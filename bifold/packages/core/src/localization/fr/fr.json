@@ -503,6 +503,22 @@
     "UnknownContact": "Contact Inconnu"
   },
   "ContactDetails": {
+    "QuickMessage": "Message",
+    "BadgeVerified": "Vérifié",
+    "BadgeInPerson": "En personne",
+    "BadgeSecureHardware": "Matériel sécurisé",
+    "TrustTitle": "Pourquoi vous pouvez faire confiance",
+    "TrustWitnessed": "Vérifié par un témoin",
+    "TrustWitnessUnnamed": "Un témoin",
+    "TrustInPerson": "Rencontré en personne",
+    "TrustInPersonCaption": "Le témoin a confirmé que vous étiez à proximité",
+    "TrustHardwareCaption": "Vérifié sur ce téléphone",
+    "TrustNone": "Pas encore vérifié",
+    "TrustNoneCaption": "Aucun témoin, et aucune preuve matérielle",
+    "TrustIdentifier": "Identifiant de la relation",
+    "ContactTitle": "Contact",
+    "Email": "E-mail",
+    "LinkedProfile": "Votre profil lié",
     "Created": "Créé",
     "ConnectionState": "État de la connexion",
     "AContact": "Un Contact",
@@ -2692,6 +2708,8 @@
     "Fetching": "Récupération des nouveaux messages…"
   },
   "Relationship": {
+    "ResignUnavailable": "Signer à nouveau : vos cartes sont déjà signées avec du matériel sécurisé.",
+    "WitnessUnavailable": "Ajouter un témoin : connectez-vous d'abord à un témoin. Touchez le bouclier en haut de Contacts.",
     "WaitingForAnswer": "En attente de la réponse de {{name}}.",
     "UpgradeTitle": "Ajouter à cette relation",
     "Resign": "Signer à nouveau",

@@ -284,10 +284,10 @@ describe('witnessCredentialUtils', () => {
 
         expect(result).not.toBeNull()
         expect(result?.witnessDid).toBe('did:example:simple-witness')
-        expect(result?.witnessName).toBe('Witness')
+        expect(result?.witnessName).toBeUndefined()
       })
 
-      it('should use default "Witness" name when issuer object has no name', () => {
+      it('gives no name when the issuer object has none (each screen words it)', () => {
         const mockCredential = {
           id: 'credential-issuer-no-name',
           encoded: {
@@ -306,7 +306,7 @@ describe('witnessCredentialUtils', () => {
 
         expect(result).not.toBeNull()
         expect(result?.witnessDid).toBe('did:example:nameless-witness')
-        expect(result?.witnessName).toBe('Witness')
+        expect(result?.witnessName).toBeUndefined()
       })
 
       it('should prefer credentialSubject.witnessName over a legacy issuer.name object', () => {

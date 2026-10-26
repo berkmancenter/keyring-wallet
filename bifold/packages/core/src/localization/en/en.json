@@ -531,6 +531,21 @@
     "RecipientDID": "Your DID"
   },
   "ContactDetails": {
+    "QuickMessage": "Message",
+    "BadgeVerified": "Verified",
+    "BadgeInPerson": "In person",
+    "BadgeSecureHardware": "Secure hardware",
+    "TrustTitle": "Why you can trust this",
+    "TrustWitnessed": "Verified by a witness",
+    "TrustWitnessUnnamed": "A witness",
+    "TrustInPerson": "Met in person",
+    "TrustInPersonCaption": "The witness confirmed you were near",
+    "TrustHardwareCaption": "Checked on this phone",
+    "TrustNone": "Not verified yet",
+    "TrustNoneCaption": "No witness, and no hardware evidence",
+    "TrustIdentifier": "Relationship identifier",
+    "ContactTitle": "Contact",
+    "Email": "Email",
     "Created": "Created",
     "ConnectionState": "Connection State",
     "AContact": "A Contact",
@@ -2745,6 +2760,8 @@
     "Fetching": "Fetching new messages…"
   },
   "Relationship": {
+    "ResignUnavailable": "Sign again: your cards are already signed with secure hardware.",
+    "WitnessUnavailable": "Add a witness: connect to a witness first. Tap the shield at the top of Contacts.",
     "WaitingForAnswer": "Waiting for {{name}} to answer.",
     "UpgradeTitle": "Add to this relationship",
     "Resign": "Sign again",

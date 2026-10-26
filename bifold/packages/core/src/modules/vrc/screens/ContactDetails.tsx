@@ -2,7 +2,7 @@ import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState, useMemo } from 'react'
 import { StyleSheet, View, TouchableOpacity, ScrollView, Image } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useAgent } from '@bifold/react-hooks'
+import { useAgent, useConnections } from '@bifold/react-hooks'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { useTranslation } from 'react-i18next'
 import Toast from 'react-native-toast-message'
@@ -35,17 +35,21 @@ import { testIdWithKey } from '../../../utils/testable'
 import { DidDetails } from '../../trust-tasks/screens/DidDetails'
 import { ContactLinks, loadContactLinks, relationshipsOfContact } from '../contacts/contactLinks'
 import { separateContact } from '../contacts/mergeContacts'
-import { useContactFacts } from '../contacts/useContactFacts'
+import { connectionToOpen } from '../contacts/messageRows'
+import { useConnectionRelationships, useContactFacts } from '../contacts/useContactFacts'
+import { useConnectionActivity } from '../../../hooks/useConnectionActivity'
+import { useUnreadMessages } from '../../../hooks/useUnreadMessages'
+import { localDate } from '../../trust-tasks/screens/localTime'
 import { useContactLinks } from '../contacts/useContactLinks'
-import { absoluteDate, appDateWords } from '../../../utils/localDay'
 
 const AVATAR_BG = '#E8E0E8'
 const NAME_COLOR = '#010B13'
-const BRAND_PURPLE = '#622C62'
-const BADGE_HW_TEAL = '#4D7A8B'
-const BADGE_WITNESS_PURPLE = '#A349A4'
-const BADGE_LOCALITY_GREEN = '#2E8540'
-const AVATAR_SIZE = 50
+const CHIP_BG = '#F0E6F0'
+const CHIP_TEXT = '#4A4A4A'
+const CHIP_ICON = '#622C62'
+const ROW_ICON = '#4A4A4A'
+const HAIRLINE = '#E3DEE3'
+const AVATAR_SIZE = 88
 
 type ContactDetailsProps = StackScreenProps<ContactStackParams, Screens.ContactDetails>
 
@@ -55,7 +59,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   }
 
   const { contact } = route.params
-  const { ColorPalette, TextTheme, Assets } = useTheme()
+  const { ColorPalette, TextTheme } = useTheme()
   const { agent } = useAgent()
   const { t } = useTranslation()
   const [ContactDetailsFooter] = useServices([TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER])
@@ -126,6 +130,25 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     [w3cCredentialRecords, relationships, witnessRecords]
   )
 
+  // Message opens the chat the Messages row for this contact opens: of its connections holding unread messages the
+  // newest, else the newest (messageRows' connectionToOpen), by the same activity, a connection's making included.
+  const relationshipOf = useConnectionRelationships()
+  const activity = useConnectionActivity()
+  const { unreadByConnection } = useUnreadMessages()
+  const { records: connectionRecords } = useConnections()
+  const messageConnectionId = useMemo(() => {
+    const madeAt = new Map(connectionRecords.map((record) => [record.id, record.createdAt]))
+    const own = relationshipOf
+      ? [...relationshipOf].filter(([, did]) => relationships.includes(did)).map(([id]) => id)
+      : []
+    if (own.length === 0) return connectionId
+    return connectionToOpen(
+      own,
+      (id) => activity(id, madeAt.get(id)),
+      (id) => unreadByConnection[id] ?? 0
+    )
+  }, [relationshipOf, relationships, activity, unreadByConnection, connectionRecords, connectionId])
+
   useEffect(() => {
     const lookupConnection = async () => {
       if (!agent) return
@@ -162,22 +185,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
     },
-    container: {
-      flex: 1,
-      backgroundColor: ColorPalette.brand.secondaryBackground,
-    },
-    contentContainer: {
-      flex: 1,
-    },
-    scrollContent: {
-      paddingHorizontal: 20,
-      paddingBottom: 16,
-    },
-    avatarSection: {
-      alignItems: 'center',
-      paddingTop: 16,
-      paddingBottom: 12,
-    },
+    container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
+    contentContainer: { flex: 1 },
+    scrollContent: { paddingHorizontal: 16, paddingBottom: 32 },
+    // 1. Who they are
+    identity: { alignItems: 'center', paddingTop: 28, gap: 10 },
     avatarCircle: {
       width: AVATAR_SIZE,
       height: AVATAR_SIZE,
@@ -187,195 +199,65 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
       justifyContent: 'center',
       overflow: 'hidden',
     },
-    avatarImage: {
-      width: AVATAR_SIZE,
-      height: AVATAR_SIZE,
-    },
-    contactName: {
-      ...TextTheme.headingTwo,
-      fontWeight: 'bold',
-      color: NAME_COLOR,
-      marginTop: 8,
-      textAlign: 'center',
-    },
-    badgesContainer: {
+    avatarImage: { width: AVATAR_SIZE, height: AVATAR_SIZE },
+    contactName: { ...TextTheme.headingTwo, fontWeight: '700', color: NAME_COLOR, textAlign: 'center' },
+    organization: { fontSize: 13, color: ColorPalette.grayscale.mediumGrey, textAlign: 'center' },
+    chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 4 },
+    chip: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      marginTop: 8,
-    },
-    verifiedBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(163, 73, 164, 0.12)',
+      gap: 5,
       paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 14,
-      gap: 4,
+      paddingVertical: 3,
+      borderRadius: 12,
+      backgroundColor: CHIP_BG,
     },
-    verifiedBadgeText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: BADGE_WITNESS_PURPLE,
-    },
-    hardwareAttestationBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(77, 122, 139, 0.2)',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 25,
-      gap: 4,
-    },
-    hardwareAttestationBadgeText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: BADGE_HW_TEAL,
-    },
-    localityConfirmedBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: 'rgba(46, 133, 64, 0.12)',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 14,
-      gap: 4,
-    },
-    localityConfirmedBadgeText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: BADGE_LOCALITY_GREEN,
-    },
-    divider: {
-      height: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.08)',
-      marginBottom: 12,
-    },
-    detailsSection: {
-      marginBottom: 8,
-    },
-    fieldGroup: {
-      marginBottom: 12,
-    },
-    fieldLabel: {
-      ...TextTheme.label,
-      color: NAME_COLOR,
-      fontSize: 14,
-      fontWeight: '800',
-      marginBottom: 4,
+    chipText: { fontSize: 13, lineHeight: 18, fontWeight: '600', color: CHIP_TEXT },
+    // The sections: rows on the screen's ground under a small label, as the chat and rooms screens do.
+    section: { marginTop: 20 },
+    sectionLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.48,
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
+      color: ColorPalette.grayscale.mediumGrey,
+      marginBottom: 4,
     },
-    fieldValue: {
-      ...TextTheme.normal,
-      fontSize: 16,
-      color: NAME_COLOR,
-    },
-    linkedProfileCard: {
-      backgroundColor: ColorPalette.grayscale.white,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: ColorPalette.grayscale.lightGrey,
-      padding: 12,
-      marginBottom: 12,
-    },
-    linkedProfileRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingVertical: 8 },
+    rowText: { flex: 1, gap: 1 },
+    rowTitle: { fontSize: 16, fontWeight: '600', color: NAME_COLOR },
+    rowCaption: { fontSize: 13, lineHeight: 18, color: ColorPalette.grayscale.mediumGrey },
     linkedProfileAvatar: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
       backgroundColor: AVATAR_BG,
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-      marginRight: 8,
     },
-    linkedProfileAvatarImage: {
-      width: 24,
-      height: 24,
-    },
-    viewMessagesRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 10,
-      marginBottom: 12,
-    },
-    viewMessagesIconCircle: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: '#F1D2D6',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 12,
-    },
-    viewMessagesText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: BRAND_PURPLE,
-    },
+    linkedProfileAvatarImage: { width: 22, height: 22 },
+    witnessRecord: { paddingVertical: 6 },
+    witnessLabel: { fontSize: 13, color: ColorPalette.grayscale.mediumGrey },
+    witnessValue: { fontSize: 15, color: NAME_COLOR },
+    localityVerified: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    // 5. What is hard to undo: last, apart.
+    danger: { marginTop: 28, paddingTop: 20, borderTopWidth: 1, borderTopColor: HAIRLINE },
     removeButton: {
+      minHeight: 48,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: ColorPalette.semantic.error,
+      backgroundColor: ColorPalette.grayscale.white,
       alignItems: 'center',
       justifyContent: 'center',
-      alignSelf: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 40,
-      borderRadius: 40,
-      borderWidth: 2,
-      borderColor: '#622C62',
-      borderStyle: 'dashed' as const,
-      marginTop: 16,
-      marginBottom: 24,
     },
-    removeButtonText: {
-      ...TextTheme.bold,
-      fontSize: 16,
-      color: '#622C62',
-      textAlign: 'center',
-    },
-    witnessSection: {
-      marginBottom: 4,
-    },
-    witnessSectionHeader: {
-      ...TextTheme.label,
-      color: NAME_COLOR,
-      marginBottom: 4,
-      fontSize: 14,
-      fontWeight: '800',
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    witnessRecord: {
-      marginBottom: 8,
-    },
-    witnessSubSection: {
-      marginBottom: 4,
-    },
-    witnessLabel: {
-      ...TextTheme.label,
-      color: NAME_COLOR,
-      marginBottom: 4,
-      fontSize: 13,
-      fontWeight: '800',
-    },
-    witnessValue: {
-      ...TextTheme.normal,
-      fontSize: 14,
-    },
-    localityVerified: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
+    removeButtonText: { ...TextTheme.bold, fontSize: 16, color: ColorPalette.semantic.error },
   })
 
   const handleViewMessages = () => {
-    if (connectionId) {
-      navigation.getParent()?.navigate(Screens.Chat, { connectionId })
+    if (messageConnectionId) {
+      navigation.getParent()?.navigate(Screens.Chat, { connectionId: messageConnectionId })
     }
   }
 
@@ -441,11 +323,18 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     setLinksVersion((version) => version + 1)
   }, [agent, contactLinks, contact.issuer.id])
 
+  // The newest witness record, for the trust section's one line about witnessing.
+  const newestWitness = useMemo(
+    () =>
+      [...witnessRecords].sort((a, b) => String(b.issuanceDate ?? '').localeCompare(String(a.issuanceDate ?? '')))[0],
+    [witnessRecords]
+  )
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView style={styles.contentContainer} contentContainerStyle={styles.scrollContent}>
-        {/* Avatar + Name + Badges */}
-        <View style={styles.avatarSection}>
+        {/* 1. Who they are: photo, name, and what is verified about them, every badge that holds. */}
+        <View style={styles.identity}>
           <View style={styles.avatarCircle}>
             {displayPhoto ? (
               <Image
@@ -454,108 +343,134 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
                 source={{ uri: displayPhoto }}
               />
             ) : (
-              <Icon name="account-outline" size={32} color="#666666" />
+              <Icon name="account-outline" size={40} color={ROW_ICON} />
             )}
           </View>
-          <ThemedText style={styles.contactName}>{displayName}</ThemedText>
-          {(witnessRecords.length > 0 || hwVerified || hwChecking) && (
-            <View style={styles.badgesContainer}>
-              {hwVerified ? (
-                <View style={styles.hardwareAttestationBadge} testID="SecureExchangeBadge">
-                  <Icon name="shield-check" size={14} color={BADGE_HW_TEAL} />
-                  <ThemedText style={styles.hardwareAttestationBadgeText}>Secure Exchange</ThemedText>
-                </View>
-              ) : hwChecking ? (
-                // The badge's own shape, so nothing shifts when it fills in: an outline, and its words kept but not
-                // shown — it does not say "Secure Exchange" before that is checked.
-                <View style={styles.hardwareAttestationBadge} testID="SecureExchangeChecking">
-                  <Icon name="shield-outline" size={14} color="#BBBBBB" />
-                  <ThemedText
-                    style={[styles.hardwareAttestationBadgeText, { opacity: 0 }]}
-                    accessibilityElementsHidden
-                    importantForAccessibility="no-hide-descendants"
-                  >
-                    Secure Exchange
-                  </ThemedText>
-                </View>
-              ) : null}
+          <ThemedText style={styles.contactName} accessibilityRole="header">
+            {displayName}
+          </ThemedText>
+          {displayOrganization ? (
+            <ThemedText style={styles.organization} selectable={true}>
+              {displayOrganization}
+            </ThemedText>
+          ) : null}
+          {(witnessRecords.length > 0 || hasLocalityConfirmed || hwVerified || hwChecking) && (
+            <View style={styles.chips}>
               {witnessRecords.length > 0 && (
-                <View style={styles.verifiedBadge} testID="WitnessedBadge">
-                  <Icon name="check-decagram" size={14} color={BADGE_WITNESS_PURPLE} />
-                  <ThemedText style={styles.verifiedBadgeText}>Verified</ThemedText>
+                <View style={styles.chip} testID="WitnessedBadge">
+                  <Icon name="check-decagram-outline" size={14} color={CHIP_ICON} />
+                  <ThemedText style={styles.chipText}>{t('ContactDetails.BadgeVerified')}</ThemedText>
                 </View>
               )}
               {hasLocalityConfirmed && (
-                <View style={styles.localityConfirmedBadge} testID="LocalityConfirmedBadge">
-                  <Icon name="map-marker-check" size={14} color={BADGE_LOCALITY_GREEN} />
-                  <ThemedText style={styles.localityConfirmedBadgeText}>In-Person</ThemedText>
+                <View style={styles.chip} testID="LocalityConfirmedBadge">
+                  <Icon name="map-marker-check-outline" size={14} color={CHIP_ICON} />
+                  <ThemedText style={styles.chipText}>{t('ContactDetails.BadgeInPerson')}</ThemedText>
                 </View>
               )}
+              {hwVerified ? (
+                <View style={styles.chip} testID="SecureExchangeBadge">
+                  <Icon name="shield-check-outline" size={14} color={CHIP_ICON} />
+                  <ThemedText style={styles.chipText}>{t('ContactDetails.BadgeSecureHardware')}</ThemedText>
+                </View>
+              ) : hwChecking ? (
+                // The chip's own shape, so nothing shifts when it fills in: its words kept but not shown, as it does
+                // not say "Secure hardware" before that is checked.
+                <View style={styles.chip} testID="SecureExchangeChecking">
+                  <Icon name="shield-outline" size={14} color="#BBBBBB" />
+                  <ThemedText
+                    style={[styles.chipText, { opacity: 0 }]}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                  >
+                    {t('ContactDetails.BadgeSecureHardware')}
+                  </ThemedText>
+                </View>
+              ) : null}
             </View>
           )}
         </View>
 
-        <View style={styles.divider} />
+        {/* Quick actions: Message, Sign again, Add a witness. */}
+        <RelationshipUpgradeSection
+          connectionId={connectionId}
+          name={displayName}
+          hardwareSigned={hwVerified}
+          onMessage={messageConnectionId ? handleViewMessages : undefined}
+        />
 
-        {/* Detail Fields */}
-        <View style={styles.detailsSection}>
-          {displayEmail && (
-            <View style={styles.fieldGroup}>
-              <ThemedText style={styles.fieldLabel}>Email</ThemedText>
-              <ThemedText style={styles.fieldValue} selectable={true}>
-                {displayEmail}
-              </ThemedText>
-            </View>
-          )}
-
-          {displayOrganization && (
-            <View style={styles.fieldGroup}>
-              <ThemedText style={styles.fieldLabel}>Organisation</ThemedText>
-              <ThemedText style={styles.fieldValue} selectable={true}>
-                {displayOrganization}
-              </ThemedText>
-            </View>
-          )}
-
-          <View style={styles.fieldGroup}>
-            <ThemedText style={styles.fieldLabel}>{t('ContactDetails.RelationshipDID')}</ThemedText>
-            {/* The identifier, for whoever needs to compare it — not shown by default (#12). */}
-            <DidDetails did={contact.issuer.id} testIdStem="ContactRelationship" />
-          </View>
-        </View>
-
-        {/* How you know them: cards and witness records, newest first. */}
+        {/* 2. How you know them: cards and witness records, newest first. */}
         <RelationshipLayers name={displayName} layers={layers} />
 
-        {/* Witness Records */}
-        {witnessRecords.length > 0 && (
-          <View style={styles.witnessSection} testID="WitnessSection">
-            <ThemedText style={styles.witnessSectionHeader}>Witness Records</ThemedText>
-            {witnessRecords.map((record, index) => (
-              <View key={index} style={styles.witnessRecord} testID="WitnessRecord">
-                {record.event && (
-                  <View style={styles.witnessSubSection}>
-                    <ThemedText style={styles.witnessLabel}>Event</ThemedText>
-                    <ThemedText style={styles.witnessValue}>{record.event}</ThemedText>
-                  </View>
-                )}
-                {record.witnessName && (
-                  <View style={styles.witnessSubSection}>
-                    <ThemedText style={styles.witnessLabel}>Witnessed By</ThemedText>
-                    <ThemedText style={styles.witnessValue}>{record.witnessName}</ThemedText>
-                  </View>
-                )}
-                {record.issuanceDate && (
-                  <View style={styles.witnessSubSection}>
-                    <ThemedText style={styles.witnessLabel}>Date</ThemedText>
-                    <ThemedText style={styles.witnessValue}>
-                      {absoluteDate(new Date(record.issuanceDate), appDateWords())}
-                    </ThemedText>
-                  </View>
-                )}
-                {record.locality && record.locality.outcome !== 'not-offered' && (
-                  <View style={styles.witnessSubSection}>
-                    <ThemedText style={styles.witnessLabel}>Locality Verification</ThemedText>
+        {/* 3. Why you can trust this: each row only once the record behind it verifies on this phone. */}
+        <View style={styles.section} testID={testIdWithKey('ContactTrust')}>
+          <ThemedText style={styles.sectionLabel} accessibilityRole="header">
+            {t('ContactDetails.TrustTitle')}
+          </ThemedText>
+          {newestWitness ? (
+            <View style={styles.row} testID={testIdWithKey('ContactTrustWitnessed')}>
+              <Icon name="check-decagram-outline" size={22} color={ROW_ICON} />
+              <View style={styles.rowText}>
+                <ThemedText style={styles.rowTitle}>{t('ContactDetails.TrustWitnessed')}</ThemedText>
+                <ThemedText style={styles.rowCaption}>
+                  {[
+                    newestWitness.witnessName ?? t('ContactDetails.TrustWitnessUnnamed'),
+                    newestWitness.issuanceDate ? localDate(newestWitness.issuanceDate) : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </ThemedText>
+              </View>
+            </View>
+          ) : null}
+          {hasLocalityConfirmed ? (
+            <View style={styles.row} testID={testIdWithKey('ContactTrustInPerson')}>
+              <Icon name="map-marker-check-outline" size={22} color={ROW_ICON} />
+              <View style={styles.rowText}>
+                <ThemedText style={styles.rowTitle}>{t('ContactDetails.TrustInPerson')}</ThemedText>
+                <ThemedText style={styles.rowCaption}>{t('ContactDetails.TrustInPersonCaption')}</ThemedText>
+              </View>
+            </View>
+          ) : null}
+          {hwVerified ? (
+            <View style={styles.row} testID={testIdWithKey('ContactTrustHardware')}>
+              <Icon name="shield-check-outline" size={22} color={ROW_ICON} />
+              <View style={styles.rowText}>
+                <ThemedText style={styles.rowTitle}>{t('Relationship.HardwareDone')}</ThemedText>
+                <ThemedText style={styles.rowCaption}>{t('ContactDetails.TrustHardwareCaption')}</ThemedText>
+              </View>
+            </View>
+          ) : null}
+          {/* Nothing verified, and known so: said, not left blank (never while hardware is still being checked). */}
+          {!newestWitness && !hwVerified && hardware.known ? (
+            <View style={styles.row} testID={testIdWithKey('ContactTrustNone')}>
+              <Icon name="information-outline" size={22} color={ROW_ICON} />
+              <View style={styles.rowText}>
+                <ThemedText style={styles.rowTitle}>{t('ContactDetails.TrustNone')}</ThemedText>
+                <ThemedText style={styles.rowCaption}>{t('ContactDetails.TrustNoneCaption')}</ThemedText>
+              </View>
+            </View>
+          ) : null}
+          <View style={styles.row}>
+            <Icon name="key-outline" size={22} color={ROW_ICON} />
+            <View style={styles.rowText}>
+              <ThemedText style={styles.rowTitle}>{t('ContactDetails.TrustIdentifier')}</ThemedText>
+              {/* The identifier, for whoever needs to compare it: not shown by default (#12). */}
+              <DidDetails did={contact.issuer.id} testIdStem="ContactRelationship" />
+            </View>
+          </View>
+          {/* Each witness record's own detail. WitnessSection is what the e2e looks for: a witness record shows. */}
+          {witnessRecords.length > 0 ? (
+            <View testID="WitnessSection">
+              {witnessRecords.map((record, index) => (
+                <View key={index} style={styles.witnessRecord} testID="WitnessRecord">
+                  {record.event ? (
+                    <>
+                      <ThemedText style={styles.witnessValue}>{record.event}</ThemedText>
+                      <ThemedText style={styles.witnessLabel}>Event</ThemedText>
+                    </>
+                  ) : null}
+                  {record.locality && record.locality.outcome !== 'not-offered' ? (
                     <View style={styles.localityVerified}>
                       <Icon
                         name={record.locality.outcome === 'confirmed' ? 'check-circle' : 'information'}
@@ -575,88 +490,78 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
                         {record.locality.venue ? ` — ${record.locality.venue}` : ''}
                       </ThemedText>
                     </View>
-                  </View>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+
+        {/* 4. Contact: whether it is one person's merged exchanges (with Separate beside it), what you share with
+            them, and what their card says. */}
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionLabel} accessibilityRole="header">
+            {t('ContactDetails.ContactTitle')}
+          </ThemedText>
+          {/* Same person? Another contact with the same name can be merged into this one, and separated again. */}
+          <ContactMergeSection
+            issuerId={contact.issuer.id}
+            name={displayName}
+            relationships={relationships}
+            records={w3cCredentialRecords}
+            links={contactLinks}
+            connectionId={connectionId}
+            onChanged={() => setLinksVersion((version) => version + 1)}
+          />
+          {sharedProfileId && (
+            <View style={styles.row} testID="LinkedProfileCard">
+              <View style={styles.linkedProfileAvatar}>
+                {liveSharedProfile && formInputFromTemplate(liveSharedProfile).photo ? (
+                  <Image
+                    testID={testIdWithKey('LinkedProfileAvatarImage')}
+                    style={styles.linkedProfileAvatarImage}
+                    source={{ uri: formInputFromTemplate(liveSharedProfile).photo }}
+                  />
+                ) : (
+                  <Icon name="account-outline" size={16} color={ROW_ICON} />
                 )}
               </View>
-            ))}
-          </View>
-        )}
-
-        {/* Same person? Another contact with the same name can be merged into this one, and separated again. */}
-        <ContactMergeSection
-          issuerId={contact.issuer.id}
-          name={displayName}
-          relationships={relationships}
-          records={w3cCredentialRecords}
-          links={contactLinks}
-          connectionId={connectionId}
-          onChanged={() => setLinksVersion((version) => version + 1)}
-        />
-
-        {/* Add to this relationship, on its existing connection: sign again, or with a witness. */}
-        {connectionId ? (
-          <RelationshipUpgradeSection connectionId={connectionId} name={displayName} hardwareSigned={hwVerified} />
-        ) : null}
-
-        {/* View Messages */}
-        <TouchableOpacity
-          onPress={handleViewMessages}
-          accessibilityLabel={t('ContactDetails.ViewMessages')}
-          accessibilityRole="button"
-          testID={testIdWithKey('ContactViewMessages')}
-          style={[styles.viewMessagesRow, !connectionId && { opacity: 0.5 }]}
-          disabled={!connectionId}
-        >
-          <View style={styles.viewMessagesIconCircle}>
-            {Assets.svg.tabFourIcon ? (
-              <Assets.svg.tabFourIcon width={18} height={18} fill="#000000" color="#000000" />
-            ) : (
-              <Icon name="message-text-outline" size={18} color="#000000" />
-            )}
-          </View>
-          <ThemedText style={styles.viewMessagesText}>{t('ContactDetails.ViewMessages')}</ThemedText>
-        </TouchableOpacity>
-
-        {sharedProfileId && (
-          <View style={styles.linkedProfileCard} testID="LinkedProfileCard">
-            <ThemedText style={styles.fieldLabel}>{t('ContactDetails.LinkedProfile')}</ThemedText>
-            {liveSharedProfile ? (
-              <View style={styles.linkedProfileRow}>
-                <View style={styles.linkedProfileAvatar}>
-                  {formInputFromTemplate(liveSharedProfile).photo ? (
-                    <Image
-                      testID={testIdWithKey('LinkedProfileAvatarImage')}
-                      style={styles.linkedProfileAvatarImage}
-                      source={{ uri: formInputFromTemplate(liveSharedProfile).photo }}
-                    />
-                  ) : (
-                    <Icon name="account-outline" size={16} color="#666666" />
-                  )}
-                </View>
-                <ThemedText style={styles.fieldValue} selectable={true}>
-                  {liveSharedProfile.label}
+              <View style={styles.rowText}>
+                <ThemedText style={styles.rowTitle} selectable={true}>
+                  {liveSharedProfile
+                    ? liveSharedProfile.label
+                    : t('ContactDetails.LinkedProfileDeleted', { label: sharedProfileLabelSnapshot ?? '' })}
                 </ThemedText>
+                <ThemedText style={styles.rowCaption}>{t('ContactDetails.LinkedProfile')}</ThemedText>
               </View>
-            ) : (
-              <ThemedText style={styles.fieldValue} selectable={true}>
-                {t('ContactDetails.LinkedProfileDeleted', { label: sharedProfileLabelSnapshot ?? '' })}
-              </ThemedText>
-            )}
-          </View>
-        )}
+            </View>
+          )}
+          {displayEmail ? (
+            <View style={styles.row}>
+              <Icon name="email-outline" size={22} color={ROW_ICON} />
+              <View style={styles.rowText}>
+                <ThemedText style={styles.rowTitle} selectable={true}>
+                  {displayEmail}
+                </ThemedText>
+                <ThemedText style={styles.rowCaption}>{t('ContactDetails.Email')}</ThemedText>
+              </View>
+            </View>
+          ) : null}
+          <ContactDetailsFooter contact={contact} connectionId={connectionId} />
+        </View>
 
-        <ContactDetailsFooter contact={contact} connectionId={connectionId} />
-
-        {/* Remove Contact */}
-        <TouchableOpacity
-          onPress={handleRemoveContact}
-          accessibilityLabel={t('ContactDetails.RemoveContact')}
-          accessibilityRole="button"
-          testID={testIdWithKey('ContactRemove')}
-          style={styles.removeButton}
-        >
-          <ThemedText style={styles.removeButtonText}>{t('ContactDetails.RemoveContact')}</ThemedText>
-        </TouchableOpacity>
+        {/* 5. Hard to undo: last, and apart. */}
+        <View style={styles.danger}>
+          <TouchableOpacity
+            onPress={handleRemoveContact}
+            accessibilityLabel={t('ContactDetails.RemoveContact')}
+            accessibilityRole="button"
+            testID={testIdWithKey('ContactRemove')}
+            style={styles.removeButton}
+          >
+            <ThemedText style={styles.removeButtonText}>{t('ContactDetails.RemoveContact')}</ThemedText>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <CommonRemoveModal

@@ -100,7 +100,7 @@ export interface WitnessRecord {
   sessionId?: string
   /** Witness DID (issuer) */
   witnessDid: string
-  /** Witness name (if available from issuer object) */
+  /** Witness name, when the credential gives one (credentialSubject.witnessName, else a legacy issuer.name) */
   witnessName?: string
   /** Issuance date */
   issuanceDate?: string
@@ -458,7 +458,8 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
       method,
       sessionId,
       witnessDid,
-      witnessName: witnessNameFromSubject || issuerObjectName || 'Witness',
+      // No name: undefined, so each screen says so in its own language (never the English 'Witness').
+      witnessName: witnessNameFromSubject || issuerObjectName || undefined,
       issuanceDate,
       credentialId: vwc.id,
       localityVerification,

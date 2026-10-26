@@ -22,7 +22,7 @@ import {
   hasVrcHardwareAttestation,
 } from '../../../../src/modules/vrc/utils/witnessCredentialUtils'
 import { contactFacts } from '../../../../src/modules/vrc/contacts/useContactFacts'
-import { ALICE_AGAIN, ALICE_FIRST, SEVERAL_RELATIONSHIPS } from '../fixtures/severalRelationships'
+import { ALICE_AGAIN, ALICE_FIRST, BOB, SEVERAL_RELATIONSHIPS } from '../fixtures/severalRelationships'
 
 jest.mock('@bifold/react-hooks')
 jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => 'Icon')
@@ -186,5 +186,60 @@ describe("a contact's Secure Exchange badge", () => {
     )
     expect(tree.getByTestId('SecureExchangeBadge')).toBeTruthy()
     expect(verifyVrcHardwareEvidence).toHaveBeenCalledTimes(1)
+  })
+})
+
+// "Why you can trust this": a row for each thing that verified on this phone, and "Not verified yet" only once that is
+// known — never while the hardware evidence is still being checked.
+describe("a contact's trust rows", () => {
+  const trust = (tree: ReturnType<typeof render>) =>
+    ['ContactTrustWitnessed', 'ContactTrustInPerson', 'ContactTrustHardware', 'ContactTrustNone'].filter((row) =>
+      tree.queryByTestId(testIdWithKey(row))
+    )
+  const openContact = async (issuer: { id: string; name: string }, hasHardwareAttestation: boolean) => {
+    await act(async () => contactFacts.load(mockUseAgent().agent as never, SEVERAL_RELATIONSHIPS as never))
+    return render(
+      <ContactDetails
+        route={{ params: { contact: { issuer, hasHardwareAttestation } } } as any}
+        navigation={{} as any}
+      />,
+      { wrapper: Container }
+    )
+  }
+  beforeEach(() => {
+    jest.spyOn(console, 'log').mockImplementation(() => null)
+    contactFacts.forget()
+    mockUseOpenIDCredentials.mockReturnValue({ openIdState: { w3cCredentialRecords: SEVERAL_RELATIONSHIPS } } as any)
+    withLinks([])
+    ;(getVrcCredentialJsonForSubject as jest.Mock).mockImplementation((_records: unknown, issuerDid: string) => ({
+      issuer: issuerDid,
+    }))
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  test('hardware evidence being checked: no row yet; verified: the hardware row, and never "not verified"', async () => {
+    ;(hasVrcHardwareAttestation as jest.Mock).mockReturnValue(true)
+    let answer: (v: { valid: boolean }) => void = () => undefined
+    ;(verifyVrcHardwareEvidence as jest.Mock).mockImplementation(() => new Promise((r) => (answer = r)))
+    const tree = await openContact(ALICE_AGAIN, true)
+    expect(trust(tree)).toEqual([])
+    await act(async () => answer({ valid: true }))
+    expect(trust(tree)).toEqual(['ContactTrustHardware'])
+  })
+
+  test('hardware evidence that does not verify, and no witness: "not verified yet"', async () => {
+    ;(hasVrcHardwareAttestation as jest.Mock).mockReturnValue(true)
+    ;(verifyVrcHardwareEvidence as jest.Mock).mockImplementation(async () => ({ valid: false }))
+    const tree = await openContact(ALICE_AGAIN, true)
+    await act(async () => undefined)
+    expect(trust(tree)).toEqual(['ContactTrustNone'])
+  })
+
+  test('witnessed in person: the witness row, named by its date, and the in-person row', async () => {
+    ;(hasVrcHardwareAttestation as jest.Mock).mockReturnValue(false)
+    const tree = await openContact(BOB, false)
+    await act(async () => undefined)
+    expect(trust(tree)).toEqual(['ContactTrustWitnessed', 'ContactTrustInPerson'])
+    expect(tree.getByText(/^ContactDetails\.TrustWitnessUnnamed · .+/)).toBeTruthy()
   })
 })

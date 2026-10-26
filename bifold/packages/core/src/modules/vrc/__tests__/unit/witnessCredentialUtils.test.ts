@@ -271,8 +271,8 @@ describe('witnessCredentialUtils', () => {
 
       expect(result).not.toBeNull()
       expect(result?.witnessDid).toBe('did:example:witness')
-      // When issuer is a string, we use 'Witness' as fallback display name
-      expect(result?.witnessName).toBe('Witness')
+      // A string issuer carries no name: none is made up (each screen says "a witness" in its own language)
+      expect(result?.witnessName).toBeUndefined()
     })
 
     it('should handle missing optional witnessContext fields', () => {
@@ -499,7 +499,7 @@ describe('witnessCredentialUtils with a witnessed/1 VWC', () => {
     const info = extractWitnessInfo(found[0])
     expect(info).toMatchObject({
       witnessDid: vwc.issuer,
-      witnessName: 'Witness',
+      witnessName: undefined,
       credentialId: 'vwc-v1',
       locality: { outcome: 'not-offered' },
     })

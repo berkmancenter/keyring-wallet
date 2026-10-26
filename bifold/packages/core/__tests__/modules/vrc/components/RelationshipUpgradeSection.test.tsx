@@ -1,8 +1,7 @@
 /**
- * "Add to this relationship" on a contact: sign the relationship cards again
- * (secure hardware now) or add a witness, on the existing connection. Every
- * request asks first and says what is shared; a pending one says so and can
- * be withdrawn; nothing is sent twice for one tap.
+ * A contact's quick actions: Message, Sign again (secure hardware now) and Add a witness, on the existing
+ * connection. Every request asks first and says what is shared; a pending one says so and can be withdrawn; nothing
+ * is sent twice for one tap. An action that can't be used now is shown disabled, with the reason under the row.
  */
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
@@ -50,11 +49,30 @@ describe('adding to a relationship', () => {
     mockWitness = 'witness-conn'
   })
 
-  test('both ways are offered, under the section title', async () => {
-    const tree = await show()
-    expect(tree.getByTestId(id('RelationshipUpgrade'))).toHaveTextContent(/Relationship\.UpgradeTitle/)
+  const disabled = (tree: Awaited<ReturnType<typeof show>>, key: string) =>
+    tree.getByTestId(id(key)).props.accessibilityState?.disabled
+
+  test('three actions: Message, Sign again and Add a witness', async () => {
+    const onMessage = jest.fn()
+    const tree = await show({ onMessage })
+    expect(tree.getByTestId(id('ContactViewMessages'))).toHaveTextContent(/ContactDetails\.QuickMessage/)
     expect(tree.getByTestId(id('RelationshipUpgradeResign'))).toHaveTextContent(/Relationship\.Resign/)
     expect(tree.getByTestId(id('RelationshipUpgradeWitness'))).toHaveTextContent(/Relationship\.Witness/)
+    await act(async () => fireEvent.press(tree.getByTestId(id('ContactViewMessages'))))
+    expect(onMessage).toHaveBeenCalledTimes(1)
+  })
+
+  test('no chat to open: Message is shown, disabled', async () => {
+    const tree = await show()
+    expect(disabled(tree, 'ContactViewMessages')).toBe(true)
+  })
+
+  test('no connection yet: nothing can be asked, and that is said', async () => {
+    const tree = await show({ connectionId: null })
+    expect(disabled(tree, 'RelationshipUpgradeResign')).toBe(true)
+    expect(disabled(tree, 'RelationshipUpgradeWitness')).toBe(true)
+    expect(tree.getByText('Relationship.NoRelationship')).toBeTruthy()
+    expect(mockPending).not.toHaveBeenCalled()
   })
 
   test('signing again asks first, says what is shared, then sends once', async () => {
@@ -86,23 +104,25 @@ describe('adding to a relationship', () => {
     expect(tree.queryByTestId(id('RelationshipUpgradeConfirm'))).toBeNull()
   })
 
-  test('with no witness connected, adding one says how, and cannot be pressed', async () => {
+  test('with no witness connected, adding one is disabled, and the reason says how', async () => {
     mockWitness = undefined
     const tree = await show()
-    const row = tree.getByTestId(id('RelationshipUpgradeWitness'))
-    expect(row).toHaveTextContent(/Relationship\.NoWitness/)
-    await act(async () => fireEvent.press(row))
+    expect(disabled(tree, 'RelationshipUpgradeWitness')).toBe(true)
+    expect(tree.getByTestId(id('RelationshipUpgradeNoWitness'))).toHaveTextContent('Relationship.WitnessUnavailable')
+    await act(async () => fireEvent.press(tree.getByTestId(id('RelationshipUpgradeWitness'))))
     expect(tree.queryByTestId(id('RelationshipUpgradeConfirm'))).toBeNull()
   })
 
-  test('a pending request says so and can be withdrawn, which offers both ways again', async () => {
+  test('a pending request says so and can be withdrawn, which makes both ways usable again', async () => {
     mockPending.mockResolvedValueOnce({ exchangeId: 'x9', witnessed: false })
     const tree = await show()
     expect(tree.getByTestId(id('RelationshipUpgradeWaiting'))).toHaveTextContent('Relationship.WaitingForAnswer')
-    expect(tree.queryByTestId(id('RelationshipUpgradeResign'))).toBeNull()
+    expect(disabled(tree, 'RelationshipUpgradeResign')).toBe(true)
+    expect(disabled(tree, 'RelationshipUpgradeWitness')).toBe(true)
     await act(async () => fireEvent.press(tree.getByTestId(id('RelationshipUpgradeCancel'))))
     expect(mockCancel).toHaveBeenCalledWith(agent, 'conn-1', 'x9')
-    expect(tree.getByTestId(id('RelationshipUpgradeResign'))).toBeTruthy()
+    expect(disabled(tree, 'RelationshipUpgradeResign')).toBe(false)
+    expect(disabled(tree, 'RelationshipUpgradeWitness')).toBe(false)
   })
 
   test.each([
@@ -118,10 +138,10 @@ describe('adding to a relationship', () => {
     expect(tree.queryByTestId(id('RelationshipUpgradeWaiting'))).toBeNull()
   })
 
-  test('once signed with secure hardware, that is said instead of offering it', async () => {
+  test('once signed with secure hardware, signing again is disabled and says why; a witness can still be added', async () => {
     const tree = await show({ hardwareSigned: true })
-    expect(tree.getByTestId(id('RelationshipUpgradeHardwareDone'))).toHaveTextContent('Relationship.HardwareDone')
-    expect(tree.queryByTestId(id('RelationshipUpgradeResign'))).toBeNull()
-    expect(tree.getByTestId(id('RelationshipUpgradeWitness'))).toBeTruthy()
+    expect(tree.getByTestId(id('RelationshipUpgradeHardwareDone'))).toHaveTextContent('Relationship.ResignUnavailable')
+    expect(disabled(tree, 'RelationshipUpgradeResign')).toBe(true)
+    expect(disabled(tree, 'RelationshipUpgradeWitness')).toBe(false)
   })
 })

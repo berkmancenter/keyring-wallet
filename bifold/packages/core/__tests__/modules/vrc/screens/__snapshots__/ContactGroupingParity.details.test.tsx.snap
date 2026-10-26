@@ -12,7 +12,7 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
   }
   style={
     Object {
-      "backgroundColor": "#313132",
+      "backgroundColor": "#000000",
       "flex": 1,
     }
   }
@@ -20,8 +20,8 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
   <RCTScrollView
     contentContainerStyle={
       Object {
-        "paddingBottom": 16,
-        "paddingHorizontal": 20,
+        "paddingBottom": 32,
+        "paddingHorizontal": 16,
       }
     }
     style={
@@ -35,8 +35,8 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
         style={
           Object {
             "alignItems": "center",
-            "paddingBottom": 12,
-            "paddingTop": 16,
+            "gap": 10,
+            "paddingTop": 28,
           }
         }
       >
@@ -45,21 +45,22 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
             Object {
               "alignItems": "center",
               "backgroundColor": "#E8E0E8",
-              "borderRadius": 25,
-              "height": 50,
+              "borderRadius": 44,
+              "height": 88,
               "justifyContent": "center",
               "overflow": "hidden",
-              "width": 50,
+              "width": 88,
             }
           }
         >
           <Icon
-            color="#666666"
+            color="#4A4A4A"
             name="account-outline"
-            size={32}
+            size={40}
           />
         </View>
         <Text
+          accessibilityRole="header"
           maxFontSizeMultiplier={2}
           style={
             Array [
@@ -71,8 +72,7 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
               Object {
                 "color": "#010B13",
                 "fontSize": 32,
-                "fontWeight": "bold",
-                "marginTop": 8,
+                "fontWeight": "700",
                 "textAlign": "center",
               },
             ]
@@ -83,11 +83,11 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
         <View
           style={
             Object {
-              "alignItems": "center",
               "flexDirection": "row",
+              "flexWrap": "wrap",
               "gap": 6,
               "justifyContent": "center",
-              "marginTop": 8,
+              "marginTop": 4,
             }
           }
         >
@@ -95,19 +95,19 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
             style={
               Object {
                 "alignItems": "center",
-                "backgroundColor": "rgba(163, 73, 164, 0.12)",
-                "borderRadius": 14,
+                "backgroundColor": "#F0E6F0",
+                "borderRadius": 12,
                 "flexDirection": "row",
-                "gap": 4,
+                "gap": 5,
                 "paddingHorizontal": 10,
-                "paddingVertical": 5,
+                "paddingVertical": 3,
               }
             }
             testID="WitnessedBadge"
           >
             <Icon
-              color="#A349A4"
-              name="check-decagram"
+              color="#622C62"
+              name="check-decagram-outline"
               size={14}
             />
             <Text
@@ -120,33 +120,34 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
                     "fontWeight": "normal",
                   },
                   Object {
-                    "color": "#A349A4",
-                    "fontSize": 11,
+                    "color": "#4A4A4A",
+                    "fontSize": 13,
                     "fontWeight": "600",
+                    "lineHeight": 18,
                   },
                 ]
               }
             >
-              Verified
+              ContactDetails.BadgeVerified
             </Text>
           </View>
           <View
             style={
               Object {
                 "alignItems": "center",
-                "backgroundColor": "rgba(46, 133, 64, 0.12)",
-                "borderRadius": 14,
+                "backgroundColor": "#F0E6F0",
+                "borderRadius": 12,
                 "flexDirection": "row",
-                "gap": 4,
+                "gap": 5,
                 "paddingHorizontal": 10,
-                "paddingVertical": 5,
+                "paddingVertical": 3,
               }
             }
             testID="LocalityConfirmedBadge"
           >
             <Icon
-              color="#2E8540"
-              name="map-marker-check"
+              color="#622C62"
+              name="map-marker-check-outline"
               size={14}
             />
             <Text
@@ -159,14 +160,15 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
                     "fontWeight": "normal",
                   },
                   Object {
-                    "color": "#2E8540",
-                    "fontSize": 11,
+                    "color": "#4A4A4A",
+                    "fontSize": 13,
                     "fontWeight": "600",
+                    "lineHeight": 18,
                   },
                 ]
               }
             >
-              In-Person
+              ContactDetails.BadgeInPerson
             </Text>
           </View>
         </View>
@@ -174,115 +176,265 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
       <View
         style={
           Object {
-            "backgroundColor": "rgba(0, 0, 0, 0.08)",
-            "height": 1,
-            "marginBottom": 12,
+            "gap": 8,
+            "marginTop": 16,
           }
         }
-      />
-      <View
-        style={
-          Object {
-            "marginBottom": 8,
-          }
-        }
+        testID="com.ariesbifold:id/RelationshipUpgrade"
       >
         <View
           style={
             Object {
-              "marginBottom": 12,
+              "flexDirection": "row",
+              "gap": 10,
             }
           }
         >
-          <Text
-            maxFontSizeMultiplier={2}
-            style={
-              Array [
-                Object {
-                  "color": "#FFFFFF",
-                  "fontSize": 18,
-                  "fontWeight": "normal",
-                },
-                Object {
-                  "color": "#010B13",
-                  "fontSize": 14,
-                  "fontWeight": "800",
-                  "letterSpacing": 0.5,
-                  "marginBottom": 4,
-                  "textTransform": "uppercase",
-                },
-              ]
+          <View
+            accessibilityLabel="ContactDetails.QuickMessage"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
+              }
             }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/ContactViewMessages"
           >
-            ContactDetails.RelationshipDID
-          </Text>
-          <View>
-            <View
-              accessibilityRole="button"
-              accessibilityState={
-                Object {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": undefined,
-                  "expanded": false,
-                  "selected": undefined,
-                }
-              }
-              accessibilityValue={
-                Object {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
-              }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onBlur={[Function]}
-              onClick={[Function]}
-              onFocus={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
+            <Icon
+              color="#42803E"
+              name="message-text-outline"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
               style={
-                Object {
-                  "alignItems": "center",
-                  "flexDirection": "row",
-                  "gap": 6,
-                  "minHeight": 32,
-                }
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
               }
-              testID="com.ariesbifold:id/ContactRelationshipToggle"
             >
-              <Icon
-                color="#606060"
-                name="chevron-right"
-                size={18}
-              />
-              <Text
-                maxFontSizeMultiplier={2}
-                style={
-                  Array [
-                    Object {
-                      "color": "#FFFFFF",
-                      "fontSize": 18,
-                      "fontWeight": "normal",
-                    },
-                    Object {
-                      "color": "#606060",
-                    },
-                  ]
-                }
-              >
-                VtaLink.Details
-              </Text>
-            </View>
+              ContactDetails.QuickMessage
+            </Text>
+          </View>
+          <View
+            accessibilityLabel="Relationship.Resign"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/RelationshipUpgradeResign"
+          >
+            <Icon
+              color="#42803E"
+              name="draw"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
+              }
+            >
+              Relationship.Resign
+            </Text>
+          </View>
+          <View
+            accessibilityLabel="Relationship.Witness"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/RelationshipUpgradeWitness"
+          >
+            <Icon
+              color="#42803E"
+              name="account-check-outline"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
+              }
+            >
+              Relationship.Witness
+            </Text>
           </View>
         </View>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+                "fontSize": 13,
+                "lineHeight": 18,
+              },
+            ]
+          }
+        >
+          Relationship.NoRelationship
+        </Text>
       </View>
       <View
         style={
@@ -326,7 +478,7 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
               ]
             }
           >
-            Relationship.LayerWitnessed
+            Relationship.LayerWitnessedUnnamed
           </Text>
           <Text
             maxFontSizeMultiplier={2}
@@ -369,12 +521,13 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
       <View
         style={
           Object {
-            "marginBottom": 4,
+            "marginTop": 20,
           }
         }
-        testID="WitnessSection"
+        testID="com.ariesbifold:id/ContactTrust"
       >
         <Text
+          accessibilityRole="header"
           maxFontSizeMultiplier={2}
           style={
             Array [
@@ -384,147 +537,270 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
                 "fontWeight": "normal",
               },
               Object {
-                "color": "#010B13",
-                "fontSize": 14,
-                "fontWeight": "800",
-                "letterSpacing": 0.5,
+                "color": "#606060",
+                "fontSize": 12,
+                "fontWeight": "700",
+                "letterSpacing": 0.48,
                 "marginBottom": 4,
                 "textTransform": "uppercase",
               },
             ]
           }
         >
-          Witness Records
+          ContactDetails.TrustTitle
         </Text>
         <View
           style={
             Object {
-              "marginBottom": 8,
+              "alignItems": "center",
+              "flexDirection": "row",
+              "gap": 12,
+              "minHeight": 60,
+              "paddingVertical": 8,
             }
           }
-          testID="WitnessRecord"
+          testID="com.ariesbifold:id/ContactTrustWitnessed"
+        >
+          <Icon
+            color="#4A4A4A"
+            name="check-decagram-outline"
+            size={22}
+          />
+          <View
+            style={
+              Object {
+                "flex": 1,
+                "gap": 1,
+              }
+            }
+          >
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#010B13",
+                    "fontSize": 16,
+                    "fontWeight": "600",
+                  },
+                ]
+              }
+            >
+              ContactDetails.TrustWitnessed
+            </Text>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#606060",
+                    "fontSize": 13,
+                    "lineHeight": 18,
+                  },
+                ]
+              }
+            >
+              ContactDetails.TrustWitnessUnnamed · 21 Jan 2026
+            </Text>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "gap": 12,
+              "minHeight": 60,
+              "paddingVertical": 8,
+            }
+          }
+          testID="com.ariesbifold:id/ContactTrustInPerson"
+        >
+          <Icon
+            color="#4A4A4A"
+            name="map-marker-check-outline"
+            size={22}
+          />
+          <View
+            style={
+              Object {
+                "flex": 1,
+                "gap": 1,
+              }
+            }
+          >
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#010B13",
+                    "fontSize": 16,
+                    "fontWeight": "600",
+                  },
+                ]
+              }
+            >
+              ContactDetails.TrustInPerson
+            </Text>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#606060",
+                    "fontSize": 13,
+                    "lineHeight": 18,
+                  },
+                ]
+              }
+            >
+              ContactDetails.TrustInPersonCaption
+            </Text>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "gap": 12,
+              "minHeight": 60,
+              "paddingVertical": 8,
+            }
+          }
+        >
+          <Icon
+            color="#4A4A4A"
+            name="key-outline"
+            size={22}
+          />
+          <View
+            style={
+              Object {
+                "flex": 1,
+                "gap": 1,
+              }
+            }
+          >
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#010B13",
+                    "fontSize": 16,
+                    "fontWeight": "600",
+                  },
+                ]
+              }
+            >
+              ContactDetails.TrustIdentifier
+            </Text>
+            <View>
+              <View
+                accessibilityRole="button"
+                accessibilityState={
+                  Object {
+                    "busy": undefined,
+                    "checked": undefined,
+                    "disabled": undefined,
+                    "expanded": false,
+                    "selected": undefined,
+                  }
+                }
+                accessibilityValue={
+                  Object {
+                    "max": undefined,
+                    "min": undefined,
+                    "now": undefined,
+                    "text": undefined,
+                  }
+                }
+                accessible={true}
+                collapsable={false}
+                focusable={true}
+                onBlur={[Function]}
+                onClick={[Function]}
+                onFocus={[Function]}
+                onResponderGrant={[Function]}
+                onResponderMove={[Function]}
+                onResponderRelease={[Function]}
+                onResponderTerminate={[Function]}
+                onResponderTerminationRequest={[Function]}
+                onStartShouldSetResponder={[Function]}
+                style={
+                  Object {
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "gap": 6,
+                    "minHeight": 32,
+                  }
+                }
+                testID="com.ariesbifold:id/ContactRelationshipToggle"
+              >
+                <Icon
+                  color="#606060"
+                  name="chevron-right"
+                  size={18}
+                />
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "color": "#606060",
+                      },
+                    ]
+                  }
+                >
+                  VtaLink.Details
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View
+          testID="WitnessSection"
         >
           <View
             style={
               Object {
-                "marginBottom": 4,
+                "paddingVertical": 6,
               }
             }
+            testID="WitnessRecord"
           >
-            <Text
-              maxFontSizeMultiplier={2}
-              style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Object {
-                    "color": "#010B13",
-                    "fontSize": 13,
-                    "fontWeight": "800",
-                    "marginBottom": 4,
-                  },
-                ]
-              }
-            >
-              Witnessed By
-            </Text>
-            <Text
-              maxFontSizeMultiplier={2}
-              style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 14,
-                    "fontWeight": "normal",
-                  },
-                ]
-              }
-            >
-              Witness
-            </Text>
-          </View>
-          <View
-            style={
-              Object {
-                "marginBottom": 4,
-              }
-            }
-          >
-            <Text
-              maxFontSizeMultiplier={2}
-              style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Object {
-                    "color": "#010B13",
-                    "fontSize": 13,
-                    "fontWeight": "800",
-                    "marginBottom": 4,
-                  },
-                ]
-              }
-            >
-              Date
-            </Text>
-            <Text
-              maxFontSizeMultiplier={2}
-              style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 14,
-                    "fontWeight": "normal",
-                  },
-                ]
-              }
-            >
-              21 Jan 2026
-            </Text>
-          </View>
-          <View
-            style={
-              Object {
-                "marginBottom": 4,
-              }
-            }
-          >
-            <Text
-              maxFontSizeMultiplier={2}
-              style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Object {
-                    "color": "#010B13",
-                    "fontSize": 13,
-                    "fontWeight": "800",
-                    "marginBottom": 4,
-                  },
-                ]
-              }
-            >
-              Locality Verification
-            </Text>
             <View
               style={
                 Object {
@@ -549,9 +825,8 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
                       "fontWeight": "normal",
                     },
                     Object {
-                      "color": "#FFFFFF",
-                      "fontSize": 14,
-                      "fontWeight": "normal",
+                      "color": "#010B13",
+                      "fontSize": 15,
                     },
                   ]
                 }
@@ -563,66 +838,14 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
         </View>
       </View>
       <View
-        accessibilityLabel="ContactDetails.ViewMessages"
-        accessibilityRole="button"
-        accessibilityState={
-          Object {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": true,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          Object {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={false}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
         style={
           Object {
-            "alignItems": "center",
-            "flexDirection": "row",
-            "marginBottom": 12,
-            "opacity": 0.5,
-            "paddingVertical": 10,
+            "marginTop": 20,
           }
         }
-        testID="com.ariesbifold:id/ContactViewMessages"
       >
-        <View
-          style={
-            Object {
-              "alignItems": "center",
-              "backgroundColor": "#F1D2D6",
-              "borderRadius": 18,
-              "height": 36,
-              "justifyContent": "center",
-              "marginRight": 12,
-              "width": 36,
-            }
-          }
-        >
-          <Icon
-            color="#000000"
-            name="message-text-outline"
-            size={18}
-          />
-        </View>
         <Text
+          accessibilityRole="header"
           maxFontSizeMultiplier={2}
           style={
             Array [
@@ -632,84 +855,93 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
                 "fontWeight": "normal",
               },
               Object {
-                "color": "#622C62",
-                "fontSize": 16,
-                "fontWeight": "600",
+                "color": "#606060",
+                "fontSize": 12,
+                "fontWeight": "700",
+                "letterSpacing": 0.48,
+                "marginBottom": 4,
+                "textTransform": "uppercase",
               },
             ]
           }
         >
-          ContactDetails.ViewMessages
+          ContactDetails.ContactTitle
         </Text>
       </View>
       <View
-        accessibilityLabel="ContactDetails.RemoveContact"
-        accessibilityRole="button"
-        accessibilityState={
-          Object {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          Object {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
         style={
           Object {
-            "alignItems": "center",
-            "alignSelf": "center",
-            "borderColor": "#622C62",
-            "borderRadius": 40,
-            "borderStyle": "dashed",
-            "borderWidth": 2,
-            "justifyContent": "center",
-            "marginBottom": 24,
-            "marginTop": 16,
-            "opacity": 1,
-            "paddingHorizontal": 40,
-            "paddingVertical": 14,
+            "borderTopColor": "#E3DEE3",
+            "borderTopWidth": 1,
+            "marginTop": 28,
+            "paddingTop": 20,
           }
         }
-        testID="com.ariesbifold:id/ContactRemove"
       >
-        <Text
-          maxFontSizeMultiplier={2}
-          style={
-            Array [
-              Object {
-                "color": "#FFFFFF",
-                "fontSize": 18,
-                "fontWeight": "normal",
-              },
-              Object {
-                "color": "#622C62",
-                "fontSize": 16,
-                "fontWeight": "bold",
-                "textAlign": "center",
-              },
-            ]
+        <View
+          accessibilityLabel="ContactDetails.RemoveContact"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
           }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onClick={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "alignItems": "center",
+              "backgroundColor": "#FFFFFF",
+              "borderColor": "#D8292F",
+              "borderRadius": 24,
+              "borderWidth": 1,
+              "justifyContent": "center",
+              "minHeight": 48,
+              "opacity": 1,
+            }
+          }
+          testID="com.ariesbifold:id/ContactRemove"
         >
-          ContactDetails.RemoveContact
-        </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#D8292F",
+                  "fontSize": 16,
+                  "fontWeight": "bold",
+                },
+              ]
+            }
+          >
+            ContactDetails.RemoveContact
+          </Text>
+        </View>
       </View>
     </View>
   </RCTScrollView>
@@ -728,7 +960,7 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
   }
   style={
     Object {
-      "backgroundColor": "#313132",
+      "backgroundColor": "#000000",
       "flex": 1,
     }
   }
@@ -736,8 +968,8 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
   <RCTScrollView
     contentContainerStyle={
       Object {
-        "paddingBottom": 16,
-        "paddingHorizontal": 20,
+        "paddingBottom": 32,
+        "paddingHorizontal": 16,
       }
     }
     style={
@@ -751,8 +983,8 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
         style={
           Object {
             "alignItems": "center",
-            "paddingBottom": 12,
-            "paddingTop": 16,
+            "gap": 10,
+            "paddingTop": 28,
           }
         }
       >
@@ -761,21 +993,22 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
             Object {
               "alignItems": "center",
               "backgroundColor": "#E8E0E8",
-              "borderRadius": 25,
-              "height": 50,
+              "borderRadius": 44,
+              "height": 88,
               "justifyContent": "center",
               "overflow": "hidden",
-              "width": 50,
+              "width": 88,
             }
           }
         >
           <Icon
-            color="#666666"
+            color="#4A4A4A"
             name="account-outline"
-            size={32}
+            size={40}
           />
         </View>
         <Text
+          accessibilityRole="header"
           maxFontSizeMultiplier={2}
           style={
             Array [
@@ -787,8 +1020,7 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
               Object {
                 "color": "#010B13",
                 "fontSize": 32,
-                "fontWeight": "bold",
-                "marginTop": 8,
+                "fontWeight": "700",
                 "textAlign": "center",
               },
             ]
@@ -800,165 +1032,265 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
       <View
         style={
           Object {
-            "backgroundColor": "rgba(0, 0, 0, 0.08)",
-            "height": 1,
-            "marginBottom": 12,
+            "gap": 8,
+            "marginTop": 16,
           }
         }
-      />
-      <View
-        style={
-          Object {
-            "marginBottom": 8,
-          }
-        }
+        testID="com.ariesbifold:id/RelationshipUpgrade"
       >
         <View
           style={
             Object {
-              "marginBottom": 12,
+              "flexDirection": "row",
+              "gap": 10,
             }
           }
         >
-          <Text
-            maxFontSizeMultiplier={2}
-            style={
-              Array [
-                Object {
-                  "color": "#FFFFFF",
-                  "fontSize": 18,
-                  "fontWeight": "normal",
-                },
-                Object {
-                  "color": "#010B13",
-                  "fontSize": 14,
-                  "fontWeight": "800",
-                  "letterSpacing": 0.5,
-                  "marginBottom": 4,
-                  "textTransform": "uppercase",
-                },
-              ]
-            }
-          >
-            Email
-          </Text>
-          <Text
-            maxFontSizeMultiplier={2}
-            selectable={true}
-            style={
-              Array [
-                Object {
-                  "color": "#FFFFFF",
-                  "fontSize": 18,
-                  "fontWeight": "normal",
-                },
-                Object {
-                  "color": "#010B13",
-                  "fontSize": 16,
-                  "fontWeight": "normal",
-                },
-              ]
-            }
-          >
-            alice@example.com
-          </Text>
-        </View>
-        <View
-          style={
-            Object {
-              "marginBottom": 12,
-            }
-          }
-        >
-          <Text
-            maxFontSizeMultiplier={2}
-            style={
-              Array [
-                Object {
-                  "color": "#FFFFFF",
-                  "fontSize": 18,
-                  "fontWeight": "normal",
-                },
-                Object {
-                  "color": "#010B13",
-                  "fontSize": 14,
-                  "fontWeight": "800",
-                  "letterSpacing": 0.5,
-                  "marginBottom": 4,
-                  "textTransform": "uppercase",
-                },
-              ]
-            }
-          >
-            ContactDetails.RelationshipDID
-          </Text>
-          <View>
-            <View
-              accessibilityRole="button"
-              accessibilityState={
-                Object {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": undefined,
-                  "expanded": false,
-                  "selected": undefined,
-                }
+          <View
+            accessibilityLabel="ContactDetails.QuickMessage"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
               }
-              accessibilityValue={
-                Object {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
               }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onBlur={[Function]}
-              onClick={[Function]}
-              onFocus={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/ContactViewMessages"
+          >
+            <Icon
+              color="#42803E"
+              name="message-text-outline"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
               style={
-                Object {
-                  "alignItems": "center",
-                  "flexDirection": "row",
-                  "gap": 6,
-                  "minHeight": 32,
-                }
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
               }
-              testID="com.ariesbifold:id/ContactRelationshipToggle"
             >
-              <Icon
-                color="#606060"
-                name="chevron-right"
-                size={18}
-              />
-              <Text
-                maxFontSizeMultiplier={2}
-                style={
-                  Array [
-                    Object {
-                      "color": "#FFFFFF",
-                      "fontSize": 18,
-                      "fontWeight": "normal",
-                    },
-                    Object {
-                      "color": "#606060",
-                    },
-                  ]
-                }
-              >
-                VtaLink.Details
-              </Text>
-            </View>
+              ContactDetails.QuickMessage
+            </Text>
+          </View>
+          <View
+            accessibilityLabel="Relationship.Resign"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/RelationshipUpgradeResign"
+          >
+            <Icon
+              color="#42803E"
+              name="draw"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
+              }
+            >
+              Relationship.Resign
+            </Text>
+          </View>
+          <View
+            accessibilityLabel="Relationship.Witness"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/RelationshipUpgradeWitness"
+          >
+            <Icon
+              color="#42803E"
+              name="account-check-outline"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
+              }
+            >
+              Relationship.Witness
+            </Text>
           </View>
         </View>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+                "fontSize": 13,
+                "lineHeight": 18,
+              },
+            ]
+          }
+        >
+          Relationship.NoRelationship
+        </Text>
       </View>
       <View
         style={
@@ -1028,30 +1360,13 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
       <View
         style={
           Object {
-            "gap": 10,
-            "marginTop": 16,
+            "marginTop": 20,
           }
         }
-        testID="com.ariesbifold:id/ContactMerge"
+        testID="com.ariesbifold:id/ContactTrust"
       >
         <Text
-          maxFontSizeMultiplier={2}
-          style={
-            Array [
-              Object {
-                "color": "#FFFFFF",
-                "fontSize": 18,
-                "fontWeight": "normal",
-              },
-              Object {
-                "fontWeight": "bold",
-              },
-            ]
-          }
-        >
-          ContactDetails.MergeOfferTitle
-        </Text>
-        <Text
+          accessibilityRole="header"
           maxFontSizeMultiplier={2}
           style={
             Array [
@@ -1062,19 +1377,362 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
               },
               Object {
                 "color": "#606060",
+                "fontSize": 12,
+                "fontWeight": "700",
+                "letterSpacing": 0.48,
+                "marginBottom": 4,
+                "textTransform": "uppercase",
               },
             ]
           }
         >
-          ContactDetails.MergeOfferBody
+          ContactDetails.TrustTitle
         </Text>
         <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "gap": 12,
+              "minHeight": 60,
+              "paddingVertical": 8,
+            }
+          }
+        >
+          <Icon
+            color="#4A4A4A"
+            name="key-outline"
+            size={22}
+          />
+          <View
+            style={
+              Object {
+                "flex": 1,
+                "gap": 1,
+              }
+            }
+          >
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#010B13",
+                    "fontSize": 16,
+                    "fontWeight": "600",
+                  },
+                ]
+              }
+            >
+              ContactDetails.TrustIdentifier
+            </Text>
+            <View>
+              <View
+                accessibilityRole="button"
+                accessibilityState={
+                  Object {
+                    "busy": undefined,
+                    "checked": undefined,
+                    "disabled": undefined,
+                    "expanded": false,
+                    "selected": undefined,
+                  }
+                }
+                accessibilityValue={
+                  Object {
+                    "max": undefined,
+                    "min": undefined,
+                    "now": undefined,
+                    "text": undefined,
+                  }
+                }
+                accessible={true}
+                collapsable={false}
+                focusable={true}
+                onBlur={[Function]}
+                onClick={[Function]}
+                onFocus={[Function]}
+                onResponderGrant={[Function]}
+                onResponderMove={[Function]}
+                onResponderRelease={[Function]}
+                onResponderTerminate={[Function]}
+                onResponderTerminationRequest={[Function]}
+                onStartShouldSetResponder={[Function]}
+                style={
+                  Object {
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "gap": 6,
+                    "minHeight": 32,
+                  }
+                }
+                testID="com.ariesbifold:id/ContactRelationshipToggle"
+              >
+                <Icon
+                  color="#606060"
+                  name="chevron-right"
+                  size={18}
+                />
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "color": "#606060",
+                      },
+                    ]
+                  }
+                >
+                  VtaLink.Details
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginTop": 20,
+          }
+        }
+      >
+        <Text
+          accessibilityRole="header"
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+                "fontSize": 12,
+                "fontWeight": "700",
+                "letterSpacing": 0.48,
+                "marginBottom": 4,
+                "textTransform": "uppercase",
+              },
+            ]
+          }
+        >
+          ContactDetails.ContactTitle
+        </Text>
+        <View
+          style={
+            Object {
+              "gap": 10,
+              "marginTop": 16,
+            }
+          }
+          testID="com.ariesbifold:id/ContactMerge"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "fontWeight": "bold",
+                },
+              ]
+            }
+          >
+            ContactDetails.MergeOfferTitle
+          </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#606060",
+                },
+              ]
+            }
+          >
+            ContactDetails.MergeOfferBody
+          </Text>
+          <View
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": false,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onClick={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "borderColor": "#42803E",
+                "borderRadius": 4,
+                "borderWidth": 2,
+                "opacity": 1,
+                "padding": 16,
+              }
+            }
+            testID="com.ariesbifold:id/ContactMergeOffer"
+          >
+            <View
+              style={
+                Object {
+                  "alignItems": "center",
+                  "flexDirection": "row",
+                  "justifyContent": "center",
+                }
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Array [
+                      Object {
+                        "color": "#42803E",
+                        "fontSize": 18,
+                        "fontWeight": "bold",
+                        "textAlign": "center",
+                      },
+                      false,
+                      false,
+                    ],
+                  ]
+                }
+              >
+                ContactDetails.Merge
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "gap": 12,
+              "minHeight": 60,
+              "paddingVertical": 8,
+            }
+          }
+        >
+          <Icon
+            color="#4A4A4A"
+            name="email-outline"
+            size={22}
+          />
+          <View
+            style={
+              Object {
+                "flex": 1,
+                "gap": 1,
+              }
+            }
+          >
+            <Text
+              maxFontSizeMultiplier={2}
+              selectable={true}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#010B13",
+                    "fontSize": 16,
+                    "fontWeight": "600",
+                  },
+                ]
+              }
+            >
+              alice@example.com
+            </Text>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#606060",
+                    "fontSize": 13,
+                    "lineHeight": 18,
+                  },
+                ]
+              }
+            >
+              ContactDetails.Email
+            </Text>
+          </View>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "borderTopColor": "#E3DEE3",
+            "borderTopWidth": 1,
+            "marginTop": 28,
+            "paddingTop": 20,
+          }
+        }
+      >
+        <View
+          accessibilityLabel="ContactDetails.RemoveContact"
           accessibilityRole="button"
           accessibilityState={
             Object {
               "busy": undefined,
               "checked": undefined,
-              "disabled": false,
+              "disabled": undefined,
               "expanded": undefined,
               "selected": undefined,
             }
@@ -1099,199 +1757,38 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
           onStartShouldSetResponder={[Function]}
           style={
             Object {
-              "borderColor": "#42803E",
-              "borderRadius": 4,
-              "borderWidth": 2,
+              "alignItems": "center",
+              "backgroundColor": "#FFFFFF",
+              "borderColor": "#D8292F",
+              "borderRadius": 24,
+              "borderWidth": 1,
+              "justifyContent": "center",
+              "minHeight": 48,
               "opacity": 1,
-              "padding": 16,
             }
           }
-          testID="com.ariesbifold:id/ContactMergeOffer"
+          testID="com.ariesbifold:id/ContactRemove"
         >
-          <View
+          <Text
+            maxFontSizeMultiplier={2}
             style={
-              Object {
-                "alignItems": "center",
-                "flexDirection": "row",
-                "justifyContent": "center",
-              }
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#D8292F",
+                  "fontSize": 16,
+                  "fontWeight": "bold",
+                },
+              ]
             }
           >
-            <Text
-              maxFontSizeMultiplier={2}
-              style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Array [
-                    Object {
-                      "color": "#42803E",
-                      "fontSize": 18,
-                      "fontWeight": "bold",
-                      "textAlign": "center",
-                    },
-                    false,
-                    false,
-                  ],
-                ]
-              }
-            >
-              ContactDetails.Merge
-            </Text>
-          </View>
+            ContactDetails.RemoveContact
+          </Text>
         </View>
-      </View>
-      <View
-        accessibilityLabel="ContactDetails.ViewMessages"
-        accessibilityRole="button"
-        accessibilityState={
-          Object {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": true,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          Object {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={false}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          Object {
-            "alignItems": "center",
-            "flexDirection": "row",
-            "marginBottom": 12,
-            "opacity": 0.5,
-            "paddingVertical": 10,
-          }
-        }
-        testID="com.ariesbifold:id/ContactViewMessages"
-      >
-        <View
-          style={
-            Object {
-              "alignItems": "center",
-              "backgroundColor": "#F1D2D6",
-              "borderRadius": 18,
-              "height": 36,
-              "justifyContent": "center",
-              "marginRight": 12,
-              "width": 36,
-            }
-          }
-        >
-          <Icon
-            color="#000000"
-            name="message-text-outline"
-            size={18}
-          />
-        </View>
-        <Text
-          maxFontSizeMultiplier={2}
-          style={
-            Array [
-              Object {
-                "color": "#FFFFFF",
-                "fontSize": 18,
-                "fontWeight": "normal",
-              },
-              Object {
-                "color": "#622C62",
-                "fontSize": 16,
-                "fontWeight": "600",
-              },
-            ]
-          }
-        >
-          ContactDetails.ViewMessages
-        </Text>
-      </View>
-      <View
-        accessibilityLabel="ContactDetails.RemoveContact"
-        accessibilityRole="button"
-        accessibilityState={
-          Object {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          Object {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          Object {
-            "alignItems": "center",
-            "alignSelf": "center",
-            "borderColor": "#622C62",
-            "borderRadius": 40,
-            "borderStyle": "dashed",
-            "borderWidth": 2,
-            "justifyContent": "center",
-            "marginBottom": 24,
-            "marginTop": 16,
-            "opacity": 1,
-            "paddingHorizontal": 40,
-            "paddingVertical": 14,
-          }
-        }
-        testID="com.ariesbifold:id/ContactRemove"
-      >
-        <Text
-          maxFontSizeMultiplier={2}
-          style={
-            Array [
-              Object {
-                "color": "#FFFFFF",
-                "fontSize": 18,
-                "fontWeight": "normal",
-              },
-              Object {
-                "color": "#622C62",
-                "fontSize": 16,
-                "fontWeight": "bold",
-                "textAlign": "center",
-              },
-            ]
-          }
-        >
-          ContactDetails.RemoveContact
-        </Text>
       </View>
     </View>
   </RCTScrollView>
@@ -1310,7 +1807,7 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
   }
   style={
     Object {
-      "backgroundColor": "#313132",
+      "backgroundColor": "#000000",
       "flex": 1,
     }
   }
@@ -1318,8 +1815,8 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
   <RCTScrollView
     contentContainerStyle={
       Object {
-        "paddingBottom": 16,
-        "paddingHorizontal": 20,
+        "paddingBottom": 32,
+        "paddingHorizontal": 16,
       }
     }
     style={
@@ -1333,8 +1830,8 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
         style={
           Object {
             "alignItems": "center",
-            "paddingBottom": 12,
-            "paddingTop": 16,
+            "gap": 10,
+            "paddingTop": 28,
           }
         }
       >
@@ -1343,21 +1840,22 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
             Object {
               "alignItems": "center",
               "backgroundColor": "#E8E0E8",
-              "borderRadius": 25,
-              "height": 50,
+              "borderRadius": 44,
+              "height": 88,
               "justifyContent": "center",
               "overflow": "hidden",
-              "width": 50,
+              "width": 88,
             }
           }
         >
           <Icon
-            color="#666666"
+            color="#4A4A4A"
             name="account-outline"
-            size={32}
+            size={40}
           />
         </View>
         <Text
+          accessibilityRole="header"
           maxFontSizeMultiplier={2}
           style={
             Array [
@@ -1369,8 +1867,7 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
               Object {
                 "color": "#010B13",
                 "fontSize": 32,
-                "fontWeight": "bold",
-                "marginTop": 8,
+                "fontWeight": "700",
                 "textAlign": "center",
               },
             ]
@@ -1382,165 +1879,265 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
       <View
         style={
           Object {
-            "backgroundColor": "rgba(0, 0, 0, 0.08)",
-            "height": 1,
-            "marginBottom": 12,
+            "gap": 8,
+            "marginTop": 16,
           }
         }
-      />
-      <View
-        style={
-          Object {
-            "marginBottom": 8,
-          }
-        }
+        testID="com.ariesbifold:id/RelationshipUpgrade"
       >
         <View
           style={
             Object {
-              "marginBottom": 12,
+              "flexDirection": "row",
+              "gap": 10,
             }
           }
         >
-          <Text
-            maxFontSizeMultiplier={2}
-            style={
-              Array [
-                Object {
-                  "color": "#FFFFFF",
-                  "fontSize": 18,
-                  "fontWeight": "normal",
-                },
-                Object {
-                  "color": "#010B13",
-                  "fontSize": 14,
-                  "fontWeight": "800",
-                  "letterSpacing": 0.5,
-                  "marginBottom": 4,
-                  "textTransform": "uppercase",
-                },
-              ]
-            }
-          >
-            Email
-          </Text>
-          <Text
-            maxFontSizeMultiplier={2}
-            selectable={true}
-            style={
-              Array [
-                Object {
-                  "color": "#FFFFFF",
-                  "fontSize": 18,
-                  "fontWeight": "normal",
-                },
-                Object {
-                  "color": "#010B13",
-                  "fontSize": 16,
-                  "fontWeight": "normal",
-                },
-              ]
-            }
-          >
-            alice@example.com
-          </Text>
-        </View>
-        <View
-          style={
-            Object {
-              "marginBottom": 12,
-            }
-          }
-        >
-          <Text
-            maxFontSizeMultiplier={2}
-            style={
-              Array [
-                Object {
-                  "color": "#FFFFFF",
-                  "fontSize": 18,
-                  "fontWeight": "normal",
-                },
-                Object {
-                  "color": "#010B13",
-                  "fontSize": 14,
-                  "fontWeight": "800",
-                  "letterSpacing": 0.5,
-                  "marginBottom": 4,
-                  "textTransform": "uppercase",
-                },
-              ]
-            }
-          >
-            ContactDetails.RelationshipDID
-          </Text>
-          <View>
-            <View
-              accessibilityRole="button"
-              accessibilityState={
-                Object {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": undefined,
-                  "expanded": false,
-                  "selected": undefined,
-                }
+          <View
+            accessibilityLabel="ContactDetails.QuickMessage"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
               }
-              accessibilityValue={
-                Object {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
               }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onBlur={[Function]}
-              onClick={[Function]}
-              onFocus={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/ContactViewMessages"
+          >
+            <Icon
+              color="#42803E"
+              name="message-text-outline"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
               style={
-                Object {
-                  "alignItems": "center",
-                  "flexDirection": "row",
-                  "gap": 6,
-                  "minHeight": 32,
-                }
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
               }
-              testID="com.ariesbifold:id/ContactRelationshipToggle"
             >
-              <Icon
-                color="#606060"
-                name="chevron-right"
-                size={18}
-              />
-              <Text
-                maxFontSizeMultiplier={2}
-                style={
-                  Array [
-                    Object {
-                      "color": "#FFFFFF",
-                      "fontSize": 18,
-                      "fontWeight": "normal",
-                    },
-                    Object {
-                      "color": "#606060",
-                    },
-                  ]
-                }
-              >
-                VtaLink.Details
-              </Text>
-            </View>
+              ContactDetails.QuickMessage
+            </Text>
+          </View>
+          <View
+            accessibilityLabel="Relationship.Resign"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/RelationshipUpgradeResign"
+          >
+            <Icon
+              color="#42803E"
+              name="draw"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
+              }
+            >
+              Relationship.Resign
+            </Text>
+          </View>
+          <View
+            accessibilityLabel="Relationship.Witness"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#FFFFFF",
+                "borderColor": "#E3DEE3",
+                "borderRadius": 14,
+                "borderWidth": 1,
+                "flex": 1,
+                "gap": 4,
+                "justifyContent": "center",
+                "minHeight": 68,
+                "opacity": 0.6,
+                "paddingHorizontal": 4,
+              }
+            }
+            testID="com.ariesbifold:id/RelationshipUpgradeWitness"
+          >
+            <Icon
+              color="#42803E"
+              name="account-check-outline"
+              size={22}
+            />
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#000000",
+                    "fontSize": 14,
+                    "fontWeight": "600",
+                    "textAlign": "center",
+                  },
+                ]
+              }
+            >
+              Relationship.Witness
+            </Text>
           </View>
         </View>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+                "fontSize": 13,
+                "lineHeight": 18,
+              },
+            ]
+          }
+        >
+          Relationship.NoRelationship
+        </Text>
       </View>
       <View
         style={
@@ -1591,30 +2188,13 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
       <View
         style={
           Object {
-            "gap": 10,
-            "marginTop": 16,
+            "marginTop": 20,
           }
         }
-        testID="com.ariesbifold:id/ContactMerge"
+        testID="com.ariesbifold:id/ContactTrust"
       >
         <Text
-          maxFontSizeMultiplier={2}
-          style={
-            Array [
-              Object {
-                "color": "#FFFFFF",
-                "fontSize": 18,
-                "fontWeight": "normal",
-              },
-              Object {
-                "fontWeight": "bold",
-              },
-            ]
-          }
-        >
-          ContactDetails.MergeOfferTitle
-        </Text>
-        <Text
+          accessibilityRole="header"
           maxFontSizeMultiplier={2}
           style={
             Array [
@@ -1625,19 +2205,362 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
               },
               Object {
                 "color": "#606060",
+                "fontSize": 12,
+                "fontWeight": "700",
+                "letterSpacing": 0.48,
+                "marginBottom": 4,
+                "textTransform": "uppercase",
               },
             ]
           }
         >
-          ContactDetails.MergeOfferBody
+          ContactDetails.TrustTitle
         </Text>
         <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "gap": 12,
+              "minHeight": 60,
+              "paddingVertical": 8,
+            }
+          }
+        >
+          <Icon
+            color="#4A4A4A"
+            name="key-outline"
+            size={22}
+          />
+          <View
+            style={
+              Object {
+                "flex": 1,
+                "gap": 1,
+              }
+            }
+          >
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#010B13",
+                    "fontSize": 16,
+                    "fontWeight": "600",
+                  },
+                ]
+              }
+            >
+              ContactDetails.TrustIdentifier
+            </Text>
+            <View>
+              <View
+                accessibilityRole="button"
+                accessibilityState={
+                  Object {
+                    "busy": undefined,
+                    "checked": undefined,
+                    "disabled": undefined,
+                    "expanded": false,
+                    "selected": undefined,
+                  }
+                }
+                accessibilityValue={
+                  Object {
+                    "max": undefined,
+                    "min": undefined,
+                    "now": undefined,
+                    "text": undefined,
+                  }
+                }
+                accessible={true}
+                collapsable={false}
+                focusable={true}
+                onBlur={[Function]}
+                onClick={[Function]}
+                onFocus={[Function]}
+                onResponderGrant={[Function]}
+                onResponderMove={[Function]}
+                onResponderRelease={[Function]}
+                onResponderTerminate={[Function]}
+                onResponderTerminationRequest={[Function]}
+                onStartShouldSetResponder={[Function]}
+                style={
+                  Object {
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "gap": 6,
+                    "minHeight": 32,
+                  }
+                }
+                testID="com.ariesbifold:id/ContactRelationshipToggle"
+              >
+                <Icon
+                  color="#606060"
+                  name="chevron-right"
+                  size={18}
+                />
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "color": "#606060",
+                      },
+                    ]
+                  }
+                >
+                  VtaLink.Details
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginTop": 20,
+          }
+        }
+      >
+        <Text
+          accessibilityRole="header"
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+                "fontSize": 12,
+                "fontWeight": "700",
+                "letterSpacing": 0.48,
+                "marginBottom": 4,
+                "textTransform": "uppercase",
+              },
+            ]
+          }
+        >
+          ContactDetails.ContactTitle
+        </Text>
+        <View
+          style={
+            Object {
+              "gap": 10,
+              "marginTop": 16,
+            }
+          }
+          testID="com.ariesbifold:id/ContactMerge"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "fontWeight": "bold",
+                },
+              ]
+            }
+          >
+            ContactDetails.MergeOfferTitle
+          </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#606060",
+                },
+              ]
+            }
+          >
+            ContactDetails.MergeOfferBody
+          </Text>
+          <View
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": false,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onClick={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "borderColor": "#42803E",
+                "borderRadius": 4,
+                "borderWidth": 2,
+                "opacity": 1,
+                "padding": 16,
+              }
+            }
+            testID="com.ariesbifold:id/ContactMergeOffer"
+          >
+            <View
+              style={
+                Object {
+                  "alignItems": "center",
+                  "flexDirection": "row",
+                  "justifyContent": "center",
+                }
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Array [
+                      Object {
+                        "color": "#42803E",
+                        "fontSize": 18,
+                        "fontWeight": "bold",
+                        "textAlign": "center",
+                      },
+                      false,
+                      false,
+                    ],
+                  ]
+                }
+              >
+                ContactDetails.Merge
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "gap": 12,
+              "minHeight": 60,
+              "paddingVertical": 8,
+            }
+          }
+        >
+          <Icon
+            color="#4A4A4A"
+            name="email-outline"
+            size={22}
+          />
+          <View
+            style={
+              Object {
+                "flex": 1,
+                "gap": 1,
+              }
+            }
+          >
+            <Text
+              maxFontSizeMultiplier={2}
+              selectable={true}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#010B13",
+                    "fontSize": 16,
+                    "fontWeight": "600",
+                  },
+                ]
+              }
+            >
+              alice@example.com
+            </Text>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#606060",
+                    "fontSize": 13,
+                    "lineHeight": 18,
+                  },
+                ]
+              }
+            >
+              ContactDetails.Email
+            </Text>
+          </View>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "borderTopColor": "#E3DEE3",
+            "borderTopWidth": 1,
+            "marginTop": 28,
+            "paddingTop": 20,
+          }
+        }
+      >
+        <View
+          accessibilityLabel="ContactDetails.RemoveContact"
           accessibilityRole="button"
           accessibilityState={
             Object {
               "busy": undefined,
               "checked": undefined,
-              "disabled": false,
+              "disabled": undefined,
               "expanded": undefined,
               "selected": undefined,
             }
@@ -1662,199 +2585,38 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
           onStartShouldSetResponder={[Function]}
           style={
             Object {
-              "borderColor": "#42803E",
-              "borderRadius": 4,
-              "borderWidth": 2,
+              "alignItems": "center",
+              "backgroundColor": "#FFFFFF",
+              "borderColor": "#D8292F",
+              "borderRadius": 24,
+              "borderWidth": 1,
+              "justifyContent": "center",
+              "minHeight": 48,
               "opacity": 1,
-              "padding": 16,
             }
           }
-          testID="com.ariesbifold:id/ContactMergeOffer"
+          testID="com.ariesbifold:id/ContactRemove"
         >
-          <View
+          <Text
+            maxFontSizeMultiplier={2}
             style={
-              Object {
-                "alignItems": "center",
-                "flexDirection": "row",
-                "justifyContent": "center",
-              }
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#D8292F",
+                  "fontSize": 16,
+                  "fontWeight": "bold",
+                },
+              ]
             }
           >
-            <Text
-              maxFontSizeMultiplier={2}
-              style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Array [
-                    Object {
-                      "color": "#42803E",
-                      "fontSize": 18,
-                      "fontWeight": "bold",
-                      "textAlign": "center",
-                    },
-                    false,
-                    false,
-                  ],
-                ]
-              }
-            >
-              ContactDetails.Merge
-            </Text>
-          </View>
+            ContactDetails.RemoveContact
+          </Text>
         </View>
-      </View>
-      <View
-        accessibilityLabel="ContactDetails.ViewMessages"
-        accessibilityRole="button"
-        accessibilityState={
-          Object {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": true,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          Object {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={false}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          Object {
-            "alignItems": "center",
-            "flexDirection": "row",
-            "marginBottom": 12,
-            "opacity": 0.5,
-            "paddingVertical": 10,
-          }
-        }
-        testID="com.ariesbifold:id/ContactViewMessages"
-      >
-        <View
-          style={
-            Object {
-              "alignItems": "center",
-              "backgroundColor": "#F1D2D6",
-              "borderRadius": 18,
-              "height": 36,
-              "justifyContent": "center",
-              "marginRight": 12,
-              "width": 36,
-            }
-          }
-        >
-          <Icon
-            color="#000000"
-            name="message-text-outline"
-            size={18}
-          />
-        </View>
-        <Text
-          maxFontSizeMultiplier={2}
-          style={
-            Array [
-              Object {
-                "color": "#FFFFFF",
-                "fontSize": 18,
-                "fontWeight": "normal",
-              },
-              Object {
-                "color": "#622C62",
-                "fontSize": 16,
-                "fontWeight": "600",
-              },
-            ]
-          }
-        >
-          ContactDetails.ViewMessages
-        </Text>
-      </View>
-      <View
-        accessibilityLabel="ContactDetails.RemoveContact"
-        accessibilityRole="button"
-        accessibilityState={
-          Object {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          Object {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          Object {
-            "alignItems": "center",
-            "alignSelf": "center",
-            "borderColor": "#622C62",
-            "borderRadius": 40,
-            "borderStyle": "dashed",
-            "borderWidth": 2,
-            "justifyContent": "center",
-            "marginBottom": 24,
-            "marginTop": 16,
-            "opacity": 1,
-            "paddingHorizontal": 40,
-            "paddingVertical": 14,
-          }
-        }
-        testID="com.ariesbifold:id/ContactRemove"
-      >
-        <Text
-          maxFontSizeMultiplier={2}
-          style={
-            Array [
-              Object {
-                "color": "#FFFFFF",
-                "fontSize": 18,
-                "fontWeight": "normal",
-              },
-              Object {
-                "color": "#622C62",
-                "fontSize": 16,
-                "fontWeight": "bold",
-                "textAlign": "center",
-              },
-            ]
-          }
-        >
-          ContactDetails.RemoveContact
-        </Text>
       </View>
     </View>
   </RCTScrollView>

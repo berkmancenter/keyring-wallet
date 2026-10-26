@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "e8cd34c73fdf592bd892ce768dfb829318f12c06",
+  "generatedFrom": "30ad49a24153e8f3cc4c0371577bce1eae566610",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -375,7 +375,12 @@
     "ContactSeparateBack": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactSeparateConfirm": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactSeparateYes": ["src/modules/vrc/components/ContactMergeSection.tsx"],
-    "ContactViewMessages": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrust": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustHardware": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustInPerson": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustNone": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustWitnessed": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactViewMessages": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "Contacts": ["src/navigators/TabStack.tsx"],
     "ContactsList": ["src/modules/vrc/screens/WhatAreContacts.tsx"],
     "Continue": [
@@ -859,6 +864,7 @@
     "RelationshipUpgradeConfirm": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeDismiss": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeHardwareDone": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeNoWitness": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeNote": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeResign": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeSend": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],

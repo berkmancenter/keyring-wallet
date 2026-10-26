@@ -446,6 +446,22 @@
     "UnknownContact": "Contact Desconhecido"
   },
   "ContactDetails": {
+    "QuickMessage": "Mensagem",
+    "BadgeVerified": "Verificado",
+    "BadgeInPerson": "Pessoalmente",
+    "BadgeSecureHardware": "Hardware seguro",
+    "TrustTitle": "Por que você pode confiar",
+    "TrustWitnessed": "Verificado por uma testemunha",
+    "TrustWitnessUnnamed": "Uma testemunha",
+    "TrustInPerson": "Encontro presencial",
+    "TrustInPersonCaption": "A testemunha confirmou que vocês estavam perto",
+    "TrustHardwareCaption": "Verificado neste telefone",
+    "TrustNone": "Ainda não verificado",
+    "TrustNoneCaption": "Nenhuma testemunha e nenhuma evidência de hardware",
+    "TrustIdentifier": "Identificador da relação",
+    "ContactTitle": "Contato",
+    "Email": "E-mail",
+    "LinkedProfile": "Seu perfil vinculado",
     "Created": "Criado",
     "ConnectionState": "Estado da conexão",
     "AContact": "Um Contato",
@@ -2594,6 +2610,8 @@
     "Fetching": "Buscando novas mensagens…"
   },
   "Relationship": {
+    "ResignUnavailable": "Assinar de novo: seus cartões já estão assinados com hardware seguro.",
+    "WitnessUnavailable": "Adicionar uma testemunha: conecte-se primeiro a uma testemunha. Toque no escudo no topo de Contatos.",
     "WaitingForAnswer": "Aguardando a resposta de {{name}}.",
     "UpgradeTitle": "Adicionar a esta relação",
     "Resign": "Assinar de novo",

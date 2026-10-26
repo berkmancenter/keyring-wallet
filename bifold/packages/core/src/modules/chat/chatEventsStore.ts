@@ -114,7 +114,7 @@ const readAll = (agent: Agent, repository: ReturnType<typeof getChatEventReposit
       if (attached !== agent) return
       // Unread, not empty: the screens keep saying so. Said in the log too, and tried again.
       const delay = READ_RETRY_DELAYS_MS[attempt]
-      agent.config?.logger?.warn(
+      agent.config?.logger?.warn?.(
         `[chat] reading chat events failed (attempt ${attempt + 1}): ${
           delay === undefined ? 'not trying again until the wallet reconnects' : `trying again in ${delay / 1000} s`
         }`,
@@ -150,7 +150,7 @@ export const chatEventsStore = {
     } catch (error) {
       // An agent with no event bus or chat storage: a test's stand-in, or a build where the chat module was never
       // registered. The chats stay unread, never shown empty, and the log says why.
-      agent.config?.logger?.warn('[chat] no chat storage on this agent: chats stay unknown', { error })
+      agent.config?.logger?.warn?.('[chat] no chat storage on this agent: chats stay unknown', { error })
       return
     }
     readAll(agent, repository, 0)
