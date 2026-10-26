@@ -12,6 +12,7 @@ import {
   contactFacts,
   knownName,
   useConnectionFacts,
+  useConnectionRelationships,
   useContactFacts,
 } from '../../../src/modules/vrc/contacts/useContactFacts'
 
@@ -149,6 +150,31 @@ describe("a connection's facts", () => {
     })
     await settle()
     expect(renders).toBe(1)
+  })
+})
+
+describe("each connection's relationship, for grouping the chat list by contact", () => {
+  test('unknown until read, then each connection with a relationship; one without is absent, not hidden', async () => {
+    const { agent } = fakeAgent([
+      { connectionId: 'conn-1', counterpartyRelationshipDid: 'did:bob:1' },
+      { connectionId: 'conn-2', counterpartyRelationshipDid: 'did:bob:2' },
+      { counterpartyRelationshipDid: 'did:nobody' },
+    ])
+    const { result } = renderHook(() => useConnectionRelationships())
+    expect(result.current).toBeUndefined()
+    await act(async () => contactFacts.load(agent, []))
+    expect(result.current && [...result.current]).toEqual([
+      ['conn-1', 'did:bob:1'],
+      ['conn-2', 'did:bob:2'],
+    ])
+  })
+
+  test('the same map while nothing moved, so the list does not regroup on every read', async () => {
+    const { agent } = fakeAgent([{ connectionId: 'conn-1', counterpartyRelationshipDid: 'did:bob:1' }])
+    await act(async () => contactFacts.load(agent, []))
+    const first = contactFacts.relationships()
+    await act(async () => contactFacts.load(agent, []))
+    expect(contactFacts.relationships()).toBe(first)
   })
 })
 
