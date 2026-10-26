@@ -1096,6 +1096,14 @@ xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \
   `lib/config.js` should prevent this; if you're overriding caps, keep it.
 - **iOS Scan screen comes up blank**: known simulator flake; the flows retry
   by backing out and re-entering.
+- **"Open settings" lands on the Settings root on an iOS simulator**: the
+  simulator is not a valid surface for `Linking.openSettings()`. On iOS 26.3
+  simulators it opened the Settings root, both with Settings cold and already
+  running, though Keyring's own page existed (Settings → Apps → Keyring), and
+  `simctl openurl <udid> app-settings:` is refused (LSApplicationWorkspaceErrorDomain
+  115). On a real iPhone the same button lands on Keyring's own page (checked on
+  a TestFlight build, 2026-10-26). Check any "Open settings" behaviour on a device;
+  a simulator run can prove only that the button opens Settings.
 - **Wallet locks mid-test**: expected — flows call `unlockIfLocked` between
   polls (5-minute inactivity lock).
 - **`could not read invitation URL`**: the invitation text is exposed via a
