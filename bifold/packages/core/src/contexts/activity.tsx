@@ -9,7 +9,6 @@ import React, {
   useState,
 } from 'react'
 import { AppState, AppStateStatus, PanResponder, View } from 'react-native'
-import { DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
 import { TOKENS, useServices } from '../container-api'
 import { LockoutReason, useAuth } from './auth'
 import { useStore } from './store'
@@ -46,7 +45,11 @@ export interface ActivityContext {
 export const ActivityContext = createContext<ActivityContext>(null as unknown as ActivityContext)
 
 export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
-  const [logger, { customAutoLockTimes }] = useServices([TOKENS.UTIL_LOGGER, TOKENS.CONFIG])
+  const [logger, { customAutoLockTimes }, messagePickup] = useServices([
+    TOKENS.UTIL_LOGGER,
+    TOKENS.CONFIG,
+    TOKENS.UTIL_MESSAGE_PICKUP,
+  ])
   const [store] = useStore()
   const { agent } = useAppAgent()
   const { lockOutUser } = useAuth()
@@ -123,7 +126,7 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
         // remove timeout when backgrounded as timeout refs can be lost when app is backgrounded
         clearInactivityTimeoutIfExists()
         try {
-          await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
+          await messagePickup.onBackground(agent)
           logger.info('Stopped agent message pickup')
         } catch (err) {
           logger.error(`Error stopping agent message pickup, ${err}`)
@@ -143,21 +146,10 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
           // downloaded update (utils/otaApply).
           notifyReturnLocked(Date.now() - lastActiveTimeRef.current)
         } else {
-          // otherwise restart message pickup
+          // otherwise restart message pickup, the way the app picks up
+          // (TOKENS.UTIL_MESSAGE_PICKUP; utils/messagePickupLifecycle.ts)
           try {
-            // Stop before starting, and name the strategy explicitly. Both matter:
-            // initiateMessagePickup SUBSCRIBES A NEW polling loop rather than
-            // replacing the running one, so without the stop every foreground
-            // resume accumulates another loop for the life of the process; and
-            // without an explicit strategy credo resolves
-            // `mediationRecord.pickupStrategy ?? moduleConfig`, letting a value
-            // persisted in the wallet decide whether this agent can receive at
-            // all. See docs/spikes/e2e-vrc-connect-findings.md.
-            await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
-            await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
-              undefined,
-              DidCommMediatorPickupStrategy.PickUpV2
-            )
+            await messagePickup.onForeground(agent)
             logger.info('Restarted agent message pickup')
           } catch (err) {
             logger.error(`Error restarting agent message pickup, ${err}`)
@@ -179,7 +171,7 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
       clearInactivityTimeoutIfExists()
       eventSubscription.remove()
     }
-  }, [clearInactivityTimeoutIfExists, lockOutUser, resetInactivityTimeout, agent, logger])
+  }, [clearInactivityTimeoutIfExists, lockOutUser, resetInactivityTimeout, agent, logger, messagePickup])
 
   useEffect(() => {
     // user has updated settings for auto lock time

@@ -63,6 +63,7 @@ import {
   WitnessSettings,
 } from './types/state'
 import { hashPIN } from './utils/crypto'
+import { defaultMessagePickupLifecycle } from './utils/messagePickupLifecycle'
 
 export const defaultConfig: Config = {
   PINSecurity: {
@@ -163,6 +164,7 @@ export class MainContainer implements Container {
     this._container.registerInstance(TOKENS.UTIL_ATTESTATION_MONITOR, { useValue: undefined })
     this._container.registerInstance(TOKENS.UTIL_APP_VERSION_MONITOR, { useValue: undefined })
     this._container.registerInstance(TOKENS.UTIL_CREDENTIAL_PROVISIONING_MONITOR, { useValue: undefined })
+    this._container.registerInstance(TOKENS.UTIL_MESSAGE_PICKUP, defaultMessagePickupLifecycle)
     this._container.registerInstance(TOKENS.NOTIFICATIONS, {
       useNotifications,
     })

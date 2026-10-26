@@ -141,6 +141,8 @@ export { FileCache } from './utils/fileCache'
 export { removeWalletBackups, sweepStaleWalletBackups, WALLET_BACKUP_MAX_AGE_MS } from './utils/walletBackup'
 export { isProtocolMessage } from './utils/protocolMessage'
 export type { CacheDataFile } from './utils/fileCache'
+export { defaultMessagePickupLifecycle } from './utils/messagePickupLifecycle'
+export type { MessagePickupLifecycle } from './utils/messagePickupLifecycle'
 export { seedTestContacts, clearTestContacts } from './utils/seedTestCredentials'
 export {
   DTG_CONTEXT,

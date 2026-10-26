@@ -26,8 +26,8 @@ let mockSavedAutoLock: number | undefined = 5
 jest.mock('../src/contexts/store', () => ({ useStore: () => [{ preferences: { autoLockTime: mockSavedAutoLock } }] }))
 jest.mock('react-native-config', () => ({ __esModule: true, default: {} }))
 jest.mock('../src/container-api', () => ({
-  TOKENS: { UTIL_LOGGER: 'logger', CONFIG: 'config' },
-  useServices: () => [{ info: jest.fn(), error: jest.fn() }, {}],
+  TOKENS: { UTIL_LOGGER: 'logger', CONFIG: 'config', UTIL_MESSAGE_PICKUP: 'messagePickup' },
+  useServices: () => [{ info: jest.fn(), error: jest.fn() }, {}, { onBackground: jest.fn(), onForeground: jest.fn() }],
 }))
 
 const MIN = 60_000
