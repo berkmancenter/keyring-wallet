@@ -1114,6 +1114,8 @@
     "GifAsIsBody": "Um GIF é enviado exatamente como está, então tudo o que estiver no arquivo vai junto.",
     "SendGif": "Enviar GIF",
     "PhotoNoPermission": "O Keyring precisa de permissão para usar a câmera ou suas fotos. Você pode permitir nos Ajustes.",
+    "PhotoNoPermissionTitle": "Acesso necessário",
+    "OpenSettings": "Abrir as configurações",
     "GifTooLarge": "Este GIF é grande demais para enviar",
     "PhotoTooLarge": "Esta foto é grande demais para enviar",
     "PhotoUnreadable": "Esta foto não pode ser enviada",

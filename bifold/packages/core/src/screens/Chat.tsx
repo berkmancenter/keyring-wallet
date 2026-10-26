@@ -23,7 +23,7 @@ import { useChatAttended } from '../components/chat/useChatAttended'
 import { useComposerText } from '../components/chat/useComposerText'
 import { ToastType } from '../components/toast/BaseToast'
 import { pickAndSendPhoto } from '../modules/chat/media/compose'
-import type { PhotoSendOutcome } from '../modules/chat/media/compose'
+import { confirmGifAsIs, showPhotoOutcome } from '../modules/chat/media/outcome'
 import type { PhotoSource } from '../modules/chat/media/pick'
 import EmojiPickerSheet from '../modules/chat/emoji/EmojiPickerSheet'
 import { type ChatMessageIds, deleteChatMessages } from '../modules/chat/history'
@@ -139,14 +139,6 @@ const progressStyles = StyleSheet.create({
 
 type ChatProps = StackScreenProps<ContactStackParams, Screens.Chat> | StackScreenProps<RootStackParams, Screens.Chat>
 
-/** What the person is told when a photo was not sent; 'sent' and 'cancelled' say nothing. */
-const PHOTO_PROBLEMS: ReadonlyMap<PhotoSendOutcome, string> = new Map<PhotoSendOutcome, string>([
-  ['no-permission', 'Chat.PhotoNoPermission'],
-  ['gif-too-large', 'Chat.GifTooLarge'],
-  ['photo-too-large', 'Chat.PhotoTooLarge'],
-  ['unreadable', 'Chat.PhotoUnreadable'],
-  ['not-sent', 'Chat.PhotoNotSent'],
-])
 const Chat: React.FC<ChatProps> = ({ route }) => {
   if (!route?.params) {
     throw new Error('Chat route params were not set properly')
@@ -483,21 +475,9 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
       if (!agent) return
       const outcome = await pickAndSendPhoto(agent, connectionId, source, {
         fallbackText: t('Chat.PhotoFallback'),
-        confirmGif: () =>
-          new Promise<boolean>((resolve) =>
-            Alert.alert(
-              t('Chat.GifAsIsTitle'),
-              t('Chat.GifAsIsBody'),
-              [
-                { text: t('Global.Cancel'), style: 'cancel', onPress: () => resolve(false) },
-                { text: t('Chat.SendGif'), onPress: () => resolve(true) },
-              ],
-              { cancelable: true, onDismiss: () => resolve(false) }
-            )
-          ),
+        confirmGif: confirmGifAsIs(t),
       })
-      const problem = PHOTO_PROBLEMS.get(outcome)
-      if (problem) Toast.show({ type: ToastType.Error, text1: t(problem) })
+      showPhotoOutcome(outcome, t)
     },
     [agent, connectionId, t]
   )

@@ -5,7 +5,11 @@
  *
  * A GIF is sent as it is, so whatever it carries goes with it: the person is
  * asked first (`confirmGif`), and nothing is sent unless they agree. A photo is
- * always re-encoded, which is what strips its EXIF and GPS (prepare.ts).
+ * always re-encoded, which strips its location and what identifies the camera
+ * or the time (prepare.ts).
+ *
+ * A pick that ends in nothing is logged, since the screen shows nothing for a
+ * cancel: an iOS picker refused access, or never presented, reports one too.
  *
  * @module chat/media/compose
  */
@@ -63,9 +67,17 @@ export async function pickAndSendPhoto(
   try {
     picked = await pickChatPhoto(source)
   } catch (error) {
-    return error instanceof ChatPhotoPermissionError ? 'no-permission' : 'unreadable'
+    if (error instanceof ChatPhotoPermissionError) {
+      agent.config?.logger?.info(`[Chat:photo] no permission to use the ${source}`)
+      return 'no-permission'
+    }
+    agent.config?.logger?.warn(`[Chat:photo] the ${source} picker failed`, { error })
+    return 'unreadable'
   }
-  if (!picked) return 'cancelled'
+  if (!picked) {
+    agent.config?.logger?.info(`[Chat:photo] the ${source} picker closed without a photo`)
+    return 'cancelled'
+  }
 
   let prepared
   try {

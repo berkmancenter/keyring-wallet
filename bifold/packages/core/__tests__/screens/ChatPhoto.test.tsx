@@ -93,7 +93,6 @@ describe('the composer’s "+"', () => {
   it.each([
     ['photo-too-large', 'Chat.PhotoTooLarge'],
     ['gif-too-large', 'Chat.GifTooLarge'],
-    ['no-permission', 'Chat.PhotoNoPermission'],
     ['not-sent', 'Chat.PhotoNotSent'],
   ])('says why when the photo was not sent (%s)', async (outcome, words) => {
     send.mockResolvedValueOnce(outcome)
@@ -101,6 +100,18 @@ describe('the composer’s "+"', () => {
     await openPlus(tree)
     await act(async () => fireEvent.press(tree.getByTestId(id('ChatAttachCamera'))))
     await waitFor(() => expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: words })))
+  })
+
+  it('asks about a missing permission with a way to Settings, not a passing toast', async () => {
+    send.mockResolvedValueOnce('no-permission')
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
+    const tree = renderChat()
+    await openPlus(tree)
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatAttachLibrary'))))
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith('Chat.PhotoNoPermissionTitle', 'Chat.PhotoNoPermission', expect.any(Array))
+    )
+    expect(Toast.show).not.toHaveBeenCalled()
   })
 
   it('says nothing when the person cancels', async () => {

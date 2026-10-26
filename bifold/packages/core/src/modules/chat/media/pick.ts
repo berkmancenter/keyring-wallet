@@ -4,7 +4,8 @@
  * R-card photo already uses.
  *
  * The picked file is never sent as it is: media/prepare.ts re-encodes every
- * photo (which strips EXIF, GPS included) and checks a GIF's size. The picker
+ * photo (which strips its location and other identifying EXIF) and checks a
+ * GIF's size. The picker
  * is asked for quality 1, so it hands over the original rather than its own
  * re-encode, which on iOS would also flatten a GIF's animation.
  *

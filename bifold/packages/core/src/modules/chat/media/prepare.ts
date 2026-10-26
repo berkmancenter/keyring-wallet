@@ -4,9 +4,11 @@
  *
  * A photo is always re-encoded, however small: resized to 1600 px on its long
  * edge and saved as JPEG at quality 0.8, then 0.6, then 0.4, then smaller
- * still, until it fits 256 KiB. The re-encode is what strips EXIF, GPS
- * included (the manipulator writes the pixels, not the source's metadata), so
- * it is never skipped. A very large photo is first resized once on its own, so
+ * still, until it fits 256 KiB. The re-encode is what strips the photo's
+ * metadata, so it is never skipped: the manipulator writes the pixels with a
+ * small EXIF block of its own (orientation, resolution, pixel size) and none of
+ * the source's, so no location, camera, serial, dates or thumbnail (checked on
+ * a real camera JPEG, 272). A very large photo is first resized once on its own, so
  * the quality steps decode the small copy rather than the original again.
  *
  * A GIF is sent as it is, since re-encoding would lose its animation, and only

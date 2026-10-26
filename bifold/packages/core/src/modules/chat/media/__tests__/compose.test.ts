@@ -62,3 +62,43 @@ describe('pickAndSendPhoto', () => {
     if (outcome !== 'not-sent') expect(send).not.toHaveBeenCalled()
   })
 })
+
+// The screen shows nothing for a cancel, and an iOS picker refused access, or never presented, reports one too.
+describe('what a pick that ends in nothing leaves in the log', () => {
+  const logger = { info: jest.fn(), warn: jest.fn() }
+  const logged = { config: { logger } } as never
+
+  it.each([
+    [
+      'a cancelled pick',
+      () => pick.mockResolvedValue(undefined),
+      'info',
+      '[Chat:photo] the camera picker closed without a photo',
+    ],
+    [
+      'no permission',
+      () => pick.mockRejectedValue(new ChatPhotoPermissionError('camera')),
+      'info',
+      '[Chat:photo] no permission to use the camera',
+    ],
+    [
+      'a picker that failed',
+      () => pick.mockRejectedValue(new Error('picker broke')),
+      'warn',
+      '[Chat:photo] the camera picker failed',
+    ],
+  ])('logs %s', async (_label, arrange, level, line) => {
+    arrange()
+    await pickAndSendPhoto(logged, 'conn-1', 'camera', options())
+    expect(logger[level as 'info' | 'warn']).toHaveBeenCalledWith(
+      line,
+      ...(level === 'warn' ? [expect.anything()] : [])
+    )
+  })
+
+  it('logs nothing for a photo that went', async () => {
+    await expect(pickAndSendPhoto(logged, 'conn-1', 'library', options())).resolves.toBe('sent')
+    expect(logger.info).not.toHaveBeenCalled()
+    expect(logger.warn).not.toHaveBeenCalled()
+  })
+})
