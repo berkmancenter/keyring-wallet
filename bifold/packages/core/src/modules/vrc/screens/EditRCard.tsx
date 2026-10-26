@@ -5,7 +5,7 @@ import { useAgent } from '@bifold/react-hooks'
 
 import RCardForm from './RCardForm'
 import { useRCardCredential } from '../hooks/useRCardCredential'
-import { RCardFormInput, formInputFromTemplate } from '../types/rcard'
+import { RCardFormInput, formInputFromTemplate, profileLabel } from '../types/rcard'
 import { Screens, SettingStackParams } from '../../../types/navigators'
 
 type EditRCardProps = StackScreenProps<SettingStackParams, Screens.EditRCard>
@@ -23,7 +23,7 @@ const EditRCard: React.FC<EditRCardProps> = ({ route, navigation }) => {
   // with more than one profile, a static "Edit Your Profile" title doesn't
   // say which one, and the form below it may be scrolled out of view.
   useEffect(() => {
-    navigation.setOptions({ title: profile ? profile.label : t('EditRCard.CreateTitle') })
+    navigation.setOptions({ title: profile ? profileLabel(profile.label, t) : t('EditRCard.CreateTitle') })
   }, [navigation, profile, t])
 
   const handleSubmit = async (input: RCardFormInput) => {

@@ -1,5 +1,6 @@
 import { Agent, W3cCredentialRecord } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
+import i18n from 'i18next'
 import { isDTGCredential, isRelationshipCredential } from '../credentialTypes'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
 import { ContactCredentialDetails } from '../../../types/navigators'
@@ -112,6 +113,16 @@ export async function getVrcNameForConnection(
  * file (no relationship DID, no credential) — the caller should fall back to
  * something connectionId-only (e.g. `Screens.Chat`) in that case.
  */
+/**
+ * The name of an issuer no credential names: "Unknown ..." and the last 8 characters of its id, in the app's language
+ * (Chat.UnknownIssuer, as the chat shows it). Outside a component, from the app's own i18n instance; English before
+ * that instance is set up.
+ */
+function unknownIssuerName(issuerId: string): string {
+  const suffix = issuerId.slice(-8)
+  return i18n.isInitialized ? i18n.t('Chat.UnknownIssuer', { suffix }) : `Unknown ...${suffix}`
+}
+
 export async function getContactCredentialDetailsForConnection(
   agent: Agent,
   connectionId: string,
@@ -127,7 +138,7 @@ export async function getContactCredentialDetailsForConnection(
     return {
       issuer: {
         id: issuerId,
-        name: displayInfo.name || `Unknown ...${issuerId.slice(-8)}`,
+        name: displayInfo.name || unknownIssuerName(issuerId),
         email: displayInfo.email,
         organization: displayInfo.organization,
         photo: displayInfo.photo,

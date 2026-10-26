@@ -17,7 +17,7 @@ import { Screens, SettingStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { useRCardCredential } from '../hooks/useRCardCredential'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
-import { formInputFromTemplate, RCardTemplate } from '../types/rcard'
+import { formInputFromTemplate, profileLabel, RCardTemplate } from '../types/rcard'
 
 type MyProfilesProps = StackScreenProps<SettingStackParams, Screens.MyProfiles>
 
@@ -26,12 +26,8 @@ const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
   const { ColorPalette } = useTheme()
   const { agent } = useAgent()
   const { profiles, activeProfileId, setActive, remove } = useRCardCredential()
-  const [blockedDeleteReason, setBlockedDeleteReason] = useState<'LastProfile' | 'ActiveProfile' | undefined>(
-    undefined
-  )
-  const [pendingDelete, setPendingDelete] = useState<{ profileId: string; contactCount: number } | undefined>(
-    undefined
-  )
+  const [blockedDeleteReason, setBlockedDeleteReason] = useState<'LastProfile' | 'ActiveProfile' | undefined>(undefined)
+  const [pendingDelete, setPendingDelete] = useState<{ profileId: string; contactCount: number } | undefined>(undefined)
 
   const styles = StyleSheet.create({
     safeArea: {
@@ -126,7 +122,7 @@ const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
           style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexShrink: 1, minWidth: 0 }}
           onPress={() => navigation.navigate(Screens.EditRCard, { profileId: profile.id })}
           accessibilityRole="button"
-          accessibilityLabel={profile.label}
+          accessibilityLabel={profileLabel(profile.label, t)}
           testID={testIdWithKey(`MyProfilesRow-${profile.id}`)}
         >
           <View style={styles.avatar}>
@@ -138,14 +134,12 @@ const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
           </View>
           <View style={styles.rowText}>
             <ThemedText variant="headingThree" numberOfLines={1}>
-              {profile.label}
+              {profileLabel(profile.label, t)}
             </ThemedText>
             <ThemedText numberOfLines={1} style={{ color: ColorPalette.grayscale.mediumGrey }}>
               {name}
             </ThemedText>
-            {isActive && (
-              <ThemedText style={{ color: ColorPalette.brand.link }}>{t('MyProfiles.Active')}</ThemedText>
-            )}
+            {isActive && <ThemedText style={{ color: ColorPalette.brand.link }}>{t('MyProfiles.Active')}</ThemedText>}
           </View>
         </TouchableOpacity>
         {!isActive && (

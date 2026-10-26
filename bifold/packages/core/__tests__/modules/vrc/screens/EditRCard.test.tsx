@@ -7,7 +7,7 @@ import EditRCard from '../../../../src/modules/vrc/screens/EditRCard'
 import { testIdWithKey } from '../../../../src/utils/testable'
 import { testDefaultState } from '../../../contexts/store'
 import { BasicAppContext } from '../../../helpers/app'
-import { buildRCardTemplate } from '../../../../src/modules/vrc/types/rcard'
+import { buildRCardTemplate, DEFAULT_LABEL } from '../../../../src/modules/vrc/types/rcard'
 import * as rCardCredentialService from '../../../../src/modules/vrc/services/rCardCredential'
 
 const profileA = buildRCardTemplate({
@@ -17,12 +17,16 @@ const profileA = buildRCardTemplate({
   organization: 'Old Org',
 })
 profileA.jcard[1].push(['photo', {}, 'uri', 'data:image/jpeg;base64,existingPhoto'])
-const profileB = buildRCardTemplate({
-  firstName: 'Jane',
-  lastName: 'Doe',
-  email: 'jane@work.example.com',
-  organization: 'Work',
-})
+const profileB = buildRCardTemplate(
+  {
+    firstName: 'Jane',
+    lastName: 'Doe',
+    email: 'jane@work.example.com',
+    organization: 'Work',
+  },
+  // A label the person chose, so the title names this profile and no other.
+  { label: 'Work' }
+)
 
 describe('EditRCard Screen', () => {
   let updateSpy: jest.SpyInstance
@@ -86,7 +90,7 @@ describe('EditRCard Screen', () => {
     expect(tree.getByTestId(testIdWithKey('RCardOrganizationInput')).props.defaultValue).toBe('Work')
   })
 
-  test('switching which profile this same screen instance edits does not leak the previous profile\'s photo', () => {
+  test("switching which profile this same screen instance edits does not leak the previous profile's photo", () => {
     // Renders with the SAME outer `key` (no fresh EditRCard mount) but a
     // different profileId param — the shape a stack navigator's route-reuse
     // can produce. Without RCardForm being keyed by profile identity inside
@@ -141,7 +145,7 @@ describe('EditRCard Screen', () => {
     expect(at('RCardLabelInput')).toBeLessThan(at('RCardFirstNameInput'))
   })
 
-  test('pre-fills the profile-name (label) field with the profile\'s own organizing tag', () => {
+  test("pre-fills the profile-name (label) field with the profile's own organizing tag", () => {
     const tree = renderScreen(profileA.id)
     expect(tree.getByTestId(testIdWithKey('RCardLabelInput')).props.defaultValue).toBe(profileA.label)
   })
@@ -166,6 +170,13 @@ describe('EditRCard Screen', () => {
   test('sets the nav header title to the profile being edited — not a generic title that could mean any of them', () => {
     renderScreen(profileB.id)
     expect(setOptions).toHaveBeenCalledWith({ title: profileB.label })
+  })
+
+  // The stored default ("My Profile") is data in English; the title shows it in the app's language (here, its key).
+  test("a profile still named the default is titled in the app's language", () => {
+    renderScreen(profileA.id)
+    expect(profileA.label).toBe(DEFAULT_LABEL)
+    expect(setOptions).toHaveBeenCalledWith({ title: 'MyProfiles.DefaultLabel' })
   })
 
   test('sets the nav header title to the create-mode title when there is no profileId', () => {

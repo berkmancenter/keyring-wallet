@@ -913,6 +913,7 @@
     "QRCode": "Código QR",
     "Credentials": "Credenciais",
     "Wallet": "Carteira",
+    "Contacts": "Contatos",
     "MyAgent": "Meu agente",
     "RequestsWaiting_one": "1 pedido aguardando",
     "RequestsWaiting_other": "{{count}} pedidos aguardando"
@@ -1088,7 +1089,8 @@
     "DeleteWithContactsTitle": "Excluir este perfil?",
     "DeleteWithContactsMessage_one": "Este perfil foi compartilhado com {{count}} contato. Ele continuará vendo o perfil como estava no momento do compartilhamento; você não poderá mais atualizá-lo para ele.",
     "DeleteWithContactsMessage_other": "Este perfil foi compartilhado com {{count}} contatos. Eles continuarão vendo o perfil como estava no momento do compartilhamento; você não poderá mais atualizá-lo para eles.",
-    "DeleteAnyway": "Excluir mesmo assim"
+    "DeleteAnyway": "Excluir mesmo assim",
+    "DefaultLabel": "Meu perfil"
   },
   "RenameContact": {
     "ThisContactName": "Este nome de contato só é visualizado em sua Lista de Contatos.",

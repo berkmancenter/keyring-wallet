@@ -1240,7 +1240,8 @@
     "DeleteWithContactsTitle": "Delete this profile?",
     "DeleteWithContactsMessage_one": "This profile has been shared with {{count}} contact. They'll keep seeing it as it was at share time; you won't be able to update it for them anymore.",
     "DeleteWithContactsMessage_other": "This profile has been shared with {{count}} contacts. They'll keep seeing it as it was at share time; you won't be able to update it for them anymore.",
-    "DeleteAnyway": "Delete Anyway"
+    "DeleteAnyway": "Delete Anyway",
+    "DefaultLabel": "My Profile"
   },
   "RenameContact": {
     "ThisContactName": "This contact name is only displayed in your Contacts List.",

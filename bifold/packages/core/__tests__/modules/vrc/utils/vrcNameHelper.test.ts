@@ -6,6 +6,7 @@ import {
 } from '../../../../src/modules/vrc/utils/vrcNameHelper'
 import { RelationshipDidRepository } from '../../../../src/modules/vrc/repositories/RelationshipDidRepository'
 import { createDTGCredential, TEST_CONTACTS, generateTestDid } from '../../../../src/modules/vrc/fixtures/testContacts'
+import { speak } from '../../../helpers/appLanguage'
 
 describe('getContactCredentialDetailsForConnection', () => {
   const CONNECTION_ID = 'connection-1'
@@ -57,6 +58,18 @@ describe('getContactCredentialDetailsForConnection', () => {
     const result = await getContactCredentialDetailsForConnection(agent, CONNECTION_ID, [])
 
     expect(result?.issuer.name).toBe(`Unknown ...${issuerId.slice(-8)}`)
+  })
+
+  it("names an unnamed issuer in the app's language once the app speaks one", async () => {
+    const issuerId = generateTestDid('unnamed-fr')
+    const agent = buildAgent([{ connectionId: CONNECTION_ID, counterpartyRelationshipDid: issuerId }])
+    await speak('fr')
+    try {
+      const result = await getContactCredentialDetailsForConnection(agent, CONNECTION_ID, [])
+      expect(result?.issuer.name).toBe(`Inconnu ...${issuerId.slice(-8)}`)
+    } finally {
+      await speak('en')
+    }
   })
 
   it('only matches the requested connection, not any relationship on file', async () => {

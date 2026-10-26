@@ -67,6 +67,15 @@ const DEFAULT_TYPES = ['VerifiableCredential', 'RCardTemplate']
  *  signature of a pre-multi-profile legacy record, used only to detect one for migration. */
 export const LEGACY_SHARED_TEMPLATE_ID = 'rcard-basic-1'
 export const DEFAULT_LABEL = 'My Profile'
+
+/**
+ * A profile's label as this phone shows it. The default is stored as data, in English, so it is shown in the app's
+ * language; a label the person chose is shown as they wrote it. Only for display: what is stored and shared keeps the
+ * stored value.
+ */
+export function profileLabel(label: string | undefined, t: (key: string) => string): string {
+  return !label || label === DEFAULT_LABEL ? t('MyProfiles.DefaultLabel') : label
+}
 const DEFAULT_ISSUER = 'urn:aries:bifold:r-card'
 const EMAIL_REGEX =
   // eslint-disable-next-line no-control-regex

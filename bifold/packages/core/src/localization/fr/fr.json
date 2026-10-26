@@ -981,6 +981,7 @@
     "QRCode": "Code QR",
     "Credentials": "Justificatifs",
     "Wallet": "Portefeuille",
+    "Contacts": "Contacts",
     "MyAgent": "Mon agent",
     "RequestsWaiting_one": "1 demande en attente",
     "RequestsWaiting_other": "{{count}} demandes en attente"
@@ -1169,7 +1170,8 @@
     "DeleteWithContactsTitle": "Supprimer ce profil ?",
     "DeleteWithContactsMessage_one": "Ce profil a été partagé avec {{count}} contact. Il continuera de le voir tel qu'il était au moment du partage ; vous ne pourrez plus le mettre à jour pour lui.",
     "DeleteWithContactsMessage_other": "Ce profil a été partagé avec {{count}} contacts. Ils continueront de le voir tel qu'il était au moment du partage ; vous ne pourrez plus le mettre à jour pour eux.",
-    "DeleteAnyway": "Supprimer quand même"
+    "DeleteAnyway": "Supprimer quand même",
+    "DefaultLabel": "Mon profil"
   },
   "RenameContact": {
     "ThisContactName": "Ce nom de contact n'est affiché que dans votre Liste de Contacts.",

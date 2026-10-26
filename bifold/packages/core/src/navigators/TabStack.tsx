@@ -346,6 +346,10 @@ const TabStack: React.FC = () => {
                 )}
                 {showLabels && (
                   <Text
+                    // One line in every language (all six labels): a long word ("Portefeuille") shrinks a little rather than breaking.
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
                     style={{
                       ...TabTheme.tabBarTextStyle,
                       color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
@@ -379,6 +383,9 @@ const TabStack: React.FC = () => {
                   )}
                   {showLabels && (
                     <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
                       style={{
                         ...TabTheme.tabBarTextStyle,
                         color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
@@ -407,6 +414,9 @@ const TabStack: React.FC = () => {
                   <Assets.svg.tabTwoIcon height={20} width={20} fill={color} />
                   {showLabels && (
                     <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
                       style={{
                         ...TabTheme.tabBarTextStyle,
                         color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
@@ -450,6 +460,9 @@ const TabStack: React.FC = () => {
                   )}
                   {showLabels && (
                     <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
                       style={{
                         ...TabTheme.tabBarTextStyle,
                         color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
@@ -479,6 +492,9 @@ const TabStack: React.FC = () => {
                 <Icon name={focused ? 'shield-account' : 'shield-account-outline'} size={24} color={color} />
                 {showLabels && (
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
                     style={{
                       ...TabTheme.tabBarTextStyle,
                       color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
@@ -508,6 +524,9 @@ const TabStack: React.FC = () => {
                 <Icon name={focused ? 'account-circle' : 'account-circle-outline'} size={26} color={color} />
                 {showLabels && (
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
                     style={{
                       ...TabTheme.tabBarTextStyle,
                       color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
