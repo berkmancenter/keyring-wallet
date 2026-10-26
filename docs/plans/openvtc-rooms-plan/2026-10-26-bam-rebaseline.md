@@ -1,6 +1,6 @@
 # 2026-10-26 — bam: re-baselining the rooms plan at VTI fc157f76
 
-**Status:** Findings, applied to the plan and its subtasks on the day they were written.
+**Status:** Findings, applied to the plan and its subtasks on the day they were written. Part 2 records the review round of PR #661.
 **Author:** bam. **Date:** 2026-10-26.
 **Plan:** [`../openvtc-rooms-plan.md`](../openvtc-rooms-plan.md), with subtasks
 [`rooms_member_sprint_subtask.md`](./rooms_member_sprint_subtask.md),
@@ -66,7 +66,7 @@
   B6 (admission policy) still waits on upstream.
 - The integration plan's §5.2 was not edited. It is a three-package diagram, not a module list, so
   there was no rooms row to add; the plan's §10 item 1 now says where the pointer belongs.
-- `rooms_member_sprint_subtask.md` was not touched; it was being edited separately.
+- `rooms_member_sprint_subtask.md` was not touched in part 1; it was being edited separately. Part 2 revises it.
 
 ## Positions this superseded
 
@@ -96,3 +96,83 @@ Each is marked applied in the files named.
   file blobs.
 - `rich-messaging-plan.md`: "the room blob layer needs an upstream spec". Large media can now use
   rooms; one-to-one chat's no-hosting goal (G5) is unchanged.
+
+# Part 2 — bam, 2026-10-26: review round of PR #661 (Alberto)
+
+**Status:** Findings, applied to `rooms_member_sprint_subtask.md` and to the parent plan's §2.2
+item 1 and §3.3 in the same change. Same author and day as part 1, so it extends this file.
+
+Alberto's review of #661 asked for four changes. The facts below were read from source or PRs
+this session unless marked **inferred** or **unproven**.
+
+## What was concluded
+
+1. **The sprint extends an existing rooms module instead of adding a layer.** keyring-bifold has
+   draft PRs, all unmerged: #595 (`RoomsService` interface, capabilities and sample;
+   `packages/core/src/modules/rooms/types.ts:311-351`), #600 (`AgentRoomsService`, stacked on
+   #595; offers, writes, files and agent access report `clientNotBuilt`; not live-proven, "no lab
+   VTC serves it yet"), #597, #601, #602 (held for build 272's final pin) and #433. #595's body
+   says "not for merge until 272's final pin", so it is not merged. The sprint's "rooms service
+   layer (L)" row and S1-S4 were written as a second layer; they now fill the `clientNotBuilt`
+   methods. The sprint is built on unmerged work; Alberto owns #595-#602 and the 272 pin is the
+   gate. bifold's R0-R3 are screen-stack names and the plan's R0-R3 are phases; the sprint says
+   so once. The #645 companion (`2026-10-25-al.md`) is the source of the persona-over-DIDComm
+   design.
+2. **The phone signs community tasks as the persona with a lent key; it signs no room write.** Per
+   #645 the phone borrows the persona's signing and key-agreement keys (`VtaClient.borrowKey`,
+   `keys/export-secret`, in-memory `EPHEMERAL_KMS_BACKEND`). #600 signs only
+   `vtc/rooms/memberships/list/0.1` this way. At VTI fc157f76, `act/0.3` completes `offers/list`
+   and `offers/accept` with no presentation, so phone-signed `offers/list` is feasible (the VTC
+   checks the signer is an active member); an `offers/accept` carrying a `keyPackage` completes
+   only if the VTA minted it (`keyPackageNotHeld`). `rooms/keys/act` stays required for seal,
+   file-key, sealed puts, and every `rooms/records/put` and `rooms/blobs/*` call, because the VTA
+   inserts the persona's presentation. That the phone could sign an accept with no `keyPackage`
+   is **inferred**.
+3. **Delivery of writes is the phone's DIDComm leg, unproven.** Upstream design has the client
+   send the act-completed document "to the host unchanged" (`docs/02-vta/data-rooms.md` about
+   lines 1364-1380), and the VTC dispatches TSP and DIDComm through one
+   `dispatch_trust_task_core` (`messaging.rs` about lines 1012 and 1694). Nothing was run.
+   `size.rs` about lines 357-360 puts a chunk on a transport that charged no room budget under
+   `LargeDocumentBudget` (5 per minute per address); whether DIDComm chunks hit it is unknown.
+   That a 256 KiB chunk fits the mediator's 1 MiB default `message_size` is inferred. These
+   became spikes S0.7-S0.9, with the cut line that files slip if S0.8 fails.
+4. **Messages use `keyring.chat/1`.** Chat already has events, an inline-image cap and checks;
+   a wallet-owned shape would be a third vocabulary. Rooms need a hosted-attachment variant, and
+   optimistic-send and retry states that chat lacks. Only the schema, pure checks and four leaf
+   components are shared; the Credo-coupled screen and stores are not.
+5. **The Farm community is a claim.** VTA 0.64.0-4a0f1ff1 and VTC 0.12.0-4a0f1ff1 were claimed;
+   4a0f1ff1 is in `vta-service-v0.64.0` and the offers (795fd2ae) and memberships-list
+   (594c8ff9) commits are its ancestors. Nothing in the repo confirms the community or its
+   `[rooms.community]` and `[rooms.files]` settings. S0.3 now confirms it, with the local lab as
+   fallback.
+6. **Decisions from Alberto's review**: 16 KiB and 25 MiB caps are fine to start; `expo-sharing`
+   for the share path (Q-S5 resolved); badge on the Rooms card only (Q-S6 resolved).
+
+## Positions this superseded
+
+Each is marked applied in the files named.
+
+- Sprint: "rooms service layer in `@bifold/core`" as new work, and S1-S4 as new service code.
+  Applied in the sprint's components table and stories.
+- Sprint and parent: "the VTA signs as the persona" for every call, and "the wallet holds no
+  room credentials and no group keys" as the whole rule. The phone holds a lent persona signing
+  key; the credential and group-key rule stands. Applied in the sprint's architecture section and
+  the parent's §2.2 item 1 and §3.3.
+- Sprint "Notifications": each offers poll costs a VTA round trip through `act/0.6`. Replaced by
+  phone-signed community reads; the 60 s interval is kept as a starting value pending S0.6.
+- Sprint decision "the message record shape is wallet-owned for now" with
+  `{kind:"message", body, replyTo?, file?}`. Replaced by `keyring.chat/1`. The 16 KiB text cap
+  became 16384 UTF-16 code units, equal to chat's; the group-messaging subtask's 32 KiB was not
+  adopted.
+- Sprint S0.3 "room host in the lab" as the primary host. It is now the fallback.
+- Sprint Q-S5, Q-S6 and Q-S3 as open or proposed. Resolved by Alberto's review.
+- Sprint S4 "key = random id" for open rooms. Now `e/<eventId>`.
+
+## Left unreconciled
+
+- A sealed record key is 22 characters and a ULID `eventId` is 26; the instruction that
+  `eventId` equals the record key cannot hold for sealed rooms as stated. Recorded as Q-S8.
+- The brief described the plan's R1-R3 as reads, writes and files; the parent plan's R0-R3 are
+  measurement, read-only, invitations, and write and curate. The sprint uses the parent's names.
+- `2026-10-25-al.md` is on wallet PR #645, not on this branch, so the parent plan names it by
+  path with no link.
