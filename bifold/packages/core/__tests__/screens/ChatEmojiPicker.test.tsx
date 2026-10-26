@@ -2,13 +2,14 @@ import { useConnectionById, useBasicMessagesByConnectionId } from '@bifold/react
 import { DidCommConnectionRecord, DidCommDidExchangeRole, DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
-import { Text } from 'react-native'
+import { Platform, Text, TextInput } from 'react-native'
 import Toast from 'react-native-toast-message'
 
 import type { ExtendedChatMessage } from '../../src/components/chat/ChatMessage'
 import * as network from '../../src/contexts/network'
 import { useChatMessagesByConnection } from '../../src/hooks/chat-messages'
 import { emojiCodePoints } from '../../src/modules/chat/emoji/EmojiPicker.ids'
+import EmojiPickerSheet from '../../src/modules/chat/emoji/EmojiPickerSheet'
 import { removeReaction, sendReaction } from '../../src/modules/chat/send'
 import Chat from '../../src/screens/Chat'
 import { Role } from '../../src/types/chat'
@@ -147,6 +148,80 @@ describe('the composer’s emoji button', () => {
 
     fireEvent.press(tree.getByTestId(id('EmojiPickerSheetClose')))
     expect(tree.queryByTestId(id('EmojiPickerSheet'))).toBeNull()
+  })
+
+  // The composer's TextInput, with the setSelection the jest mock lacks.
+  const composerField = (tree: ReturnType<typeof render>) => {
+    const instance = tree.UNSAFE_getByType(TextInput).instance as { focus: jest.Mock; setSelection?: jest.Mock }
+    instance.setSelection = jest.fn()
+    instance.focus.mockClear()
+    return instance as { focus: jest.Mock; setSelection: jest.Mock }
+  }
+  // What iOS's modal reports once the sheet has gone.
+  const sheetClosed = (tree: ReturnType<typeof render>) =>
+    act(() => (tree.UNSAFE_getByType(EmojiPickerSheet).props.onClosed as () => void)())
+
+  // A field never focused kept its caret at the start, so typing landed before the emoji, and with no caret or
+  // keyboard the field looked gone (272).
+  it('puts the person back in the field, caret after the emoji, once the sheet has closed', async () => {
+    const tree = renderChat()
+    const field = composerField(tree)
+    fireEvent.press(tree.getByTestId(id('ChatComposerEmojiButton')))
+    await act(async () => fireEvent.press(tree.getByTestId(emojiId('😀'))))
+
+    fireEvent.press(tree.getByTestId(id('EmojiPickerSheetClose')))
+    expect(field.focus).not.toHaveBeenCalled()
+
+    await sheetClosed(tree)
+    expect(field.focus).toHaveBeenCalledTimes(1)
+    expect(field.setSelection).toHaveBeenCalledWith(2, 2)
+
+    await sheetClosed(tree)
+    expect(field.focus).toHaveBeenCalledTimes(1)
+  })
+
+  it('puts the person back in the field at once on Android, whose modal never says it has closed', async () => {
+    const os = jest.replaceProperty(Platform, 'OS', 'android')
+    try {
+      const tree = renderChat()
+      const field = composerField(tree)
+      fireEvent.press(tree.getByTestId(id('ChatComposerEmojiButton')))
+      await act(async () => fireEvent.press(tree.getByTestId(emojiId('😀'))))
+
+      fireEvent.press(tree.getByTestId(id('EmojiPickerSheetClose')))
+
+      expect(field.focus).toHaveBeenCalledTimes(1)
+      expect(field.setSelection).toHaveBeenCalledWith(2, 2)
+    } finally {
+      os.restore()
+    }
+  })
+
+  it('leaves the field alone when the picker was for a reaction', async () => {
+    const tree = renderChat()
+    const field = composerField(tree)
+    fireEvent(tree.getByText('see you at noon'), 'longPress')
+    fireEvent.press(tree.getByTestId(id('ChatReactionBarMore')))
+
+    fireEvent.press(tree.getByTestId(id('EmojiPickerSheetClose')))
+    await sheetClosed(tree)
+
+    expect(field.focus).not.toHaveBeenCalled()
+  })
+
+  it('leaves the field alone when a reaction picker opens before the composer’s sheet said it had closed', async () => {
+    const tree = renderChat()
+    const field = composerField(tree)
+    fireEvent.press(tree.getByTestId(id('ChatComposerEmojiButton')))
+    await act(async () => fireEvent.press(tree.getByTestId(emojiId('😀'))))
+    fireEvent.press(tree.getByTestId(id('EmojiPickerSheetClose')))
+
+    fireEvent(tree.getByText('see you at noon'), 'longPress')
+    fireEvent.press(tree.getByTestId(id('ChatReactionBarMore')))
+    fireEvent.press(tree.getByTestId(id('EmojiPickerSheetClose')))
+    await sheetClosed(tree)
+
+    expect(field.focus).not.toHaveBeenCalled()
   })
 
   it('is disabled while the chat cannot send', () => {

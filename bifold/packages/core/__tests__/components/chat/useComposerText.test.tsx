@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { Button } from 'react-native'
+import { Button, TextInput } from 'react-native'
 import { GiftedChat } from 'react-native-gifted-chat'
 
 import { insertAtSelection, useComposerText } from '../../../src/components/chat/useComposerText'
@@ -23,12 +23,14 @@ const Host: React.FC<{ onDraft: (draft: boolean) => void }> = ({ onDraft }) => {
   return (
     <>
       <Button title="insert" onPress={() => composer.insert('👍')} />
+      <Button title="focus" onPress={composer.focusAtCaret} />
       <GiftedChat
         messages={[]}
         user={{ _id: 1 }}
         onSend={() => undefined}
         text={composer.text}
         textInputProps={{ ...composer.textInputProps, placeholder: 'Type here' }}
+        textInputRef={composer.inputRef}
       />
     </>
   )
@@ -67,5 +69,51 @@ describe('useComposerText with the real composer', () => {
     })
     expect(input().props.value).toBe('👍')
     expect(drafts[drafts.length - 1]).toBe(true)
+  })
+})
+
+describe('focusAtCaret', () => {
+  // The mocked TextInput has focus but no setSelection; the real one has both.
+  const field = (tree: ReturnType<typeof render>) => {
+    const instance = tree.UNSAFE_getByType(TextInput).instance as { focus: jest.Mock; setSelection?: jest.Mock }
+    instance.setSelection = jest.fn()
+    return instance as { focus: jest.Mock; setSelection: jest.Mock }
+  }
+
+  it('puts the caret after emoji inserted into a field never focused, not before them (272)', () => {
+    const { tree, input } = renderHost()
+    act(() => {
+      fireEvent.press(tree.getByText('insert'))
+    })
+    act(() => {
+      fireEvent.press(tree.getByText('insert'))
+    })
+    const input0 = field(tree)
+    input0.focus.mockClear()
+
+    act(() => {
+      fireEvent.press(tree.getByText('focus'))
+    })
+
+    expect(input().props.value).toBe('👍👍')
+    expect(input0.focus).toHaveBeenCalledTimes(1)
+    expect(input0.setSelection).toHaveBeenCalledWith(4, 4)
+  })
+
+  it('puts the caret after an emoji inserted mid-text', () => {
+    const { tree, input } = renderHost()
+    fireEvent.changeText(input(), 'Hello world')
+    fireEvent(input(), 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } })
+    act(() => {
+      fireEvent.press(tree.getByText('insert'))
+    })
+    const input0 = field(tree)
+
+    act(() => {
+      fireEvent.press(tree.getByText('focus'))
+    })
+
+    expect(input().props.value).toBe('Hello👍 world')
+    expect(input0.setSelection).toHaveBeenCalledWith(7, 7)
   })
 })

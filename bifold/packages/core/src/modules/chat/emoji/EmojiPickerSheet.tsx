@@ -13,13 +13,15 @@ export interface EmojiPickerSheetProps {
   /** Called with the fully-qualified emoji chosen. The caller decides whether the sheet stays open. */
   onSelect: (emoji: string) => void
   onClose: () => void
+  /** Once the sheet has finished closing. iOS only, as the modal's onDismiss is: Android never calls it. */
+  onClosed?: () => void
 }
 
 /**
  * The emoji picker as a sheet over the chat: from the composer's emoji button,
  * and from "+" on a message's reaction bar.
  */
-const EmojiPickerSheet: React.FC<EmojiPickerSheetProps> = ({ visible, onSelect, onClose }) => {
+const EmojiPickerSheet: React.FC<EmojiPickerSheetProps> = ({ visible, onSelect, onClose, onClosed }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
 
@@ -37,7 +39,7 @@ const EmojiPickerSheet: React.FC<EmojiPickerSheetProps> = ({ visible, onSelect, 
   })
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} onDismiss={onClosed}>
       <Pressable
         style={styles.backdrop}
         onPress={onClose}

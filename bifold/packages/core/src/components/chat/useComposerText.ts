@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { NativeSyntheticEvent, TextInputSelectionChangeEventData } from 'react-native'
+import type { RefObject } from 'react'
+import type { NativeSyntheticEvent, TextInput, TextInputSelectionChangeEventData } from 'react-native'
 
 /** `insert` placed into `text` over the selection, and where the caret ends up. */
 export function insertAtSelection(
@@ -21,8 +22,15 @@ export function insertAtSelection(
  * one render: gifted-chat copies a defined `text` prop into its own state,
  * then the prop is dropped again and the composer is uncontrolled as before.
  * gifted-chat reports '' after a send.
+ *
+ * `inputRef` goes to gifted-chat as `textInputRef`, so `focusAtCaret` can put
+ * the person back in the field after the emoji picker: an insert into a field
+ * never focused leaves its own caret at the start, where typing would land
+ * before the emoji (272).
  */
 export function useComposerText() {
+  // gifted-chat's textInputRef is typed RefObject<TextInput>, without React 19's `| null`.
+  const inputRef = useRef<TextInput>(null) as RefObject<TextInput>
   const textRef = useRef('')
   const selectionRef = useRef({ start: 0, end: 0 })
   const [hasDraft, setHasDraft] = useState(false)
@@ -51,10 +59,19 @@ export function useComposerText() {
     [onChangeText]
   )
 
+  /** Focus the field with its caret where the last insert left it. */
+  const focusAtCaret = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+    const caret = Math.min(selectionRef.current.end, textRef.current.length)
+    input.focus()
+    input.setSelection(caret, caret)
+  }, [])
+
   // Hand the text over for one render only.
   useEffect(() => {
     if (text !== undefined) setText(undefined)
   }, [text])
 
-  return { text, textInputProps, insert, hasDraft }
+  return { text, textInputProps, inputRef, insert, focusAtCaret, hasDraft }
 }

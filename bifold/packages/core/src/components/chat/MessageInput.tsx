@@ -77,6 +77,11 @@ export const renderComposer = (
             lineHeight: 20,
             marginTop: 2,
             marginBottom: 2,
+            // A visible edge, so the field still reads as one when it holds only an emoji and has no caret (272).
+            paddingHorizontal: 12,
+            borderWidth: 1,
+            borderColor: '#D0D0D0',
+            borderRadius: 18,
           },
           props.textInputProps?.style,
         ],
