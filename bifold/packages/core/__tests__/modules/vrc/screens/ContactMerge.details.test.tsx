@@ -67,23 +67,37 @@ const open = (issuer: { id: string; name: string }) =>
 const id = testIdWithKey
 
 /**
- * The screen's links reads made after the last save (its re-read once a merge or separation has been stored), waited
- * for and then settled inside act, so what it shows is asserted after that read rather than within a time budget a
- * loaded CI worker can run out of (CI, 10-25: "expected 4, received 3"). Waiting for the read to be *made* is only a
- * render away (no I/O); the read itself is awaited, not timed.
+ * The screen's links reads made after the last write (its re-read once a merge is saved or a separation deletes the
+ * links), waited for and then settled inside act, so what it shows is asserted after that read rather than within a
+ * time budget a loaded CI worker can run out of (CI, 10-25: "expected 4, received 3"; 10-26: ContactMergedByYou not
+ * found within the 1 s default). Waiting for the read to be *made* is only a render away (no I/O); the read itself is
+ * awaited, not timed.
  */
 const reReadSettled = async () => {
-  const readsAfterSave = () => {
-    const saved = Math.max(0, ...store.save.mock.invocationCallOrder)
+  const readsAfterWrite = () => {
+    const written = Math.max(
+      0,
+      ...store.save.mock.invocationCallOrder,
+      ...store.update.mock.invocationCallOrder,
+      ...store.deleteById.mock.invocationCallOrder
+    )
     return store.findAllByQuery.mock.invocationCallOrder.flatMap((order, i) =>
-      order > saved ? [store.findAllByQuery.mock.results[i].value] : []
+      order > written ? [store.findAllByQuery.mock.results[i].value] : []
     )
   }
-  await waitFor(() => expect(readsAfterSave().length).toBeGreaterThan(0), { timeout: 5000 })
+  await waitFor(() => expect(readsAfterWrite().length).toBeGreaterThan(0), { timeout: 5000 })
   await act(async () => {
-    await Promise.all(readsAfterSave())
+    await Promise.all(readsAfterWrite())
   })
 }
+
+/**
+ * Every other wait on what the screen shows once it has read the links, where reReadSettled has no write to key on:
+ * the first read after render (the links are seeded), or the screen catching up after a removal. The read is a
+ * microtask away; the budget is for a loaded CI worker, not the 1 s default it lost to. A probe that delays every
+ * links read by 1.5 s fails this file at each of these waits on the default, and passes with this budget.
+ */
+const LINKS_READ = { timeout: 5000 }
 
 describe('Same person? on a contact', () => {
   beforeEach(() => {
@@ -131,7 +145,10 @@ describe('Same person? on a contact', () => {
       expect(tree.getByText('ContactDetails.MergeAllConfirmTitle (count 3)')).toBeTruthy()
       fireEvent.press(tree.getByTestId(id('ContactMergeYes')))
 
-      await tree.findByTestId(id('ContactMergedByYou'))
+      // First what was stored (did the merge land?), then what the screen shows once it has read the links again.
+      await waitFor(() => expect(store.records).toHaveLength(2), { timeout: 5000 })
+      await reReadSettled()
+      expect(tree.getByTestId(id('ContactMergedByYou'))).toBeTruthy()
       // Alice's first contact has two cards, the other two one each: all four on one contact, under the oldest.
       expect(tree.getAllByTestId(id('RelationshipLayer'))).toHaveLength(4)
       expect(new Map(store.records.map((r) => [r.content.issuerDid, r.content.contactId]))).toEqual(
@@ -150,7 +167,7 @@ describe('Same person? on a contact', () => {
         tags: { recordType: CONTACT_LINK, issuerDid: ALICE_AGAIN.id, contactId: ALICE_FIRST.id },
       })
       const tree = open(ALICE_AGAIN)
-      expect(await tree.findByText('ContactDetails.MergeOfferBody (count 1)')).toBeTruthy()
+      expect(await tree.findByText('ContactDetails.MergeOfferBody (count 1)', LINKS_READ)).toBeTruthy()
       expect(tree.getByTestId(id('ContactMergedByYou'))).toBeTruthy()
       fireEvent.press(tree.getByTestId(id('ContactMergeOffer')))
       expect(tree.getByText('ContactDetails.MergeConfirmTitle (count 2)')).toBeTruthy()
@@ -191,7 +208,9 @@ describe('Same person? on a contact', () => {
     fireEvent.press(await tree.findByTestId(id('ContactMergeOffer')))
     fireEvent.press(tree.getByTestId(id('ContactMergeYes')))
 
-    const label = await tree.findByTestId(id('ContactMergedByYou'))
+    await waitFor(() => expect(store.records).toHaveLength(1), { timeout: 5000 })
+    await reReadSettled()
+    const label = tree.getByTestId(id('ContactMergedByYou'))
     expect(label.props.children).toBe('ContactDetails.MergedByYou')
     expect(tree.getAllByTestId(id('RelationshipLayer'))).toHaveLength(3)
     expect(store.records).toHaveLength(1)
@@ -201,8 +220,9 @@ describe('Same person? on a contact', () => {
     expect(tree.getByText('ContactDetails.SeparateLink')).toBeTruthy()
     fireEvent.press(tree.getByTestId(id('ContactSeparate')))
     expect(tree.queryByTestId(id('ContactSeparateConfirm'))).toBeNull()
-    await waitFor(() => expect(tree.getByTestId(id('ContactMergeOffer'))).toBeTruthy())
-    expect(store.records).toHaveLength(0)
+    await waitFor(() => expect(store.records).toHaveLength(0), { timeout: 5000 })
+    await reReadSettled()
+    expect(tree.getByTestId(id('ContactMergeOffer'))).toBeTruthy()
     expect(tree.getAllByTestId(id('RelationshipLayer'))).toHaveLength(1)
   })
 
@@ -217,7 +237,7 @@ describe('Same person? on a contact', () => {
       <ContactDetails route={{ params: { contact: { issuer: ALICE_AGAIN } } } as any} navigation={{ pop } as any} />,
       { wrapper: Container }
     )
-    await tree.findByTestId(id('ContactMergedByYou'))
+    await tree.findByTestId(id('ContactMergedByYou'), LINKS_READ)
     await waitFor(() =>
       expect(tree.getByTestId(id('ContactViewMessages')).props.accessibilityState?.disabled).toBe(false)
     )
@@ -230,7 +250,7 @@ describe('Same person? on a contact', () => {
     expect(tree.getByTestId(id('ContactRemoveMergedSeparate'))).toBeTruthy()
     fireEvent.press(tree.getByTestId(id('ContactRemoveMergedConfirm')))
 
-    await waitFor(() => expect(pop).toHaveBeenCalled())
+    await waitFor(() => expect(pop).toHaveBeenCalled(), LINKS_READ)
     expect(mockDeleteContact.mock.calls.map((call) => call[0])).toEqual([
       { issuerId: ALICE_AGAIN.id, connectionId: 'conn-again' },
       { issuerId: ALICE_FIRST.id, connectionId: 'conn-first' },
@@ -245,10 +265,10 @@ describe('Same person? on a contact', () => {
       tags: { recordType: CONTACT_LINK, issuerDid: ALICE_AGAIN.id, contactId: ALICE_FIRST.id, confirmation: 'user' },
     })
     const tree = open(ALICE_AGAIN)
-    await tree.findByTestId(id('ContactMergedByYou'))
+    await tree.findByTestId(id('ContactMergedByYou'), LINKS_READ)
     fireEvent.press(tree.getByTestId(id('ContactRemove')))
     fireEvent.press(tree.getByTestId(id('ContactRemoveMergedSeparate')))
-    await waitFor(() => expect(tree.getByTestId(id('ContactMergeOffer'))).toBeTruthy())
+    await waitFor(() => expect(tree.getByTestId(id('ContactMergeOffer'))).toBeTruthy(), LINKS_READ)
     expect(store.records).toHaveLength(0)
     expect(mockDeleteContact).not.toHaveBeenCalled()
   })
@@ -281,7 +301,7 @@ describe('Same person? on a contact', () => {
     fireEvent.press(tree.getByTestId('ConfirmRemove'))
 
     // The question answered was about one relationship; storage says two. Nothing goes, and the screen catches up.
-    expect(await tree.findByTestId(id('ContactMergedByYou'))).toBeTruthy()
+    expect(await tree.findByTestId(id('ContactMergedByYou'), LINKS_READ)).toBeTruthy()
     expect(mockDeleteContact).not.toHaveBeenCalled()
     expect(pop).not.toHaveBeenCalled()
     expect(store.records).toHaveLength(1)
@@ -314,7 +334,7 @@ describe('Same person? on a contact', () => {
       <ContactDetails route={{ params: { contact: { issuer: ALICE_AGAIN } } } as any} navigation={{ pop } as any} />,
       { wrapper: Container }
     )
-    await tree.findByTestId(id('ContactMergedByYou'))
+    await tree.findByTestId(id('ContactMergedByYou'), LINKS_READ)
     fireEvent.press(tree.getByTestId(id('ContactRemove')))
     // Meanwhile, elsewhere: this relationship now belongs to a different contact of the same size (still 2).
     store.records[0] = {
@@ -347,13 +367,13 @@ describe('Same person? on a contact', () => {
   test('merged on the person’s word: never shown as confirmed; their phone can be asked, and then says it was', async () => {
     store.records.push(mergedLink('user'))
     const tree = openWithConnection(ALICE_AGAIN)
-    await tree.findByTestId(id('ContactMergedByYou'))
+    await tree.findByTestId(id('ContactMergedByYou'), LINKS_READ)
     expect(tree.queryByTestId(id('ContactMergeConfirmedByPhone'))).toBeNull()
     await waitFor(() =>
       expect(tree.getByTestId(id('ContactMergeAskPhone')).props.accessibilityState?.disabled).toBe(false)
     )
     fireEvent.press(tree.getByTestId(id('ContactMergeAskPhone')))
-    expect(await tree.findByTestId(id('ContactMergeAsked'))).toBeTruthy()
+    expect(await tree.findByTestId(id('ContactMergeAsked'), LINKS_READ)).toBeTruthy()
     expect(mockAskToConfirm).toHaveBeenCalledWith(expect.anything(), expect.any(Map), ALICE_AGAIN.id)
     expect(tree.queryByTestId(id('ContactMergeConfirmedByPhone'))).toBeNull()
   })
@@ -361,7 +381,7 @@ describe('Same person? on a contact', () => {
   test('confirmed by the other phone: says so, instead of "merged by you"', async () => {
     store.records.push(mergedLink('peer'))
     const tree = openWithConnection(ALICE_AGAIN)
-    expect(await tree.findByTestId(id('ContactMergeConfirmedByPhone'))).toBeTruthy()
+    expect(await tree.findByTestId(id('ContactMergeConfirmedByPhone'), LINKS_READ)).toBeTruthy()
     expect(tree.queryByTestId(id('ContactMergedByYou'))).toBeNull()
     expect(tree.queryByTestId(id('ContactMergeAskPhone'))).toBeNull()
   })
@@ -369,7 +389,7 @@ describe('Same person? on a contact', () => {
   test('confirmed by the other phone: Separate asks first; Back keeps the merge, Separate undoes it', async () => {
     store.records.push(mergedLink('peer'))
     const tree = openWithConnection(ALICE_AGAIN)
-    await tree.findByTestId(id('ContactMergeConfirmedByPhone'))
+    await tree.findByTestId(id('ContactMergeConfirmedByPhone'), LINKS_READ)
     fireEvent.press(tree.getByTestId(id('ContactSeparate')))
     // Asked, not done: the confirmed merge is still there.
     expect(await tree.findByTestId(id('ContactSeparateConfirm'))).toBeTruthy()
@@ -381,8 +401,10 @@ describe('Same person? on a contact', () => {
     // And through: separated, the confirmation forgotten with the link.
     fireEvent.press(tree.getByTestId(id('ContactSeparate')))
     fireEvent.press(await tree.findByTestId(id('ContactSeparateYes')))
-    await waitFor(() => expect(store.records).toHaveLength(0))
-    await waitFor(() => expect(tree.queryByTestId(id('ContactMergeConfirmedByPhone'))).toBeNull())
+    await waitFor(() => expect(store.records).toHaveLength(0), LINKS_READ)
+    // Absent only once the screen has read the links after the separation, not merely before it has.
+    await reReadSettled()
+    expect(tree.queryByTestId(id('ContactMergeConfirmedByPhone'))).toBeNull()
   })
 
   const askOn = (connectionId: string, askedAt: number) => ({
@@ -394,14 +416,14 @@ describe('Same person? on a contact', () => {
   test('an ask from today shows as asked, without promising an answer', async () => {
     store.records.push(mergedLink('user'), askOn('conn-again', Date.now()))
     const tree = openWithConnection(ALICE_AGAIN)
-    expect(await tree.findByTestId(id('ContactMergeAsked'))).toBeTruthy()
+    expect(await tree.findByTestId(id('ContactMergeAsked'), LINKS_READ)).toBeTruthy()
     expect(tree.queryByTestId(id('ContactMergeAskPhone'))).toBeNull()
   })
 
   test('an ask older than a day — perhaps a silent Not now — lets the person ask again', async () => {
     store.records.push(mergedLink('user'), askOn('conn-again', Date.now() - ASK_SHOWN_FOR - 1000))
     const tree = openWithConnection(ALICE_AGAIN)
-    await tree.findByTestId(id('ContactMergedByYou'))
+    await tree.findByTestId(id('ContactMergedByYou'), LINKS_READ)
     await waitFor(() => expect(tree.getByTestId(id('ContactMergeAskPhone'))).toBeTruthy())
     expect(tree.queryByTestId(id('ContactMergeAsked'))).toBeNull()
   })
