@@ -18,8 +18,11 @@ import type { Askar } from '@openwallet-foundation/askar-shared'
 
 type FakeList = { rows: { name: string; value: string; tags: Record<string, string> }[] }
 
-/** A native layer that hands out one list per page and records every list and scan freed. */
-function fakeNative(pages: FakeList[]) {
+/**
+ * A native layer that hands out one list per page and records every list and scan freed. `failReadingValue` makes
+ * reading a row's value throw, as a native read can, inside the callback `fetchAll` gives `forEachRow`.
+ */
+function fakeNative(pages: FakeList[], options: { failReadingValue?: boolean } = {}) {
   const lists = new Map<string, FakeList>()
   const freed: string[] = []
   let scansFreed = 0
@@ -41,7 +44,10 @@ function fakeNative(pages: FakeList[]) {
     entryListCount: (o: { entryListHandle: { handle: string } }) => lists.get(o.entryListHandle.handle)!.rows.length,
     entryListGetName: (o: At) => entry(o).name,
     entryListGetCategory: () => 'DidRecord',
-    entryListGetValue: (o: At) => new TextEncoder().encode(entry(o).value),
+    entryListGetValue: (o: At) => {
+      if (options.failReadingValue) throw new Error('reading the value failed')
+      return new TextEncoder().encode(entry(o).value)
+    },
     entryListGetTags: (o: At) => JSON.stringify(entry(o).tags),
     entryListFree: (o: { entryListHandle: { handle: string } }) => {
       freed.push(o.entryListHandle.handle)
@@ -62,13 +68,11 @@ describe('askar-shared Scan frees the entry lists it reads (the #654 patch)', ()
     expect(native.scansFreed()).toBe(1)
   })
 
-  it('a callback that throws still frees the list it was reading, and the scan', async () => {
-    const native = fakeNative([{ rows: [row(1)] }, { rows: [row(2)] }])
-    await expect(
-      scanOver().forEachRow(() => {
-        throw new Error('callback failed')
-      })
-    ).rejects.toThrow('callback failed')
+  // Through fetchAll too: forEachRow is private, and fetchAll is what Credo calls. A row that cannot be read throws
+  // inside fetchAll's callback, which is the failure the patch's finally must survive.
+  it('a row that cannot be read still frees the list it was in, and the scan', async () => {
+    const native = fakeNative([{ rows: [row(1)] }, { rows: [row(2)] }], { failReadingValue: true })
+    await expect(scanOver().fetchAll()).rejects.toThrow('reading the value failed')
     expect(native.freed).toEqual(['list-0'])
     expect(native.scansFreed()).toBe(1)
   })
