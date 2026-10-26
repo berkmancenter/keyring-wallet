@@ -281,6 +281,31 @@ describe('withOta', () => {
       expect(JSON.stringify(log.mock.calls)).not.toContain('vta/join')
     })
 
+    it('keeps a blocker held at the return even when the lock-out releases it during the read', async () => {
+      // A chat with an unsent draft holds 'chat-draft'. Locking out unmounts the chat, which
+      // releases it, and with an update staged that happens while the metadata is being read.
+      let release = registerOtaApplyBlocker('chat-draft')
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockImplementation(async () => {
+        release()
+        release = () => undefined
+        return staged271
+      })
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({
+          staged: STAGED,
+          apply: false,
+          reason: 'blocked: chat-draft',
+          blockers: ['chat-draft'],
+        })
+      )
+      expect(reload).not.toHaveBeenCalled()
+    })
+
     it('logs a metadata read that fails, and does not reload', async () => {
       jest.mocked(exists).mockResolvedValue(true)
       jest.mocked(readFile).mockRejectedValue(new Error('EACCES'))
