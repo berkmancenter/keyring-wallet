@@ -203,16 +203,56 @@ export type RecoveredRefusal = {
   reason: 'failedCheck' | 'notOurs' | 'unreadable'
 }
 
+/** A card the agent keeps, as fetched: no `credential` when the vault did not give it back. */
+export interface AgentCard {
+  id: string
+  credential?: Record<string, unknown>
+}
+
 /**
- * Fetch what the agent keeps for this persona and keep, on this phone, each
- * card that is about the persona and still holds up (vtiDeliveredCheck). The
- * vault answers only a filtered query, never a list of everything. It is asked
- * by purpose, which the vault's receive infers from the card's type names
+ * The queries that find every community card the agent keeps. The vault
+ * answers only a filtered query, never a list of everything. It is asked by
+ * purpose, which the vault's receive infers from the card's type names
  * (vta-vault receive.rs `infer_purpose`: invitation, membership, role,
  * endorsement, personhood), and by type for what that leaves out: a DTG
  * Credentials v1 role card is an `AuthorityCredential`, which no purpose
  * matches, so it was never asked for and never came back on a new phone.
- * Every card is fetched once, whichever query found it.
+ */
+export const AGENT_CARD_QUERIES: Record<string, string>[] = [
+  { purpose: 'membership' },
+  { purpose: 'role' },
+  { purpose: 'endorsement' },
+  { type: 'AuthorityCredential' },
+]
+
+/**
+ * Every community card the agent keeps, each fetched once, whichever query
+ * found it. The vault cannot be asked for one identity's cards (its query has
+ * no subject filter, and what it answers names no subject), so a run that
+ * reads it for several identities reads it once and sorts the cards by
+ * subject: read per identity, every card was fetched once per identity (#401
+ * Farm run, 4 identities on an agent keeping 88 cards: 352 fetches, 164 s).
+ * A query the agent does not answer throws; a card it does not give back is
+ * returned without its credential.
+ */
+export async function fetchAgentCards(task: VaultTask): Promise<AgentCard[]> {
+  const ids = new Set<string>()
+  for (const query of AGENT_CARD_QUERIES) {
+    const answer = await task<{ credentials?: { id?: string }[] }>(VAULT_QUERY, query)
+    for (const d of answer?.credentials ?? []) if (typeof d.id === 'string' && d.id) ids.add(d.id)
+  }
+  const cards: AgentCard[] = []
+  for (const id of ids) {
+    const got = await task<{ credential?: Record<string, unknown> }>(VAULT_GET, { id }).catch(() => undefined)
+    cards.push({ id, credential: got?.credential })
+  }
+  return cards
+}
+
+/**
+ * Keep, on this phone, each card the agent keeps that is about this persona
+ * and still holds up (vtiDeliveredCheck). `cards` are the agent's cards
+ * already fetched (`fetchAgentCards`); without them the vault is read here.
  */
 export async function recoverCardsFromAgent(
   agent: Agent,
@@ -222,26 +262,15 @@ export async function recoverCardsFromAgent(
   options: {
     onProgress?: (p: { found: number; restored: number }) => void
     check?: (credential: Record<string, unknown>, issuer: string) => Promise<string | undefined>
+    cards?: AgentCard[]
   } = {}
 ): Promise<{ found: number; restored: string[]; refused: RecoveredRefusal[] }> {
   const check = options.check ?? ((c, issuer) => checkDeliveredCard(agent, c, issuer))
-  const ids = new Set<string>()
-  const queries: Record<string, string>[] = [
-    { purpose: 'membership' },
-    { purpose: 'role' },
-    { purpose: 'endorsement' },
-    { type: 'AuthorityCredential' },
-  ]
-  for (const query of queries) {
-    const answer = await task<{ credentials?: { id?: string }[] }>(VAULT_QUERY, query)
-    for (const d of answer?.credentials ?? []) if (typeof d.id === 'string' && d.id) ids.add(d.id)
-  }
+  const cards = options.cards ?? (await fetchAgentCards(task))
   const restored: string[] = []
   const refused: RecoveredRefusal[] = []
-  options.onProgress?.({ found: ids.size, restored: 0 })
-  for (const id of ids) {
-    const got = await task<{ credential?: Record<string, unknown> }>(VAULT_GET, { id }).catch(() => undefined)
-    const credential = got?.credential
+  options.onProgress?.({ found: cards.length, restored: 0 })
+  for (const { id, credential } of cards) {
     if (!credential) {
       refused.push({ credentialId: id, reason: 'unreadable' })
       continue
@@ -296,9 +325,9 @@ export async function recoverCardsFromAgent(
       vault: { state: 'kept', at: new Date().toISOString() },
     })
     restored.push(id)
-    options.onProgress?.({ found: ids.size, restored: restored.length })
+    options.onProgress?.({ found: cards.length, restored: restored.length })
   }
-  return { found: ids.size, restored, refused }
+  return { found: cards.length, restored, refused }
 }
 
 // ---------------------------------------------------------------------------

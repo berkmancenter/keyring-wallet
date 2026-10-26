@@ -43,7 +43,6 @@
 2	src/modules/trust-tasks/__tests__/ceremonyRegistry.test.ts	TS2493
 2	src/modules/trust-tasks/__tests__/deliveredCardKept.test.ts	TS7006
 1	src/modules/trust-tasks/__tests__/deviceWords.test.ts	TS2339
-2	src/modules/trust-tasks/__tests__/getCardsFromAgent.test.tsx	TS2550
 6	src/modules/trust-tasks/__tests__/hiddenAttestation.test.ts	TS2493
 4	src/modules/trust-tasks/__tests__/hiddenAttestation.test.ts	TS2556
 2	src/modules/trust-tasks/__tests__/hiddenAttestation.test.ts	TS2698
