@@ -1,0 +1,30 @@
+diff --git a/build/store/Scan.js b/build/store/Scan.js
+index 8dab8a9aee447de4f451ab2fc8274068eb626343..1721c197e754e3436706466630e98826b6012177 100644
+--- a/build/store/Scan.js
++++ b/build/store/Scan.js
+@@ -46,10 +46,21 @@ class Scan {
+                     break;
+                 this._listHandle = listHandle;
+                 const list = new EntryList_1.EntryList({ handle: this._listHandle });
+-                recordCount = recordCount + list.length;
+-                for (let index = 0; index < list.length; index++) {
+-                    const entry = list.getEntryByIndex(index);
+-                    cb(entry);
++                try {
++                    recordCount = recordCount + list.length;
++                    for (let index = 0; index < list.length; index++) {
++                        const entry = list.getEntryByIndex(index);
++                        cb(entry);
++                    }
++                }
++                finally {
++                    // Keyring patch: free the native entry list scanNext returned. Unfreed,
++                    // every query keeps its whole decrypted result set in native memory for
++                    // the life of the app (askar_entry_list_free is the only release, and no
++                    // finalizer exists). The callback must not keep an Entry past this point:
++                    // its getters read this list.
++                    list.handle.free();
++                    this._listHandle = undefined;
+                 }
+             }
+         }
