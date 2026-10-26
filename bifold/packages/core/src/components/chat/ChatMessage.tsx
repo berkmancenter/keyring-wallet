@@ -6,7 +6,6 @@ import { View, Text } from 'react-native'
 // inverted list + GestureHandlerRootView on Android with the new architecture
 import { TouchableOpacity } from 'react-native-gesture-handler'
 import { Bubble, IMessage, MessageImage, MessageImageProps, MessageProps } from 'react-native-gifted-chat'
-import moment from 'moment'
 
 import { useTheme } from '../../contexts/theme'
 import { Role } from '../../types/chat'
@@ -17,6 +16,7 @@ import type { ChatReaction } from '../../modules/chat/fold'
 import type { ChatEventRecord } from '../../modules/chat/records/ChatEventRecord'
 import { testIdWithKey } from '../../utils/testable'
 import { ChatIds } from './Chat.ids'
+import { timeLabel, useDateWords, useUses24HourClock } from '../../utils/localDay'
 
 // Date separator color as per design
 const DATE_SEPARATOR_COLOR = '#888888'
@@ -123,9 +123,11 @@ export const MessageReactions: React.FC<{ reactions: ChatReaction[]; isMe: boole
 
 const MessageTime: React.FC<{ message: ExtendedChatMessage }> = ({ message }) => {
   const { ChatTheme: theme } = useTheme()
+  const words = useDateWords()
+  const use24h = useUses24HourClock()
 
-  // Show only time (e.g., "9:22 AM") - date is shown in day separator
-  const timeOnly = moment(message.createdAt).format('h:mm A')
+  // Only the time, in the app's words and the phone's clock ("4:01 PM", "16:01"); the day pill says the day.
+  const timeOnly = timeLabel(new Date(message.createdAt), words, use24h)
 
   return (
     <ThemedText style={message.user._id === Role.me ? theme.timeStyleRight : theme.timeStyleLeft}>

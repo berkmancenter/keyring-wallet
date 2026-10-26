@@ -125,7 +125,7 @@ exports[`ChatMessage Credential offer renders correctly 1`] = `
                     ]
                   }
                 >
-                  12:00 AM
+                  Chat.Dates.Time24
                 </Text>
               </View>
             </View>
@@ -262,7 +262,7 @@ exports[`ChatMessage Proof request renders correctly 1`] = `
                     ]
                   }
                 >
-                  12:00 AM
+                  Chat.Dates.Time24
                 </Text>
               </View>
             </View>
@@ -465,7 +465,7 @@ exports[`ChatMessage Sent presentation renders correctly 1`] = `
                     ]
                   }
                 >
-                  12:00 AM
+                  Chat.Dates.Time24
                 </Text>
               </View>
             </View>
