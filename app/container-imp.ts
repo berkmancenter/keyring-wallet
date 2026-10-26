@@ -40,6 +40,7 @@ import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
 import useBCAgentSetup from '@/hooks/useBCAgentSetup'
 import AppGlobalListeners from '@/components/AppGlobalListeners'
 import { appPushNotificationsConfig } from '@/push/pushDefaults'
+import { appMessagePickupLifecycle, setLivePickupEnabled } from '@/utils/livePickup'
 import { offerFeedbackReport } from '@/utils/problemReport'
 import { expirationOverrideInMinutes } from '@utils/expiration'
 import BCLogger from '@utils/logger'
@@ -367,8 +368,15 @@ export class AppContainer implements Container {
       let tours = initialState.tours
       let onboarding = initialState.onboarding
       let personCredOfferDissmissed = initialState.dismissPersonCredentialOffer
-      let { environment, remoteDebugging, enableProxy, enableAppToAppPersonFlow, enableTspCarriage, enableDidCommV2 } =
-        initialState.developer
+      let {
+        environment,
+        remoteDebugging,
+        enableProxy,
+        enableAppToAppPersonFlow,
+        enableTspCarriage,
+        enableDidCommV2,
+        enableLivePickup,
+      } = initialState.developer
       let witness = initialState.witness
 
       await Promise.all([
@@ -391,6 +399,7 @@ export class AppContainer implements Container {
         loadState<boolean>(BCLocalStorageKeys.EnableAppToAppPersonFlow, (val) => (enableAppToAppPersonFlow = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableTspCarriage, (val) => (enableTspCarriage = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
+        loadState<boolean>(BCLocalStorageKeys.EnableLivePickup, (val) => (enableLivePickup = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -415,9 +424,12 @@ export class AppContainer implements Container {
           enableAppToAppPersonFlow,
           enableTspCarriage,
           enableDidCommV2,
+          enableLivePickup,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
+      // Before any agent starts: configureMessagePickup reads it.
+      setLivePickupEnabled(state.developer.enableLivePickup)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {
@@ -440,6 +452,15 @@ export class AppContainer implements Container {
     this._container.registerInstance(TOKENS.ONBOARDING, generateOnboardingWorkflowSteps)
 
     this._container.registerInstance(TOKENS.UTIL_LOGGER, logger)
+    // Background pauses live pickup or stops polling; the foreground restart is
+    // the app's own (useBCAgentSetup), so bifold's ActivityProvider never
+    // restarts pickup with a strategy of its own.
+    // This shadows bifold's default because it is registered in THIS child container
+    // and the app resolves from it (container-compose.ts, App.tsx). Registered on the
+    // parent, or resolved from bifold's container, ActivityProvider would silently get
+    // bifold's polling restart and undo live pickup on every return
+    // (__tests__/containerComposition.test.ts).
+    this._container.registerInstance(TOKENS.UTIL_MESSAGE_PICKUP, appMessagePickupLifecycle(logger))
 
     // Initialize VRC module (credential display handlers, localization, container registration)
     initializeVrcModule(this._container)

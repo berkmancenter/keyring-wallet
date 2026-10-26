@@ -1,5 +1,6 @@
 import { Agent } from '@credo-ts/core'
 
+import { setLivePickupEnabled } from './livePickup'
 import { createPickupBoost, PICKUP_ACTIVE_INTERVAL_MS, PICKUP_ACTIVE_WINDOW_MS, startPickupBoost } from './pickupBoost'
 
 describe('createPickupBoost', () => {
@@ -131,6 +132,23 @@ describe('createPickupBoost', () => {
       await advance(3_000)
       expect(pickupMessages).toHaveBeenCalled()
       boost.stop()
+    })
+
+    it('stands down in live pickup: no window, so no status-requests over the socket', async () => {
+      setLivePickupEnabled(true)
+      try {
+        const { agent, pickupMessages, sent, processed } = fakeAgent()
+        const boost = startPickupBoost(agent, { warn: jest.fn() })
+        await Promise.resolve()
+        boost.boost()
+        sent('a-contact')
+        processed('a-contact')
+        await advance(5_000)
+        expect(pickupMessages).not.toHaveBeenCalled()
+        boost.stop()
+      } finally {
+        setLivePickupEnabled(false)
+      }
     })
 
     it('stops listening when stopped', () => {

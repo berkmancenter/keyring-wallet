@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "21ba34bb6ed97d5ef34211d9c6ab125e39795a77",
+  "generatedFrom": "436fde6a640a011c26bbb7b87bc213a70760264b",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "Accept": ["src/screens/Terms.tsx"],
@@ -63,6 +63,7 @@
     "ToggleDeveloper": ["src/screens/Developer.tsx"],
     "ToggleEnableAppToAppPersonFlow": ["src/screens/Developer.tsx"],
     "ToggleEnableDidCommV2": ["src/screens/Developer.tsx"],
+    "ToggleEnableLivePickup": ["src/screens/Developer.tsx"],
     "ToggleEnableTspCarriage": ["src/screens/Developer.tsx"],
     "ToggleRemoteLoggingSwitch": ["src/screens/Developer.tsx"],
     "ToggleUseShareableLink": ["src/screens/Developer.tsx"],
