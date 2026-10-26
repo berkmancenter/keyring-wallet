@@ -13,6 +13,18 @@ import { useStore } from '../contexts/store'
 const appLinkListeners = new Set<(url: string) => void>()
 let pendingAppLink: string | undefined
 
+/**
+ * Links already made active in this process. The hook below mounts again after
+ * every unlock and asks for the link that opened the app, which stays the same
+ * for the life of the process. On Android it is even the latest link the app
+ * was opened with (MainActivity.onNewIntent calls setIntent). Without this,
+ * every unlock handled that link again: a used invitation failed with "Unable
+ * to handle deeplink", and a link that acts (a join, an enrolment) could act
+ * twice. Only that mount-time lookup is checked against it. A link that
+ * arrives (a tap, a notification) is always handled, even one handled before.
+ */
+const activatedLinks = new Set<string>()
+
 export function openAppLink(url: string): void {
   if (appLinkListeners.size === 0) {
     pendingAppLink = url
@@ -53,7 +65,7 @@ export const useDeepLinks = () => {
   useEffect(() => {
     const getUrlAsync = async () => {
       const initialUrl = await Linking.getInitialURL()
-      if (initialUrl) {
+      if (initialUrl && !activatedLinks.has(initialUrl)) {
         setStashedDeepLink(initialUrl)
       }
     }
@@ -100,6 +112,7 @@ export const useDeepLinks = () => {
   // activate stashed deeplink when ready
   useEffect(() => {
     if (stashedDeepLink && ready) {
+      activatedLinks.add(stashedDeepLink)
       dispatch({
         type: DispatchAction.ACTIVE_DEEP_LINK,
         payload: [stashedDeepLink],
