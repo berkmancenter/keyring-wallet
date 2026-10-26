@@ -1,4 +1,5 @@
 import { MainContainer } from '@bifold/core'
+import { useMemo } from 'react'
 import { TFunction } from 'react-i18next'
 import { container } from 'tsyringe'
 
@@ -34,3 +35,15 @@ export const composeContainers = (
 
 /** The container the app is given: the child (see above). */
 export const composeAppContainer = (...args: Parameters<typeof composeContainers>) => composeContainers(...args).app
+
+/**
+ * The container the app is given, built once per mount of App: a new one only when one of its inputs changes (the
+ * translation function, which changes with the language). Built in App's render body, a new pair of containers came
+ * with every render of App, and App renders again on every launch: HotUpdater.wrap re-renders it once its update check
+ * finishes. Each rebuild gave every useServices consumer new instances, ran MainContainer.init's start-up work again,
+ * and left another of the logger's event listeners behind (AppContainer.init's startEventListeners).
+ */
+export const useAppContainer = (...args: Parameters<typeof composeContainers>) => {
+  const [t, navigate, setSurveyVisible] = args
+  return useMemo(() => composeAppContainer(t, navigate, setSurveyVisible), [t, navigate, setSurveyVisible])
+}
