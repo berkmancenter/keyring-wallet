@@ -25,6 +25,7 @@ import VtiHiddenVetting from '../modules/trust-tasks/screens/VtiHiddenVetting'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
 import SignIn from '../modules/trust-tasks/screens/SignIn'
 import VtaClaim from '../modules/trust-tasks/screens/VtaClaim'
+import RoomsHome from '../modules/rooms/screens/RoomsHome'
 import { MyAgentStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
@@ -167,6 +168,12 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         // Each scan is its own screen, as for sign-in.
         getId={({ params }) => params?.scanId}
         options={{ title: t('Screens.VtaClaim'), ...ScreenOptionsDictionary[Screens.VtaClaim] }}
+      />
+      {/* Rooms: reached only from the entry points the rooms flag shows. */}
+      <Stack.Screen
+        name={Screens.RoomsHome}
+        component={RoomsHome}
+        options={{ title: t('Rooms.Rooms'), ...ScreenOptionsDictionary[Screens.RoomsHome] }}
       />
     </Stack.Navigator>
   )

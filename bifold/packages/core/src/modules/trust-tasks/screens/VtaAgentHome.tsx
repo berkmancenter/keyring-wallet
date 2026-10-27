@@ -37,6 +37,10 @@ import { useCommunityJourneysOf } from '../module/communityJourney'
 import { COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT } from '../module/communityChanged'
 import { communityNameIsStale, refreshPublishedNameThrottled } from '../module/communityNameRefresh'
 import { communityTarget } from '../module/vtiCommunityLink'
+import { RoomsCard } from '../../rooms/components/RoomsCard'
+import { useMyRooms } from '../../rooms/useMyRooms'
+import { useRoomOffersCount } from '../../rooms/useRoomOffersCount'
+import { useRoomsService } from '../../rooms/useRoomsService'
 
 import { DevicesCard } from './DevicesCard'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
@@ -309,6 +313,11 @@ const VtaAgentHome: React.FC = () => {
   // card shows it. Each card told it after painting, one render late.
   const held = holdings ? communitiesHeld(holdings) : []
   const journeys = useCommunityJourneysOf(held)
+  // Rooms, while the rooms flag is on: one card, its rooms read once here, its offers badge polled while an agent
+  // is linked and the app is in the foreground (nothing pushes an offer).
+  const roomsService = useRoomsService()
+  const myRooms = useMyRooms(roomsService)
+  const roomOffers = useRoomOffersCount(roomsService, link.kind === 'linked')
 
   // Only what still waits: a decided or expired request is not listed. The
   // same rule as the badge on the My Agent tab (waitingRequests.ts).
@@ -1030,6 +1039,18 @@ const VtaAgentHome: React.FC = () => {
             </ThemedText>
           ) : null}
         </View>
+
+        {roomsService ? (
+          <>
+            <SectionRule />
+            <RoomsCard
+              service={roomsService}
+              myRooms={myRooms}
+              offersCount={roomOffers}
+              onOpen={() => go(Screens.RoomsHome)}
+            />
+          </>
+        ) : null}
 
         <SectionRule />
         <DevicesCard onPress={() => go(Screens.VtaDevices)} />
