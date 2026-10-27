@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "a3656d1a679ed23a2883f31ef2952d52bc2c36af",
+  "generatedFrom": "92d091d586ce2cbd5da9ea6ea134658223c73702",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -89,9 +89,12 @@
     "AgentGetAgentToggle": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "AgentGetCards": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsButton": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
+    "AgentGetCardsCommunities": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsHint": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
+    "AgentGetCardsNoCommunities": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsProgress": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsResult": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
+    "AgentGetCardsUnreadableIdentities": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGone": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGoneLinkNew": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGoneTryAgain": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
@@ -251,10 +254,22 @@
     "ChatActionCopy": ["src/components/chat/Chat.ids.ts"],
     "ChatActionDeleteForMe": ["src/components/chat/Chat.ids.ts"],
     "ChatActionReply": ["src/components/chat/Chat.ids.ts"],
+    "ChatActionsButton": ["src/components/chat/Chat.ids.ts"],
+    "ChatAttachCamera": ["src/components/chat/Chat.ids.ts"],
+    "ChatAttachLibrary": ["src/components/chat/Chat.ids.ts"],
+    "ChatComposerCamera": ["src/components/chat/Chat.ids.ts"],
     "ChatComposerEmojiButton": ["src/components/chat/Chat.ids.ts"],
+    "ChatComposerField": ["src/components/chat/Chat.ids.ts"],
+    "ChatDayPill": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingCancel": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingCurrent": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingOption": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingSave": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingSheet": ["src/components/chat/Chat.ids.ts"],
     "ChatHeaderTitle": ["src/modules/vrc/components/ChatHeaderTitle.tsx"],
     "ChatMessageActions": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageActionsBackdrop": ["src/components/chat/Chat.ids.ts"],
+    "ChatMessageImage": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageReactions": ["src/components/chat/Chat.ids.ts"],
     "ChatReaction": ["src/components/chat/Chat.ids.ts"],
     "ChatReactionBar": ["src/components/chat/Chat.ids.ts"],
@@ -333,6 +348,8 @@
     "ContactCard": ["src/modules/vrc/components/ContactCard.tsx", "src/modules/vrc/screens/ListContacts.tsx"],
     "ContactHardwareChecking": ["src/modules/vrc/components/ContactCard.tsx"],
     "ContactMenu": ["src/modules/vrc/components/InfoIcon.tsx"],
+    "ContactMenuClearChat": ["src/modules/vrc/components/InfoIcon.tsx"],
+    "ContactMenuDisappearing": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactMenuOverlay": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactMenuRemoveContact": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactMenuViewContact": ["src/modules/vrc/components/InfoIcon.tsx"],
@@ -361,7 +378,12 @@
     "ContactSeparateBack": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactSeparateConfirm": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactSeparateYes": ["src/modules/vrc/components/ContactMergeSection.tsx"],
-    "ContactViewMessages": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrust": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustHardware": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustInPerson": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustNone": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustWitnessed": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactViewMessages": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "Contacts": ["src/navigators/TabStack.tsx"],
     "ContactsList": ["src/modules/vrc/screens/WhatAreContacts.tsx"],
     "Continue": [
@@ -473,8 +495,17 @@
     "Done": ["src/components/modals/ProofCancelModal.tsx", "src/screens/CredentialOfferAccept.tsx"],
     "E2EAutoLockMinutes": ["src/components/misc/E2EClockRows.tsx"],
     "E2EClocksMode": ["src/components/misc/E2EClockRows.tsx"],
+    "E2EDisappearHourSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "E2EGrantWindowSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "E2EPhoneGrantWindowSeconds": ["src/components/misc/E2EClockRows.tsx"],
+    "EmojiPicker": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerClearSearch": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerNoResults": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerRecent": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSearch": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheet": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheetBackdrop": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheetClose": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
     "EnableWalletNamingSwitchElement": ["src/screens/Developer.tsx"],
     "Enter": ["src/screens/AttemptLockout.tsx", "src/screens/PINEnter.tsx"],
     "EnterOldPIN": ["src/screens/PINChange.tsx", "src/screens/PINVerify.tsx"],
@@ -670,6 +701,7 @@
     "JoinWaysTitle": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinWaysVettingNotSupported": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWillShow": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "KeepMessages": ["src/screens/Settings.tsx"],
     "KeysMoved": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedDevices": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedOk": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
@@ -828,6 +860,9 @@
     "RCardSubmit": ["src/modules/vrc/screens/RCardForm.tsx"],
     "RecordLoading": ["src/components/animated/RecordLoading.tsx"],
     "ReenterPIN": ["src/screens/PINChange.tsx", "src/screens/PINCreate.tsx"],
+    "RelationshipDayExchange": ["src/modules/vrc/components/RelationshipLayers.tsx"],
+    "RelationshipDaySheet": ["src/modules/vrc/components/RelationshipLayers.tsx"],
+    "RelationshipDaySheetClose": ["src/modules/vrc/components/RelationshipLayers.tsx"],
     "RelationshipLayer": ["src/modules/vrc/components/RelationshipLayers.tsx"],
     "RelationshipLayers": ["src/modules/vrc/components/RelationshipLayers.tsx"],
     "RelationshipUpgrade": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
@@ -835,6 +870,7 @@
     "RelationshipUpgradeConfirm": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeDismiss": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeHardwareDone": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeNoWitness": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeNote": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeResign": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeSend": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
@@ -1221,6 +1257,7 @@
     "DenyConsentButton_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "DirectoryDisclosureField_": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
     "Dismiss": ["src/components/listItems/NotificationListItem.tsx", "src/components/misc/InfoBox.tsx"],
+    "EmojiPickerEmoji_": ["src/modules/chat/emoji/EmojiPicker.tsx"],
     "JoinPrivateVettingRefused_": ["src/modules/trust-tasks/screens/PrivateVettingStart.tsx"],
     "JoinPrivateVettingStart_": ["src/modules/trust-tasks/screens/PrivateVettingStart.tsx"],
     "JoinWayCannotUse_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
@@ -1229,6 +1266,7 @@
     "JoinWayFollows_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWayStart_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWay_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
+    "KeepMessages_": ["src/screens/Settings.tsx"],
     "MyProfilesRow-": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "OfferChoice_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],
     "OfferDevice_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],
@@ -1263,17 +1301,41 @@
     "SecureExchangeBadge": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "SecureExchangeChecking": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "VetterHeaderBackground": ["src/components/views/VetterHeaderBackground.tsx"],
-    "WitnessRecord": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "WitnessRecord": ["src/modules/vrc/components/RelationshipLayers.tsx"],
     "WitnessSection": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "WitnessVerifiedBadge": ["src/modules/vrc/components/ContactCard.tsx"],
     "WitnessedBadge": ["src/modules/vrc/screens/ContactDetails.tsx"]
   },
   "derived": [
     {
-      "src/components/chat/ActionSlider.tsx": "action.text"
+      "src/components/chat/ActionSlider.tsx": "action.testID ?? action.text"
+    },
+    {
+      "src/components/chat/ChatActions.tsx": "ChatIds.actionsButton"
+    },
+    {
+      "src/components/chat/ChatMessage.tsx": "ChatIds.image"
     },
     {
       "src/components/chat/ChatMessage.tsx": "ChatIds.reactions"
+    },
+    {
+      "src/components/chat/DayPill.tsx": "ChatIds.dayPill"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearing"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearingCancel"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearingCurrent"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearingSave"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "`${ChatIds.disappearingOption}-${expiresIn}`"
     },
     {
       "src/components/chat/MessageActions.tsx": "ChatIds.actions"
@@ -1283,6 +1345,15 @@
     },
     {
       "src/components/chat/MessageActions.tsx": "testID"
+    },
+    {
+      "src/components/chat/MessageInput.tsx": "ChatIds.composerCamera"
+    },
+    {
+      "src/components/chat/MessageInput.tsx": "ChatIds.composerEmoji"
+    },
+    {
+      "src/components/chat/MessageInput.tsx": "ChatIds.composerField"
     },
     {
       "src/components/chat/ReactionBar.tsx": "ChatIds.reactionBar"
@@ -1313,6 +1384,30 @@
     },
     {
       "src/components/texts/Link.tsx": "testIdForAccessabilityLabel(linkText)"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.clearSearch"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.noResults"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.root"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.search"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "section.testID"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheet"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheetBackdrop"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheetClose"
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Copy`"

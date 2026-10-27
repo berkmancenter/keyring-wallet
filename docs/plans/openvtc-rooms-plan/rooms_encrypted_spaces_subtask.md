@@ -4,17 +4,18 @@
 built.
 **Parent:** [`../openvtc-rooms-plan.md`](../openvtc-rooms-plan.md)
 **Reasoning:** [`./2026-10-06-bam.md`](./2026-10-06-bam.md) (the Encrypted Spaces assessment
-this builds on); [`./2026-10-13-bam.md`](./2026-10-13-bam.md) (re-baselining onto the VTI pin)
-**Baseline:** VTI `49f5f1be` (tag VTI-Eucalyptus, 2026-10-07), Keyring's pin in
-`scripts/openvtc/PINS.json`
+this builds on); [`./2026-10-13-bam.md`](./2026-10-13-bam.md) (re-baselining onto the VTI pin at the time); [`./2026-10-26-bam-rebaseline.md`](./2026-10-26-bam-rebaseline.md) (re-baselining onto fc157f76)
+**Baseline:** VTI `main` at `fc157f76` (2026-10-26), read from
+`/srv/dev/code/seas/verifiable-trust-infrastructure`; Keyring's pin in `scripts/openvtc/PINS.json`
+still names an earlier commit (`49f5f1be`) until bumped
 
 ## Sources
 
 - **Rooms planning doc:** [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md).
-- **Rooms code and design:** verifiable-trust-infrastructure at the pin `49f5f1be`, the
-  `external/verifiable-trust-infrastructure` clone managed by `scripts/openvtc/setup-external.mjs`
-  (read from its git objects at the pinned commit). Paths written `VTI/...` are relative to
-  that commit.
+- **Rooms code and design:** verifiable-trust-infrastructure at `fc157f76`, the sibling checkout
+  `/srv/dev/code/seas/verifiable-trust-infrastructure` (read from its git objects at that commit;
+  `external/verifiable-trust-infrastructure`, managed by `scripts/openvtc/setup-external.mjs`, holds the
+  older pin). Paths written `VTI/...` are relative to that commit.
 - **Encrypted Spaces (ES):** the assessment [`2026-10-06-bam.md`](./2026-10-06-bam.md), plus
   [github.com/encrypted-spaces/prototype](https://github.com/encrypted-spaces/prototype) at
   `aa7440b` (tag `v0.0.2`, 2026-09-22) and
@@ -37,16 +38,18 @@ adopt, not whether the two connect at all.
 
 - *Engine.* `VTI/vti-rooms/src/storage.rs` is a set of free functions over
   `vti_common::store::KeyspaceHandle`. That type is an **enum**, not a trait
-  (`VTI/vti-common/src/store/mod.rs`, `pub enum Store` / `pub enum KeyspaceHandle`), with two
+  (`VTI/vti-common/src/store/mod.rs:364,423`, `pub enum Store` / `pub enum KeyspaceHandle`), with two
   variants: local **fjall** and **vsock** (a store proxied to the parent instance for Nitro
   enclaves). An optional `encryption` feature adds at-rest encryption with location-bound AAD.
-  At the pin the module also has `store/test_fixture.rs`, compiled only under `cfg(test)` or the
+  The module also has `store/test_fixture.rs`, compiled only under `cfg(test)` or the
   `test-support` feature: it opens pre-created fjall keyspaces for tests and adds no backend.
   To add a backend you would add an enum variant or pull out a trait. No other backend
   (SQL, S3, DynamoDB) is planned for rooms. `vta-tee` uses DynamoDB, but not for rooms.
-- *The one real trait seam is for authorization, not storage:* `ChainVerifier`
-  (`VTI/vti-rooms/src/authz.rs:142`). It exists so that `room-host` and `vtc-service` reach the
-  same room decision.
+- *The real trait seams are authorization and file blobs, not record storage:* `ChainVerifier`
+  (`VTI/vti-rooms/src/authz.rs:142`) exists so that `room-host` and `vtc-service` reach the
+  same room decision, and `BlobStore` (`VTI/vti-common/src/blob_store/mod.rs:322`, reached through
+  `BlobStores`, `VTI/vti-rooms/src/blobs.rs:867`) is the pluggable backend for file ciphertext. Neither stores
+  records.
 - *Hosting.* Invariant I3, "Hosting is a setting, not an exit" (`data-rooms.md` §2), and §7.1 keep
   "who controls the DID" separate from "who stores content". Hosts can be the standalone
   `room-host` or the VTC in-process (`VTI/vtc-service/src/rooms/handlers.rs`). Moving a room means
@@ -64,7 +67,7 @@ adopt, not whether the two connect at all.
 | Who reads/writes | Credential chain issued by the room DID (VMC + VAC: read/write/curate, attenuable, expiring). Never host ACLs (I5) | §2, §4 |
 | Encryption | `attributed`: one sealed blob per record under the MLS exporter key. AEAD binds `roomId\|key\|version\|epoch` (ChaCha20-Poly1305). Host sees opaque keys, status, version, epoch, timestamps | §3.1, §6; `sealed.rs` |
 | Deletion | `purge_record` is a request the host is trusted to honour. **Cryptographic** deletion works by pruning epoch links (`prune_epoch_links_before`) | `storage.rs`, `retention.rs` |
-| Verifiability | Host computes a Merkle tree head and inclusion proof **on every read by rescanning the whole room** (`storage::tree_head`, about line 706). The commitments are optional in responses. Anchoring them in the witnessed `did:webvh` log is decided but not built | `room-host/src/lib.rs` ~760-850; `data-rooms-epoch-anchoring.md`; `data-rooms-verified-reads.md` |
+| Verifiability | Host computes a Merkle tree head and inclusion proof **on every read by rescanning the whole room** (`storage::tree_head`, `vti-rooms/src/storage.rs:681,778`; still uncached at fc157f76). The commitments are optional in responses. Anchoring them in the witnessed `did:webvh` log is decided ("decided, and now buildable") but not built for this purpose (P4) | `room-host/src/lib.rs` ~760-850; `data-rooms-epoch-anchoring.md`; `data-rooms-verified-reads.md` |
 | Limits | 64 KiB Trust Task body on a VTC, 2 MB on `room-host` (axum's default body limit; `room-host` sets none of its own). The replay guard is in-memory and single-process (`InMemoryReplayGuard`) | rooms plan §5; `room-host/src/lib.rs` ~499 |
 
 ## 2. Fit analysis: ES as a backend for rooms
@@ -148,10 +151,11 @@ already have these.
 
 **Seam:** extract a `RecordStore` trait from the free functions in
 `VTI/vti-rooms/src/storage.rs` (put/get/list/tree_head/tree_head_with_trace/epoch links),
-following the `ChainVerifier` pattern in `authz.rs`. No such trait exists at the pin: the only
-`trait …Store` definitions in `vti-rooms` and `vti-common` are `SessionStore`
-(`vti-common/src/auth/backend.rs`) and `SeedStore` (`vti-common/src/seed_store.rs`), neither a
-record store. The current fjall/vsock path becomes the
+following the `ChainVerifier` pattern in `authz.rs`. There is no `RecordStore` at fc157f76 (`Store` and `KeyspaceHandle` stay closed enums,
+`vti-common/src/store/mod.rs:364,423`): the `trait …Store` definitions in `vti-rooms` and
+`vti-common` are `SessionStore` (`vti-common/src/auth/backend.rs`), `SeedStore`
+(`vti-common/src/seed_store.rs`), and `BlobStore`/`BlobStores` (file blobs only), none a record
+store. The current fjall/vsock path becomes the
 first implementation and a merk-backed store the second. Authorization, sealing, MLS and Trust
 Task wiring stay as they are. Verification goes in `vti-rooms` (and therefore `vti-rooms-wasm`)
 and is called by the VTA's `rooms/keys/read|browse`.
@@ -167,7 +171,7 @@ and is called by the VTA's `rooms/keys/read|browse`.
    per write, so reads stop rescanning.
 4. **P3, range/absence proofs on `list`.** Versioned spec field, verifier in `vti-rooms`, tested
    with a host that omits a record.
-5. **P4, anchor the root** in the witnessed log entry (`data-rooms-epoch-anchoring.md` §3a).
+5. **P4, anchor the root** in the witnessed log entry (`data-rooms-epoch-anchoring.md` §3a). The note's status is "decided, and now buildable"; it is unbuilt for this purpose: a `rooms/owner/anchor/0.1` handler exists on the owner's VTA (`VTI/vta-service/src/trust_tasks/room_owner.rs:263`, behind the `webvh` feature), but the guide's §10.1 still says renewal anchoring is not implemented, and nothing here shows a host or client checking an anchor.
 6. **P5, research only.** An `attributed` room backed by a full ES Space in a lab. ES's
    `uid` is bound to a member DID through the VMC, ES auth is replaced by Trust Task
    presentations, and real proofs are switched on. Decide afterwards whether option A is worth
@@ -186,7 +190,7 @@ and is called by the VTA's `rooms/keys/read|browse`.
 
 ## 5. Privacy guarantees compared, and running without a TEE
 
-Sources: rooms material from VTI `49f5f1be` (`data-rooms.md` §3-6, §12; `sealed.rs`;
+Sources: rooms material from VTI `49f5f1be` and re-read at `fc157f76` only where a line reference above says so (`data-rooms.md` §3-6, §12; `sealed.rs`;
 `vta-keyspaces/src/lib.rs`; `docs/02-vta/tee-architecture.md`); ES material from
 `prototype` @ `aa7440b` and whitepaper v1.1. Items marked (inferred) are
 inference, not verified from docs or code. Cryptographic soundness of either system was
@@ -201,7 +205,7 @@ not verified.
 | Who acted | Member DID disclosed on every read and write; host keeps a per-member access log. `private` (BBS+, unlinkable) designed, not coded | Per-space `uid` plus signed changelog entries; `_users` public-key table visible to the server |
 | Membership list at host | No roster kept; could be rebuilt from presentation logs (inferred) | Users table is server-visible |
 | Forward secrecy / PCS | MLS gives both at the key layer; the `Chained` epoch-link chain gives up PCS for stored content (a current key opens every retained epoch) | Ratchet on invite, fresh key on removal; PCS only via explicit key refresh (inferred); retention tree has the same "current key reaches everything retained" trade |
-| Deletion | Purge is a host promise; cryptographic deletion is a coarse "every epoch before K" cut (`prune_epoch_links_before`), no wire verb yet | Per-item deletion via retention tree plus retention proofs (prototype quality) |
+| Deletion | Purge is a host promise; cryptographic deletion is a coarse "every epoch before K" cut (`prune_epoch_links_before`), reached on the wire by `rooms/epoch/prune` 0.1/0.2 | Per-item deletion via retention tree plus retention proofs (prototype quality) |
 | Authorship | Signed with the member's DID inside the sealed body: provable to outsiders, invisible to the host | Ed25519 entries visible to the server; deniable mode not built |
 | Integrity | AEAD plus signatures; Merkle head optional and recomputed per read; witnessed anchoring not built | Merkle commitment, signatures, fast-forward proofs; fake receipts by default (`RISC0_DEV_MODE`) |
 | Hidden from other members | Nothing; members hold the group key | Nothing, apart from ACL predicates |

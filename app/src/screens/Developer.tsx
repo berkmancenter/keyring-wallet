@@ -48,7 +48,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons'
 
+import { configureMessagePickup } from '@/hooks/useBCAgentSetup'
 import OtaDeveloperSection from '@/ota/OtaDeveloperSection'
+import { setLivePickupEnabled } from '@/utils/livePickup'
 import { BCDispatchAction, BCState } from '@/store'
 import IASEnvironment from './IASEnvironment'
 import RemoteLogWarning from './RemoteLogWarning'
@@ -74,6 +76,7 @@ const Developer: React.FC = () => {
   const [enableAppToAppPersonFlow, setEnableAppToAppPersonFlow] = useState(!!store.developer.enableAppToAppPersonFlow)
   const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
+  const [enableLivePickup, setEnableLivePickup] = useState(!!store.developer.enableLivePickup)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -354,6 +357,23 @@ const Developer: React.FC = () => {
     // relationship invitations read the flag live (isDidCommV2Enabled).
     setDidCommV2Enabled(next)
     setEnableDidCommV2(next)
+  }
+
+  const toggleEnableLivePickupSwitch = () => {
+    const next = !enableLivePickup
+    dispatch({
+      type: BCDispatchAction.TOGGLE_LIVE_PICKUP,
+      payload: [next],
+    })
+    setLivePickupEnabled(next)
+    setEnableLivePickup(next)
+    // Takes effect at once: pickup restarts in the chosen mode
+    // (utils/livePickup.ts, configureMessagePickup).
+    if (agent) {
+      configureMessagePickup(agent).catch((error) =>
+        logger.warn(`Could not restart message pickup after the switch: ${(error as Error)?.message ?? error}`)
+      )
+    }
   }
 
   /**
@@ -805,6 +825,23 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableDidCommV2Switch}
             value={enableDidCommV2}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableLivePickup')}
+          accessibilityLabel={t('Developer.EnableLivePickup')}
+          testID={testIdWithKey('ToggleEnableLivePickup')}
+          showRowSeparator
+          // The row toggles too: iOS hides the Switch behind the accessible row
+          // from automation (same fix as the DIDComm v2 row, 2026-09-14).
+          onPress={toggleEnableLivePickupSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableLivePickup ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableLivePickupSwitch}
+            value={enableLivePickup}
           />
         </SectionRow>
         <SectionRow
