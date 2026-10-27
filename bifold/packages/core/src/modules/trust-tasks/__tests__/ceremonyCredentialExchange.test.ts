@@ -23,6 +23,7 @@ import { respondToCredentialExchangeQuery, setupTrustTasksInbound } from '../cer
 import { credentialExchangeStore } from '../credentialExchangeStore'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
+import { readOneClock } from '../../../../__tests__/helpers/oneClock'
 
 // DCQL `type_values` matches against a stored credential's JSON-LD EXPANDED
 // type IRIs (Credo's `expandedTypes` tag), not its raw compact `type` array —
@@ -221,6 +222,9 @@ const inboundQuery = (id = 'qqqq1111-1111-4111-8111-111111111111') => ({
 afterEach(() => {
   jest.clearAllMocks()
 })
+
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
 
 describe('an inbound credential-exchange query', () => {
   test('a satisfiable query surfaces a consent prompt and sends nothing', async () => {

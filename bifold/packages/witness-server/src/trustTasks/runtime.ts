@@ -14,7 +14,9 @@
  * same runtime), so conformance cannot drift between the two sides.
  */
 
-export type TrustTaskRuntime = typeof import('@openvtc/trust-tasks')
+// The runtime alone: the package root also loads every prebuilt spec module (over 1,200 at 0.27),
+// and this service needs three of them, loaded below by path.
+export type TrustTaskRuntime = typeof import('@openvtc/trust-tasks/runtime')
 export type WitnessSessionPayload = typeof import('@openvtc/trust-tasks/witness/session/0.1/payload')
 export type WitnessSubmitPayload = typeof import('@openvtc/trust-tasks/witness/session/submit/0.1/payload')
 export type TrustTaskDiscoveryPayload = typeof import('@openvtc/trust-tasks/trust-task-discovery/0.1/payload')
@@ -34,11 +36,24 @@ let loaded: Promise<LoadedTrustTaskRuntime> | undefined
 export function loadTrustTaskRuntime(): Promise<LoadedTrustTaskRuntime> {
   if (!loaded) {
     loaded = Promise.all([
-      dynamicImport('@openvtc/trust-tasks') as Promise<TrustTaskRuntime>,
+      dynamicImport('@openvtc/trust-tasks/runtime') as Promise<TrustTaskRuntime>,
       dynamicImport('@openvtc/trust-tasks/witness/session/0.1/payload') as Promise<WitnessSessionPayload>,
       dynamicImport('@openvtc/trust-tasks/witness/session/submit/0.1/payload') as Promise<WitnessSubmitPayload>,
       dynamicImport('@openvtc/trust-tasks/trust-task-discovery/0.1/payload') as Promise<TrustTaskDiscoveryPayload>,
     ]).then(([runtime, session, submit, discovery]) => ({ runtime, session, submit, discovery }))
   }
   return loaded
+}
+
+/**
+ * The two stateful §7.2 checks the framework requires a consumer to choose since 0.27. A wallet's
+ * submission can be delayed by its mediator, so this keeps no acceptance window and no duplicate
+ * record, as before; the freshness floor refuses only a future-dated document or an empty
+ * validity interval. The skew is the wallet's five-minute clock allowance, the same as the
+ * wallet's own consumer (@bifold/core TrustTasksService), so the two sides judge alike.
+ */
+export function witnessConsumeChecks(
+  runtime: TrustTaskRuntime
+): ReturnType<TrustTaskRuntime['notConsequentialChecks']> {
+  return { ...runtime.notConsequentialChecks(), freshness: { ...runtime.DEFAULT_FRESHNESS, skewMs: 5 * 60_000 } }
 }

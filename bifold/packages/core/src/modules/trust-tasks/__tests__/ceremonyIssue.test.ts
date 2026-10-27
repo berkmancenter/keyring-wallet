@@ -30,6 +30,7 @@ import { digestMultibase } from '../documentProof'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../../vrc/witnessStatusStore'
+import { readOneClock } from '../../../../__tests__/helpers/oneClock'
 
 const UNSIGNED_VRC = {
   '@context': ['https://www.w3.org/ns/credentials/v2'],
@@ -205,6 +206,9 @@ afterEach(() => {
 
 const flushDelivery = () => new Promise((resolve) => setTimeout(resolve, 50))
 
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
+
 describe('the proposer side (auto-delivery on acceptance)', () => {
   test('consuming the acceptance delivers the signed VRC on the exchange thread, exactly once', async () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
@@ -242,7 +246,9 @@ describe('the proposer side (auto-delivery on acceptance)', () => {
     await flushDelivery() // delivery is fire-and-forget off the inbound handler
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { issueRCardForAcceptedExchange } = require('../../vrc/vrc-manager') as { issueRCardForAcceptedExchange: jest.Mock }
+    const { issueRCardForAcceptedExchange } = require('../../vrc/vrc-manager') as {
+      issueRCardForAcceptedExchange: jest.Mock
+    }
     expect(issueRCardForAcceptedExchange).toHaveBeenCalledWith(fake.agent, fake.connectionId)
     expect(fake.sentMessages).toHaveLength(3) // discovery, propose, then our issue
     const doc = fake.sentMessages[2].document as {
@@ -341,7 +347,9 @@ describe('the responder side (consent gates everything)', () => {
     // The acceptance also triggers the R-Card (legacy leg) — the basic-message
     // announcement it used to depend on can be lost.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { issueRCardForAcceptedExchange } = require('../../vrc/vrc-manager') as { issueRCardForAcceptedExchange: jest.Mock }
+    const { issueRCardForAcceptedExchange } = require('../../vrc/vrc-manager') as {
+      issueRCardForAcceptedExchange: jest.Mock
+    }
     expect(issueRCardForAcceptedExchange).toHaveBeenCalledWith(fake.agent, fake.connectionId)
   })
 
@@ -388,7 +396,11 @@ describe('the inbound issue leg (verify, store, receipt)', () => {
     setupTrustTasksInbound(fake.agent)
     const { doc, vrc } = inboundIssue()
 
-    await deliver(fake.capturedHandlerRef, doc, { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    await deliver(fake.capturedHandlerRef, doc, {
+      id: fake.connectionId,
+      did: 'did:peer:4aaa',
+      theirDid: 'did:peer:4zzz',
+    })
 
     expect(fake.w3c.verifyCredential).toHaveBeenCalled()
     expect(fake.storedCredentials).toHaveLength(1)
@@ -403,7 +415,11 @@ describe('the inbound issue leg (verify, store, receipt)', () => {
     setupTrustTasksInbound(fake.agent)
     const { doc } = inboundIssue()
 
-    await deliver(fake.capturedHandlerRef, doc, { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    await deliver(fake.capturedHandlerRef, doc, {
+      id: fake.connectionId,
+      did: 'did:peer:4aaa',
+      theirDid: 'did:peer:4zzz',
+    })
 
     expect(fake.storedCredentials).toHaveLength(0)
     const error = fake.sentMessages[0].document as { payload: { code: string } }
@@ -415,7 +431,11 @@ describe('the inbound issue leg (verify, store, receipt)', () => {
     setupTrustTasksInbound(fake.agent)
     const { doc } = inboundIssue({ omitProof: true })
 
-    await deliver(fake.capturedHandlerRef, doc, { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    await deliver(fake.capturedHandlerRef, doc, {
+      id: fake.connectionId,
+      did: 'did:peer:4aaa',
+      theirDid: 'did:peer:4zzz',
+    })
 
     expect(fake.storedCredentials).toHaveLength(0)
     const error = fake.sentMessages[0].document as { payload: { code: string } }
@@ -428,7 +448,11 @@ describe('the inbound issue leg (verify, store, receipt)', () => {
     const { doc } = inboundIssue()
     mockedVerify.mockResolvedValueOnce(false)
 
-    await deliver(fake.capturedHandlerRef, doc, { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    await deliver(fake.capturedHandlerRef, doc, {
+      id: fake.connectionId,
+      did: 'did:peer:4aaa',
+      theirDid: 'did:peer:4zzz',
+    })
 
     expect(fake.storedCredentials).toHaveLength(0)
     const error = fake.sentMessages[0].document as { payload: { code: string } }
@@ -442,7 +466,11 @@ describe('the inbound issue leg (verify, store, receipt)', () => {
       vrc: { ...SIGNED_VRC, issuer: 'did:peer:0zPeerRel', credentialSubject: { id: 'did:peer:0zSomebodyElse' } },
     })
 
-    await deliver(fake.capturedHandlerRef, doc, { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    await deliver(fake.capturedHandlerRef, doc, {
+      id: fake.connectionId,
+      did: 'did:peer:4aaa',
+      theirDid: 'did:peer:4zzz',
+    })
 
     expect(fake.storedCredentials).toHaveLength(0)
     const error = fake.sentMessages[0].document as { payload: { code: string } }

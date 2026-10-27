@@ -17,6 +17,7 @@ import { setupTrustTasksInbound } from '../ceremony'
 import { trustTaskRegistry } from '../registry'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
+import { readOneClock } from '../../../../__tests__/helpers/oneClock'
 
 jest.mock('../../vrc/vrc-manager', () => ({
   RCE_PROTOCOL_VERSION: 4,
@@ -113,6 +114,9 @@ const deliver = async (
   await handler({ message: new TrustTaskMessage({ document }), connection })
 }
 
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
+
 describe('the built-in types are registrations, not a separate path', () => {
   test('discovery is resolvable through the registry and dispatches on an inbound query', async () => {
     // The built-ins register themselves at ceremony.ts module load — assert
@@ -175,7 +179,15 @@ describe('a newly-registered type dispatches through the same mechanism', () => 
 
     await deliver(
       fake.capturedHandlerRef,
-      { id: 'doc-2', type: customTypeUri, threadId: 'thread-2', issuer: 'did:peer:4zzz', recipient: 'did:peer:4aaa', issuedAt: new Date().toISOString(), payload: {} },
+      {
+        id: 'doc-2',
+        type: customTypeUri,
+        threadId: 'thread-2',
+        issuer: 'did:peer:4zzz',
+        recipient: 'did:peer:4aaa',
+        issuedAt: new Date().toISOString(),
+        payload: {},
+      },
       { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' }
     )
 
@@ -183,7 +195,11 @@ describe('a newly-registered type dispatches through the same mechanism', () => 
     expect(responseSpy).not.toHaveBeenCalled()
     const [, , document, context] = requestSpy.mock.calls[0]
     expect((document as { type: string }).type).toBe(customTypeUri)
-    expect(context).toMatchObject({ connectionId: fake.connectionId, senderDid: 'did:peer:4zzz', recipientDid: 'did:peer:4aaa' })
+    expect(context).toMatchObject({
+      connectionId: fake.connectionId,
+      senderDid: 'did:peer:4zzz',
+      recipientDid: 'did:peer:4aaa',
+    })
   })
 
   test('the #response leg reaches handleResponse, not handleRequest', async () => {

@@ -68,7 +68,7 @@ import {
   transcriptKeyMatchesVrcSigner,
   verifyTranscript,
 } from './locality'
-import { loadTrustTaskRuntime } from './runtime'
+import { loadTrustTaskRuntime, witnessConsumeChecks } from './runtime'
 import { packTspReply } from './tspReply'
 
 /** Which carriage a request arrived on — a reply always goes back the same way. */
@@ -367,6 +367,7 @@ export class WitnessTaskSessions {
       myVid: myDid,
       now: Date.now(),
       newErrorId: () => randomUUID(),
+      checks: witnessConsumeChecks(runtime),
       handler: async (rawDoc) => {
         const policy = this.host.localityPolicy ?? 'off'
         const supportedTypes: unknown[] =
@@ -399,6 +400,7 @@ export class WitnessTaskSessions {
       myVid: myDid,
       now: Date.now(),
       newErrorId: () => randomUUID(),
+      checks: witnessConsumeChecks(runtime),
       handler: async (rawDoc) => {
         const doc = rawDoc as unknown as Record<string, unknown>
         const parties = (doc.payload as { parties?: [string, string] } | undefined)?.parties
@@ -511,6 +513,7 @@ export class WitnessTaskSessions {
       myVid: myDid,
       now: Date.now(),
       newErrorId: () => randomUUID(),
+      checks: witnessConsumeChecks(runtime),
       handler: async (rawDoc) => {
         const doc = rawDoc as unknown as Record<string, unknown>
         const sessionId = String(doc.threadId ?? '')

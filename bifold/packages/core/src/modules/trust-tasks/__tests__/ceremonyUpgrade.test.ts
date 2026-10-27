@@ -29,6 +29,7 @@ import { extendedCode } from '../services/TrustTasksService'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../../vrc/witnessStatusStore'
+import { readOneClock } from '../../../../__tests__/helpers/oneClock'
 
 const UNSIGNED_VRC = {
   '@context': ['https://www.w3.org/ns/credentials/v2'],
@@ -296,6 +297,9 @@ async function firstExchangeAsResponder(fake: ReturnType<typeof makeFakeAgent>) 
     conn(fake, PEER, ME)
   )
 }
+
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
 
 describe('upgrading a relationship on its existing connection', () => {
   beforeEach(() => rcard().mockClear())

@@ -9,6 +9,7 @@
  * nothing in memory survives a restart; only the stored records do.
  */
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
+import { readOneClock } from '../../../../__tests__/helpers/oneClock'
 
 jest.mock('../../vrc/vrc-manager', () => ({
   RCE_PROTOCOL_VERSION: 4,
@@ -192,6 +193,9 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 50))
 // Every boot() reloads the ceremony's whole module graph (a real restart, in
 // effect): a few seconds each on a loaded CI runner, and most tests boot twice.
 jest.setTimeout(45_000)
+
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
 
 describe('a proposal asked, then the app killed before an answer', () => {
   test('on restart it is asked again, the same exchange, and accepting answers it', async () => {

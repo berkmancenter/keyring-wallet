@@ -26,6 +26,7 @@ import { LOCALITY_EXT_NAMESPACE } from '../deviceLocality'
 import { vrcFlowStore } from '../../vrc/witnessStatusStore'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
+import { readOneClock } from '../../../../__tests__/helpers/oneClock'
 
 jest.mock('../../vrc/vrc-manager', () => ({
   RCE_PROTOCOL_VERSION: 4,
@@ -130,6 +131,9 @@ const deliver = async (
   await handler({ message: new TrustTaskMessage({ document }), connection })
 }
 
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
+
 describe('the capability gate', () => {
   test('a v3 peer never receives a Trust Task message', async () => {
     const { agent, sentMessages } = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
@@ -158,15 +162,19 @@ describe('the capability gate', () => {
     expect(query.type).toBe(discovery.TYPE_URI)
     expect(query.payload.patterns).toContain('vrc/relationships/*')
 
-    await deliver(fake.capturedHandlerRef, {
-      id: 'dddd1111-0000-4000-8000-00000000000d',
-      type: `${discovery.TYPE_URI}#response`,
-      threadId: String((query as unknown as { threadId: string }).threadId ?? 'dddd'),
-      issuer: 'did:peer:4zzz',
-      recipient: 'did:peer:4aaa',
-      issuedAt: new Date().toISOString(),
-      payload: { supportedTypes: [propose.TYPE_URI] },
-    }, { id: 'conn-1', did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'dddd1111-0000-4000-8000-00000000000d',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: String((query as unknown as { threadId: string }).threadId ?? 'dddd'),
+        issuer: 'did:peer:4zzz',
+        recipient: 'did:peer:4aaa',
+        issuedAt: new Date().toISOString(),
+        payload: { supportedTypes: [propose.TYPE_URI] },
+      },
+      { id: 'conn-1', did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' }
+    )
 
     expect(fake.sentMessages).toHaveLength(2)
     const doc = fake.sentMessages[1].document as { type: string; payload: { relationshipDid: string } }
@@ -178,15 +186,19 @@ describe('the capability gate', () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
     setupTrustTasksInbound(fake.agent)
     await maybeOpenRelationshipExchange(fake.agent, 'conn-1', 4, 4)
-    await deliver(fake.capturedHandlerRef, {
-      id: 'dddd2222-0000-4000-8000-00000000000d',
-      type: `${discovery.TYPE_URI}#response`,
-      threadId: 'dddd2222-0000-4000-8000-00000000000d',
-      issuer: 'did:peer:4zzz',
-      recipient: 'did:peer:4aaa',
-      issuedAt: new Date().toISOString(),
-      payload: { supportedTypes: ['https://trusttasks.org/spec/chat/message/0.1'] },
-    }, { id: 'conn-1', did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'dddd2222-0000-4000-8000-00000000000d',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: 'dddd2222-0000-4000-8000-00000000000d',
+        issuer: 'did:peer:4zzz',
+        recipient: 'did:peer:4aaa',
+        issuedAt: new Date().toISOString(),
+        payload: { supportedTypes: ['https://trusttasks.org/spec/chat/message/0.1'] },
+      },
+      { id: 'conn-1', did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' }
+    )
 
     expect(fake.sentMessages).toHaveLength(1) // the discovery query only
   })
@@ -194,15 +206,19 @@ describe('the capability gate', () => {
   test('an inbound discovery is answered with our supported types, pattern-filtered', async () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4peer' })
     setupTrustTasksInbound(fake.agent)
-    await deliver(fake.capturedHandlerRef, {
-      id: 'dddd3333-0000-4000-8000-00000000000d',
-      type: discovery.TYPE_URI,
-      threadId: 'dddd3333-0000-4000-8000-00000000000d',
-      issuer: 'did:peer:4peer',
-      recipient: 'did:peer:4me',
-      issuedAt: new Date().toISOString(),
-      payload: { patterns: ['vrc/relationships/propose'] },
-    }, { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4peer' })
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'dddd3333-0000-4000-8000-00000000000d',
+        type: discovery.TYPE_URI,
+        threadId: 'dddd3333-0000-4000-8000-00000000000d',
+        issuer: 'did:peer:4peer',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: { patterns: ['vrc/relationships/propose'] },
+      },
+      { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4peer' }
+    )
 
     expect(fake.sentMessages).toHaveLength(1)
     const response = fake.sentMessages[0].document as { type: string; payload: { supportedTypes: string[] } }
@@ -363,15 +379,19 @@ describe('inbound routing', () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4peer' })
     setupTrustTasksInbound(fake.agent)
 
-    await deliver(fake.capturedHandlerRef, {
-      id: 'aaaa1111-1111-4111-8111-111111111111',
-      type: propose.TYPE_URI,
-      threadId: 'aaaa1111-1111-4111-8111-111111111111',
-      issuer: 'did:peer:4peer',
-      recipient: 'did:peer:4me',
-      issuedAt: new Date().toISOString(),
-      payload: { relationshipDid: 'did:peer:peer-rel', witnessed: false },
-    }, { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4peer' })
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'aaaa1111-1111-4111-8111-111111111111',
+        type: propose.TYPE_URI,
+        threadId: 'aaaa1111-1111-4111-8111-111111111111',
+        issuer: 'did:peer:4peer',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: { relationshipDid: 'did:peer:peer-rel', witnessed: false },
+      },
+      { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4peer' }
+    )
 
     // Consent gate: nothing on the wire until the user answers.
     expect(fake.sentMessages).toHaveLength(0)
@@ -385,7 +405,10 @@ describe('inbound routing', () => {
       'did:peer:peer-rel',
       TRUST_TASKS_MIN_RCE_VERSION
     )
-    const response = fake.sentMessages[0].document as { type: string; payload: { accept: boolean; relationshipDid: string } }
+    const response = fake.sentMessages[0].document as {
+      type: string
+      payload: { accept: boolean; relationshipDid: string }
+    }
     expect(response.type).toBe(`${propose.TYPE_URI}#response`)
     expect(response.payload.accept).toBe(true)
     expect(response.payload.relationshipDid).toBe('did:peer:my-rel')
@@ -396,15 +419,19 @@ describe('inbound routing', () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4peer' })
     setupTrustTasksInbound(fake.agent)
 
-    await deliver(fake.capturedHandlerRef, {
-      id: 'aaaa1111-0000-4000-8000-00000000000a',
-      type: `${propose.TYPE_URI}#response`,
-      threadId: 'aaaa1111-1111-4111-8111-111111111111',
-      issuer: 'did:peer:4peer',
-      recipient: 'did:peer:4me',
-      issuedAt: new Date().toISOString(),
-      payload: { accept: true, relationshipDid: 'did:peer:peer-rel' },
-    }, { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4peer' })
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'aaaa1111-0000-4000-8000-00000000000a',
+        type: `${propose.TYPE_URI}#response`,
+        threadId: 'aaaa1111-1111-4111-8111-111111111111',
+        issuer: 'did:peer:4peer',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: { accept: true, relationshipDid: 'did:peer:peer-rel' },
+      },
+      { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4peer' }
+    )
 
     expect(fake.relationshipRepo.updateCounterpartyRelationshipDid).toHaveBeenCalledWith(
       expect.anything(),
@@ -419,15 +446,19 @@ describe('inbound routing', () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4peer' })
     setupTrustTasksInbound(fake.agent)
 
-    await deliver(fake.capturedHandlerRef, {
-      id: 'aaaa1111-1111-4111-8111-111111111111',
-      type: propose.TYPE_URI,
-      threadId: 'aaaa1111-1111-4111-8111-111111111111',
-      issuer: 'did:peer:4peer',
-      recipient: 'did:peer:4me',
-      issuedAt: new Date().toISOString(),
-      payload: { relationshipDid: 'did:peer:mallory-rel', witnessed: false },
-    }, undefined)
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'aaaa1111-1111-4111-8111-111111111111',
+        type: propose.TYPE_URI,
+        threadId: 'aaaa1111-1111-4111-8111-111111111111',
+        issuer: 'did:peer:4peer',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: { relationshipDid: 'did:peer:mallory-rel', witnessed: false },
+      },
+      undefined
+    )
 
     expect(fake.relationshipRepo.updateCounterpartyRelationshipDid).not.toHaveBeenCalled()
     expect(fake.sentMessages).toHaveLength(0)

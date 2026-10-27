@@ -23,6 +23,7 @@ import { digestMultibase, taskDigestMultibase } from '../documentProof'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 import * as witnessShare from '../witnessShareSpec'
+import { readOneClock } from '../../../../__tests__/helpers/oneClock'
 
 jest.mock('../../vrc/vrc-manager', () => ({
   RCE_PROTOCOL_VERSION: 4,
@@ -221,6 +222,9 @@ const deliver = async (fake: ReturnType<typeof makeFakeAgent>, document: Record<
     connection: { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' },
   })
 }
+
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
 
 describe('the inbound witness-share (verify the bundle, store, receipt)', () => {
   test('a conforming bundle is verified, STORED, and receipted with the VWC digest', async () => {

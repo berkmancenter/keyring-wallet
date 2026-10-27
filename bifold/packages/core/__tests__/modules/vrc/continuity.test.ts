@@ -29,6 +29,7 @@ import {
 import { SPEC, TYPE_URI } from '../../../src/modules/vrc/contacts/continuitySpec'
 import { TrustTasksService, respondWith } from '../../../src/modules/trust-tasks/services/TrustTasksService'
 import { memoryGenericRecords } from './fixtures/memoryGenericRecords'
+import { readOneClock } from '../../helpers/oneClock'
 
 const mockSend = jest.fn(
   async (_agent: unknown, _connectionId: string, _document: Record<string, unknown>) => undefined
@@ -122,6 +123,9 @@ beforeEach(() => {
   pipeline = new TrustTasksService({ save: async () => undefined } as never)
   jest.spyOn(pipeline, 'consume')
 })
+
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
 
 describe('answering a continuity check', () => {
   test('a genuine request passes the real pipeline (which answers "accepted", not "handled") and prompts', async () => {

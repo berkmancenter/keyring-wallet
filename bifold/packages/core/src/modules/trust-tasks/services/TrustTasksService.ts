@@ -16,15 +16,20 @@
  */
 
 import type { AgentContext } from '@credo-ts/core'
+// The runtime alone: the package root also loads every prebuilt spec module (over 1,200 at 0.27),
+// and this file needs none of them.
 import {
   consumeInbound,
+  DEFAULT_FRESHNESS,
+  notConsequentialChecks,
   respondWith,
   refuse,
   rejectWith,
   extendedCode,
   StaticTransport,
   UnauthenticatedTransport,
-} from '@openvtc/trust-tasks'
+  type ConsumeChecks,
+} from '@openvtc/trust-tasks/runtime'
 
 import { TrustTaskMessage, TRUST_TASK_BINDING_URI } from '../messages/TrustTaskMessage'
 import { trustTaskPayloadValidator } from '../validator'
@@ -61,6 +66,23 @@ export interface ConsumeOptions {
   handler: (document: Record<string, unknown>, parties: unknown) => unknown | Promise<unknown>
 }
 
+/**
+ * The two stateful §7.2 checks (freshness, item 4; duplicate execution, item 11), which the
+ * framework requires a consumer to choose since 0.27.
+ *
+ * Every document this wallet consumes can wait in a mediator while the phone is offline, so it
+ * keeps no acceptance window and no duplicate record: the consequential posture's five-minute
+ * window would refuse a message picked up after a longer absence. The freshness floor still
+ * refuses a future-dated document and one whose validity interval is empty. Its skew is
+ * Keyring's own five-minute clock allowance (the card and relationship-credential builders
+ * backdate by it), not the spec's typical 60 s, so a peer whose clock runs a few minutes fast is
+ * not refused.
+ */
+export const KEYRING_CONSUME_CHECKS: ConsumeChecks = {
+  ...notConsequentialChecks(),
+  freshness: { ...DEFAULT_FRESHNESS, skewMs: 5 * 60_000 },
+}
+
 let errorSequence = 0
 
 export class TrustTasksService {
@@ -88,6 +110,7 @@ export class TrustTasksService {
       now: Date.now(),
       newErrorId: () => `err-${Date.now()}-${++errorSequence}`,
       handler: options.handler as never,
+      checks: KEYRING_CONSUME_CHECKS,
     })
 
     // Retain the document regardless of outcome — rejected documents are

@@ -22,6 +22,7 @@ import { TrustTaskDocumentRecord } from '../services/TrustTaskDocumentRecord'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
 import * as session from '@openvtc/trust-tasks/witness/session/0.1/payload'
 import * as submit from '@openvtc/trust-tasks/witness/session/submit/0.1/payload'
+import { readOneClock } from '../../../../__tests__/helpers/oneClock'
 
 const NOW = () => '2026-08-18T12:00:00Z'
 const DID = { alice: 'did:peer:4alice', bob: 'did:peer:4bob', wendy: 'did:peer:4wendy' }
@@ -65,6 +66,9 @@ const proposeDoc = (extra: Record<string, unknown> = {}) => ({
   payload: { relationshipDid: REL.bob, witnessed: true },
   ...extra,
 })
+
+// The pipeline reads Date.now() and the fixtures stamp with new Date(): one clock (see the helper).
+readOneClock()
 
 describe('TrustTaskMessage (binding 0.2 carriage)', () => {
   test('carries the document in the reserved attachment on the dedicated @type', () => {
@@ -141,11 +145,16 @@ describe('TrustTasksService — the §7.2 pipeline on the published 0.9 lock', (
       myDid: DID.alice,
       senderDid: DID.bob,
       handler: (doc) =>
-        respondWith(doc as never, 'aaaa1111-0000-4000-8000-00000000000a', {
-          accept: true,
-          relationshipDid: REL.alice,
-          witnessed: true,
-        }, NOW),
+        respondWith(
+          doc as never,
+          'aaaa1111-0000-4000-8000-00000000000a',
+          {
+            accept: true,
+            relationshipDid: REL.alice,
+            witnessed: true,
+          },
+          NOW
+        ),
     })
     expect(outcome.kind).toBe('handled')
     const response = (outcome as { response: { payload: { witnessed: boolean } } }).response
@@ -184,7 +193,13 @@ describe('TrustTasksService — the §7.2 pipeline on the published 0.9 lock', (
       },
       myDid: DID.wendy,
       senderDid: DID.bob,
-      handler: (doc) => respondWith(doc as never, 'cccc2222-2222-4222-8222-222222222222', { challenge: 'nonce-bob-m1', domain: 'wendy.example' }, NOW),
+      handler: (doc) =>
+        respondWith(
+          doc as never,
+          'cccc2222-2222-4222-8222-222222222222',
+          { challenge: 'nonce-bob-m1', domain: 'wendy.example' },
+          NOW
+        ),
     })
     expect(outcome.kind).toBe('handled')
   })
@@ -196,7 +211,13 @@ describe('TrustTasksService — the §7.2 pipeline on the published 0.9 lock', (
       document: proposeDoc(),
       myDid: DID.alice,
       senderDid: DID.bob,
-      handler: (doc) => respondWith(doc as never, 'aaaa1111-0000-4000-8000-00000000000a', { accept: true, relationshipDid: REL.alice }, NOW),
+      handler: (doc) =>
+        respondWith(
+          doc as never,
+          'aaaa1111-0000-4000-8000-00000000000a',
+          { accept: true, relationshipDid: REL.alice },
+          NOW
+        ),
     })
     const pair = await service.getOutcomeEvidencePair(agentContext, 'aaaa1111-1111-4111-8111-111111111111')
     expect(pair.initiating).toBeDefined()
