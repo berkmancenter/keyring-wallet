@@ -1,6 +1,6 @@
 # Rich Messaging — Plan
 
-**Status:** Proposed. Nothing here is built.
+**Status:** Steps 1–4 built and shipped, first in store build 272: the `chat/1.0` message, reactions and replies (keyring-bifold#525, #530, #556, #561, #564), the emoji picker (#552, #559, #574), inline photos (#577, #581, #584, #588, #591, #592), and message history with disappearing messages (#551, #560, #562, #570, #572, #573), with the two-phone run in keyring-wallet#639. Chat runs over DIDComm v1 only; chat over v2 (§4.1) is still to build. D2 is not recorded as decided.
 **Scope:** The smallest set of changes that makes one-to-one Keyring chat feel like a modern messenger:
 - **reactions;**
 - **quoted replies;**
