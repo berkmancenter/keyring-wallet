@@ -62,6 +62,12 @@ export interface Preferences {
    * every read of this flag agree it starts false.
    */
   hasSeenLocalityPreflight: boolean
+  /**
+   * Rooms, while in development (modules/rooms). Absent or false: no rooms screen, entry or service call
+   * anywhere. Set only from Developer settings, whose switch exists only in a development build or one
+   * that carries the sample rooms (modules/rooms/useRoomsService.ts).
+   */
+  featureRooms?: boolean
 }
 
 export interface Tours {

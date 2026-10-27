@@ -887,6 +887,8 @@
     "DataRetention": "Date de rétention",
     "PreventAutoLock": "Empêcher le verrouillage automatique",
     "TogglePreventAutoLock": "Basculer pour empêcher le verrouillage automatique",
+    "FeatureRooms": "Salles (en développement)",
+    "ToggleFeatureRooms": "Activer ou désactiver les salles (en développement)",
     "AppGuides": "Guides d'applications",
     "Build": "Créer",
     "WhatAreContacts": "Qu’est-ce qu’un Contact?",
@@ -2787,5 +2789,19 @@
       "Symbols": "Symboles",
       "Flags": "Drapeaux"
     }
+  },
+  "Rooms": {
+    "SampleData": "Données d'exemple. Rien ici n'est réel, et rien n'est envoyé.",
+    "ComingSoon": "Bientôt disponible",
+    "NotAvailableYet": "Pas encore disponible",
+    "AgentNeedsUpdate": "Votre agent doit être mis à jour",
+    "CommunityNeedsUpdate": "Cette communauté doit être mise à jour",
+    "DetailsNotLoaded": "Détails non chargés",
+    "NoRightRead": "Vous ne pouvez pas lire ce salon",
+    "NoRightWrite": "Vous ne pouvez pas publier ici",
+    "NoRightCurate": "Réservé aux curateurs",
+    "AdminOnly": "Seuls les administrateurs de la communauté peuvent voir ceci",
+    "NoAgentLinked": "Reliez d'abord votre agent",
+    "AgentUnknown": "Impossible de joindre votre agent. Réessayez plus tard."
   }
 }

@@ -83,6 +83,16 @@ describe('Developer Screen', () => {
     expect(PreventAutoLockToggle).not.toBe(null)
   })
 
+  test('rooms (in development) can be switched on, in a development build', async () => {
+    const tree = render(<Developer />)
+    const roomsSwitch = await tree.findByTestId(testIdWithKey('FeatureRoomsSwitchElement'))
+    expect(roomsSwitch.props.value).toBe(false)
+    await act(async () => {
+      fireEvent(roomsSwitch, 'onValueChange')
+    })
+    expect(tree.getByTestId(testIdWithKey('FeatureRoomsSwitchElement')).props.value).toBe(true)
+  })
+
   test('useVerifierCapability can be toggled', async () => {
     const tree = render(<Developer />)
 

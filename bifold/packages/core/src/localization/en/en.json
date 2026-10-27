@@ -918,6 +918,8 @@
     "DataRetention": "Data retention",
     "PreventAutoLock": "Prevent auto-lock",
     "TogglePreventAutoLock": "Toggle prevent auto-lock",
+    "FeatureRooms": "Rooms (in development)",
+    "ToggleFeatureRooms": "Turn rooms on or off (in development)",
     "AppGuides": "App guides",
     "Build": "Build",
     "WhatAreContacts": "What are Contacts?",
@@ -2839,5 +2841,19 @@
       "Symbols": "Symbols",
       "Flags": "Flags"
     }
+  },
+  "Rooms": {
+    "SampleData": "Sample data. Nothing here is real, and nothing is sent.",
+    "ComingSoon": "Coming soon",
+    "NotAvailableYet": "Not available yet",
+    "AgentNeedsUpdate": "Your agent needs an update",
+    "CommunityNeedsUpdate": "This community needs an update",
+    "DetailsNotLoaded": "Details not loaded",
+    "NoRightRead": "You can't read this room",
+    "NoRightWrite": "You can't post here",
+    "NoRightCurate": "Only curators can do this",
+    "AdminOnly": "Only the community's administrators can see this",
+    "NoAgentLinked": "Link your agent first",
+    "AgentUnknown": "Couldn't reach your agent. Try again later."
   }
 }

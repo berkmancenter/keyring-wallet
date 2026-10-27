@@ -820,6 +820,8 @@
     "DataRetention": "Retenção de dados",
     "PreventAutoLock": "Prevenir travamento automático",
     "TogglePreventAutoLock": "Alternar prevenir travamento automático",
+    "FeatureRooms": "Salas (em desenvolvimento)",
+    "ToggleFeatureRooms": "Ativar ou desativar as salas (em desenvolvimento)",
     "AppGuides": "Guia do app",
     "WhatAreContacts": "O que são Contatos?",
     "ScanMyQR": "Scanear meu QR code",
@@ -2689,5 +2691,19 @@
       "Symbols": "Símbolos",
       "Flags": "Bandeiras"
     }
+  },
+  "Rooms": {
+    "SampleData": "Dados de exemplo. Nada aqui é real, e nada é enviado.",
+    "ComingSoon": "Em breve",
+    "NotAvailableYet": "Ainda não disponível",
+    "AgentNeedsUpdate": "Seu agente precisa ser atualizado",
+    "CommunityNeedsUpdate": "Esta comunidade precisa de uma atualização",
+    "DetailsNotLoaded": "Detalhes não carregados",
+    "NoRightRead": "Você não pode ler esta sala",
+    "NoRightWrite": "Você não pode publicar aqui",
+    "NoRightCurate": "Só curadores podem fazer isso",
+    "AdminOnly": "Só os administradores da comunidade podem ver isto",
+    "NoAgentLinked": "Vincule seu agente primeiro",
+    "AgentUnknown": "Não foi possível falar com seu agente. Tente mais tarde."
   }
 }

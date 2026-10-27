@@ -11,6 +11,7 @@ import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
 import { seedTestContacts, clearTestContacts } from '../utils/seedTestCredentials'
 import { E2EClockRows } from '../components/misc/E2EClockRows'
+import { roomsSwitchAvailable } from '../modules/rooms/useRoomsService'
 
 const Developer: React.FC = () => {
   const [store, dispatch] = useStore()
@@ -26,6 +27,7 @@ const Developer: React.FC = () => {
   const [enableWalletNaming, setEnableWalletNaming] = useState(!!store.preferences.enableWalletNaming)
   const [enableShareableLink, setEnableShareableLink] = useState(!!store.preferences.enableShareableLink)
   const [preventAutoLock, setPreventAutoLock] = useState(!!store.preferences.preventAutoLock)
+  const [featureRooms, setFeatureRooms] = useState(!!store.preferences.featureRooms)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isClearingContacts, setIsClearingContacts] = useState(false)
   const styles = StyleSheet.create({
@@ -128,6 +130,14 @@ const Developer: React.FC = () => {
       payload: [!enableWalletNaming],
     })
     setEnableWalletNaming((previousState) => !previousState)
+  }
+
+  const toggleFeatureRoomsSwitch = () => {
+    dispatch({
+      type: DispatchAction.FEATURE_ROOMS,
+      payload: [!featureRooms],
+    })
+    setFeatureRooms((previousState) => !previousState)
   }
 
   const togglePreventAutoLockSwitch = () => {
@@ -384,6 +394,31 @@ const Developer: React.FC = () => {
             />
           </Pressable>
         </View>
+        {/* Rooms while in development: only where a development build or the sample rooms can feed them. */}
+        {roomsSwitchAvailable() ? (
+          <View style={styles.settingContainer}>
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="bold" style={styles.settingLabelText}>
+                {t('Settings.FeatureRooms')}
+              </ThemedText>
+            </View>
+            <Pressable
+              style={styles.settingSwitchContainer}
+              accessibilityLabel={t('Settings.ToggleFeatureRooms')}
+              accessibilityRole={'switch'}
+              testID={testIdWithKey('ToggleFeatureRooms')}
+            >
+              <Switch
+                trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+                thumbColor={featureRooms ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+                ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+                onValueChange={toggleFeatureRoomsSwitch}
+                testID={testIdWithKey('FeatureRoomsSwitchElement')}
+                value={featureRooms}
+              />
+            </Pressable>
+          </View>
+        ) : null}
         {/* The clocks in force, in a test build only (gate efficiency item 4). */}
         <E2EClockRows />
       </ScrollView>

@@ -75,6 +75,7 @@ enum PreferencesDispatchAction {
   USE_WITNESSING = 'preferences/useWitnessing',
   USE_LOCALITY_CONFIRMATION = 'preferences/useLocalityConfirmation',
   MARK_LOCALITY_PREFLIGHT_SEEN = 'preferences/markLocalityPreflightSeen',
+  FEATURE_ROOMS = 'preferences/featureRooms',
 }
 
 enum ToursDispatchAction {
@@ -521,6 +522,17 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
     case PreferencesDispatchAction.PREVENT_AUTO_LOCK: {
       const choice = (action?.payload ?? []).pop() ?? false
       const preferences = { ...state.preferences, preventAutoLock: choice }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.FEATURE_ROOMS: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = { ...state.preferences, featureRooms: choice }
 
       PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
 
