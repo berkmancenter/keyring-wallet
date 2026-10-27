@@ -43,14 +43,27 @@ export function openAppLink(url: string): void {
  * once, for the life of the app, and keeps such a link for the hook's next
  * mount, like a link the app opens itself. With the hook mounted it does
  * nothing: the hook's own listener has the link.
+ *
+ * Registered by a call, from RootStack as it mounts, and not only when this
+ * module is first evaluated. A release build inlines requires (Metro
+ * `inlineRequires`), so this module ran only when the main stack first
+ * rendered: until then, during onboarding and on the PIN screen after a cold
+ * start, nothing was listening. On iOS a link tapped then was lost; Android
+ * still had it, as the latest intent, from `getInitialURL` (VTI#2303 check, 274
+ * test build: the same tap on the first setup screen reached Join on Android,
+ * not on iOS).
  */
-if (typeof Linking?.addEventListener === 'function') {
+let keepingLinks = false
+export function keepLinksUntilMainStack(): void {
+  if (keepingLinks || typeof Linking?.addEventListener !== 'function') return
+  keepingLinks = true
   Linking.addEventListener('url', ({ url }) => {
     if (url && appLinkListeners.size === 0) {
       pendingAppLink = url
     }
   })
 }
+keepLinksUntilMainStack()
 
 export const useDeepLinks = () => {
   const [store, dispatch] = useStore()

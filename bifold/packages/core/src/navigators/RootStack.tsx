@@ -15,6 +15,7 @@ import ContinuityCheckModal from '../modules/vrc/components/ContinuityCheckModal
 import LocalityPreflightModal from '../modules/vrc/components/LocalityPreflightModal'
 import CredentialExchangeQueryModal from '../modules/trust-tasks/components/CredentialExchangeQueryModal'
 import { useStore } from '../contexts/store'
+import { keepLinksUntilMainStack } from '../hooks/deep-links'
 import { afterChatDrafts } from '../modules/chat/draft'
 import { BifoldError } from '../types/error'
 import { LockShutdown, oldStoreClosed } from '../utils/lockShutdown'
@@ -34,6 +35,13 @@ const RootStack: React.FC = () => {
   agentRef.current = agent
   const lockShutdownRef = useRef<LockShutdown | null>(null)
   const [onboardingComplete, setOnboardingComplete] = useState(false)
+
+  // A link that arrives before the main stack has ever rendered (onboarding, or the PIN screen after a cold start)
+  // is kept for it. Called here, as the app starts: a release build would otherwise load the keeper only with the
+  // main stack (hooks/deep-links.ts).
+  useEffect(() => {
+    keepLinksUntilMainStack()
+  }, [])
 
   const shouldRenderMainStack = useMemo(
     () => onboardingComplete && store.authentication.didAuthenticate,
