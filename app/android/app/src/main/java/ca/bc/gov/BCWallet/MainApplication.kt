@@ -15,6 +15,8 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 
 import com.hotupdater.HotUpdater
+import com.hotupdater.HotUpdaterConfig
+import com.hotupdater.HotUpdaterImpl
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 import org.wonday.orientation.OrientationActivityLifecycle
@@ -26,6 +28,10 @@ import org.wonday.orientation.OrientationActivityLifecycle
  * heads-up banner on stock Android: only an entry in the shade.
  */
 const val WAKE_CHANNEL_ID = "keyring_wake"
+
+/** The bundle file React Native was given for this process (MainActivity's update watchdog reads it). */
+@Volatile
+var otaBundleFile: String? = null
 
 class MainApplication : Application(), ReactApplication {
 
@@ -47,7 +53,11 @@ class MainApplication : Application(), ReactApplication {
             // builds keep loading from Metro. Expo's ReactNativeHostWrapper reads
             // this through to the New Architecture ReactHost (toReactHost).
             override fun getJSBundleFile(): String? =
-                if (BuildConfig.DEBUG) null else HotUpdater.getJSBundleFile(this@MainApplication.applicationContext)
+                if (BuildConfig.DEBUG) {
+                    null
+                } else {
+                    HotUpdater.getJSBundleFile(this@MainApplication.applicationContext).also { otaBundleFile = it }
+                }
     })
 
     override val reactHost: ReactHost
@@ -57,8 +67,28 @@ class MainApplication : Application(), ReactApplication {
         registerActivityLifecycleCallbacks(OrientationActivityLifecycle.getInstance())
         super.onCreate()
         createWakeChannel()
+        // Before React Native asks for the bundle file (see otaIsolationKey).
+        HotUpdaterConfig.isolationKey = otaIsolationKey()
         loadReactNative(this)
         ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    }
+
+    // The key hot-updater files this phone's downloaded update under. Its
+    // default, HotUpdaterPrefs_{fingerprint}_{appVersion}_{channel}, has no build
+    // number, and every store build has the same version (0.2.0). So a store
+    // build with only JavaScript changes would find the previous build's update,
+    // launch it instead of its own bundle, and the server would offer neither an
+    // update nor a rollback (the update is older than this build). With the
+    // build number in the key, each store build starts on its own bundle. This
+    // is the default composition with the version read as {version}+{build};
+    // keep it in step with AppDelegate.mm and app/src/ota/stagedUpdate.ts
+    // (isolationKeyFor), which rebuilds it to read the staged update for
+    // apply-on-return.
+    internal fun otaIsolationKey(): String {
+        val version = "${HotUpdaterImpl.getAppVersion(this) ?: "unknown"}+${BuildConfig.VERSION_CODE}"
+        val fingerprint = HotUpdaterImpl.getFingerprintHash(this)
+        val base = if (fingerprint.isNullOrEmpty()) version else "${fingerprint}_$version"
+        return "HotUpdaterPrefs_${base}_${HotUpdaterImpl.getChannel(this)}"
     }
 
     // High importance: a wake is something waiting for the person (an approval or

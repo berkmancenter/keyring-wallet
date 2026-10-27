@@ -6,6 +6,7 @@ import {
   PersistentStorage,
   ReducerAction,
 } from '@bifold/core'
+import Config from 'react-native-config'
 
 export interface IASEnvironment {
   name: string
@@ -27,6 +28,8 @@ export interface Developer {
   enableAppToAppPersonFlow: boolean
   enableTspCarriage: boolean
   enableDidCommV2: boolean
+  /** Mediator pickup over a live WebSocket instead of polling (utils/livePickup.ts). */
+  enableLivePickup: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -44,6 +47,7 @@ enum DeveloperDispatchAction {
   TOGGLE_APP_TO_APP_PERSON_FLOW = 'developer/toggleAppToAppPersonFlow',
   TOGGLE_TSP_CARRIAGE = 'developer/toggleTspCarriage',
   TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
+  TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -104,6 +108,10 @@ const developerState: Developer = {
   enableAppToAppPersonFlow: false,
   enableTspCarriage: false,
   enableDidCommV2: false,
+  // Off unless the build says otherwise: LIVE_MESSAGE_PICKUP=true in app/.env
+  // turns it on for a review build with no code change. A value saved from
+  // Developer options wins over this at startup (container-imp.ts).
+  enableLivePickup: Config.LIVE_MESSAGE_PICKUP === 'true',
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -119,6 +127,7 @@ export enum BCLocalStorageKeys {
   EnableAppToAppPersonFlow = 'EnableAppToAppPersonFlow',
   EnableTspCarriage = 'EnableTspCarriage',
   EnableDidCommV2 = 'EnableDidCommV2',
+  EnableLivePickup = 'EnableLivePickup',
 }
 
 export const initialState: BCState = {
@@ -187,6 +196,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableDidCommV2 }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableDidCommV2, developer.enableDidCommV2)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_LIVE_PICKUP: {
+      const enableLivePickup: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableLivePickup }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableLivePickup, developer.enableLivePickup)
 
       return { ...state, developer }
     }

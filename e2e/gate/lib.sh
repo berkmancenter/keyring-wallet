@@ -349,13 +349,34 @@ use_build() {
 # exit. Piped through tail, that status was lost and the leg went on to wait for a device that never came
 # (1010-2354: smoke-android sat 17 min in adb wait-for-device after "swap used 9 GB > 8 GB"). Now the leg breaks at
 # once, with emu.sh's own reason: setup, not a verdict on the app, and --only-failed reruns the whole leg.
+# emu_net_ready <serial>: wait (60 s at most) until the emulator can reach the network, before a leg onboards. A fresh
+# userdata boots cold and its network can come up after the app starts: 1022-1709's link failed "couldn't reach its
+# message service" at onboarding on a just-reset AVD (inferred: a cold-boot network race). Probes GATE_NET_PROBE_HOST
+# (default RUNNER_MEDIATOR_HOST; set it to the app's own mediator) from inside the emulator: TCP 443 by nc until the
+# deadline, then the name alone as a weaker "dns only". Logged; a timeout is said and does not stop the leg.
+emu_net_ready() {
+  local serial=$1 host=${GATE_NET_PROBE_HOST:-${RUNNER_MEDIATOR_HOST:-}} t0 how dns=
+  [ -n "$host" ] || { echo "emulator network: no probe host (GATE_NET_PROBE_HOST / RUNNER_MEDIATOR_HOST), not checked"; return 0; }
+  # nc is the proof (the port, not only the name): say so when the image lacks it, so a DNS-only result is not mistaken.
+  adb -s "$serial" shell "command -v nc >/dev/null 2>&1" 2>/dev/null || echo "emulator network: no nc in the image: only the name can be checked"
+  t0=$(date +%s)
+  while [ $(( $(date +%s) - t0 )) -lt "${GATE_NET_WAIT_S:-60}" ]; do
+    how=$(adb -s "$serial" shell "echo | nc -w 3 $host 443 >/dev/null 2>&1 && echo tcp || { ping -c 1 -W 3 $host 2>&1 | grep -q '^PING $host (' && echo dns; }" 2>/dev/null | tr -d '\r')
+    [ "$how" = tcp ] && { echo "emulator network: $host reached (tcp 443) after $(( $(date +%s) - t0 )) s"; return 0; }
+    [ "$how" = dns ] && dns=1
+    sleep "${GATE_NET_STEP_S:-3}"
+  done
+  # TCP never answered: the name alone is a weaker sign, said as such; nothing at all is NOT reached.
+  if [ -n "$dns" ]; then echo "emulator network: $host resolved but tcp 443 not reached in ${GATE_NET_WAIT_S:-60} s (dns only; the leg goes on)"
+  else echo "emulator network: $host NOT reached in ${GATE_NET_WAIT_S:-60} s (the leg goes on; onboarding may fail on it)"; fi
+}
 emu_start() {
   local port=$1 out rc why t0; t0=$(date +%s)
   if is_ci; then
     # The workflow's emulator step boots one emulator on this leg's port (read from the leg's E=emulator-NNNN).
     # The wait is this leg's emulator_start step, not an "adb" step of its own (steps.tsv).
     GALARM_STEPS=0 galarm 120 adb -s "emulator-$port" wait-for-device 2>/dev/null \
-      && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"; echo "emulator-$port up (CI)"; return 0; }
+      && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"; emu_net_ready "emulator-$port"; echo "emulator-$port up (CI)"; return 0; }
     broken "no emulator on port $port (CI): the workflow's emulator step must use -port $port"
   fi
   "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
@@ -363,7 +384,7 @@ emu_start() {
   out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim ${EMU_EXTRA:-} 2>&1); rc=$?
   echo "$out" | tail -1
   step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"
-  [ "$rc" = 0 ] && { leg_logcat "emulator-$port"; return 0; }
+  [ "$rc" = 0 ] && { leg_logcat "emulator-$port"; emu_net_ready "emulator-$port"; return 0; }
   why=$(echo "$out" | grep -E '^emu\.sh: |not booted' | tail -1 | sed 's/^emu\.sh: //')
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
 }

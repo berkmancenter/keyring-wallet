@@ -1,0 +1,5 @@
+# ota-carried-check.sh: OTA commits replaced in the store build by a different commit, one per line:
+#   <wallet|bifold> <OTA commit> <replacing wallet commit> <why>
+# The replacing commit must be on the cut's target, or the row fails.
+bifold 5457f436 bc92984a the askar-shared yarn patch (#654) frees the same scan entry lists the OTA shim did
+bifold 459203ea bc92984a the shim's own test; the yarn patch has its guard (#655)

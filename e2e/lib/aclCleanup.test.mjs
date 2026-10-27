@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fromGrant, grantAfter, grantEntries, linkedPhoneEntries, ownedBy } from "./aclCleanup.js";
+import { expiresWith, fromGrant, grantAfter, grantEntries, linkedPhoneEntries, ownedBy, phoneOwnEntry } from "./aclCleanup.js";
 
 const ADMIN = "did:key:zRunnerAdmin";
 // 1015-1852's link-address-resume: this case granted its phone's temporary key; kk, beside it, linked its own phone to
@@ -98,4 +98,25 @@ test("linkedPhoneEntries: a key the phone made from its grant is its own too", (
 test("linkedPhoneEntries: no link record, nothing selected", () => {
   assert.deepEqual(linkedPhoneEntries(runner, {}), []);
   assert.deepEqual(linkedPhoneEntries(runner, { before: [], heirs: ["did:peer:2.zRotated"] }), []);
+});
+
+// The devices row (#574): the phone's own entry, never the device its key added; the device expires with the phone.
+const devLink = { before: [], tempDid: "did:key:zTemp", heirs: ["did:peer:2.zPhone"] };
+const phoneRow = (expiresAt) => ({ subject: "did:peer:2.zPhone", createdBy: ADMIN, createdAt: "2026-10-22T06:00:00Z", label: "keyring-admin", expiresAt });
+const deviceRow = (expiresAt) => ({ subject: "did:key:zDevice", createdBy: "did:peer:2.zPhone", createdAt: "2026-10-22T06:21:30Z", label: "Computer", expiresAt });
+
+test("phoneOwnEntry: the phone's own rotated key, not the newer device its key created", () => {
+  assert.equal(phoneOwnEntry([phoneRow(null), deviceRow(null)], devLink).subject, "did:peer:2.zPhone");
+  assert.equal(phoneOwnEntry([{ ...phoneRow(null), subject: "did:key:zTemp" }], { tempDid: "did:key:zTemp" }).subject, "did:key:zTemp");
+  assert.equal(phoneOwnEntry([deviceRow(null)], devLink), undefined);
+});
+
+test("expiresWith: both permanent, or the same expiry; a permanent phone with an expiring device fails, and the reverse", () => {
+  const t = "2026-10-23T06:00:00Z";
+  assert.equal(expiresWith(deviceRow(undefined), phoneRow(undefined)), true);
+  assert.equal(expiresWith(deviceRow(t), phoneRow(t)), true);
+  assert.equal(expiresWith(deviceRow(t), phoneRow(undefined)), false, "permanent phone, expiring device");
+  assert.equal(expiresWith(deviceRow(undefined), phoneRow(t)), false, "expiring phone, permanent device (VTI-ACL-053's case)");
+  const phone = phoneOwnEntry([phoneRow(t), deviceRow(undefined)], devLink);
+  assert.equal(expiresWith(deviceRow(undefined), phone), false, "the phone read from the runner is the phone, so the mismatch shows");
 });

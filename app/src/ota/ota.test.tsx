@@ -1,11 +1,20 @@
+import { notifyReturnLocked, registerOtaApplyBlocker, resetOtaReturnLockedListenersForTests } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
-import { Text } from 'react-native'
+import { Platform, Text } from 'react-native'
+import { exists, readFile } from 'react-native-fs'
 
 import { isOtaEnabled, otaUpdateUrl } from './otaConfig'
 import { otaLabel, OtaClient, readOtaStatus } from './otaStatus'
 import { DEFAULT_RING, ensureRing, isRing, setRing } from './rings'
 import { withOta } from './withOta'
+
+jest.mock('react-native-device-info', () => ({ getBuildNumber: () => '271' }))
+jest.mock('react-native-fs', () => ({
+  DocumentDirectoryPath: '/docs',
+  exists: jest.fn(async () => false),
+  readFile: jest.fn(),
+}))
 
 const fakeStore = (initial: string) => {
   let cohort = initial
@@ -115,6 +124,211 @@ describe('withOta', () => {
       })
     )
     expect(log).toHaveBeenCalledWith('enabled', expect.objectContaining({ ring: DEFAULT_RING }))
+  })
+
+  describe('applying on a return', () => {
+    const FP = 'ed918b7940a829525a2edcc6036f01881d6dce3a'
+    const STAGED = '01a170f1-bf53-7586-8537-e480624f5e1a'
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+    const away = 31 * 60_000
+    const staged271 = JSON.stringify({
+      isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
+      stagingBundleId: STAGED,
+      verificationPending: true,
+    })
+    let os: PropertyDescriptor | undefined
+
+    const wrapped = (log = jest.fn()) => {
+      jest.spyOn(HotUpdater, 'getCohort').mockReturnValue('ring2')
+      jest.spyOn(HotUpdater, 'getFingerprintHash').mockReturnValue(FP)
+      jest.spyOn(HotUpdater, 'getAppVersion').mockReturnValue('0.2.0')
+      jest.spyOn(HotUpdater, 'getDefaultChannel').mockReturnValue('production')
+      jest.spyOn(HotUpdater, 'getBundleId').mockReturnValue('01a16998-e09d-7e22-8440-98fab0992afd')
+      const reload = jest.spyOn(HotUpdater, 'reload').mockResolvedValue(undefined)
+      const wrap = jest.spyOn(HotUpdater, 'wrap').mockReturnValue(() => App)
+      withOta(App, 'https://ota.example.org/hot-updater', log)
+      // The options withOta handed hot-updater, including its update-check callback.
+      const options = wrap.mock.calls[0][0] as { onUpdateProcessCompleted?: (response: unknown) => void }
+      return {
+        reload,
+        log,
+        completed: (response: unknown) => options.onUpdateProcessCompleted?.(response),
+      }
+    }
+
+    beforeEach(() => {
+      // withOta subscribes for the life of the process; each test starts with no
+      // listener, so the real notifyReturnLocked reaches only the one it registers.
+      resetOtaReturnLockedListenersForTests()
+      os = Object.getOwnPropertyDescriptor(Platform, 'OS')
+      Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true })
+    })
+    afterEach(() => {
+      if (os) Object.defineProperty(Platform, 'OS', os)
+      jest.mocked(exists).mockReset().mockResolvedValue(false)
+      jest.mocked(readFile).mockReset()
+    })
+
+    it("does not reload on a bare 'UPDATE' event: an offered update is not a staged one", async () => {
+      const { reload, log, completed } = wrapped()
+      // hot-updater reports UPDATE as soon as an update is offered, before its download has done anything.
+      completed({ status: 'UPDATE', id: STAGED, shouldForceUpdate: false, message: null })
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({
+          staged: null,
+          apply: false,
+          reason: 'no update staged',
+          // Logged with nothing staged too, to compare with the metadata file on a device.
+          isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
+          // Logged whatever decided the return: here nothing holds it.
+          blockers: [],
+        })
+      )
+    })
+
+    it("does not reload for the previous build's staged update (same fingerprint, another build number)", async () => {
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockResolvedValue(
+        JSON.stringify({
+          isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+270_production`,
+          stagingBundleId: STAGED,
+          verificationPending: true,
+        })
+      )
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).not.toHaveBeenCalled()
+      // Logged with both keys, so on a device it does not read as "nothing staged".
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({
+          staged: null,
+          apply: false,
+          reason: 'staged under another key',
+          isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
+          stagedUnderKey: `HotUpdaterPrefs_${FP}_0.2.0+270_production`,
+        })
+      )
+    })
+
+    it('reloads into the update hot-updater has staged, read from its metadata at the return', async () => {
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockResolvedValue(staged271)
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).toHaveBeenCalledTimes(1)
+      expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ staged: STAGED, apply: true }))
+    })
+
+    it('does not reload when a flow begins while the metadata is being read', async () => {
+      let release: (() => void) | undefined
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockImplementation(async () => {
+        release = registerOtaApplyBlocker('a test flow')
+        return staged271
+      })
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      release?.()
+      // The log first: a failure then names the decision taken, not only the reload.
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({
+          staged: STAGED,
+          apply: false,
+          reason: 'blocked: a test flow',
+          blockers: ['a test flow'],
+        })
+      )
+      expect(reload).not.toHaveBeenCalled()
+    })
+
+    it('logs the blockers held at a short return with nothing staged, as a device check reads them', async () => {
+      // A chat draft typed before the phone was locked for a few minutes: the lock-out return fires,
+      // the decision stops at "nothing staged", and the draft's blocker must still show.
+      const release = registerOtaApplyBlocker('chat-draft')
+      const { log } = wrapped()
+      notifyReturnLocked(6 * 60_000)
+      await flush()
+      release()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ awayMinutes: 6, reason: 'no update staged', blockers: ['chat-draft'] })
+      )
+    })
+
+    it("names a blocker by its kind only, in the reason and the log, not a VTA task's Trust Task type", async () => {
+      // Staged and away long enough, so the decision reaches the blockers and names them in its reason.
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockResolvedValue(staged271)
+      const release = registerOtaApplyBlocker('vta-task:vta/join/0.1')
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      release()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ apply: false, reason: 'blocked: vta-task', blockers: ['vta-task'] })
+      )
+      expect(JSON.stringify(log.mock.calls)).not.toContain('vta/join')
+    })
+
+    it('keeps a blocker held at the return even when the lock-out releases it during the read', async () => {
+      // A chat with an unsent draft holds 'chat-draft'. Locking out unmounts the chat, which
+      // releases it, and with an update staged that happens while the metadata is being read.
+      let release = registerOtaApplyBlocker('chat-draft')
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockImplementation(async () => {
+        release()
+        release = () => undefined
+        return staged271
+      })
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({
+          staged: STAGED,
+          apply: false,
+          reason: 'blocked: chat-draft',
+          blockers: ['chat-draft'],
+        })
+      )
+      expect(reload).not.toHaveBeenCalled()
+    })
+
+    it('logs a metadata read that fails, and does not reload', async () => {
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockRejectedValue(new Error('EACCES'))
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ staged: null, apply: false, readError: 'Error: EACCES' })
+      )
+    })
+
+    it('logs a return check that throws, and does not reload', async () => {
+      const { reload, log } = wrapped()
+      jest.spyOn(HotUpdater, 'getDefaultChannel').mockImplementation(() => {
+        throw new Error('native module gone')
+      })
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith('apply on return failed', { error: 'Error: native module gone' })
+    })
   })
 
   it('runs without updates when the binary has no loader', () => {

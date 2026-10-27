@@ -40,6 +40,7 @@
  *
  * No packages needed: runs on a bare checkout, in CI's parse-check step.
  */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -534,13 +535,76 @@ export const runCheck = ({ root = e2eDir, manifests, allow } = {}) => {
   return { ok, totals, files, stale, known: { keys: known.keys.size, stems: known.stems.size } }
 }
 
+// ---------------------------------------------------------------- Drift
+
+/** The command that brings e2e/lib/testids.json back in step with the pinned bifold. */
+export const SYNC_COMMAND = 'e2e/scripts/sync-testids.sh bifold'
+
+const SECTIONS = ['keys', 'stems', 'raw']
+
+/**
+ * Whether the synced manifest is bifold's at the pin: ids bifold has that the copy lacks (`added`), ids the copy still
+ * has that bifold dropped (`removed`), per section, and `changed` for any other difference (a key's files, `derived`).
+ * `generatedFrom` is left out: the same ids under a newer pin need no sync.
+ */
+export const manifestDrift = (synced, upstream) => {
+  const added = [], removed = []
+  for (const section of SECTIONS) {
+    const mine = synced?.[section] ?? {}, theirs = upstream?.[section] ?? {}
+    for (const id of Object.keys(theirs)) if (!(id in mine)) added.push(section === 'keys' ? id : `${section}:${id}`)
+    for (const id of Object.keys(mine)) if (!(id in theirs)) removed.push(section === 'keys' ? id : `${section}:${id}`)
+  }
+  const strip = (m) => JSON.stringify({ ...m, generatedFrom: undefined })
+  const changed = strip(synced) !== strip(upstream)
+  return { ok: !changed, added: added.sort(), removed: removed.sort(), changed }
+}
+
+/**
+ * bifold's packages/core/testids.json at the submodule commit the wallet pins (the gitlink, not the submodule's working
+ * tree, which can sit anywhere locally). `{ skipped }` when that commit cannot be read here. The gitlink is the index's,
+ * as sync-testids.sh reads it: a staged, uncommitted pin bump is checked against the pin being made (in CI the index
+ * and HEAD agree).
+ */
+export const pinnedManifest = (wallet = path.resolve(e2eDir, '..')) => {
+  const git = (args) => execFileSync('git', args, { cwd: wallet, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
+  let sha
+  try {
+    sha = git(['rev-parse', ':bifold']).trim()
+  } catch {
+    return { skipped: 'no bifold submodule pinned here' }
+  }
+  try {
+    return { sha, manifest: JSON.parse(git(['-C', 'bifold', 'show', `${sha}:packages/core/testids.json`])) }
+  } catch {
+    return { sha, skipped: `bifold ${sha.slice(0, 8)} (the pin) has no packages/core/testids.json readable here (submodule not checked out, or that commit not fetched)` }
+  }
+}
+
+/** The drift lines for a person, ending in the command; empty when in step. */
+export const driftLines = (drift, sha) => {
+  if (drift.ok) return []
+  const list = (ids) => ids.slice(0, 12).join(', ') + (ids.length > 12 ? `, … ${ids.length - 12} more` : '')
+  const lines = [`testids: e2e/lib/testids.json is out of step with bifold ${sha.slice(0, 8)} (the pinned submodule)`]
+  if (drift.added.length) lines.push(`  ${drift.added.length} id(s) bifold has that the copy lacks: ${list(drift.added)}`)
+  if (drift.removed.length) lines.push(`  ${drift.removed.length} id(s) the copy keeps that bifold dropped: ${list(drift.removed)}`)
+  if (!drift.added.length && !drift.removed.length) lines.push('  the same ids, with other differences (their files, the derived list)')
+  lines.push(`  run: ${SYNC_COMMAND}`)
+  return lines
+}
+
 const main = () => {
   const json = process.argv.includes('--json')
   const result = runCheck()
+  // The copy against bifold at the pin. CI checks the submodule out, so a skip there would hide drift: it fails.
+  const pinned = pinnedManifest()
+  const drift = pinned.manifest ? manifestDrift(loadJson(path.join(e2eDir, 'lib', 'testids.json')), pinned.manifest) : undefined
+  const driftOk = drift ? drift.ok : !process.env.CI
   if (json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + '\n')
-    process.exit(result.ok ? 0 : 1)
+    process.stdout.write(JSON.stringify({ ...result, drift: drift ?? { skipped: pinned.skipped } }, null, 2) + '\n')
+    process.exit(result.ok && driftOk ? 0 : 1)
   }
+  if (drift) for (const line of driftLines(drift, pinned.sha)) console.error(line)
+  else console.error(`testids drift: ${process.env.CI ? 'FAILED, not checked' : 'not checked'}: ${pinned.skipped}`)
   const { totals, known } = result
   for (const f of result.files) {
     if (f.error) console.error(`${f.file}: ${f.error}`)
@@ -551,6 +615,7 @@ const main = () => {
   const summary = `${totals.checked} references in ${totals.files} files against ${known.keys} ids and ${known.stems} stems (${totals.allowed} allowlisted, ${totals.dynamic} dynamic)`
   if (result.ok) {
     console.log(`testids: all known; ${summary}`)
+    if (!driftOk) process.exit(1)
     return
   }
   console.error(`testids: ${totals.unknown} unknown, ${totals.invalid} invalid, ${totals.unreadable} files not fully read; ${summary}`)

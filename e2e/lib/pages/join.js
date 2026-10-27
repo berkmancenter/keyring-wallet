@@ -36,6 +36,10 @@ export const JOIN_MARKERS = [
   "JoinRequestSent",
   "JoinMakeIdentity",
   "JoinError",
+  // bifold #473: a phone its agent refused, with an identity in this community, is told so here instead of being asked
+  // to link (269's refused-community-notice threw "no join screen" on it). Its spinner, JoinCheckingAgent, is not an
+  // end screen: the wait spans it.
+  "JoinAgentRefused",
   "JoinNeedsAgent",
   "JoinNotAccepting",
   "JoinVersionUnsupported",

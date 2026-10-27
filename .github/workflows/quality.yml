@@ -107,29 +107,28 @@ jobs:
               || { echo "::error file=$f::$f is not valid ES module JavaScript"; fail=1; }
           done < <(find e2e -name '*.js' -not -path 'e2e/node_modules/*' -not -path 'e2e/artifacts/*')
           # Every testID the drivers name must exist in the app (e2e/lib/testids*.json,
-          # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate.
+          # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate. And e2e/lib/testids.json must be
+          # bifold's packages/core/testids.json at the pinned submodule, both ways: a pin bump carries its resync
+          # (e2e/scripts/sync-testids.sh bifold), and a check that cannot read the pin fails here (CI is set).
           node e2e/scripts/check-testids.mjs || fail=1
-          # The leg cleanup (lib.sh keys_since) finds and deletes this leg's phone keys through the CI guard, and says
-          # so loudly when the runner's ACL cannot be read (a fake VTA; no secrets, no network).
-          bash e2e/gate/ci/keys-since.test.sh || { echo "::error file=e2e/gate/ci/keys-since.test.sh::the leg cleanup test failed"; fail=1; }
-          # pnm-locked caps a pnm call once it holds the slug lock (PNM_CALL_TIMEOUT), so a dead transport cannot hold a leg.
-          bash e2e/gate/ci/pnm-locked.test.sh || { echo "::error file=e2e/gate/ci/pnm-locked.test.sh::the pnm call cap test failed"; fail=1; }
-          # The CI lane's configuration must name one runner, linkfail's approver DID and no admin credential (item 11).
-          bash e2e/gate/ci/ci-env-check.test.sh || { echo "::error file=e2e/gate/ci/ci-env-check.test.sh::the CI configuration check test failed"; fail=1; }
-          # A phone grant under an expiring identity (a lane's, the mini's) carries an expiry: VTA 0.60 refuses a permanent
-          # one (VTI-ACL-053). And two gate machines on the same runners never gate at once (the turn lock).
-          bash e2e/gate/ci/grant-expiry.test.sh || { echo "::error file=e2e/gate/ci/grant-expiry.test.sh::the phone-grant expiry test failed"; fail=1; }
-          bash e2e/gate/ci/turns.test.sh || { echo "::error file=e2e/gate/ci/turns.test.sh::the gate turn test failed"; fail=1; }
-          # A build directory another script filled is used as it is: the simulator app unzipped, the manifest found.
-          bash e2e/gate/ci/fetch-run.test.sh || { echo "::error file=e2e/gate/ci/fetch-run.test.sh::the build fetch test failed"; fail=1; }
-          # gate.sh run --rows: some rows of named legs, scoped to their own leg, never a release gate.
-          bash e2e/gate/ci/rows.test.sh || { echo "::error file=e2e/gate/ci/rows.test.sh::the --rows test failed"; fail=1; }
-          # The gate harness's own unit tests (node built-ins only, no install): a gate.sh / lib.sh / run-summary change
-          # merged green while breaking two of them (#518, #522; fixed in #523), since nothing here ran them.
-          # The release tier check too (scripts/release/tier.mjs decides what may go out over the air).
-          for t in e2e/gate/*.test.mjs scripts/release/*.test.mjs; do
-            node --test "$t" || { echo "::error file=$t::$t failed"; fail=1; }
-          done
+          # The harness's and the scripts' own tests (node built-ins and bash only, no install), found rather than named
+          # (scripts/ci/find-tests.mjs): every *.test.mjs and *.test.sh under e2e/ and scripts/, so a new one runs here
+          # without anyone adding it. Named lists left 21 of them running nowhere, check-testids.test.mjs among them,
+          # until 2026-10-22; #518 and #522 had merged green while breaking two gate tests the same way. Those needing
+          # a package this job does not install (webdriverio, node-pty, qrcode) are listed with why in
+          # scripts/ci/tests-need-install.json; a listed file that is gone fails here. Among what they cover: the leg
+          # cleanup through the CI guard (keys-since), the pnm call cap, the CI lane's configuration, phone-grant expiry
+          # and the gate turn lock, gate.sh --rows, the release tier check, the openvtc helpers, fetch-binaries' refusal
+          # of an unpinned moving build, and the testid manifest's drift from the pinned bifold.
+          tests=$(node scripts/ci/find-tests.mjs) || { echo "::error file=scripts/ci/tests-need-install.json::a listed test no longer exists"; fail=1; }
+          while IFS= read -r t; do
+            [ -n "$t" ] || continue
+            # stdin from /dev/null: a test reading stdin would otherwise eat the rest of this list.
+            case $t in
+              *.sh) bash "$t" < /dev/null ;;
+              *) node --test "$t" < /dev/null ;;
+            esac || { echo "::error file=$t::$t failed"; fail=1; }
+          done <<< "$tests"
           exit $fail
 
   test:

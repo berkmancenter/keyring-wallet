@@ -95,7 +95,7 @@
     "react-native": "patch:react-native@npm%3A0.81.5#~/.yarn/patches/react-native-npm-0.81.5-d8232ef145.patch",
     "react-test-renderer": "19.1.0",
     "@types/react": "19.1.0",
-    "@openwallet-foundation/askar-shared": "0.6.0",
+    "@openwallet-foundation/askar-shared": "patch:@openwallet-foundation/askar-shared@npm%3A0.6.0#~/.yarn/patches/@openwallet-foundation-askar-shared-npm-0.6.0-38cb7d527c.patch",
     "@hyperledger/indy-vdr-shared": "0.3.0",
     "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch",
     "@credo-ts/anoncreds": "0.7.1-pr-2704-20260909134930",

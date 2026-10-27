@@ -38,6 +38,41 @@ on:
       - "e2e/**"
       - "tsp-reference/**"
       - "scripts/openvtc/**"
+  # A pull request that changes what the native compilers see gets both builds
+  # before it merges. No required check compiles Objective-C, Swift or Kotlin,
+  # and #562 reached main with an AppDelegate.mm that didn't compile (#568).
+  # These two jobs are not required checks (a path-filtered check would stay
+  # pending on every other PR), so the reviewer waits for them by name. A pull
+  # request from a fork skips them: they need the MEDIATOR_URL secret.
+  pull_request:
+    paths:
+      - "app/ios/**"
+      - "app/android/**"
+      - "app/package.json"
+      - "yarn.lock"
+      - "app/patches/**"
+      - ".yarn/patches/**"
+      # The submodule pin: a bifold bump can carry native code (react-native-attestation).
+      - "bifold"
+      - ".github/workflows/test-builds.yml"
+      # Below: files that decide what the bundle and the native build resolve, none of
+      # which any required check exercises. A wrong value here builds or boots a
+      # different app than the one that was reviewed, and `singletonPrefixes` has done
+      # exactly that once already (see the comment in app/metro.config.js: on
+      # 2026-08-26 every correct PIN was reported wrong on device, because askar
+      # registered its native binding on one copy and the store check read another).
+      # Which physical copy of each duplicated package the bundle gets.
+      - "app/metro.config.js"
+      # module-resolver aliases and the transforms; what every import resolves to.
+      - "app/babel.config.js"
+      # Assets linked into the native projects (fonts).
+      - "app/react-native.config.js"
+      # `preinstall` builds the bifold submodule and `postinstall` repairs the portal
+      # symlinks, so this file changes the install that every build starts from and
+      # yarn.lock does not record either hook.
+      - "package.json"
+      - "scripts/ensure-bifold-ready.js"
+      - "scripts/fix-portal-symlinks.js"
   workflow_dispatch:
     inputs:
       platform:
@@ -74,8 +109,9 @@ permissions:
 # commit is in the group so that a later merge to main cannot cancel a pinned
 # release's build (238 lost its build that way and had to be re-dispatched on
 # a cut branch). (inputs.push is empty on a push to main, a push-off build.)
+# A pull request is grouped by its number, so a new push replaces its older run.
 concurrency:
-  group: test-builds-${{ github.sha }}-push-${{ inputs.push || 'off' }}-clocks-${{ inputs.clocks || 'short' }}
+  group: test-builds-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.sha }}-push-${{ inputs.push || 'off' }}-clocks-${{ inputs.clocks || 'short' }}
   cancel-in-progress: true
 
 jobs:
@@ -107,7 +143,7 @@ jobs:
 
   ios-simulator:
     needs: heads
-    if: inputs.platform != 'android'
+    if: inputs.platform != 'android' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: macos-26
     environment: test-builds
     timeout-minutes: 90
@@ -264,7 +300,7 @@ jobs:
 
   android-apk:
     needs: heads
-    if: inputs.platform != 'ios'
+    if: inputs.platform != 'ios' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-22.04
     environment: test-builds
     timeout-minutes: 90
@@ -389,7 +425,7 @@ jobs:
           # left the libraries' codegen folders missing, so CMake failed), and the
           # same Gradle tasks.
           rm -rf ~/.gradle/caches ~/.gradle/daemon 2>/dev/null || true
-          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
+          cd android && ./gradlew bundleRelease assembleRelease :app:testReleaseUnitTest --stacktrace
 
       - name: Package the APK and its manifest
         run: |

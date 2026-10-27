@@ -99,9 +99,8 @@ const textOf = async (d, key) => (await byTestId(d, key).getAttribute(PLATFORM =
 async function toAgentHome(d) {
   await dismissTourIfPresent(d).catch(() => undefined);
   await (await waitForTestId(d, "MyAgent", 30000)).click();
-  // Builds before the one-agent screen: a linked phone could still be on the panel.
-  const open = await waitForTestId(d, "OpenYourAgentButton", 15000).catch(() => undefined);
-  if (open) await open.click();
+  // A linked phone's My Agent hands over to the agent home by itself (on focus since 09-29, before paint since
+  // bifold #484); "Open your agent", once waited on here for 15 s, is gone (bifold #485).
   // The agent home (AgentSeat on the one-agent screen, AgentDoors before it)
   // or the panel's vetting card. Landing on none of them is a failure, never
   // a seat: reading the panel's branch off a screen that is not the panel
