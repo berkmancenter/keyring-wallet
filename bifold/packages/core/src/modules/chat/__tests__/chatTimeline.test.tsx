@@ -3,8 +3,9 @@
  * chat's events as timeline items, and what counts as unread. Against a fake repository and event bus, so no
  * agent runs here.
  */
-import { JsonTransformer, RepositoryEventTypes } from '@credo-ts/core'
+import { EventEmitter, JsonTransformer, RepositoryEventTypes } from '@credo-ts/core'
 import { act, render, renderHook } from '@testing-library/react-native'
+import { EventEmitter as NodeEventEmitter } from 'events'
 import { View } from 'react-native'
 import { Subject } from 'rxjs'
 
@@ -190,6 +191,45 @@ describe('every chat event, read once and kept current', () => {
         ?.map((r) => r.content?.text)
         .sort()
     ).toEqual(['just arrived', 'stored'])
+  })
+
+  test('a lock and an unlock of the same agent: what arrives after the unlock is shown (275)', async () => {
+    // Credo's own event bus, so its shutdown behaves as on a phone: Agent.shutdown fires stop$, and every observable
+    // of its events ends. The unlock then initializes that same instance (useBifoldAgentSetup's restart).
+    const stop$ = new Subject<boolean>()
+    const events = new EventEmitter({ EventEmitterClass: NodeEventEmitter } as never, stop$)
+    const restartable = { ...agent, events }
+    const saved = (record: ChatEventRecord) =>
+      events.emit({ contextCorrelationId: 'default' } as never, {
+        type: RepositoryEventTypes.RecordSaved,
+        payload: { record },
+      })
+    const texts = (records?: ChatEventRecord[]) => records?.map((r) => r.content?.text).sort()
+    // The store tells its watchers on the next tick.
+    const tick = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
+
+    const before = message('A', 'before the lock')
+    mockRecords = [before]
+    ;(useAgent as jest.Mock).mockReturnValue({ agent: restartable })
+    const { result, rerender } = renderHook(() => useChatEvents('A'))
+    await tick()
+    expect(texts(result.current)).toEqual(['before the lock'])
+
+    // The lock: the agent is shut down and the screens have none.
+    stop$.next(true)
+    ;(useAgent as jest.Mock).mockReturnValue({ agent: null })
+    rerender({})
+    // Stored as the restarted agent picked up, before the screens had it back.
+    const meanwhile = message('A', 'picked up at the unlock')
+    mockRecords = [before, meanwhile]
+
+    // The unlock: the same instance, started again.
+    ;(useAgent as jest.Mock).mockReturnValue({ agent: restartable })
+    rerender({})
+    await tick()
+    await act(async () => saved(message('A', 'after the unlock')))
+    await tick()
+    expect(texts(result.current)).toEqual(['after the unlock', 'before the lock', 'picked up at the unlock'])
   })
 
   test('a reaction whose target never came is deleted once it is older than the mediator keeps it', async () => {

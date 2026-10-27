@@ -23,7 +23,8 @@ import { getChatEventRepository } from './ChatModule'
 import { foldChatEvents, prunableOrphans } from './fold'
 import { ChatEventRecord } from './records/ChatEventRecord'
 
-type Unsubscribe = { unsubscribe: () => void }
+// `closed` turns true when the agent stops its events (Agent.shutdown fires its stop$, and every observable ends).
+type Unsubscribe = { unsubscribe: () => void; closed?: boolean }
 
 let attached: Agent | undefined
 let read = false
@@ -134,9 +135,14 @@ export const chatEventsStore = {
     return () => listeners.delete(listener)
   },
 
-  /** Read every chat event for `agent`, once, and follow it from then on. Another agent starts afresh. */
+  /**
+   * Read every chat event for `agent`, once, and follow it from then on. Another agent starts afresh, and so does the
+   * same agent started again: a lock shuts it down, which ends every subscription to its events, and the unlock
+   * initializes that same instance (useBifoldAgentSetup's restart). Kept as it was, every chat stayed frozen at the
+   * lock: messages stored after it were never shown until the app was closed (275).
+   */
   attach(agent: Agent): void {
-    if (attached === agent) return
+    if (attached === agent && !subscriptions.some((s) => s.closed)) return
     chatEventsStore.forget()
     attached = agent
     let repository: ReturnType<typeof getChatEventRepository>
