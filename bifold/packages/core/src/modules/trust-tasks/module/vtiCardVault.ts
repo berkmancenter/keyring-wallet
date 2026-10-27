@@ -233,18 +233,26 @@ export const AGENT_CARD_QUERIES: Record<string, string>[] = [
  * subject: read per identity, every card was fetched once per identity (#401
  * Farm run, 4 identities on an agent keeping 88 cards: 352 fetches, 164 s).
  * A query the agent does not answer throws; a card it does not give back is
- * returned without its credential.
+ * returned without its credential. `onRead` hears how many cards there are as
+ * soon as the queries answer, then each one read: the reads are most of a
+ * run's time (#401 re-time: 88 cards, ~40 s), and a count that sat at 0 for
+ * all of it read as stuck.
  */
-export async function fetchAgentCards(task: VaultTask): Promise<AgentCard[]> {
+export async function fetchAgentCards(
+  task: VaultTask,
+  onRead?: (read: number, of: number) => void
+): Promise<AgentCard[]> {
   const ids = new Set<string>()
   for (const query of AGENT_CARD_QUERIES) {
     const answer = await task<{ credentials?: { id?: string }[] }>(VAULT_QUERY, query)
     for (const d of answer?.credentials ?? []) if (typeof d.id === 'string' && d.id) ids.add(d.id)
   }
   const cards: AgentCard[] = []
+  onRead?.(0, ids.size)
   for (const id of ids) {
     const got = await task<{ credential?: Record<string, unknown> }>(VAULT_GET, { id }).catch(() => undefined)
     cards.push({ id, credential: got?.credential })
+    onRead?.(cards.length, ids.size)
   }
   return cards
 }

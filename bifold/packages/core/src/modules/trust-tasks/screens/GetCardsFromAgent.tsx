@@ -63,6 +63,9 @@ export interface CardsBack {
   unreadableIdentities?: number
 }
 
+/** How far a run has got: cards found and kept, and while the agent's cards are being read, how many are read. */
+export type CardsProgress = { found: number; restored: number; read?: number }
+
 /** What taking on the agent's identities found, with what the phone can see of it. */
 export type AdoptionFound = AdoptionReport & { visibleContexts?: string[] }
 
@@ -71,8 +74,8 @@ export interface GetCardsDeps {
   store: (agent: Agent) => VtiCommunityStore
   /** The agent, connected, as a task sender. */
   taskFor: (agent: Agent, vtaDid: string) => Promise<VaultTask>
-  /** Every card the agent keeps, each fetched once. */
-  fetchCards: (task: VaultTask) => Promise<AgentCard[]>
+  /** Every card the agent keeps, each fetched once; `onRead` hears how many are read of how many. */
+  fetchCards: (task: VaultTask, onRead?: (read: number, of: number) => void) => Promise<AgentCard[]>
   /** Take on the agent's identities this phone does not hold yet (`held`: the DIDs it does), from its `cards`. */
   adopt: (agent: Agent, vtaDid: string, held: string[], cards: AgentCard[]) => Promise<AdoptionFound>
 }
@@ -116,10 +119,10 @@ export async function bringBackFromAgent(
   agent: Agent,
   vtaDid: string | undefined,
   personas: VtiPersona[],
-  onProgress: (p: { found: number; restored: number }) => void,
+  onProgress: (p: CardsProgress) => void,
   deps: GetCardsDeps = defaultDeps
 ): Promise<CardsBack> {
-  const read = vaultReader(agent, deps)
+  const read = vaultReader(agent, deps, (r, of) => onProgress({ found: of, restored: 0, read: r }))
   let silent = false
   const vault = vtaDid ? await read(vtaDid) : undefined
   const found =
@@ -165,14 +168,18 @@ export async function bringBackFromAgent(
 type VaultRead = { task: VaultTask; cards: AgentCard[] }
 
 /** Each agent's vault, read once per run however many identities it holds; undefined when it does not answer. */
-function vaultReader(agent: Agent, deps: GetCardsDeps): (vtaDid: string) => Promise<VaultRead | undefined> {
+function vaultReader(
+  agent: Agent,
+  deps: GetCardsDeps,
+  onRead?: (read: number, of: number) => void
+): (vtaDid: string) => Promise<VaultRead | undefined> {
   const reads = new Map<string, Promise<VaultRead | undefined>>()
   return (vtaDid) => {
     let read = reads.get(vtaDid)
     if (!read) {
       read = (async () => {
         const task = await deps.taskFor(agent, vtaDid)
-        return { task, cards: await deps.fetchCards(task) }
+        return { task, cards: await deps.fetchCards(task, onRead) }
       })().catch(() => undefined)
       reads.set(vtaDid, read)
     }
@@ -191,9 +198,11 @@ function vaultReader(agent: Agent, deps: GetCardsDeps): (vtaDid: string) => Prom
 export async function getCardsFromAgent(
   agent: Agent,
   personas: VtiPersona[],
-  onProgress: (p: { found: number; restored: number }) => void,
+  onProgress: (p: CardsProgress) => void,
   deps: GetCardsDeps = defaultDeps,
-  read: (vtaDid: string) => Promise<VaultRead | undefined> = vaultReader(agent, deps),
+  read: (vtaDid: string) => Promise<VaultRead | undefined> = vaultReader(agent, deps, (r, of) =>
+    onProgress({ found: of, restored: 0, read: r })
+  ),
   failedCheck: { credentialId: string; communityDid: string }[] = []
 ): Promise<CardsBack> {
   const store = deps.store(agent)
@@ -252,13 +261,13 @@ export const REFUSED_WORDS: Record<RecoveredRefusal['reason'], string> = {
  * and coming back overlapped the first).
  */
 type Run = {
-  progress: { found: number; restored: number }
-  listeners: Set<(p: { found: number; restored: number }) => void>
+  progress: CardsProgress
+  listeners: Set<(p: CardsProgress) => void>
   done: Promise<CardsBack>
 }
 let current: Run | undefined
 
-function startRun(run: (onProgress: (p: { found: number; restored: number }) => void) => Promise<CardsBack>): Run {
+function startRun(run: (onProgress: (p: CardsProgress) => void) => Promise<CardsBack>): Run {
   const started = { progress: { found: 0, restored: 0 }, listeners: new Set() } as Run
   started.done = run((p) => {
     started.progress = p
@@ -279,7 +288,7 @@ export const GetCardsFromAgent: React.FC<{
 }> = ({ agent, personas, vtaDid, deps }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
-  const [progress, setProgress] = useState<{ found: number; restored: number } | undefined>(current?.progress)
+  const [progress, setProgress] = useState<CardsProgress | undefined>(current?.progress)
   const [result, setResult] = useState<CardsBack>()
   // Identities taken on by an earlier tap: the screen's list was read before them.
   const [taken, setTaken] = useState<VtiPersona[]>([])
@@ -328,7 +337,9 @@ export const GetCardsFromAgent: React.FC<{
         <View style={styles.row}>
           <ActivityIndicator color={ColorPalette.brand.primary} />
           <ThemedText testID={testIdWithKey('AgentGetCardsProgress')}>
-            {t('VtaLink.GetCardsProgress', { found: progress!.found, restored: progress!.restored })}
+            {progress!.read !== undefined && progress!.read < progress!.found
+              ? t('VtaLink.GetCardsReading', { read: progress!.read, found: progress!.found })
+              : t('VtaLink.GetCardsProgress', { found: progress!.found, restored: progress!.restored })}
           </ThemedText>
         </View>
       ) : null}

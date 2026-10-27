@@ -1571,6 +1571,7 @@
     "GetCardsButton": "Recuperar suas comunidades e cartões do seu agente",
     "GetCardsHint": "Use em um telefone novo, ou se alguma comunidade ou cartão estiver faltando neste telefone, por exemplo depois de reinstalar o Keyring.",
     "GetCardsProgress": "{{found}} encontrados, {{restored}} recuperados…",
+    "GetCardsReading": "Lendo {{read}} de {{found}} cartões do seu agente…",
     "CardsBack_one": "1 cartão recuperado do seu agente.",
     "CardsBack_other": "{{count}} cartões recuperados do seu agente.",
     "CommunitiesBack_one": "1 comunidade recuperada do seu agente.",

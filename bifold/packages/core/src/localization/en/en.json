@@ -1716,6 +1716,7 @@
     "GetCardsButton": "Bring back your communities and cards from your agent",
     "GetCardsHint": "Use this on a new phone, or if a community or card is missing on this phone, for example after reinstalling Keyring.",
     "GetCardsProgress": "Found {{found}}, got {{restored}} back…",
+    "GetCardsReading": "Reading {{read}} of {{found}} cards from your agent…",
     "CardsBack_one": "Got 1 card back from your agent.",
     "CardsBack_other": "Got {{count}} cards back from your agent.",
     "CommunitiesBack_one": "Brought back 1 community from your agent.",

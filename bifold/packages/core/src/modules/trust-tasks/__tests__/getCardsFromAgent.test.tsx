@@ -169,6 +169,21 @@ describe('getting the cards back, identity by identity', () => {
     expect(gets).toHaveLength(3)
   })
 
+  // #401 re-time: 88 cards took ~40 s to read, and the count sat at "Found 0" for all of it.
+  it('says how many cards there are as soon as the vault answers, then each one read', async () => {
+    const vault = fakeVault()
+    for (const c of [cardAbout(persona.did, 0), cardAbout(persona.did, 1), cardAbout(persona.did, 2)])
+      await vault.task('https://trusttasks.org/spec/vault/credentials/receive/0.1', { credential: c.credential })
+    const reads: [number, number][] = []
+    await fetchAgentCards(vault.task, (read, of) => reads.push([read, of]))
+    expect(reads).toEqual([
+      [0, 3],
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ])
+  })
+
   it("cards adoption found don't hold up are said as such, not as another identity's", async () => {
     const failing = cardAbout('did:webvh:QmLab:labb')
     const got = await bringBackFromAgent(
@@ -253,6 +268,26 @@ describe('the Manage row', () => {
     await act(async () => finish([cardAbout(persona.did)]))
     expect(again.getByTestId(testIdWithKey('AgentGetCardsResult'))).toHaveTextContent(/VtaLink\.CardsBack\(count=1\)/)
     expect(again.getByTestId(testIdWithKey('AgentGetCardsButton'))).not.toBeDisabled()
+  })
+
+  it('while the cards are being read, says how many of how many', async () => {
+    let finish: (cards: AgentCard[]) => void = () => undefined
+    const fetchCards = jest.fn(
+      (_t: unknown, onRead?: (read: number, of: number) => void) =>
+        new Promise<AgentCard[]>((resolve) => {
+          onRead?.(0, 3)
+          onRead?.(1, 3)
+          finish = resolve
+        })
+    )
+    const d = { ...deps({ [VTA]: [] }, { [persona.did]: { restored: ['m'], refused: [] } }), fetchCards }
+    const tree = renderRow([persona], d as GetCardsDeps, VTA)
+    await tap(tree)
+    expect(tree.getByTestId(testIdWithKey('AgentGetCardsProgress'))).toHaveTextContent(
+      'VtaLink.GetCardsReading(read=1,found=3)'
+    )
+    await act(async () => finish([cardAbout(persona.did)]))
+    expect(tree.getByTestId(testIdWithKey('AgentGetCardsResult'))).toHaveTextContent(/VtaLink\.CardsBack\(count=1\)/)
   })
 
   it('a new phone whose agent does not answer is told so, not that there are no cards', async () => {
