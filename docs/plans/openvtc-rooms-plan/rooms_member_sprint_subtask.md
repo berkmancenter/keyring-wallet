@@ -3,7 +3,9 @@
 Subtask of [`../openvtc-rooms-plan.md`](../openvtc-rooms-plan.md). Draft. Reasoning for the
 re-baseline and for the review round of PR #661 (existing rooms module, persona signing, delivery
 leg, message vocabulary, test host) is in
-[`2026-10-26-bam-rebaseline.md`](2026-10-26-bam-rebaseline.md).
+[`2026-10-26-bam-rebaseline.md`](2026-10-26-bam-rebaseline.md). Where rooms appear (the community
+screen, not the Messages list), a room's tabs and the send guard are in
+[`2026-10-27-al.md`](2026-10-27-al.md).
 
 **This is the first chunk of rooms work.** Keyring ships at least this much room functionality:
 join a data room, list its most recent content, download an attachment, post a message or a
@@ -194,8 +196,17 @@ deferred until one-to-one chat has been stable through a store release.
 
 ### Where it lives
 
-Rooms are a section of the **My Agent** stack, reached from the VTA agent home
-(`modules/trust-tasks/screens/VtaAgentHome.tsx`), as a "Rooms" card beside Requests and Devices.
+Rooms are a section of the **My Agent** stack, reached two ways:
+
+- from the VTA agent home (`modules/trust-tasks/screens/VtaAgentHome.tsx`), as a "Rooms" card
+  beside Requests and Devices, which lists every room and offer;
+- from each community's screen (`modules/trust-tasks/screens/VtiCommunity.tsx`), as a Rooms
+  section beside membership and vetting, listing that community's offers and the member's rooms
+  there.
+
+The card is the one place that lists them all, because rooms are not tied to one community (T3
+rooms mix communities). Rooms do not appear in the Messages list.
+
 Reasons that rule out the alternatives:
 
 - Rooms need a linked VTA, and the agent home is shown only then, so the gate costs nothing.
@@ -204,8 +215,8 @@ Reasons that rule out the alternatives:
   `unmountOnBlur: true`, which would discard a composer draft and abort a running download
   each time the member switches tabs.
 - Settings holds only Help and More Information; it has no feature screens.
-- A per-community entry on `VtiCommunity` is not discoverable, and rooms are not tied to one
-  community (T3 rooms mix communities).
+- A Messages row for a room needs a feed of its new posts; this sprint reads a room only when it
+  is open (see "Notifications").
 
 Pending offers surface as a count badge on the Rooms card only. The My Agent tab keeps its
 waiting-requests badge and does not show room offers.
@@ -221,7 +232,8 @@ inherit the agent-offline banner.
 |---|---|
 | `RoomsHome` | Joined rooms (from `vtc/rooms/memberships/list`) and an Offers section. Empty, loading, error and offline states. Pull to refresh. |
 | `RoomOffer` | Consent screen for one offer: who invites, which room, its tier, `validUntil`, what joining discloses. Accept / Decline. Takes an `offerRef` route param (see "Join entry points"). |
-| `RoomView` | Newest-first message list, "load older" at the end, an attachment chip on file messages, and the composer. |
+| `RoomView` | Tabs under the room's header, in a plain row (not a navigator), so a draft and a running transfer survive a switch. **Chat:** newest-first message list, "load older" at the end, an attachment chip on file messages, and the composer, which always shows who the member posts as; there is no confirmation on each send. **Files:** the room's library, newest first, each opening the attachment sheet. **Notes:** titled records and the markers of removed ones, pinned first; untitled records stay in Chat. **Members:** the member's own access, the community's list where the member may see it, and leaving the community. |
+| Community Rooms section | On a community's screen: that community's offers, then the member's rooms there, each opening `RoomOffer` or `RoomView`. |
 | Attachment sheet | A bottom sheet for a tapped attachment: name, size, claimed type, Download, progress and cancel, then Share / Open. |
 
 Wiring: add the screens to the `Screens` enum and `MyAgentStackParams` in
