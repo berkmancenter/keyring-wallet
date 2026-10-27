@@ -145,13 +145,22 @@ async function onChat(d, peer) {
   return composer && named;
 }
 
+/**
+ * Tap Send in the open chat. Since the slim composer (bifold #610), Send exists only once the field holds text (Camera
+ * stands in its place before), so wait for it to appear rather than tap the moment the text is set.
+ */
+async function tapSend(d) {
+  const send = await d.$("~GC_SEND_TOUCHABLE"); // gifted-chat Send.js
+  await send.waitForExist({ timeout: 5000 });
+  await send.click();
+}
+
 /** Send `text` from the open chat. The composer has no testID (gifted-chat; MessageInput.tsx): found by type. */
 async function sendChat(d, text) {
   const input = await d.$("-ios class chain:**/XCUIElementTypeTextView");
   await input.waitForExist({ timeout: 15000 });
   await input.setValue(text);
-  const send = await d.$("~GC_SEND_TOUCHABLE"); // gifted-chat Send.js
-  await send.click();
+  await tapSend(d);
   await sleep(2000);
 }
 
@@ -382,7 +391,7 @@ try {
       // The composer's sheet stays open for more; it closes only when asked.
       const stayed = await existsTestId(a, "EmojiPickerSheet", 2000);
       await tapTestId(a, "EmojiPickerSheetClose", 5000);
-      await (await a.$("~GC_SEND_TOUCHABLE")).click();
+      await tapSend(a);
       const onB = Boolean(await waitForText(b, "gate: picked 😀"));
       await screenshot(b, "pair-emoji-composer").catch(() => undefined);
       return { ok: stayed && onB, detail: `the sheet stayed open after a choice ${stayed} · B shows "gate: picked 😀" ${onB}` };
