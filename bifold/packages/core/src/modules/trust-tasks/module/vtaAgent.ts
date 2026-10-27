@@ -2585,6 +2585,16 @@ export class VtaAgentController {
   }
 
   /**
+   * A signed-in client for the rooms service (`modules/rooms`) while this
+   * phone is linked; undefined when it is not.
+   */
+  async roomsClient(agent: Agent): Promise<Pick<VtaClient, 'task' | 'supportedTypes'> | undefined> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return undefined
+    return this.signedIn(agent, vtaDid)
+  }
+
+  /**
    * A presence tick that failed. The agent answers a phone another device
    * removed with "DID not in ACL" (a signed permissionDenied, vta-service
    * messaging/auth.rs), which moves the link to removed, as a refused owner

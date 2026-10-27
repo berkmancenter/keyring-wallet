@@ -263,7 +263,8 @@ describe('T2: a write is sent once', () => {
   }, 10000)
 
   it('classifies only the reads as safe to send twice', () => {
-    expect([MANIFEST, STATUS].filter(isVtiReadTask)).toEqual([MANIFEST, STATUS])
+    const ROOM_MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
+    expect([MANIFEST, STATUS, ROOM_MEMBERSHIPS].filter(isVtiReadTask)).toEqual([MANIFEST, STATUS, ROOM_MEMBERSHIPS])
     expect([SUBMIT, SUPPLEMENT, WITHDRAW, SELF_REMOVE, PROFILE, 'https://t/unknown/0.1'].filter(isVtiReadTask)).toEqual(
       []
     )

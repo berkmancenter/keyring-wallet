@@ -5,3 +5,6 @@ export { deriveCapabilities, sampleCapabilities, ROOMS_OPERATIONS, ROOMS_REQUIRE
 export type { CapabilityInputs } from './capabilities'
 export { toInertText, inertFlags } from './inertText'
 export { registerRoomsService } from './register'
+export { AgentRoomsService, R1_BUILT } from './real/agentRoomsService'
+export type { RoomsBackend, RoomsCommunity } from './real/agentRoomsService'
+export { createAgentRoomsBackend } from './real/agentRoomsBackend'

@@ -2338,21 +2338,11 @@ export class VtaClient {
   // ---------------------------------------------------------------------------
 
   /**
-   * Whether this agent serves `vta/pcs/*` at all — `applications/show` with an
-   * id it cannot hold.
-   *
-   * `notFound` means the family is served, which is the answer we want: the
-   * probe asks a question whose "failure" is the success signal.
-   * `unsupportedType` means the agent predates vta-service 0.60.
-   *
-   * Returns `undefined` for "cannot tell", which includes a policy holding the
-   * probe for consent or step-up. `waitForConsent: false` keeps that cheap: a
-   * held task is refused at once rather than waiting, and the caller must NOT
-   * treat the refusal as a verdict — a rule covering reads is not evidence
-   * about the agent's version.
+   * The Trust Task types this agent dispatches, from its own `trust-task-discovery/0.1` answer;
+   * undefined when it could not be asked or listed nothing. An empty list is inconclusive, never
+   * "serves nothing".
    */
-  async servesPcs(): Promise<boolean | undefined> {
-    // Ask the agent what it serves, rather than inferring it from a refusal.
+  async supportedTypes(): Promise<string[] | undefined> {
     // `trust-task-discovery/0.1` answers from the dispatch table itself
     // (`vta-service/src/trust_tasks/discovery.rs` passes `dispatched_uris()`)
     // and its handler takes no capability check, so the answer is conclusive
@@ -2384,13 +2374,33 @@ export class VtaClient {
           typeof t === 'string' ? t : t && typeof t === 'object' ? (t as { type?: unknown }).type : undefined
         )
         .filter((t): t is string => typeof t === 'string')
-      // An agent that lists nothing has not answered the question: an empty
-      // list is inconclusive, never a no.
-      if (uris.length > 0) return uris.some((uri) => uri.startsWith(PCS_FAMILY))
+      return uris.length > 0 ? uris : undefined
     } catch {
-      // An agent that does not serve discovery, or a policy that denies it,
-      // leaves the question to the probe below.
+      // An agent that does not serve discovery, or a policy that denies it.
+      return undefined
     }
+  }
+
+  /**
+   * Whether this agent serves `vta/pcs/*` at all — `applications/show` with an
+   * id it cannot hold.
+   *
+   * `notFound` means the family is served, which is the answer we want: the
+   * probe asks a question whose "failure" is the success signal.
+   * `unsupportedType` means the agent predates vta-service 0.60.
+   *
+   * Returns `undefined` for "cannot tell", which includes a policy holding the
+   * probe for consent or step-up. `waitForConsent: false` keeps that cheap: a
+   * held task is refused at once rather than waiting, and the caller must NOT
+   * treat the refusal as a verdict — a rule covering reads is not evidence
+   * about the agent's version.
+   */
+  async servesPcs(): Promise<boolean | undefined> {
+    // Ask the agent what it serves, rather than inferring it from a refusal.
+    // An agent that lists nothing, or cannot be asked, leaves the question to
+    // the probe below.
+    const uris = await this.supportedTypes()
+    if (uris) return uris.some((uri) => uri.startsWith(PCS_FAMILY))
 
     try {
       await this.task(

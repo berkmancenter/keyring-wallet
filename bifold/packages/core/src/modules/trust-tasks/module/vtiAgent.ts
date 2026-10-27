@@ -87,6 +87,7 @@ const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
 const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
 const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
 const SELF_REMOVE = 'https://trusttasks.org/spec/vtc/members/self-remove/0.1'
+const ROOM_MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 /*
  * Every document `ask` sends is signed. `ask` carries only DIDComm and TSP,
@@ -114,6 +115,7 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
  * - the manifest — `vtc/join-requests/manifest`, the published criteria, at
  *   each version this wallet speaks (`joinWire`).
  * - `STATUS` — `vtc/join-requests/status/0.1`, where the applicant's request stands.
+ * - `ROOM_MEMBERSHIPS` — `vtc/rooms/memberships/list/0.1`, the member's rooms there (`modules/rooms`).
  *
  * Everything else `ask` sends changes state and is a WRITE: the submit,
  * `SUPPLEMENT`, `WITHDRAW`, `SELF_REMOVE` above, and the vetter profile publish
@@ -123,7 +125,7 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
  * answered — a submit it deferred, say — sent again is a second submit, and
  * reads as `requestAlreadyOpen`.
  */
-export const VTI_READ_TASKS: ReadonlySet<string> = new Set([...JOIN_MANIFEST_TYPES, STATUS])
+export const VTI_READ_TASKS: ReadonlySet<string> = new Set([...JOIN_MANIFEST_TYPES, STATUS, ROOM_MEMBERSHIPS])
 
 /** Whether `type` is a read `ask` may send again over DIDComm after TSP silence (see `VTI_READ_TASKS`). */
 export function isVtiReadTask(type: string): boolean {
@@ -1812,6 +1814,26 @@ class VtiAgentController {
         ? { code: text(payload.code), reason: text(payload.reason), decidedAt: text(payload.decidedAt) }
         : {}),
     }
+  }
+
+  /**
+   * Send one Trust Task to the community as the connected persona and return
+   * its answer's payload. For tasks with no wrapper of their own here — the
+   * rooms tasks (`modules/rooms`). Refusals surface as `VtiRefusal`.
+   */
+  async communityTask(
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const answer = await this.ask(communityDid, type, payload)
+    if (!answer) throw this.sentNoAnswer(communityDid, type)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    return ((answer.body as { payload?: Record<string, unknown> } | undefined)?.payload ?? {}) as Record<
+      string,
+      unknown
+    >
   }
 
   /**
