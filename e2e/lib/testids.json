@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "c95a747cb5763151df6d09bc8cc33d345852685e",
+  "generatedFrom": "92d091d586ce2cbd5da9ea6ea134658223c73702",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -89,9 +89,12 @@
     "AgentGetAgentToggle": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "AgentGetCards": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsButton": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
+    "AgentGetCardsCommunities": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsHint": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
+    "AgentGetCardsNoCommunities": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsProgress": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsResult": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
+    "AgentGetCardsUnreadableIdentities": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGone": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGoneLinkNew": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGoneTryAgain": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
@@ -254,7 +257,10 @@
     "ChatActionsButton": ["src/components/chat/Chat.ids.ts"],
     "ChatAttachCamera": ["src/components/chat/Chat.ids.ts"],
     "ChatAttachLibrary": ["src/components/chat/Chat.ids.ts"],
+    "ChatComposerCamera": ["src/components/chat/Chat.ids.ts"],
     "ChatComposerEmojiButton": ["src/components/chat/Chat.ids.ts"],
+    "ChatComposerField": ["src/components/chat/Chat.ids.ts"],
+    "ChatDayPill": ["src/components/chat/Chat.ids.ts"],
     "ChatDisappearingCancel": ["src/components/chat/Chat.ids.ts"],
     "ChatDisappearingCurrent": ["src/components/chat/Chat.ids.ts"],
     "ChatDisappearingOption": ["src/components/chat/Chat.ids.ts"],
@@ -372,7 +378,12 @@
     "ContactSeparateBack": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactSeparateConfirm": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactSeparateYes": ["src/modules/vrc/components/ContactMergeSection.tsx"],
-    "ContactViewMessages": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrust": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustHardware": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustInPerson": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustNone": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactTrustWitnessed": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactViewMessages": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "Contacts": ["src/navigators/TabStack.tsx"],
     "ContactsList": ["src/modules/vrc/screens/WhatAreContacts.tsx"],
     "Continue": [
@@ -849,6 +860,9 @@
     "RCardSubmit": ["src/modules/vrc/screens/RCardForm.tsx"],
     "RecordLoading": ["src/components/animated/RecordLoading.tsx"],
     "ReenterPIN": ["src/screens/PINChange.tsx", "src/screens/PINCreate.tsx"],
+    "RelationshipDayExchange": ["src/modules/vrc/components/RelationshipLayers.tsx"],
+    "RelationshipDaySheet": ["src/modules/vrc/components/RelationshipLayers.tsx"],
+    "RelationshipDaySheetClose": ["src/modules/vrc/components/RelationshipLayers.tsx"],
     "RelationshipLayer": ["src/modules/vrc/components/RelationshipLayers.tsx"],
     "RelationshipLayers": ["src/modules/vrc/components/RelationshipLayers.tsx"],
     "RelationshipUpgrade": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
@@ -856,6 +870,7 @@
     "RelationshipUpgradeConfirm": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeDismiss": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeHardwareDone": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeNoWitness": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeNote": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeResign": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeSend": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
@@ -1286,7 +1301,7 @@
     "SecureExchangeBadge": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "SecureExchangeChecking": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "VetterHeaderBackground": ["src/components/views/VetterHeaderBackground.tsx"],
-    "WitnessRecord": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "WitnessRecord": ["src/modules/vrc/components/RelationshipLayers.tsx"],
     "WitnessSection": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "WitnessVerifiedBadge": ["src/modules/vrc/components/ContactCard.tsx"],
     "WitnessedBadge": ["src/modules/vrc/screens/ContactDetails.tsx"]
@@ -1303,6 +1318,9 @@
     },
     {
       "src/components/chat/ChatMessage.tsx": "ChatIds.reactions"
+    },
+    {
+      "src/components/chat/DayPill.tsx": "ChatIds.dayPill"
     },
     {
       "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearing"
@@ -1327,6 +1345,15 @@
     },
     {
       "src/components/chat/MessageActions.tsx": "testID"
+    },
+    {
+      "src/components/chat/MessageInput.tsx": "ChatIds.composerCamera"
+    },
+    {
+      "src/components/chat/MessageInput.tsx": "ChatIds.composerEmoji"
+    },
+    {
+      "src/components/chat/MessageInput.tsx": "ChatIds.composerField"
     },
     {
       "src/components/chat/ReactionBar.tsx": "ChatIds.reactionBar"
@@ -2578,9 +2605,6 @@
     },
     {
       "src/screens/AutoLock.tsx": "testID"
-    },
-    {
-      "src/screens/Chat.tsx": "ChatIds.composerEmoji"
     },
     {
       "src/screens/ConfigureMediator.tsx": "mediator"
