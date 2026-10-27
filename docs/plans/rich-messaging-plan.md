@@ -14,6 +14,7 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 - [`rich-messaging-plan/2026-10-21-al.md`](./rich-messaging-plan/2026-10-21-al.md) — the research this plan is built on: current code, what the protocols allow, how Signal, WhatsApp and Matrix move media, and whether a VTA can host media.
 - [`rich-messaging-plan/2026-10-24-al.md`](./rich-messaging-plan/2026-10-24-al.md) — the response to the review of 2026-10-22, point by point, and the evaluation of message history and disappearing messages.
 - [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research, including the Credo mediator's 7-day cleanup; and Step 4's bounds on what a peer can set (a 1-hour floor, a version cap) and the backstop for a received message's clock.
+- [`rich-messaging-plan/2026-10-27-al.md`](./rich-messaging-plan/2026-10-27-al.md) — D2 and Step 3: photos shipped in store build 272; what is on record about D2's acceptance and Step 0's measurements, and what is not.
 
 **Related plans:**
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
