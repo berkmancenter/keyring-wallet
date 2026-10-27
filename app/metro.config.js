@@ -251,7 +251,10 @@ module.exports = (async () => {
         // unstable_conditionNames does not help: the package declares no such
         // condition to match.
         if (moduleName.startsWith('@openvtc/trust-tasks/')) {
-          const subPath = moduleName.slice('@openvtc/trust-tasks/'.length)
+          // `./runtime` (from 0.27.8: the runtime without the prebuilt spec modules) is the one
+          // export whose file is not dist/<path>.js. dist/_runtime/index.js exists in 0.9 as well.
+          const requested = moduleName.slice('@openvtc/trust-tasks/'.length)
+          const subPath = requested === 'runtime' ? '_runtime/index' : requested
           const bases = [
             path.join(__dirname, 'node_modules'),
             path.join(__dirname, '..', 'bifold', 'packages', 'core', 'node_modules'),
