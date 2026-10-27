@@ -1,7 +1,14 @@
 import { Agent } from '@credo-ts/core'
 
 import { setLivePickupEnabled } from './livePickup'
-import { createPickupBoost, PICKUP_ACTIVE_INTERVAL_MS, PICKUP_ACTIVE_WINDOW_MS, startPickupBoost } from './pickupBoost'
+import {
+  createPickupBoost,
+  createPickupHold,
+  focusedRouteName,
+  PICKUP_ACTIVE_INTERVAL_MS,
+  PICKUP_ACTIVE_WINDOW_MS,
+  startPickupBoost,
+} from './pickupBoost'
 
 describe('createPickupBoost', () => {
   let clock = 0
@@ -76,6 +83,42 @@ describe('createPickupBoost', () => {
     boost.stop()
     await advance(10_000)
     expect(pickupOnce).not.toHaveBeenCalled()
+  })
+
+  it('holds the window open while a screen that waits on a peer is in front, and lets it end after', async () => {
+    const pickupOnce = jest.fn(async () => undefined)
+    const boost = createPickupBoost({ pickupOnce, now })
+    const hold = createPickupHold(boost.boost, ['Chat'])
+    const asks = async (ms: number) => {
+      const before = pickupOnce.mock.calls.length
+      await advance(ms)
+      return pickupOnce.mock.calls.length - before
+    }
+    // The screen in front sits in a nested navigator, as a chat does under the tabs.
+    const front = (name: string) =>
+      focusedRouteName({
+        index: 0,
+        routes: [{ name: 'Tabs', state: { index: 1, routes: [{ name: 'Home' }, { name }] } }],
+      })
+
+    // Control: a screen that waits on nobody holds nothing, so a window from activity lapses as before.
+    boost.boost()
+    hold.focus(front('Settings'))
+    await advance(PICKUP_ACTIVE_WINDOW_MS)
+    expect(await asks(10_000)).toBe(0)
+
+    // A chat in front: asking every second for three windows' time, more than any one window could give.
+    hold.focus(front('Chat'))
+    expect(await asks(3 * PICKUP_ACTIVE_WINDOW_MS)).toBeGreaterThan(
+      (2 * PICKUP_ACTIVE_WINDOW_MS) / PICKUP_ACTIVE_INTERVAL_MS
+    )
+
+    // Left: the window ends on its own, at most a window after the last renewal.
+    hold.focus(front('Settings'))
+    await advance(PICKUP_ACTIVE_WINDOW_MS)
+    expect(await asks(10_000)).toBe(0)
+    hold.stop()
+    boost.stop()
   })
 
   describe('startPickupBoost', () => {

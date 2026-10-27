@@ -7,7 +7,18 @@ import PickupWindowListener from '@/components/PickupWindowListener'
 import { startPickupBoost } from '@/utils/pickupBoost'
 
 jest.mock('@bifold/react-hooks')
-jest.mock('@/utils/pickupBoost', () => ({ startPickupBoost: jest.fn() }))
+jest.mock('@/utils/pickupBoost', () => ({ ...jest.requireActual('@/utils/pickupBoost'), startPickupBoost: jest.fn() }))
+// The root navigation, with Home in front: no screen that holds the window open.
+const mockUnsubscribeState = jest.fn()
+const mockNavigation = {
+  getParent: () => undefined,
+  getState: () => ({ index: 0, routes: [{ name: 'Home' }] }),
+  addListener: jest.fn(() => mockUnsubscribeState),
+}
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  useNavigation: () => mockNavigation,
+}))
 
 const mockUseAgent = useAgent as jest.MockedFunction<typeof useAgent>
 const mockStartPickupBoost = startPickupBoost as jest.MockedFunction<typeof startPickupBoost>
@@ -41,6 +52,7 @@ describe('PickupWindowListener', () => {
     unmount()
     expect(stop).toHaveBeenCalledTimes(1)
     expect(remove).toHaveBeenCalledTimes(1)
+    expect(mockUnsubscribeState).toHaveBeenCalledTimes(1)
   })
 
   it('does nothing without an agent', () => {

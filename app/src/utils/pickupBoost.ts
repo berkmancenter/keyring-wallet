@@ -80,6 +80,48 @@ export const createPickupBoost = ({
   }
 }
 
+/** How often a held window is renewed: well inside the window, so it never lapses between renewals. */
+export const PICKUP_HOLD_RENEW_MS = 10_000
+
+type NavigationStateLike = { index?: number; routes: { name: string; state?: NavigationStateLike }[] }
+
+/** The screen in front: the focused route of the innermost focused navigator. */
+export const focusedRouteName = (state: NavigationStateLike | undefined): string | undefined => {
+  let name: string | undefined
+  while (state?.routes?.length) {
+    const route = state.routes[state.index ?? state.routes.length - 1]
+    name = route?.name
+    state = route?.state
+  }
+  return name
+}
+
+/**
+ * Holds the 1 s window open while one of `screens` is in front, where a person
+ * waits on a peer (a chat, the scanner, an exchange): it opens on arrival and
+ * is renewed until the person leaves, rather than lapsing 30 s after the last
+ * message. Leaving lets it end on its own, a window after the last renewal.
+ */
+export const createPickupHold = (boost: () => void, screens: readonly string[]) => {
+  let renewal: ReturnType<typeof setInterval> | undefined
+  const release = () => {
+    if (renewal) clearInterval(renewal)
+    renewal = undefined
+  }
+  return {
+    focus(name: string | undefined) {
+      if (!name || !screens.includes(name)) {
+        release()
+        return
+      }
+      if (renewal) return
+      boost()
+      renewal = setInterval(boost, PICKUP_HOLD_RENEW_MS)
+    },
+    stop: release,
+  }
+}
+
 /**
  * The window for a running agent: asks the default mediator with the same call
  * credo's own loop makes (Pickup 2.0, the mediator this app is provisioned
