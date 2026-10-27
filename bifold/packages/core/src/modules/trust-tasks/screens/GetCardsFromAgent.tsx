@@ -35,6 +35,7 @@ import {
   type RecoveredRefusal,
   type VaultTask,
 } from '../module/vtiCardVault'
+import { sameIdentity } from '../module/didScid'
 import { checkDeliveredCard } from '../module/vtiDeliveredCheck'
 import { classifyCredential } from '../module/vtiInbox'
 import { GenericRecordsCommunityStore, type VtiCommunityStore } from '../module/VtiCommunityStore'
@@ -220,11 +221,12 @@ export async function getCardsFromAgent(
     }
     total.found += vault.cards.length
     onProgress({ found: total.found, restored: total.restored })
-    const dids = new Set(theirs.map((p) => p.did))
     const mine = new Map<string, AgentCard[]>()
     for (const card of vault.cards) {
       const subject = card.credential ? classifyCredential(card.credential).subjectDid : undefined
-      if (subject && dids.has(subject)) mine.set(subject, [...(mine.get(subject) ?? []), card])
+      // Whose card it is: the identity's DID, or its did:scid:vh:1 form (didScid).
+      const whose = subject ? theirs.find((p) => sameIdentity(p.did, subject))?.did : undefined
+      if (whose) mine.set(whose, [...(mine.get(whose) ?? []), card])
       else if (!card.credential) total.refused.push({ credentialId: card.id, reason: 'unreadable' })
       else if (failed.has(card.id)) {
         const f = failedCheck.find((x) => x.credentialId === card.id)

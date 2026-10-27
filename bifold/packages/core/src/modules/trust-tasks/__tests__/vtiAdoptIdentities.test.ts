@@ -74,6 +74,14 @@ const adopt = async (
     now: () => NOW,
   })
 
+// The persona's did:scid:vh:1 form (openvtc #503): the same SCID as PERSONA_DID, located by src.
+const PERSONA_SCID = 'did:scid:vh:1:QmPersona?src=dids.example/negative-weird'
+const toScid = (card: Record<string, unknown>, id: string) => ({
+  ...card,
+  id,
+  credentialSubject: { ...(card.credentialSubject as Record<string, unknown>), id: PERSONA_SCID },
+})
+
 describe("taking on the agent's identities", () => {
   it("a membership card about one of the agent's DIDs: that identity, for that community, with its document's key ids", async () => {
     const { store } = identities()
@@ -271,5 +279,24 @@ describe('the contexts a grant lets this phone see', () => {
     expect(visibleContextsOf(['ctx:keyring', 'ctx:openvtc-alice'])).toEqual(['keyring', 'openvtc-alice'])
     expect(visibleContextsOf([])).toBeUndefined()
     expect(visibleContextsOf(undefined)).toBeUndefined()
+  })
+})
+
+describe('an identity whose card names its did:scid form', () => {
+  it("is taken on as the did:webvh its agent lists, with that DID's key ids", async () => {
+    const { store } = identities()
+    const vault = await vaultWith(toScid(membershipCard, 'urn:uuid:scid-membership'))
+    const report = await adopt(store, vault.task)
+    expect(report.adopted.map((p) => [p.did, p.communityDid, p.vtaKeyIds])).toEqual([
+      [PERSONA_DID, COMMUNITY, keysOf(PERSONA_DID)],
+    ])
+    expect(report.cardsForOthers).toBe(1)
+  })
+
+  it('is not one the phone already holds, under either form', async () => {
+    const { store } = identities()
+    const vault = await vaultWith(toScid(membershipCard, 'urn:uuid:scid-membership'))
+    const report = await adopt(store, vault.task, [ofPersona], [PERSONA_DID])
+    expect(report.cardsForOthers).toBe(0)
   })
 })

@@ -31,6 +31,7 @@ import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
 import { VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
+import { sameIdentity } from './didScid'
 import { listKeyed, putKeyed } from './keyedRecords'
 import { vtaAgent } from './vtaAgent'
 import {
@@ -298,7 +299,7 @@ export async function recoverCardsFromAgent(
       continue
     }
     const item = classifyCredential(credential)
-    if (item.subjectDid !== persona.did || !item.communityDid) {
+    if (!item.subjectDid || !sameIdentity(item.subjectDid, persona.did) || !item.communityDid) {
       refused.push({ credentialId: id, communityDid: item.communityDid || undefined, reason: 'notOurs' })
       continue
     }
@@ -339,13 +340,13 @@ export async function recoverCardsFromAgent(
         : (await store.listHeldCredentials('role', item.communityDid)).some((c) => sameCard(c.credential, credential))
       if (!held) {
         if (existing) await store.saveMembership({ ...existing, role, roleVec: credential })
-        else await store.saveHeldCredential({ ...item, kind: 'role' })
+        else await store.saveHeldCredential({ ...item, subjectDid: persona.did, kind: 'role' })
       }
     } else if (item.kind === 'vetter-grant') {
       held = (await store.listHeldCredentials('vetter-grant', item.communityDid)).some((c) =>
         sameCard(c.credential, credential)
       )
-      if (!held) await store.saveHeldCredential({ ...item, kind: 'vetter-grant' })
+      if (!held) await store.saveHeldCredential({ ...item, subjectDid: persona.did, kind: 'vetter-grant' })
     } else {
       refused.push({ credentialId: id, communityDid: item.communityDid, reason: 'notOurs' })
       continue

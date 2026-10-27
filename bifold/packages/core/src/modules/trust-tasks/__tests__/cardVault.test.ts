@@ -278,6 +278,39 @@ describe('getting the cards back on a new phone', () => {
     expect(held).toHaveLength(1)
   })
 
+  // openvtc #503: a persona made as did:scid has its cards issued to that form, the same SCID as its did:webvh.
+  describe("a card issued to the persona's did:scid form", () => {
+    const asScid = (card: Record<string, unknown>) => ({
+      ...card,
+      credentialSubject: {
+        ...(card.credentialSubject as object),
+        id: 'did:scid:vh:1:QmPersona?src=dids.example/negative-weird',
+      },
+    })
+    const recoverFrom = async (...cards: Record<string, unknown>[]) => {
+      const vault = fakeVault()
+      for (const credential of cards) await vault.task('vault/credentials/receive/0.1', { credential })
+      resetCardVaultCache()
+      const community = fakeCommunityStore()
+      const result = await recoverCardsFromAgent(fakeAgent().agent, community.store, persona, vault.task, {
+        check: async () => undefined,
+      })
+      return { result, ...community }
+    }
+
+    it('is kept, its membership under the persona', async () => {
+      const { result, memberships } = await recoverFrom(asScid(membershipCard))
+      expect(result.restored).toEqual([membershipCard.id])
+      expect(memberships.get(COMMUNITY)).toMatchObject({ personaDid: PERSONA_DID })
+    })
+
+    it("a role card with no membership is held under the persona's DID, where it is looked for", async () => {
+      const { result, held } = await recoverFrom(asScid(roleVac))
+      expect(result.restored).toEqual([roleVac.id])
+      expect(held.map((h) => h.subjectDid)).toEqual([PERSONA_DID])
+    })
+  })
+
   it('does not keep a card that fails its check, or one about someone else', async () => {
     const vault = await agentThatKept()
     const other = { ...persona, did: 'did:webvh:QmOther:dids.example:other' }

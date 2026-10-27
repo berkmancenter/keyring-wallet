@@ -27,6 +27,7 @@
  * @module trust-tasks/module/vtiAdoptIdentities
  */
 
+import { sameIdentity } from './didScid'
 import type { VtaMintedDid } from './VtaClient'
 import type { AgentCard } from './vtiCardVault'
 import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
@@ -105,6 +106,9 @@ export async function adoptAgentIdentities(options: {
   const now = options.now ?? Date.now
   const held = new Set(options.held ?? [])
   const minted = new Map((await options.listDids()).map((d) => [d.did, d]))
+  // The agent's DID a card is about: the same DID, or its did:scid:vh:1 form (didScid).
+  const mintedAs = (subject: string) =>
+    minted.has(subject) ? subject : [...minted.keys()].find((did) => sameIdentity(did, subject))
   const otherIdentities = [...minted.keys()].filter((did) => !held.has(did)).length
   const report: AdoptionReport = { adopted: [], otherIdentities, cardsForOthers: 0, unreadable: [], failedCheck: [] }
   if (minted.size === 0) return report
@@ -119,11 +123,12 @@ export async function adoptAgentIdentities(options: {
     const item = classifyCredential(credential)
     // The cards a community gives an identity in it: membership, a role, a vetter grant.
     if (item.kind !== 'membership' && item.kind !== 'role' && item.kind !== 'vetter-grant') continue
-    if (!item.communityDid || !minted.has(item.subjectDid)) continue
-    if (!held.has(item.subjectDid)) report.cardsForOthers += 1
+    const did = item.subjectDid ? mintedAs(item.subjectDid) : undefined
+    if (!item.communityDid || !did) continue
+    if (!held.has(did)) report.cardsForOthers += 1
     const from = typeof credential.validFrom === 'string' ? credential.validFrom : ''
     const list = byCommunity.get(item.communityDid) ?? []
-    list.push({ id, did: item.subjectDid, membership: item.kind === 'membership', from, credential })
+    list.push({ id, did, membership: item.kind === 'membership', from, credential })
     byCommunity.set(item.communityDid, list)
   }
 
