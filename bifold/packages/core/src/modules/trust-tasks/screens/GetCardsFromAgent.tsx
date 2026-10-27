@@ -43,6 +43,8 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 export interface CardsBack {
   found: number
   restored: number
+  /** Cards this phone already held: not saved again. */
+  already?: number
   refused: RecoveredRefusal[]
   /** Identities whose agent did not answer. */
   unreachable: number
@@ -237,6 +239,7 @@ export async function getCardsFromAgent(
           onProgress: (p) => onProgress({ found: total.found, restored: before + p.restored }),
         })
         total.restored += got.restored.length
+        if (got.already.length) total.already = (total.already ?? 0) + got.already.length
         total.refused.push(...got.refused)
         if (got.restored.length) emitCommunityChanged(persona.communityDid, 'membership')
       } catch {
@@ -368,14 +371,16 @@ export const GetCardsFromAgent: React.FC<{
               {t('VtaLink.CommunitiesUnreadable', { count: result.unreadableIdentities })}
             </ThemedText>
           ) : null}
-          <ThemedText>
+          <ThemedText testID={testIdWithKey('AgentGetCardsSummary')}>
             {result.restored > 0
               ? t('VtaLink.CardsBack', { count: result.restored })
-              : result.found > 0
-                ? t('VtaLink.CardsBackNoneKept')
-                : result.unreachable === (result.asked ?? personas.length)
-                  ? t('VtaLink.CardsBackUnreachable')
-                  : t('VtaLink.CardsBackNone')}
+              : result.already
+                ? t('VtaLink.CardsBackNothingNew', { count: result.already })
+                : result.found > 0
+                  ? t('VtaLink.CardsBackNoneKept')
+                  : result.unreachable === (result.asked ?? personas.length)
+                    ? t('VtaLink.CardsBackUnreachable')
+                    : t('VtaLink.CardsBackNone')}
           </ThemedText>
           {(Object.keys(REFUSED_WORDS) as RecoveredRefusal['reason'][])
             .filter((reason) => refusedBy(reason) > 0)

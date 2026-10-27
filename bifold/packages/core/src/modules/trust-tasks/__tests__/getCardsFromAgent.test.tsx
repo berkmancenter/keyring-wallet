@@ -70,7 +70,11 @@ const found = (adopted: VtiPersona[], counts: Partial<AdoptionFound> = {}): Adop
   ...counts,
 })
 
-type Answer = { restored: string[]; refused: { reason: 'failedCheck' | 'notOurs' | 'unreadable' }[] }
+type Answer = {
+  restored: string[]
+  already?: string[]
+  refused: { reason: 'failedCheck' | 'notOurs' | 'unreadable' }[]
+}
 
 // Each agent's vault (its cards, or 'down'), and what restoring each identity's cards gives.
 const deps = (
@@ -95,7 +99,7 @@ const deps = (
     const got = answers[p.did] ?? { restored: [], refused: [] }
     o.onProgress?.({ found: o.cards.length, restored: 0 })
     o.onProgress?.({ found: o.cards.length, restored: got.restored.length })
-    return { found: o.cards.length, ...got }
+    return { found: o.cards.length, already: [], ...got }
   }) as never,
 })
 
@@ -344,6 +348,36 @@ describe('the Manage row', () => {
       'VtaLink.CardsBackNotOurs(count=1)'
     )
     expect(tree.queryByTestId(testIdWithKey('AgentGetCardsRefused_unreadable'))).toBeNull()
+  })
+
+  // #401 Farm run: a tap that brought nothing new showed only what was left, never that nothing was new.
+  it('a tap that finds everything already here says nothing is new', async () => {
+    const tree = renderRow(
+      [persona],
+      deps(
+        { [VTA]: [0, 1, 2].map((n) => cardAbout(persona.did, n)) },
+        { [persona.did]: { restored: [], already: ['a', 'b'], refused: [{ reason: 'notOurs' }] } }
+      )
+    )
+    await tap(tree)
+    expect(tree.getByTestId(testIdWithKey('AgentGetCardsSummary'))).toHaveTextContent(
+      'VtaLink.CardsBackNothingNew(count=2)'
+    )
+    expect(tree.getByTestId(testIdWithKey('AgentGetCardsRefused_notOurs'))).toHaveTextContent(
+      'VtaLink.CardsBackNotOurs(count=1)'
+    )
+  })
+
+  it('cards got back are said as got back, even with others already here', async () => {
+    const tree = renderRow(
+      [persona],
+      deps(
+        { [VTA]: [0, 1].map((n) => cardAbout(persona.did, n)) },
+        { [persona.did]: { restored: ['a'], already: ['b'], refused: [] } }
+      )
+    )
+    await tap(tree)
+    expect(tree.getByTestId(testIdWithKey('AgentGetCardsSummary'))).toHaveTextContent('VtaLink.CardsBack(count=1)')
   })
 
   it('an agent that does not answer is said plainly, and the button can be tried again', async () => {

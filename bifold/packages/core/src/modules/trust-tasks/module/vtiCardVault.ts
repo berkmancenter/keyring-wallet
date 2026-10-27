@@ -33,7 +33,12 @@ import { DeviceEventEmitter } from 'react-native'
 import { VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { listKeyed, putKeyed } from './keyedRecords'
 import { vtaAgent } from './vtaAgent'
-import { GenericRecordsCommunityStore, isCurrentMembership, type VtiCommunityStore } from './VtiCommunityStore'
+import {
+  GenericRecordsCommunityStore,
+  heldCredentialKey,
+  isCurrentMembership,
+  type VtiCommunityStore,
+} from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { checkDeliveredCard, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { classifyCredential, roleNameOf } from './vtiInbox'
@@ -257,10 +262,18 @@ export async function fetchAgentCards(
   return cards
 }
 
+/** The same card: its id, or its content when it has none (as held credentials are keyed). */
+const sameCard = (held: Record<string, unknown> | undefined, card: Record<string, unknown>) =>
+  !!held &&
+  heldCredentialKey({ kind: 'other', communityDid: '', credential: held }) ===
+    heldCredentialKey({ kind: 'other', communityDid: '', credential: card })
+
 /**
  * Keep, on this phone, each card the agent keeps that is about this persona
  * and still holds up (vtiDeliveredCheck). `cards` are the agent's cards
  * already fetched (`fetchAgentCards`); without them the vault is read here.
+ * A card this phone already holds is not saved again: it is `already`, not
+ * `restored`, so a tap that brings nothing new says so.
  */
 export async function recoverCardsFromAgent(
   agent: Agent,
@@ -272,10 +285,11 @@ export async function recoverCardsFromAgent(
     check?: (credential: Record<string, unknown>, issuer: string) => Promise<string | undefined>
     cards?: AgentCard[]
   } = {}
-): Promise<{ found: number; restored: string[]; refused: RecoveredRefusal[] }> {
+): Promise<{ found: number; restored: string[]; already: string[]; refused: RecoveredRefusal[] }> {
   const check = options.check ?? ((c, issuer) => checkDeliveredCard(agent, c, issuer))
   const cards = options.cards ?? (await fetchAgentCards(task))
   const restored: string[] = []
+  const already: string[] = []
   const refused: RecoveredRefusal[] = []
   options.onProgress?.({ found: cards.length, restored: 0 })
   for (const { id, credential } of cards) {
@@ -298,29 +312,40 @@ export async function recoverCardsFromAgent(
       refused.push({ credentialId: id, communityDid: item.communityDid, reason: 'failedCheck' })
       continue
     }
+    let held = false
     if (item.kind === 'membership') {
       const found = await store.getMembership(item.communityDid, persona.did)
       // The very card the community ended does not bring the membership back.
       if (found && !isCurrentMembership(found) && found.vmc?.id === credential.id) continue
       // A membership the community ended lends nothing to a new one.
       const existing = found && isCurrentMembership(found) ? found : undefined
-      await store.saveMembership({
-        communityDid: item.communityDid,
-        personaDid: persona.did,
-        role: existing?.role ?? 'member',
-        vmc: credential,
-        roleVec: existing?.roleVec,
-        grantedAt: typeof credential.validFrom === 'string' ? credential.validFrom : new Date().toISOString(),
-        validUntil: typeof credential.validUntil === 'string' ? credential.validUntil : undefined,
-        via: existing?.via ?? 'unknown',
-      })
+      held = sameCard(existing?.vmc, credential)
+      if (!held)
+        await store.saveMembership({
+          communityDid: item.communityDid,
+          personaDid: persona.did,
+          role: existing?.role ?? 'member',
+          vmc: credential,
+          roleVec: existing?.roleVec,
+          grantedAt: typeof credential.validFrom === 'string' ? credential.validFrom : new Date().toISOString(),
+          validUntil: typeof credential.validUntil === 'string' ? credential.validUntil : undefined,
+          via: existing?.via ?? 'unknown',
+        })
     } else if (item.kind === 'role') {
       const existing = await store.getMembership(item.communityDid, persona.did)
       const role = String(roleNameOf(credential) ?? 'member')
-      if (existing) await store.saveMembership({ ...existing, role, roleVec: credential })
-      else await store.saveHeldCredential({ ...item, kind: 'role' })
+      held = existing
+        ? sameCard(existing.roleVec, credential)
+        : (await store.listHeldCredentials('role', item.communityDid)).some((c) => sameCard(c.credential, credential))
+      if (!held) {
+        if (existing) await store.saveMembership({ ...existing, role, roleVec: credential })
+        else await store.saveHeldCredential({ ...item, kind: 'role' })
+      }
     } else if (item.kind === 'vetter-grant') {
-      await store.saveHeldCredential({ ...item, kind: 'vetter-grant' })
+      held = (await store.listHeldCredentials('vetter-grant', item.communityDid)).some((c) =>
+        sameCard(c.credential, credential)
+      )
+      if (!held) await store.saveHeldCredential({ ...item, kind: 'vetter-grant' })
     } else {
       refused.push({ credentialId: id, communityDid: item.communityDid, reason: 'notOurs' })
       continue
@@ -332,10 +357,14 @@ export async function recoverCardsFromAgent(
       kind,
       vault: { state: 'kept', at: new Date().toISOString() },
     })
+    if (held) {
+      already.push(id)
+      continue
+    }
     restored.push(id)
     options.onProgress?.({ found: cards.length, restored: restored.length })
   }
-  return { found: cards.length, restored, refused }
+  return { found: cards.length, restored, already, refused }
 }
 
 // ---------------------------------------------------------------------------

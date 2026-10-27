@@ -1730,6 +1730,8 @@
     "CommunitiesUnreadable_other": "{{count}} community identities couldn't be read from your agent, so they weren't brought back.",
     "CardsBackNone": "Your agent has no cards for this phone's communities.",
     "CardsBackNoneKept": "Your agent had cards, but none could be kept on this phone.",
+    "CardsBackNothingNew_one": "Nothing new: this phone already has the card your agent keeps for it.",
+    "CardsBackNothingNew_other": "Nothing new: this phone already has the {{count}} cards your agent keeps for it.",
     "CardsBackUnreachable": "Your agent didn't answer. Try again in a moment.",
     "CardsBackSomeUnreachable": "Your agent didn't answer for some communities. Try again in a moment.",
     "CardsBackFailedCheck_one": "1 card didn't check out, so Keyring didn't keep it.",

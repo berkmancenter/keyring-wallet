@@ -1585,6 +1585,8 @@
     "CommunitiesUnreadable_other": "{{count}} identidades de comunidade não puderam ser lidas do seu agente, então não foram trazidas de volta.",
     "CardsBackNone": "Seu agente não tem cartões para as comunidades deste telefone.",
     "CardsBackNoneKept": "Seu agente tinha cartões, mas nenhum pôde ser guardado neste telefone.",
+    "CardsBackNothingNew_one": "Nada de novo: este telefone já tem o cartão que seu agente guarda para ele.",
+    "CardsBackNothingNew_other": "Nada de novo: este telefone já tem os {{count}} cartões que seu agente guarda para ele.",
     "CardsBackUnreachable": "Seu agente não respondeu. Tente de novo em instantes.",
     "CardsBackSomeUnreachable": "Seu agente não respondeu para algumas comunidades. Tente de novo em instantes.",
     "CardsBackFailedCheck_one": "1 cartão não passou na verificação, então o Keyring não o guardou.",

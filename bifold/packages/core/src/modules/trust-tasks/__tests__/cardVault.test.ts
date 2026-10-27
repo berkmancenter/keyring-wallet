@@ -251,6 +251,33 @@ describe('getting the cards back on a new phone', () => {
     expect(result.restored).toEqual([roleVac.id])
   })
 
+  // #401 Farm run: a tap made when everything was already here said it had got the cards back.
+  it('a card this phone already holds is not saved again: it is already here, not got back', async () => {
+    const vault = await agentThatKept()
+    resetCardVaultCache()
+    const { store, memberships } = fakeCommunityStore()
+    const recover = () =>
+      recoverCardsFromAgent(fakeAgent().agent, store, persona, vault.task, { check: async () => undefined })
+    expect((await recover()).restored.sort()).toEqual([membershipCard.id, roleCard.id].sort())
+    const saved = memberships.get(COMMUNITY)
+    const again = await recover()
+    expect(again.restored).toEqual([])
+    expect(again.already.sort()).toEqual([membershipCard.id, roleCard.id].sort())
+    expect(memberships.get(COMMUNITY)).toBe(saved)
+  })
+
+  it('the same for a role card held with no membership', async () => {
+    const vault = fakeVault()
+    await vault.task('vault/credentials/receive/0.1', { credential: roleVac })
+    const { store, held } = fakeCommunityStore()
+    const recover = () =>
+      recoverCardsFromAgent(fakeAgent().agent, store, persona, vault.task, { check: async () => undefined })
+    expect((await recover()).restored).toEqual([roleVac.id])
+    const again = await recover()
+    expect(again).toMatchObject({ restored: [], already: [roleVac.id] })
+    expect(held).toHaveLength(1)
+  })
+
   it('does not keep a card that fails its check, or one about someone else', async () => {
     const vault = await agentThatKept()
     const other = { ...persona, did: 'did:webvh:QmOther:dids.example:other' }
