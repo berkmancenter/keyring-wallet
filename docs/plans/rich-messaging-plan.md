@@ -1,6 +1,6 @@
 # Rich Messaging — Plan
 
-**Status:** Proposed. Nothing here is built.
+**Status:** Steps 1–4 built and shipped, first in store build 272: the `chat/1.0` message, reactions and replies (keyring-bifold#525, #530, #556, #561, #564), the emoji picker (#552, #559, #574), inline photos (#577, #581, #584, #588, #591, #592), and message history with disappearing messages (#551, #560, #562, #570, #572, #573), with the two-phone run in keyring-wallet#639. Chat runs over DIDComm v1 only; chat over v2 (§4.1) is still to build. D2 is not recorded as decided.
 **Scope:** The smallest set of changes that makes one-to-one Keyring chat feel like a modern messenger:
 - **reactions;**
 - **quoted replies;**
@@ -14,6 +14,7 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 - [`rich-messaging-plan/2026-10-21-al.md`](./rich-messaging-plan/2026-10-21-al.md) — the research this plan is built on: current code, what the protocols allow, how Signal, WhatsApp and Matrix move media, and whether a VTA can host media.
 - [`rich-messaging-plan/2026-10-24-al.md`](./rich-messaging-plan/2026-10-24-al.md) — the response to the review of 2026-10-22, point by point, and the evaluation of message history and disappearing messages.
 - [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research, including the Credo mediator's 7-day cleanup; Step 4's bounds on what a peer can set (a 1-hour floor, a version cap) and the backstop for a received message's clock; and D2's acceptance for the Credo mediator.
+- [`rich-messaging-plan/2026-10-27-al.md`](./rich-messaging-plan/2026-10-27-al.md) — D2 and Step 3: photos shipped in store build 272; what is on record about D2's acceptance and Step 0's measurements, and what is not.
 
 **Related plans:**
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
@@ -62,7 +63,7 @@ The plan adds five things, all carried by the messages we already send through t
   - turn on disappearing messages for a chat, which both phones honour.
 
 **Non-goals**
-- **Videos, documents and full-resolution photos.** They do not fit in a 1 MiB message, and every way to move them needs storage that someone hosts (§8).
+- **Videos, documents and full-resolution photos.** They do not fit in a 1 MiB message, and every way to move them needs storage that someone hosts (§8). Upstream data rooms now serve that storage as `rooms/blobs/*`, so large media can use a room; this plan's no-hosting goal (G5) does not adopt that path.
 - **Group chat.** It belongs to the rooms subtask.
 - **Third-party GIF search** (Giphy, Tenor). It sends users' search terms to a third party and needs an API key in the app. GIFs come from the phone.
 - **Edits, delete-for-everyone, read receipts and typing indicators.** The event format leaves room for them (§4.2), but they are not part of the minimum.
@@ -405,7 +406,7 @@ Videos, documents and full-resolution photos need bytes to live **outside** the 
   - VTA app-state is JSON only, capped at 64 KiB per record (`MAX_VALUE_BYTES = 65_536`, `vta-service/src/operations/app_state.rs`), and has **no blob member by design**: "1.0 has no blob member at all … [the cap] is what keeps a consumer from quietly treating `value` as a blob store" (`docs/05-design-notes/appstate-store.md`).
   - No grant scoped to a peer exists. Giving a peer read access means an admin adding them to the ACL for a whole context, with write access too, since "a namespace in 1.0 is collision avoidance, **not** a trust boundary" (`appstate-store.md`). There is no share link.
   - Not every Keyring user has a VTA. The Farm path is "optional and additive" (`docs/plans/keyring-on-the-vta-farm.md` on `origin/main`).
-- **Data rooms** are hosted by a VTC or the `room-host` binary, and the room host "is not part of the VTA, on purpose" (`docs/02-vta/data-rooms.md`). Their blob layer is a design in Keyring's own rooms subtask that "**does** need an upstream spec" (`rooms_group_messaging_subtask.md` §1). Bytes would still sit with whoever runs the host.
+- **Data rooms** are hosted by a VTC or the `room-host` binary, and the room host "is not part of the VTA, on purpose" (`docs/02-vta/data-rooms.md`). Their blob layer is served upstream: `rooms/blobs/*` with `rooms/keys/file-key/0.2` and a pluggable `BlobStore` (VTI `fc157f76`; `docs/05-design-notes/data-rooms-files.md`; Keyring's `rooms_group_messaging_subtask.md` §8.2). Large media can therefore use a room. Bytes still sit with whoever runs the host, so this does not meet G5 for one-to-one chat, which has no room and hosts nothing.
 - **Splitting media into many messages** through the mediator would let a video arrive in pieces. It turns the mediator into a file store by the back door, fills the queue caps (200 soft, 1,000 hard per DID on Affinidi) and costs every pickup. Rejected.
 
-**The path that fits the no-hosting goal** is upstream: an app-state `blobRef` (a MINOR addition the VTI design note leaves open, `appstate-store.md`) together with a peer-scoped read grant, or the rooms blob layer. Either one would put a user's media on infrastructure the *user* chose, at the cost and under the terms of that operator. Keyring would then add a link-based attachment variant (§4.3). Until one of those exists upstream, large media stays out of scope.
+**The paths that fit the no-hosting goal** are upstream: the rooms blob layer, which now exists, or an app-state `blobRef` (a MINOR addition the VTI design note leaves open, `appstate-store.md`) together with a peer-scoped read grant, which does not. Either one puts a user's media on infrastructure the *user* chose, at the cost and under the terms of that operator. Keyring would add a link-based attachment variant (§4.3) on top of either. One-to-one chat's no-hosting goal is unchanged, so large media stays out of this plan's scope until a product decision picks a room-hosted or app-state attachment path.
