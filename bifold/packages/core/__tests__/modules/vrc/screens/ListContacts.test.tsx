@@ -1,5 +1,5 @@
 import { ClaimFormat, JsonTransformer, W3cCredentialRecord } from '@credo-ts/core'
-import { fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { Text } from 'react-native'
 import { container } from 'tsyringe'
@@ -151,6 +151,20 @@ describe('ListContacts Screen', () => {
     await waitFor(() => {
       expect(tree.getByText('Contacts.EmptyList')).toBeTruthy()
     })
+  })
+
+  test('does not say "No contacts yet" while the contacts are still being read', async () => {
+    const loading = mockUseOpenIDCredentials()
+    mockUseOpenIDCredentials.mockReturnValue({ ...loading, openIdState: { ...loading.openIdState, isLoading: true } })
+    const tree = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    // The control is 'Renders correctly with no contacts': the same empty list, loaded, does say it.
+    await act(async () => undefined)
+    expect(tree.queryByText('Contacts.EmptyList')).toBeNull()
   })
 
   test('Displays contacts from DTG credentials', async () => {

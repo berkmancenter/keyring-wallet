@@ -243,29 +243,19 @@ export const OpenIDCredentialRecordProvider: React.FC<PropsWithChildren<OpenIDCr
   useEffect(() => {
     if (!agent) return
 
-    agent.w3cCredentials?.getAll().then((w3cCredentialRecords) => {
-      setState((prev) => ({
-        ...prev,
-        w3cCredentialRecords: filterW3CCredentialsOnly(w3cCredentialRecords),
-        isLoading: false,
-      }))
-    })
-
-    agent.sdJwtVc?.getAll().then((creds) => {
-      setState((prev) => ({
-        ...prev,
-        sdJwtVcRecords: filterSdJwtCredentialsOnly(creds),
-        isLoading: false,
-      }))
-    })
-
-    agent.mdoc?.getAll().then((mdocVcRecords) => {
-      setState((prev) => ({
-        ...prev,
-        mdocVcRecords,
-        isLoading: false,
-      }))
-    })
+    // Loading ends when every list has been read (or failed), not with the first: a screen
+    // that shows "none yet" while loading would otherwise flash it after each unlock.
+    Promise.allSettled([
+      agent.w3cCredentials?.getAll().then((w3cCredentialRecords) => {
+        setState((prev) => ({ ...prev, w3cCredentialRecords: filterW3CCredentialsOnly(w3cCredentialRecords) }))
+      }),
+      agent.sdJwtVc?.getAll().then((creds) => {
+        setState((prev) => ({ ...prev, sdJwtVcRecords: filterSdJwtCredentialsOnly(creds) }))
+      }),
+      agent.mdoc?.getAll().then((mdocVcRecords) => {
+        setState((prev) => ({ ...prev, mdocVcRecords }))
+      }),
+    ]).then(() => setState((prev) => ({ ...prev, isLoading: false })))
   }, [agent])
 
   useEffect(() => {

@@ -159,6 +159,33 @@ describe('OpenIDCredentialRecordProvider', () => {
     expect(result.current.openIdState.openIDCredentialRecords).toEqual([])
   })
 
+  test('keeps loading until every list is read, not just the first', async () => {
+    let resolveW3c: (records: W3cCredentialRecord[]) => void = () => undefined
+    const agent = createAgentMock()
+    agent.w3cCredentials.getAll = jest.fn(() => new Promise<W3cCredentialRecord[]>((resolve) => (resolveW3c = resolve)))
+    mockUseAppAgent.mockReturnValue({ agent })
+
+    const { result } = renderHook(() => useOpenIDCredentials(), { wrapper })
+
+    // SD-JWT (and the absent mdoc module) are done; the W3C list, which Contacts reads, is not.
+    await waitFor(() => expect(agent.sdJwtVc.getAll).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(result.current.openIdState.isLoading).toBe(true)
+
+    resolveW3c([])
+    await waitFor(() => expect(result.current.openIdState.isLoading).toBe(false))
+  })
+
+  test('stops loading when a list fails to read', async () => {
+    const agent = createAgentMock()
+    agent.w3cCredentials.getAll = jest.fn().mockRejectedValue(new Error('store closed'))
+    mockUseAppAgent.mockReturnValue({ agent })
+
+    const { result } = renderHook(() => useOpenIDCredentials(), { wrapper })
+
+    await waitFor(() => expect(result.current.openIdState.isLoading).toBe(false))
+  })
+
   test('delegates credential lookup and storage helpers to credentialRecord utilities', async () => {
     const agent = createAgentMock()
     const w3cRecord = createRecord(W3cCredentialRecord.prototype, { id: 'w3c-id' })
@@ -183,7 +210,9 @@ describe('OpenIDCredentialRecordProvider', () => {
     await expect(result.current.getW3CCredentialById('w3c-id')).resolves.toBe(w3cRecord)
     await expect(result.current.getSdJwtCredentialById('sd-jwt-id')).resolves.toBe(sdJwtRecord)
     await expect(result.current.getMdocCredentialById('mdoc-id')).resolves.toBe(mdocRecord)
-    await expect(result.current.getCredentialById('w3c-id', OpenIDCredentialType.W3cCredential)).resolves.toBe(w3cRecord)
+    await expect(result.current.getCredentialById('w3c-id', OpenIDCredentialType.W3cCredential)).resolves.toBe(
+      w3cRecord
+    )
     await expect(result.current.getCredentialById('sd-jwt-id')).resolves.toBe(sdJwtRecord)
 
     await result.current.storeCredential(w3cRecord)

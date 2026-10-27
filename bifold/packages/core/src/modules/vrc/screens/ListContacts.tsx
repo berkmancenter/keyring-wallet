@@ -37,7 +37,7 @@ const ListContacts: React.FC = () => {
   const { start, stop } = useTour()
   const screenIsFocused = useIsFocused()
   const {
-    openIdState: { w3cCredentialRecords },
+    openIdState: { w3cCredentialRecords, isLoading },
   } = useOpenIDCredentials()
   // Read again on each return to the list, so a merge or a separation made on a contact's screen shows here.
   const contactLinks = useContactLinks(screenIsFocused)
@@ -301,7 +301,8 @@ const ListContacts: React.FC = () => {
         data={groupedContacts}
         keyExtractor={(item) => item.issuer.id}
         renderItem={renderContactItem}
-        ListEmptyComponent={EmptyContactsList}
+        // Not "No contacts yet" while the contacts are still being read (after an unlock or a start).
+        ListEmptyComponent={isLoading ? null : EmptyContactsList}
         showsVerticalScrollIndicator={false}
       />
     </View>
