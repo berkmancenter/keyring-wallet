@@ -1,6 +1,6 @@
 import { ProofCustomMetadata, ProofMetadata } from '@bifold/verifier'
 import { useAgent, useProofByState } from '@bifold/react-hooks'
-import { DidCommProofState} from '@credo-ts/didcomm'
+import { DidCommProofState } from '@credo-ts/didcomm'
 import { CardStyleInterpolators, StackCardStyleInterpolator, createStackNavigator } from '@react-navigation/stack'
 import React, { useEffect, useMemo } from 'react'
 import { View } from 'react-native'
@@ -28,6 +28,7 @@ import ProofRequestStack from './ProofRequestStack'
 import SettingStack from './SettingStack'
 import TabStack from './TabStack'
 import { useDefaultStackOptions } from './defaultStackOptions'
+import { restoreReturnState } from '../utils/navReturn'
 
 const MainStack: React.FC = () => {
   const { t } = useTranslation()
@@ -41,6 +42,11 @@ const MainStack: React.FC = () => {
     TOKENS.OBJECT_SCREEN_CONFIG,
   ])
   const declinedProofs = useProofByState([DidCommProofState.Declined, DidCommProofState.Abandoned])
+  // Back to where the person was before an inactivity lock (utils/navReturn.ts). Declared before
+  // useDeepLinks, so its effect runs first and a link that came with the unlock navigates on top.
+  useEffect(() => {
+    restoreReturnState()
+  }, [])
   useDeepLinks()
 
   // Initialize R-card credential hook to handle migration from state to Credo
