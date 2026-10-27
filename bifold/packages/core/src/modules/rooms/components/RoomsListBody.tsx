@@ -4,7 +4,8 @@
  * from the agent's keys goes in its own group, since its community is not known yet.
  *
  * Reading, failure and "not available" each say so: the list is never shown empty for a reason other than
- * having no rooms. Offers are listed here; reviewing and accepting one is a later step.
+ * having no rooms. A room opens its screen when given `onOpenRoom`. Offers are listed here; reviewing and
+ * accepting one is a later step.
  *
  * @module rooms/components/RoomsListBody
  */

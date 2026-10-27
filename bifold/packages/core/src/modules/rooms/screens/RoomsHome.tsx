@@ -5,6 +5,7 @@
  *
  * @module rooms/screens/RoomsHome
  */
+import { useNavigation } from '@react-navigation/native'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { ScrollView, StyleSheet } from 'react-native'
@@ -12,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import RoomsListBody from '../components/RoomsListBody'
 import { SampleDataBanner } from '../components/SampleDataBanner'
@@ -21,8 +23,13 @@ import { useRoomsService } from '../useRoomsService'
 const RoomsHome: React.FC = () => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
+  const navigation = useNavigation()
   const service = useRoomsService()
   const myRooms = useMyRooms(service)
+  const openRoom = (room: { roomId: string }) =>
+    (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(Screens.Room, {
+      roomId: room.roomId,
+    })
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 16, gap: 16 },
@@ -33,7 +40,7 @@ const RoomsHome: React.FC = () => {
         {service ? (
           <>
             <SampleDataBanner service={service} />
-            <RoomsListBody myRooms={myRooms} acrossCommunities />
+            <RoomsListBody myRooms={myRooms} acrossCommunities onOpenRoom={openRoom} />
           </>
         ) : (
           <ThemedText testID={testIdWithKey('RoomsOff')}>{t('Rooms.Off')}</ThemedText>

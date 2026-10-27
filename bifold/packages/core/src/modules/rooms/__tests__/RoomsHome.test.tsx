@@ -12,6 +12,9 @@ import type { RoomsService } from '../types'
 
 let mockService: RoomsService | undefined
 jest.mock('../useRoomsService', () => ({ useRoomsService: () => mockService }))
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
+}))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const RoomsHome = require('../screens/RoomsHome').default

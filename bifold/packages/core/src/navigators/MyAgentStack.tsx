@@ -26,6 +26,7 @@ import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
 import SignIn from '../modules/trust-tasks/screens/SignIn'
 import VtaClaim from '../modules/trust-tasks/screens/VtaClaim'
 import RoomsHome from '../modules/rooms/screens/RoomsHome'
+import Room from '../modules/rooms/screens/Room'
 import { MyAgentStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
@@ -174,6 +175,11 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.RoomsHome}
         component={RoomsHome}
         options={{ title: t('Rooms.Rooms'), ...ScreenOptionsDictionary[Screens.RoomsHome] }}
+      />
+      <Stack.Screen
+        name={Screens.Room}
+        component={Room}
+        options={{ title: t('Rooms.Room'), ...ScreenOptionsDictionary[Screens.Room] }}
       />
     </Stack.Navigator>
   )
