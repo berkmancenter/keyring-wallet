@@ -5,10 +5,12 @@
  */
 import { render } from '@testing-library/react-native'
 import React, { useContext } from 'react'
+import { DeviceEventEmitter } from 'react-native'
 
 import { AuthContext, AuthProvider, LockoutReason } from '../src/contexts/auth'
 import { Screens, Stacks } from '../src/types/navigators'
 import { noteNavigationState, restoreReturnState, setReturnNavigationRef } from '../src/utils/navReturn'
+import { WALLET_LOCKED_EVENT } from '../src/utils/walletLocked'
 
 const mockDispatch = jest.fn()
 jest.mock('../src/contexts/store', () => ({
@@ -61,5 +63,16 @@ describe('the screen after a lock', () => {
     lockWith(LockoutReason.Logout)
     expect(restoreReturnState()).toBe(false)
     expect(ref.resetRoot).not.toHaveBeenCalled()
+  })
+})
+
+// What is kept only while the wallet is open (bring back's card reads) goes on both.
+describe('a lock or a log out is told to what is kept while unlocked', () => {
+  it.each([LockoutReason.Timeout, LockoutReason.Logout])('%s', (reason) => {
+    const heard = jest.fn()
+    const sub = DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, heard)
+    lockWith(reason)
+    sub.remove()
+    expect(heard).toHaveBeenCalledWith(reason)
   })
 })

@@ -19,7 +19,7 @@ import {
   persona,
 } from '../../../../__tests__/helpers/cardVault'
 import { testIdWithKey } from '../../../utils/testable'
-import { fetchAgentCards, recoverCardsFromAgent, type AgentCard } from '../module/vtiCardVault'
+import { fetchAgentCards, forgetCardReads, recoverCardsFromAgent, type AgentCard } from '../module/vtiCardVault'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 import {
   bringBackFromAgent,
@@ -45,6 +45,9 @@ jest.mock('react-i18next', () => {
 })
 
 const agent = {} as Agent
+
+// Each test reads its agent as a fresh session would.
+beforeEach(() => forgetCardReads())
 const VTA = persona.vtaDid
 const OTHER_VTA = 'did:webvh:QmVta2:dids.example:other-vta'
 const second: VtiPersona = {

@@ -14,7 +14,7 @@ import {
   roleVac,
 } from '../../../../__tests__/helpers/cardVault'
 import type { VtaMintedDid } from '../module/VtaClient'
-import { fetchAgentCards } from '../module/vtiCardVault'
+import { fetchAgentCards, forgetCardReads } from '../module/vtiCardVault'
 import {
   adoptAgentIdentities,
   keyIdsFromDocument,
@@ -24,6 +24,9 @@ import {
 import type { VtiIdentityStore, VtiPersona } from '../module/VtiIdentityStore'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+
+// Each test reads its agent as a fresh session would.
+beforeEach(() => forgetCardReads())
 
 const VTA = persona.vtaDid
 const OTHER_COMMUNITY = 'did:webvh:QmOther:vtc.example:second-vtc'

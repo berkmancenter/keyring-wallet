@@ -29,6 +29,7 @@ import {
   type AdoptionReport,
 } from '../module/vtiAdoptIdentities'
 import {
+  cardsOnPhone,
   fetchAgentCards,
   recoverCardsFromAgent,
   type AgentCard,
@@ -77,8 +78,15 @@ export interface GetCardsDeps {
   store: (agent: Agent) => VtiCommunityStore
   /** The agent, connected, as a task sender. */
   taskFor: (agent: Agent, vtaDid: string) => Promise<VaultTask>
-  /** Every card the agent keeps, each fetched once; `onRead` hears how many are read of how many. */
-  fetchCards: (task: VaultTask, onRead?: (read: number, of: number) => void) => Promise<AgentCard[]>
+  /**
+   * Every card the agent keeps, each fetched once; `onRead` hears how many are read of how many, and a card in
+   * `onPhone` is not fetched.
+   */
+  fetchCards: (
+    task: VaultTask,
+    onRead?: (read: number, of: number) => void,
+    onPhone?: ReadonlyMap<string, Record<string, unknown>>
+  ) => Promise<AgentCard[]>
   /** Take on the agent's identities this phone does not hold yet (`held`: the DIDs it does), from its `cards`. */
   adopt: (agent: Agent, vtaDid: string, held: string[], cards: AgentCard[]) => Promise<AdoptionFound>
 }
@@ -177,12 +185,15 @@ function vaultReader(
   onRead?: (read: number, of: number) => void
 ): (vtaDid: string) => Promise<VaultRead | undefined> {
   const reads = new Map<string, Promise<VaultRead | undefined>>()
+  // The cards already on this phone, read once a run: the vault is not asked for them again.
+  let onPhone: Promise<Map<string, Record<string, unknown>>> | undefined
   return (vtaDid) => {
     let read = reads.get(vtaDid)
     if (!read) {
       read = (async () => {
         const task = await deps.taskFor(agent, vtaDid)
-        return { task, cards: await deps.fetchCards(task, onRead) }
+        onPhone ??= cardsOnPhone(deps.store(agent)).catch(() => new Map())
+        return { task, cards: await deps.fetchCards(task, onRead, await onPhone) }
       })().catch(() => undefined)
       reads.set(vtaDid, read)
     }

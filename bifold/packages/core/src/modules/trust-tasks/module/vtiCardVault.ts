@@ -30,6 +30,8 @@ import type { Agent } from '@credo-ts/core'
 import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
+import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
+
 import { VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { sameIdentity } from './didScid'
 import { listKeyed, putKeyed } from './keyedRecords'
@@ -109,9 +111,10 @@ async function setState(agent: Agent, record: CardVaultRecord): Promise<void> {
   DeviceEventEmitter.emit(VTI_CARD_VAULT_EVENT, { credentialId: record.credentialId })
 }
 
-/** For tests: forget the cache. */
+/** For tests: forget the cache, and the cards read this session, as a relaunch does. */
 export function resetCardVaultCache(): void {
   cache.clear()
+  forgetCardReads()
 }
 
 /** For tests: set one card's state in the cache only (nothing is stored), and announce it. */
@@ -232,6 +235,27 @@ export const AGENT_CARD_QUERIES: Record<string, string>[] = [
 ]
 
 /**
+ * The agent's cards read this app session, by id, so a second tap asks the
+ * vault only for what it has not read yet. The reads are one at a time
+ * (VtaClient serialises its tasks; the vault has no batch read) and are most
+ * of a run's time. In memory only, and dropped when the wallet locks or the
+ * person logs out, so a locked phone holds no card it was only shown. A card
+ * read before is still checked on every run (vtiDeliveredCheck reads its
+ * status then), so one revoked since is refused as before.
+ */
+const cardReads = new Map<string, Record<string, unknown>>()
+
+/** Drop the cards read this session: on lock and log out, and between tests. */
+export function forgetCardReads(): void {
+  cardReads.clear()
+}
+// Registered when this module loads and never removed, unlike this file's other listeners, and on purpose. A
+// release build inlines requires, so it runs only once something first uses this module, but cardReads lives
+// here too: before then there is nothing to forget. Keep it here rather than in RootStack. A test that resets
+// modules around this file would add a listener per load.
+DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, forgetCardReads)
+
+/**
  * Every community card the agent keeps, each fetched once, whichever query
  * found it. The vault cannot be asked for one identity's cards (its query has
  * no subject filter, and what it answers names no subject), so a run that
@@ -242,11 +266,13 @@ export const AGENT_CARD_QUERIES: Record<string, string>[] = [
  * returned without its credential. `onRead` hears how many cards there are as
  * soon as the queries answer, then each one read: the reads are most of a
  * run's time (#401 re-time: 88 cards, ~40 s), and a count that sat at 0 for
- * all of it read as stuck.
+ * all of it read as stuck. A card on the phone already (`onPhone`, by id) or
+ * read earlier this session is not fetched again.
  */
 export async function fetchAgentCards(
   task: VaultTask,
-  onRead?: (read: number, of: number) => void
+  onRead?: (read: number, of: number) => void,
+  onPhone?: ReadonlyMap<string, Record<string, unknown>>
 ): Promise<AgentCard[]> {
   const ids = new Set<string>()
   for (const query of AGENT_CARD_QUERIES) {
@@ -256,11 +282,30 @@ export async function fetchAgentCards(
   const cards: AgentCard[] = []
   onRead?.(0, ids.size)
   for (const id of ids) {
-    const got = await task<{ credential?: Record<string, unknown> }>(VAULT_GET, { id }).catch(() => undefined)
-    cards.push({ id, credential: got?.credential })
+    let credential = onPhone?.get(id) ?? cardReads.get(id)
+    if (!credential) {
+      const got = await task<{ credential?: Record<string, unknown> }>(VAULT_GET, { id }).catch(() => undefined)
+      credential = got?.credential
+      if (credential) cardReads.set(id, credential)
+    }
+    cards.push({ id, credential })
     onRead?.(cards.length, ids.size)
   }
   return cards
+}
+
+/** The cards this phone holds, by id: the agent's vault need not be asked for them. */
+export async function cardsOnPhone(store: VtiCommunityStore): Promise<Map<string, Record<string, unknown>>> {
+  const held = new Map<string, Record<string, unknown>>()
+  const add = (credential?: Record<string, unknown>) => {
+    if (typeof credential?.id === 'string' && credential.id) held.set(credential.id, credential)
+  }
+  for (const m of await store.listMemberships()) {
+    add(m.vmc)
+    add(m.roleVec)
+  }
+  for (const h of await store.listHeldCredentials()) add(h.credential)
+  return held
 }
 
 /** The same card: its id, or its content when it has none (as held credentials are keyed). */
