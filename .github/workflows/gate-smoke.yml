@@ -14,6 +14,21 @@ name: Gate smoke (CI runners)
 # file that is not yet on main is refused, so a PR is how a change to this workflow is tried). The job fails
 # only when a ROW says FAIL (or the leg broke before its rows).
 
+# A workflow_run run is attributed to the DEFAULT BRANCH HEAD at trigger time, not to the commit that
+# triggered it, so GitHub's own title for this run names whatever main's head was when "Test builds" finished
+# — a different commit whenever main moved during the build. run-name is evaluated before any job, so it can
+# only read the event and the inputs, not the artifact-derived sha the `builds` job resolves; it carries the
+# triggering commit, and the smoke jobs below carry the sha the artifacts were actually built from. When those
+# two disagree, that disagreement is itself worth seeing.
+run-name: >-
+  Gate smoke ·
+  ${{ github.event_name == 'workflow_run'
+  && format('{0} (Test builds {1})', github.event.workflow_run.head_sha, github.event.workflow_run.id)
+  || github.event_name == 'pull_request' && format('PR #{0}', github.event.number)
+  || inputs.run-id != '' && format('Test builds {0}', inputs.run-id)
+  || inputs.wallet-sha != '' && inputs.wallet-sha
+  || 'newest green push build of main' }}
+
 on:
   pull_request:
     branches: [main]
@@ -111,7 +126,7 @@ jobs:
           echo "test-builds run $run (wallet $wallet): iOS ${ios:-none}, Android ${android:-none}; platform $platform" >> "$GITHUB_STEP_SUMMARY"
 
   ios:
-    name: iOS smoke (macos-26)
+    name: iOS smoke (macos-26) · ${{ needs.builds.outputs.wallet }}
     needs: builds
     if: needs.builds.outputs.platform != 'android'
     runs-on: macos-26
@@ -262,7 +277,7 @@ jobs:
           [ "$OK" = true ] || { echo "::error::a ROW failed or the leg broke (see the summary)"; exit 1; }
 
   android:
-    name: Android smoke (ubuntu-latest, KVM)
+    name: Android smoke (ubuntu-latest, KVM) · ${{ needs.builds.outputs.wallet }}
     needs: builds
     if: needs.builds.outputs.platform != 'ios'
     runs-on: ubuntu-latest
