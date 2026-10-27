@@ -2863,6 +2863,25 @@
     "PostUnread": "Ce message n'a pas pu être lu.",
     "PostsFailed": "Impossible de lire les messages de ce salon. Tirez vers le bas pour réessayer.",
     "PostsNone": "Aucun message pour l'instant.",
-    "LoadOlder": "Charger les messages plus anciens"
+    "LoadOlder": "Charger les messages plus anciens",
+    "Offer": "Invitation à un salon",
+    "OfferFrom": "{{community}} vous invite dans un salon",
+    "OfferWhatJoiningShares": "Ce que rejoindre partage",
+    "OfferJoinAs": "Vous rejoignez en tant que {{who}}. Les membres voient cette identité sur vos publications.",
+    "OfferCommunitySees": "{{community}} voit que vous avez accepté.",
+    "OfferAccept": "Rejoindre le salon",
+    "OfferNotNow": "Pas maintenant",
+    "OfferNotNowHint": "L'invitation est masquée sur ce téléphone seulement. La communauté n'est pas prévenue.",
+    "OfferConfirmTitle": "Rejoindre ce salon ?",
+    "OfferConfirmBody": "Vous rejoignez {{room}} en tant que {{who}}.",
+    "OfferReadFailed": "Impossible de lire cette invitation. Réessayez plus tard.",
+    "OfferRefreshed": "L'invitation a été relue, car la version affichée n'était plus à jour. Vérifiez-la, puis rejoignez.",
+    "OfferAcceptFailed": "Impossible de rejoindre le salon. Réessayez.",
+    "OfferHideFailed": "Impossible de masquer l'invitation. Réessayez.",
+    "OfferGone": "Cette invitation n'est plus disponible.",
+    "OfferNotAMember": "Vous n'êtes plus membre actif de cette communauté : vous ne pouvez pas rejoindre ses salons.",
+    "OfferAlreadyAccepted": "Cette invitation a déjà été acceptée et ne peut pas l'être de nouveau. Demandez à la communauté de vous retirer du salon et de vous inviter à nouveau.",
+    "OfferAdmissionPending": "La communauté n'a pas encore confirmé. Réessayez dans une minute.",
+    "OfferKeyHolderRefused": "La communauté ne peut pas vous ajouter pour le moment. Réessayez plus tard."
   }
 }

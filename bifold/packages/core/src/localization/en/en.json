@@ -2915,6 +2915,25 @@
     "PostUnread": "This post couldn't be read.",
     "PostsFailed": "Couldn't read this room's posts. Pull down to try again.",
     "PostsNone": "No posts yet.",
-    "LoadOlder": "Load older posts"
+    "LoadOlder": "Load older posts",
+    "Offer": "Room offer",
+    "OfferFrom": "{{community}} offers you a room",
+    "OfferWhatJoiningShares": "What joining shares",
+    "OfferJoinAs": "You join as {{who}}. Members see this identity on what you post.",
+    "OfferCommunitySees": "{{community}} sees that you accepted.",
+    "OfferAccept": "Join room",
+    "OfferNotNow": "Not now",
+    "OfferNotNowHint": "This hides the offer on this phone only. The community isn't told.",
+    "OfferConfirmTitle": "Join this room?",
+    "OfferConfirmBody": "You join {{room}} as {{who}}.",
+    "OfferReadFailed": "Couldn't read this offer. Try again later.",
+    "OfferRefreshed": "This offer was read again because the last look was out of date. Check it, then join.",
+    "OfferAcceptFailed": "Couldn't join the room. Try again.",
+    "OfferHideFailed": "Couldn't hide the offer. Try again.",
+    "OfferGone": "This offer is no longer available.",
+    "OfferNotAMember": "You're no longer an active member of this community, so you can't join its rooms.",
+    "OfferAlreadyAccepted": "This offer was already accepted and can't be accepted again. Ask the community to remove you from the room and offer it to you again.",
+    "OfferAdmissionPending": "The community hasn't confirmed yet. Try again in a minute.",
+    "OfferKeyHolderRefused": "The community couldn't add you right now. Try again later."
   }
 }

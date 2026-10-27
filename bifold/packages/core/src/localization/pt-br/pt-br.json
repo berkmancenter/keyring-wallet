@@ -2765,6 +2765,25 @@
     "PostUnread": "Não foi possível ler esta publicação.",
     "PostsFailed": "Não foi possível ler as publicações desta sala. Puxe para baixo para tentar de novo.",
     "PostsNone": "Nenhuma publicação ainda.",
-    "LoadOlder": "Carregar publicações anteriores"
+    "LoadOlder": "Carregar publicações anteriores",
+    "Offer": "Convite para sala",
+    "OfferFrom": "{{community}} convida você para uma sala",
+    "OfferWhatJoiningShares": "O que entrar compartilha",
+    "OfferJoinAs": "Você entra como {{who}}. Os membros veem essa identidade no que você publicar.",
+    "OfferCommunitySees": "{{community}} vê que você aceitou.",
+    "OfferAccept": "Entrar na sala",
+    "OfferNotNow": "Agora não",
+    "OfferNotNowHint": "Isso oculta o convite só neste telefone. A comunidade não é avisada.",
+    "OfferConfirmTitle": "Entrar nesta sala?",
+    "OfferConfirmBody": "Você entra em {{room}} como {{who}}.",
+    "OfferReadFailed": "Não foi possível ler este convite. Tente mais tarde.",
+    "OfferRefreshed": "O convite foi lido de novo porque a versão exibida estava desatualizada. Confira e depois entre.",
+    "OfferAcceptFailed": "Não foi possível entrar na sala. Tente novamente.",
+    "OfferHideFailed": "Não foi possível ocultar o convite. Tente novamente.",
+    "OfferGone": "Este convite não está mais disponível.",
+    "OfferNotAMember": "Você não é mais membro ativo desta comunidade, então não pode entrar nas salas dela.",
+    "OfferAlreadyAccepted": "Este convite já foi aceito e não pode ser aceito de novo. Peça à comunidade para remover você da sala e convidar de novo.",
+    "OfferAdmissionPending": "A comunidade ainda não confirmou. Tente de novo em um minuto.",
+    "OfferKeyHolderRefused": "A comunidade não conseguiu adicionar você agora. Tente mais tarde."
   }
 }

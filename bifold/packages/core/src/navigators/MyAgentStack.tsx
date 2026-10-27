@@ -27,6 +27,7 @@ import SignIn from '../modules/trust-tasks/screens/SignIn'
 import VtaClaim from '../modules/trust-tasks/screens/VtaClaim'
 import RoomsHome from '../modules/rooms/screens/RoomsHome'
 import Room from '../modules/rooms/screens/Room'
+import RoomOffer from '../modules/rooms/screens/RoomOffer'
 import { MyAgentStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
@@ -180,6 +181,11 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.Room}
         component={Room}
         options={{ title: t('Rooms.Room'), ...ScreenOptionsDictionary[Screens.Room] }}
+      />
+      <Stack.Screen
+        name={Screens.RoomOffer}
+        component={RoomOffer}
+        options={{ title: t('Rooms.Offer'), ...ScreenOptionsDictionary[Screens.RoomOffer] }}
       />
     </Stack.Navigator>
   )

@@ -1,12 +1,13 @@
 /**
- * Rooms: the offers waiting on the member, then their rooms grouped by community (rooms member sprint). Reached
- * from the Rooms card on the My Agent home, only while the rooms flag is on; with it off there is no service and
- * the screen says rooms are off rather than showing an empty list.
+ * Rooms: the offers waiting on the member, then their rooms grouped by community (rooms member sprint). An offer
+ * opens its consent screen, and the list is read again on coming back to it. Reached from the Rooms card on the
+ * My Agent home, only while the rooms flag is on; with it off there is no service and the screen says rooms are
+ * off rather than showing an empty list.
  *
  * @module rooms/screens/RoomsHome
  */
-import { useNavigation } from '@react-navigation/native'
-import React from 'react'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
+import React, { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -26,10 +27,17 @@ const RoomsHome: React.FC = () => {
   const navigation = useNavigation()
   const service = useRoomsService()
   const myRooms = useMyRooms(service)
-  const openRoom = (room: { roomId: string }) =>
-    (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(Screens.Room, {
-      roomId: room.roomId,
-    })
+  const go = navigation as unknown as { navigate: (name: string, params: object) => void }
+  const openRoom = (room: { roomId: string }) => go.navigate(Screens.Room, { roomId: room.roomId })
+  const openOffer = (offer: { offerId: string }) => go.navigate(Screens.RoomOffer, { offerRef: offer.offerId })
+  // Read again on coming back (an offer accepted or hidden); the first focus is the mount's own read.
+  const focused = useIsFocused()
+  const wasFocused = useRef(focused)
+  const { reload } = myRooms
+  useEffect(() => {
+    if (focused && !wasFocused.current) reload()
+    wasFocused.current = focused
+  }, [focused, reload])
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 16, gap: 16 },
@@ -40,7 +48,7 @@ const RoomsHome: React.FC = () => {
         {service ? (
           <>
             <SampleDataBanner service={service} />
-            <RoomsListBody myRooms={myRooms} acrossCommunities onOpenRoom={openRoom} />
+            <RoomsListBody myRooms={myRooms} acrossCommunities onOpenRoom={openRoom} onOpenOffer={openOffer} />
           </>
         ) : (
           <ThemedText testID={testIdWithKey('RoomsOff')}>{t('Rooms.Off')}</ThemedText>

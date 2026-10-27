@@ -4,14 +4,14 @@
  * from the agent's keys goes in its own group, since its community is not known yet.
  *
  * Reading, failure and "not available" each say so: the list is never shown empty for a reason other than
- * having no rooms. A room opens its screen when given `onOpenRoom`. Offers are listed here; reviewing and
- * accepting one is a later step.
+ * having no rooms. A room opens its screen when given `onOpenRoom`, and an offer its consent screen when given
+ * `onOpenOffer`.
  *
  * @module rooms/components/RoomsListBody
  */
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -26,7 +26,11 @@ import { roomHandle, RoomRow } from './RoomRow'
 import { roomsStatusText } from './roomsStatusText'
 import TierBadge from './TierBadge'
 
-const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean }> = ({ offer, withCommunity }) => {
+const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean; onPress?: (offer: RoomOffer) => void }> = ({
+  offer,
+  withCommunity,
+  onPress,
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const line = [
@@ -35,15 +39,13 @@ const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean }> = ({ offe
   ]
     .filter(Boolean)
     .join(' · ')
-  return (
-    <View
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 }}
-      accessible
-      accessibilityLabel={`${t('Rooms.OfferOf', { room: offer.roomName, interpolation: { escapeValue: false } })}${
-        line ? `, ${line}` : ''
-      }`}
-      testID={testIdWithKey(`RoomOfferRow_${roomHandle(offer.offerId)}`)}
-    >
+  const label = `${t('Rooms.OfferOf', { room: offer.roomName, interpolation: { escapeValue: false } })}${
+    line ? `, ${line}` : ''
+  }`
+  const style = { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 } as const
+  const testID = testIdWithKey(`RoomOfferRow_${roomHandle(offer.offerId)}`)
+  const content = (
+    <>
       <Icon name="email-outline" size={22} color={ColorPalette.brand.primary} />
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -56,7 +58,25 @@ const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean }> = ({ offe
           </ThemedText>
         ) : null}
       </View>
-    </View>
+    </>
+  )
+  if (!onPress)
+    return (
+      <View style={style} accessible accessibilityLabel={label} testID={testID}>
+        {content}
+      </View>
+    )
+  return (
+    <Pressable
+      style={style}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={() => onPress(offer)}
+      testID={testID}
+    >
+      {content}
+      <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+    </Pressable>
   )
 }
 
@@ -77,9 +97,15 @@ export interface RoomsListBodyProps {
   /** Group by community and name it on offers (a list across communities). */
   acrossCommunities: boolean
   onOpenRoom?: (room: RoomSummary) => void
+  onOpenOffer?: (offer: RoomOffer) => void
 }
 
-export const RoomsListBody: React.FC<RoomsListBodyProps> = ({ myRooms, acrossCommunities, onOpenRoom }) => {
+export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
+  myRooms,
+  acrossCommunities,
+  onOpenRoom,
+  onOpenOffer,
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const styles = StyleSheet.create({
@@ -127,7 +153,7 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({ myRooms, acrossCom
             {t('Rooms.Offers')}
           </ThemedText>
           {waiting.map((offer) => (
-            <OfferRow key={offer.offerId} offer={offer} withCommunity={acrossCommunities} />
+            <OfferRow key={offer.offerId} offer={offer} withCommunity={acrossCommunities} onPress={onOpenOffer} />
           ))}
         </View>
       ) : null}
