@@ -19,6 +19,7 @@ import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
 import { Screens, Stacks, TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
+import { findUsedInvitation, openUsedInvitation, usedInvitationToast } from '../utils/usedInvitation'
 import { deepLinkCarriesInvitation, invitationLinkError } from '../utils/invitationLink'
 import { appMessageWakeDeps, openMessageWake, type WakeNavigation } from '../utils/messageWake'
 import { isOpenIdCredentialOffer } from '../utils/parsers'
@@ -262,6 +263,14 @@ const TabStack: React.FC = () => {
           store.preferences.walletName
         )
       } catch (err: unknown) {
+        // An invitation taken before: open the contact it made, not "Unable to handle deeplink".
+        const used = await findUsedInvitation(agent, err)
+        if (used) {
+          logger.info(`deep link: invitation ${used.invitationId} was already used`)
+          openUsedInvitation(used, navigation as unknown as { navigate: (name: string, params?: object) => void })
+          Toast.show(usedInvitationToast(used, t, toastBottomOffset))
+          return
+        }
         const error = new BifoldError(
           t('Error.Title1039'),
           t('Error.Message1039'),

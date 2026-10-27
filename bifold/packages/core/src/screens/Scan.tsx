@@ -19,6 +19,7 @@ import { BifoldError, QrCodeScanError } from '../types/error'
 import { ConnectStackParams } from '../types/navigators'
 import { PermissionContract } from '../types/permissions'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
+import { findUsedInvitation, openUsedInvitation, usedInvitationToast } from '../utils/usedInvitation'
 import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 
 export type ScanProps = StackScreenProps<ConnectStackParams>
@@ -39,6 +40,8 @@ export function scanErrorOf(
     const text = keyringLinkErrorText(e, t)
     return new QrCodeScanError(text, value, text)
   }
+  // Already in words (a used invitation): shown as it is.
+  if (e instanceof QrCodeScanError) return e
   return new QrCodeScanError(invalidQrCode, value, (e as Error)?.message)
 }
 
@@ -80,6 +83,15 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
       } catch (err: unknown) {
         // Ours, and already in words: let it through to be shown as it is.
         if (err instanceof KeyringLinkError) throw err
+        // An invitation taken before: open the contact it made, or say a new one is needed.
+        const used = await findUsedInvitation(agent, err)
+        if (used) {
+          if (openUsedInvitation(used, navigation?.getParent())) {
+            Toast.show(usedInvitationToast(used, t, toastBottomOffset))
+            return
+          }
+          throw new QrCodeScanError(t('Scan.InvitationAlreadyUsed'), value, t('Scan.InvitationAlreadyUsedAskNew'))
+        }
         const error = new BifoldError(
           t('Error.Title1031'),
           t('Error.Message1031'),
@@ -90,7 +102,16 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
         throw error
       }
     },
-    [agent, logger, navigation, enableImplicitInvitations, enableReuseConnections, store.preferences.walletName, t]
+    [
+      agent,
+      logger,
+      navigation,
+      enableImplicitInvitations,
+      enableReuseConnections,
+      store.preferences.walletName,
+      t,
+      toastBottomOffset,
+    ]
   )
 
   const handleCodeScan = useCallback(

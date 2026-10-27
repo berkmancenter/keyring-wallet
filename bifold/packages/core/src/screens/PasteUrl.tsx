@@ -5,6 +5,7 @@ import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, View, TextInput, ScrollView, TouchableOpacity } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Toast from 'react-native-toast-message'
 
 import Button, { ButtonType } from '../components/buttons/Button'
 import { hitSlop } from '../constants'
@@ -17,6 +18,7 @@ import { ConnectStackParams } from '../types/navigators'
 import { deviceCodeScan } from '../modules/trust-tasks/module/deviceCodeScan'
 import { KeyringLinkError, keyringLinkErrorText } from '../modules/trust-tasks/module/vtiLinks'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
+import { findUsedInvitation, openUsedInvitation, usedInvitationToast } from '../utils/usedInvitation'
 import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
 
@@ -106,6 +108,16 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
       // for a link Keyring did recognize (keyring-bifold#139 gate).
       if (e instanceof KeyringLinkError) {
         setErrorMessage({ title: t('Scan.CodeNotUsable'), message: keyringLinkErrorText(e, (k) => t(k)) })
+        return
+      }
+      // An invitation taken before: open the contact it made, or say a new one is needed.
+      const used = await findUsedInvitation(agent, e)
+      if (used) {
+        if (openUsedInvitation(used, navigation?.getParent())) {
+          Toast.show(usedInvitationToast(used, t))
+          return
+        }
+        setErrorMessage({ title: t('Scan.InvitationAlreadyUsed'), message: t('Scan.InvitationAlreadyUsedAskNew') })
         return
       }
       // Anything else: say what was read, so a clipboard that held something
