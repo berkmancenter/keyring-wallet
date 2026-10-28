@@ -42,7 +42,10 @@ export const ROOMS_REQUIREMENTS: Record<RoomsOperation, Requirement> = {
   write: { from: 'agent', anyOf: [`${SPEC}rooms/keys/act/0.5`, `${SPEC}rooms/keys/act/0.6`] },
   curate: { from: 'agent', anyOf: [`${SPEC}rooms/keys/act/0.5`, `${SPEC}rooms/keys/act/0.6`] },
   listOffers: { from: 'community' },
-  acceptOffer: { from: 'community' },
+  // Accepting stores the offer's membership and authority in the agent's vault, where its presentations
+  // find them. A sealed room also needs rooms/keys/key-package/0.2 and rooms/keys/welcome/0.1: checked per
+  // offer, since an open room needs neither.
+  acceptOffer: { from: 'agent', anyOf: [`${SPEC}vault/credentials/receive/0.1`] },
   hideOffer: { from: 'local' },
   listFiles: { from: 'agent', anyOf: [`${SPEC}rooms/keys/file-key/0.2`] },
   openFile: { from: 'agent', anyOf: [`${SPEC}rooms/keys/file-key/0.2`] },

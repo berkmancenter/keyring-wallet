@@ -49,11 +49,11 @@ describe('deriveCapabilities', () => {
     expect(caps.hideOffer).toMatchObject({ status: 'available', reason: 'ok' })
   })
 
-  it('names only Trust Task types under the rooms spec family', () => {
+  it('names only Trust Task types under the rooms and vault spec families', () => {
     for (const need of Object.values(ROOMS_REQUIREMENTS)) {
       if (need.from === 'agent')
         for (const type of need.anyOf)
-          expect(type).toMatch(/^https:\/\/trusttasks\.org\/spec\/rooms\/keys\/[a-z-]+\/0\.\d+$/)
+          expect(type).toMatch(/^https:\/\/trusttasks\.org\/spec\/(rooms\/keys|vault\/credentials)\/[a-z-]+\/0\.\d+$/)
     }
   })
 })

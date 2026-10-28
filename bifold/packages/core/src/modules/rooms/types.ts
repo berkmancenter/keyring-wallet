@@ -237,9 +237,12 @@ export interface WritePreview {
 }
 
 export interface RoomOffer {
+  /** Names the offer to `previewOffer` and `hideOffer`: a route parameter, opaque to screens. */
   offerId: string
   roomId: string
   roomName: InertText
+  /** What the room is for, as the community's administrators wrote it. Absent when the room has none. */
+  description?: InertText
   communityDid: string
   communityName: InertText
   tier: RoomTier
@@ -344,6 +347,25 @@ export class RoomsPreviewExpired extends Error {
   public constructor(public readonly token: string) {
     super('this preview has expired; prepare it again')
     this.name = 'RoomsPreviewExpired'
+  }
+}
+
+/**
+ * A community or the person's agent refused the operation, in its own terms. `code` is the refusal's code
+ * without its task prefix (`vtc/rooms/offers/accept:alreadyAccepted` → `alreadyAccepted`), plus a few of
+ * Keyring's own for a step that went wrong between them (`welcomeMissing`, `joinFailed`). Screens word the
+ * codes they know and show a generic line for any other. `retryable`: the same request again may succeed.
+ * A transport failure (no answer) is not a refusal and arrives as a plain `Error`.
+ */
+export class RoomsRefused extends Error {
+  public constructor(
+    public readonly operation: RoomsOperation,
+    public readonly code: string,
+    public readonly retryable: boolean,
+    detail?: string
+  ) {
+    super(`${operation} was refused (${code})${detail ? `: ${detail}` : ''}`)
+    this.name = 'RoomsRefused'
   }
 }
 

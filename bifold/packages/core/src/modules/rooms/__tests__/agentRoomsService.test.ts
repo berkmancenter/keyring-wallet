@@ -84,6 +84,9 @@ function backend(overrides: Partial<RoomsBackend> = {}) {
     communityTask,
     leaveCommunity: jest.fn(async () => undefined),
     decodeBase64Url: (s) => Buffer.from(s, 'base64url').toString('utf8'),
+    hiddenOffers: async () => [],
+    hideOffer: jest.fn(async () => undefined),
+    warn: jest.fn(),
     ...overrides,
   }
   return { b, agentTask, communityTask }
@@ -205,7 +208,7 @@ describe('AgentRoomsService', () => {
     const err = await service.prepareWrite().catch((e) => e)
     expect(err).toBeInstanceOf(RoomsUnavailable)
     expect(err).toMatchObject({ reason: 'clientNotBuilt' })
-    await expect(service.listOffers()).rejects.toMatchObject({ reason: 'clientNotBuilt' })
+    await expect(service.listFiles()).rejects.toMatchObject({ reason: 'clientNotBuilt' })
     expect(agentTask).not.toHaveBeenCalled()
   })
 })

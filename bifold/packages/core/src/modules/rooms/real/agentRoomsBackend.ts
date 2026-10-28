@@ -5,6 +5,7 @@
  */
 import { TypedArrayEncoder, type Agent } from '@credo-ts/core'
 
+import { listKeyed, putKeyed } from '../../trust-tasks/module/keyedRecords'
 import { vtaAgent } from '../../trust-tasks/module/vtaAgent'
 import { GenericRecordsCommunityStore } from '../../trust-tasks/module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../../trust-tasks/module/VtiIdentityStore'
@@ -14,6 +15,9 @@ import { vtiAgent } from '../../trust-tasks/module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vtiTsp'
 
 import type { RoomsBackend, RoomsCommunity } from './agentRoomsService'
+
+/** This phone's own rooms records: today only the offers the person hid, which no community is told of. */
+const RECORD_TYPE = 'keyring/rooms'
 
 export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: string } = {}): RoomsBackend {
   const identityStore = new GenericRecordsIdentityStore(agent)
@@ -66,5 +70,13 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     },
 
     decodeBase64Url: (value) => TypedArrayEncoder.toUtf8String(TypedArrayEncoder.fromBase64Url(value)),
+
+    hiddenOffers: async () =>
+      (await listKeyed<{ offerId?: unknown }>(agent, RECORD_TYPE, 'hiddenOffer')).flatMap((r) =>
+        typeof r.offerId === 'string' ? [r.offerId] : []
+      ),
+    hideOffer: (offerId) => putKeyed(agent, RECORD_TYPE, 'hiddenOffer', offerId, { offerId }),
+
+    warn: (message) => agent.config.logger.warn(message),
   }
 }

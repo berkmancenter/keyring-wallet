@@ -1,6 +1,8 @@
 /**
- * The rooms Trust Tasks R1 sends, and parsers for what comes back. Every shape is read from the
- * Trust Task specs (dtgwg-trust-tasks-tf: `rooms/keys/{list,browse,read}`, `vtc/rooms/memberships/list`).
+ * The rooms Trust Tasks the real service sends, and parsers for what comes back. Every shape is read from
+ * the Trust Task specs (dtgwg-trust-tasks-tf, as `@openvtc/trust-tasks` 0.27 ships them:
+ * `rooms/keys/{list,browse,read,key-package,welcome,backfill}`, `vtc/rooms/{memberships,offers}/*`,
+ * `vault/credentials/{receive,query,get}`).
  * The parsers accept only what the specs define and drop anything else, so a malformed or hostile
  * answer can at worst lose a row, never inject one.
  */
@@ -14,6 +16,19 @@ export const ROOMS_TASK = {
   keysBrowse: `${SPEC}rooms/keys/browse/0.1`,
   keysRead: `${SPEC}rooms/keys/read/0.1`,
   membershipsList: `${SPEC}vtc/rooms/memberships/list/0.1`,
+  // 0.3 adds the renewals of rooms the member is already in; 0.2 is asked of a community without it.
+  offersList03: `${SPEC}vtc/rooms/offers/list/0.3`,
+  offersList02: `${SPEC}vtc/rooms/offers/list/0.2`,
+  offersAccept: `${SPEC}vtc/rooms/offers/accept/0.1`,
+  keysKeyPackage: `${SPEC}rooms/keys/key-package/0.2`,
+  keysWelcome: `${SPEC}rooms/keys/welcome/0.1`,
+  keysBackfill: `${SPEC}rooms/keys/backfill/0.2`,
+  vaultReceive: `${SPEC}vault/credentials/receive/0.1`,
+  vaultQuery: `${SPEC}vault/credentials/query/0.1`,
+  // The spec's 0.2 is asked where served. VTAs up to 0.66 serve only 0.1: the same request, and an answer whose
+  // `credential` is the one a room's credentials (JSON objects) come back in under 0.2 as well.
+  vaultGet02: `${SPEC}vault/credentials/get/0.2`,
+  vaultGet01: `${SPEC}vault/credentials/get/0.1`,
 } as const
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 ? v : undefined)
@@ -85,6 +100,133 @@ export function parseMemberships(payload: unknown): { items: RoomMembershipRecor
     ]
   })
   return { items, nextCursor: str(p?.nextCursor) }
+}
+
+/**
+ * One offer of a room the community owns (`vtc/rooms/offers/list` 0.2/0.3 `OfferV2`). The credentials are the
+ * community's JSON text, stored in the member's agent on accept and never shown.
+ */
+export interface OfferRecord {
+  roomId: string
+  host: string
+  label: string
+  description?: string
+  tier: RoomTier
+  actions: RoomVerb[]
+  validUntil?: string
+  /** `accepted`: kept listed while a repeated accept can still be answered. */
+  state: 'open' | 'accepted'
+  credentials: { invitation: string; membership: string; authority: string }
+}
+
+/** A renewal of an admission the member holds (`vtc/rooms/offers/list/0.3` `renewals`). */
+export interface RenewalRecord {
+  roomId: string
+  host: string
+  validUntil: string
+  /** When the authority it replaces expires. */
+  renews: string
+  issuedAt: string
+  credentials: { membership: string; authority: string }
+}
+
+const credentialsOf = <K extends string>(v: unknown, keys: readonly K[]): Record<K, string> | undefined => {
+  const c = obj(v)
+  if (!c) return undefined
+  const out = {} as Record<K, string>
+  for (const k of keys) {
+    const value = str(c[k])
+    if (!value) return undefined
+    out[k] = value
+  }
+  return out
+}
+
+export function parseOffers(payload: unknown): {
+  items: OfferRecord[]
+  renewals: RenewalRecord[]
+  nextCursor?: string
+} {
+  const p = obj(payload)
+  const items = arr(p?.items).flatMap((raw): OfferRecord[] => {
+    const o = obj(raw)
+    const roomId = str(o?.roomId)
+    const host = str(o?.host)
+    const visibility = str(o?.visibility)
+    const state = str(o?.state)
+    const credentials = credentialsOf(o?.credentials, ['invitation', 'membership', 'authority'] as const)
+    if (!o || !roomId || !host || !TIERS.includes(visibility as RoomTier) || !credentials) return []
+    if (state !== 'open' && state !== 'accepted') return []
+    return [
+      {
+        roomId,
+        host,
+        label: str(o.label) ?? '',
+        description: str(o.description),
+        tier: visibility as RoomTier,
+        actions: arr(o.actions).filter((a): a is RoomVerb => VERBS.includes(a as RoomVerb)),
+        validUntil: str(o.validUntil),
+        state,
+        credentials,
+      },
+    ]
+  })
+  const renewals = arr(p?.renewals).flatMap((raw): RenewalRecord[] => {
+    const r = obj(raw)
+    const roomId = str(r?.roomId)
+    const host = str(r?.host)
+    const validUntil = str(r?.validUntil)
+    const renews = str(r?.renews)
+    const issuedAt = str(r?.issuedAt)
+    const credentials = credentialsOf(r?.credentials, ['membership', 'authority'] as const)
+    if (!roomId || !host || !validUntil || !renews || !issuedAt || !credentials) return []
+    return [{ roomId, host, validUntil, renews, issuedAt, credentials }]
+  })
+  return { items, renewals, nextCursor: str(p?.nextCursor) }
+}
+
+/** The community's answer to an accept (`vtc/rooms/offers/accept/0.1`). Undefined unless it says `admitted`. */
+export function parseAccept(
+  payload: unknown
+): { roomId: string; epoch?: number; welcome?: string; ratchetTree?: string } | undefined {
+  const p = obj(payload)
+  const roomId = str(p?.roomId)
+  if (!p || !roomId || p.state !== 'admitted') return undefined
+  return { roomId, epoch: int(p.epoch), welcome: str(p.welcome), ratchetTree: str(p.ratchetTree) }
+}
+
+/** The agent's KeyPackage for an offer's invitation (`rooms/keys/key-package/0.2`). */
+export function parseKeyPackage(payload: unknown): { keyPackage: string; alreadyMinted: boolean } | undefined {
+  const p = obj(payload)
+  const keyPackage = str(p?.keyPackage)
+  if (!keyPackage || typeof p?.alreadyMinted !== 'boolean') return undefined
+  return { keyPackage, alreadyMinted: p.alreadyMinted }
+}
+
+/** The handles a vault query answered with, and the validity the vault computed for each (`vault/credentials/query/0.1`). */
+export function parseVaultQuery(payload: unknown): { id: string; validUntil?: string }[] {
+  return arr(obj(payload)?.credentials).flatMap((raw) => {
+    const d = obj(raw)
+    const id = str(d?.id)
+    return id ? [{ id, validUntil: str(d?.validUntil) }] : []
+  })
+}
+
+/** The subject of a stored credential (`vault/credentials/get/0.2`): who it was issued to. */
+export function vaultCredentialSubject(payload: unknown): string | undefined {
+  return str(obj(obj(obj(payload)?.credential)?.credentialSubject)?.id)
+}
+
+/**
+ * The code a refusal carried, without its task prefix: a task's own code where the refusal names one in its
+ * `details`, else the framework's. Undefined for anything that is not a refusal (no answer, a dropped
+ * connection), which a caller passes on unchanged. Both legs refuse with a `VtiRefusal`.
+ */
+export function refusalCode(error: unknown): string | undefined {
+  if (!(error instanceof Error) || error.name !== 'VtiRefusal') return undefined
+  const e = error as Error & { code?: unknown; details?: unknown }
+  const named = str(obj(e.details)?.code) ?? str(e.code)
+  return named?.slice(named.lastIndexOf(':') + 1)
 }
 
 /** One record's metadata in a listing (`rooms/_shared` `RecordMetadata`). */
