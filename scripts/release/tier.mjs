@@ -71,6 +71,11 @@ export const RULES = [
   ['none', 'the .env template (builds read their own .env)', /^app\/\.env\.sample$/],
   ['none', "a package's test or type-check config", /^bifold\/packages\/[^/]+\/(jest\.config\.[jt]s|tsconfig[^/]*\.json|\.eslintrc[^/]*|\.prettierrc[^/]*)$/],
   ['none', "bifold's own lockfile (the app installs from the wallet's yarn.lock, which a new dependency changes)", /^bifold\/yarn\.lock$/],
+  // The e2e test-id manifest, the same artefact the wallet's own e2e/lib/testids.json is, on the other side of
+  // the submodule. Nothing the app ships reads it: testIdWithKey is `testIdPrefix + key`, no src imports the
+  // file, and its only consumers are gen-testids.mjs, e2e/ and CI. check-testids.mjs still holds it to the
+  // pinned bifold, both ways, whatever the tier says.
+  ['none', "bifold's e2e test-id manifest (generated from src; nothing the app ships reads it)", /^bifold\/packages\/core\/testids\.json$/],
   // Store: dependencies, policy.
   ['store', 'dependency manifest or patch (needs a native fingerprint check)', /(^|\/)(package\.json|yarn\.lock|Podfile\.lock)$|^\.yarn\/patches\/|^app\/patches\//],
   ['store', 'stored-data migration (policy: never OTA)', (f) => MIGRATION_PATHS.includes(f)],
