@@ -21,6 +21,7 @@ const KEY: Record<Exclude<RoomsReason, 'ok' | 'sample' | 'noRight'>, string> = {
   noAgentLinked: 'Rooms.NoAgentLinked',
   agentUnknown: 'Rooms.AgentUnknown',
   detailsNotLoaded: 'Rooms.DetailsNotLoaded',
+  communityUnreachable: 'Rooms.CommunityUnreachable',
 }
 
 /** A missing right, in the words of what the row would have done. */
@@ -36,4 +37,9 @@ export function roomsStatusText(t: TFunction, status: OperationStatus, operation
   if (status.reason === 'ok' || status.reason === 'sample') return undefined
   if (status.reason === 'noRight') return t(noRightKey(operation)) as string
   return t(KEY[status.reason]) as string
+}
+
+/** Why reading the member's rooms failed: the service's reason when it gave one, else that the agent was not reached. */
+export function roomsReadFailedText(t: TFunction, failure?: OperationStatus): string {
+  return (failure && roomsStatusText(t, failure, 'listMyRooms')) ?? (t('Rooms.AgentUnknown') as string)
 }

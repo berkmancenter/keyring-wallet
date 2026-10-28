@@ -48,6 +48,7 @@ export type RoomsOperation =
  * - `detailsNotLoaded`: a room known only from the agent's key custody, without the community's
  *   record of it (rights, host). The operation needs those ("Details not loaded").
  * - `noRight`: this member's rights in the room do not include it ("You can't post here").
+ * - `communityUnreachable`: none of the member's communities answered for their rooms; try again later.
  */
 export type RoomsReason =
   | 'ok'
@@ -61,6 +62,7 @@ export type RoomsReason =
   | 'communityDoesNotServe'
   | 'detailsNotLoaded'
   | 'noRight'
+  | 'communityUnreachable'
 
 export type RoomsStatus = 'available' | 'comingSoon' | 'unavailable'
 

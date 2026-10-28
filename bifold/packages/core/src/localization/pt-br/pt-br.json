@@ -2710,6 +2710,7 @@
     "AdminOnly": "Só os administradores da comunidade podem ver isto",
     "NoAgentLinked": "Vincule seu agente primeiro",
     "AgentUnknown": "Não foi possível falar com seu agente. Tente mais tarde.",
+    "CommunityUnreachable": "Não foi possível falar com sua comunidade. Tente mais tarde.",
     "YourRooms": "Suas salas",
     "Rooms": "Salas",
     "RoomCount": "{{count}} salas",

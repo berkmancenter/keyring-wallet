@@ -2808,6 +2808,7 @@
     "AdminOnly": "Seuls les administrateurs de la communauté peuvent voir ceci",
     "NoAgentLinked": "Reliez d'abord votre agent",
     "AgentUnknown": "Impossible de joindre votre agent. Réessayez plus tard.",
+    "CommunityUnreachable": "Impossible de joindre votre communauté. Réessayez plus tard.",
     "YourRooms": "Vos salons",
     "Rooms": "Salons",
     "RoomCount": "{{count}} salons",

@@ -23,7 +23,7 @@ import type { RoomOffer, RoomSummary } from '../types'
 import type { MyRooms } from '../useMyRooms'
 
 import { roomHandle, RoomRow } from './RoomRow'
-import { roomsStatusText } from './roomsStatusText'
+import { roomsReadFailedText, roomsStatusText } from './roomsStatusText'
 import TierBadge from './TierBadge'
 
 const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean; onPress?: (offer: RoomOffer) => void }> = ({
@@ -117,7 +117,7 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
   if (!capabilities && failed)
     return (
       <View style={styles.section}>
-        <ThemedText testID={testIdWithKey('RoomsReadFailed')}>{t('Rooms.AgentUnknown')}</ThemedText>
+        <ThemedText testID={testIdWithKey('RoomsReadFailed')}>{roomsReadFailedText(t, myRooms.failure)}</ThemedText>
         <Button
           title={t('Rooms.TryAgain')}
           buttonType={ButtonType.Secondary}

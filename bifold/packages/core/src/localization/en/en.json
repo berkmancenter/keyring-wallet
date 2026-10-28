@@ -2860,6 +2860,7 @@
     "AdminOnly": "Only the community's administrators can see this",
     "NoAgentLinked": "Link your agent first",
     "AgentUnknown": "Couldn't reach your agent. Try again later.",
+    "CommunityUnreachable": "Couldn't reach your community. Try again later.",
     "YourRooms": "Your rooms",
     "Rooms": "Rooms",
     "RoomCount": "{{count}} rooms",

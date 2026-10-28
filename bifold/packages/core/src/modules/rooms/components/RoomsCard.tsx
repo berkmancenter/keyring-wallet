@@ -17,7 +17,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import type { RoomsService } from '../types'
 import type { MyRooms } from '../useMyRooms'
 
-import { roomsStatusText } from './roomsStatusText'
+import { roomsReadFailedText, roomsStatusText } from './roomsStatusText'
 import { SampleDataBanner } from './SampleDataBanner'
 
 /** "2 rooms · 1 offer", leaving out offers when there are none. */
@@ -58,7 +58,7 @@ export const RoomsCard: React.FC<RoomsCardProps> = ({ service, myRooms, offersCo
   const status = myRooms.capabilities?.listMyRooms
   const unavailable = status ? roomsStatusText(t, status, 'listMyRooms') : undefined
   const detail = myRooms.failed
-    ? (t('Rooms.AgentUnknown') as string)
+    ? roomsReadFailedText(t, myRooms.failure)
     : (unavailable ?? (myRooms.rooms ? roomsCount(t, myRooms.rooms.length, offers) : (t('Rooms.Reading') as string)))
   const enabled = !!status && !unavailable
   return (

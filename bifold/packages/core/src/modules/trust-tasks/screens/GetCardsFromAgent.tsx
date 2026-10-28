@@ -14,13 +14,13 @@
 import type { Agent } from '@credo-ts/core'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, DeviceEventEmitter, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
-import { emitCommunityChanged } from '../module/communityChanged'
+import { emitCommunityChanged, VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 import { vtaAgent } from '../module/vtaAgent'
 import {
   adoptAgentIdentities,
@@ -114,6 +114,15 @@ const defaultDeps: GetCardsDeps = {
         return keyIdsFromDocument(did, didDocument as unknown as Record<string, unknown> | undefined)
       },
       held,
+      // An identity taken on has no key copies on the phone yet: without them it cannot reach its community.
+      holdKeys: async (persona) => {
+        await client.holdPersonaKeys(persona)
+        DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
+      },
+      onKeysFailed: (persona, reason) =>
+        agent.config.logger.warn(
+          `Bring back: ${persona.did}'s keys were not borrowed; asked again when a session with its agent next opens: ${reason}`
+        ),
     })
     // What this phone's grant lets it see, for saying why nothing came back; a phone that cannot tell says less.
     const me = await client.whoAmI().catch(() => undefined)

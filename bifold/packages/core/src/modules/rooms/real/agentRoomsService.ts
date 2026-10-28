@@ -207,13 +207,26 @@ export class AgentRoomsService implements RoomsService {
     await this.require('listMyRooms')
     const communities = await this.backend.communities()
     // A community that cannot answer loses only its own details: its rooms still show from custody,
-    // as `detailsNotLoaded`, and the other communities' rooms are unaffected.
+    // as `detailsNotLoaded`, and the other communities' rooms are unaffected. Why it did not answer is logged.
+    const unreachable: string[] = []
     const memberships = await Promise.all(
       communities.map(async (community) => ({
         community,
-        records: await this.membershipsOf(community).catch((): RoomMembershipRecord[] => []),
+        records: await this.membershipsOf(community).catch((e: unknown): RoomMembershipRecord[] => {
+          this.backend.warn(`rooms: ${community.did} did not list this member's rooms: ${message(e)}`)
+          unreachable.push(community.did)
+          return []
+        }),
       }))
     )
+    // When none answered, custody alone is not the member's rooms: an open room holds no keys and would be
+    // missing, and every other room would show by its id. The read fails instead, and the screen says why.
+    if (communities.length > 0 && unreachable.length === communities.length)
+      throw new RoomsUnavailable(
+        'listMyRooms',
+        'communityUnreachable',
+        `no community answered for this member's rooms (${unreachable.join(', ')})`
+      )
     const held = await this.heldRooms()
 
     const next = new Map<string, KnownRoom>()

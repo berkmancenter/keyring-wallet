@@ -14,7 +14,14 @@ import RoomRow, { roomHandle } from '../components/RoomRow'
 import RoomsListBody, { groupRooms } from '../components/RoomsListBody'
 import RoomsCard from '../components/RoomsCard'
 import { createSampleRoomsService } from '../sample/sampleRooms'
-import type { OperationStatus, RoomOffer, RoomsCapabilities, RoomsService, RoomSummary } from '../types'
+import {
+  RoomsUnavailable,
+  type OperationStatus,
+  type RoomOffer,
+  type RoomsCapabilities,
+  type RoomsService,
+  type RoomSummary,
+} from '../types'
 import { useMyRooms, type MyRooms } from '../useMyRooms'
 
 const inApp = (node: React.ReactElement) => render(<BasicAppContext>{node}</BasicAppContext>)
@@ -104,8 +111,18 @@ describe('the rooms list', () => {
     const reload = jest.fn()
     const tree = inApp(<RoomsListBody myRooms={myRooms({ failed: true, reload })} acrossCommunities />)
     expect(tree.getByTestId(id('RoomsReadFailed'))).toBeTruthy()
+    expect(tree.getByText('Rooms.AgentUnknown')).toBeTruthy()
     fireEvent.press(tree.getByTestId(id('RoomsTryAgain')))
     expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  test('a first read no community answered: says the community was not reached, not the agent', () => {
+    const tree = inApp(
+      <RoomsListBody myRooms={myRooms({ failed: true, failure: no('communityUnreachable') })} acrossCommunities />
+    )
+    expect(tree.getByText('Rooms.CommunityUnreachable')).toBeTruthy()
+    expect(tree.queryByText('Rooms.AgentUnknown')).toBeNull()
+    expect(tree.getByTestId(id('RoomsTryAgain'))).toBeTruthy()
   })
 
   test("listing rooms not available: the reason's words, not an empty list", () => {
@@ -161,6 +178,17 @@ describe('the Rooms card', () => {
     expect(off.queryByTestId(id('RoomsCard'))).toBeNull()
     const on = inApp(<RoomsCard service={service} myRooms={listed()} onOpen={jest.fn()} />)
     expect(on.getByTestId(id('RoomsCard'))).toBeTruthy()
+  })
+
+  test('a read no community answered: the card says so', () => {
+    const tree = inApp(
+      <RoomsCard
+        service={service}
+        myRooms={myRooms({ failed: true, failure: no('communityUnreachable') })}
+        onOpen={jest.fn()}
+      />
+    )
+    expect(tree.getByTestId(id('RoomsCardDetail')).props.children).toBe('Rooms.CommunityUnreachable')
   })
 
   test('opens Rooms when rooms can be listed', () => {
@@ -248,6 +276,25 @@ describe('the read behind them', () => {
     await act(async () => result.current.reload())
     await waitFor(() => expect(result.current.failed).toBe(true))
     expect(result.current.rooms).toHaveLength(1)
+  })
+
+  test('a read no community answered keeps the reason, and a read that then succeeds clears it', async () => {
+    let fail = true
+    const service = {
+      capabilities: async () => caps(),
+      listMyRooms: async () => {
+        if (fail) throw new RoomsUnavailable('listMyRooms', 'communityUnreachable', 'no community answered')
+        return [room()]
+      },
+      listOffers: async () => [],
+    } as unknown as RoomsService
+    const { result } = renderHook(() => useMyRooms(service))
+    await waitFor(() => expect(result.current.failed).toBe(true))
+    expect(result.current.failure?.reason).toBe('communityUnreachable')
+    fail = false
+    await act(async () => result.current.reload())
+    await waitFor(() => expect(result.current.rooms).toHaveLength(1))
+    expect(result.current.failure).toBeUndefined()
   })
 
   test('the sample service end to end: its three rooms, the custody one last, and its offer', async () => {

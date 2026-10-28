@@ -127,13 +127,45 @@ describe('AgentRoomsService', () => {
     expect(rooms.find((r) => r.roomId === CUSTODY_ROOM)).toMatchObject({ nameFrom: 'roomId', source: 'custody' })
   })
 
-  it('keeps the other rooms when one community cannot answer', async () => {
-    const { b } = backend({
-      communityTask: jest.fn(async () => {
-        throw new Error('community unreachable')
-      }),
+  it('keeps the other rooms when one community cannot answer, and logs why it did not', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', name: 'Choir', personaDid: 'did:key:persona-b' }
+    const { b, communityTask } = backend({ communities: async () => [COMMUNITY, other] })
+    const answer = communityTask.getMockImplementation()
+    communityTask.mockImplementation(async (did, type, payload) => {
+      if (did === other.did) throw new Error('community unreachable')
+      return answer?.(did, type, payload)
     })
     const rooms = await new AgentRoomsService(b).listMyRooms()
+    expect(rooms.map((r) => [r.roomId, r.source])).toEqual([
+      [ROOM, 'community'],
+      [CUSTODY_ROOM, 'custody'],
+    ])
+    expect(b.warn).toHaveBeenCalledTimes(1)
+    expect(b.warn).toHaveBeenCalledWith(`rooms: ${other.did} did not list this member's rooms: community unreachable`)
+  })
+
+  // A member whose community session could not open (an identity brought back from the agent, before its keys
+  // were borrowed: 10-28) saw one sealed room by its id and no open room at all, and nothing said why.
+  it('fails, saying no community was reached, when none answers, and logs each reason', async () => {
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw new Error('vtiAgent: the persona has no borrowed key-agreement key')
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({
+      name: 'RoomsUnavailable',
+      operation: 'listMyRooms',
+      reason: 'communityUnreachable',
+    })
+    expect(b.warn).toHaveBeenCalledWith(
+      `rooms: ${COMMUNITY.did} did not list this member's rooms: vtiAgent: the persona has no borrowed key-agreement key`
+    )
+  })
+
+  it('a phone in no community still lists the rooms its agent holds keys for', async () => {
+    const { b, communityTask } = backend({ communities: async () => [] })
+    const rooms = await new AgentRoomsService(b).listMyRooms()
+    expect(communityTask).not.toHaveBeenCalled()
     expect(rooms.map((r) => [r.roomId, r.source])).toEqual([
       [ROOM, 'custody'],
       [CUSTODY_ROOM, 'custody'],
