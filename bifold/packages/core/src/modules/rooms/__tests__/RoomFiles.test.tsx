@@ -2,7 +2,7 @@
  * A post's files (R6a): a chip under the post; a tap opens the attachment sheet with the type and size the sharer
  * gave; Download shows progress and can be cancelled (nothing kept); a finished copy is shared through the system
  * sheet and released when the sheet closes; a failed download says so and can be tried again. Where files can't be
- * opened, no chip offers to.
+ * opened, the chip still names the file, but is not a button.
  */
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
@@ -146,7 +146,7 @@ describe("a post's files", () => {
     expect(tree.queryByTestId(id('RoomFileShare'))).toBeNull()
   })
 
-  test('where files cannot be opened, no chip offers to (control: the tests above)', async () => {
+  test('where files cannot be opened, the chip names the file but is not a button (control: the tests above)', async () => {
     const service = mockService as RoomsService
     jest.spyOn(service, 'roomCapabilities').mockImplementation(async () => ({
       ...deriveRoomCapabilities(sampleCapabilities(), { source: 'community', verbs: ['read', 'write'] }),
@@ -154,6 +154,10 @@ describe("a post's files", () => {
     }))
     const tree = show()
     await waitFor(() => expect(tree.getByText('Agenda for Thursday')).toBeTruthy())
-    expect(tree.queryByTestId(id('RoomFileChip_f1'))).toBeNull()
+    const chip = tree.getByTestId(id('RoomFileChip_f1'))
+    expect(chip).toHaveTextContent(/Agenda, Oct 30\.pdf/)
+    expect(chip.props.accessibilityRole).toBeUndefined()
+    fireEvent.press(chip)
+    expect(tree.queryByTestId(id('RoomFileSheet'))).toBeNull()
   })
 })

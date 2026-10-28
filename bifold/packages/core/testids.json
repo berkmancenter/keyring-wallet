@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "07ba4da72ba00504dda043c01b4a24a965a2ff46",
+  "generatedFrom": "c32dde63c192c7148fced10fb4532e5378fcc3a8",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -903,6 +903,10 @@
     "RevokedOrNotAvailable": ["src/components/misc/Card11Pure.tsx"],
     "RoomActingAs": ["src/modules/rooms/screens/Room.tsx"],
     "RoomComposer": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerAttach": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerFile": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerFileRefused": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerFileRemove": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerInput": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerPostingAs": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerSend": ["src/modules/rooms/components/RoomComposer.tsx"],
@@ -937,6 +941,7 @@
     "RoomOfferUntil": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOffers": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomPostAgent": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostCancel": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostNotSent": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostRemoved": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostRetry": ["src/modules/rooms/components/RoomPostBubble.tsx"],

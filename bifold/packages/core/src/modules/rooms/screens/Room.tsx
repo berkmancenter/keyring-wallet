@@ -71,7 +71,20 @@ export const pendingAsPost = (pending: PendingPost, actingAs: RoomPost['author']
   retracted: false,
   unread: false,
   delivery: pending.state === 'sent' ? undefined : pending.state,
-  files: [],
+  files: pending.file
+    ? [
+        {
+          fileId: pending.localId,
+          name: toInertText(pending.file.name),
+          mediaType: pending.file.mimeType,
+          size: pending.file.size,
+        },
+      ]
+    : [],
+  progress:
+    pending.state === 'sending' && pending.progress && pending.progress.total > 0
+      ? Math.min(1, pending.progress.sent / pending.progress.total)
+      : undefined,
 })
 
 const Room: React.FC = () => {
@@ -227,6 +240,7 @@ const Room: React.FC = () => {
               <RoomPostBubble
                 post={item.post}
                 onRetry={item.post.delivery === 'failed' ? () => outbox.retry(item.post.key) : undefined}
+                onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
                 onOpenFile={canOpenFiles ? setOpenedFile : undefined}
               />
             )
@@ -258,7 +272,12 @@ const Room: React.FC = () => {
           }
         />
         {unavailable ? null : (
-          <RoomComposer onSend={outbox.send} unavailable={cannotPost} postingAs={identityText(room.actingAs)} />
+          <RoomComposer
+            onSend={outbox.send}
+            unavailable={cannotPost}
+            postingAs={identityText(room.actingAs)}
+            canAttach
+          />
         )}
       </KeyboardAvoidingView>
       <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />

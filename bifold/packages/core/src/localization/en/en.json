@@ -2948,6 +2948,11 @@
     "FileShare": "Share or save",
     "FileShareUnavailable": "Downloaded, but this device can't share files from Keyring.",
     "SizeKB": "{{n}} KB",
-    "SizeMB": "{{n}} MB"
+    "SizeMB": "{{n}} MB",
+    "FileAttach": "Attach a file",
+    "FileRemove": "Remove the file",
+    "FileTooLarge": "That file is too large. Files can be up to 25 MB.",
+    "FileUnreadable": "Couldn't read that file. Try another.",
+    "PostSendingPercent": "Sending… {{percent}}%"
   }
 }

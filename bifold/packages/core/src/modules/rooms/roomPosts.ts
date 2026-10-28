@@ -36,6 +36,8 @@ export interface RoomPost {
   delivery?: 'sending' | 'failed'
   /** The files the post carries, each shown as a chip under its words. None on a retracted post. */
   files: RoomFile[]
+  /** How far a sending post's file has come, 0 to 1. */
+  progress?: number
 }
 
 const sameIdentity = (a?: Identity, b?: Identity): boolean => !!a && !!b && JSON.stringify(a) === JSON.stringify(b)

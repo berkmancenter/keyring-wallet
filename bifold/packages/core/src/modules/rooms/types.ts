@@ -189,11 +189,26 @@ export interface Note extends NoteSummary {
   check: HostCheck
 }
 
+/** A file to post, as the phone picked it: a local copy the service reads and uploads through the member's agent. */
+export interface RoomsAttachment {
+  uri: string
+  name: string
+  mimeType?: string
+  size: number
+}
+
 export interface WriteDraft {
   title: string
   body: string
   /** Replace this note instead of adding one. */
   replaceKey?: string
+  /** One file to post with it (`rooms/records/put` 0.2 `blobs`). The service refuses one over its limit. */
+  attachment?: RoomsAttachment /**
+   * The post's own id, the same on every retry. The service derives the record's key from it and writes create-only,
+   * so a retry of a post that already landed answers with that post instead of writing it twice; within one app run
+   * a retried upload resumes rather than starting again. Without it, a retry may post twice.
+   */
+  idempotencyKey?: string
 }
 
 /**
@@ -358,7 +373,8 @@ export interface RoomsService {
   listNotes(roomId: string): Promise<NoteList>
   readNote(roomId: string, key: string): Promise<Note>
   prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview>
-  confirmWrite(token: string): Promise<{ key: string; version: number }>
+  /** Sends what the preview showed; with an attachment, `options` reports the upload and can cancel it (nothing is written). */
+  confirmWrite(token: string, options?: RoomsTransferOptions): Promise<{ key: string; version: number }>
   curate(roomId: string, key: string, action: 'pin' | 'unpin' | 'retract'): Promise<void>
 
   listOffers(communityDid?: string): Promise<RoomOffer[]>

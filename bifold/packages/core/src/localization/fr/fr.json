@@ -2896,6 +2896,11 @@
     "FileShare": "Partager ou enregistrer",
     "FileShareUnavailable": "Téléchargé, mais cet appareil ne peut pas partager de fichiers depuis Keyring.",
     "SizeKB": "{{n}} Ko",
-    "SizeMB": "{{n}} Mo"
+    "SizeMB": "{{n}} Mo",
+    "FileAttach": "Joindre un fichier",
+    "FileRemove": "Retirer le fichier",
+    "FileTooLarge": "Ce fichier est trop volumineux. Les fichiers peuvent faire jusqu'à 25 Mo.",
+    "FileUnreadable": "Impossible de lire ce fichier. Essayez-en un autre.",
+    "PostSendingPercent": "Envoi… {{percent}} %"
   }
 }

@@ -25,8 +25,10 @@ import { identityText } from './roomWords'
 export const RoomPostBubble: React.FC<{
   post: RoomPost
   onRetry?: () => void
+  /** Stops a post's upload while it is sending. */
+  onCancel?: () => void
   onOpenFile?: (file: RoomFile) => void
-}> = ({ post, onRetry, onOpenFile }) => {
+}> = ({ post, onRetry, onCancel, onOpenFile }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const words = useDateWords()
@@ -86,17 +88,16 @@ export const RoomPostBubble: React.FC<{
                 {post.text}
               </ThemedText>
             ) : null}
-            {onOpenFile
-              ? post.files.map((file) => (
-                  <RoomFileChip
-                    key={file.fileId}
-                    file={file}
-                    ink={ink}
-                    edge={mine ? ColorPalette.grayscale.white : ColorPalette.grayscale.lightGrey}
-                    onPress={onOpenFile}
-                  />
-                ))
-              : null}
+            {post.files.map((file) => (
+              <RoomFileChip
+                key={file.fileId}
+                file={file}
+                ink={ink}
+                edge={mine ? ColorPalette.grayscale.white : ColorPalette.grayscale.lightGrey}
+                // A file still on its way up has nothing to open yet.
+                onPress={post.delivery ? undefined : onOpenFile}
+              />
+            ))}
           </>
         )}
         {post.delivery ? (
@@ -105,8 +106,23 @@ export const RoomPostBubble: React.FC<{
             accessibilityLiveRegion="polite"
             testID={testIdWithKey(post.delivery === 'failed' ? 'RoomPostNotSent' : 'RoomPostSending')}
           >
-            {t(post.delivery === 'failed' ? 'Rooms.PostNotSent' : 'Rooms.PostSending')}
+            {post.delivery === 'failed'
+              ? t('Rooms.PostNotSent')
+              : post.progress !== undefined
+                ? t('Rooms.PostSendingPercent', { percent: Math.round(post.progress * 100) })
+                : t('Rooms.PostSending')}
           </ThemedText>
+        ) : null}
+        {post.delivery === 'sending' && onCancel ? (
+          <Pressable
+            onPress={onCancel}
+            hitSlop={8}
+            style={{ alignSelf: 'flex-end' }}
+            accessibilityRole="button"
+            testID={testIdWithKey('RoomPostCancel')}
+          >
+            <ThemedText style={[styles.meta, { textDecorationLine: 'underline' }]}>{t('Global.Cancel')}</ThemedText>
+          </Pressable>
         ) : time ? (
           <ThemedText style={[styles.meta, { alignSelf: 'flex-end' }]}>{time}</ThemedText>
         ) : null}

@@ -2798,6 +2798,11 @@
     "FileShare": "Compartilhar ou salvar",
     "FileShareUnavailable": "Baixado, mas este aparelho não consegue compartilhar arquivos pelo Keyring.",
     "SizeKB": "{{n}} KB",
-    "SizeMB": "{{n}} MB"
+    "SizeMB": "{{n}} MB",
+    "FileAttach": "Anexar um arquivo",
+    "FileRemove": "Remover o arquivo",
+    "FileTooLarge": "Esse arquivo é grande demais. Os arquivos podem ter até 25 MB.",
+    "FileUnreadable": "Não foi possível ler esse arquivo. Tente outro.",
+    "PostSendingPercent": "Enviando… {{percent}}%"
   }
 }
