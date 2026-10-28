@@ -191,7 +191,7 @@ describe('getting the cards back, identity by identity', () => {
         recoverCardsFromAgent(a, s, p, t, { ...o, check: async () => undefined })) as never,
     } as unknown as GetCardsDeps
     await bringBackFromAgent(fakeAgent().agent, VTA, [persona, second], () => undefined, d)
-    const gets = vault.calls.slice(before).filter((c) => c.type.endsWith('/get/0.1'))
+    const gets = vault.calls.slice(before).filter((c) => /\/credentials\/get\/0\.[12]$/.test(c.type))
     expect(gets).toHaveLength(3)
   })
 

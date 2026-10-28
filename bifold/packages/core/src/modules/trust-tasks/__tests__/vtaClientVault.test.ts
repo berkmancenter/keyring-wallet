@@ -1,10 +1,15 @@
 /**
  * The VtaClient calls trigger-link sign-in makes on the member's VTA:
  * `vault/sign-trust-task` (0.2 first, not held for consent), `vault/list`,
- * `vault/upsert` (0.1 first, as vta-sdk's own client), and sealing a vault
- * secret to the VTA as a `didcomm-authcrypt` JWE from the manager identity.
+ * `vault/upsert` (0.3 first: every VTA in use serves it), each spelled for the
+ * version it is sent in, and sealing a vault secret to the VTA as a
+ * `didcomm-authcrypt` JWE from the manager identity.
  */
-import { VAULT_SECRET_MESSAGE_TYPE, VTA_TASK, VtaClient } from '../module/VtaClient'
+import Ajv from 'ajv/dist/2020'
+import { PAYLOAD_SCHEMA as UPSERT_0_3 } from '@openvtc/trust-tasks/vault/upsert/0.3/payload'
+import { PAYLOAD_SCHEMA as UPSERT_0_4 } from '@openvtc/trust-tasks/vault/upsert/0.4/payload'
+
+import { VAULT_SECRET_MESSAGE_TYPE, VTA_TASK, VtaClient, vaultPayloadFor } from '../module/VtaClient'
 import { AGENT_DEVICE_TASK } from '../module/vtaDevices'
 import { vtaSignInPort } from '../module/oobSignInAgent'
 import { authcryptTo } from '../module/VtiMediatorTransport'
@@ -19,8 +24,10 @@ jest.mock('../module/VtiMediatorTransport', () => ({
 const VTA = 'did:webvh:agent'
 const PHONE = 'did:peer:2.phone'
 
+const logger = { info: jest.fn(), warn: jest.fn() }
+
 function client() {
-  const vta = new VtaClient({ config: { logger: { info: jest.fn(), warn: jest.fn() } } } as never, VTA, {} as never, {})
+  const vta = new VtaClient({ config: { logger } } as never, VTA, {} as never, {})
   jest.spyOn(vta, 'managerDid', 'get').mockReturnValue(PHONE)
   return vta
 }
@@ -50,15 +57,74 @@ describe("the sign-in's VTA calls", () => {
     await expect(vta.signTrustTask({ entryId: 'vault_1', unsignedEnvelope: {} })).rejects.toThrow(/signedEnvelope/)
   })
 
-  it('lists and upserts vault entries at 0.1', async () => {
+  it('lists and upserts vault entries at 0.4, and logs the version each was answered in', async () => {
+    logger.info.mockClear()
     const vta = client()
     const task = jest
       .spyOn(vta, 'task')
-      .mockResolvedValueOnce({ entries: [{ id: 'vault_1' }], truncated: false })
-      .mockResolvedValueOnce({ entry: { id: 'vault_2' }, created: true })
+      .mockResolvedValueOnce({ entries: [{ id: 'vault_1' }] })
+      .mockResolvedValueOnce({ entry: { id: 'vault_2' }, wasCreated: true })
     await expect(vta.vaultList({ targetDid: 'did:web:vtc' })).resolves.toEqual([{ id: 'vault_1' }])
     await expect(vta.vaultUpsert({ label: 'x' })).resolves.toEqual({ entry: { id: 'vault_2' }, created: true })
-    expect(task.mock.calls.map((c) => c[0])).toEqual([VTA_TASK.vaultList, VTA_TASK.vaultUpsert])
+    expect(task.mock.calls.map((c) => c[0])).toEqual([VTA_TASK.vaultList04, VTA_TASK.vaultUpsert04])
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(`vaultList answered in ${VTA_TASK.vaultList04}`))
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining(`vaultUpsert answered in ${VTA_TASK.vaultUpsert04}`)
+    )
+  })
+
+  // The sign-in's entry, built in 0.1's spelling as ensureSignInVaultEntry builds it.
+  const signInEntry = {
+    contextId: 'personal',
+    targets: [{ kind: 'did', did: 'did:web:vtc' }],
+    label: 'Keyring sign-in',
+    secretKind: 'did-self-issued',
+    sealedSecret: { envelope: 'didcomm-authcrypt' as const, jwe: '{"ciphertext":"c"}' },
+  }
+
+  it("sends the sign-in's entry at 0.4 in its spelling, which 0.4's and 0.3's own schemas accept", async () => {
+    const vta = client()
+    const task = jest.spyOn(vta, 'task').mockResolvedValueOnce({ entry: { id: 'vault_3' }, wasCreated: true })
+    await vta.vaultUpsert(signInEntry)
+    const [type, sent] = task.mock.calls[0]
+    expect(type).toBe(VTA_TASK.vaultUpsert04)
+    const ajv = new Ajv({ strict: false, allErrors: true, logger: false })
+    expect(ajv.compile(UPSERT_0_4 as object)(sent)).toBe(true)
+    const valid = ajv.compile(UPSERT_0_3 as object)
+    expect(valid(sent)).toBe(true)
+    // The control: the same entry as built, in 0.1's spelling, is what 0.3 refuses.
+    expect(valid(signInEntry)).toBe(false)
+    expect(sent).toMatchObject({ secretKind: 'didSelfIssued', sealedSecret: { envelope: 'didcommAuthcrypt' } })
+  })
+
+  it('steps down 0.4 → 0.3 → 0.2 → 0.1 on version refusals, each in its own spelling', async () => {
+    const vta = client()
+    const task = jest
+      .spyOn(vta, 'task')
+      .mockRejectedValueOnce(new VtiRefusal('unsupportedVersion', 'no'))
+      .mockRejectedValueOnce(new VtiRefusal('unsupportedVersion', 'no'))
+      .mockRejectedValueOnce(new VtiRefusal('unsupportedVersion', 'no'))
+      .mockResolvedValueOnce({ entry: { id: 'vault_4' } })
+    await vta.vaultUpsert(signInEntry)
+    expect(task.mock.calls.map((c) => c[0])).toEqual([
+      VTA_TASK.vaultUpsert04,
+      VTA_TASK.vaultUpsert03,
+      VTA_TASK.vaultUpsert02,
+      VTA_TASK.vaultUpsert,
+    ])
+    expect(task.mock.calls.map((c) => (c[1] as { secretKind: string }).secretKind)).toEqual([
+      'didSelfIssued',
+      'didSelfIssued',
+      'didSelfIssued',
+      'did-self-issued',
+    ])
+  })
+
+  it('never retries in another version when the refusal is about the request itself', async () => {
+    const vta = client()
+    const task = jest.spyOn(vta, 'task').mockRejectedValueOnce(new VtiRefusal('forbidden', 'not yours'))
+    await expect(vta.vaultUpsert(signInEntry)).rejects.toThrow(/not yours/)
+    expect(task).toHaveBeenCalledTimes(1)
   })
 
   it('seals a vault secret to the VTA from the manager identity, as a didcomm-authcrypt JWE', async () => {
@@ -80,6 +146,38 @@ describe("the sign-in's VTA calls", () => {
 
   it('does not seal without a session', async () => {
     await expect(client().sealVaultSecret({ kind: 'did-self-issued' })).rejects.toThrow(/not connected/)
+  })
+})
+
+describe('vaultPayloadFor', () => {
+  const entry = {
+    secretKind: 'did-self-issued',
+    targets: [
+      { kind: 'web-origin', origin: 'https://x' },
+      { kind: 'did', did: 'did:web:v' },
+    ],
+    sealedSecret: { envelope: 'didcomm-authcrypt', jwe: 'j' },
+    label: 'keep-me-as-is',
+  }
+
+  it("leaves 0.1's spelling at 0.1, and changes nothing that has no camel form", () => {
+    expect(vaultPayloadFor(VTA_TASK.vaultUpsert, entry)).toEqual(entry)
+    expect(vaultPayloadFor(VTA_TASK.vaultUpsert03, { secretKind: 'custom' })).toEqual({ secretKind: 'custom' })
+  })
+
+  it('spells 0.2 and 0.3 in camel case, without touching other fields or the input', () => {
+    for (const uri of [VTA_TASK.vaultUpsert02, VTA_TASK.vaultUpsert03, VTA_TASK.vaultList03]) {
+      expect(vaultPayloadFor(uri, entry)).toEqual({
+        secretKind: 'didSelfIssued',
+        targets: [
+          { kind: 'webOrigin', origin: 'https://x' },
+          { kind: 'did', did: 'did:web:v' },
+        ],
+        sealedSecret: { envelope: 'didcommAuthcrypt', jwe: 'j' },
+        label: 'keep-me-as-is',
+      })
+    }
+    expect(entry.secretKind).toBe('did-self-issued')
   })
 })
 

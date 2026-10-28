@@ -48,13 +48,34 @@ export const OOB_TASKS = {
   prove02: 'https://trusttasks.org/spec/auth/oob/prove/0.2',
   grant02: 'https://trusttasks.org/spec/auth/oob/grant/0.2',
   respond02: 'https://trusttasks.org/spec/auth/oob/respond/0.2',
+  // The 2026-10-24 naming pass (trust-tasks-tf f27ea5387): claim 0.2 and prove 0.3 answer `decisionClosesAt`
+  // (RFC 3339) where 0.1/0.2 answered `decisionDeadline` (epoch seconds); grant 0.3 names `sessionEndsAt`
+  // (RFC 3339) where 0.2 named `notAfter`; respond 0.3 carries a 0.3 grant. A community from 0d3f268e
+  // (vtc-service member_portal/oob.rs) serves only claim 0.2, prove/grant/respond 0.3; one at vtc 0.14 or before
+  // only claim 0.1 and prove/grant/respond 0.1-0.2. identify stays 0.1.
+  claim02: 'https://trusttasks.org/spec/auth/oob/claim/0.2',
+  prove03: 'https://trusttasks.org/spec/auth/oob/prove/0.3',
+  grant03: 'https://trusttasks.org/spec/auth/oob/grant/0.3',
+  respond03: 'https://trusttasks.org/spec/auth/oob/respond/0.3',
 } as const
 
 /**
- * Which `prove` / `grant` / `respond` a sign-in runs at. 0.2 is tried first; a community from before it refuses
- * `prove/0.2` as a type or version it does not serve, and the sign-in proves at 0.1, which delegates nothing.
+ * Which `prove` / `grant` / `respond` a sign-in runs at. 0.3 is tried first, then 0.2, then 0.1: a community that
+ * does not serve one refuses it as a type or version it does not serve, before the request is touched. 0.1
+ * delegates nothing.
  */
-export type OobVersion = '0.1' | '0.2'
+export type OobVersion = '0.1' | '0.2' | '0.3'
+
+/** A sign-in's decision deadline, in epoch seconds: claim 0.2 / prove 0.3 say `decisionClosesAt`, earlier ones `decisionDeadline`. */
+export function decisionDeadlineOf(payload: Record<string, unknown>): number | undefined {
+  const closes = payload.decisionClosesAt
+  if (typeof closes === 'string') {
+    const ms = Date.parse(closes)
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : undefined
+  }
+  const deadline = payload.decisionDeadline
+  return typeof deadline === 'number' && Number.isInteger(deadline) ? deadline : undefined
+}
 
 /**
  * Task families a wallet never lets a browser sign as the member, whatever a community offers (auth/oob/grant/0.2):
@@ -448,8 +469,8 @@ async function answerProblem(
   if (service.did !== expected.vtcDid) return 'the answer names another community'
   if (payload.purpose !== LOGIN) return 'the answer is not for signing in'
   if (payload.origin !== expected.portalOrigin) return "the answer's origin is not the community's sign-in portal"
-  const deadline = payload.decisionDeadline
-  if (typeof deadline !== 'number' || !Number.isInteger(deadline)) return 'the answer has no decision deadline'
+  const deadline = decisionDeadlineOf(payload)
+  if (deadline === undefined) return 'the answer has no decision deadline'
   if (deadline <= expected.now) return 'the decision deadline has passed'
   return undefined
 }
@@ -485,12 +506,22 @@ export async function claimSignIn(link: string | TriggerAccept, deps: SignInDeps
   if (!base || !portalOrigin) throw new SignInError('noSignIn')
 
   const keyA = (deps.newKey ?? newThrowawayKey)()
-  const claim = keyA.sign(
-    oobEnvelope(OOB_TASKS.claim, { requestId }, keyA.did, vtcDid, requestId),
-    // K_a proves control of itself to the community: `authentication`.
-    'authentication'
-  )
-  const answer = await sendToCommunity(deps, base, claim)
+  // K_a proves control of itself to the community: `authentication`.
+  const claimAt = (type: string) =>
+    keyA.sign(oobEnvelope(type, { requestId }, keyA.did, vtcDid, requestId), 'authentication')
+  // 0.2 first. A community that does not serve it refuses the type at dispatch, before the request is touched,
+  // so the request is claimed again at 0.1.
+  let claim = claimAt(OOB_TASKS.claim02)
+  let answer: Record<string, unknown>
+  try {
+    answer = await sendToCommunity(deps, base, claim)
+  } catch (error) {
+    if (!(error instanceof SignInError) || error.reason !== 'refused' || !isUnsupportedTaskCode(error.detail)) {
+      throw error
+    }
+    claim = claimAt(OOB_TASKS.claim)
+    answer = await sendToCommunity(deps, base, claim)
+  }
   const problem = await answerProblem(answer, {
     vtcDid,
     vtcDocument,
@@ -507,7 +538,7 @@ export async function claimSignIn(link: string | TriggerAccept, deps: SignInDeps
     vtcDid,
     base,
     portalOrigin,
-    decisionDeadline: (answer.payload as { decisionDeadline: number }).decisionDeadline,
+    decisionDeadline: decisionDeadlineOf(answer.payload as Record<string, unknown>) as number,
     keyA,
     answer,
   }

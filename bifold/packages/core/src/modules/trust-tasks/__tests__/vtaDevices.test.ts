@@ -70,6 +70,10 @@ function fakeAgent(overrides: Partial<Record<string, (payload: Record<string, un
       sent.push({ type, payload })
       const answer = overrides[type]
       if (answer) return answer(payload) as T
+      // An agent before 0d3f268e: the 0.3 device tasks and acl/list/0.3 are refused, naming what it serves.
+      if (type === AGENT_DEVICE_TASK.heartbeat03) throw unsupported(type, AGENT_DEVICE_TASK.heartbeat)
+      if (type === AGENT_DEVICE_TASK.list03) throw unsupported(type, AGENT_DEVICE_TASK.list)
+      if (type === AGENT_DEVICE_TASK.aclList03) throw unsupported(type, AGENT_DEVICE_TASK.aclList)
       if (type === AGENT_DEVICE_TASK.aclList02) throw unsupported(type, AGENT_DEVICE_TASK.aclList)
       if (type === AGENT_DEVICE_TASK.aclRevoke02) throw unsupported(type, AGENT_DEVICE_TASK.aclRevoke)
       if (type === AGENT_DEVICE_TASK.aclList) return { entries: acl, truncated: false } as T
@@ -303,30 +307,34 @@ describe('another phone acting as the same agent', () => {
 // with camelCase enum values on the wire: wipe's scope is `cacheAndKeys`.
 // acl/list and acl/revoke are not deprecated and stay at 0.1.
 describe('the device tasks this phone speaks', () => {
-  it('are the 0.2 versions, the access-list tasks at 0.2 with 0.1 beside them', () => {
+  it('are the 0.2 versions with heartbeat and list at 0.3 too, the access-list tasks at 0.1 to 0.3', () => {
     expect(AGENT_DEVICE_TASK).toEqual({
       register: 'https://trusttasks.org/spec/device/register/0.2',
       heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
       list: 'https://trusttasks.org/spec/device/list/0.2',
+      heartbeat03: 'https://trusttasks.org/spec/device/heartbeat/0.3',
+      list03: 'https://trusttasks.org/spec/device/list/0.3',
       wipe: 'https://trusttasks.org/spec/device/wipe/0.2',
       setWake: 'https://trusttasks.org/spec/device/set-wake/0.2',
       aclList: 'https://trusttasks.org/spec/acl/list/0.1',
       aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
       aclList02: 'https://trusttasks.org/spec/acl/list/0.2',
       aclRevoke02: 'https://trusttasks.org/spec/acl/revoke/0.2',
+      aclList03: 'https://trusttasks.org/spec/acl/list/0.3',
     })
   })
 })
 
-// vta-service 0.53.1 and 0.54.0 serve acl/list and acl/revoke only at 0.1, and
-// a refused 0.2 never reached the phone over TSP (al-phone, 10-05): 0.1 first.
+// Newest first (group 1b): v0.67.0 serves acl/list only at 0.3, agents before it only at 0.1. A refusal names what
+// the agent serves, so this 0.1 agent is asked 0.1 next, and straight away after that. (Over TSP a refused 0.2 once
+// never reached the phone, al-phone 10-05: the case to watch.)
 describe('the access-list tasks, asked in the version agents serve', () => {
-  it('asks acl/list in 0.1 first, in one message each time', async () => {
+  it('asks acl/list in 0.3 first, then in 0.1, which it remembers', async () => {
     const { port, sent } = fakeAgent()
     await listAgentDevices(port)
     await listAgentDevices(port)
     const acl = sent.map((s) => s.type).filter((t) => t.includes('/acl/'))
-    expect(acl).toEqual([AGENT_DEVICE_TASK.aclList, AGENT_DEVICE_TASK.aclList])
+    expect(acl).toEqual([AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList, AGENT_DEVICE_TASK.aclList])
   })
 
   it('an agent that refuses 0.1 as unsupported is asked in 0.2, and removes with its explicit full removal', async () => {

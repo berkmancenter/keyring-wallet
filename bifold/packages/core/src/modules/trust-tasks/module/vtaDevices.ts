@@ -39,6 +39,12 @@ export const AGENT_DEVICE_TASK = {
   register: 'https://trusttasks.org/spec/device/register/0.2',
   heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
   list: 'https://trusttasks.org/spec/device/list/0.2',
+  // 0.3 (trust-tasks-tf f27ea5387), asked first: from 0d3f268e (vta-service #2309) the agent serves only
+  // heartbeat/0.3 and list/0.3, while v0.60.0 to v0.66.0 serve 0.1 and 0.2. What this phone sends is the same in
+  // both; heartbeat's answer spells `serverTime` `respondedAt`, and list's `cursor`/`truncated` are `nextCursor`
+  // (neither is read here).
+  heartbeat03: 'https://trusttasks.org/spec/device/heartbeat/0.3',
+  list03: 'https://trusttasks.org/spec/device/list/0.3',
   wipe: 'https://trusttasks.org/spec/device/wipe/0.2',
   setWake: 'https://trusttasks.org/spec/device/set-wake/0.2',
   aclList: 'https://trusttasks.org/spec/acl/list/0.1',
@@ -46,6 +52,9 @@ export const AGENT_DEVICE_TASK = {
   // 0.2 asked first, 0.1 when the agent does not serve it (taskVersions.ts).
   aclList02: 'https://trusttasks.org/spec/acl/list/0.2',
   aclRevoke02: 'https://trusttasks.org/spec/acl/revoke/0.2',
+  // 0.3, asked first: vta-service v0.67.0 serves acl/list only at 0.3 (the same entries as 0.2), and acl/revoke
+  // only at 0.2; v0.60.0 to 0d3f268e only at 0.1.
+  aclList03: 'https://trusttasks.org/spec/acl/list/0.3',
 } as const
 
 /** acl/revoke/0.2 needs its narrowing said: a full removal is `{kind: "entry"}` (trust-tasks-tf ce07a039 acl/revoke/0.2). */
@@ -106,13 +115,17 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v 
 export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
   const [aclAnswer, listAnswer] = await Promise.all([
     versionsFor(port.managerDid ?? port)
-      .ask('aclList', [AGENT_DEVICE_TASK.aclList, AGENT_DEVICE_TASK.aclList02], (uri) =>
+      .ask('aclList', [AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList], (uri) =>
         port.task<{ entries?: unknown }>(uri, {})
       )
       .then(({ answer }) => answer),
     // Wiped and disabled bindings are left out unless asked for, and a removed
     // device must stay listed as removed rather than fall back to a bare ACL row.
-    port.task<{ devices?: unknown }>(AGENT_DEVICE_TASK.list, { includeWiped: true, includeDisabled: true }),
+    versionsFor(port.managerDid ?? port)
+      .ask('deviceList', [AGENT_DEVICE_TASK.list03, AGENT_DEVICE_TASK.list], (uri) =>
+        port.task<{ devices?: unknown }>(uri, { includeWiped: true, includeDisabled: true })
+      )
+      .then(({ answer }) => answer),
   ])
   const entries = (Array.isArray(aclAnswer?.entries) ? aclAnswer.entries : []) as Json[]
   const rows = (Array.isArray(listAnswer?.devices) ? listAnswer.devices : []) as Json[]
@@ -193,7 +206,7 @@ export async function removeAgentDevice(
   }
   await versionsFor(port.managerDid ?? port).ask(
     'aclRevoke',
-    [AGENT_DEVICE_TASK.aclRevoke, AGENT_DEVICE_TASK.aclRevoke02],
+    [AGENT_DEVICE_TASK.aclRevoke02, AGENT_DEVICE_TASK.aclRevoke],
     (uri) => port.task(uri, revokePayload(uri, device.did))
   )
   return { mode: wiped ? 'wiped' : 'revoked' }
@@ -227,12 +240,20 @@ export async function registerThisDevice(
 
 /** Tell the agent this phone is still here. */
 export async function heartbeat(port: AgentDevicePort): Promise<void> {
-  await port.task(AGENT_DEVICE_TASK.heartbeat, {})
+  await sendHeartbeat(port, {})
 }
+
+/** A heartbeat in the newest version the agent serves (0.3, else 0.2). */
+const sendHeartbeat = (port: AgentDevicePort, payload: Record<string, unknown>) =>
+  versionsFor(port.managerDid ?? port).ask(
+    'deviceHeartbeat',
+    [AGENT_DEVICE_TASK.heartbeat03, AGENT_DEVICE_TASK.heartbeat],
+    (uri) => port.task(uri, payload)
+  )
 
 /** Rename this phone: a heartbeat carrying the corrected name, the only way a binding's name changes. */
 export async function renameThisDevice(port: AgentDevicePort, displayName: string): Promise<void> {
-  await port.task(AGENT_DEVICE_TASK.heartbeat, { ext: { [EXT_DEVICE_NAME]: { displayName } } })
+  await sendHeartbeat(port, { ext: { [EXT_DEVICE_NAME]: { displayName } } })
 }
 
 /** A push gateway's opaque handle for this phone's push token (`push/register`'s answer). */

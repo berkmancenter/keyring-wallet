@@ -17,7 +17,9 @@
  * So discovery answers the question, and the probe is only a fallback.
  */
 import { VtaClient } from '../module/VtaClient'
-import { DISCOVERY_TASK, PCS_VTA_TASK } from '../module/pcsVtaPayloads'
+import { DISCOVERY_TASK, DISCOVERY_TASK_03, PCS_VTA_TASK } from '../module/pcsVtaPayloads'
+import { TaskVersions } from '../module/taskVersions'
+import { VtiRefusal } from '../module/vtiAgent'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -27,6 +29,8 @@ function clientWith(script: (uri: string) => Promise<unknown>) {
   const asked: string[] = []
   const payloads: unknown[] = []
   Object.assign(client, {
+    // Built by the constructor in the app; this client skips the constructor.
+    versions: new TaskVersions(),
     task: async (uri: string, payload: unknown) => {
       asked.push(uri)
       payloads.push(payload)
@@ -39,6 +43,16 @@ function clientWith(script: (uri: string) => Promise<unknown>) {
 const refusal = (code: string) => Object.assign(new Error(code), { document: { payload: { code } } })
 
 describe('what the agent says it serves', () => {
+  it('asks discovery at 0.3, and at 0.1 only when the agent does not serve 0.3', async () => {
+    const { client, asked } = clientWith(async (uri) => {
+      if (uri === DISCOVERY_TASK_03)
+        throw new VtiRefusal('unsupportedVersion', 'no', { servedVersions: [DISCOVERY_TASK] })
+      return { supportedTypes: ['https://trusttasks.org/spec/vta/pcs/applications/show/0.1'] }
+    })
+    expect(await client.servesPcs()).toBe(true)
+    expect(asked).toEqual([DISCOVERY_TASK_03, DISCOVERY_TASK])
+  })
+
   it('reads the family out of discovery, and asks nothing else', async () => {
     const { client, asked } = clientWith(async () => ({
       supportedTypes: ['https://trusttasks.org/spec/vta/pcs/applications/show/0.1'],
@@ -46,7 +60,7 @@ describe('what the agent says it serves', () => {
     expect(await client.servesPcs()).toBe(true)
     // No probe: discovery answered, so dispatching a task that could wake an
     // approver would be gratuitous.
-    expect(asked).toEqual([DISCOVERY_TASK])
+    expect(asked).toEqual([DISCOVERY_TASK_03])
   })
 
   it('accepts the object form as well as the bare URI', async () => {
@@ -65,7 +79,7 @@ describe('what the agent says it serves', () => {
       supportedTypes: ['https://trusttasks.org/spec/acl/list/0.1'],
     }))
     expect(await client.servesPcs()).toBe(false)
-    expect(asked).toEqual([DISCOVERY_TASK])
+    expect(asked).toEqual([DISCOVERY_TASK_03])
   })
 })
 
@@ -88,22 +102,22 @@ describe('how the question is asked', () => {
     // An agent serving nothing is not a real answer, and it is what a pattern
     // mismatch looks like. Falling through to the probe is the honest move.
     const { client, asked } = clientWith(async (uri) => {
-      if (uri === DISCOVERY_TASK) return { supportedTypes: [] }
+      if (uri === DISCOVERY_TASK_03) return { supportedTypes: [] }
       throw refusal('permissionDenied')
     })
     expect(await client.servesPcs()).toBeUndefined()
-    expect(asked).toEqual([DISCOVERY_TASK, PCS_VTA_TASK.applicationsShow])
+    expect(asked).toEqual([DISCOVERY_TASK_03, PCS_VTA_TASK.applicationsShow])
   })
 })
 
 describe('the probe, only when discovery cannot answer', () => {
   it('falls back when discovery is not served, and reads notFound as yes', async () => {
     const { client, asked } = clientWith(async (uri) => {
-      if (uri === DISCOVERY_TASK) throw refusal('unsupportedType')
+      if (uri === DISCOVERY_TASK_03) throw refusal('unsupportedType')
       throw refusal('vta/pcs/applications/show:notFound')
     })
     expect(await client.servesPcs()).toBe(true)
-    expect(asked).toEqual([DISCOVERY_TASK, PCS_VTA_TASK.applicationsShow])
+    expect(asked).toEqual([DISCOVERY_TASK_03, PCS_VTA_TASK.applicationsShow])
   })
 
   it('reads unsupportedType on the probe as no', async () => {
@@ -117,7 +131,7 @@ describe('the probe, only when discovery cannot answer', () => {
     // The whole point of this file. An old agent with enforcement on can say
     // this about a task it does not implement.
     const { client } = clientWith(async (uri) => {
-      if (uri === DISCOVERY_TASK) throw refusal('permissionDenied')
+      if (uri === DISCOVERY_TASK_03) throw refusal('permissionDenied')
       throw refusal('permissionDenied')
     })
     expect(await client.servesPcs()).toBeUndefined()
@@ -132,7 +146,7 @@ describe('the probe, only when discovery cannot answer', () => {
       throw refusal('permissionDenied')
     })
     expect(await client.servesPcs()).toBeUndefined()
-    expect(asked).toEqual([DISCOVERY_TASK, PCS_VTA_TASK.applicationsShow])
+    expect(asked).toEqual([DISCOVERY_TASK_03, PCS_VTA_TASK.applicationsShow])
   })
 
   it('is inconclusive for a refusal it does not recognise', async () => {

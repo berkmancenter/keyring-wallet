@@ -43,6 +43,13 @@ export const PCS_FAMILY = 'https://trusttasks.org/spec/vta/pcs/'
  */
 export const DISCOVERY_TASK = 'https://trusttasks.org/spec/trust-task-discovery/0.1'
 
+/**
+ * `trust-task-discovery/0.3`, asked of the agent first: vta-service has served it since v0.46.0 (2026-09-30), and
+ * v0.60.0 and v0.64.0 serve 0.1 and 0.3 (vta-sdk trust_tasks.rs TASK_TRUST_TASK_DISCOVERY_*). 0.1 is withdrawn in
+ * the 2027-01-01 batch. The query is the same; 0.3's answer may add an acceptance window per type, which is not read.
+ */
+export const DISCOVERY_TASK_03 = 'https://trusttasks.org/spec/trust-task-discovery/0.3'
+
 /** The five task types of the applicant's round. */
 export const PCS_VTA_TASK = {
   applicationsCreate: 'https://trusttasks.org/spec/vta/pcs/applications/create/0.1',

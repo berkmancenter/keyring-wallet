@@ -29,9 +29,26 @@ function world(opts: { otherSeenAt?: () => string | undefined; registered?: bool
         registered = true
         return {} as T
       }
-      // An agent at v0.52.0: acl/* at 0.1 only.
+      // An agent at v0.52.0: acl/* at 0.1 only, and the device tasks at 0.2 (0.3 refused, as before 0d3f268e).
+      if (
+        type === AGENT_DEVICE_TASK.heartbeat03 ||
+        type === AGENT_DEVICE_TASK.list03 ||
+        type === AGENT_DEVICE_TASK.aclList03
+      )
+        throw new VtiRefusal('unsupportedVersion', 'unsupported version', {
+          servedVersions: [
+            (
+              {
+                [AGENT_DEVICE_TASK.heartbeat03]: AGENT_DEVICE_TASK.heartbeat,
+                [AGENT_DEVICE_TASK.list03]: AGENT_DEVICE_TASK.list,
+              } as Record<string, string>
+            )[type] ?? AGENT_DEVICE_TASK.aclList,
+          ],
+        })
       if (type === AGENT_DEVICE_TASK.aclList02)
-        throw new VtiRefusal('unsupportedVersion', 'unsupported version', { servedVersions: [AGENT_DEVICE_TASK.aclList] })
+        throw new VtiRefusal('unsupportedVersion', 'unsupported version', {
+          servedVersions: [AGENT_DEVICE_TASK.aclList],
+        })
       if (type === AGENT_DEVICE_TASK.aclList)
         return {
           entries: [
@@ -85,7 +102,13 @@ describe('telling the agent this phone is here', () => {
         task: async <T>(type: string) => {
           sent.push(type)
           if (type === AGENT_DEVICE_TASK.register) throw new VtiRefusal('invalid', 'displayName too long')
-          if (type === AGENT_DEVICE_TASK.aclList02) throw new VtiRefusal('unsupportedVersion', 'unsupported version')
+          if (
+            type === AGENT_DEVICE_TASK.aclList02 ||
+            type === AGENT_DEVICE_TASK.aclList03 ||
+            type === AGENT_DEVICE_TASK.list03 ||
+            type === AGENT_DEVICE_TASK.heartbeat03
+          )
+            throw new VtiRefusal('unsupportedVersion', 'unsupported version')
           if (type === AGENT_DEVICE_TASK.aclList) return { entries: [] } as T
           if (type === AGENT_DEVICE_TASK.list) return { devices: [] } as T
           return {} as T

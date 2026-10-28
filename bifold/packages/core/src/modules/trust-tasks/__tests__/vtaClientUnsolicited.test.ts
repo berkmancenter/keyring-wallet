@@ -65,8 +65,8 @@ describe('a message the agent sends of its own accord, while a task waits for it
     expect(resolve).toHaveBeenCalledWith(answer)
   })
 
-  it('so does a step-up approve-request, of either version', () => {
-    for (const v of ['0.1', '0.2']) {
+  it('so does a step-up approve-request, of every version this phone reads', () => {
+    for (const v of ['0.1', '0.2', '0.3', '0.4', '0.5']) {
       const { onInbound, resolve, deliver } = waitingClient()
       const request = message({ type: `https://trusttasks.org/spec/auth/step-up/approve-request/${v}`, payload: {} })
       deliver(request)

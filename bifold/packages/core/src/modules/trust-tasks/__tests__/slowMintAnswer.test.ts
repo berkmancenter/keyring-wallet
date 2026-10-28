@@ -23,7 +23,8 @@ jest.mock('../module/vtaReplyProof', () => ({ checkVtaReply: jest.fn(async () =>
 
 import { MINT_TIMEOUT_MS, VTA_TASK, VtaClient } from '../module/VtaClient'
 
-const MINT = VTA_TASK.didsCreate
+// The version asked first (VTA_TASK_VERSIONS.didsCreate).
+const MINT = VTA_TASK.didsCreate12
 const PAYLOAD = { contextId: 'vta', serverId: 'control', label: 'keyring-x' }
 const MINTED = { did: 'did:webvh:QmMinted:dids.example:immune-hood' }
 

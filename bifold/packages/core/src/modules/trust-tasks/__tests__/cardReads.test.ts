@@ -24,6 +24,7 @@ import {
   recoverCardsFromAgent,
   resetCardVaultCache,
   VAULT_GET,
+  VAULT_GET_02,
 } from '../module/vtiCardVault'
 
 const mockVerify = jest.fn()
@@ -47,7 +48,9 @@ async function agentKeeping(...cards: Record<string, unknown>[]) {
   for (const credential of cards) await vault.task('vault/credentials/receive/0.1', { credential })
   return vault
 }
-const gets = (vault: ReturnType<typeof fakeVault>) => vault.calls.filter((c) => c.type === VAULT_GET).length
+// A card read at either version of vault/credentials/get.
+const isGet = (type: string) => type === VAULT_GET || type === VAULT_GET_02
+const gets = (vault: ReturnType<typeof fakeVault>) => vault.calls.filter((c) => isGet(c.type)).length
 
 beforeEach(() => {
   resetCardVaultCache()
@@ -84,7 +87,7 @@ describe("reading the agent's cards", () => {
     const onPhone = await cardsOnPhone(store)
     expect([...onPhone.keys()]).toEqual([membershipCard.id])
     const cards = await fetchAgentCards(vault.task, undefined, onPhone)
-    expect(vault.calls.filter((c) => c.type === VAULT_GET).map((c) => c.payload)).toEqual([{ id: roleCard.id }])
+    expect(vault.calls.filter((c) => isGet(c.type)).map((c) => c.payload)).toEqual([{ id: roleCard.id }])
     expect(cards.find((c) => c.id === membershipCard.id)?.credential).toBe(membershipCard)
   })
 
@@ -99,7 +102,7 @@ describe("reading the agent's cards", () => {
   it('a card the vault did not give back is asked for again next time', async () => {
     const vault = await agentKeeping(membershipCard)
     const failing = (async (type: string, payload: Record<string, unknown>) => {
-      if (type === VAULT_GET) throw new Error('no answer')
+      if (isGet(type)) throw new Error('no answer')
       return vault.task(type, payload)
     }) as typeof vault.task
     expect((await fetchAgentCards(failing))[0].credential).toBeUndefined()

@@ -42,6 +42,7 @@ import {
   type VerifyAttestationPayload,
   PCS_FAMILY,
   DISCOVERY_TASK,
+  DISCOVERY_TASK_03,
 } from './pcsVtaPayloads'
 
 import {
@@ -77,7 +78,14 @@ import {
   type VetterStanding,
 } from './pcsVetterTasks'
 import { VtiRefusal, isHiddenVettingType } from './vtiAgent'
-import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf, type StepUpRequest } from './stepUp'
+import {
+  STEP_UP_REQUEST_TYPES,
+  StepUpDeclined,
+  approveResponsePayload,
+  approveResponseTypesFor,
+  stepUpRequestOf,
+  type StepUpRequest,
+} from './stepUp'
 import { isDigestMultibase } from './vettingShape'
 import { TaskVersions } from './taskVersions'
 import { chooseCarriage, type Carriage } from './tspCapability'
@@ -138,6 +146,9 @@ export const VTA_TASK = {
   contextsCreate: 'https://trusttasks.org/spec/vta/contexts/create/1.0',
   didsList: 'https://trusttasks.org/spec/vta/webvh/dids/list/1.0',
   didsCreate: 'https://trusttasks.org/spec/vta/webvh/dids/create/1.0',
+  didsCreate11: 'https://trusttasks.org/spec/vta/webvh/dids/create/1.1',
+  /** 1.2 adds only OPTIONAL request members (`didMethod`, `scidAlsoKnownAs`); 1.1's payload is a valid 1.2 one. */
+  didsCreate12: 'https://trusttasks.org/spec/vta/webvh/dids/create/1.2',
   keysExportSecret: 'https://trusttasks.org/spec/keys/export-secret/0.1',
   serversList: 'https://trusttasks.org/spec/vta/webvh/servers/list/1.0',
   consentRequest: 'https://trusttasks.org/spec/task-consent/request/0.1',
@@ -159,11 +170,15 @@ export const VTA_TASK = {
   aclGrant02: 'https://trusttasks.org/spec/acl/grant/0.2',
   aclRevoke02: 'https://trusttasks.org/spec/acl/revoke/0.2',
   aclUpdate02: 'https://trusttasks.org/spec/acl/update/0.2',
+  /** 0.3 (vta-service #2324, in v0.67.0): 0.2's entries; `pageSize` is `limit`, `cursor`/`truncated` are `nextCursor`. */
+  aclList03: 'https://trusttasks.org/spec/acl/list/0.3',
   // Only "Send me a test request" sends these (approvalRules.ts TEST_REQUEST_TASKS).
   contextsDelete: 'https://trusttasks.org/spec/vta/contexts/delete/1.0',
   // The approval rules' row (vta-sdk trust_tasks.rs:2048-2060). Writing is super-admin.
   policyGet: 'https://trusttasks.org/spec/policy/get/0.1',
   policyUpsert: 'https://trusttasks.org/spec/policy/upsert/0.2',
+  /** 0.3: the same request; the answer's `created` is spelled `wasCreated` (trust-tasks-tf f27ea5387). */
+  policyUpsert03: 'https://trusttasks.org/spec/policy/upsert/0.3',
   // The vault, for trigger-link sign-in (oobSignInAgent). vta-sdk's own client
   // sends every vault task at 0.1 (client/vault.rs:35-279, VTI 03a3562f);
   // 0.1 is deprecated in favour of 0.2 (trust_tasks.rs:701-846), which the VTA
@@ -172,6 +187,12 @@ export const VTA_TASK = {
   vaultList02: 'https://trusttasks.org/spec/vault/list/0.2',
   vaultUpsert: 'https://trusttasks.org/spec/vault/upsert/0.1',
   vaultUpsert02: 'https://trusttasks.org/spec/vault/upsert/0.2',
+  vaultList03: 'https://trusttasks.org/spec/vault/list/0.3',
+  vaultUpsert03: 'https://trusttasks.org/spec/vault/upsert/0.3',
+  // 0.4 (trust-tasks-tf f27ea5387): the same vault-entry shape as 0.3 (vault/_shared/0.3); list's `pageSize` is
+  // `limit` and its answer's `cursor`/`truncated` are `nextCursor`; upsert's `created` is `wasCreated`.
+  vaultList04: 'https://trusttasks.org/spec/vault/list/0.4',
+  vaultUpsert04: 'https://trusttasks.org/spec/vault/upsert/0.4',
   vaultSignTrustTask: 'https://trusttasks.org/spec/vault/sign-trust-task/0.1',
   vaultSignTrustTask02: 'https://trusttasks.org/spec/vault/sign-trust-task/0.2',
 } as const
@@ -181,28 +202,38 @@ export const VTA_TASK = {
  * ask: newest first, except where agents in use serve only the older one.
  */
 export const VTA_TASK_VERSIONS = {
-  // 0.1 first: vta-service 0.53.1 and 0.54.0 serve acl/{list,grant,update,
-  // revoke} only at 0.1 (trust_tasks/mod.rs:2245-2255 in both), and a refused
-  // 0.2 never reached the phone over TSP, so an add to My devices read as "no
-  // answer" (al-phone, 10-05). 0.2 is asked if an agent ever refuses 0.1.
-  aclList: [VTA_TASK.aclList, VTA_TASK.aclList02],
-  aclGrant: [VTA_TASK.aclGrant, VTA_TASK.aclGrant02],
-  aclRevoke: [VTA_TASK.aclRevoke, VTA_TASK.aclRevoke02],
-  aclUpdate: [VTA_TASK.aclUpdate, VTA_TASK.aclUpdate02],
-  // 0.1 first: vta-service 0.53.1 and 0.54.0 serve only task-consent/decision/0.1
-  // (trust_tasks/mod.rs:2242, TASK_TASK_CONSENT_DECISION_0_1), and its refusal of
-  // a 0.2 decision never reached the phone over TSP, so the step-down never
-  // ran and an Approve hung (al-phone, 10-05). This client sends only 0.1's
-  // members; 0.2 is asked if an agent ever refuses 0.1.
-  consentDecision: [VTA_TASK.consentDecision, VTA_TASK.consentDecision02],
+  // Newest first. The agents in use share no version: vta-service v0.60.0 to 0d3f268e serve acl/* only at 0.1,
+  // and v0.67.0 (#2323, #2324) only acl/{grant,revoke,update}/0.2 and acl/list/0.3. So one of them steps down on a
+  // refusal whichever is asked first. That needs the refusal to reach the phone: over TSP a refused 0.2 once did
+  // not (al-phone, 10-05), so a TSP-only agent before v0.67.0 is the case to watch.
+  aclList: [VTA_TASK.aclList03, VTA_TASK.aclList02, VTA_TASK.aclList],
+  aclGrant: [VTA_TASK.aclGrant02, VTA_TASK.aclGrant],
+  aclRevoke: [VTA_TASK.aclRevoke02, VTA_TASK.aclRevoke],
+  aclUpdate: [VTA_TASK.aclUpdate02, VTA_TASK.aclUpdate],
+  // 0.2 first. The agents in use share no version: vta-service v0.60.0 to v0.66.0 serve only 0.1, and from
+  // 0d3f268e (2026-10-28, #2313, what first.openvtc.net runs) only 0.2. So one of them steps down on a refusal
+  // whichever is asked first, and 0.2 is where agents are going. This client sends only 0.1's members, which are a
+  // valid 0.2 decision. The step-down needs the refusal to reach the phone: over TSP it once did not (al-phone,
+  // 10-05), so a TSP-only agent at 0.60-0.66 is the case to watch.
+  consentDecision: [VTA_TASK.consentDecision02, VTA_TASK.consentDecision],
   // 0.2 first: the reference rungs signed identify and grant with 0.2 against
   // VTI main 03a3562f (ref-23, ref-24). The payload is the same in both.
   vaultSignTrustTask: [VTA_TASK.vaultSignTrustTask02, VTA_TASK.vaultSignTrustTask],
-  // 0.1 first, as vta-sdk's own client and pnm send them (ref-23 created the
-  // sign-in entry with pnm's 0.1). Both casings of `secretKind` are read and
-  // accepted (vti-common vault/mod.rs:300-322).
-  vaultList: [VTA_TASK.vaultList, VTA_TASK.vaultList02],
-  vaultUpsert: [VTA_TASK.vaultUpsert, VTA_TASK.vaultUpsert02],
+  // 0.4 first, then 0.3. The agents in use share no version: vta-service v0.22.0 to v0.66.0 serve 0.1 to 0.3
+  // (0.2 and 0.3 converted down to the 0.1 handler, trust_tasks/wire_v0_2.rs), and from 0d3f268e (2026-10-28,
+  // #2309, what first.openvtc.net runs) the same edge takes only 0.4. So an agent before 0d3f268e answers 0.4 with
+  // a refusal and is asked 0.3. 0.1 and 0.2 are withdrawn in the 2027-01-01 batch and 0.3 in 2027-04-01's. Each
+  // version gets its own spellings (vaultPayloadFor), and both answers are read back.
+  vaultList: [VTA_TASK.vaultList04, VTA_TASK.vaultList03, VTA_TASK.vaultList02, VTA_TASK.vaultList],
+  vaultUpsert: [VTA_TASK.vaultUpsert04, VTA_TASK.vaultUpsert03, VTA_TASK.vaultUpsert02, VTA_TASK.vaultUpsert],
+  // 1.2 first, then 1.1. vta-service serves 1.1 from v0.49.0 (2026-10-02) and 1.2 from v0.65.0 (2026-10-26);
+  // VTI main serves only 1.2 (#2318), so the next release refuses 1.1. A 0.60-0.64 agent steps down to 1.1 on a
+  // refusal. 1.0 is withdrawn in the 2027-01-01 batch and 1.1 in 2027-04-01's. The payload is the same in all three.
+  didsCreate: [VTA_TASK.didsCreate12, VTA_TASK.didsCreate11, VTA_TASK.didsCreate],
+  // 0.3 first: 0d3f268e (#2310 batch) serves only policy/upsert/0.3; v0.60.0 to v0.66.0 only 0.2.
+  policyUpsert: [VTA_TASK.policyUpsert03, VTA_TASK.policyUpsert],
+  // 0.3 first: every VTA in use serves it (pcsVtaPayloads.ts DISCOVERY_TASK_03).
+  discovery: [DISCOVERY_TASK_03, DISCOVERY_TASK],
 } as const
 
 /** The `type` of the DIDComm message a sealed vault secret travels in (vta-sdk didcomm_session.rs:567-570; informational). */
@@ -224,11 +255,42 @@ export interface VtaVaultEntry {
   [key: string]: unknown
 }
 
-/** `vault/_shared` SealedEnvelope, the one variant Keyring makes (vta-service trust_tasks/vault.rs:168-188). */
-export type VtaSealedSecret = { envelope: 'didcomm-authcrypt'; jwe: string }
+/**
+ * `vault/_shared` SealedEnvelope, the one variant Keyring makes (vta-service trust_tasks/vault.rs:168-188):
+ * `didcomm-authcrypt` at 0.1, `didcommAuthcrypt` from 0.2 (vaultPayloadFor spells it for the version sent).
+ */
+export type VtaSealedSecret = { envelope: 'didcomm-authcrypt' | 'didcommAuthcrypt'; jwe: string }
 
-/** Is this one of the 0.2 access-list URIs (where a revoke may answer `entry: null`)? */
-const isAcl02 = (uri: string) => /\/acl\/[a-z-]+\/0\.2$/.test(uri)
+/**
+ * A vault payload spelled for the version it is sent in. vault 0.1 spells its enums in kebab case and 0.2 on in
+ * camel case (trust-tasks vault/_shared 0.1 vs 0.2 and 0.3: `secretKind`, a target's `kind`, a sealed secret's
+ * `envelope`); the VTA validates each version against its own schema, so a payload built once in 0.1's spelling is
+ * invalid at 0.2 and 0.3. Callers build in 0.1's spelling; values with no camel form (`did`, `custom`) are unchanged.
+ */
+export function vaultPayloadFor<P extends Record<string, unknown>>(uri: string, payload: P): P {
+  const minor = Number(/\/vault\/[a-z-]+\/0\.(\d+)$/.exec(uri)?.[1] ?? 1)
+  if (minor < 2) return payload
+  const camel = (value: unknown) =>
+    typeof value === 'string' ? value.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()) : value
+  const out: Record<string, unknown> = { ...payload }
+  if ('secretKind' in out) out.secretKind = camel(out.secretKind)
+  if (Array.isArray(out.targets)) {
+    out.targets = out.targets.map((target) =>
+      target && typeof target === 'object' ? { ...target, kind: camel((target as { kind?: unknown }).kind) } : target
+    )
+  }
+  const sealed = out.sealedSecret as { envelope?: unknown } | undefined
+  if (sealed && typeof sealed === 'object') out.sealedSecret = { ...sealed, envelope: camel(sealed.envelope) }
+  // 0.4 names a page's size `limit` (vault/list/0.4).
+  if (minor >= 4 && 'pageSize' in out) {
+    out.limit = out.pageSize
+    delete out.pageSize
+  }
+  return out as P
+}
+
+/** Is this one of the 0.2 access-list URIs, or acl/list/0.3 (the same entries; a revoke may answer `entry: null`)? */
+const isAcl02 = (uri: string) => /\/acl\/[a-z-]+\/0\.2$|\/acl\/list\/0\.3$/.test(uri)
 
 /**
  * A full administrator's authority as an `acl/_shared/0.2` entry spells it:
@@ -290,6 +352,8 @@ export interface VtaMintedDid {
   scid: string
   signingKeyId: string
   kaKeyId: string
+  /** From dids/create 1.1 on: the VTA serves the DID's log itself. */
+  serverless?: boolean
   didDocument?: unknown
   [key: string]: unknown
 }
@@ -684,13 +748,7 @@ export function activeSwapTestHook(): VtaSwapTestHook {
 type Probe = { kind: 'live' } | { kind: 'refused'; detail: string } | { kind: 'unknown'; detail: string }
 
 /** Documents the agent sends of its own accord: never the answer to a task this client asked. */
-const UNSOLICITED = new Set<string>([
-  VTA_TASK.consentRequest,
-  VTA_TASK.consentGranted,
-  STEP_UP_TASK.approveRequest01,
-  STEP_UP_TASK.approveRequest02,
-  STEP_UP_TASK.approveRequest04,
-])
+const UNSOLICITED = new Set<string>([VTA_TASK.consentRequest, VTA_TASK.consentGranted, ...STEP_UP_REQUEST_TYPES])
 
 /** Persona mints running now, by VTA and community (see `ensurePersona`). */
 const personasInFlight = new Map<string, Promise<VtiPersona>>()
@@ -1008,10 +1066,13 @@ export class VtaClient {
   /** Grants this client is waiting for, by the payload digest the VTA names. */
   private grantWaiters = new Map<string, () => void>()
   /** Which version of each family this agent was found to serve (taskVersions.ts). */
-  private readonly versions = new TaskVersions((family, from, to) =>
-    this.agent.config.logger.info(
-      `${LOG_PREFIX} ${agentNamedFor(from, this.vtaDid)} does not serve ${from}; asking ${to} (${family})`
-    )
+  private readonly versions = new TaskVersions(
+    (family, from, to) =>
+      this.agent.config.logger.info(
+        `${LOG_PREFIX} ${agentNamedFor(from, this.vtaDid)} does not serve ${from}; asking ${to} (${family})`
+      ),
+    // The version in use, once per family: what shows when an older one's fallback can go.
+    (family, uri) => this.agent.config?.logger?.info(`${LOG_PREFIX} ${family} answered in ${uri}`)
   )
 
   constructor(
@@ -1359,7 +1420,19 @@ export class VtaClient {
     }
     const answer = await ask(stepUp.request, { taskType })
     const decision = answer === 'approve' ? 'approved' : 'denied'
-    await this.sendTask(stepUp.request.responseType, approveResponsePayload(stepUp.request, decision), 30000)
+    // The version the answer goes in is logged once it is answered ("stepUpResponse:… answered in …").
+    this.agent.config.logger.info(
+      `${LOG_PREFIX} answering the agent's step-up ${stepUp.request.requestType} (${decision}), in ${approveResponseTypesFor(stepUp.request.requestType).join(' then ')}`
+    )
+    // 0.6 first, whatever the request's version: from 0d3f268e (#2313) the agent mints approve-request/0.2 yet
+    // serves only approve-response/0.6, while v0.60.0 to v0.66.0 serve only 0.1-0.3. The request's own response
+    // version is the step-down. The members are the same in every version sent (approveResponsePayload).
+    const payload = approveResponsePayload(stepUp.request, decision)
+    await this.versions.ask(
+      `stepUpResponse:${stepUp.request.responseType}`,
+      approveResponseTypesFor(stepUp.request.requestType),
+      (type) => this.sendTask(type, payload, 30000)
+    )
     if (decision === 'denied') throw new StepUpDeclined()
     return resubmit()
   }
@@ -1658,7 +1731,7 @@ export class VtaClient {
   /** `vault/list`: the entries' metadata, filtered as the VTA filters (`contextId`, `targetDid`, …). */
   async vaultList(filters: Record<string, unknown> = {}): Promise<VtaVaultEntry[]> {
     const { answer } = await this.versions.ask('vaultList', VTA_TASK_VERSIONS.vaultList, (type) =>
-      this.task<{ entries?: VtaVaultEntry[] } | VtaVaultEntry[]>(type, filters)
+      this.task<{ entries?: VtaVaultEntry[] } | VtaVaultEntry[]>(type, vaultPayloadFor(type, filters))
     )
     return Array.isArray(answer) ? answer : (answer?.entries ?? [])
   }
@@ -1666,9 +1739,14 @@ export class VtaClient {
   /** `vault/upsert`: create (no `id`) or update an entry. A create needs `sealedSecret` (vault.rs:826-870). */
   async vaultUpsert(payload: Record<string, unknown>): Promise<{ entry?: VtaVaultEntry; created?: boolean }> {
     const { answer } = await this.versions.ask('vaultUpsert', VTA_TASK_VERSIONS.vaultUpsert, (type) =>
-      this.task<{ entry?: VtaVaultEntry; created?: boolean }>(type, payload)
+      this.task<{ entry?: VtaVaultEntry; created?: boolean; wasCreated?: boolean }>(
+        type,
+        vaultPayloadFor(type, payload)
+      )
     )
-    return answer ?? {}
+    // 0.4 spells it `wasCreated`; 0.1 to 0.3 `created`.
+    const { wasCreated, ...rest } = answer ?? {}
+    return wasCreated === undefined ? rest : { ...rest, created: wasCreated }
   }
 
   /**
@@ -1870,9 +1948,10 @@ export class VtaClient {
    */
   async listAcl(): Promise<VtaAclEntry[]> {
     const { answer } = await this.versions.ask('aclList', VTA_TASK_VERSIONS.aclList, (uri) =>
-      this.task<{ entries?: unknown; truncated?: unknown }>(uri, {})
+      this.task<{ entries?: unknown; truncated?: unknown; nextCursor?: unknown }>(uri, {})
     )
-    if (answer?.truncated === true) {
+    // 0.1 and 0.2 say a partial page with `truncated`; 0.3 with a `nextCursor`.
+    if (answer?.truncated === true || typeof answer?.nextCursor === 'string') {
       this.agent.config.logger.warn(
         `${LOG_PREFIX} ${this.vtaDid} answered a partial access list; showing the first page`
       )
@@ -1965,7 +2044,7 @@ export class VtaClient {
   }
 
   /**
-   * Write the approval rules: `policy/upsert/0.2` on the reserved row, its
+   * Write the approval rules: `policy/upsert` (0.3, else 0.2) on the reserved row, its
    * Rego generated from the rules exactly as the SDK does — the agent derives
    * it again and refuses a write that differs, and refuses the reserved id
    * without the rules in `ext` (operations/policy.rs:172-197). Validated here
@@ -1977,15 +2056,17 @@ export class VtaClient {
   async writeApprovals(model: Pick<ApprovalsModel, 'rules' | 'sets'>, expectedVersion: number): Promise<number> {
     const rules = model.rules.map(ruleForWire)
     validateApprovals(rules, model.sets)
-    const answer = await this.task<{ policy?: { version?: unknown } }>(VTA_TASK.policyUpsert, {
-      id: DECLARATIVE_POLICY_ID,
-      name: DECLARATIVE_POLICY_NAME,
-      module: synthesizeRego(rules),
-      priority: DECLARATIVE_POLICY_PRIORITY,
-      enabled: true,
-      expectedVersion,
-      ext: { [EXT_KEY_RULES]: rules, [EXT_KEY_APPROVER_SETS]: model.sets },
-    })
+    const { answer } = await this.versions.ask('policyUpsert', VTA_TASK_VERSIONS.policyUpsert, (type) =>
+      this.task<{ policy?: { version?: unknown } }>(type, {
+        id: DECLARATIVE_POLICY_ID,
+        name: DECLARATIVE_POLICY_NAME,
+        module: synthesizeRego(rules),
+        priority: DECLARATIVE_POLICY_PRIORITY,
+        enabled: true,
+        expectedVersion,
+        ext: { [EXT_KEY_RULES]: rules, [EXT_KEY_APPROVER_SETS]: model.sets },
+      })
+    )
     return typeof answer?.policy?.version === 'number' ? answer.policy.version : expectedVersion + 1
   }
 
@@ -2131,30 +2212,36 @@ export class VtaClient {
     if (!options.serverId && !options.didUrl) {
       throw new Error(`${LOG_PREFIX} mintPersona needs a registered server id or a serverless DID URL`)
     }
-    return this.task<VtaMintedDid>(
-      VTA_TASK.didsCreate,
-      {
-        contextId: options.contextId,
-        ...(options.serverId ? { serverId: options.serverId } : {}),
-        // Serverless: the VTA mints and serves the log itself at this URL.
-        ...(options.didUrl ? { url: options.didUrl } : {}),
-        label: options.label,
-        addMediatorService: true,
-        // DIDComm only. A VTA adds `#tsp` by default when it and its mediator
-        // speak TSP (VTI vta-service did_webvh/document.rs:47-67), and a
-        // community then pushes to the persona over TSP first. Across two
-        // mediators that push never reached the phone (227 gate, VTA Farm),
-        // and the community falls back to DIDComm only after an hour. Over
-        // DIDComm the same pushes arrive.
-        addTspService: false,
-        setPrimary: false,
-      },
-      MINT_TIMEOUT_MS,
-      // A mint whose answer is lost still succeeds at the VTA; retried with the
-      // same key within 24 h the VTA returns that first mint instead of minting
-      // an orphan (VTI-Q17, answered by the maintainers 2026-09-23).
-      options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}
-    )
+    const payload = {
+      contextId: options.contextId,
+      ...(options.serverId ? { serverId: options.serverId } : {}),
+      // Serverless: the VTA mints and serves the log itself at this URL.
+      ...(options.didUrl ? { url: options.didUrl } : {}),
+      label: options.label,
+      addMediatorService: true,
+      // DIDComm only. A VTA adds `#tsp` by default when it and its mediator
+      // speak TSP (VTI vta-service did_webvh/document.rs:47-67), and a
+      // community then pushes to the persona over TSP first. Across two
+      // mediators that push never reached the phone (227 gate, VTA Farm),
+      // and the community falls back to DIDComm only after an hour. Over
+      // DIDComm the same pushes arrive.
+      addTspService: false,
+      setPrimary: false,
+    }
+    // A step down happens only on a version refusal, when the VTA minted nothing, so the same key goes with each try.
+    return this.versions
+      .ask('didsCreate', VTA_TASK_VERSIONS.didsCreate, (type) =>
+        this.task<VtaMintedDid>(
+          type,
+          payload,
+          MINT_TIMEOUT_MS,
+          // A mint whose answer is lost still succeeds at the VTA; retried with the
+          // same key within 24 h the VTA returns that first mint instead of minting
+          // an orphan (VTI-Q17, answered by the maintainers 2026-09-23).
+          options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}
+        )
+      )
+      .then(({ answer }) => answer)
   }
 
   /**
@@ -2398,23 +2485,25 @@ export class VtaClient {
     // and its handler takes no capability check, so the answer is conclusive
     // both ways and needs no grant.
     try {
-      const answer = await this.task<{ supportedTypes?: unknown }>(
-        DISCOVERY_TASK,
-        // **No patterns**, deliberately: a responder matches a pattern against
-        // a task's *slug*, not its Type URI
-        // (`vti-common/src/trust_task/discovery.rs` `matches_any` calls
-        // `slug_of(uri)` before `match_slug`), so a URI-shaped pattern matches
-        // nothing and the answer comes back empty — which would read as "does
-        // not serve it" for an agent that does. An empty pattern list means
-        // every supported task (`matches_any` returns true when
-        // `patterns.is_empty()`), and the filtering happens below where the
-        // Type URIs are unambiguous. The spec's own payload note says as much:
-        // a discoverer wanting more asks for everything and filters locally.
-        {},
-        30000,
-        {},
-        undefined,
-        { waitForConsent: false }
+      const { answer } = await this.versions.ask('discovery', VTA_TASK_VERSIONS.discovery, (type) =>
+        this.task<{ supportedTypes?: unknown }>(
+          type,
+          // **No patterns**, deliberately: a responder matches a pattern against
+          // a task's *slug*, not its Type URI
+          // (`vti-common/src/trust_task/discovery.rs` `matches_any` calls
+          // `slug_of(uri)` before `match_slug`), so a URI-shaped pattern matches
+          // nothing and the answer comes back empty — which would read as "does
+          // not serve it" for an agent that does. An empty pattern list means
+          // every supported task (`matches_any` returns true when
+          // `patterns.is_empty()`), and the filtering happens below where the
+          // Type URIs are unambiguous. The spec's own payload note says as much:
+          // a discoverer wanting more asks for everything and filters locally.
+          {},
+          30000,
+          {},
+          undefined,
+          { waitForConsent: false }
+        )
       )
       const types = Array.isArray(answer?.supportedTypes) ? answer.supportedTypes : []
       // Entries come as a bare URI or as `{type}` — both forms are legal in

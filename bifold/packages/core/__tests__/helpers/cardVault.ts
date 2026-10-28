@@ -224,6 +224,9 @@ export function fakeVault(
       } as T
     }
     if (type.endsWith('/get/0.1')) return { credential: kept.get(String(payload.id))?.credential } as T
+    // An agent from 0d3f268e answers get at 0.2 (only): the card as `credential`, with its `format`.
+    if (type.endsWith('/get/0.2'))
+      return { format: 'ldp_vc', credential: kept.get(String(payload.id))?.credential } as T
     throw Object.assign(new Error(`unknown task ${type}`), { code: 'unsupportedTask' })
   }
   return { task, kept, calls }

@@ -12,6 +12,13 @@
  * schema's minimum) is not answered. The `reason` is what the person reads,
  * word for word.
  */
+import Ajv from 'ajv/dist/2020'
+import { PAYLOAD_SCHEMA as REQUEST_0_3 } from '@openvtc/trust-tasks/auth/step-up/approve-request/0.3/payload'
+import { PAYLOAD_SCHEMA as REQUEST_0_5 } from '@openvtc/trust-tasks/auth/step-up/approve-request/0.5/payload'
+import { PAYLOAD_SCHEMA as RESPONSE_0_2 } from '@openvtc/trust-tasks/auth/step-up/approve-response/0.2/payload'
+import { PAYLOAD_SCHEMA as RESPONSE_0_5 } from '@openvtc/trust-tasks/auth/step-up/approve-response/0.5/payload'
+import { PAYLOAD_SCHEMA as RESPONSE_0_6 } from '@openvtc/trust-tasks/auth/step-up/approve-response/0.6/payload'
+
 import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf } from '../module/stepUp'
 import { STEP_UP_ASK_TIMEOUT_MS, VtaAgentController } from '../module/vtaAgent'
 import { OwnerNotConfirmed, deviceRefusalOf } from '../module/vtaOwner'
@@ -25,7 +32,7 @@ const REASON = 'Approve disclosing 2 attributes to did:web:shop.example'
 const DEVICES_ADD = 'https://trusttasks.org/spec/acl/grant/0.1'
 
 const approveRequest = (
-  version: '0.1' | '0.2' | '0.4' = '0.2',
+  version: '0.1' | '0.2' | '0.3' | '0.4' | '0.5' = '0.2',
   payload: Record<string, unknown> = {},
   envelope: Record<string, unknown> = {}
 ) => ({
@@ -40,16 +47,19 @@ const approveRequest = (
     challenge: CHALLENGE,
     reason: REASON,
     targetAcr: 'aal2',
-    // 0.4 names the evidence it takes in `accepts` (required); 0.1/0.2 in `acceptableEvidence`.
-    ...(version === '0.4'
+    // 0.4 and 0.5 name the evidence they take in `accepts` (required); 0.1-0.3 in `acceptableEvidence`.
+    ...(version === '0.4' || version === '0.5'
       ? { accepts: ['didSigned', 'webauthn'] }
       : { acceptableEvidence: version === '0.1' ? ['did-signed', 'webauthn'] : ['didSigned', 'webauthn'] }),
-    ttl: 300,
+    // 0.5 names the unit (`ttl` -> `ttlSeconds`, trust-tasks-tf f27ea5387).
+    ...(version === '0.5' ? { ttlSeconds: 300 } : { ttl: 300 }),
     ...payload,
   },
   proof: { type: 'DataIntegrityProof', proofPurpose: 'authentication' },
   ...envelope,
 })
+
+const ajv = new Ajv({ strict: false, allErrors: true, logger: false })
 
 const stepUpRefusal = (request: unknown = approveRequest()) =>
   new VtiRefusal('taskFailed', 'task failed: auth:step_up_required', {
@@ -69,6 +79,7 @@ describe('reading a step-up refusal', () => {
         challenge: CHALLENGE,
         reason: REASON,
         targetAcr: 'aal2',
+        requestType: STEP_UP_TASK.approveRequest02,
         responseType: STEP_UP_TASK.approveResponse,
       },
     })
@@ -84,9 +95,67 @@ describe('reading a step-up refusal', () => {
         challenge: CHALLENGE,
         reason: REASON,
         targetAcr: 'aal2',
+        requestType: STEP_UP_TASK.approveRequest04,
         responseType: 'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
       },
     })
+  })
+
+  it('reads a 0.5 approve-request (ttlSeconds), and answers it with approve-response 0.6', () => {
+    const doc = approveRequest('0.5')
+    // The fixture is a real 0.5 request: 0.27.8's generated schema takes it, and not 0.4's `ttl`.
+    const valid = ajv.compile(REQUEST_0_5 as object)
+    expect(valid(doc.payload)).toBe(true)
+    expect(valid({ ...doc.payload, ttlSeconds: undefined, ttl: 300 })).toBe(false)
+    expect(stepUpRequestOf(stepUpRefusal(doc), { vtaDid: VTA, me: PHONE })).toEqual({
+      ok: true,
+      request: {
+        issuer: VTA,
+        subject: PHONE,
+        sessionId: 'session-7',
+        challenge: CHALLENGE,
+        reason: REASON,
+        targetAcr: 'aal2',
+        requestType: STEP_UP_TASK.approveRequest05,
+        responseType: 'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
+      },
+    })
+  })
+
+  it('reads a 0.3 approve-request, and answers it with approve-response 0.5, which ratifies 0.3', () => {
+    const doc = approveRequest('0.3')
+    expect(ajv.compile(REQUEST_0_3 as object)(doc.payload)).toBe(true)
+    expect(stepUpRequestOf(stepUpRefusal(doc), { vtaDid: VTA, me: PHONE })).toMatchObject({
+      ok: true,
+      request: {
+        challenge: CHALLENGE,
+        requestType: STEP_UP_TASK.approveRequest03,
+        responseType: 'https://trusttasks.org/spec/auth/step-up/approve-response/0.5',
+      },
+    })
+  })
+
+  it('does not answer a 0.5 request in 0.1-0.3 spelling (no `accepts`), or one that takes no DID-signed evidence', () => {
+    const oldSpelling = approveRequest('0.5', { accepts: undefined, acceptableEvidence: ['didSigned'] })
+    expect(stepUpRequestOf(stepUpRefusal(oldSpelling), { vtaDid: VTA, me: PHONE })).toEqual({
+      ok: false,
+      why: 'malformed',
+    })
+    const webauthnOnly = approveRequest('0.5', { accepts: ['webauthn'] })
+    expect(stepUpRequestOf(stepUpRefusal(webauthnOnly), { vtaDid: VTA, me: PHONE })).toEqual({
+      ok: false,
+      why: 'evidenceUnsupported',
+    })
+  })
+
+  it('leaves a 0.3 or 0.5 step-up bound to one operation (no sessionId) to be answered elsewhere', () => {
+    for (const v of ['0.3', '0.5'] as const) {
+      const bound = approveRequest(v, { sessionId: undefined, boundTo: 'sha256:op' })
+      expect(stepUpRequestOf(stepUpRefusal(bound), { vtaDid: VTA, me: PHONE })).toEqual({
+        ok: false,
+        why: 'boundStepUp',
+      })
+    }
   })
 
   it('does not answer a 0.4 request that takes no DID-signed evidence, or names none', () => {
@@ -194,6 +263,23 @@ describe('reading a step-up refusal', () => {
 describe('the answer, as auth/step-up/approve-response/0.2', () => {
   const request = { issuer: VTA, subject: PHONE, sessionId: 'session-7', challenge: CHALLENGE, reason: REASON }
 
+  it("is valid in every response version it is sent as: 0.2, 0.5 and 0.6 (0.27.8's generated schemas)", () => {
+    for (const [name, schema] of [
+      ['0.2', RESPONSE_0_2],
+      ['0.5', RESPONSE_0_5],
+      ['0.6', RESPONSE_0_6],
+    ] as const) {
+      const valid = ajv.compile(schema as object)
+      for (const decision of ['approved', 'denied'] as const) {
+        expect({ name, decision, valid: valid(approveResponsePayload(request, decision)) }).toEqual({
+          name,
+          decision,
+          valid: true,
+        })
+      }
+    }
+  })
+
   it('approves with the echoes and DID-signed evidence', () => {
     expect(approveResponsePayload(request, 'approved')).toEqual({
       subject: PHONE,
@@ -218,12 +304,13 @@ describe('the answer, as auth/step-up/approve-response/0.2', () => {
 
 describe('a task that needs a step-up', () => {
   function client(ask?: jest.Mock) {
-    const vta = new VtaClient({ config: { logger: { info: jest.fn(), warn: jest.fn() } } } as never, VTA, {} as never, {
+    const logger = { info: jest.fn(), warn: jest.fn() }
+    const vta = new VtaClient({ config: { logger } } as never, VTA, {} as never, {
       ...(ask ? { onStepUp: ask } : {}),
     })
     jest.spyOn(vta, 'managerDid', 'get').mockReturnValue(PHONE)
     const send = jest.spyOn(vta as unknown as { sendTask: (...a: unknown[]) => Promise<unknown> }, 'sendTask')
-    return { vta, send }
+    return { vta, send, logger }
   }
 
   it('asks the person with the reason, answers approved, and re-submits the task', async () => {
@@ -238,7 +325,8 @@ describe('a task that needs a step-up', () => {
     expect(ask).toHaveBeenCalledWith(expect.objectContaining({ reason: REASON, challenge: CHALLENGE }), {
       taskType: DEVICES_ADD,
     })
-    expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse, DEVICES_ADD])
+    // 0.6 first: what an agent from 0d3f268e takes (a 0.2 request's own response is the step-down).
+    expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse06, DEVICES_ADD])
     // The answer waits for the agent's reply like any task.
     expect(send.mock.calls[1][2]).toBe(30000)
     expect(send.mock.calls[1][1]).toEqual({
@@ -274,13 +362,73 @@ describe('a task that needs a step-up', () => {
     })
   })
 
+  // 0.6 first for any request (group 1b): from 0d3f268e the agent mints approve-request/0.2 yet serves only
+  // approve-response/0.6; v0.60.0 to v0.66.0 serve only 0.1-0.3, so the request's own version is the step-down.
+  it.each([
+    ['0.5', ['https://trusttasks.org/spec/auth/step-up/approve-response/0.6']],
+    [
+      '0.3',
+      [
+        'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
+        'https://trusttasks.org/spec/auth/step-up/approve-response/0.5',
+      ],
+    ],
+    [
+      '0.2',
+      [
+        'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
+        'https://trusttasks.org/spec/auth/step-up/approve-response/0.2',
+      ],
+    ],
+  ] as const)(
+    'answers a %s approve-request in %j, logging the request and, once answered, the version',
+    async (version, ladder) => {
+      const ask = jest.fn(async () => 'approve' as const)
+      const { vta, send, logger } = client(ask)
+      send
+        .mockRejectedValueOnce(stepUpRefusal(approveRequest(version)))
+        .mockResolvedValueOnce({ status: 'elevated' })
+        .mockResolvedValueOnce({ granted: true })
+
+      await expect(vta.task(DEVICES_ADD, {})).resolves.toEqual({ granted: true })
+      expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, ladder[0], DEVICES_ADD])
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `answering the agent's step-up https://trusttasks.org/spec/auth/step-up/approve-request/${version} (approved), in ${ladder.join(' then ')}`
+        )
+      )
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(`answered in ${ladder[0]}`))
+    }
+  )
+
+  it.each([
+    ['0.2', 'https://trusttasks.org/spec/auth/step-up/approve-response/0.2'],
+    ['0.3', 'https://trusttasks.org/spec/auth/step-up/approve-response/0.5'],
+  ] as const)(
+    'an agent that refuses approve-response/0.6 (v0.66.0 or before) is answered a %s request in %s, the same members',
+    async (version, own) => {
+      const ask = jest.fn(async () => 'approve' as const)
+      const { vta, send } = client(ask)
+      send
+        .mockRejectedValueOnce(stepUpRefusal(approveRequest(version)))
+        .mockRejectedValueOnce(new VtiRefusal('unsupportedType', 'approve-response/0.6 is not served'))
+        .mockResolvedValueOnce({ status: 'elevated' })
+        .mockResolvedValueOnce({ granted: true })
+
+      await expect(vta.task(DEVICES_ADD, {})).resolves.toEqual({ granted: true })
+      const types = send.mock.calls.map((c) => c[0])
+      expect(types).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse06, own, DEVICES_ADD])
+      expect(send.mock.calls[2][1]).toEqual(send.mock.calls[1][1])
+    }
+  )
+
   it('sends a signed denial when the person says no, and does not re-submit', async () => {
     const ask = jest.fn(async () => 'deny' as const)
     const { vta, send } = client(ask)
     send.mockRejectedValueOnce(stepUpRefusal()).mockResolvedValueOnce({ status: 'denied' })
 
     await expect(vta.task(DEVICES_ADD, {})).rejects.toBeInstanceOf(StepUpDeclined)
-    expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse])
+    expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse06])
     expect(send.mock.calls[1][1]).toMatchObject({ decision: 'denied', deniedReason: 'Declined on this phone' })
   })
 

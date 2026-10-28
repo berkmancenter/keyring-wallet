@@ -25,6 +25,11 @@ function portFailing(failWith?: () => Error): AgentDevicePort {
   return {
     managerDid: ME,
     task: async <T>(type: string) => {
+      // An agent before 0d3f268e: the 0.3 device tasks refused, naming the 0.2 it serves.
+      if (type === AGENT_DEVICE_TASK.heartbeat03 || type === AGENT_DEVICE_TASK.list03) {
+        const served = type === AGENT_DEVICE_TASK.heartbeat03 ? AGENT_DEVICE_TASK.heartbeat : AGENT_DEVICE_TASK.list
+        throw new VtiRefusal('unsupportedVersion', 'unsupported version', { servedVersions: [served] })
+      }
       if (type === AGENT_DEVICE_TASK.heartbeat && failWith) throw failWith()
       if (type === AGENT_DEVICE_TASK.aclList02 || type === AGENT_DEVICE_TASK.aclList)
         return { entries: [{ subject: ME, role: 'admin' }] } as T

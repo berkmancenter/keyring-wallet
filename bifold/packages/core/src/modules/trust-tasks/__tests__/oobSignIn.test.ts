@@ -140,8 +140,9 @@ describe('claiming a sign-in code', () => {
     // The claim: K_a's, for authentication, threaded to the request.
     const [url, claim] = post.mock.calls[0]
     expect(url).toBe(`${BASE}/trust-tasks`)
+    // 0.2 first; this community answers it.
     expect(claim).toMatchObject({
-      type: OOB_TASKS.claim,
+      type: OOB_TASKS.claim02,
       issuer: claimed.keyA.did,
       recipient: VTC,
       parentThreadId: REQUEST_ID,
@@ -295,6 +296,46 @@ describe('claiming a sign-in code', () => {
       const error = await failureOf(claimSignIn(LINK, deps))
       expect(error.reason).toBe(reason)
       expect(error.detail).toBe(code)
+    })
+  })
+})
+
+// From 0d3f268e (2026-10-28) a community serves only claim 0.2, whose answer names the deadline
+// `decisionClosesAt` (RFC 3339); at vtc 0.14 or before only claim 0.1 (`decisionDeadline`, epoch seconds).
+describe('claim 0.2 and 0.1', () => {
+  it('reads a 0.2 answer’s decisionClosesAt as the deadline, in epoch seconds', async () => {
+    const { deps } = depsWith((claim) =>
+      answerTo(claim, (answer, payload) => {
+        answer.type = `${OOB_TASKS.claim02}#response`
+        delete payload.decisionDeadline
+        payload.decisionClosesAt = new Date((NOW + 90) * 1000).toISOString()
+      })
+    )
+    await expect(claimSignIn(LINK, deps)).resolves.toMatchObject({ decisionDeadline: NOW + 90 })
+  })
+
+  it.each(['unsupportedType', 'unsupportedVersion'])(
+    'a community at vtc 0.14 (answering claim/0.2 %s) is claimed again at 0.1',
+    async (code) => {
+      const { deps, post } = depsWith((claim) =>
+        (claim as Record<string, unknown>).type === OOB_TASKS.claim02 ? errorDocument(code) : answerTo(claim)
+      )
+      await expect(claimSignIn(LINK, deps)).resolves.toMatchObject({ decisionDeadline: NOW + 120 })
+      expect(post.mock.calls.map(([, d]) => d.type)).toEqual([OOB_TASKS.claim02, OOB_TASKS.claim])
+    }
+  )
+
+  it('a claim refused for another reason is not claimed again', async () => {
+    const { deps, post } = depsWith(() => errorDocument('auth/oob/claim:alreadyClaimed'))
+    await expect(failureOf(claimSignIn(LINK, deps))).resolves.toMatchObject({ reason: 'alreadyClaimed' })
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it('an answer with neither deadline member is a bad answer', async () => {
+    const { deps } = depsWith((claim) => answerTo(claim, (_answer, payload) => delete payload.decisionDeadline))
+    await expect(failureOf(claimSignIn(LINK, deps))).resolves.toMatchObject({
+      reason: 'badAnswer',
+      detail: 'the answer has no decision deadline',
     })
   })
 })
