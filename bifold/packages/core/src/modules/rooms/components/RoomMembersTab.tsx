@@ -1,0 +1,201 @@
+/**
+ * A room's members (data rooms mock, Members). First the member's own access: what they can do, until when, and as
+ * which identity. Below it, the community's list of who it admitted, where the member may see it: a room keeps no
+ * member list of its own, so this is the community's record, and only the community adds or removes people. Last,
+ * the way out: leaving the community takes the member out of all its rooms, and is done on the community's own
+ * screen, where every case of leaving is already handled, rather than by a second, lesser path here.
+ *
+ * The community's list is read when the tab is first shown, and only where the service says it can be; a refusal
+ * (only administrators may see it) is said in the rooms screens' usual words.
+ *
+ * @module rooms/components/RoomMembersTab
+ */
+import type { TFunction } from 'i18next'
+import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { ScrollView, StyleSheet, View } from 'react-native'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
+
+import Button, { ButtonType } from '../../../components/buttons/Button'
+import { ThemedText } from '../../../components/texts/ThemedText'
+import { useTheme } from '../../../contexts/theme'
+import { testIdWithKey } from '../../../utils/testable'
+import { localDate } from '../../trust-tasks/screens/localTime'
+import type { CommunityRoomMember, OperationStatus, Room, RoomsService, RoomVerb } from '../types'
+
+import { roomHandle } from './RoomRow'
+import { roomsStatusText } from './roomsStatusText'
+import { accessText, identityText } from './roomWords'
+
+/** A member's role in words, from the most a member's rights allow. */
+export const roleText = (t: TFunction, verbs: RoomVerb[]): string => {
+  const can = new Set(verbs)
+  if (can.has('admin')) return t('Rooms.RoleAdmin') as string
+  if (can.has('curate')) return t('Rooms.RoleCurator') as string
+  if (can.has('write')) return t('Rooms.RoleMember') as string
+  return t('Rooms.RoleReader') as string
+}
+
+type Listing = { kind: 'reading' } | { kind: 'read'; members: CommunityRoomMember[] } | { kind: 'failed' }
+
+export interface RoomMembersTabProps {
+  service: RoomsService
+  room: Room
+  status: OperationStatus
+  /** Opens the community's screen, where leaving it is done; none where the room's community is not known. */
+  onLeave?: () => void
+}
+
+export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, status, onLeave }) => {
+  const { t } = useTranslation()
+  const { ColorPalette } = useTheme()
+  const statusWords = roomsStatusText(t, status, 'listCommunityMembers')
+  const [listing, setListing] = useState<Listing>({ kind: 'reading' })
+  // A refusal the service gives when asked: its reason, in the same words as a status known beforehand.
+  const [refusedWords, setRefusedWords] = useState<string>()
+  const { communityDid, roomId } = room
+
+  useEffect(() => {
+    if (statusWords || !communityDid) return
+    let live = true
+    service.listCommunityMembers(communityDid, roomId).then(
+      (members) => live && setListing({ kind: 'read', members }),
+      (e: unknown) => {
+        if (!live) return
+        const reason = (e as { name?: string; reason?: OperationStatus['reason'] })?.reason
+        if ((e as { name?: string })?.name === 'RoomsUnavailable' && reason)
+          setRefusedWords(roomsStatusText(t, { status: 'unavailable', reason, detail: '' }, 'listCommunityMembers'))
+        setListing({ kind: 'failed' })
+      }
+    )
+    return () => {
+      live = false
+    }
+  }, [service, communityDid, roomId, statusWords, t])
+
+  const styles = StyleSheet.create({
+    content: { padding: 16, gap: 16 },
+    card: {
+      gap: 10,
+      padding: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+    },
+    fact: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+    label: { width: 84, color: ColorPalette.grayscale.mediumGrey },
+    value: { flex: 1, minWidth: 140 },
+    muted: { color: ColorPalette.grayscale.mediumGrey },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+    idWords: { flex: 1 },
+  })
+
+  const until = room.validUntil
+    ? localDate(room.validUntil)
+    : room.source === 'custody'
+      ? (t('Rooms.DetailsNotLoaded') as string)
+      : (t('Rooms.MembersNoEnd') as string)
+  const fact = (label: string, value: string, testID: string) => (
+    <View style={styles.fact}>
+      <ThemedText style={styles.label}>{label}</ThemedText>
+      <ThemedText style={styles.value} testID={testIdWithKey(testID)}>
+        {value}
+      </ThemedText>
+    </View>
+  )
+
+  const list = (() => {
+    const unavailable = statusWords ?? (room.communityDid ? refusedWords : (t('Rooms.DetailsNotLoaded') as string))
+    if (unavailable)
+      return (
+        <ThemedText style={styles.muted} testID={testIdWithKey('RoomMembersUnavailable')}>
+          {unavailable}
+        </ThemedText>
+      )
+    if (listing.kind === 'reading')
+      return (
+        <ThemedText style={styles.muted} testID={testIdWithKey('RoomMembersReading')}>
+          {t('Rooms.Reading')}
+        </ThemedText>
+      )
+    if (listing.kind === 'failed')
+      return (
+        <ThemedText style={styles.muted} testID={testIdWithKey('RoomMembersFailed')}>
+          {t('Rooms.MembersFailed')}
+        </ThemedText>
+      )
+    if (listing.members.length === 0)
+      return (
+        <ThemedText style={styles.muted} testID={testIdWithKey('RoomMembersNone')}>
+          {t('Rooms.MembersNone')}
+        </ThemedText>
+      )
+    return (
+      <View testID={testIdWithKey('RoomMembersList')}>
+        <ThemedText variant="caption" style={styles.muted}>
+          {t('Rooms.MembersFromCommunity', {
+            community: room.communityName ?? '',
+            count: listing.members.length,
+            interpolation: { escapeValue: false },
+          })}
+        </ThemedText>
+        {listing.members.map((member) => {
+          const you = member.identity.did === room.actingAs.did
+          return (
+            <View
+              key={member.identity.did}
+              style={styles.row}
+              accessible
+              accessibilityLabel={`${identityText(member.identity)}, ${roleText(t, member.verbs)}`}
+              testID={testIdWithKey(`RoomMember_${roomHandle(member.identity.did)}`)}
+            >
+              <Icon name="account-outline" size={22} color={ColorPalette.brand.primary} />
+              <ThemedText style={styles.idWords}>
+                {identityText(member.identity)}
+                {you ? <ThemedText style={styles.muted}>{` · ${t('Rooms.You')}`}</ThemedText> : null}
+              </ThemedText>
+              <ThemedText variant="caption" style={styles.muted}>
+                {roleText(t, member.verbs)}
+              </ThemedText>
+            </View>
+          )
+        })}
+      </View>
+    )
+  })()
+
+  return (
+    <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('RoomMembers')}>
+      <View style={styles.card} testID={testIdWithKey('RoomMembersYourAccess')}>
+        <ThemedText variant="bold" accessibilityRole="header">
+          {t('Rooms.MembersYourAccess')}
+        </ThemedText>
+        {fact(t('Rooms.MembersYouCan'), accessText(t, room), 'RoomMembersYouCan')}
+        {fact(t('Rooms.MembersUntil'), until, 'RoomMembersUntil')}
+        {fact(t('Rooms.MembersAs'), identityText(room.actingAs), 'RoomMembersAs')}
+      </View>
+      <View style={{ gap: 6 }}>
+        {list}
+        <ThemedText variant="caption" style={styles.muted} testID={testIdWithKey('RoomMembersCaption')}>
+          {t('Rooms.MembersCaption')}
+        </ThemedText>
+      </View>
+      {onLeave && room.communityName ? (
+        <View style={{ gap: 6 }}>
+          <Button
+            title={t('Rooms.MembersLeave', { community: room.communityName, interpolation: { escapeValue: false } })}
+            buttonType={ButtonType.Secondary}
+            onPress={onLeave}
+            testID={testIdWithKey('RoomMembersLeave')}
+          />
+          <ThemedText variant="caption" style={styles.muted}>
+            {t('Rooms.MembersLeaveHint')}
+          </ThemedText>
+        </View>
+      ) : null}
+    </ScrollView>
+  )
+}
+
+export default RoomMembersTab
