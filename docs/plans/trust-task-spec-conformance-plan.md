@@ -230,9 +230,9 @@ Each bifold PR is followed by a root PR advancing the submodule pointer; they ca
 | 12 | `propose/0.2` in the wallet, witness-share receipt, subtask update | bifold + root docs | W5 steps 2–5 | after 11 ships in a library release, and after 7 |
 | 13 | consent rules carry explicit governance values | bifold | W9 step 1 | any time |
 
-## 7. Open questions for Brendan
+## 7. Decisions (agreed 2026-10-28)
 
-| # | Question | Recommendation | Blocks |
+| # | Question | Decision (the recommendation, agreed) | Blocks |
 |---|---|---|---|
 | Q1 | Emit `trust-task-error/0.6` everywhere, or keep 0.5 for VTI vetting peers? | 0.6 everywhere if W10 step 3a shows VTI and openvtc read it; otherwise keep 0.5 in `vtiVetting.ts` only, with the reason in the doc comment, and revisit at the next VTI pin advance | W1 step 3 |
 | Q2 | Author `vrc/relationships/propose/0.2` with the decision in `#response`, superseding the subtask's "a decline is a `trust-task-error`" rule for 0.2? | Yes. It is our spec and the SHOULD lands on us; negotiation keeps deployed peers on 0.1 | W5 |
