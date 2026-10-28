@@ -15,6 +15,7 @@ import {
   AgentRoomsService,
   createAgentRoomsBackend,
   useContainer,
+  type Container,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
   findV2MediationRecord,
@@ -35,7 +36,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
-import { DependencyContainer } from 'tsyringe'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
 import { disarmLivePickup, isLivePickupEnabled, livePickupFor, trackingWebSocketClass } from '@/utils/livePickup'
@@ -176,10 +176,13 @@ export const provisionV2MediationIfConfigured = async (agent: Agent, enabled: bo
  * the container, not the agent). That is safe because `initializeAgent` is reachable only from the onboarding
  * stack: RootStack renders the main stack only while an agent is set, and a lock-out sets none. So every rooms
  * screen mounts after this registration.
+ *
+ * `container` is the app's container as `useContainer` gives it, bifold's wrapper: the registration goes into the
+ * tsyringe container it wraps, which is where `useRoomsService` resolves the service from.
  */
-export function registerRealRooms(container: DependencyContainer, agent: Agent): void {
+export function registerRealRooms(container: Container, agent: Agent): void {
   const backend = createAgentRoomsBackend(agent, { mediatorDid: Config.VTI_MEDIATOR_DID || undefined })
-  registerRoomsService(container, new AgentRoomsService(backend))
+  registerRoomsService(container.container, new AgentRoomsService(backend))
 }
 
 const useBCAgentSetup = () => {

@@ -1,8 +1,11 @@
 /**
  * The real rooms service is registered once an agent exists. Nothing else registers it: without this,
  * `TOKENS.UTIL_ROOMS_SERVICE` stays empty and a store build, which carries no sample rooms, shows none.
+ *
+ * It is registered on the container the app hands out (`useContainer`, bifold's wrapper) and resolved from it as
+ * `useRoomsService` does. Handing the wrapper to tsyringe's registerInstance crashed every agent start.
  */
-import { TOKENS } from '@bifold/core'
+import { MainContainer, TOKENS } from '@bifold/core'
 import Config from 'react-native-config'
 import { container } from 'tsyringe'
 
@@ -23,6 +26,9 @@ const mockedConfig = Config as unknown as { VTI_MEDIATOR_DID?: string }
 
 const fakeAgent = (name: string) => ({ name } as never)
 
+// The app's container, as useContainer gives it.
+const appContainer = () => new MainContainer(container.createChildContainer())
+
 describe('registerRealRooms', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -30,18 +36,18 @@ describe('registerRealRooms', () => {
   })
 
   it("registers the real service, built on this agent and the build's VTI mediator", () => {
-    const child = container.createChildContainer()
+    const child = appContainer()
     const agent = fakeAgent('first')
     registerRealRooms(child, agent)
 
     expect(mockCreateAgentRoomsBackend).toHaveBeenCalledWith(agent, { mediatorDid: 'did:example:vti-mediator' })
     const service = child.resolve(TOKENS.UTIL_ROOMS_SERVICE)
     expect(service).toBeDefined()
-    expect(service.isSample).toBe(false)
+    expect(service?.isSample).toBe(false)
   })
 
   it('replaces the service when a new agent starts, as after a lock-out', () => {
-    const child = container.createChildContainer()
+    const child = appContainer()
     registerRealRooms(child, fakeAgent('first'))
     const first = child.resolve(TOKENS.UTIL_ROOMS_SERVICE)
     registerRealRooms(child, fakeAgent('second'))
@@ -52,7 +58,7 @@ describe('registerRealRooms', () => {
 
   it('leaves the mediator to the agent session when the build names none', () => {
     mockedConfig.VTI_MEDIATOR_DID = ''
-    registerRealRooms(container.createChildContainer(), fakeAgent('first'))
+    registerRealRooms(appContainer(), fakeAgent('first'))
     expect(mockCreateAgentRoomsBackend).toHaveBeenCalledWith(expect.anything(), { mediatorDid: undefined })
   })
 })
