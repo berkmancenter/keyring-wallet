@@ -1,5 +1,7 @@
 # Push notifications — waking a backgrounded phone without telling Apple or Google anything
 
+**Roadmap epic:** [keyring-wallet#697](https://github.com/berkmancenter/keyring-wallet/issues/697)
+
 **Scope.** How Keyring tells a person that something is waiting when the app is
 in the background or closed. It uses a Signal-style contentless push sent by
 OpenVTC's push wake-up gateway, and the phone composes the notification itself.

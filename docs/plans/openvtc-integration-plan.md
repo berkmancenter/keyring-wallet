@@ -1,5 +1,7 @@
 # TSP / OpenVTC Integration — Analysis, Architecture & Phased Plan
 
+**Roadmap epic:** [keyring-wallet#690](https://github.com/berkmancenter/keyring-wallet/issues/690)
+
 *Living plan for the OpenVTC infrastructure-compatibility workstream, at **Rev 25**. Supporting research (TSP/DIDComm learning notes, engineering brief) is kept out of the repo for now; ask if you want it.*
 
 **Subtask plans** — each owned by this plan, each stating current design for one workstream in detail:

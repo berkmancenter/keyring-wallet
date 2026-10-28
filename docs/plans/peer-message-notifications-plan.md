@@ -1,5 +1,7 @@
 # Peer message notifications — one notification per message from a relationship peer
 
+**Roadmap epic:** [keyring-wallet#701](https://github.com/berkmancenter/keyring-wallet/issues/701)
+
 **Scope.** After two people exchange a VRC, they can message each other in Keyring (Bifold's
 chat over the DIDComm connection the exchange made). This plan covers how the recipient's phone
 shows a notification for each such message while Keyring is in the background or closed: which
