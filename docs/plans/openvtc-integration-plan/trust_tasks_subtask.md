@@ -1274,6 +1274,10 @@ task** (digest-deduplicated) and receipting. The legacy issue-credential leg
 is suppressed for the VRC on v4 pairs; the RCard (a VDS) still travels it. A
 decline is a `trust-task-error` (`propose:declined`) — never
 `accept: false`.
+This is the `propose/0.1` form; a `propose/0.2` that reports the decline in
+`#response`, per framework #46, is proposed in
+[`../trust-task-spec-conformance-plan.md`](../trust-task-spec-conformance-plan.md)
+W5 and does not change this rule until adopted.
 
 **Capability negotiation runs through `supportedTypes`** (e2e-proven,
 marker-gated): the proposer's `trust-task-discovery` query precedes the
