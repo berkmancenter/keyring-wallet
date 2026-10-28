@@ -132,7 +132,13 @@ export enum BCLocalStorageKeys {
 
 export const initialState: BCState = {
   ...defaultState,
-  preferences: { ...defaultState.preferences, useDataRetention: false, disableDataRetentionOption: true },
+  preferences: {
+    ...defaultState.preferences,
+    useDataRetention: false,
+    disableDataRetentionOption: true,
+    // Rooms are on for everyone from 276; Developer settings has the off switch. A saved choice still wins on load.
+    featureRooms: true,
+  },
   developer: developerState,
   dismissPersonCredentialOffer: dismissPersonCredentialOfferState,
 }
