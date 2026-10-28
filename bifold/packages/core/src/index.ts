@@ -368,6 +368,9 @@ export type {
   ITrustTaskDisplayRegistry,
   TrustTaskDisplayResult,
 } from './types/trust-task-display'
+// The real rooms service, for the app to register once an agent exists (rooms/register.ts).
+export { registerRoomsService, AgentRoomsService, createAgentRoomsBackend } from './modules/rooms'
+export type { RoomsService, RoomsBackend } from './modules/rooms'
 export { default as TrustTaskApprovalCard, TrustTaskFields } from './screens/TrustTaskApprovalCard'
 export type { TrustTaskFieldsProps } from './screens/TrustTaskApprovalCard'
 export { default as TrustTaskApprovalModal } from './screens/TrustTaskApprovalModal'
