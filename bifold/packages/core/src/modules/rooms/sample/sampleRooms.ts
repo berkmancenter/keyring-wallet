@@ -9,6 +9,7 @@
  */
 import { deriveRoomCapabilities, sampleCapabilities } from '../capabilities'
 import { inertFlags, toInertText } from '../inertText'
+import { chatMessageBody } from '../roomPosts'
 import type {
   AgentGrant,
   AgentGrantRequest,
@@ -74,6 +75,26 @@ const fileOf = (attachment: RoomsAttachment, fileId: string): RoomFile => ({
   sharedAt: '2026-10-25T12:00:00Z',
 })
 
+/**
+ * A chat message in a sample room: a keyring.chat/1 message body, as the composer writes one. The event ids are
+ * fixed and dated 2023, so the chat parser's clock window accepts them whatever the run's date.
+ */
+const chatPost = (
+  key: string,
+  version: number,
+  author: Identity,
+  at: string,
+  text: string
+): NoteSummary & { body: string } => ({
+  key,
+  version,
+  author,
+  updatedAt: at,
+  status: 'active',
+  pinned: false,
+  body: chatMessageBody(text, `01HJYJQ6008Q2W4E5R6T7Y8Z${key.toUpperCase().replace('M', '9')}`, new Date(at)),
+})
+
 interface SampleRoom extends Room {
   notes: (NoteSummary & { body: string })[]
   files: RoomFile[]
@@ -104,7 +125,6 @@ function sampleState() {
           status: 'active',
           pinned: true,
           body: 'Vetting backlog, the rooms policy draft, then a vote on item 3.',
-          files: [AGENDA],
         },
         {
           key: 'n2',
@@ -137,6 +157,11 @@ function sampleState() {
           pinned: false,
           body: '',
         },
+        // The chat (data rooms mock): keyring.chat/1 messages, as Keyring posts them. Untitled, so they stay in Chat.
+        chatPost('m1', 5, TERM, '2026-10-21T14:50:00Z', 'Draft agenda is in Files. Can everyone look before Thursday?'),
+        { ...chatPost('m2', 6, RIVER, '2026-10-21T15:05:00Z', 'Agenda, Oct 30'), files: [AGENDA] },
+        chatPost('m3', 7, ME, '2026-10-22T08:10:00Z', 'Looks good. Item 3 needs a vote.'),
+        { ...chatPost('m4', 8, GLASS, '2026-10-22T09:31:00Z', 'Summary of item 3 posted to Notes.'), byAgent: true },
       ],
       files: [AGENDA],
     },

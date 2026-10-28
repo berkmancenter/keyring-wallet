@@ -153,7 +153,9 @@ describe("a post's files", () => {
       openFile: { status: 'comingSoon', reason: 'clientNotBuilt', detail: 'not built' },
     }))
     const tree = show()
-    await waitFor(() => expect(tree.getByText('Agenda for Thursday')).toBeTruthy())
+    await waitFor(() =>
+      expect(tree.getByText('Draft agenda is in Files. Can everyone look before Thursday?')).toBeTruthy()
+    )
     const chip = tree.getByTestId(id('RoomFileChip_f1'))
     expect(chip).toHaveTextContent(/Agenda, Oct 30\.pdf/)
     expect(chip.props.accessibilityRole).toBeUndefined()

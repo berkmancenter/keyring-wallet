@@ -13,10 +13,10 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 
-export type RoomTab = 'chat' | 'files'
+export type RoomTab = 'chat' | 'files' | 'notes'
 
-const LABEL: Record<RoomTab, string> = { chat: 'Rooms.Chat', files: 'Rooms.Files' }
-const TEST_ID: Record<RoomTab, string> = { chat: 'RoomTabChat', files: 'RoomTabFiles' }
+const LABEL: Record<RoomTab, string> = { chat: 'Rooms.Chat', files: 'Rooms.Files', notes: 'Rooms.Notes' }
+const TEST_ID: Record<RoomTab, string> = { chat: 'RoomTabChat', files: 'RoomTabFiles', notes: 'RoomTabNotes' }
 
 export const RoomTabs: React.FC<{ tabs: RoomTab[]; selected: RoomTab; onSelect: (tab: RoomTab) => void }> = ({
   tabs,

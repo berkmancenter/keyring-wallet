@@ -9,8 +9,8 @@
  * may not post, the composer gives the reason instead. A post's files show as chips; a tap opens the attachment sheet
  * (download, then share), and "+" posts one.
  *
- * Under the header, the room's parts as tabs (data rooms mock): Chat, and Files, the room's library. Reached only
- * while the rooms flag is on.
+ * Under the header, the room's parts as tabs (data rooms mock): Chat; Files, the room's library; and Notes, its
+ * titled records and the markers of removed ones, which the chat leaves out. Reached only while the rooms flag is on.
  *
  * @module rooms/screens/Room
  */
@@ -33,6 +33,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { RoomComposer } from '../components/RoomComposer'
 import { RoomFileSheet } from '../components/RoomFileSheet'
 import { RoomFilesTab } from '../components/RoomFilesTab'
+import { RoomNotesTab } from '../components/RoomNotesTab'
 import { RoomPostBubble } from '../components/RoomPostBubble'
 import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
@@ -41,7 +42,7 @@ import { type RoomTab, RoomTabs } from '../components/RoomTabs'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import TierBadge from '../components/TierBadge'
 import { toInertText } from '../inertText'
-import type { RoomPost } from '../roomPosts'
+import { isNote, type RoomPost } from '../roomPosts'
 import type { RoomFile } from '../types'
 import { useRoom } from '../useRoom'
 import { POSTS_PAGE, useRoomPosts } from '../useRoomPosts'
@@ -74,6 +75,7 @@ export const pendingAsPost = (pending: PendingPost, actingAs: RoomPost['author']
   text: toInertText(pending.text),
   isChatMessage: true,
   retracted: false,
+  pinned: false,
   unread: false,
   delivery: pending.state === 'sent' ? undefined : pending.state,
   files: pending.file
@@ -180,7 +182,10 @@ const Room: React.FC = () => {
 
   const unavailable = roomsStatusText(t, roomCapabilities.listNotes, 'listNotes')
   const cannotPost = roomsStatusText(t, roomCapabilities.write, 'write')
-  const items = feed.posts || pendingPosts.length ? withDayPills([...pendingPosts, ...(feed.posts ?? [])]) : []
+  // Titled records and removed ones are the room's notes, on their own tab; the chat shows the rest.
+  const chatPosts = feed.posts?.filter((p) => !isNote(p))
+  const notes = feed.posts?.filter(isNote)
+  const items = chatPosts || pendingPosts.length ? withDayPills([...pendingPosts, ...(chatPosts ?? [])]) : []
 
   const empty = unavailable ? (
     <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsUnavailable')}>
@@ -231,7 +236,15 @@ const Room: React.FC = () => {
           <ThemedText style={styles.warnText}>{t('Rooms.HostConflict')}</ThemedText>
         </View>
       ) : null}
-      <RoomTabs tabs={['chat', 'files']} selected={tab} onSelect={showTab} />
+      <RoomTabs tabs={['chat', 'files', 'notes']} selected={tab} onSelect={showTab} />
+      {tab === 'notes' ? (
+        <RoomNotesTab
+          notes={notes}
+          feed={feed}
+          unavailable={unavailable}
+          onOpenFile={canOpenFiles ? setOpenedFile : undefined}
+        />
+      ) : null}
       {tab === 'files' ? (
         <RoomFilesTab
           files={state.files}

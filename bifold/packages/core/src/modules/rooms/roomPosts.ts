@@ -30,6 +30,8 @@ export interface RoomPost {
   /** The body is a keyring.chat/1 message. False: shown as the record's text, as written. */
   isChatMessage: boolean
   retracted: boolean
+  /** Pinned by a curator: listed first among the room's notes. */
+  pinned: boolean
   /** The record could not be read; only what the listing said about it is known. */
   unread: boolean
   /** A post this phone is still sending, or could not send (not yet a record in the room). */
@@ -89,10 +91,18 @@ export function postOf(note: Note | NoteSummary, actingAs?: Identity, now: numbe
     text: retracted || !read ? toInertText('') : chatText !== undefined ? toInertText(chatText) : note.body,
     isChatMessage: chatText !== undefined,
     retracted,
+    pinned: note.pinned,
     unread: !read && !retracted,
     files: retracted ? [] : (note.files ?? []),
   }
 }
+
+/**
+ * A record that belongs in the room's Notes rather than its chat (data rooms mock): one with a title, which a chat
+ * message never has, or one a curator removed, whose marker stays among the notes so the history stays honest. A
+ * record with neither stays in the chat, shown as written.
+ */
+export const isNote = (post: Pick<RoomPost, 'title' | 'retracted'>): boolean => !!post.title || post.retracted
 
 /** Newest first: by time, then by version, so records with no time keep a stable order. */
 export const newestFirst = <T extends Pick<NoteSummary, 'updatedAt' | 'version'>>(notes: T[]): T[] =>

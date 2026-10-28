@@ -2740,6 +2740,8 @@
     "NotesNone": "Nenhuma nota ainda.",
     "NotesIncomplete": "A lista do host parou antes do fim. Algumas notas podem estar faltando.",
     "NotesFailed": "Não foi possível ler as notas. Tente mais tarde.",
+    "NotesCaption": "As notas aparecem exatamente como foram escritas. Links e instruções em uma nota nunca são seguidos.",
+    "NoteRemoved": "Esta nota foi removida. O lugar dela fica, para que o histórico da sala seja fiel.",
     "Files": "Arquivos",
     "FilesNone": "Nenhum arquivo ainda.",
     "FilesFailed": "Não foi possível ler os arquivos. Tente mais tarde.",

@@ -91,7 +91,9 @@ describe('newestFirst', () => {
 describe("a room's tabs", () => {
   test('Chat is shown first; Files shows the library, with type, size and who shared it', async () => {
     const tree = show()
-    await waitFor(() => expect(tree.getByText('Agenda for Thursday')).toBeTruthy())
+    await waitFor(() =>
+      expect(tree.getByText('Draft agenda is in Files. Can everyone look before Thursday?')).toBeTruthy()
+    )
     expect(tree.getByTestId(id('RoomTabChat')).props.accessibilityState).toEqual({ selected: true })
     expect(tree.queryByTestId(id('RoomFiles'))).toBeNull()
 

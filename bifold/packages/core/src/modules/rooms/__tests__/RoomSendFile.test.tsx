@@ -107,8 +107,9 @@ describe('sending a file', () => {
     expect(draft.body).toBe('')
     expect(tree.queryByTestId(id('RoomComposerFile'))).toBeNull()
 
-    // Written: the room's list carries the post with its file, which now opens the sheet.
-    const chip = await waitFor(() => tree.getByTestId(id('RoomFileChip_fn5')))
+    // Written: the room's list carries the post with its file, which now opens the sheet. The sample keys a write
+    // by its version, one past the room's 8.
+    const chip = await waitFor(() => tree.getByTestId(id('RoomFileChip_fn9')))
     expect(chip).toHaveTextContent(/Minutes\.pdf/)
     expect(tree.queryByTestId(id('RoomPostSending'))).toBeNull()
     fireEvent.press(chip)
