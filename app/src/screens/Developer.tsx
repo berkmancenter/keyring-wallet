@@ -73,6 +73,7 @@ const Developer: React.FC = () => {
   const [enableWalletNaming, setEnableWalletNaming] = useState(!!store.preferences.enableWalletNaming)
   const [remoteLoggingEnabled, setRemoteLoggingEnabled] = useState(logger?.remoteLoggingEnabled)
   const [enableShareableLink, setEnableShareableLink] = useState(!!store.preferences.enableShareableLink)
+  const [featureRooms, setFeatureRooms] = useState(!!store.preferences.featureRooms)
   const [enableAppToAppPersonFlow, setEnableAppToAppPersonFlow] = useState(!!store.developer.enableAppToAppPersonFlow)
   const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
@@ -321,6 +322,14 @@ const Developer: React.FC = () => {
       payload: [!enableShareableLink],
     })
     setEnableShareableLink((previousState) => !previousState)
+  }
+
+  const toggleFeatureRoomsSwitch = () => {
+    dispatch({
+      type: DispatchAction.FEATURE_ROOMS,
+      payload: [!featureRooms],
+    })
+    setFeatureRooms((previousState) => !previousState)
   }
 
   const toggleEnableAppToAppPersonFlowSwitch = () => {
@@ -1145,6 +1154,21 @@ const Developer: React.FC = () => {
             onValueChange={toggleShareableLinkSwitch}
             value={enableShareableLink}
             disabled={!store.authentication.didAuthenticate}
+          />
+        </SectionRow>
+        {/* The off switch for rooms, which are on by default: shown in every build, store ones included. */}
+        <SectionRow
+          title={t('Settings.FeatureRooms')}
+          accessibilityLabel={t('Settings.ToggleFeatureRooms')}
+          testID={testIdWithKey('ToggleFeatureRooms')}
+          showRowSeparator
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={featureRooms ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleFeatureRoomsSwitch}
+            value={featureRooms}
           />
         </SectionRow>
         <SectionRow
