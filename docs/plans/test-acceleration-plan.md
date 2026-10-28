@@ -1,5 +1,7 @@
 # Test acceleration — fewer runs on devices, faster loops, nothing proved less
 
+**Roadmap epic:** [keyring-wallet#702](https://github.com/berkmancenter/keyring-wallet/issues/702)
+
 **Status:** Proposed. No code written. Phase T0 needs no purchase and no decision beyond this plan.
 **Scope:** how fast and how cheaply a change gets a trustworthy verdict, from commit to result: native builds, the Jest suites, the e2e harness, a Node protocol tier that does not exist yet, the emulator and simulator runs, and the physical-phone runs. It covers where each assurance is proved, what it runs on, and the order the work happens in. It is the one plan that sequences testing-speed work.
 **Siblings:** [`release-cadence-and-testing-strategy/gate_efficiency_subtask.md`](./release-cadence-and-testing-strategy/gate_efficiency_subtask.md) owns the release gate: lanes, cadence, component-test moves, VTA contract fixtures, the flakiness policy and the coverage manifest. [`ios-builds-on-linux-plan.md`](./ios-builds-on-linux-plan.md) owns where iOS builds and gates run and the Mac purchase. [`openvtc-interop-harness-plan.md`](./openvtc-interop-harness-plan.md) owns interop with upstream's reference implementations. [`release-flow-plan.md`](./release-flow-plan.md) owns the branches and channels the builds feed; this plan changes how fast builds and checks run, not the flow.

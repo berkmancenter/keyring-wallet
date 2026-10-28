@@ -1,5 +1,7 @@
 # Delegated Batch Issuance (DBI) — Bridging KERI-Rooted Credentials to W3C, SD-JWT and mdoc
 
+**Roadmap epic:** [keyring-wallet#700](https://github.com/berkmancenter/keyring-wallet/issues/700)
+
 *Living plan for the DBI workstream. Separate from, but linked to, [`openvtc-integration-plan.md`](./openvtc-integration-plan.md): DBI reuses its Trust Task carriage and VTA key-management interface, and adds no dependency on TSP.*
 
 **Reviews that shaped it** — each records its own reasoning and disposition; this plan states only the current position:

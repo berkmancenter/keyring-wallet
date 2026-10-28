@@ -1,5 +1,7 @@
 # OpenVTC interop harness
 
+**Roadmap epic:** [keyring-wallet#699](https://github.com/berkmancenter/keyring-wallet/issues/699)
+
 Every Keyring release candidate proves that Keyring works with upstream's
 reference implementations, and not only with another copy of Keyring.
 

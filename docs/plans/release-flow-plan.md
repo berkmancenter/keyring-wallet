@@ -1,5 +1,7 @@
 # Release flow — from a feature branch to testers' phones
 
+**Roadmap epic:** [keyring-wallet#693](https://github.com/berkmancenter/keyring-wallet/issues/693)
+
 **Scope.** How a change travels from a branch to a device: the branches that
 exist and what each is for, the three delivery channels and the store track
 each maps to, how versions and build numbers are assigned, how the
