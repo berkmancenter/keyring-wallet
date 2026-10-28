@@ -14,7 +14,7 @@
  *
  * @module rooms/components/RoomComposer
  */
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, TextInput, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -44,9 +44,17 @@ export interface RoomComposerProps {
   unavailable?: string
   /** Who the member posts as, in words ("…negative-weird"). */
   postingAs?: string
+  /** Opens the file picker each time it changes to a new number above 0 (the Files tab's "Add a file"). */
+  attachRequest?: number
 }
 
-export const RoomComposer: React.FC<RoomComposerProps> = ({ onSend, unavailable, postingAs, canAttach }) => {
+export const RoomComposer: React.FC<RoomComposerProps> = ({
+  onSend,
+  unavailable,
+  postingAs,
+  canAttach,
+  attachRequest = 0,
+}) => {
   const { t, i18n } = useTranslation()
   const { ColorPalette } = useTheme()
   const [text, setText] = useState('')
@@ -114,6 +122,24 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({ onSend, unavailable,
     },
   })
 
+  const attach = async () => {
+    setRefused(undefined)
+    const picked = await pickRoomFile()
+    if (!picked) return
+    if (picked.ok) setFile(picked.file)
+    else setRefused(picked.reason)
+  }
+
+  // Each new request opens the picker once, and only once: the first render's 0 is no request.
+  const attachRef = useRef(attach)
+  attachRef.current = attach
+  const handled = useRef(attachRequest)
+  useEffect(() => {
+    if (attachRequest <= handled.current) return
+    handled.current = attachRequest
+    if (canAttach && !unavailable) void attachRef.current()
+  }, [attachRequest, canAttach, unavailable])
+
   if (unavailable)
     return (
       <View style={{ backgroundColor: ColorPalette.brand.secondaryBackground }}>
@@ -127,14 +153,6 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({ onSend, unavailable,
     if (!onSend(text, file)) return
     setText('')
     setFile(undefined)
-  }
-
-  const attach = async () => {
-    setRefused(undefined)
-    const picked = await pickRoomFile()
-    if (!picked) return
-    if (picked.ok) setFile(picked.file)
-    else setRefused(picked.reason)
   }
 
   return (

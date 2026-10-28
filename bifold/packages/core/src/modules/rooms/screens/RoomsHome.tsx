@@ -1,6 +1,6 @@
 /**
  * Rooms: the offers waiting on the member, then their rooms grouped by community (rooms member sprint). An offer
- * opens its consent screen, and the list is read again on coming back to it. Reached from the Rooms card on the
+ * opens its consent screen, and the list is read again on coming back to it, or when pulled down. Reached from the Rooms card on the
  * My Agent home, only while the rooms flag is on; with it off there is no service and the screen says rooms are
  * off rather than showing an empty list.
  *
@@ -9,7 +9,7 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ScrollView, StyleSheet } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -44,7 +44,15 @@ const RoomsHome: React.FC = () => {
   })
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('RoomsHome')}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        testID={testIdWithKey('RoomsHome')}
+        refreshControl={
+          service ? (
+            <RefreshControl refreshing={myRooms.refreshing} onRefresh={reload} tintColor={ColorPalette.brand.primary} />
+          ) : undefined
+        }
+      >
         {service ? (
           <>
             <SampleDataBanner service={service} />

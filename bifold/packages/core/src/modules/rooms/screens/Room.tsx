@@ -7,7 +7,10 @@
  * A post's words are its chat message, or the record as it was written: inert either way, never followed. Below the
  * posts, the composer: a post shows at once as sending, and stays, marked, if it could not be sent. Where the member
  * may not post, the composer gives the reason instead. A post's files show as chips; a tap opens the attachment sheet
- * (download, then share). Sending a file comes in a later step. Reached only while the rooms flag is on.
+ * (download, then share), and "+" posts one.
+ *
+ * Under the header, the room's parts as tabs (data rooms mock): Chat, and Files, the room's library. Reached only
+ * while the rooms flag is on.
  *
  * @module rooms/screens/Room
  */
@@ -29,10 +32,12 @@ import { localDayKey } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import { RoomComposer } from '../components/RoomComposer'
 import { RoomFileSheet } from '../components/RoomFileSheet'
+import { RoomFilesTab } from '../components/RoomFilesTab'
 import { RoomPostBubble } from '../components/RoomPostBubble'
 import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { identityText } from '../components/roomWords'
+import { type RoomTab, RoomTabs } from '../components/RoomTabs'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import TierBadge from '../components/TierBadge'
 import { toInertText } from '../inertText'
@@ -102,6 +107,14 @@ const Room: React.FC = () => {
   const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList)
   const outbox = useRoomSend(service, roomId, feed.refresh)
   const [openedFile, setOpenedFile] = useState<RoomFile>()
+  const [tab, setTab] = useState<RoomTab>('chat')
+  const [attachRequest, setAttachRequest] = useState(0)
+  const { reload } = state
+  // The library is read again each time it is shown, so a file just posted from the chat is in it.
+  const showTab = (next: RoomTab) => {
+    if (next === 'files' && tab !== 'files') reload()
+    setTab(next)
+  }
   const canOpenFiles = roomCapabilities?.openFile.status === 'available'
   const { settle } = outbox
   // A sent post leaves the outbox once the room's own list shows it.
@@ -218,11 +231,31 @@ const Room: React.FC = () => {
           <ThemedText style={styles.warnText}>{t('Rooms.HostConflict')}</ThemedText>
         </View>
       ) : null}
-      {/* keyboard-controller's view, which lifts on Android too: the app draws under the system bars there. */}
+      <RoomTabs tabs={['chat', 'files']} selected={tab} onSelect={showTab} />
+      {tab === 'files' ? (
+        <RoomFilesTab
+          files={state.files}
+          failed={state.filesFailed}
+          status={roomCapabilities.listFiles}
+          refreshing={state.refreshing}
+          onRefresh={reload}
+          onOpenFile={canOpenFiles ? setOpenedFile : undefined}
+          onAddFile={
+            unavailable || cannotPost
+              ? undefined
+              : () => {
+                  setTab('chat')
+                  setAttachRequest((n) => n + 1)
+                }
+          }
+        />
+      ) : null}
+      {/* The chat stays mounted on the other tabs, hidden, so its draft and a post on its way are kept.
+          keyboard-controller's view, which lifts on Android too: the app draws under the system bars there. */}
       <KeyboardAvoidingView
         ref={keyboard.ref}
         onLayout={keyboard.onLayout}
-        style={{ flex: 1 }}
+        style={tab === 'chat' ? { flex: 1 } : { display: 'none' }}
         behavior="padding"
         keyboardVerticalOffset={keyboard.offset}
       >
@@ -277,6 +310,7 @@ const Room: React.FC = () => {
             unavailable={cannotPost}
             postingAs={identityText(room.actingAs)}
             canAttach
+            attachRequest={attachRequest}
           />
         )}
       </KeyboardAvoidingView>

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "c32dde63c192c7148fced10fb4532e5378fcc3a8",
+  "generatedFrom": "68b8c873b5e76ae55aea1f1aa6aa713d2bc59879",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -921,6 +921,13 @@
     "RoomFileShareUnavailable": ["src/modules/rooms/components/RoomFileSheet.tsx"],
     "RoomFileSheet": ["src/modules/rooms/components/RoomFileSheet.tsx"],
     "RoomFileSheetClose": ["src/modules/rooms/components/RoomFileSheet.tsx"],
+    "RoomFiles": ["src/modules/rooms/components/RoomFilesTab.tsx"],
+    "RoomFilesAdd": ["src/modules/rooms/components/RoomFilesTab.tsx"],
+    "RoomFilesCaution": ["src/modules/rooms/components/RoomFilesTab.tsx"],
+    "RoomFilesFailed": ["src/modules/rooms/components/RoomFilesTab.tsx"],
+    "RoomFilesNone": ["src/modules/rooms/components/RoomFilesTab.tsx"],
+    "RoomFilesReading": ["src/modules/rooms/components/RoomFilesTab.tsx"],
+    "RoomFilesUnavailable": ["src/modules/rooms/components/RoomFilesTab.tsx"],
     "RoomHeader": ["src/modules/rooms/screens/Room.tsx"],
     "RoomHostConflict": ["src/modules/rooms/screens/Room.tsx"],
     "RoomLoadOlder": ["src/modules/rooms/screens/Room.tsx"],
@@ -956,6 +963,9 @@
     "RoomReadFailed": ["src/modules/rooms/screens/Room.tsx"],
     "RoomReading": ["src/modules/rooms/screens/Room.tsx"],
     "RoomScreen": ["src/modules/rooms/screens/Room.tsx"],
+    "RoomTabChat": ["src/modules/rooms/components/RoomTabs.tsx"],
+    "RoomTabFiles": ["src/modules/rooms/components/RoomTabs.tsx"],
+    "RoomTabs": ["src/modules/rooms/components/RoomTabs.tsx"],
     "RoomTier": ["src/modules/rooms/components/TierBadge.tsx"],
     "RoomTitle": ["src/modules/rooms/screens/Room.tsx"],
     "RoomTryAgain": ["src/modules/rooms/screens/Room.tsx"],
@@ -1493,6 +1503,9 @@
     },
     {
       "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheetClose"
+    },
+    {
+      "src/modules/rooms/components/RoomTabs.tsx": "TEST_ID[tab]"
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Copy`"

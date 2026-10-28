@@ -2743,6 +2743,8 @@
     "Files": "Arquivos",
     "FilesNone": "Nenhum arquivo ainda.",
     "FilesFailed": "Não foi possível ler os arquivos. Tente mais tarde.",
+    "FilesAdd": "Adicionar um arquivo",
+    "FilesCaution": "Um arquivo só é baixado quando você o abre. O Keyring não consegue verificar o que um arquivo contém.",
     "Members": "Membros",
     "Chat": "Conversa",
     "GroupChat": "Conversa em grupo",

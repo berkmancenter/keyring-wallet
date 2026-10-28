@@ -20,6 +20,8 @@ export interface RoomState {
   failed: boolean
   notesFailed: boolean
   filesFailed: boolean
+  /** A reload asked for by the member (pull to refresh) is under way; the first read is not one. */
+  refreshing: boolean
   reload: () => void
 }
 
@@ -28,9 +30,13 @@ export function useRoom(service: RoomsService | undefined, roomId: string): Room
     failed: false,
     notesFailed: false,
     filesFailed: false,
+    refreshing: false,
   })
   const [generation, setGeneration] = useState(0)
-  const reload = useCallback(() => setGeneration((g) => g + 1), [])
+  const reload = useCallback(() => {
+    setState((s) => ({ ...s, refreshing: true }))
+    setGeneration((g) => g + 1)
+  }, [])
 
   useEffect(() => {
     if (!service) return
@@ -49,7 +55,7 @@ export function useRoom(service: RoomsService | undefined, roomId: string): Room
         roomCapabilities = perRoom
         set({ room, roomCapabilities, capabilities, failed: false })
       } catch {
-        set({ failed: true })
+        set({ failed: true, refreshing: false })
         return
       }
       const listing: Promise<void>[] = []
@@ -68,6 +74,7 @@ export function useRoom(service: RoomsService | undefined, roomId: string): Room
           )
         )
       await Promise.all(listing)
+      set({ refreshing: false })
     })()
     return () => {
       live = false

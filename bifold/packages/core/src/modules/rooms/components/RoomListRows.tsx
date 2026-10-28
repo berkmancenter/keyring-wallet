@@ -4,14 +4,14 @@
  * title is sealed with the body, so the row says the note is encrypted until it is read. A retracted note
  * is a tombstone: it says so and has no body.
  *
- * Neither row opens anything yet; reading a note and opening a file come in later steps.
+ * A file row opens the attachment sheet; a note row opens nothing yet.
  *
  * @module rooms/components/RoomListRows
  */
 import type { TFunction } from 'i18next'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -20,6 +20,7 @@ import { localDate } from '../../trust-tasks/screens/localTime'
 import { testIdWithKey } from '../../../utils/testable'
 import type { NoteSummary, RoomFile } from '../types'
 
+import { fileIcon, fileSizeText, fileTypeText } from './fileWords'
 import { roomHandle } from './RoomRow'
 import { identityText } from './roomWords'
 
@@ -86,38 +87,66 @@ export const NoteRow: React.FC<{ note: NoteSummary }> = ({ note }) => {
   )
 }
 
-/** "84 KB", "1.2 MB". */
-export const fileSize = (bytes: number): string =>
-  bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`
-
-export const FileRow: React.FC<{ file: RoomFile }> = ({ file }) => {
-  // Drawn again on a language change, so the shared date follows it.
-  useTranslation()
-  const { ColorPalette } = useTheme()
-  const styles = useRowStyles()
-  const line = [
-    file.size !== undefined ? fileSize(file.size) : undefined,
-    file.sharedBy ? identityText(file.sharedBy) : undefined,
+/** The type and size the sharer gave, in the app's words ("PDF · 84 KB"), then who shared it and when. */
+export const fileLines = (t: TFunction, file: RoomFile, language: string): [string, string] => [
+  [fileTypeText(file), file.size !== undefined ? fileSizeText(t, file.size, language) : undefined]
+    .filter(Boolean)
+    .join(' · '),
+  [
+    file.sharedBy
+      ? (t('Rooms.FileSharedBy', { who: identityText(file.sharedBy), interpolation: { escapeValue: false } }) as string)
+      : undefined,
     file.sharedAt ? localDate(file.sharedAt) : undefined,
   ]
     .filter(Boolean)
-    .join(' · ')
-  return (
-    <View
-      style={styles.row}
-      accessible
-      accessibilityLabel={line ? `${file.name}, ${line}` : file.name}
-      testID={testIdWithKey(`RoomFileRow_${roomHandle(file.fileId)}`)}
-    >
-      <Icon name="file-outline" size={22} color={ColorPalette.brand.primary} />
+    .join(' · '),
+]
+
+/** A file in the room's library. A tap opens the attachment sheet; with no `onPress` the row is not a button. */
+export const FileRow: React.FC<{ file: RoomFile; onPress?: (file: RoomFile) => void }> = ({ file, onPress }) => {
+  const { t, i18n } = useTranslation()
+  const { ColorPalette } = useTheme()
+  const styles = useRowStyles()
+  const [facts, shared] = fileLines(t, file, i18n.language)
+  const label = [String(file.name), facts, shared].filter(Boolean).join(', ')
+  const testID = testIdWithKey(`RoomFileRow_${roomHandle(file.fileId)}`)
+  const content = (
+    <>
+      <Icon name={fileIcon(file)} size={26} color={ColorPalette.brand.primary} />
       <View style={{ flex: 1, gap: 2 }}>
-        <ThemedText variant="bold">{file.name}</ThemedText>
-        {line ? (
+        <ThemedText variant="bold" numberOfLines={2} ellipsizeMode="middle">
+          {file.name}
+        </ThemedText>
+        {facts ? (
           <ThemedText variant="caption" style={styles.muted}>
-            {line}
+            {facts}
+          </ThemedText>
+        ) : null}
+        {shared ? (
+          <ThemedText variant="caption" style={styles.muted}>
+            {shared}
           </ThemedText>
         ) : null}
       </View>
-    </View>
+    </>
+  )
+  if (!onPress)
+    return (
+      <View style={styles.row} accessible accessibilityLabel={label} testID={testID}>
+        {content}
+      </View>
+    )
+  return (
+    <Pressable
+      style={styles.row}
+      onPress={() => onPress(file)}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={t('Rooms.FileOpenHint')}
+      testID={testID}
+    >
+      {content}
+      <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+    </Pressable>
   )
 }

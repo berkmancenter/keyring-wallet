@@ -2893,6 +2893,8 @@
     "Files": "Files",
     "FilesNone": "No files yet.",
     "FilesFailed": "Couldn't read the files. Try again later.",
+    "FilesAdd": "Add a file",
+    "FilesCaution": "A file downloads only when you open it. Keyring can’t check what a file contains.",
     "Members": "Members",
     "Chat": "Chat",
     "GroupChat": "Group chat",

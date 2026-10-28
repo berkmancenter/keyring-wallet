@@ -18,13 +18,18 @@ export interface MyRooms {
   offers?: RoomOffer[]
   /** The last read failed; what was read before stays. */
   failed: boolean
+  /** A reload asked for by the member (pull to refresh) is under way; the first read is not one. */
+  refreshing: boolean
   reload: () => void
 }
 
 export function useMyRooms(service: RoomsService | undefined, communityDid?: string): MyRooms {
-  const [state, setState] = useState<Omit<MyRooms, 'reload'>>({ failed: false })
+  const [state, setState] = useState<Omit<MyRooms, 'reload'>>({ failed: false, refreshing: false })
   const [generation, setGeneration] = useState(0)
-  const reload = useCallback(() => setGeneration((g) => g + 1), [])
+  const reload = useCallback(() => {
+    setState((s) => ({ ...s, refreshing: true }))
+    setGeneration((g) => g + 1)
+  }, [])
 
   useEffect(() => {
     if (!service) return
@@ -44,9 +49,10 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
           rooms: communityDid ? rooms?.filter((r) => r.communityDid === communityDid) : rooms,
           offers: communityDid ? offers.filter((o) => o.communityDid === communityDid) : offers,
           failed: false,
+          refreshing: false,
         })
       } catch {
-        if (live) setState((s) => ({ ...s, failed: true }))
+        if (live) setState((s) => ({ ...s, failed: true, refreshing: false }))
       }
     })()
     return () => {

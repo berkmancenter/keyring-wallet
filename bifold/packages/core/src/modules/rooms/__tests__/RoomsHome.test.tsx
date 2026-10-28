@@ -1,7 +1,7 @@
 /**
  * Rooms: with the sample service, the "Sample data" banner and the rooms; with the rooms flag off (no
  * service), a line saying rooms are off and no list. An offer opens its consent screen, and coming back to the
- * list reads it again.
+ * list, or pulling it down, reads it again.
  */
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
@@ -93,5 +93,25 @@ describe('Rooms', () => {
     })
     await waitFor(() => expect(tree.queryByTestId(testIdWithKey('RoomOfferRow_o1'))).toBeNull())
     expect(listOffers).toHaveBeenCalledTimes(2)
+  })
+
+  test('pulling the list down reads it again, and the spinner stops when it has', async () => {
+    mockService = createSampleRoomsService()
+    const listMyRooms = jest.spyOn(mockService, 'listMyRooms')
+    const tree = show()
+    await waitFor(() => expect(tree.getByText('Planning')).toBeTruthy())
+    const scroll = () => tree.getByTestId(testIdWithKey('RoomsHome'))
+    expect(scroll().props.refreshControl.props.refreshing).toBe(false)
+    expect(listMyRooms).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      scroll().props.refreshControl.props.onRefresh()
+    })
+    await waitFor(() => expect(listMyRooms).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(scroll().props.refreshControl.props.refreshing).toBe(false))
+  })
+
+  test('rooms flag off: nothing to pull (control above)', () => {
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('RoomsHome')).props.refreshControl).toBeUndefined()
   })
 })

@@ -55,7 +55,12 @@ const offer: RoomOffer = {
 }
 const no = (reason: OperationStatus['reason']): OperationStatus => ({ status: 'unavailable', reason, detail: 'test' })
 const caps = (over: Partial<RoomsCapabilities> = {}): RoomsCapabilities => ({ ...sampleCapabilities(), ...over })
-const myRooms = (over: Partial<MyRooms> = {}): MyRooms => ({ failed: false, reload: jest.fn(), ...over })
+const myRooms = (over: Partial<MyRooms> = {}): MyRooms => ({
+  failed: false,
+  refreshing: false,
+  reload: jest.fn(),
+  ...over,
+})
 
 describe('a room row', () => {
   test('a community room: its name, tier and expiry; not a button without onPress', () => {
