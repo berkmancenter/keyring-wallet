@@ -44,6 +44,8 @@ test('stored-data migrations are never OTA, by policy', () => {
 test('what the app never ships is none, even a manifest there', () => {
   assert.equal(tierOf('e2e/package.json', 'docs/plans/x.md', '.gitignore', 'app/.env.sample'), 'none');
   assert.equal(tierOf('bifold/packages/witness-server/package.json', 'bifold/yarn.lock', 'bifold/packages/core/jest.config.js'), 'none');
+  // The e2e test-id manifest: a pin range that changes only it is `none`, like the wallet's own e2e manifests.
+  assert.equal(tierOf('bifold/packages/core/testids.json'), 'none');
   assert.equal(tierOf('bifold/packages/core/src/__tests__/x.test.ts'), 'none');
 });
 
