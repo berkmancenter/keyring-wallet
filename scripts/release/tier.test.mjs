@@ -46,6 +46,13 @@ test('what the app never ships is none, even a manifest there', () => {
   assert.equal(tierOf('bifold/packages/witness-server/package.json', 'bifold/yarn.lock', 'bifold/packages/core/jest.config.js'), 'none');
   // The e2e test-id manifest: a pin range that changes only it is `none`, like the wallet's own e2e manifests.
   assert.equal(tierOf('bifold/packages/core/testids.json'), 'none');
+  // And its `none` never masks the source change that added the id, which is the shape of a UI fix that adds
+  // one: classify takes the highest tier, so the pair classifies `ota`. (The CLI still answers `unchecked` for
+  // that pair without --range, as it does for any path-ota change: a held flag reads added lines.)
+  assert.equal(
+    tierOf('bifold/packages/core/testids.json', 'bifold/packages/core/src/components/chat/Chat.ids.ts'),
+    'ota'
+  );
   assert.equal(tierOf('bifold/packages/core/src/__tests__/x.test.ts'), 'none');
 });
 
