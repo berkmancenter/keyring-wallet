@@ -3,7 +3,7 @@
  * was written (inert, never followed), and nothing a room holds makes it throw.
  */
 import { toInertText } from '../inertText'
-import { chatMessageText, newestFirst, postOf } from '../roomPosts'
+import { chatMessageBody, chatMessageText, newestFirst, postOf } from '../roomPosts'
 import type { Note, NoteSummary } from '../types'
 
 // A ULID dated 2023-12-31: inside the parser's clock window whatever the run's date.
@@ -90,5 +90,23 @@ describe('newest first', () => {
       { key: 'd', version: 9 },
     ])
     expect(order.map((n) => n.key)).toEqual(['b', 'a', 'd', 'c'])
+  })
+})
+
+describe('a post as written', () => {
+  const EVENT_ID = '01JB0000000000000000000000'
+  const at = new Date('2026-10-26T12:00:00Z')
+
+  test('is a keyring.chat/1 message that reads back as its text, markup and all', () => {
+    const text = 'Agenda: <b>item 3</b> https://example.org'
+    const body = chatMessageBody(text, EVENT_ID, at)
+    expect(JSON.parse(body)).toEqual({
+      profile: 'keyring.chat/1',
+      eventId: EVENT_ID,
+      type: 'message',
+      content: { format: 'text/plain', text },
+      clientTs: '2026-10-26T12:00:00.000Z',
+    })
+    expect(chatMessageText(body, at.getTime())).toBe(text)
   })
 })

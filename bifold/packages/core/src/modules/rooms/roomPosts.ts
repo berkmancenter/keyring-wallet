@@ -9,7 +9,7 @@
  *
  * @module rooms/roomPosts
  */
-import { parseChatEvent } from '../chat/chatEvent'
+import { CHAT_PROFILE, type ChatMessageEvent, parseChatEvent } from '../chat/chatEvent'
 
 import { toInertText, type InertText } from './inertText'
 import type { Identity, Note, NoteSummary } from './types'
@@ -32,6 +32,8 @@ export interface RoomPost {
   retracted: boolean
   /** The record could not be read; only what the listing said about it is known. */
   unread: boolean
+  /** A post this phone is still sending, or could not send (not yet a record in the room). */
+  delivery?: 'sending' | 'failed'
 }
 
 const sameIdentity = (a?: Identity, b?: Identity): boolean => !!a && !!b && JSON.stringify(a) === JSON.stringify(b)
@@ -53,6 +55,18 @@ export function chatMessageText(body: string, now: number = Date.now()): string 
   const result = parseChatEvent(parsed, { now })
   if (!result.ok || result.event.type !== 'message') return undefined
   return result.event.content?.text
+}
+
+/** A post's body as it is written to the room: a keyring.chat/1 message, which `chatMessageText` reads back. */
+export function chatMessageBody(text: string, eventId: string, at: Date): string {
+  const event: ChatMessageEvent = {
+    profile: CHAT_PROFILE,
+    eventId,
+    type: 'message',
+    content: { format: 'text/plain', text },
+    clientTs: at.toISOString(),
+  }
+  return JSON.stringify(event)
 }
 
 /** One record as a post. `note` is the record when it was read, or only its listing entry when it could not be. */

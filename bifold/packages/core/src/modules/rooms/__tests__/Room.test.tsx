@@ -20,6 +20,7 @@ import type { HostCheck, Note, NoteList, Room as RoomRecord, RoomsService } from
 let mockService: RoomsService | undefined
 let mockParams: Record<string, string> | undefined
 jest.mock('../useRoomsService', () => ({ useRoomsService: () => mockService }))
+jest.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 100 }))
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
   useRoute: () => ({ params: mockParams }),

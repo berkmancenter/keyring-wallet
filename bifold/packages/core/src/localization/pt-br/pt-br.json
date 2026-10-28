@@ -2784,6 +2784,10 @@
     "OfferNotAMember": "Você não é mais membro ativo desta comunidade, então não pode entrar nas salas dela.",
     "OfferAlreadyAccepted": "Este convite já foi aceito e não pode ser aceito de novo. Peça à comunidade para remover você da sala e convidar de novo.",
     "OfferAdmissionPending": "A comunidade ainda não confirmou. Tente de novo em um minuto.",
-    "OfferKeyHolderRefused": "A comunidade não conseguiu adicionar você agora. Tente mais tarde."
+    "OfferKeyHolderRefused": "A comunidade não conseguiu adicionar você agora. Tente mais tarde.",
+    "Send": "Enviar",
+    "PostSending": "Enviando…",
+    "PostNotSent": "Não enviado. Toque para tentar de novo.",
+    "PostingAs": "Publicando como {{who}}"
   }
 }

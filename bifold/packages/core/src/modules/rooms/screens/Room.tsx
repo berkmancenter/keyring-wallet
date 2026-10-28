@@ -4,15 +4,26 @@
  * the room's name and tier and who the member posts as; and a warning when the member's agent found the host's
  * answer inconsistent (records dropped or replayed).
  *
- * A post's words are its chat message, or the record as it was written: inert either way, never followed. Writing
- * and attachments come in later steps; nothing here pretends to do them. Reached only while the rooms flag is on.
+ * A post's words are its chat message, or the record as it was written: inert either way, never followed. Below the
+ * posts, the composer: a post shows at once as sending, and stays, marked, if it could not be sent. Where the member
+ * may not post, the composer gives the reason instead. Attachments come in a later step; nothing here pretends to
+ * do them. Reached only while the rooms flag is on.
  *
  * @module rooms/screens/Room
  */
+import { useHeaderHeight } from '@react-navigation/elements'
 import { useRoute } from '@react-navigation/native'
-import React from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native'
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -22,15 +33,18 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { localDayKey } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
+import { RoomComposer } from '../components/RoomComposer'
 import { RoomPostBubble } from '../components/RoomPostBubble'
 import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { identityText } from '../components/roomWords'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import TierBadge from '../components/TierBadge'
+import { toInertText } from '../inertText'
 import type { RoomPost } from '../roomPosts'
 import { useRoom } from '../useRoom'
 import { POSTS_PAGE, useRoomPosts } from '../useRoomPosts'
+import { type PendingPost, useRoomSend } from '../useRoomSend'
 import { useRoomsService } from '../useRoomsService'
 
 type Item = { kind: 'day'; key: string; date: Date } | { kind: 'post'; key: string; post: RoomPost }
@@ -48,15 +62,42 @@ export const withDayPills = (posts: RoomPost[]): Item[] => {
   return items
 }
 
+/** A post on its way, drawn as the member's own until the room's list carries it. */
+export const pendingAsPost = (pending: PendingPost, actingAs: RoomPost['author']): RoomPost => ({
+  key: pending.localId,
+  version: 0,
+  author: actingAs,
+  byAgent: false,
+  mine: true,
+  at: pending.at,
+  text: toInertText(pending.text),
+  isChatMessage: true,
+  retracted: false,
+  unread: false,
+  delivery: pending.state === 'sent' ? undefined : pending.state,
+})
+
 const Room: React.FC = () => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const roomId = (useRoute()?.params as { roomId?: string } | undefined)?.roomId ?? ''
   const service = useRoomsService()
+  // The keyboard rises from the screen's bottom, under a navigation header: offset by the header, as the chat does.
+  const headerHeight = useHeaderHeight()
   const state = useRoom(service, roomId)
   const { room, roomCapabilities } = state
   const canList = roomCapabilities?.listNotes.status === 'available'
   const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList)
+  const outbox = useRoomSend(service, roomId, feed.refresh)
+  const { settle } = outbox
+  // A sent post leaves the outbox once the room's own list shows it.
+  useEffect(() => {
+    if (feed.posts) settle(new Set(feed.posts.map((p) => p.key)))
+  }, [feed.posts, settle])
+  const pendingPosts = useMemo(
+    () => outbox.pending.map((p) => pendingAsPost(p, room?.actingAs)),
+    [outbox.pending, room?.actingAs]
+  )
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     header: { paddingHorizontal: 16, paddingVertical: 10, gap: 4 },
@@ -111,7 +152,8 @@ const Room: React.FC = () => {
     )
 
   const unavailable = roomsStatusText(t, roomCapabilities.listNotes, 'listNotes')
-  const items = feed.posts ? withDayPills(feed.posts) : []
+  const cannotPost = roomsStatusText(t, roomCapabilities.write, 'write')
+  const items = feed.posts || pendingPosts.length ? withDayPills([...pendingPosts, ...(feed.posts ?? [])]) : []
 
   const empty = unavailable ? (
     <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsUnavailable')}>
@@ -162,42 +204,58 @@ const Room: React.FC = () => {
           <ThemedText style={styles.warnText}>{t('Rooms.HostConflict')}</ThemedText>
         </View>
       ) : null}
-      <FlatList
-        testID={testIdWithKey('RoomPosts')}
-        data={unavailable ? [] : items}
-        keyExtractor={(item) => item.key}
-        // A page is small (POSTS_PAGE posts and their day pills): draw it whole, so "Load older" sits under it.
-        initialNumToRender={POSTS_PAGE * 2}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) =>
-          item.kind === 'day' ? <DayPill date={item.date} /> : <RoomPostBubble post={item.post} />
-        }
-        ListEmptyComponent={empty}
-        refreshControl={
-          unavailable ? undefined : (
-            <RefreshControl
-              refreshing={feed.refreshing}
-              onRefresh={feed.refresh}
-              tintColor={ColorPalette.brand.primary}
-            />
-          )
-        }
-        ListFooterComponent={
-          feed.hasOlder ? (
-            <Button
-              title={t('Rooms.LoadOlder')}
-              buttonType={ButtonType.Secondary}
-              onPress={feed.loadOlder}
-              disabled={feed.loadingOlder}
-              testID={testIdWithKey('RoomLoadOlder')}
-            />
-          ) : feed.incomplete ? (
-            <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsIncomplete')}>
-              {t('Rooms.NotesIncomplete')}
-            </ThemedText>
-          ) : null
-        }
-      />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={headerHeight}
+      >
+        <FlatList
+          testID={testIdWithKey('RoomPosts')}
+          data={unavailable ? [] : items}
+          keyExtractor={(item) => item.key}
+          // A page is small (POSTS_PAGE posts and their day pills): draw it whole, so "Load older" sits under it.
+          initialNumToRender={POSTS_PAGE * 2}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) =>
+            item.kind === 'day' ? (
+              <DayPill date={item.date} />
+            ) : (
+              <RoomPostBubble
+                post={item.post}
+                onRetry={item.post.delivery === 'failed' ? () => outbox.retry(item.post.key) : undefined}
+              />
+            )
+          }
+          ListEmptyComponent={empty}
+          refreshControl={
+            unavailable ? undefined : (
+              <RefreshControl
+                refreshing={feed.refreshing}
+                onRefresh={feed.refresh}
+                tintColor={ColorPalette.brand.primary}
+              />
+            )
+          }
+          ListFooterComponent={
+            feed.hasOlder ? (
+              <Button
+                title={t('Rooms.LoadOlder')}
+                buttonType={ButtonType.Secondary}
+                onPress={feed.loadOlder}
+                disabled={feed.loadingOlder}
+                testID={testIdWithKey('RoomLoadOlder')}
+              />
+            ) : feed.incomplete ? (
+              <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsIncomplete')}>
+                {t('Rooms.NotesIncomplete')}
+              </ThemedText>
+            ) : null
+          }
+        />
+        {unavailable ? null : (
+          <RoomComposer onSend={outbox.send} unavailable={cannotPost} postingAs={identityText(room.actingAs)} />
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }

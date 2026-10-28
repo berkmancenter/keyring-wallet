@@ -2934,6 +2934,10 @@
     "OfferNotAMember": "You're no longer an active member of this community, so you can't join its rooms.",
     "OfferAlreadyAccepted": "This offer was already accepted and can't be accepted again. Ask the community to remove you from the room and offer it to you again.",
     "OfferAdmissionPending": "The community hasn't confirmed yet. Try again in a minute.",
-    "OfferKeyHolderRefused": "The community couldn't add you right now. Try again later."
+    "OfferKeyHolderRefused": "The community couldn't add you right now. Try again later.",
+    "Send": "Send",
+    "PostSending": "Sending…",
+    "PostNotSent": "Not sent. Tap to try again.",
+    "PostingAs": "Posting as {{who}}"
   }
 }

@@ -2882,6 +2882,10 @@
     "OfferNotAMember": "Vous n'êtes plus membre actif de cette communauté : vous ne pouvez pas rejoindre ses salons.",
     "OfferAlreadyAccepted": "Cette invitation a déjà été acceptée et ne peut pas l'être de nouveau. Demandez à la communauté de vous retirer du salon et de vous inviter à nouveau.",
     "OfferAdmissionPending": "La communauté n'a pas encore confirmé. Réessayez dans une minute.",
-    "OfferKeyHolderRefused": "La communauté ne peut pas vous ajouter pour le moment. Réessayez plus tard."
+    "OfferKeyHolderRefused": "La communauté ne peut pas vous ajouter pour le moment. Réessayez plus tard.",
+    "Send": "Envoyer",
+    "PostSending": "Envoi…",
+    "PostNotSent": "Non envoyé. Touchez pour réessayer.",
+    "PostingAs": "Vous publiez en tant que {{who}}"
   }
 }
