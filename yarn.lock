@@ -5652,10 +5652,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openvtc/trust-tasks@npm:^0.27.8":
-  version: 0.27.9
-  resolution: "@openvtc/trust-tasks@npm:0.27.9"
-  checksum: 10c0/9ba3f37e8fca76e239f464301d340e9c13190c03dc40da95d1e350a5f681a5ef56cbf1c6065a40b00415f3d8c76389e8b1dea6de3c6b12add82bf73563ad2226
+"@openvtc/trust-tasks@npm:0.27.8":
+  version: 0.27.8
+  resolution: "@openvtc/trust-tasks@npm:0.27.8"
+  checksum: 10c0/4abf5e5dc91f3f83f15ccbacef8a635f26afa7edeb4e0c496dcfdfed95b81f248e3c8e5ef211a4650bcb99cd910039b3d055be860378b1bc6c2275a72960ed41
   languageName: node
   linkType: hard
 
