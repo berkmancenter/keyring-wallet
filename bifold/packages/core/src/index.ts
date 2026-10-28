@@ -93,6 +93,7 @@ export { defaultState, mergeReducers, StoreContext, StoreProvider, useStore } fr
 export { ThemeProvider, useTheme } from './contexts/theme'
 export { openAppLink, useDeepLinks } from './hooks/deep-links'
 export { APPROVALS_LINK, MESSAGES_LINK } from './modules/trust-tasks/module/vtiLinks'
+export { roomsSwitchAvailable } from './modules/rooms/useRoomsService'
 export { useConnectionDisplayName } from './hooks/connections'
 export { useRCardCredential } from './modules/vrc/hooks/useRCardCredential'
 export { VrcNameCacheProvider, useVrcNameCache } from './modules/vrc/context/VrcNameCacheProvider'
