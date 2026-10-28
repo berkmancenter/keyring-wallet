@@ -11,6 +11,11 @@ import {
   WalletSecret,
   setupVrcConnectionHandler,
   setupTrustTasksInbound,
+  registerRoomsService,
+  AgentRoomsService,
+  createAgentRoomsBackend,
+  useContainer,
+  type Container,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
   findV2MediationRecord,
@@ -162,10 +167,29 @@ export const provisionV2MediationIfConfigured = async (agent: Agent, enabled: bo
   }
 }
 
+/**
+ * Rooms read and write through the person's own agent and communities (bifold rooms/register.ts): without
+ * this, `TOKENS.UTIL_ROOMS_SERVICE` stays empty and a store build, which carries no sample rooms, shows none.
+ *
+ * Called before every `setAgent` with a live agent, the restarted one included, so the service is never built
+ * on an agent other than the one the app runs. Screens resolve the service once (`useRoomsService` memoises on
+ * the container, not the agent). That is safe because `initializeAgent` is reachable only from the onboarding
+ * stack: RootStack renders the main stack only while an agent is set, and a lock-out sets none. So every rooms
+ * screen mounts after this registration.
+ *
+ * `container` is the app's container as `useContainer` gives it, bifold's wrapper: the registration goes into the
+ * tsyringe container it wraps, which is where `useRoomsService` resolves the service from.
+ */
+export function registerRealRooms(container: Container, agent: Agent): void {
+  const backend = createAgentRoomsBackend(agent, { mediatorDid: Config.VTI_MEDIATOR_DID || undefined })
+  registerRoomsService(container.container, new AgentRoomsService(backend))
+}
+
 const useBCAgentSetup = () => {
   const [agent, setAgent] = useState<Agent | null>(null)
   const agentInstanceRef = useRef<Agent | null>(null)
   const [store, dispatch] = useStore<BCState>()
+  const container = useContainer()
   const [logger, indyLedgers, credDefs, schemas] = useServices([
     TOKENS.UTIL_LOGGER,
     TOKENS.UTIL_LEDGERS,
@@ -319,6 +343,7 @@ const useBCAgentSetup = () => {
         if (restartedAgent) {
           logger.info('Successfully restarted existing agent...')
           await configureMessagePickup(restartedAgent)
+          registerRealRooms(container, restartedAgent)
           agentInstanceRef.current = restartedAgent
           setAgent(restartedAgent)
           return
@@ -390,6 +415,8 @@ const useBCAgentSetup = () => {
         void runDataIntegritySelfTest(newAgent)
       }
 
+      registerRealRooms(container, newAgent)
+
       logger.info('Setting new agent...')
       agentInstanceRef.current = newAgent
       setAgent(newAgent)
@@ -406,6 +433,7 @@ const useBCAgentSetup = () => {
       migrateIfRequired,
       warmUpCache,
       restartExistingAgent,
+      container,
     ]
   )
 
