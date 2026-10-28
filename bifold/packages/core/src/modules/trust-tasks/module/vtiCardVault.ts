@@ -44,6 +44,7 @@ import {
 } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { checkDeliveredCard, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
+import { withoutRoomCards } from './roomCards'
 import { classifyCredential, roleNameOf } from './vtiInbox'
 
 export const VAULT_RECEIVE = 'https://trusttasks.org/spec/vault/credentials/receive/0.1'
@@ -333,7 +334,8 @@ export async function recoverCardsFromAgent(
   } = {}
 ): Promise<{ found: number; restored: string[]; already: string[]; refused: RecoveredRefusal[] }> {
   const check = options.check ?? ((c, issuer) => checkDeliveredCard(agent, c, issuer))
-  const cards = options.cards ?? (await fetchAgentCards(task))
+  // A data room's cards are the room's, not a community's: they are neither kept here nor refused (roomCards).
+  const cards = withoutRoomCards(options.cards ?? (await fetchAgentCards(task)))
   const restored: string[] = []
   const already: string[] = []
   const refused: RecoveredRefusal[] = []

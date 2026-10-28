@@ -99,6 +99,30 @@ export const vetterGrantProofSet = base(
   proofSet
 )
 
+/** A data room the persona was admitted to, hosted by the community (vtc-service `room-dids`). */
+export const ROOM = 'did:webvh:QmRoom:vtc.example:room-dids:c56d36fc3bbe4fc9a3270b594d4d2c78'
+/** A room's card, in the shape the room issues it: its own DID as issuer, DTG v1's context, no status list. */
+const roomBase = (id: string, type: string, subject: Record<string, unknown>) => ({
+  '@context': ['https://www.w3.org/ns/credentials/v2', 'https://registry.trustoverip.org/dtg/context/v1'],
+  id,
+  type: ['VerifiableCredential', 'DTGCredential', type],
+  issuer: ROOM,
+  issuerScope: 'public',
+  validFrom: '2026-10-27T04:51:49Z',
+  validUntil: '2026-11-26T04:51:41Z',
+  credentialSubject: { id: PERSONA_DID, ...subject },
+  proof: { ...oneProof, verificationMethod: `${ROOM}#key-1`, created: '2026-10-27T04:51:49Z' },
+})
+/**
+ * The two cards accepting a room offer leaves in the member's agent (`vtc/rooms/offers/accept`). The membership
+ * card's types are a community's; the authority card grants room actions at the room's own DID. Shapes as a
+ * lab agent holds them (VTA 0.65, community A's "Keyring lab open", 10-27).
+ */
+export const roomMembershipCard = roomBase('urn:uuid:65ccef05-99bf-46f7-854b-b4f2989c7623', 'MembershipCredential', {})
+export const roomAuthorityCard = roomBase('urn:uuid:4de53d5f-2d7e-4b20-9634-51efcf4456dc', 'AuthorityCredential', {
+  authority: { actions: ['read', 'write'], scope: ROOM },
+})
+
 export const membership: VtiMembership = {
   communityDid: COMMUNITY,
   personaDid: PERSONA_DID,

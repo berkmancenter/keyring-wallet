@@ -31,6 +31,7 @@ import { sameIdentity } from './didScid'
 import type { VtaMintedDid } from './VtaClient'
 import type { AgentCard } from './vtiCardVault'
 import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
+import { withoutRoomCards } from './roomCards'
 import { classifyCredential } from './vtiInbox'
 
 export interface AdoptionKeyIds {
@@ -118,7 +119,8 @@ export async function adoptAgentIdentities(options: {
     string,
     { id: string; did: string; membership: boolean; from: string; credential: Record<string, unknown> }[]
   >()
-  for (const { id, credential } of cards) {
+  // A data room's cards name the room as their issuer, not a community: they take no identity on (roomCards).
+  for (const { id, credential } of withoutRoomCards(cards)) {
     if (!credential) continue
     const item = classifyCredential(credential)
     // The cards a community gives an identity in it: membership, a role, a vetter grant.
