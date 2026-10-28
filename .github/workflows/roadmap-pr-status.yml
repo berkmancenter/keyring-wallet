@@ -1,0 +1,27 @@
+name: Roadmap card status
+
+# A pull request that says `Refs #N` moves card N to "In progress" on the Keyring
+# Roadmap (scripts/roadmap/pr-status.mjs; docs/plans/public-roadmap-plan.md §8).
+# pull_request_target runs this workflow from the base branch, so a pull request
+# from a fork can't change what runs with the token, and the PR's own code is
+# never checked out. Until the ROADMAP_TOKEN secret exists the job moves nothing.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  move-cards:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/roadmap
+      - name: Move referenced cards to In progress
+        env:
+          ROADMAP_TOKEN: ${{ secrets.ROADMAP_TOKEN }}
+          ROADMAP_PROJECT_ID: PVT_kwDOAAIAlc4BpB-A
+        run: node scripts/roadmap/pr-status.mjs
