@@ -80,6 +80,10 @@ jest.mock('../module/communityJourney', () => ({
 /** Read, and not a member. */
 const notMember = { join: { kind: 'none' }, vetterGrant: { state: 'none' } }
 
+// The rooms service, set by the rooms tests (undefined: the rooms flag is off, as in every other test).
+let mockRoomsService: unknown = undefined
+jest.mock('../../rooms/useRoomsService', () => ({ useRoomsService: () => mockRoomsService }))
+
 // What the persona inbox says of this community's agent, set per test (IN-350).
 let mockAgentState: unknown = undefined
 jest.mock('../module/vtiPersonaInbox', () => ({
@@ -300,6 +304,82 @@ describe('the community screen, for a member', () => {
     expect(tree.queryByTestId(testIdWithKey('CommunityCriteria'))).toBeNull()
     expect(tree.queryByTestId(testIdWithKey('ApplyToCommunityButton'))).toBeNull()
     expect(tree.queryByTestId(testIdWithKey('CommunityOpenDesk'))).toBeNull()
+  })
+
+  it("rooms flag on: this community's offers and rooms, each opening its screen; off, no section (on is the control)", async () => {
+    mockJourney = { join: { kind: 'member', membership }, vetterGrant: { state: 'none' } }
+    const room = (roomId: string, name: string, did: string) => ({
+      roomId,
+      name,
+      nameFrom: 'community',
+      source: 'community',
+      communityDid: did,
+      tier: 'open',
+      verbs: ['read'],
+      standing: 'member',
+    })
+    const offer = (offerId: string, roomName: string, did: string) => ({
+      offerId,
+      roomId: `did:webvh:r:${offerId}`,
+      roomName,
+      communityDid: did,
+      tier: 'open',
+      verbs: ['read'],
+    })
+    mockRoomsService = {
+      isSample: false,
+      capabilities: async () => jest.requireActual('../../rooms/capabilities').sampleCapabilities(),
+      listMyRooms: async () => [
+        room('did:webvh:r:here', 'Planning', communityDid),
+        room('did:webvh:r:else', 'Elsewhere', 'did:webvh:other'),
+      ],
+      listOffers: async () => [
+        offer('o-here', 'Kernel notes', communityDid),
+        offer('o-else', 'Far', 'did:webvh:other'),
+      ],
+    }
+    const navigate = useNavigation().navigate as jest.Mock
+    navigate.mockClear()
+    try {
+      const on = show()
+      await act(async () => undefined)
+      expect(on.getByTestId(testIdWithKey('CommunityRooms'))).toBeTruthy()
+      expect(on.getByText('Planning')).toBeTruthy()
+      expect(on.getByText('Kernel notes')).toBeTruthy()
+      expect(on.queryByText('Elsewhere')).toBeNull()
+      expect(on.queryByText('Far')).toBeNull()
+
+      fireEvent.press(on.getByText('Planning'))
+      expect(navigate).toHaveBeenCalledWith(Screens.Room, { roomId: 'did:webvh:r:here' })
+      fireEvent.press(on.getByTestId(testIdWithKey('RoomOfferRow_ohere')))
+      expect(navigate).toHaveBeenCalledWith(Screens.RoomOffer, { offerRef: 'o-here' })
+      on.unmount()
+
+      mockRoomsService = undefined
+      const off = show()
+      await act(async () => undefined)
+      expect(off.getByTestId(testIdWithKey('CommunityMember'))).toBeTruthy()
+      expect(off.queryByTestId(testIdWithKey('CommunityRooms'))).toBeNull()
+    } finally {
+      mockRoomsService = undefined
+    }
+  })
+
+  it('not a member: no Rooms section, even with the rooms flag on', async () => {
+    mockJourney = notMember
+    mockRoomsService = {
+      isSample: false,
+      capabilities: async () => jest.requireActual('../../rooms/capabilities').sampleCapabilities(),
+      listMyRooms: async () => [],
+      listOffers: async () => [],
+    }
+    try {
+      const tree = show()
+      await act(async () => undefined)
+      expect(tree.queryByTestId(testIdWithKey('CommunityRooms'))).toBeNull()
+    } finally {
+      mockRoomsService = undefined
+    }
   })
 
   it('a member who vets here is offered their desk', async () => {

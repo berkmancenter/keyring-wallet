@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "bf46c37a26e565c1631595acff0502f11feacfc1",
+  "generatedFrom": "eb02e0e5523d2a8f36feded6bee3bec31d2e3462",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -331,6 +331,7 @@
     "CommunityRemoveHereCancel": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityRemoveHereCard": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityRemoveHereConfirm": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
+    "CommunityRooms": ["src/modules/rooms/components/CommunityRoomsSection.tsx"],
     "CommunityScroll": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityUseHolderAgent": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityVouchPrivately": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],

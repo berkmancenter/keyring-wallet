@@ -31,6 +31,7 @@ import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
 import { communityTarget } from '../module/vtiCommunityLink'
 import { joinKnown, readFailed, useCommunityJourney, vetterGrantKnown } from '../module/communityJourney'
+import { CommunityRoomsSection } from '../../rooms/components/CommunityRoomsSection'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
 import { HeldByAnotherAgent } from './HeldByAnotherAgent'
@@ -318,6 +319,8 @@ const VtiCommunity: React.FC = () => {
             ) : null}
           </View>
         ) : null}
+        {/* A member's rooms and room offers in this community, beside membership and vetting (rooms flag on only). */}
+        {membership ? <CommunityRoomsSection communityDid={communityDid} /> : null}
 
         {membership || heldElsewhere || standingUnknown ? null : (
           <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.WhatIsAsked')}</Text>
