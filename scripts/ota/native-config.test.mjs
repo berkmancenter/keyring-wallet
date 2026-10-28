@@ -84,7 +84,9 @@ test('values are XML-escaped', () => {
 })
 
 test('the build id is the UUID v7 both loaders derive from a timestamp, and orders by time', () => {
-  // 2026-10-27 14:27Z, when 275's store build started (run 40520149511).
+  // 2026-10-27 14:27Z, when 275's store build started (run 40520149511). The expected id was computed outside this
+  // code, from HotUpdater.mm's byte layout (12 hex digits of milliseconds, then 7000-8000 and zeros), not with
+  // minBundleIdFor. check-min-bundle-id.mjs's LOADER_PINS hold the loader to that layout.
   assert.equal(minBundleIdFor(1793111220000), '01a17dc1-df20-7000-8000-000000000000')
   assert.equal(minBundleIdFor(1), '00000000-0001-7000-8000-000000000000')
   // The server offers only bundles whose id is at or after it. A bundle made 10-26 20:43Z, like 273's last update

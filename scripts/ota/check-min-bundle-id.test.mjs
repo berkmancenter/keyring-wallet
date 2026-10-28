@@ -1,12 +1,18 @@
 // node --test scripts/ota/
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-import { appInfoPlistEntry, buildTimestampInPlist, dexEntries } from './check-min-bundle-id.mjs'
+import {
+  appInfoPlistEntry,
+  buildTimestampInPlist,
+  dexEntries,
+  LOADER_PINS,
+  missingPins,
+} from './check-min-bundle-id.mjs'
 import { minBundleIdFor } from './native-config.mjs'
 
 const script = path.join(path.dirname(new URL(import.meta.url).pathname), 'check-min-bundle-id.mjs')
@@ -31,6 +37,21 @@ const zipOf = (dir, name, files) => {
   return out
 }
 
+/** A stand-in loader package holding every pinned line (plus filler), so the CLI tests don't need node_modules. */
+const fakeLoader = (dir, drop) => {
+  const root = path.join(dir, 'loader')
+  for (const { file, lines } of [...LOADER_PINS.ios, ...LOADER_PINS.android]) {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true })
+    writeFileSync(path.join(root, file), ['// filler', ...lines.filter((l) => l !== drop), ''].join('\n'))
+  }
+  writeFileSync(path.join(root, 'package.json'), '{"version":"0.0.0-test"}')
+  return root
+}
+
+const checkWith =
+  (loader) =>
+  (...args) =>
+    spawnSync(process.execPath, [script, `--loader=${loader}`, ...args], { encoding: 'utf8' })
 const check = (...args) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' })
 
 test('the app Info.plist is the bundle root one, not a framework or extension plist', () => {
@@ -61,6 +82,7 @@ test('the build timestamp is read only as plain digits', () => {
 
 test('android: each binary must carry the id in one of its dex files', { skip: !(has('zip') && has('unzip')) }, () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'min-bundle-'))
+  const check = checkWith(fakeLoader(dir))
   try {
     const aab = zipOf(dir, 'app-release.aab', {
       'base/dex/classes.dex': 'dex\n035 other strings',
@@ -88,6 +110,7 @@ test('android: each binary must carry the id in one of its dex files', { skip: !
 
 test('ios: the app plist timestamp must give the build id', { skip: !(has('zip') && has('plutil')) }, () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'min-bundle-'))
+  const check = checkWith(fakeLoader(dir))
   try {
     const stamped = plist(`\t<key>HOT_UPDATER_BUILD_TIMESTAMP</key>\n\t<string>${STAMP}</string>\n`)
     const xmlIpa = zipOf(dir, 'xml.ipa', { 'Payload/KeyRing.app/Info.plist': stamped })
@@ -119,4 +142,59 @@ test('ios: the app plist timestamp must give the build id', { skip: !(has('zip')
 test('the last argument must be a build id, and there must be a binary', () => {
   assert.match(check('android', 'x.apk', 'not-an-id').stderr, /must be the build's MIN_BUNDLE_ID/)
   assert.match(check('android', ID).stderr, /no binary to check/)
+})
+
+test('a loader without a pinned line, or without the file, is named', () => {
+  const pins = [{ file: 'a.mm', lines: ['reads KEY', 'bytes[6] = 0x70;'] }]
+  assert.deepEqual(
+    missingPins(pins, () => 'reads KEY\nbytes[6] = 0x70;'),
+    []
+  )
+  assert.deepEqual(
+    missingPins(pins, () => 'reads KEY'),
+    ['a.mm: no "bytes[6] = 0x70;"']
+  )
+  assert.deepEqual(
+    missingPins(pins, () => undefined),
+    ['a.mm: not found']
+  )
+})
+
+test('the check fails before reading any binary when the loader stopped reading our value', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'min-bundle-'))
+  try {
+    // A rename of the plist key in a library upgrade: the binary would keep the 26-hour fallback.
+    const renamed = checkWith(fakeLoader(dir, 'infoDictionary[@"HOT_UPDATER_BUILD_TIMESTAMP"]'))
+    const ios = renamed('ios', path.join(dir, 'never-read.ipa'), ID)
+    assert.equal(ios.status, 1)
+    assert.match(ios.stderr, /no longer reads our value as pinned/)
+    assert.match(ios.stderr, /HotUpdater\.mm: no "infoDictionary/)
+    // The Android pins are separate: an iOS-only change leaves an Android check to read its binary.
+    const android = renamed('android', path.join(dir, 'missing.apk'), ID)
+    assert.doesNotMatch(android.stderr, /pinned/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// The pins against the loader this repository actually installs, when it is installed (the CI jobs that run
+// these tests install it; a bare checkout skips).
+const installedLoader = path.resolve(
+  path.dirname(script),
+  '..',
+  '..',
+  'app',
+  'node_modules',
+  '@hot-updater',
+  'react-native'
+)
+test('the installed loader has every pinned line', { skip: !existsSync(installedLoader) }, () => {
+  const read = (file) => {
+    try {
+      return readFileSync(path.join(installedLoader, file), 'utf8')
+    } catch {
+      return undefined
+    }
+  }
+  assert.deepEqual(missingPins([...LOADER_PINS.ios, ...LOADER_PINS.android], read), [])
 })
