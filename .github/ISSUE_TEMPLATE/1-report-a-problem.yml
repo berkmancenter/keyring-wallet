@@ -1,0 +1,54 @@
+name: Report a problem
+description: Something in Keyring doesn't work, or works in a way you didn't expect.
+type: Bug
+labels: [needs-triage, community]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for telling us. We aim to respond within about a week. This issue's number is your receipt: follow it to see where your report stands.
+
+        **This page is public and its edit history is kept.** Do not paste names, keys, addresses or private messages, and leave out screenshots that show them.
+
+        Found a security problem? Don't file it here. Use the [private security report](https://github.com/berkmancenter/keyring-wallet/security/advisories/new) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, and what Keyring did.
+      placeholder: I opened a chat after unlocking the app, and new messages didn't show.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we see it too?
+      description: The steps, if you know them. "It happened once" is useful too.
+      placeholder: |
+        1. Open Keyring
+        2. ...
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Phone
+      options:
+        - iPhone
+        - Android
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Keyring version
+      description: In Keyring, Settings → About. Leave it blank if you can't find it.
+  - type: markdown
+    attributes:
+      value: |
+        By filing, you agree to follow our [contributing guide](https://github.com/berkmancenter/keyring-wallet/blob/main/CONTRIBUTING.md).

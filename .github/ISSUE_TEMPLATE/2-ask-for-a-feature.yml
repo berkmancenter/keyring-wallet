@@ -1,0 +1,35 @@
+name: Ask for a feature
+description: Something you'd like Keyring to do, or do differently.
+type: Feature
+labels: [needs-triage, community]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. We aim to respond within about a week. This issue's number is your receipt: follow it to see where your request stands, and add a 👍 to requests you'd like too.
+
+        **This page is public and its edit history is kept.** Do not paste names, keys, addresses or private messages.
+
+        Before you file, check the [roadmap's open requests](https://github.com/berkmancenter/keyring-wallet/issues?q=is%3Aissue+is%3Aopen+label%3Acommunity+sort%3Areactions-%2B1-desc): someone may have asked already.
+  - type: textarea
+    id: want
+    attributes:
+      label: What would you like Keyring to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help you?
+      description: What you're trying to get done, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else?
+      description: How you work around it today, or an app that already does it well.
+  - type: markdown
+    attributes:
+      value: |
+        By filing, you agree to follow our [contributing guide](https://github.com/berkmancenter/keyring-wallet/blob/main/CONTRIBUTING.md).
