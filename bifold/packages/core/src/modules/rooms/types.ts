@@ -149,6 +149,11 @@ export interface NoteSummary {
   /** Upstream's curation state (`RecordMetadata.status`). `retracted` is a tombstone: no body. */
   status: 'active' | 'deprecated' | 'retracted'
   pinned: boolean
+  /**
+   * The files the record carries (`rooms/records/put` 0.2 `blobs`), with the details its body gives each: listed
+   * from the host's metadata, with no file key and no download. Usually one; more when another client attached them.
+   */
+  files?: RoomFile[]
 }
 
 /**
@@ -234,7 +239,20 @@ export interface OfferPreview {
   actingAs: Identity
 }
 
+/** Bytes moved so far, and in all. Upload or download alike. */
+export interface RoomsTransferProgress {
+  sent: number
+  total: number
+}
+
+export interface RoomsTransferOptions {
+  onProgress?: (progress: RoomsTransferProgress) => void
+  /** Aborting it stops the transfer and rejects with an error named `AbortError`; no partial copy is kept. */
+  signal?: AbortSignal
+}
+
 export interface RoomFile {
+  /** The blob's id: what `openFile` takes. */
   fileId: string
   name: InertText
   mediaType?: string
@@ -350,9 +368,9 @@ export interface RoomsService {
   hideOffer(offerId: string): Promise<void>
 
   listFiles(roomId: string): Promise<RoomFile[]>
-  openFile(roomId: string, fileId: string): Promise<OpenedFile>
+  openFile(roomId: string, fileId: string, options?: RoomsTransferOptions): Promise<OpenedFile>
   /**
-   * Deletes the protected local copy `openFile` made. Call it when the viewer closes. The service also
+   * Deletes the protected local copy a completed `openFile` made (a cancelled one keeps none). Call it when the viewer closes. The service also
    * deletes any copies left from earlier sessions on its first `openFile` after the app starts.
    */
   releaseFile(localUri: string): Promise<void>

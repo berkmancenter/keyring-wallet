@@ -2938,6 +2938,16 @@
     "Send": "Send",
     "PostSending": "Sending…",
     "PostNotSent": "Not sent. Tap to try again.",
-    "PostingAs": "Posting as {{who}}"
+    "PostingAs": "Posting as {{who}}",
+    "FileOpenHint": "Shows the file's details and lets you download it.",
+    "FileTypeAsShared": "{{type}}, as shared",
+    "FileSharedBy": "Shared by {{who}}",
+    "FileCaution": "Keyring can't check what a file contains. Open it only if you trust who shared it.",
+    "FileDownload": "Download",
+    "FileFailed": "Couldn't download the file.",
+    "FileShare": "Share or save",
+    "FileShareUnavailable": "Downloaded, but this device can't share files from Keyring.",
+    "SizeKB": "{{n}} KB",
+    "SizeMB": "{{n}} MB"
   }
 }

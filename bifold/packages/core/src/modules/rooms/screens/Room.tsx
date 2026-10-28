@@ -6,14 +6,14 @@
  *
  * A post's words are its chat message, or the record as it was written: inert either way, never followed. Below the
  * posts, the composer: a post shows at once as sending, and stays, marked, if it could not be sent. Where the member
- * may not post, the composer gives the reason instead. Attachments come in a later step; nothing here pretends to
- * do them. Reached only while the rooms flag is on.
+ * may not post, the composer gives the reason instead. A post's files show as chips; a tap opens the attachment sheet
+ * (download, then share). Sending a file comes in a later step. Reached only while the rooms flag is on.
  *
  * @module rooms/screens/Room
  */
 import { useHeaderHeight } from '@react-navigation/elements'
 import { useRoute } from '@react-navigation/native'
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -34,6 +34,7 @@ import { useTheme } from '../../../contexts/theme'
 import { localDayKey } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import { RoomComposer } from '../components/RoomComposer'
+import { RoomFileSheet } from '../components/RoomFileSheet'
 import { RoomPostBubble } from '../components/RoomPostBubble'
 import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
@@ -42,6 +43,7 @@ import { SampleDataBanner } from '../components/SampleDataBanner'
 import TierBadge from '../components/TierBadge'
 import { toInertText } from '../inertText'
 import type { RoomPost } from '../roomPosts'
+import type { RoomFile } from '../types'
 import { useRoom } from '../useRoom'
 import { POSTS_PAGE, useRoomPosts } from '../useRoomPosts'
 import { type PendingPost, useRoomSend } from '../useRoomSend'
@@ -75,6 +77,7 @@ export const pendingAsPost = (pending: PendingPost, actingAs: RoomPost['author']
   retracted: false,
   unread: false,
   delivery: pending.state === 'sent' ? undefined : pending.state,
+  files: [],
 })
 
 const Room: React.FC = () => {
@@ -89,6 +92,8 @@ const Room: React.FC = () => {
   const canList = roomCapabilities?.listNotes.status === 'available'
   const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList)
   const outbox = useRoomSend(service, roomId, feed.refresh)
+  const [openedFile, setOpenedFile] = useState<RoomFile>()
+  const canOpenFiles = roomCapabilities?.openFile.status === 'available'
   const { settle } = outbox
   // A sent post leaves the outbox once the room's own list shows it.
   useEffect(() => {
@@ -223,6 +228,7 @@ const Room: React.FC = () => {
               <RoomPostBubble
                 post={item.post}
                 onRetry={item.post.delivery === 'failed' ? () => outbox.retry(item.post.key) : undefined}
+                onOpenFile={canOpenFiles ? setOpenedFile : undefined}
               />
             )
           }
@@ -256,6 +262,7 @@ const Room: React.FC = () => {
           <RoomComposer onSend={outbox.send} unavailable={cannotPost} postingAs={identityText(room.actingAs)} />
         )}
       </KeyboardAvoidingView>
+      <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />
     </SafeAreaView>
   )
 }

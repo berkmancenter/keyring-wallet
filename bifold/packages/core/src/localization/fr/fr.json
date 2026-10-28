@@ -2886,6 +2886,16 @@
     "Send": "Envoyer",
     "PostSending": "Envoi…",
     "PostNotSent": "Non envoyé. Touchez pour réessayer.",
-    "PostingAs": "Vous publiez en tant que {{who}}"
+    "PostingAs": "Vous publiez en tant que {{who}}",
+    "FileOpenHint": "Affiche les détails du fichier et permet de le télécharger.",
+    "FileTypeAsShared": "{{type}}, tel que partagé",
+    "FileSharedBy": "Partagé par {{who}}",
+    "FileCaution": "Keyring ne peut pas vérifier le contenu d'un fichier. Ne l'ouvrez que si vous faites confiance à la personne qui l'a partagé.",
+    "FileDownload": "Télécharger",
+    "FileFailed": "Impossible de télécharger le fichier.",
+    "FileShare": "Partager ou enregistrer",
+    "FileShareUnavailable": "Téléchargé, mais cet appareil ne peut pas partager de fichiers depuis Keyring.",
+    "SizeKB": "{{n}} Ko",
+    "SizeMB": "{{n}} Mo"
   }
 }

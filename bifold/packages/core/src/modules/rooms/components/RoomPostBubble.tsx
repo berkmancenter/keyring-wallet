@@ -3,7 +3,7 @@
  * everyone else's on the left. A post an AI agent wrote is marked as one, in words and with a dashed edge, so it is
  * never taken for a person's. What a post says is inert text: shown as written, links and markup included, and
  * never followed. A post this phone is still sending says so; one it could not send says so, and a tap sends it
- * again.
+ * again. A post's files show as chips under its words; a tap opens the attachment sheet.
  *
  * @module rooms/components/RoomPostBubble
  */
@@ -16,11 +16,17 @@ import { useTheme } from '../../../contexts/theme'
 import { timeLabel, useDateWords, useUses24HourClock } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import type { RoomPost } from '../roomPosts'
+import type { RoomFile } from '../types'
 
+import { RoomFileChip } from './RoomFileChip'
 import { roomHandle } from './RoomRow'
 import { identityText } from './roomWords'
 
-export const RoomPostBubble: React.FC<{ post: RoomPost; onRetry?: () => void }> = ({ post, onRetry }) => {
+export const RoomPostBubble: React.FC<{
+  post: RoomPost
+  onRetry?: () => void
+  onOpenFile?: (file: RoomFile) => void
+}> = ({ post, onRetry, onOpenFile }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const words = useDateWords()
@@ -80,6 +86,17 @@ export const RoomPostBubble: React.FC<{ post: RoomPost; onRetry?: () => void }> 
                 {post.text}
               </ThemedText>
             ) : null}
+            {onOpenFile
+              ? post.files.map((file) => (
+                  <RoomFileChip
+                    key={file.fileId}
+                    file={file}
+                    ink={ink}
+                    edge={mine ? ColorPalette.grayscale.white : ColorPalette.grayscale.lightGrey}
+                    onPress={onOpenFile}
+                  />
+                ))
+              : null}
           </>
         )}
         {post.delivery ? (

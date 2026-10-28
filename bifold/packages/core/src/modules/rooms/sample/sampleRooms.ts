@@ -40,6 +40,18 @@ const RIVER: Identity = { identityWords: '…river-stone', did: 'did:peer:2.samp
 const TERM: Identity = { identityWords: '…term-benefit', did: 'did:peer:2.sample-term' }
 const GLASS: Identity = { identityWords: '…glass-willow', did: 'did:peer:2.sample-glass' }
 
+const AGENDA: RoomFile = {
+  fileId: 'f1',
+  name: toInertText('Agenda, Oct 30.pdf'),
+  mediaType: 'application/pdf',
+  size: 84_000,
+  sharedBy: RIVER,
+  sharedAt: '2026-10-21T15:05:00Z',
+}
+
+/** The sample's download: this many steps of progress, one per tick, so a sheet can show it and be cancelled. */
+export const SAMPLE_DOWNLOAD_STEPS = 4
+
 interface SampleRoom extends Room {
   notes: (NoteSummary & { body: string })[]
   files: RoomFile[]
@@ -70,6 +82,7 @@ function sampleState() {
           status: 'active',
           pinned: true,
           body: 'Vetting backlog, the rooms policy draft, then a vote on item 3.',
+          files: [AGENDA],
         },
         {
           key: 'n2',
@@ -103,16 +116,7 @@ function sampleState() {
           body: '',
         },
       ],
-      files: [
-        {
-          fileId: 'f1',
-          name: toInertText('Agenda, Oct 30.pdf'),
-          mediaType: 'application/pdf',
-          size: 84_000,
-          sharedBy: RIVER,
-          sharedAt: '2026-10-21T15:05:00Z',
-        },
-      ],
+      files: [AGENDA],
     },
     {
       roomId: 'did:webvh:sample:welcome-desk',
@@ -312,10 +316,18 @@ export function createSampleRoomsService(options: { now?: () => number } = {}): 
     async listFiles(roomId) {
       return room(roomId).files
     },
-    async openFile(roomId, fileId): Promise<OpenedFile> {
+    async openFile(roomId, fileId, options = {}): Promise<OpenedFile> {
       const file = room(roomId).files.find((f) => f.fileId === fileId)
       if (!file) throw new Error(`no sample file ${fileId}`)
-      return { localUri: `sample://${fileId}`, mediaType: file.mediaType, size: file.size ?? 0 }
+      const total = file.size ?? 0
+      const aborted = () => Object.assign(new Error('the download was cancelled'), { name: 'AbortError' })
+      for (let step = 1; step <= SAMPLE_DOWNLOAD_STEPS; step++) {
+        if (options.signal?.aborted) throw aborted()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        if (options.signal?.aborted) throw aborted()
+        options.onProgress?.({ sent: Math.round((total * step) / SAMPLE_DOWNLOAD_STEPS), total })
+      }
+      return { localUri: `sample://${fileId}`, mediaType: file.mediaType, size: total }
     },
     async releaseFile() {
       // Nothing to delete: the sample makes no local copies.

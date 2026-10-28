@@ -53,10 +53,16 @@ describe('a record as a post', () => {
     expect(post.isChatMessage).toBe(false)
   })
 
-  test('retracted: no words, and not "unread"', () => {
-    const summary: NoteSummary = { key: 'k2', version: 2, status: 'retracted', pinned: false }
+  test('retracted: no words, no files, and not "unread"', () => {
+    const files = [{ fileId: 'f9', name: toInertText('old.pdf') }]
+    const summary: NoteSummary = { key: 'k2', version: 2, status: 'retracted', pinned: false, files }
     const post = postOf(summary, me)
-    expect(post).toMatchObject({ retracted: true, unread: false, text: '' })
+    expect(post).toMatchObject({ retracted: true, unread: false, text: '', files: [] })
+  })
+
+  test("a post's files come from its record", () => {
+    const files = [{ fileId: 'f1', name: toInertText('Agenda.pdf'), mediaType: 'application/pdf', size: 84_000 }]
+    expect(postOf({ ...note('Agenda attached'), files }, me).files).toEqual(files)
   })
 
   test("a record that couldn't be read: unread, with no words", () => {

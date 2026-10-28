@@ -66,6 +66,7 @@ module.exports = {
     '^@bifold/verifier$': '<rootDir>/../verifier/src/index.ts',
     'expo-crypto': '<rootDir>/__mocks__/@expo/expo-crypto.js',
     'expo-image-picker': '<rootDir>/__mocks__/@expo/expo-image-picker.js',
+    'expo-sharing': '<rootDir>/__mocks__/@expo/expo-sharing.js',
     'expo-image-manipulator': '<rootDir>/__mocks__/@expo/expo-image-manipulator.js',
     '@expo/app-integrity': '<rootDir>/__mocks__/@expo/app-integrity.js',
   },

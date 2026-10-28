@@ -2155,6 +2155,7 @@ __metadata:
     expo-image-manipulator: "npm:~14.0.8"
     expo-image-picker: "npm:~17.0.11"
     expo-secure-store: "npm:*"
+    expo-sharing: "npm:~14.0.8"
     i18next: "npm:~25.8.0"
     install-peerdeps: "npm:~3.0.7"
     jest: "npm:~29.6.4"
@@ -2248,6 +2249,7 @@ __metadata:
     expo-crypto: ~15.0.8
     expo-image-manipulator: ~14.0.8
     expo-image-picker: ~17.0.11
+    expo-sharing: ~14.0.8
     i18next: ~21.6.16
     lodash.startcase: ~4.4.0
     moment: ~2.29.4
@@ -11554,6 +11556,15 @@ __metadata:
   version: 1.0.5
   resolution: "expo-server@npm:1.0.5"
   checksum: 10c0/0da974f733235d457f7ce51e5452f48f203378687f821bdab7159617a491c0192251423a17a7a3a118486e1cbfffff5d5ad31aeeedcf2cfad6412a1bd7e86877
+  languageName: node
+  linkType: hard
+
+"expo-sharing@npm:~14.0.8":
+  version: 14.0.8
+  resolution: "expo-sharing@npm:14.0.8"
+  peerDependencies:
+    expo: "*"
+  checksum: 10c0/64c6f42272b7e762988dbb92af6eabb71bd8229366cdc675cda78513fea39c46c9a46bb250ffaf5587b8361bd824a89820e46771cb5f97fc16bbfc87e3f00518
   languageName: node
   linkType: hard
 

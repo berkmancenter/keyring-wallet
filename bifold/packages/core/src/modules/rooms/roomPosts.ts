@@ -12,7 +12,7 @@
 import { CHAT_PROFILE, type ChatMessageEvent, parseChatEvent } from '../chat/chatEvent'
 
 import { toInertText, type InertText } from './inertText'
-import type { Identity, Note, NoteSummary } from './types'
+import type { Identity, Note, NoteSummary, RoomFile } from './types'
 
 export interface RoomPost {
   key: string
@@ -34,6 +34,8 @@ export interface RoomPost {
   unread: boolean
   /** A post this phone is still sending, or could not send (not yet a record in the room). */
   delivery?: 'sending' | 'failed'
+  /** The files the post carries, each shown as a chip under its words. None on a retracted post. */
+  files: RoomFile[]
 }
 
 const sameIdentity = (a?: Identity, b?: Identity): boolean => !!a && !!b && JSON.stringify(a) === JSON.stringify(b)
@@ -86,6 +88,7 @@ export function postOf(note: Note | NoteSummary, actingAs?: Identity, now: numbe
     isChatMessage: chatText !== undefined,
     retracted,
     unread: !read && !retracted,
+    files: retracted ? [] : (note.files ?? []),
   }
 }
 
