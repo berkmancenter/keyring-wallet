@@ -15,15 +15,8 @@ import { useHeaderHeight } from '@react-navigation/elements'
 import { useRoute } from '@react-navigation/native'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  StyleSheet,
-  View,
-} from 'react-native'
+import { ActivityIndicator, FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -31,6 +24,7 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { DayPill } from '../../../components/chat/DayPill'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { useMeasuredKeyboardOffset } from '../../trust-tasks/screens/keyboardOffset'
 import { localDayKey } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import { RoomComposer } from '../components/RoomComposer'
@@ -85,8 +79,10 @@ const Room: React.FC = () => {
   const { ColorPalette } = useTheme()
   const roomId = (useRoute()?.params as { roomId?: string } | undefined)?.roomId ?? ''
   const service = useRoomsService()
-  // The keyboard rises from the screen's bottom, under a navigation header: offset by the header, as the chat does.
+  // The composer rides above the keyboard. The view's offset is where its parent starts on screen, measured: on iOS 26
+  // the header height a screen is told is the status bar alone, and the composer stayed under the keyboard.
   const headerHeight = useHeaderHeight()
+  const keyboard = useMeasuredKeyboardOffset(headerHeight)
   const state = useRoom(service, roomId)
   const { room, roomCapabilities } = state
   const canList = roomCapabilities?.listNotes.status === 'available'
@@ -209,10 +205,13 @@ const Room: React.FC = () => {
           <ThemedText style={styles.warnText}>{t('Rooms.HostConflict')}</ThemedText>
         </View>
       ) : null}
+      {/* keyboard-controller's view, which lifts on Android too: the app draws under the system bars there. */}
       <KeyboardAvoidingView
+        ref={keyboard.ref}
+        onLayout={keyboard.onLayout}
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={headerHeight}
+        behavior="padding"
+        keyboardVerticalOffset={keyboard.offset}
       >
         <FlatList
           testID={testIdWithKey('RoomPosts')}
