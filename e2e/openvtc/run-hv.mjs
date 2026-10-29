@@ -164,8 +164,15 @@ try {
     if (control) say('CONTROL: presenting the real ticket in the refusal row');
     await applicantRole.request(app, { ticketUri: control ? ticketUri : withWrongSecret(ticketUri), via: 'field' });
     let status = '';
+    // A refused request leaves the active step: the screen goes back to "Ask a vetter" and the refused card is drawn
+    // under the ticket field, below the fold, where Android's page source does not reach (1029-2326: the refusal landed
+    // at 23:39:17Z and the card read "Refused", but only once a later step scrolled to it). So scroll to it each time.
     for (const until = Date.now() + 150000; Date.now() < until; await sleep(3000)) {
       status = await textOf(app, 'VettingRequestStatus').catch(() => '');
+      if (!status) {
+        await scrollToTestId(app, 'VettingRequestStatus', 4).catch(() => undefined);
+        status = await textOf(app, 'VettingRequestStatus').catch(() => '');
+      }
       if (/Refused|Refusée|Recusado|Accepted|Aceit|Declined|Recus/i.test(status)) break;
     }
     await screenshot(app, 'hv-refused').catch(() => undefined);
