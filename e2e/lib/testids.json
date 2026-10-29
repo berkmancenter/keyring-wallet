@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "32204b832f31901ac646d1e379d59b784567bfa0",
+  "generatedFrom": "a324c0408824f449dc4621bb2ecb3cfb57f686d5",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -1401,6 +1401,7 @@
     "RequestNotTaken_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "RequestsOther_": ["src/modules/trust-tasks/screens/OtherAgentsRequests.tsx"],
     "RequestsSwitch_": ["src/modules/trust-tasks/screens/OtherAgentsRequests.tsx"],
+    "RoomFeatureCard_": ["src/modules/rooms/components/RoomFeatureCard.tsx"],
     "RoomFileChip_": ["src/modules/rooms/components/RoomFileChip.tsx"],
     "RoomFileRow_": ["src/modules/rooms/components/RoomListRows.tsx"],
     "RoomMember_": ["src/modules/rooms/components/RoomMembersTab.tsx"],
