@@ -229,5 +229,7 @@ test('a job log still unreadable after the retries: the smoke runs, with that pl
   const lines = []
   const r = await postRelease({ ...opts(never), log: (l) => lines.push(l) })
   assert.deepEqual([r.verdict, r.bundles.map((b) => b.id)], ['green', [ANDROID]])
+  // What was published is still known, so the brake can say a withdraw would be partial.
+  assert.deepEqual(r.platforms, ['ios', 'android'])
   assert.ok(lines.some((l) => /log of job 11 is still unreadable after 6 tries: bundle ids unknown/.test(l)))
 })

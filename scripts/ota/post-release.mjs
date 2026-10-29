@@ -112,7 +112,7 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
   const run = api(`repos/${repo}/actions/runs/${publishRun}`)
   const jobs = api(`repos/${repo}/actions/runs/${publishRun}/jobs?per_page=100`).jobs
   const published = publishedJobs(jobs)
-  const base = { sha: run.head_sha, ref: run.head_branch, bundles: [] }
+  const base = { sha: run.head_sha, ref: run.head_branch, bundles: [], platforms: published.map((j) => j.platform) }
   if (!published.length) {
     log(`publish run ${publishRun} published nothing (a dry run, promote, withdraw or device test): no smoke`)
     return { ...base, verdict: 'none' }
@@ -188,7 +188,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!/^\d+$/.test(values['publish-run'] ?? '') || !repo) throw new Error('usage: post-release.mjs --publish-run <id> [--repo owner/name]')
     const r = await postRelease({ publishRun: values['publish-run'], repo })
     const out = {
-      verdict: r.verdict, sha: r.sha, ref: r.ref, bundles: JSON.stringify(r.bundles),
+      verdict: r.verdict, sha: r.sha, ref: r.ref, bundles: JSON.stringify(r.bundles), platforms: JSON.stringify(r.platforms ?? []),
       test_builds: r.testBuilds ?? '', gate_smoke: r.gateSmoke ?? '', screens: JSON.stringify(r.screens ?? []),
     }
     // The screen check's handoff (the owner's pipeline: a quick simulator check of each changed screen after release).
@@ -199,6 +199,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         `### Post-release smoke: ${r.verdict}`, '',
         `- released: ${r.ref} at ${r.sha}`,
         ...r.bundles.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel})`),
+        ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (its log was unreadable)`),
         r.testBuilds ? `- Test builds run ${r.testBuilds}` : '', r.gateSmoke ? `- gate-smoke run ${r.gateSmoke}` : '',
         ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`), '',
         `#### Changed screens since ${r.since ?? 'unknown'} (for the screen check)`, '',
