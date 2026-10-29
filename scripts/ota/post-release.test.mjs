@@ -36,15 +36,23 @@ test("bundle ids come from ota-deploy's own lines, with platform and channel", (
   assert.deepEqual(bundlesFromLog('ota-deploy: ios fingerprint abc is the target build\'s'), [])
 })
 
-test('the dispatched run: on the sha, by dispatch, at or after the ask; the newest of those', () => {
+test('the dispatched run: on the sha, by dispatch, at or after the ask', () => {
   const since = Date.parse('2026-10-29T20:00:00Z')
   const run = (id, over) => ({ id, event: 'workflow_dispatch', head_sha: SHA, created_at: '2026-10-29T20:00:10Z', ...over })
-  const runs = [run(1, { created_at: '2026-10-29T19:59:00Z' }), run(2), run(3, { head_sha: 'f'.repeat(40) }), run(4, { event: 'push' }), run(5, { created_at: '2026-10-29T20:00:20Z' })]
-  assert.equal(pickDispatched(runs, { sha: SHA, since }).id, 5)
-  assert.equal(pickDispatched([run(1, { created_at: '2026-10-29T19:59:00Z' })], { sha: SHA, since }), undefined)
-  // gate-smoke: the run titled for the Test builds run it smokes, not another smoke dispatched at the same time.
-  const smokes = [run(7, { display_title: 'Gate smoke · Test builds 5010' }), run(8, { display_title: 'Gate smoke · Test builds 501', created_at: '2026-10-29T20:00:05Z' })]
+  const others = [run(1, { created_at: '2026-10-29T19:59:00Z' }), run(3, { head_sha: 'f'.repeat(40) }), run(4, { event: 'push' })]
+  assert.equal(pickDispatched([...others, run(2)], { sha: SHA, since }).id, 2)
+  assert.equal(pickDispatched(others, { sha: SHA, since }), undefined)
+  // gate-smoke: the run titled for the Test builds run it smokes; one for another build doesn't count.
+  const smokes = [run(7, { display_title: 'Gate smoke · Test builds 5010' }), run(8, { display_title: 'Gate smoke · Test builds 501' })]
   assert.equal(pickDispatched(smokes, { title: 'Test builds 501', since }).id, 8)
+})
+
+test('two matching runs are refused, naming both, never resolved by taking the newest', () => {
+  // A manual Android-only gate-smoke of the same build, dispatched in the same minute: taking it would read red.
+  const since = Date.parse('2026-10-29T20:00:00Z')
+  const run = (id, at) => ({ id, event: 'workflow_dispatch', head_sha: SHA, display_title: 'Gate smoke · Test builds 501', created_at: at })
+  assert.throws(() => pickDispatched([run(601, '2026-10-29T20:00:05Z'), run(602, '2026-10-29T20:00:20Z')], { title: 'Test builds 501', since }), /more than one run matches \(601, 602\): refusing to pick one/)
+  assert.throws(() => pickDispatched([run(501, '2026-10-29T20:00:05Z'), run(502, '2026-10-29T20:00:06Z')], { sha: SHA, since }), /refusing/)
 })
 
 test('the smoke is green only with both platform jobs green; skipped or missing is not', () => {
@@ -175,4 +183,28 @@ test('screens it cannot work out are reported unknown, and the smoke still runs'
   const listChanged = () => { throw new Error('range unreadable') }
   const r = await postRelease(opts(fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN }).gh, { listChanged }))
   assert.deepEqual([r.verdict, r.screens], ['green', []])
+})
+
+test('an ambiguous smoke ends the run with an error, so there is no verdict for the brake to act on', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const twice = (...args) => {
+    const out = gh(...args)
+    // A second gate-smoke for the same build, dispatched by someone else in the same minute.
+    if (args[1]?.includes('workflows/gate-smoke.yml/runs')) {
+      const list = JSON.parse(out)
+      if (list.workflow_runs.length) list.workflow_runs.push({ ...list.workflow_runs[0], id: 602 })
+      return JSON.stringify(list)
+    }
+    return out
+  }
+  await assert.rejects(postRelease(opts(twice)), /more than one run matches \(601, 602\): refusing to pick one/)
+})
+
+test('a dispatched run that never finishes is given up on with an error, not waited on forever', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios')], smokeJobs: GREEN })
+  const stuck = (...args) => {
+    const out = gh(...args)
+    return /actions\/runs\/501$/.test(args[1] ?? '') ? JSON.stringify({ ...JSON.parse(out), status: 'waiting', conclusion: null }) : out
+  }
+  await assert.rejects(postRelease(opts(stuck, { pollMs: 60000, maxWaitMs: 5 * 60000 })), /test-builds\.yml run 501 still waiting after 5 min: giving up/)
 })

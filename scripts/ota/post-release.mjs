@@ -64,18 +64,21 @@ export const baseOf = ({ sha, earlier, isAncestor, describe }) => earlier.find((
 
 /**
  * The run this script dispatched: by dispatch, created at or after it asked, and either on the sha (Test builds) or
- * titled for the Test builds run it smokes (gate-smoke's run-name names its run-id). The newest of those.
+ * titled for the Test builds run it smokes (gate-smoke's run-name names its run-id). More than one match is refused,
+ * naming them, never resolved by picking one: the run found decides the verdict (and, with the brake, a withdraw), so
+ * a manual dispatch in the same minute (say an Android-only smoke) must not be taken for this one.
  */
-export const pickDispatched = (runs, { sha, title, since }) =>
-  runs
-    .filter(
-      (r) =>
-        r.event === 'workflow_dispatch' &&
-        Date.parse(r.created_at) >= since &&
-        (sha ? r.head_sha === sha : true) &&
-        (title ? new RegExp(`\\b${title}\\b`).test(r.display_title ?? '') : true)
-    )
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0]
+export const pickDispatched = (runs, { sha, title, since }) => {
+  const matches = runs.filter(
+    (r) =>
+      r.event === 'workflow_dispatch' &&
+      Date.parse(r.created_at) >= since &&
+      (sha ? r.head_sha === sha : true) &&
+      (title ? new RegExp(`\\b${title}\\b`).test(r.display_title ?? '') : true)
+  )
+  if (matches.length > 1) throw new Error(`more than one run matches (${matches.map((r) => r.id).join(', ')}): refusing to pick one`)
+  return matches[0]
+}
 
 /** A gate-smoke run's verdict from its jobs: green only with both platform jobs green (a skipped one is not). */
 export const smokeVerdict = (jobs) => {
@@ -96,7 +99,11 @@ const gitOk = (...args) => { try { execFileSync('git', args, { stdio: 'ignore' }
 const realIsAncestor = (a, b) => gitOk('merge-base', '--is-ancestor', a, b)
 const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--match', 'staging-v*', '--abbrev=0', sha], { encoding: 'utf8' }).trim()
 
-export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = realIsAncestor, describe = realDescribe, listChanged = changedFiles, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = () => Date.now(), pollMs = 60000, log = console.log }) {
+// How long a dispatched run may take before this gives up with an error (Test builds about 45 min, the smoke about 30):
+// a bound of its own, so a waiting environment or a stuck runner can't hold the job to GitHub's six-hour limit.
+const MAX_WAIT_MS = 100 * 60 * 1000
+
+export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = realIsAncestor, describe = realDescribe, listChanged = changedFiles, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = () => Date.now(), pollMs = 60000, maxWaitMs = MAX_WAIT_MS, log = console.log }) {
   const api = (route) => JSON.parse(gh('api', route))
   const run = api(`repos/${repo}/actions/runs/${publishRun}`)
   const jobs = api(`repos/${repo}/actions/runs/${publishRun}/jobs?per_page=100`).jobs
@@ -134,8 +141,9 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     // Not found also when the branch moved past the released commit: its Test builds would build another commit.
     if (!found) throw new Error(`dispatched ${workflow} on ${run.head_branch}, but found no run of it for ${run.head_sha.slice(0, 8)}`)
     log(`${workflow}: run ${found.id}`)
-    for (let r = found; ; ) {
+    for (let r = found, waited = 0; ; waited += pollMs) {
       if (r.status === 'completed') return r
+      if (waited >= maxWaitMs) throw new Error(`${workflow} run ${found.id} still ${r.status} after ${Math.round(waited / 60000)} min: giving up`)
       await sleep(pollMs)
       r = api(`repos/${repo}/actions/runs/${found.id}`)
     }
