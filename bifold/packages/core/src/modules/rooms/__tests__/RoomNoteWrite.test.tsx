@@ -7,6 +7,8 @@
  */
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
+import { Modal } from 'react-native'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
@@ -121,6 +123,17 @@ describe('a new note', () => {
     await waitFor(() => expect(tree.queryByTestId(id('RoomNoteEditor'))).toBeNull())
     await waitFor(() => notesList(tree).getByText('Decisions'))
     expect(notesList(tree).getByText('We meet on Thursdays.')).toBeTruthy()
+  })
+
+  test("the editor's top bar clears the status bar: the modal has its own safe-area provider", async () => {
+    const tree = await show()
+    await press(tree, 'RoomNoteNew')
+    // A modal is its own window: the SafeAreaView reads its insets from the nearest provider inside it, or none.
+    const outward: unknown[] = []
+    for (let node = tree.getByTestId(id('RoomNoteEditor')).parent; node; node = node.parent) outward.push(node.type)
+    const provider = outward.indexOf(SafeAreaProvider)
+    expect(provider).toBeGreaterThan(-1)
+    expect(provider).toBeLessThan(outward.indexOf(Modal))
   })
 
   test('Back from the check returns to the words, unchanged; Cancel closes with nothing written', async () => {

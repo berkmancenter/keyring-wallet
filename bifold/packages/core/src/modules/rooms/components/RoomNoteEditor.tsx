@@ -11,10 +11,11 @@
  */
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
+import SafeAreaModal from '../../../components/modals/SafeAreaModal'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
@@ -38,12 +39,14 @@ export interface RoomNoteEditorProps {
 }
 
 export const RoomNoteEditor: React.FC<RoomNoteEditorProps> = ({ service, roomId, target, onClose, onSaved }) => (
-  <Modal visible={!!target} animationType="slide" onRequestClose={onClose}>
+  // A modal is its own window, outside the app's safe-area provider: without one of its own the editor's SafeAreaView
+  // reads no insets and its top bar sits under the status bar, out of reach.
+  <SafeAreaModal visible={!!target} animationType="slide" onRequestClose={onClose}>
     {/* Mounted afresh for each note, so words and a new note's id never carry over to the next. */}
     {target ? (
       <EditorBody service={service} roomId={roomId} target={target} onClose={onClose} onSaved={onSaved} />
     ) : null}
-  </Modal>
+  </SafeAreaModal>
 )
 
 const EditorBody: React.FC<Omit<RoomNoteEditorProps, 'target'> & { target: NoteEditorTarget }> = ({
