@@ -810,7 +810,7 @@ describe('the vetter profile, as vta-sdk CheckShape (vetting.rs:570-597)', () =>
 })
 
 // ---------------------------------------------------------------------------
-// 9. trust-task-error: 0.5 read, 0.3 read until its removal date
+// 9. trust-task-error: 0.5 and 0.6 (extends 0.5) read, 0.3 read until its removal date
 // ---------------------------------------------------------------------------
 
 describe("the applicant reads a vetter's refusal", () => {
@@ -852,6 +852,13 @@ describe("the applicant reads a vetter's refusal", () => {
     })
   })
 
+  it('in trust-task-error/0.6, which extends 0.5', async () => {
+    expect(await refusal('0.6', after)).toMatchObject({
+      status: 'refused',
+      refusalCode: 'vetting/request:invalidTicket',
+    })
+  })
+
   it(`in the legacy 0.3 until ${LEGACY_ERROR_03_UNTIL}, and not after`, async () => {
     expect(await refusal('0.3', before)).toMatchObject({ status: 'refused' })
     expect(await refusal('0.3', after)).toMatchObject({ status: 'sent' })
@@ -859,6 +866,7 @@ describe("the applicant reads a vetter's refusal", () => {
 
   it('never in a version Keyring does not emit', async () => {
     expect(await refusal('0.4', before)).toMatchObject({ status: 'sent' })
+    expect(await refusal('0.7', after)).toMatchObject({ status: 'sent' })
   })
 })
 
