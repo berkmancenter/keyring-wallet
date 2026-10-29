@@ -1,4 +1,15 @@
-name: OTA publish (ring 0)
+name: OTA release
+
+# Each run names its release and what it does: "OTA 276.2 · publish to ring 0", "OTA 276.2 · widen to everyone", ...
+# A run-name becomes each run's API `.name` (the workflow keeps `name:` above). GitHub's workflow_run subscriptions
+# match on a workflow's name, so post-release.yml lists "OTA release". At the first titled release, check that a
+# "Post-release · OTA <n> ..." run started. If none did, workflow_run matched the run's title instead: drop run-name.
+run-name: >-
+  OTA ${{ inputs.release || inputs.channel }} ·
+  ${{ inputs.action == 'publish' && 'publish to ring 0'
+  || inputs.action == 'promote' && (inputs.to_ring == 'ring2' && 'widen to everyone' || 'widen to ring 1')
+  || inputs.action == 'disable' && format('withdraw {0}', inputs.platform == 'both' && 'ios + android' || inputs.platform)
+  || inputs.action }}${{ inputs.dry_run && ' (dry run)' || '' }}
 
 # Publishes an over-the-air JS bundle to ring 0 (the maintainers' own devices),
 # phase 1 of docs/plans/release-cadence-and-testing-strategy/ota_updates_subtask.md.
@@ -37,8 +48,10 @@ on:
         type: choice
         options: [production, preview, device-test]
         default: production
-      build:
-        description: 'production/preview: the store build the bundle targets, by number (its staging-v*-NNN tag)'
+      # Was `build` (the store build number). The release number carries it: the part before the dot. The dispatch
+      # is at GitHub's ten-input limit, so the release could not be an input of its own.
+      release:
+        description: 'production/preview: the release, <store build>.<n>, e.g. 276.2 (the bundle targets store build 276, its staging-v*-276 tag); promote and disable take it as their label'
         type: string
         default: ''
       base:
@@ -94,7 +107,7 @@ jobs:
     runs-on: ubuntu-22.04
     environment: ota-approval
     steps:
-      - run: echo "Approved - ${{ inputs.action }} on channel ${{ inputs.channel }} from ${{ github.sha }} (build '${{ inputs.build }}', base '${{ inputs.base }}', bundle '${{ inputs.bundle_id }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ${{ inputs.action == 'promote' && format('widening to {0}', inputs.to_ring) || 'ring 0' }}."
+      - run: echo "Approved - ${{ inputs.action }} on channel ${{ inputs.channel }} from ${{ github.sha }} (release '${{ inputs.release }}', base '${{ inputs.base }}', bundle '${{ inputs.bundle_id }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ${{ inputs.action == 'promote' && format('widening to {0}', inputs.to_ring) || 'ring 0' }}."
 
   publish:
     needs: [approve]
@@ -142,7 +155,7 @@ jobs:
         env:
           CHANNEL: ${{ inputs.channel }}
           ACTION: ${{ inputs.action }}
-          BUILD: ${{ inputs.build }}
+          RELEASE: ${{ inputs.release }}
           BASE: ${{ inputs.base }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
           EXPECT_FINGERPRINT: ${{ inputs.expect_fingerprint }}
@@ -153,9 +166,10 @@ jobs:
           case "$CHANNEL" in
             production | preview)
               [ -z "$BASE" ] || err "base is for device-test only"
+              # Every production/preview run names its release, so every run's title does: <store build>.<n>.
+              [[ "$RELEASE" =~ ^[0-9]+\.[0-9]+$ ]] || err "$CHANNEL needs release: <store build>.<n>, e.g. 276.2 (got '$RELEASE'); a bare store build number no longer names a release"
               case "$ACTION" in
                 publish)
-                  [[ "$BUILD" =~ ^[0-9]+$ ]] || err "$CHANNEL needs build: the store build number (got '$BUILD')"
                   [ -z "$BUNDLE_ID" ] || err "bundle_id is for disable only" ;;
                 # Withdrawing only narrows: scripts/ota/withdraw.mjs checks the bundle
                 # is this channel's and this platform's, then disables it.
@@ -163,7 +177,6 @@ jobs:
                 # (scripts/ota/promote.mjs), the one way anything does.
                 disable | promote)
                   [ -n "$BUNDLE_ID" ] || err "$ACTION needs bundle_id"
-                  [ -z "$BUILD" ] || err "$ACTION takes bundle_id, not build"
                   if [ "$PLATFORM" = both ]; then
                     # Each platform keeps its own bundle id: ios:<id>,android:<id>.
                     [ "$ACTION" = promote ] || err "disable takes one bundle: its own platform (ios or android), not both"
@@ -181,7 +194,7 @@ jobs:
             device-test)
               [[ "$BASE" =~ ^[0-9a-f]{40}$ ]] || err "device-test needs base: the test app's build commit as a full SHA (got '$BASE')"
               git merge-base --is-ancestor "$BASE" "$GITHUB_SHA" || err "base $BASE is not an ancestor of $GITHUB_SHA"
-              [ -z "$BUILD" ] || err "device-test takes base, not build"
+              [ -z "$RELEASE" ] || err "device-test takes base, not release"
               [ "$ACTION" != promote ] || err "promote is for production and preview; device-test bundles are never widened"
               if [ "$ACTION" = disable ]; then
                 [ -n "$BUNDLE_ID" ] || err "disable needs bundle_id"
@@ -195,7 +208,7 @@ jobs:
               echo "::warning::device-test: the tier check is skipped for this channel (the quick-install test app, base ${BASE:0:8}); nothing published here can reach a store build" ;;
             *) err "unknown channel $CHANNEL" ;;
           esac
-          echo "channel $CHANNEL, action $ACTION"
+          echo "channel $CHANNEL, action $ACTION${RELEASE:+, release $RELEASE}"
 
       # Runs on a dry run too, and before the slow install: a dry run then proves
       # the server and the token, not only the build. Nothing is uploaded: one
@@ -275,11 +288,13 @@ jobs:
         if: ${{ !contains(fromJSON('["disable","cleanup","promote"]'), inputs.action) }}
         env:
           CHANNEL: ${{ inputs.channel }}
-          BUILD: ${{ inputs.build }}
+          RELEASE: ${{ inputs.release }}
           PLATFORM: ${{ matrix.platform }}
           EXPECT_FINGERPRINT: ${{ inputs.expect_fingerprint }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The store build is the release number before its dot: 276.2 targets build 276.
+          BUILD="${RELEASE%%.*}"
           if [ "$CHANNEL" = device-test ]; then
             echo "hash=$EXPECT_FINGERPRINT" >> "$GITHUB_OUTPUT"
             echo "expected $PLATFORM fingerprint $EXPECT_FINGERPRINT (the test app's)"
@@ -345,7 +360,7 @@ jobs:
           OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
           HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
           CHANNEL: ${{ inputs.channel }}
-          BUILD: ${{ inputs.build }}
+          RELEASE: ${{ inputs.release }}
           PLATFORM: ${{ matrix.platform }}
           SCOPE: ${{ inputs.scope }}
           EXPECTED: ${{ steps.expected.outputs.hash }}
@@ -353,9 +368,11 @@ jobs:
           # An ota-strict change: ota-deploy proves its launch smoke for GITHUB_SHA through gh (strict-proof.mjs).
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The store build is the release number before its dot: 276.2 targets build 276.
+          BUILD="${RELEASE%%.*}"
           recorded=()
           [ -n "$RECORDED" ] && recorded=(--recorded-fingerprint "$RECORDED")
-          node scripts/ota-deploy.mjs --build "$BUILD" --channel "$CHANNEL" --platform "$PLATFORM" --scope "$SCOPE" \
+          node scripts/ota-deploy.mjs --build "$BUILD" --release "$RELEASE" --channel "$CHANNEL" --platform "$PLATFORM" --scope "$SCOPE" \
             --after-native-config --expect-fingerprint "$PLATFORM=$EXPECTED" "${recorded[@]}"
 
       # production/preview: widen one bundle past ring 0. A dry run only checks.
@@ -434,9 +451,11 @@ jobs:
       - name: Dry run
         if: ${{ inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
         env:
-          BUILD: ${{ inputs.build }}
+          RELEASE: ${{ inputs.release }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The store build is the release number before its dot: 276.2 targets build 276.
+          BUILD="${RELEASE%%.*}"
           tag=$(git tag --list "staging-v*-$BUILD")
           if [ "$(printf '%s\n' "$tag" | grep -c .)" != 1 ]; then
             echo "::error::expected one staging-v*-$BUILD tag, found: ${tag:-none}"
