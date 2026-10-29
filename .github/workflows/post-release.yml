@@ -75,6 +75,8 @@ jobs:
   # update server's token but never the signing key, and runs nothing but scripts/ota/brake.mjs, whose only write to
   # the server is scripts/ota/withdraw.mjs (disable). Publishing and widening still need the owner's approval in
   # ota-publish.yml. brake.test.mjs holds this job to that. Its summary says what it pulled and why.
+  # Only a red SMOKE brakes. Red Test builds (verdict builds-red) deliberately don't: a build failure can be the
+  # infrastructure, and it doesn't show the published bundle is bad. Don't widen this condition to any red.
   brake:
     name: Brake · ${{ github.event.workflow_run.head_branch }}
     needs: smoke
