@@ -21,16 +21,14 @@ const COPIED = [
 const dirs = []
 after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })))
 
-// A fake gh: `gh api [--paginate --slurp] <route>` answers from FAKE_GH (met: every condition proven; anything else:
+// A fake gh: `gh api [--paginate --slurp] <route>` answers from FAKE_GH (met: the launch smoke proven; anything else:
 // nothing on GitHub). --slurp wraps the answer as the one page of a list, as gh does.
 const FAKE_GH = `#!/usr/bin/env node
 const route = process.argv[process.argv.length - 1] || ''
 const slurp = process.argv.includes('--slurp')
 const sha = process.env.FAKE_SHA
 const met = process.env.FAKE_GH === 'met'
-const out = route.includes('/statuses')
-  ? met ? ['ota-strict/targeted-tests', 'ota-strict/sim-check'].map((context) => ({ context, state: 'success', target_url: 'https://example.invalid/e' })) : []
-  : route.includes('test-builds.yml/runs')
+const out = route.includes('test-builds.yml/runs')
     ? { workflow_runs: met ? [{ id: 101, head_sha: sha, event: 'workflow_dispatch', conclusion: 'success' }] : [] }
     : route.includes('gate-smoke.yml/runs')
       ? { workflow_runs: met ? [{ id: 201, display_title: 'Gate smoke · Test builds 101', conclusion: 'success' }] : [] }
@@ -96,18 +94,17 @@ const repoWith = (file, { tier } = {}) => {
 
 const PASSED_THE_GATE = /no signing key at/
 
-test('a strict change with nothing proven is refused, naming each missing condition', () => {
+test('a strict change with no launch smoke is refused, naming it', () => {
   const r = repoWith('app/src/screens/SignIn.tsx')('none')
   assert.equal(r.status, 1)
   assert.match(r.stdout, /tier ota-strict \(sign-in \/ key handling\)/)
   assert.match(r.stdout, /MISSING launch smoke/)
-  assert.match(r.stdout, /MISSING targeted tests/)
-  assert.match(r.stdout, /MISSING sim check/)
-  assert.match(r.stderr, /a strict condition is not proven: nothing is published/)
+  assert.doesNotMatch(r.stdout, /targeted tests|sim check/)
+  assert.match(r.stderr, /its launch smoke is not proven: nothing is published/)
   assert.doesNotMatch(r.stderr, PASSED_THE_GATE)
 })
 
-test('a strict change with every condition proven passes the tier gate', () => {
+test('a strict change with its launch smoke proven passes the tier gate', () => {
   const r = repoWith('app/src/screens/SignIn.tsx')('met')
   assert.match(r.stdout, /met {5}launch smoke: iOS in gate-smoke run 201, Android in gate-smoke run 201/)
   assert.match(r.stderr, PASSED_THE_GATE)
