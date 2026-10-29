@@ -11,6 +11,14 @@
  * itself and is never retried in another version: a task that was refused for
  * what it asked must not be asked again in a different version.
  *
+ * `servedVersions` is a hint, not the whole truth. vta-service builds it from
+ * its dispatch table alone, but v0.60.0 to v0.66.0 also answer older versions
+ * the table doesn't list, rewriting them at the edge (`wire_v0_2`): device/*
+ * at 0.2 and vault/* at 0.2 and 0.3. A refusal of device/list/0.3 there names
+ * only 0.1, while 0.2 is answered. So the step down walks this wallet's own
+ * list, older one by one, and the named versions only move it up (an agent
+ * upgraded since it was last asked).
+ *
  * What an agent was found to serve is remembered per family for the life of
  * the client, so the step down is paid once, not on every call.
  *
@@ -29,9 +37,9 @@ export const servedVersionsOf = (refusal: VtiRefusal): string[] => {
 }
 
 /**
- * Which version to try after `tried` was refused: the next of `uris` (newest
- * first) that the agent says it serves, or simply the next one when the
- * refusal names none. Undefined when nothing is left that the agent could serve.
+ * Which version to try after `tried` was refused: a newer one of `uris` (newest
+ * first) that the refusal names, else the next older one not yet tried, named
+ * or not. Undefined when none is left.
  */
 export function versionAfterRefusal(
   uris: readonly string[],
@@ -40,10 +48,12 @@ export function versionAfterRefusal(
   alreadyTried: ReadonlySet<string> = new Set([tried])
 ): string | undefined {
   const served = servedVersionsOf(refusal)
-  // An agent that names what it serves is taken at its word, whichever way that
-  // goes (an agent upgraded since it was last asked may now serve only a newer one).
-  if (served.length > 0) return uris.find((uri) => served.includes(uri) && !alreadyTried.has(uri))
-  return uris.slice(uris.indexOf(tried) + 1).find((uri) => !alreadyTried.has(uri))
+  const at = uris.indexOf(tried)
+  // An agent upgraded since it was last asked may now serve only a newer one, and says so.
+  const newer = uris.slice(0, at).find((uri) => served.includes(uri) && !alreadyTried.has(uri))
+  if (newer) return newer
+  // Never skipped for being unnamed: the agent may answer it at its edge (see the module comment).
+  return uris.slice(at + 1).find((uri) => !alreadyTried.has(uri))
 }
 
 /** A report (a log line) never decides a call: one that throws is dropped, the answer or step-down kept. */

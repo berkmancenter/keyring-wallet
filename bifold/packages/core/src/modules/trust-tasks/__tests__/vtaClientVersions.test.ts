@@ -2,8 +2,8 @@
  * acl/* and task-consent/decision, newest first (group 1b): vta-service v0.52.0 to 0d3f268e serve acl/* only at 0.1,
  * v0.67.0 only acl/{grant,revoke,update}/0.2 and acl/list/0.3; v0.60.0 to v0.66.0 serve decision/0.1 only, 0d3f268e
  * on only 0.2. The newest is asked first, an agent that does not serve it answers `unsupportedVersion` naming the
- * full URIs it does serve (trust_tasks/helpers.rs `method_not_found`), the client steps to one of those, and
- * remembers it.
+ * full URIs in its dispatch table (trust_tasks/helpers.rs `method_not_found`), the client steps to the next older
+ * version (or up to a newer one named), and remembers what answered.
  */
 import { FULL_ADMIN_AUTHORITY_02, VTA_TASK, VtaClient } from '../module/VtaClient'
 import { TaskVersions, isUnsupportedVersionRefusal, versionAfterRefusal } from '../module/taskVersions'
@@ -62,10 +62,17 @@ describe('the version step-down', () => {
     expect(isUnsupportedVersionRefusal(new Error('unsupportedVersion'))).toBe(false)
   })
 
-  it('goes to a version the agent names, skipping ones it does not serve', () => {
+  it('steps to the next older version whether or not the refusal names it, and up only to a newer one it names', () => {
     const uris = ['f/0.3', 'f/0.2', 'f/0.1']
-    expect(versionAfterRefusal(uris, 'f/0.3', unsupported('f/0.3', ['f/0.1']))).toBe('f/0.1')
+    // vta-service v0.60.0 to v0.66.0 name only their dispatch table, so 0.2 (answered at the edge) is not named:
+    // it is asked anyway. Jumping straight to the named 0.1 is what gave up on device/list (no 0.1 in its list)
+    // and took vault/list to 0.1 past the 0.3 those agents answer.
+    expect(versionAfterRefusal(uris, 'f/0.3', unsupported('f/0.3', ['f/0.1']))).toBe('f/0.2')
+    expect(versionAfterRefusal(['f/0.3', 'f/0.2'], 'f/0.3', unsupported('f/0.3', ['f/0.1']))).toBe('f/0.2')
     expect(versionAfterRefusal(uris, 'f/0.3', new VtiRefusal('unsupportedVersion', 'no'))).toBe('f/0.2')
+    // A newer one named is an upgraded agent: up to it, past the older ones.
+    expect(versionAfterRefusal(uris, 'f/0.1', unsupported('f/0.1', ['f/0.3']))).toBe('f/0.3')
+    // Undefined because 0.1 is the last rung, not because the agent named only 0.0: nothing older is left.
     expect(versionAfterRefusal(uris, 'f/0.1', unsupported('f/0.1', ['f/0.0']))).toBeUndefined()
   })
 
@@ -142,11 +149,16 @@ describe('reporting the version in use', () => {
 })
 
 describe('the access list, against an agent that serves only 0.1 (v0.52.0 to 0d3f268e)', () => {
-  it('asks list in 0.3, is told the agent serves 0.1, asks 0.1, and asks 0.1 straight away the next time', async () => {
+  it('asks list in 0.3, then 0.2, then 0.1, and asks 0.1 straight away the next time', async () => {
     const { vta, sent } = agentServing(V01, () => ({ entries: [{ subject: PHONE, role: 'admin' }], truncated: false }))
     await expect(vta.listAcl()).resolves.toEqual([{ subject: PHONE, role: 'admin' }])
     await vta.listAcl()
-    expect(sent().map((s) => s.type)).toEqual([VTA_TASK.aclList03, VTA_TASK.aclList, VTA_TASK.aclList])
+    expect(sent().map((s) => s.type)).toEqual([
+      VTA_TASK.aclList03,
+      VTA_TASK.aclList02,
+      VTA_TASK.aclList,
+      VTA_TASK.aclList,
+    ])
   })
 
   it('grants in 0.1 with the 0.1 entry, after 0.2 is refused as unsupported', async () => {

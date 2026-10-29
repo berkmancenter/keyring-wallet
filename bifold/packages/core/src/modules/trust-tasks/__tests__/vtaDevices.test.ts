@@ -325,16 +325,22 @@ describe('the device tasks this phone speaks', () => {
   })
 })
 
-// Newest first (group 1b): v0.67.0 serves acl/list only at 0.3, agents before it only at 0.1. A refusal names what
-// the agent serves, so this 0.1 agent is asked 0.1 next, and straight away after that. (Over TSP a refused 0.2 once
-// never reached the phone, al-phone 10-05: the case to watch.)
+// Newest first (group 1b): v0.67.0 serves acl/list only at 0.3, agents before it only at 0.1. A refusal names only
+// the agent's dispatch table, which can leave out versions it answers at its edge, so each older version is asked in
+// turn: this 0.1 agent is asked 0.2, then 0.1, and 0.1 straight away after that (stepDownAgainstReleases.test.ts).
+// (Over TSP a refused 0.2 once never reached the phone, al-phone 10-05 on v0.53/0.54: the case to watch.)
 describe('the access-list tasks, asked in the version agents serve', () => {
-  it('asks acl/list in 0.3 first, then in 0.1, which it remembers', async () => {
+  it('asks acl/list in 0.3 first, then 0.2, then 0.1, which it remembers', async () => {
     const { port, sent } = fakeAgent()
     await listAgentDevices(port)
     await listAgentDevices(port)
     const acl = sent.map((s) => s.type).filter((t) => t.includes('/acl/'))
-    expect(acl).toEqual([AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList, AGENT_DEVICE_TASK.aclList])
+    expect(acl).toEqual([
+      AGENT_DEVICE_TASK.aclList03,
+      AGENT_DEVICE_TASK.aclList02,
+      AGENT_DEVICE_TASK.aclList,
+      AGENT_DEVICE_TASK.aclList,
+    ])
   })
 
   it('an agent that refuses 0.1 as unsupported is asked in 0.2, and removes with its explicit full removal', async () => {
@@ -357,13 +363,15 @@ describe('the access-list tasks, asked in the version agents serve', () => {
     })
   })
 
-  it('does not ask again in 0.2 when the agent refuses 0.1 for any other reason', async () => {
+  it('asks nothing more once the agent refuses 0.1 for any other reason', async () => {
     const { port, sent } = fakeAgent({
       [AGENT_DEVICE_TASK.aclList]: () => {
         throw new VtiRefusal('permissionDenied', 'not allowed')
       },
     })
     await expect(listAgentDevices(port)).rejects.toThrow('not allowed')
-    expect(sent.some((s) => s.type === AGENT_DEVICE_TASK.aclList02)).toBe(false)
+    // 0.3 and 0.2 were refused as unsupported on the way down; 0.1's refusal is the answer, never retried.
+    const acl = sent.map((s) => s.type).filter((t) => t.includes('/acl/list/'))
+    expect(acl).toEqual([AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList])
   })
 })

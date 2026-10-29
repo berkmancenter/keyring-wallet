@@ -40,14 +40,17 @@ describe('minting a persona', () => {
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(`didsCreate answered in ${VTA_TASK.didsCreate12}`))
   })
 
-  it('steps down to 1.0 on a version refusal, with the same payload and idempotency key', async () => {
+  it('steps down to 1.1 on a version refusal, with the same payload and idempotency key', async () => {
     const vta = client()
     const task = jest
       .spyOn(vta, 'task')
-      .mockRejectedValueOnce(new VtiRefusal('unsupportedVersion', 'no', { servedVersions: [VTA_TASK.didsCreate] }))
+      // v0.49.0 to v0.64.0 serve 1.0 and 1.1; the next older one is asked.
+      .mockRejectedValueOnce(
+        new VtiRefusal('unsupportedVersion', 'no', { servedVersions: [VTA_TASK.didsCreate, VTA_TASK.didsCreate11] })
+      )
       .mockResolvedValueOnce(MINTED)
     await vta.mintPersona({ contextId: 'vta', serverId: 'control', idempotencyKey: 'key-1' })
-    expect(task.mock.calls.map((c) => c[0])).toEqual([VTA_TASK.didsCreate12, VTA_TASK.didsCreate])
+    expect(task.mock.calls.map((c) => c[0])).toEqual([VTA_TASK.didsCreate12, VTA_TASK.didsCreate11])
     expect(task.mock.calls[1][1]).toEqual(task.mock.calls[0][1])
     expect(task.mock.calls.map((c) => c[3])).toEqual([{ idempotencyKey: 'key-1' }, { idempotencyKey: 'key-1' }])
   })
