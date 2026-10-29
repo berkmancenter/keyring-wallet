@@ -95,43 +95,35 @@ through, the run says which one widened, and `disable` undoes it.
 After the update it re-reads the record and fails the run unless the record
 shows the new ring with a 0 rollout. **A failed check doesn't undo the
 widening:** the bundle may already be wider, so recover with `disable`, not by
-assuming nothing changed. A publish's tier must be `ota`, or `ota-strict` with every strict condition proven
+assuming nothing changed. A publish's tier must be `ota`, or `ota-strict` with its launch smoke proven
 (below); ota-deploy refuses everything else, so a promoted bundle is always one of the two.
 
 ### Strict changes
 
 tier.mjs gives `ota-strict` (exit 5) to a JavaScript change that touches sign-in or key handling, or the VTI protocol
-line. The owner's rule (10-29) is bug, fix, minimal tests, OTA. A strict bundle goes out on these five conditions, each
-for the exact commit the bundle is built from:
+line. The owner's pipeline (10-29) is: a change's tests run as its pull request's required related-tests check before
+it can merge, and a release follows the merge at once. A strict bundle goes out on three conditions, each for the exact
+commit the bundle is built from:
 
-1. **Targeted tests with a control:** the change's own tests are green, and a control shows they fail without the fix.
-   Attested by the commit status `ota-strict/targeted-tests` = success, with a `target_url` to the evidence.
-2. **A simulator check of the changed screen:** one check. Attested by the commit status `ota-strict/sim-check` =
-   success, with a `target_url` to the evidence.
-3. **A launch smoke on both platforms:** a green Test builds run built from the commit (pushed, or dispatched on its
+1. **A launch smoke on both platforms:** a green Test builds run built from the commit (pushed, or dispatched on its
    ref; a pull request's run builds the merge ref, so it doesn't count), and a green gate-smoke.yml run of that Test
    builds run (`-f run-id=<id>`) whose iOS and Android smoke jobs are both green. Read from GitHub by the publish.
-4. **The owner's single approval:** the ota-approval environment, as for every publish. GitHub can't enforce whose
+   Red runs are ignored, so a launch smoke that went green on a rerun counts.
+2. **The owner's single approval:** the ota-approval environment, as for every publish. GitHub can't enforce whose
    click it is while every maintainer session acts as the owner's account, so this condition rests on a rule: no
    session approves a publish, a promote or any environment gate itself. An approval counts only when the owner
    clicks it, or tells the session running it directly, for that run, and the owner's words go in the approval comment.
-5. **Ring 0 first:** every publish reaches ring 0 only. Widening is `promote`, after the owner's own check.
+3. **Ring 0 first:** every publish reaches ring 0 only. Widening is `promote`, which the owner approves in the same
+   sitting.
 
-Only 3 and 5 are proven by a machine. 1, 2 and 4 are conventions: any session with write access can set a status
-with any `target_url`, and nothing checks that the tests or the simulator check happened. So they rest on the same
-rule as 4: a status is set only by whoever ran that check, with the evidence it names. Red runs are ignored, so a
-launch smoke that went green on a rerun counts.
+Only 1 and 3 are proven by a machine; 2 rests on the rule above. Until 10-29 a strict bundle also needed two attested
+commit statuses (`ota-strict/targeted-tests` and `ota-strict/sim-check`). Those are no longer read: the change's
+tests are its pull request's required check, and the simulator checks run after release.
 
-`scripts/ota/strict-proof.mjs` reads 1–3 for the publish (ota-deploy calls it, only on exit 5 with tier `ota-strict`).
-Any condition missing, failed, unreadable, or for another commit, and nothing is published. A strict bundle is published
-only by ota-publish.yml (ota-deploy checks that `GITHUB_SHA` is HEAD). To see what is still missing before asking for
-the approval: `node scripts/ota/strict-proof.mjs --sha <full sha> --repo berkmancenter/keyring-wallet`, or a dry run.
-To set an attested status:
-
-```sh
-gh api repos/berkmancenter/keyring-wallet/statuses/<full sha> -f context=ota-strict/sim-check \
-  -f state=success -f target_url=<the evidence> -f description='<what was checked>'
-```
+`scripts/ota/strict-proof.mjs` reads condition 1 for the publish (ota-deploy calls it, only on exit 5 with tier
+`ota-strict`). A smoke missing, red, unreadable, or for another commit, and nothing is published. A strict bundle is
+published only by ota-publish.yml (ota-deploy checks that `GITHUB_SHA` is HEAD). To check before asking for the
+approval: `node scripts/ota/strict-proof.mjs --sha <full sha> --repo berkmancenter/keyring-wallet`.
 
 **Withdrawing** a production or preview bundle is the `disable` action, with
 `bundle_id` and the bundle's own `platform`, after the same approval. It checks
@@ -142,7 +134,7 @@ run checks only that the bundle is there.
 **Store builds stay the main channel.** We keep shipping store builds often;
 OTA supplements them and never replaces them. It carries JavaScript fixes only,
 within store policy: nothing that adds a feature or changes what the app does.
-The tier check enforces the code side (`ota`, or `ota-strict` with its conditions proven). What counts as a fix is the
+The tier check enforces the code side (`ota`, or `ota-strict` with its launch smoke proven). What counts as a fix is the
 publisher's call, and the commit subject is what testers read.
 
 ota-publish's dispatch has ten inputs, GitHub's maximum: a new one has to

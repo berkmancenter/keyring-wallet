@@ -15,10 +15,9 @@
 //                                    strict, unchecked}
 // Exit: 0 ota, 1 none, 2 store (native, or a held flag), 3 an error (reported as store, never none), 4 unchecked (ota by
 // its paths, but --files cannot read the added lines a held flag looks at: run it with --range), 5 ota-strict (OTA
-// only under the strict conditions, for the bundle's exact commit: its targeted tests green with a control, one
-// simulator check of the changed screen, a launch smoke on both platforms, the owner's single approval, and ring 0
-// first, widened after the owner's check; the flags are listed under "strict"). ONLY 0 permits an OTA publish as it
-// stands; 5 permits one only when the publish step has proof of those conditions (scripts/ota/strict-proof.mjs, run
+// only under the strict conditions, for the bundle's exact commit: a launch smoke on both platforms, the owner's
+// single approval, and ring 0 first; the flags are listed under "strict"). ONLY 0 permits an OTA publish as it
+// stands; 5 permits one only when the publish step has proof of the launch smoke (scripts/ota/strict-proof.mjs, run
 // by app/scripts/ota-deploy.mjs); 1-4 mean do not publish OTA. "tier" is the verdict; "reasons" is the per-file input (a
 // file there can say ota while the tier is store, unchecked or ota-strict), so never recompute the tier from reasons.
 // tier.mjs names the strict conditions; the publish step proves them, and must fail closed when it cannot.
@@ -228,7 +227,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       for (const f of r.flags) console.log(`${{ store: 'hold  ', strict: 'strict' }[f.policy] || 'flag  '} ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
       const why = r.held.length ? ` (held back from OTA: ${r.held.join('; ')})`
         : r.unchecked.length ? ` (ota by its paths; not checked without --range: ${r.unchecked.join('; ')})`
-        : r.strict.length ? ` (OTA only with targeted tests and a control, a simulator check, a launch smoke on both platforms, the owner's approval, ring 0 first: ${r.strict.join('; ')})` : '';
+        : r.strict.length ? ` (OTA only with a launch smoke on both platforms, the owner's approval, ring 0 first: ${r.strict.join('; ')})` : '';
       console.log(`tier=${r.tier}${why}`);
     }
     // exitCode, not exit(): a large --json written to a pipe must finish before the process ends.

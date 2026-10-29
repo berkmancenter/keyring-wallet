@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { checkSmoke, checkStatuses, proveStrict } from './strict-proof.mjs'
+import { checkSmoke, proveStrict } from './strict-proof.mjs'
 
 const SHA = '67be5abe14670f99a26a35d7041bba39a437c1fe'
 const OTHER = '94c5a7756a0126c11f08beea99c6dc4d2361e9c0'
@@ -19,8 +19,6 @@ const smoke = (over) => ({
   jobs: [job('iOS'), job('Android')],
   ...over,
 })
-const status = (context, over) => ({ context, state: 'success', target_url: 'https://example.invalid/evidence', ...over })
-const STATUSES = [status('ota-strict/targeted-tests'), status('ota-strict/sim-check')]
 
 test('the smoke: a green iOS and Android job of a green dispatched or pushed build of the commit', () => {
   assert.equal(checkSmoke(SHA, [build()], [smoke()]).met, true)
@@ -54,18 +52,6 @@ test('the smoke: one platform per run is enough when both are covered', () => {
   assert.deepEqual([r.met, r.detail], [true, 'iOS in gate-smoke run 201, Android in gate-smoke run 202'])
 })
 
-test('the attested checks: the newest status of each context, success, with its evidence', () => {
-  assert.deepEqual(checkStatuses(STATUSES).map((c) => c.met), [true, true])
-  assert.match(checkStatuses([STATUSES[0]])[1].detail, /no ota-strict\/sim-check status/)
-  assert.match(checkStatuses([status('ota-strict/targeted-tests', { state: 'pending' }), STATUSES[1]])[0].detail, /is pending/)
-  assert.match(checkStatuses([status('ota-strict/targeted-tests', { target_url: null }), STATUSES[1]])[0].detail, /names no evidence/)
-  // Newest first: a later failure overrides an earlier success, and a later success an earlier failure.
-  assert.equal(checkStatuses([status('ota-strict/sim-check', { state: 'failure' }), ...STATUSES])[1].met, false)
-  assert.equal(checkStatuses([...STATUSES, status('ota-strict/sim-check', { state: 'failure' })])[1].met, true)
-  // A context that is only similar does not count.
-  assert.equal(checkStatuses([status('ota-strict/sim-check-2'), STATUSES[0]])[1].met, false)
-})
-
 const fakeApi = (routes) => (route) => {
   const hit = Object.entries(routes).find(([prefix]) => route.startsWith(prefix))
   if (!hit) throw new Error(`unexpected route ${route}`)
@@ -74,7 +60,6 @@ const fakeApi = (routes) => (route) => {
 }
 const R = 'owner/repo'
 const ROUTES = {
-  [`repos/${R}/commits/${SHA}/statuses`]: STATUSES,
   [`repos/${R}/actions/workflows/test-builds.yml/runs`]: { workflow_runs: [build()] },
   [`repos/${R}/actions/workflows/gate-smoke.yml/runs`]: {
     workflow_runs: [{ id: 201, display_title: 'Gate smoke · Test builds 101', conclusion: 'success' }, { id: 299, display_title: 'Gate smoke · Test builds 999', conclusion: 'success' }],
@@ -82,11 +67,13 @@ const ROUTES = {
   [`repos/${R}/actions/runs/201/jobs`]: { jobs: [job('iOS'), job('Android')] },
 }
 
-test('proveStrict: every condition met, reading only the smokes that name the build', () => {
+test('proveStrict: the smoke met, reading only the smokes that name the build; no commit status is asked for', () => {
   const asked = []
   const api = fakeApi(ROUTES)
   const conditions = proveStrict({ sha: SHA, repo: R, api: (route) => (asked.push(route), api(route)) })
-  assert.deepEqual(conditions.map((c) => [c.name, c.met]), [['launch smoke', true], ['targeted tests', true], ['sim check', true]])
+  assert.deepEqual(conditions.map((c) => [c.name, c.met]), [['launch smoke', true]])
+  // The attested statuses are gone (10-29 pipeline): a status is never read, so none can stand in for the smoke.
+  assert.equal(asked.some((r) => r.includes('/statuses')), false)
   assert.equal(asked.some((r) => r.includes('/runs/299/')), false)
 })
 
@@ -104,11 +91,11 @@ test('proveStrict: the smoke may be on any page of the gate-smoke list', () => {
 })
 
 test('proveStrict: a read that fails is a condition not met, never a pass', () => {
-  const down = proveStrict({ sha: SHA, repo: R, api: fakeApi({ ...ROUTES, [`repos/${R}/commits/${SHA}/statuses`]: new Error('HTTP 502') }) })
-  assert.deepEqual(down.map((c) => [c.name, c.met]), [['launch smoke', true], ['attested checks', false]])
-  assert.match(down[1].detail, /could not read: HTTP 502/)
   const noRuns = proveStrict({ sha: SHA, repo: R, api: fakeApi({ ...ROUTES, [`repos/${R}/actions/workflows/test-builds.yml/runs`]: new Error('HTTP 404') }) })
-  assert.equal(noRuns[0].met, false)
+  assert.deepEqual(noRuns.map((c) => [c.name, c.met]), [['launch smoke', false]])
+  assert.match(noRuns[0].detail, /could not read: HTTP 404/)
+  const noJobs = proveStrict({ sha: SHA, repo: R, api: fakeApi({ ...ROUTES, [`repos/${R}/actions/runs/201/jobs`]: new Error('HTTP 502') }) })
+  assert.equal(noJobs[0].met, false)
 })
 
 test('proveStrict: a short sha or no repository proves nothing', () => {

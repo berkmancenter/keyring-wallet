@@ -13,9 +13,8 @@
  * JavaScript-only by scripts/release/tier.mjs (exit 0, tier "ota"), with no
  * held class (stored-record deletion always ships as a store build). Tier
  * "ota-strict" (exit 5: sign-in or key handling, the VTI protocol line) is
- * published only when scripts/ota/strict-proof.mjs proves every strict
- * condition for HEAD (launch smoke on both platforms, the attested targeted
- * tests and simulator check), from ota-publish.yml only (GITHUB_SHA must be
+ * published only when scripts/ota/strict-proof.mjs proves a launch smoke on
+ * both platforms for HEAD, from ota-publish.yml only (GITHUB_SHA must be
  * HEAD; GITHUB_REPOSITORY names the repository); otherwise nothing is.
  * Measuring from any other commit could read "ota" for JS that calls a native
  * method the build lacks.
@@ -156,9 +155,9 @@ if (args['skip-tier']) {
   }
   const strict = run.status === 5 && verdict.tier === 'ota-strict'
   if (strict) {
-    // Only with every strict condition proven for this exact commit (scripts/ota/strict-proof.mjs).
+    // Only with the launch smoke proven for this exact commit (scripts/ota/strict-proof.mjs).
     const flags = verdict.strict.join('; ')
-    console.log(`ota-deploy: tier ota-strict (${flags}); proving the strict conditions for ${walletHead.slice(0, 8)}`)
+    console.log(`ota-deploy: tier ota-strict (${flags}); proving the launch smoke for ${walletHead.slice(0, 8)}`)
     // The proof is for the commit the run checked out, and the bundle is built from HEAD: they must be one commit.
     const checkedOut = process.env.GITHUB_SHA || 'unset'
     if (checkedOut !== walletHead) {
@@ -169,7 +168,7 @@ if (args['skip-tier']) {
     const conditions = proveStrict({ sha: walletHead, repo: process.env.GITHUB_REPOSITORY })
     for (const c of conditions) console.log(`ota-deploy:   ${c.met ? 'met    ' : 'MISSING'} ${c.name}: ${c.detail}`)
     if (!conditions.every((c) => c.met))
-      fail('tier is "ota-strict" and a strict condition is not proven: nothing is published')
+      fail('tier is "ota-strict" and its launch smoke is not proven: nothing is published')
   } else if (run.status !== 0 || verdict.tier !== 'ota') {
     const held = verdict.held?.length ? `; held: ${verdict.held.join(', ')}` : ''
     fail(`tier is "${verdict.tier}" (exit ${run.status})${held}: this change ships as a store build`)
