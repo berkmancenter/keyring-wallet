@@ -1,12 +1,12 @@
 # Public Roadmap — Plan
 
-**Status:** Proposed. Decisions D1–D18 are taken (§10). **Step 1 and launch are blocked** until the product owner names the triage owner, the moderation owner and the holder of the claude.ai account that owns the Command Center (§8.1, §9).
+**Status:** Proposed. Decisions D1–D18 are taken (§10). Step 0 is done, with the exceptions recorded in [`2026-10-27-al.md`](./public-roadmap-plan/2026-10-27-al.md). Step 1 is in progress from a local review list the product owner has approved. The triage and moderation owners are named privately (§8.1). **Launch is blocked** until the bot account exists (§8, D10).
 **Scope:** Make Keyring's work visible in public: what we are building, what testers and the community asked for, and what shipped in which release. It is delivered as one public GitHub Project over GitHub issues in `keyring-wallet` and `keyring-bifold`. Each plan in `docs/plans/` on `main` becomes an epic. Fixes and requests from the community become public issues, and the issue number is the reporter's receipt. Every card reads in plain language, with technical detail one click away.
 **Companions:**
 - [`public-roadmap-plan/2026-10-21-al.md`](./public-roadmap-plan/2026-10-21-al.md) — research findings (what the internal board and the tester-report ledger held on 2026-10-21, what GitHub offers as of October 2026, how other open-source projects run public roadmaps), the options weighed, and the first decisions.
 - [`public-roadmap-plan/2026-10-22-bam.md`](./public-roadmap-plan/2026-10-22-bam.md) — review of the plan: publication and privacy gaps, status and closure semantics, verifiable acceptance criteria. Lists the items awaiting owner confirmation and carries the point-in-time data removed from §3.
 - [`public-roadmap-plan/2026-10-25-al.md`](./public-roadmap-plan/2026-10-25-al.md) — the product owner's answers to the review's decisions (D3, D6, D10 confirmed) and what is still open.
-- [`public-roadmap-plan/2026-10-27-al.md`](./public-roadmap-plan/2026-10-27-al.md) — the App key's accountable role (D10), the plan's status at merge, and the blockers re-checked on 2026-10-27.
+- [`public-roadmap-plan/2026-10-27-al.md`](./public-roadmap-plan/2026-10-27-al.md) — the key's accountable role (D10), the plan's status at merge and the blockers re-checked; Part 2: the Step 0 results, and running without an org owner (an `epic` label instead of the Epic type, a bot account instead of a GitHub App, issue deletion).
 
 **Related plans:** [`release-flow-plan.md`](./release-flow-plan.md) (how a change reaches testers). The versioning-and-releases plan is **not in this repository yet** (not on `main`): it makes each tester release a version, with a GitHub Release as the changelog of record. This plan's *Shipped in* field and the Testing and Shipped automation are **conditional on it** (§8).
 
@@ -79,7 +79,7 @@ Two things block a direct copy: (1) the ledger and queue carry identities and pr
 |---|---|---|
 | Work items (features, bugs, tasks, epics) | GitHub issues in `keyring-wallet` and `keyring-bifold`, all on the **Keyring Roadmap** project | The source of truth for *what* and *where it stands* (D1, D2) |
 | Epics and community reports | `keyring-wallet` | Reporters and readers don't know which repository holds the code, so every entry point lives in one place |
-| Implementation issues | The repository where the code changes | Bifold sub-issues sit under wallet epics. Cross-repository sub-issues are assumed to work because both repositories are in one org; Step 0 verifies it. A wallet report found to be a bifold fix gets a bifold sub-issue, so the reporter's link never moves. Issues are never transferred between repositories: one filed in the wrong place is re-created in the right one, linked, and closed as Duplicate |
+| Implementation issues | The repository where the code changes | Bifold sub-issues sit under wallet epics. Cross-repository sub-issues work: Step 0 linked a sub-issue across two repositories of one owner. The first real epic re-checks it inside the org while the project is still private. A wallet report found to be a bifold fix gets a bifold sub-issue, so the reporter's link never moves. Issues are never transferred between repositories: one filed in the wrong place is re-created in the right one, linked, and closed as Duplicate |
 | Plans (design, rationale) | `docs/plans/` | The epic links its plan; the plan names its epic in its header |
 | Tester reports and reporter identity | Signal bot ledger (private) | The ledger keeps `IN-` → reporter and `IN-` → public issue number (D3). No `IN-` number appears on a public issue |
 | Items the product owner marks keep-private, and embargoed security work before disclosure | A **private holding project**, *Keyring Private*, in the org: draft items only (no issue is created, so there is no history to leak), with title, reason withheld, and who decides. Embargoed security work lives in a private security advisory, not in the holding project | Nothing here syncs to the public board. Holding-project items that later become public are created fresh through the Step 2/3 gate (D7) |
@@ -88,7 +88,7 @@ Two things block a direct copy: (1) the ledger and queue carry identities and pr
 
 ### 4.2 Issue types and hierarchy
 
-- **Issue types** (org level): `Epic` (to be added), `Feature`, `Bug`, `Task`.
+- **Issue types** (org level): `Feature`, `Bug`, `Task`. An epic is a `Feature` issue carrying the **`epic` label**, created in each repository. An `Epic` issue type would need an org owner to add it.
 - **Epic** = one plan. **Sub-issues** = the plan's phases or subtasks, and under them individual steps where useful. GitHub allows 100 sub-issues per parent and 8 levels ([adding sub-issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues): "up to 100 sub-issues per parent issue and create up to eight levels of nested sub-issues").
 - **Community items** (fixes, requests from Signal) are standalone `Bug` or `Feature` issues. They join an epic as a sub-issue only when they really belong to one.
 - **Dependencies** ("blocked by") mark items waiting on another item, including upstream waits. They show as an icon on the board.
@@ -141,11 +141,11 @@ One public project, **Keyring Roadmap**, linked to both repositories. Each view'
 | 1 | **Board** (default) | Board | `status:Requested,"Under review",Planned,"In progress",Testing` | Columns by Status; manual order within a column |
 | 2 | **Up next** | Table | `status:Planned,"In progress",Testing up-next:"Next release"` | Group by Status; manual order. What the next release is aiming at, with no dates |
 | 3 | **Shipped** | Table | `status:Shipped` | Group by `Shipped in`, newest first. The public "what changed" history. Items with a blank `Shipped in` form the *pre-versioning* group |
-| 4 | **Big pieces** | Table | `type:Epic -status:"Not planned",Duplicate` | Sort by Status; shows sub-issue progress |
+| 4 | **Big pieces** | Table | `label:epic -status:"Not planned",Duplicate` | Sort by Status; shows sub-issue progress |
 | 5 | **From the community** | Table | `source:Community` | Group by Status. Reporters find their items here, declined ones included |
 | 6 | **Closed without shipping** | Table | `status:"Not planned",Duplicate` | Group by Status. Each row's reason is in the issue's last comment |
 
-**Sorting by 👍.** Project views document sorting "by a field value" and do not document sorting by reactions ([customizing the table layout](https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/customizing-the-table-layout)). Step 0 verifies whether view 5 can. If it cannot, the README links to an issue search sorted by `reactions-+1-desc` over the `community` label, which the issue forms and the sync both set.
+**Sorting by 👍.** Project views cannot sort by reactions. The *Sort by* list offers only built-in and custom fields (checked in Step 0), and the docs only describe sorting "by a field value" ([customizing the table layout](https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/customizing-the-table-layout)). So the README links to an issue search sorted by `reactions-+1-desc` over the `community` label, which the issue forms and the sync both set.
 
 A **project README** covers:
 - what Keyring is;
@@ -211,12 +211,12 @@ Plan / spec link, affected areas, PRs, acceptance criteria, agent notes.
 - **Default-deny.** An item is public only if its triage record says *public-safe*. A *security* flag is an exclusion that fails closed: a missing, unknown or conflicting flag means not public.
 - **Disclosure approver.** The product owner approves any disclosure, with a **named backup role** for when the approver is unavailable (D14).
 - **Fixes.** Security fixes are developed in the repository's private advisory fork. No public branch or PR exists before the release. `keyring-bifold` follows the same rule, and a bifold security fix's merge and the wallet's submodule-pointer bump are timed to the same release, since a public pointer bump reveals the fix.
-- **Discovered late.** If a security-sensitive item turns out to be on the board, it is **deleted** (org owner), not closed: closing leaves the content and its history visible.
-- **Reporting channel.** Private vulnerability reporting is enabled on both repositories, including the `keyring-bifold` fork, and the issue forms point to it. Step 0 verifies it by submitting a test report on each.
+- **Discovered late.** If a security-sensitive item turns out to be on the board, it is **deleted**, not closed: closing leaves the content and its history visible. Deleting an issue in an org repository needs an org owner, or the org setting that lets members delete issues (§7.3).
+- **Reporting channel.** Private vulnerability reporting is enabled on both repositories, including the `keyring-bifold` fork, and the issue forms point to it. A test report on each is still to be submitted.
 
 ### 7.3 If something leaks
 
-1. The org owner deletes the issue or comment (deletion removes it from the issue's history, which redaction does not).
+1. An org owner deletes the issue or comment (deletion removes it from the issue's history, which redaction does not). Until an owner can act, a leak in a body or comment is edited out and the old revision deleted from the edit history, which repository writers can do. A leak in a title, or a whole issue, needs the owner or a GitHub content-removal request (step 2).
 2. If it persists in a cached or mirrored copy, file a GitHub content-removal request.
 3. If it is a key or credential, re-key it. Deleting the content does not make it safe.
 4. Record what leaked, when, how long, and the fix in the Command Center's decisions section.
@@ -228,7 +228,7 @@ Plan / spec link, affected areas, PRs, acceptance criteria, agent notes.
 
 Everything here that can create or edit public text passes through the scan (§7.1).
 
-- **Credential.** The `GITHUB_TOKEN` cannot write to projects ([automating projects using Actions](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/automating-projects-using-actions): "`GITHUB_TOKEN` is scoped to the repository level and cannot access projects"). Automation runs as a **GitHub App**, a bot identity, with Projects (read/write) and Issues (write) on both repositories (D10). Its key is managed outside this document. Rotation and revocation of the App's key are owned by the triage owner role (§8.1); where the key is stored is not documented here. Its bot identity is documented in the project README and each repository's contributing file, so readers know bot comments are ours.
+- **Credential.** The `GITHUB_TOKEN` cannot write to projects ([automating projects using Actions](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/automating-projects-using-actions): "`GITHUB_TOKEN` is scoped to the repository level and cannot access projects"). Automation runs as a **bot account**: a separate GitHub user, controlled by the triage owner, with write access to both repositories and admin on the project (D10). Its token is managed outside this document. Rotation and revocation of the token are owned by the triage owner role (§8.1); where the token is stored is not documented here. Its bot identity is documented in the project README and each repository's contributing file, so readers know bot comments are ours.
 - **Signal → issue (idempotent upsert):**
   1. When a report is accepted **and the reporter has said yes to a public issue**, find the issue the ledger maps the `IN-` number to. Opt-in is per report and is recorded in the ledger. A report without opt-in stays in Signal.
   2. If there is none, create one in `keyring-wallet` from the card template; otherwise update it.
@@ -243,28 +243,28 @@ Everything here that can create or edit public text passes through the scan (§7
   - A workflow sets **In progress** when a linked PR opens.
   - **Conditional on the versioning-and-releases plan** (not in this repository): the release flow sets **Testing** when a tester build contains the item, and **Shipped** plus `Shipped in` plus the closing comment when the GitHub Release is published. For a bifold item, the release job finds bifold PRs between the old and new submodule pointer. Until that plan lands, the triage owner sets Testing and Shipped by hand at each release, and `Shipped in` stays blank.
 - **Plans → epics.** A small script creates the Epic for a plan from its header, and the plan header gets the issue number in the same PR. Only plans merged to `main` become epics.
-- **Staleness check.** A weekly scheduled workflow in `keyring-wallet`, as the App, **reports** to the triage owner and never closes anything ("stale bots are widely resented, and they would close real tester reports"):
+- **Staleness check.** A weekly scheduled workflow in `keyring-wallet`, as the bot account, **reports** to the triage owner and never closes anything ("stale bots are widely resented, and they would close real tester reports"):
   - In progress or Testing with no activity for 14 days;
   - Requested with no maintainer comment within the acknowledgement target (§8.1), and Under review with no activity for 30 days;
   - any card whose public layer is missing or stale (§6).
 
   The 14, 30 and acknowledgement thresholds are **provisional**, set to match a weekly rhythm; they have no data behind them yet.
 - **Skills.** These skills are **not in this repository** (the project skills here are under `.claude/skills/`, and none of these is there): `keyring-command-center` reads the backlog from GitHub; the Signal lane uses the upsert and replies with links; the release flow sets Testing and Shipped; a new `keyring-roadmap` skill, created by this plan, holds the card standard, the scan and the triage steps.
-- **Rollback.** The project can be switched back to private, and the automation disabled by suspending the App or disabling its workflows. Step 3 proves both.
+- **Rollback.** The project can be switched back to private, and the automation disabled by revoking the bot account's token or disabling its workflows. Step 3 proves both.
 
 ### 8.1 Ownership and cadence
 
-- **Triage owner** (a named role; **who is not yet named, and Step 1 and launch wait on it**): moves cards out of Requested, approves held scan results, receives the weekly report, and sets Testing and Shipped by hand while the release automation is not in place. The role also owns rotation and revocation of the App's key (D10), including when the key may have leaked and when the role changes hands; where the key is stored is not documented here. "The coordinator" elsewhere in Keyring's processes means this role.
+- **Triage owner** (a named role; named privately by the product owner): moves cards out of Requested, approves held scan results, receives the weekly report, and sets Testing and Shipped by hand while the release automation is not in place. The role also owns rotation and revocation of the bot account's token (D10), including when the token may have leaked and when the role changes hands; where the token is stored is not documented here. "The coordinator" elsewhere in Keyring's processes means this role.
 - **Acknowledgement.** The public statement, in the project README and the issue forms, is "we aim to respond within about a week". Internally the triage owner tracks a tighter target of 3 working days, which the weekly check reports against and which is never published (*provisional*, D15). The response may only say the item is seen.
 - **Moderation owner** (**not yet named; Step 1 and launch wait on it**): handles community issues and comments under the Code of Conduct, reviews community-filed attachments, takes down leaks (§7.3), and may lock an issue that has stopped being useful. Locking is for conduct and for finished threads, never for disagreement.
-- **Where jobs run:** the weekly check runs as a scheduled workflow in `keyring-wallet`; the Signal sync runs where the Signal bot runs. Both run as the App.
+- **Where jobs run:** the weekly check runs as a scheduled workflow in `keyring-wallet`; the Signal sync runs where the Signal bot runs. Both run as the bot account.
 
 ---
 
 ## 9. Steps
 
 **Step 0 — Prepare** (no public change)
-- Create the GitHub App and install it. Add the `Epic` issue type. Enable private vulnerability reporting on both repos. Confirm Issues are on in `keyring-bifold`.
+- Create the bot account and add it to both repositories and the project. Create the `epic` label in both repositories. Enable private vulnerability reporting on both repos. Confirm Issues are on in `keyring-bifold`.
 - Verify, and record the result in the plan or a dated companion:
   - private vulnerability reporting works on both repos, including the `keyring-bifold` fork, by submitting a test report on each;
   - a sub-issue links across the two repositories;
@@ -292,7 +292,7 @@ Everything here that can create or edit public text passes through the scan (§7
   | Plan marked Draft | Off the board, unless the plan's owner opts in to an *Exploring* epic (D6) |
 
 - *Done when:* the product owner has approved the list (each row: publish / keep private / drop), keep-private rows are in the private holding project, the scan finds nothing in the approved rows, and every canary is rejected.
-- **Blocked:** the Command Center and Backlog page databases are readable only from the claude.ai account that owns them, so this step runs from a session signed in there. Decided, waiting on someone else: the product owner has not yet named who holds that account and runs the step.
+- **Source:** the Command Center and Backlog page databases are readable only from the claude.ai account that owns them, so the review list was rebuilt locally from the agents' session records (backlog rows to 10-11, Backlog-page items to 10-21) plus the coordinator's current queue. A fresh export replaces it when that account is reachable.
 
 **Step 2 — Build the project, seed the epics**
 - Create Keyring Roadmap (kept **private** until Step 4), its fields, the six views and README. Create one Epic per plan in the D6 scope, with sub-issues for phases. Write the epic numbers back into the plan headers.
@@ -332,7 +332,7 @@ Everything here that can create or edit public text passes through the scan (§7
 | D7 | Internal view | No second board. Internal coordination stays in Signal and the Command Center. Withheld items sit in one private holding project of draft items (§4.1) | A second board would be a second source of truth. But keep-private and embargoed items must live somewhere that is not the public board, and draft items have no issue history to leak. |
 | D8 | Filing on GitHub | Anyone can file bugs **and** feature requests as issues, through forms. No Discussions; 👍 shows interest | One place to look, and one status for each request. Feature requests in Discussions would need a second status system |
 | D9 | Dates | None on the board. Releases only, plus an *Up next* marker | A small team's dates slip and become broken promises in public |
-| D10 | Credentials | A GitHub App (a bot identity) with Projects write and Issues write on both repositories; its key is managed outside this document, and its rotation and revocation are owned by the triage owner role; the bot identity is documented publicly | The workflow token cannot write to projects (§8), and an App is not tied to one person's account |
+| D10 | Credentials | A bot account (a separate GitHub user, so a bot identity) with write access to both repositories and admin on the project. Its token is managed outside this document; its rotation and revocation are owned by the triage owner role; the bot identity is documented publicly | The workflow token cannot write to projects (§8). An org-owned GitHub App needs an org owner to create and install it, and the project has none. A bot account is still not one person's account |
 | D11 | Project | A new public project. The existing private org project #9 "Keyring" is left to its owner | #9 holds older items, mostly from private repositories, which outsiders would see as redacted rows |
 | D12 | Declined items | Not planned and Duplicate are Status options, shown in *Closed without shipping*, each with a one-line reason comment, and a link to the original for Duplicate | A close reason alone is not a project field, so a view would have to filter on issue state, which also contains shipped items |
 | D13 | Publication cadence | For the first few public weeks, reports are published in daily batches. Cadence may loosen afterwards; provisional, reviewed after about a month | Real-time publication ties an issue's creation time to a message's arrival. Once opt-in and summary scrubbing exist, batching adds little privacy and slows G2 (the reporter sees the item change state), so it is a launch precaution, not a permanent rule |
@@ -353,4 +353,4 @@ Everything here that can create or edit public text passes through the scan (§7
 
 **Later (not in this plan):** a Keyring agent in the Signal channel that asks for and records decisions, such as accepting a report or choosing *Up next*. Revisit after Step 4, once the board is the source of truth.
 
-**Blocked on others:** Step 1 needs a session signed in to the claude.ai account that owns the Command Center and Backlog page (see Step 1). The triage owner and moderation owner (§8.1) are named by the product owner.
+**Blocked on others:** an org owner, for issue deletion (§7.2, §7.3) and, optionally, an `Epic` issue type and an org-owned App. Nothing else waits on one.
