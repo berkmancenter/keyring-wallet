@@ -12,14 +12,21 @@ import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import {
+  COMMUNITY,
   fakeAgent,
   fakeCommunityStore,
   fakeVault,
   membershipCard,
   persona,
+  PERSONA_DID,
+  ROOM,
+  roomAuthorityCard,
+  roomMembershipCard,
 } from '../../../../__tests__/helpers/cardVault'
 import { testIdWithKey } from '../../../utils/testable'
+import { forgetRoomCommunities } from '../module/roomCards'
 import { fetchAgentCards, forgetCardReads, recoverCardsFromAgent, type AgentCard } from '../module/vtiCardVault'
+import type { VtiMembership } from '../module/VtiCommunityStore'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 import {
   bringBackFromAgent,
@@ -226,6 +233,47 @@ describe('getting the cards back, identity by identity', () => {
       )
     )
     expect(got.refused).toEqual([{ credentialId: failing.id, communityDid: 'c', reason: 'failedCheck' }])
+  })
+})
+
+describe('Bring back on a phone an earlier Bring back took a room in as a community', () => {
+  // 10-28: a member's phone listed "3 communities", two of them the rooms they had joined, and each rooms call asked
+  // both rooms as communities, which never answer: the room list took about a minute.
+  it('forgets the room first, and asks only the community for its cards', async () => {
+    const vault = fakeVault()
+    for (const credential of [membershipCard, roomMembershipCard, roomAuthorityCard])
+      await vault.task('https://trusttasks.org/spec/vault/credentials/receive/0.1', { credential })
+    const roomPersona: VtiPersona = { ...persona, communityDid: ROOM }
+    const memberships = new Map<string, VtiMembership>(
+      [COMMUNITY, ROOM].map((did) => [did, { communityDid: did, personaDid: PERSONA_DID } as VtiMembership])
+    )
+    const personas = new Map([persona, roomPersona].map((p) => [p.communityDid, p]))
+    const d = {
+      adopt: async () => found([]),
+      store: () => fakeCommunityStore().store,
+      taskFor: async () => vault.task,
+      fetchCards: fetchAgentCards,
+      recover: ((a: Agent, s: never, p: VtiPersona, t: never, o: object) =>
+        recoverCardsFromAgent(a, s, p, t, { ...o, check: async () => undefined })) as never,
+      forgetRooms: (_a: Agent, cards: AgentCard[]) =>
+        forgetRoomCommunities({
+          cards,
+          communities: {
+            listMemberships: async () => [...memberships.values()],
+            forgetCommunity: async (did: string) => void memberships.delete(did),
+          },
+          identities: {
+            listPersonas: async () => [...personas.values()],
+            forgetPersona: async (did: string) => void personas.delete(did),
+          },
+        }),
+    } as unknown as GetCardsDeps
+
+    const got = await bringBackFromAgent(fakeAgent().agent, persona.vtaDid, [persona, roomPersona], () => undefined, d)
+
+    expect(got.asked).toBe(1)
+    expect([...memberships.keys()]).toEqual([COMMUNITY])
+    expect([...personas.keys()]).toEqual([COMMUNITY])
   })
 })
 

@@ -15,7 +15,8 @@ import {
   roomAuthorityCard,
   roomMembershipCard,
 } from '../../../../__tests__/helpers/cardVault'
-import { roomIssuersOf, withoutRoomCards } from '../module/roomCards'
+import { forgetRoomCommunities, roomIssuersOf, withoutRoomCards } from '../module/roomCards'
+import type { VtiMembership } from '../module/VtiCommunityStore'
 import type { VtaMintedDid } from '../module/VtaClient'
 import { adoptAgentIdentities } from '../module/vtiAdoptIdentities'
 import { fetchAgentCards, forgetCardReads, recoverCardsFromAgent, resetCardVaultCache } from '../module/vtiCardVault'
@@ -119,5 +120,57 @@ describe('Bring back, on an agent that holds a room', () => {
     expect(result.found).toBe(1)
     expect(memberships.has(COMMUNITY)).toBe(true)
     expect(memberships.has(ROOM)).toBe(false)
+  })
+})
+
+/** A phone's community and identity records, keyed as the stores keep them: by community and identity, and by agent. */
+function recorded(memberships: VtiMembership[], personas: VtiPersona[]) {
+  const m = new Map(memberships.map((x) => [`${x.communityDid}|${x.personaDid}`, x]))
+  const p = new Map(personas.map((x) => [`${x.vtaDid}|${x.communityDid}`, x]))
+  return {
+    memberships: m,
+    personas: p,
+    communities: {
+      listMemberships: async () => [...m.values()],
+      forgetCommunity: jest.fn(async (did: string, personaDid?: string) => {
+        for (const [k, x] of m) if (x.communityDid === did && (!personaDid || x.personaDid === personaDid)) m.delete(k)
+      }),
+    },
+    identities: {
+      listPersonas: async () => [...p.values()],
+      forgetPersona: jest.fn(async (did: string, vtaDid?: string) => {
+        for (const [k, x] of p) if (x.communityDid === did && (!vtaDid || x.vtaDid === vtaDid)) p.delete(k)
+      }),
+    },
+  }
+}
+
+const memberOf = (communityDid: string) => ({ communityDid, personaDid: PERSONA_DID }) as VtiMembership
+
+describe('a room an earlier Bring back recorded as a community', () => {
+  it('is forgotten, membership and identity record, and the community the identity belongs to is kept', async () => {
+    const phone = recorded([memberOf(COMMUNITY), memberOf(ROOM)], [persona, { ...persona, communityDid: ROOM }])
+    const forgotten = await forgetRoomCommunities({
+      cards: [card(membershipCard), card(roleVac), card(roomMembershipCard), card(roomAuthorityCard)],
+      communities: phone.communities,
+      identities: phone.identities,
+    })
+    expect(forgotten).toEqual([ROOM])
+    expect([...phone.memberships.values()].map((x) => x.communityDid)).toEqual([COMMUNITY])
+    expect([...phone.personas.values()].map((x) => x.communityDid)).toEqual([COMMUNITY])
+    expect(phone.communities.forgetCommunity).toHaveBeenCalledWith(ROOM, PERSONA_DID)
+    expect(phone.identities.forgetPersona).toHaveBeenCalledWith(ROOM, persona.vtaDid)
+  })
+
+  it('nothing is forgotten when no card names a room', async () => {
+    const phone = recorded([memberOf(COMMUNITY)], [persona])
+    const forgotten = await forgetRoomCommunities({
+      cards: [card(membershipCard), card(roleVac)],
+      communities: phone.communities,
+      identities: phone.identities,
+    })
+    expect(forgotten).toEqual([])
+    expect(phone.communities.forgetCommunity).not.toHaveBeenCalled()
+    expect(phone.identities.forgetPersona).not.toHaveBeenCalled()
   })
 })

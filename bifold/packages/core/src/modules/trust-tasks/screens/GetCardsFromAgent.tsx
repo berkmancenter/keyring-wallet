@@ -37,6 +37,7 @@ import {
   type VaultTask,
 } from '../module/vtiCardVault'
 import { sameIdentity } from '../module/didScid'
+import { forgetRoomCommunities } from '../module/roomCards'
 import { checkDeliveredCard } from '../module/vtiDeliveredCheck'
 import { classifyCredential } from '../module/vtiInbox'
 import { GenericRecordsCommunityStore, type VtiCommunityStore } from '../module/VtiCommunityStore'
@@ -89,6 +90,8 @@ export interface GetCardsDeps {
   ) => Promise<AgentCard[]>
   /** Take on the agent's identities this phone does not hold yet (`held`: the DIDs it does), from its `cards`. */
   adopt: (agent: Agent, vtaDid: string, held: string[], cards: AgentCard[]) => Promise<AdoptionFound>
+  /** Forget the data rooms an earlier Bring back recorded as communities, found among `cards`; answers their DIDs. */
+  forgetRooms?: (agent: Agent, cards: AgentCard[]) => Promise<string[]>
 }
 
 const defaultDeps: GetCardsDeps = {
@@ -128,6 +131,12 @@ const defaultDeps: GetCardsDeps = {
     const me = await client.whoAmI().catch(() => undefined)
     return { ...report, visibleContexts: visibleContextsOf(me?.scopes) }
   },
+  forgetRooms: (agent, cards) =>
+    forgetRoomCommunities({
+      cards,
+      communities: new GenericRecordsCommunityStore(agent),
+      identities: new GenericRecordsIdentityStore(agent),
+    }),
 }
 
 /**
@@ -145,22 +154,25 @@ export async function bringBackFromAgent(
   const read = vaultReader(agent, deps, (r, of) => onProgress({ found: of, restored: 0, read: r }))
   let silent = false
   const vault = vtaDid ? await read(vtaDid) : undefined
+  // A room an earlier Bring back took for a community is forgotten first, so nothing below asks it as one.
+  const rooms = new Set((vault && (await deps.forgetRooms?.(agent, vault.cards).catch((): string[] => []))) || [])
+  const kept = rooms.size > 0 ? personas.filter((p) => !rooms.has(p.communityDid)) : personas
   const found =
     vtaDid && vault
       ? await deps
           .adopt(
             agent,
             vtaDid,
-            personas.filter((p) => p.vtaDid === vtaDid).map((p) => p.did),
+            kept.filter((p) => p.vtaDid === vtaDid).map((p) => p.did),
             vault.cards
           )
           .catch(() => undefined)
       : undefined
   if (vtaDid && !found) silent = true
   const adopted = found?.adopted ?? []
-  const held = new Set(personas.map((p) => `${p.vtaDid}|${p.communityDid}`))
+  const held = new Set(kept.map((p) => `${p.vtaDid}|${p.communityDid}`))
   const fresh = adopted.filter((p) => !held.has(`${p.vtaDid}|${p.communityDid}`))
-  const all = [...personas, ...fresh]
+  const all = [...kept, ...fresh]
   // Nothing on this phone, and the agent did not answer: said as unreachable, not "no cards".
   if (silent && all.length === 0)
     return { found: 0, restored: 0, refused: [], unreachable: 1, adopted: 0, asked: 1, taken: [] }

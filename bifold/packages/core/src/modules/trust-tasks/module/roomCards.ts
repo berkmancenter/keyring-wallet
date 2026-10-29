@@ -21,6 +21,8 @@
  *
  * @module trust-tasks/module/roomCards
  */
+import type { VtiCommunityStore } from './VtiCommunityStore'
+import type { VtiIdentityStore } from './VtiIdentityStore'
 
 const ROOM_ACTIONS: ReadonlySet<string> = new Set(['read', 'write', 'curate', 'admin'])
 
@@ -67,4 +69,33 @@ export function withoutRoomCards<T extends { credential?: Record<string, unknown
   const rooms = roomIssuersOf(cards)
   if (rooms.size === 0) return [...cards]
   return cards.filter(({ credential }) => !credential || !issuedByRoom(credential, rooms))
+}
+
+/**
+ * Forget what this phone recorded for a "community" that is a data room: each membership in it and the identity
+ * recorded for it. Bring back before the guard above took a room's cards for a community's, so a phone that
+ * brought cards back while its agent held a room's lists the room among its communities. Each of its rooms calls
+ * then asks the room as a community, which never answers: about a minute before the room list showed (10-28).
+ * Only records go, by the room's DID: the identity's keys stay with its agent, and the community the identity
+ * really belongs to, recorded under its own DID, is untouched. Answers the rooms forgotten.
+ */
+export async function forgetRoomCommunities(options: {
+  cards: Iterable<{ credential?: Record<string, unknown> }>
+  communities: Pick<VtiCommunityStore, 'listMemberships' | 'forgetCommunity'>
+  identities: Pick<VtiIdentityStore, 'listPersonas' | 'forgetPersona'>
+}): Promise<string[]> {
+  const rooms = roomIssuersOf(options.cards)
+  if (rooms.size === 0) return []
+  const forgotten = new Set<string>()
+  for (const membership of await options.communities.listMemberships()) {
+    if (!rooms.has(membership.communityDid)) continue
+    await options.communities.forgetCommunity(membership.communityDid, membership.personaDid)
+    forgotten.add(membership.communityDid)
+  }
+  for (const persona of await options.identities.listPersonas()) {
+    if (!rooms.has(persona.communityDid)) continue
+    await options.identities.forgetPersona(persona.communityDid, persona.vtaDid)
+    forgotten.add(persona.communityDid)
+  }
+  return [...forgotten]
 }
