@@ -208,3 +208,26 @@ test('a dispatched run that never finishes is given up on with an error, not wai
   }
   await assert.rejects(postRelease(opts(stuck, { pollMs: 60000, maxWaitMs: 5 * 60000 })), /test-builds\.yml run 501 still waiting after 5 min: giving up/)
 })
+
+test("a job log that isn't readable yet is retried, then read", async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  let failures = 2
+  const late = (...args) => {
+    if (/actions\/jobs\/11\/logs$/.test(args[1] ?? '') && failures-- > 0) throw new Error('HTTP 404: Not Found')
+    return gh(...args)
+  }
+  const r = await postRelease(opts(late))
+  assert.deepEqual([r.verdict, r.bundles.map((b) => b.id)], ['green', [IOS, ANDROID]])
+})
+
+test('a job log still unreadable after the retries: the smoke runs, with that platform\'s bundle unknown', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const never = (...args) => {
+    if (/actions\/jobs\/11\/logs$/.test(args[1] ?? '')) throw new Error('HTTP 404: Not Found')
+    return gh(...args)
+  }
+  const lines = []
+  const r = await postRelease({ ...opts(never), log: (l) => lines.push(l) })
+  assert.deepEqual([r.verdict, r.bundles.map((b) => b.id)], ['green', [ANDROID]])
+  assert.ok(lines.some((l) => /log of job 11 is still unreadable after 6 tries: bundle ids unknown/.test(l)))
+})

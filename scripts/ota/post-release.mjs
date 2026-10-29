@@ -99,6 +99,10 @@ const gitOk = (...args) => { try { execFileSync('git', args, { stdio: 'ignore' }
 const realIsAncestor = (a, b) => gitOk('merge-base', '--is-ancestor', a, b)
 const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--match', 'staging-v*', '--abbrev=0', sha], { encoding: 'utf8' }).trim()
 
+// Reading a just-finished job's log: up to six tries, 30 s apart.
+const LOG_ATTEMPTS = 6
+const LOG_RETRY_MS = 30000
+
 // How long a dispatched run may take before this gives up with an error (Test builds about 45 min, the smoke about 30):
 // a bound of its own, so a waiting environment or a stuck runner can't hold the job to GitHub's six-hour limit.
 const MAX_WAIT_MS = 100 * 60 * 1000
@@ -113,7 +117,24 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     log(`publish run ${publishRun} published nothing (a dry run, promote, withdraw or device test): no smoke`)
     return { ...base, verdict: 'none' }
   }
-  const bundles = published.flatMap((j) => bundlesFromLog(gh('api', `repos/${repo}/actions/jobs/${j.id}/logs`)))
+  // A job's log is not always readable the moment its run completes (10-29: the first post-release run failed on
+  // exactly that). Retry for a few minutes; if it still isn't there, smoke anyway with the bundles unknown: the smoke
+  // doesn't need them, and the brake refuses an empty list loudly rather than guessing.
+  const readLog = async (jobId) => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return gh('api', `repos/${repo}/actions/jobs/${jobId}/logs`)
+      } catch (error) {
+        if (attempt >= LOG_ATTEMPTS) {
+          log(`the log of job ${jobId} is still unreadable after ${attempt} tries: bundle ids unknown`)
+          return ''
+        }
+        await sleep(LOG_RETRY_MS)
+      }
+    }
+  }
+  const bundles = []
+  for (const j of published) bundles.push(...bundlesFromLog(await readLog(j.id)))
   let screens = []
   let since
   try {
