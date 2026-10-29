@@ -26,7 +26,8 @@
  * anything.
  */
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -51,6 +52,20 @@ export const bundlesFromLog = (log) =>
   [...String(log).matchAll(/ota-deploy: (ios|android) bundle ([0-9a-f-]{36}) is on ring0 \(channel ([\w-]+)\)/g)].map(
     ([, platform, id, channel]) => ({ platform, id, channel })
   )
+
+/** The bundles in an ota-bundle record (ota-deploy's JSON lines); a line that isn't one is skipped. */
+export const bundlesFromRecord = (text) =>
+  String(text)
+    .split('\n')
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        const r = JSON.parse(line)
+        return /^(ios|android)$/.test(r.platform) && /^[0-9a-f-]{36}$/.test(r.id) && r.channel ? [{ platform: r.platform, id: r.id, channel: r.channel }] : []
+      } catch {
+        return []
+      }
+    })
 
 /** The screens a person would look at: the app's and bifold's .tsx screens and components, not tests. */
 export const screensOf = (files) =>
@@ -117,6 +132,31 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     log(`publish run ${publishRun} published nothing (a dry run, promote, withdraw or device test): no smoke`)
     return { ...base, verdict: 'none' }
   }
+  // Each ota-bundle-<platform> artifact of the publish run, downloaded and read. Any read that fails gives no record,
+  // and the log is read instead.
+  const readBundleRecords = (runId) => {
+    let names = []
+    try {
+      names = api(`repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`)
+        .artifacts.filter((a) => !a.expired && /^ota-bundle-(ios|android)$/.test(a.name))
+        .map((a) => a.name)
+    } catch (error) {
+      log(`the publish run's artifacts are unreadable: ${String(error.message).split('\n')[0]}`)
+      return []
+    }
+    const out = []
+    for (const name of names) {
+      try {
+        const dir = mkdtempSync(path.join(tmpdir(), 'ota-bundle-'))
+        gh('run', 'download', String(runId), '-R', repo, '-n', name, '-D', dir)
+        out.push(...bundlesFromRecord(readFileSync(path.join(dir, 'ota-bundle.jsonl'), 'utf8')))
+      } catch (error) {
+        log(`the ${name} record is unreadable: ${String(error.message).split('\n')[0]}`)
+      }
+    }
+    return out
+  }
+
   // A job's log is not always readable the moment its run completes (10-29: the first post-release run failed on
   // exactly that). Retry for a few minutes; if it still isn't there, smoke anyway with the bundles unknown: the smoke
   // doesn't need them, and the brake refuses an empty list loudly rather than guessing.
@@ -133,8 +173,15 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
       }
     }
   }
-  const bundles = []
-  for (const j of published) bundles.push(...bundlesFromLog(await readLog(j.id)))
+  // The structured record first (ota-publish.yml's ota-bundle-<platform> artifact, from ota-deploy), so the ids don't
+  // depend on a log's timing or wording. The log only for a platform with no record (a run from before the record).
+  const recorded = readBundleRecords(publishRun)
+  const bundles = [...recorded]
+  for (const j of published) {
+    if (recorded.some((b) => b.platform === j.platform)) continue
+    log(`no bundle record for ${j.platform}: reading the publish log`)
+    bundles.push(...bundlesFromLog(await readLog(j.id)).filter((b) => b.platform === j.platform))
+  }
   let screens = []
   let since
   try {

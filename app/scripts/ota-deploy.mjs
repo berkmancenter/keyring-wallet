@@ -52,7 +52,7 @@
  * requires an approver. Run locally only for the spike, with a throwaway key.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 
@@ -243,6 +243,12 @@ for (const platform of platforms) {
   if (!bundle) fail(`deployed, but cannot find the ${platform} bundle with message "${message}"`)
   hotUpdater('bundle', 'update', bundle.id, '--target-cohorts', RING0, '-y')
   console.log(`ota-deploy: ${platform} bundle ${bundle.id} is on ${RING0} (channel ${args.channel})`)
+  // The bundle's record for what follows a release (post-release.yml, the brake): structured, so a reworded log line
+  // can't lose it. One JSON line per bundle, to the file ota-publish.yml uploads as the ota-bundle-<platform> artifact.
+  if (process.env.OTA_BUNDLE_RECORD) {
+    const record = { platform, id: bundle.id, channel: args.channel, release: args.release ?? null, wallet: walletHead }
+    appendFileSync(process.env.OTA_BUNDLE_RECORD, JSON.stringify(record) + '\n')
+  }
 }
 
 console.log(`ota-deploy: done. wallet ${walletHead} bifold ${bifoldHead}`)

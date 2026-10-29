@@ -148,6 +148,11 @@ which has the update server's token but no reviewers, and never in `ota-approval
 narrows. The job never gets the signing key and runs nothing but the brake, and `brake.test.mjs` holds it to that.
 Publishing and widening still always need the owner's own approval.
 
+The bundle ids come from the publish run's `ota-bundle-<platform>` artifacts, which ota-deploy writes as each bundle
+reaches ring 0, so neither the brake nor the handoff depends on a log line's wording. Only a platform without a record
+falls back to the job log, as for a release whose branch predates the record. strict-proof and post-release find a
+smoke by gate-smoke's run title ("Test builds <id>"); `scripts/ota/gate-smoke-title.test.mjs` holds that title to both.
+
 The screen list is the handoff for the quick simulator check of each changed screen, which follows the widen. A screen
 that is wrong becomes a fix pull request at once; it never withdraws the bundle. A red smoke or red builds fail the job.
 The smoke job dispatches only Test builds and gate-smoke, and publishes, widens and withdraws nothing. A run that published

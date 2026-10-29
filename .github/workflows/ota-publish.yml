@@ -367,6 +367,8 @@ jobs:
           RECORDED: ${{ steps.expected.outputs.recorded }}
           # An ota-strict change: ota-deploy proves its launch smoke for GITHUB_SHA through gh (strict-proof.mjs).
           GH_TOKEN: ${{ github.token }}
+          # Each bundle put on ring 0, as a JSON line, for the next step to upload (post-release.yml reads it).
+          OTA_BUNDLE_RECORD: ${{ runner.temp }}/ota-bundle.jsonl
         run: |
           # The store build is the release number before its dot: 276.2 targets build 276.
           BUILD="${RELEASE%%.*}"
@@ -374,6 +376,16 @@ jobs:
           [ -n "$RECORDED" ] && recorded=(--recorded-fingerprint "$RECORDED")
           node scripts/ota-deploy.mjs --build "$BUILD" --release "$RELEASE" --channel "$CHANNEL" --platform "$PLATFORM" --scope "$SCOPE" \
             --after-native-config --expect-fingerprint "$PLATFORM=$EXPECTED" "${recorded[@]}"
+
+      # The bundle ids, structured, for post-release.yml and its brake: they no longer depend on reading this job's
+      # log, or on the wording of its lines. post-release reads the log only for a platform with no record here.
+      - name: Record the published bundle
+        if: ${{ success() && !inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-bundle-${{ matrix.platform }}
+          path: ${{ runner.temp }}/ota-bundle.jsonl
+          if-no-files-found: error
 
       # production/preview: widen one bundle past ring 0. A dry run only checks.
       - name: Promote (${{ inputs.channel }})
