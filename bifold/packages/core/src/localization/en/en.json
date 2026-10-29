@@ -1809,6 +1809,8 @@
     "AddedUseNow": "Use it now",
     "AddedKeep": "Keep using {{agent}}",
     "UnlinkNext": "{{agent}} will be your agent after this.",
+    "UnlinkingOther": "Unlinking…",
+    "UnlinkOtherFailed": "Couldn't unlink this agent.",
     "StatusMemberOf": "Member of {{community}}",
     "StatusMemberOfMany": "Member of {{count}} communities",
     "NextStep": "Next step",

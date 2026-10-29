@@ -1664,6 +1664,8 @@
     "AddedUseNow": "Usar agora",
     "AddedKeep": "Continuar com {{agent}}",
     "UnlinkNext": "{{agent}} será o seu agente depois disso.",
+    "UnlinkingOther": "Desvinculando…",
+    "UnlinkOtherFailed": "Não foi possível desvincular este agente.",
     "StatusMemberOf": "Membro de {{community}}",
     "StatusMemberOfMany": "Membro de {{count}} comunidades",
     "NextStep": "Próximo passo",

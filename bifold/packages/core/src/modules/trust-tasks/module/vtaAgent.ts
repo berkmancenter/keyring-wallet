@@ -206,6 +206,11 @@ export interface VtaAgentState {
    */
   unlinking?: boolean
   /**
+   * Agents that are not current, being unlinked (`unlinking`, while the agent
+   * is told) or still on the list after an unlink (`failed`), by DID (IN-379).
+   */
+  unlinkingOthers?: Readonly<Record<string, 'unlinking' | 'failed'>>
+  /**
    * Requests for this phone's decision from the agents that are not current,
    * as last seen by a look at each (several agents, step 3), with whether the
    * look reached it. Carried into `approvals` when the person switches to it.
@@ -266,7 +271,7 @@ export interface VtaAgentDeps {
     agent: Agent,
     vtaDid: string,
     store: VtiIdentityStore,
-    options: { onInbound: (plaintext: DidCommV2PlaintextMessage) => void }
+    options: { onInbound: (plaintext: DidCommV2PlaintextMessage) => void; connectDrainMs?: number }
   ) => Pick<VtaClient, 'connect' | 'disconnect' | 'task'>
   /** How long a key fetch waits for the current agent's session (KEY_FETCH_WAIT_MS); shorter in tests. */
   keyFetchWaitMs?: number
@@ -1137,15 +1142,42 @@ export class VtaAgentController {
    * forgets its link, its own key for it and what a look found there. As with
    * any unlink, the agent keeps this phone's key on its list until removed from
    * another device (VTI-Q23), and identities and memberships stay recorded.
+   *
+   * The telling takes up to UNLINK_TELL_QUEUE_MS, so `unlinkingOthers` says
+   * the agent is going from the tap: its row stayed as it was for 5–10 s, with
+   * nothing to say the tap was taken (IN-379). It is not taken off the list
+   * before then: the telling signs in with the key this phone forgets after.
+   * An agent still on the list afterwards is marked failed, for a retry.
    */
   async unlinkAgent(agent: Agent, vtaDid: string): Promise<void> {
     const link = this.state.link
     if ((link.kind === 'linked' || link.kind === 'revoked') && link.vtaDid === vtaDid) return this.unlink(agent)
+    if (this.state.unlinkingOthers?.[vtaDid] === 'unlinking') return
+    this.markUnlinkingOther(vtaDid, 'unlinking')
+    let gone = false
+    try {
+      await this.unlinkOther(agent, vtaDid)
+      gone = !this.state.agents?.some((a) => a.vtaDid === vtaDid)
+    } finally {
+      this.markUnlinkingOther(vtaDid, gone ? undefined : 'failed')
+    }
+  }
+
+  private markUnlinkingOther(vtaDid: string, mark: 'unlinking' | 'failed' | undefined): void {
+    const marks = { ...(this.state.unlinkingOthers ?? {}) }
+    if (mark) marks[vtaDid] = mark
+    else delete marks[vtaDid]
+    this.set({ unlinkingOthers: marks })
+  }
+
+  private async unlinkOther(agent: Agent, vtaDid: string): Promise<void> {
     const client = (this.deps.lookClient ?? ((a, did, store, options) => new VtaClient(a, did, store, options)))(
       agent,
       vtaDid,
       this.identityStore(agent),
-      { onInbound: () => undefined }
+      // No drain before the telling: a reply is matched by its thread, so the
+      // backlog a drain would discard cannot pass for one, and it saved 2 s.
+      { onInbound: () => undefined, connectDrainMs: 0 }
     )
     let timer: ReturnType<typeof setTimeout> | undefined
     const deadline = new Promise<void>((resolve) => {

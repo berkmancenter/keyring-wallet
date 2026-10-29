@@ -1765,6 +1765,8 @@
     "AddedUseNow": "L’utiliser maintenant",
     "AddedKeep": "Garder {{agent}}",
     "UnlinkNext": "{{agent}} sera votre agent après cela.",
+    "UnlinkingOther": "Dissociation…",
+    "UnlinkOtherFailed": "Impossible de dissocier cet agent.",
     "StatusMemberOf": "Membre de {{community}}",
     "StatusMemberOfMany": "Membre de {{count}} communautés",
     "NextStep": "Prochaine étape",

@@ -1551,6 +1551,61 @@ describe('several agents', () => {
     expect(links()).toEqual([HOME.vtaDid])
   })
 
+  // IN-379: the row stayed as it was for the 5–10 s the telling took.
+  it('an agent being unlinked reads as unlinking from the tap until it is gone, and a second tap adds nothing', async () => {
+    jest.useRealTimers()
+    let signedIn!: () => void
+    const connects: Array<{ connectDrainMs?: number }> = []
+    const lookClient = (_a: unknown, _did: string, _s: unknown, options: { connectDrainMs?: number }) => ({
+      connect: () => {
+        connects.push(options)
+        return new Promise<void>((resolve) => (signedIn = resolve))
+      },
+      disconnect: async () => undefined,
+      task: async () => ({}),
+    })
+    const { vta, links } = twoAgents({ lookClient })
+    await vta.restore({} as never)
+    const unlinking = vta.unlinkAgent({} as never, WORK.vtaDid)
+    await vta.unlinkAgent({} as never, WORK.vtaDid)
+    expect(vta.getState().unlinkingOthers).toEqual({ [WORK.vtaDid]: 'unlinking' })
+    expect(vta.getState().agents?.map((a) => a.vtaDid)).toEqual([HOME.vtaDid, WORK.vtaDid])
+    // Told without the drain a session otherwise waits before its first send.
+    expect(connects).toEqual([expect.objectContaining({ connectDrainMs: 0 })])
+    signedIn()
+    await unlinking
+    expect(links()).toEqual([HOME.vtaDid])
+    expect(vta.getState().unlinkingOthers).toEqual({})
+  })
+
+  it('an agent still on the list after the unlink is marked failed, and a retry clears it', async () => {
+    const { lookClient } = telling()
+    const { vta, links } = twoAgents({ lookClient })
+    const deps = (vta as unknown as { deps: { linkStore: (a: unknown) => Record<string, unknown> } }).deps
+    let refuse = true
+    vta.configure({
+      ...deps,
+      linkStore: (a: unknown) => {
+        const store = deps.linkStore(a)
+        return {
+          ...store,
+          remove: async (did: string) => {
+            if (refuse) throw new Error('store busy')
+            return (store.remove as (d: string) => Promise<void>)(did)
+          },
+        }
+      },
+    } as never)
+    await vta.restore({} as never)
+    await vta.unlinkAgent({} as never, WORK.vtaDid)
+    expect(links()).toContain(WORK.vtaDid)
+    expect(vta.getState().unlinkingOthers).toEqual({ [WORK.vtaDid]: 'failed' })
+    refuse = false
+    await vta.unlinkAgent({} as never, WORK.vtaDid)
+    expect(links()).toEqual([HOME.vtaDid])
+    expect(vta.getState().unlinkingOthers).toEqual({})
+  })
+
   it('unlinking the current agent this way brings up the next', async () => {
     const { lookClient } = telling()
     const { vta } = twoAgents({ lookClient })
