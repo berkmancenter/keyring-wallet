@@ -42,3 +42,11 @@ test('the run title names the release and what the run does', () => {
   for (const words of ['publish to ring 0', 'widen to everyone', 'widen to ring 1', 'withdraw', 'ios \\+ android', ' \\(dry run\\)'])
     assert.match(runName, new RegExp(words))
 })
+
+test('recording the published bundle can never fail a publish that succeeded', () => {
+  // post-release (the smoke and the brake) runs only on a successful publish run: a fatal record step would skip it.
+  const step = yml.slice(yml.indexOf('- name: Record the published bundle'), yml.indexOf('- name: Promote ('))
+  assert.match(step, /continue-on-error: true/)
+  assert.match(step, /if-no-files-found: warn/)
+  assert.doesNotMatch(step, /if-no-files-found: error/)
+})

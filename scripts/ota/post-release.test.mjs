@@ -1,8 +1,10 @@
 // node --test scripts/ota/
 import assert from 'node:assert/strict'
+import { writeFileSync } from 'node:fs'
+import path from 'node:path'
 import { test } from 'node:test'
 
-import { baseOf, bundlesFromLog, pickDispatched, postRelease, publishedJobs, screensOf, smokeVerdict } from './post-release.mjs'
+import { baseOf, bundlesFromLog, bundlesFromRecord, pickDispatched, postRelease, publishedJobs, screensOf, smokeVerdict } from './post-release.mjs'
 
 const SHA = 'cb36b83a1e0b6a67fb0e8fd32b6b95dd88d9ac3f'
 const PREV = 'a'.repeat(40)
@@ -232,4 +234,48 @@ test('a job log still unreadable after the retries: the smoke runs, with that pl
   // What was published is still known, so the brake can say a withdraw would be partial.
   assert.deepEqual(r.platforms, ['ios', 'android'])
   assert.ok(lines.some((l) => /log of job 11 is still unreadable after 6 tries: bundle ids unknown/.test(l)))
+})
+
+const record = (platform, id) => JSON.stringify({ platform, id, channel: 'production', release: '276.3', wallet: SHA })
+
+test('a bundle record is read line by line; anything that is not a bundle is skipped', () => {
+  assert.deepEqual(bundlesFromRecord(`${record('ios', IOS)}\nnot json\n{"platform":"web","id":"${IOS}","channel":"production"}\n`), [
+    { platform: 'ios', id: IOS, channel: 'production' },
+  ])
+})
+
+/** The fake gh, plus the publish run's ota-bundle artifacts for the given platforms. */
+const withRecords = (base, platforms) => (...args) => {
+  if (args[1] === `repos/${R}/actions/runs/900/artifacts?per_page=100`)
+    return JSON.stringify({ artifacts: platforms.map((p) => ({ name: `ota-bundle-${p}`, expired: false })) })
+  if (args[0] === 'run' && args[1] === 'download') {
+    const name = args[args.indexOf('-n') + 1]
+    const platform = name.replace('ota-bundle-', '')
+    writeFileSync(path.join(args[args.indexOf('-D') + 1], 'ota-bundle.jsonl'), record(platform, platform === 'ios' ? IOS : ANDROID) + '\n')
+    return ''
+  }
+  return base(...args)
+}
+
+test('the bundle ids come from the publish run\'s records; its logs are not read', async () => {
+  const { gh, calls } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const r = await postRelease(opts(withRecords(gh, ['ios', 'android'])))
+  assert.deepEqual(r.bundles.map((b) => [b.platform, b.id]), [['ios', IOS], ['android', ANDROID]])
+  assert.equal(calls.some((c) => /\/logs$/.test(c[1] ?? '')), false)
+})
+
+test('a platform with no record falls back to its log, and only that platform', async () => {
+  const { gh, calls } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const r = await postRelease(opts(withRecords(gh, ['android'])))
+  assert.deepEqual(r.bundles.map((b) => b.platform).sort(), ['android', 'ios'])
+  const logsRead = calls.filter((c) => /\/logs$/.test(c[1] ?? '')).map((c) => c[1])
+  assert.deepEqual(logsRead, [`repos/${R}/actions/jobs/11/logs`])
+})
+
+test('the record path never writes: download is the one non-api call besides the two dispatches', async () => {
+  const { gh, calls } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const all = []
+  await postRelease(opts((...a) => (all.push(a), withRecords(gh, ['ios', 'android'])(...a))))
+  const nonApi = all.filter((c) => c[0] !== 'api').map((c) => `${c[0]} ${c[1]}`)
+  assert.deepEqual([...new Set(nonApi)].sort(), ['run download', 'workflow run'])
 })
