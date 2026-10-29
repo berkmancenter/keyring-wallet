@@ -85,8 +85,12 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
       backgroundColor: ColorPalette.brand.secondaryBackground,
     },
     fact: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
-    label: { width: 84, color: ColorPalette.grayscale.mediumGrey },
-    value: { flex: 1, minWidth: 140 },
+    // A least width, not a width: a label longer than its column ("Vous pouvez" at large text) widens it and the value
+    // wraps below, rather than the label breaking mid-word.
+    label: { minWidth: 84, flexShrink: 0, color: ColorPalette.grayscale.mediumGrey },
+    // Narrower than this, a value of a few words stacks one to a line beside its label: it wraps below instead.
+    value: { flex: 1, minWidth: 160 },
+    unbroken: { minWidth: 220 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
     idWords: { flex: 1 },
@@ -107,10 +111,12 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
     : room.source === 'custody'
       ? (t('Rooms.DetailsNotLoaded') as string)
       : (t('Rooms.MembersNoEnd') as string)
-  const fact = (label: string, value: string, testID: string) => (
+  // An identity's short form ("did:webv…expose") has no space to break at, so it splits at its ellipsis: it needs room
+  // for one line beside its label, or goes below.
+  const fact = (label: string, value: string, testID: string, unbroken = false) => (
     <View style={styles.fact}>
       <ThemedText style={styles.label}>{label}</ThemedText>
-      <ThemedText style={styles.value} testID={testIdWithKey(testID)}>
+      <ThemedText style={[styles.value, unbroken ? styles.unbroken : undefined]} testID={testIdWithKey(testID)}>
         {value}
       </ThemedText>
     </View>
@@ -189,7 +195,7 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
         </ThemedText>
         {fact(t('Rooms.MembersYouCan'), accessText(t, room), 'RoomMembersYouCan')}
         {fact(t('Rooms.MembersUntil'), until, 'RoomMembersUntil')}
-        {fact(t('Rooms.MembersAs'), identityText(room.actingAs), 'RoomMembersAs')}
+        {fact(t('Rooms.MembersAs'), identityText(room.actingAs), 'RoomMembersAs', true)}
       </View>
       <View style={{ gap: 6 }}>
         {list}

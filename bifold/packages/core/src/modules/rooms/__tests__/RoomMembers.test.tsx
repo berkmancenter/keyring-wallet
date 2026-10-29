@@ -8,6 +8,7 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import i18next from 'i18next'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
@@ -90,6 +91,21 @@ describe("a room's Members tab", () => {
     expect(tree.getByTestId(id('RoomMembersUntil'))).toHaveTextContent(/2027/)
     expect(tree.getByTestId(id('RoomMembersAs'))).toHaveTextContent('…negative-weird')
     expect(tree.getByTestId(id('RoomMembersCaption'))).toBeTruthy()
+  })
+
+  test('a label longer than its column widens it instead of breaking mid-word ("Vous pouv / ez" at large text), and its value wraps below', async () => {
+    const tree = show()
+    await openMembers(tree)
+    for (const key of ['Rooms.MembersYouCan', 'Rooms.MembersUntil', 'Rooms.MembersAs']) {
+      const label = StyleSheet.flatten(tree.getByText(key).props.style)
+      expect(label.width).toBeUndefined()
+      expect(label.minWidth).toBe(84)
+      expect(label.flexShrink).toBe(0)
+    }
+    // A value goes below its label sooner than it would stack its words one to a line beside it.
+    expect(StyleSheet.flatten(tree.getByTestId(id('RoomMembersYouCan')).props.style).minWidth).toBe(160)
+    // An identity's short form has no space to break at: it goes below sooner, rather than split at its ellipsis.
+    expect(StyleSheet.flatten(tree.getByTestId(id('RoomMembersAs')).props.style).minWidth).toBe(220)
   })
 
   test("the community's list, read only once the tab is shown, with roles and you marked", async () => {
