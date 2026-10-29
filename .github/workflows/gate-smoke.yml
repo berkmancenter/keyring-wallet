@@ -20,6 +20,9 @@ name: Gate smoke (CI runners)
 # only read the event and the inputs, not the artifact-derived sha the `builds` job resolves; it carries the
 # triggering commit, and the smoke jobs below carry the sha the artifacts were actually built from. When those
 # two disagree, that disagreement is itself worth seeing.
+# Read by strict-proof.mjs (a strict OTA needs a green smoke of its Test builds run) and post-release.mjs (the smoke
+# after a release): both find a run by "Test builds <id>" in this title. scripts/ota/gate-smoke-title.test.mjs renders
+# these formats against both; keep "Test builds <id>" in every title that names a Test builds run.
 run-name: >-
   Gate smoke ·
   ${{ github.event_name == 'workflow_run'

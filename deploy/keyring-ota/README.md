@@ -125,6 +125,39 @@ tests are its pull request's required check, and the simulator checks run after 
 published only by ota-publish.yml (ota-deploy checks that `GITHUB_SHA` is HEAD). To check before asking for the
 approval: `node scripts/ota/strict-proof.mjs --sha <full sha> --repo berkmancenter/keyring-wallet`.
 
+### After release
+
+Every "OTA publish (ring 0)" run that published starts `post-release.yml` from the default branch
+(`scripts/ota/post-release.mjs`). It dispatches Test builds on the released branch and waits for the run built from
+the released commit. Then it dispatches gate-smoke.yml on that run, both platforms, and waits for it. Its job summary
+and the `post-release-handoff-<sha>` artifact give:
+
+- the released commit;
+- the bundle ids;
+- the Test builds and gate-smoke runs;
+- the verdict;
+- the screens (`.tsx` under `screens/` or `components/`) changed since the previous release, or since the store build
+  for the first one.
+
+**The brake.** If the post-release smoke is red, the `brake` job re-runs its failed jobs once (a red can be the
+runner: on 10-29 the emulator's own launcher hung). If it is still red, the job withdraws that release's bundles at
+once (`scripts/ota/brake.mjs`, through `withdraw.mjs`), and its summary says what it pulled and why.
+
+The brake is the one action that needs no approval, by the owner's decision (10-29). It runs in the `ota` environment,
+which has the update server's token but no reviewers, and never in `ota-approval`. It only withdraws, which only ever
+narrows. The job never gets the signing key and runs nothing but the brake, and `brake.test.mjs` holds it to that.
+Publishing and widening still always need the owner's own approval.
+
+The bundle ids come from the publish run's `ota-bundle-<platform>` artifacts, which ota-deploy writes as each bundle
+reaches ring 0, so neither the brake nor the handoff depends on a log line's wording. Only a platform without a record
+falls back to the job log, as for a release whose branch predates the record. strict-proof and post-release find a
+smoke by gate-smoke's run title ("Test builds <id>"); `scripts/ota/gate-smoke-title.test.mjs` holds that title to both.
+
+The screen list is the handoff for the quick simulator check of each changed screen, which follows the widen. A screen
+that is wrong becomes a fix pull request at once; it never withdraws the bundle. A red smoke or red builds fail the job.
+The smoke job dispatches only Test builds and gate-smoke, and publishes, widens and withdraws nothing. A run that published
+nothing, such as a dry run, promote, withdraw or device test, stops at once.
+
 **Withdrawing** a production or preview bundle is the `disable` action, with
 `bundle_id` and the bundle's own `platform`, after the same approval. It checks
 that the bundle is on that channel and platform, disables it, and checks that
@@ -282,7 +315,7 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 | `OTA_SIGNING_KEY_PEM` | secret, environment `ota` | the store RSA private key (channels production and preview) | ota-publish.yml |
 | `OTA_TEST_SIGNING_KEY_PEM` | secret, environment `ota` | the quick-install test app's throwaway private key (channel device-test only); delete it after a trial | ota-publish.yml |
 | `HOT_UPDATER_AUTH_TOKEN` | secret, environment `ota` | the server's management token | ota-publish.yml |
-| environment `ota-approval` | required reviewers | the owner, the one required reviewer; holds no secrets | ota-publish.yml |
+| environment `ota-approval` | required reviewers | the owner, the one required reviewer; holds no secrets. Every publish, promote and manual withdraw waits for it | ota-publish.yml |
 
 **Channels and keys** (`ota-publish.yml`'s `channel` input; enforced by `scripts/ota/signing-key.mjs`):
 
