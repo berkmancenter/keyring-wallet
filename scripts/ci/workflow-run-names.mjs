@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 /**
- * Every workflow_run subscription must name a workflow that exists. GitHub matches `on.workflow_run.workflows` by a
- * workflow's `name:`, never its file, so renaming a workflow silently stops every run chained behind it: no error
- * anywhere, the next run just never starts. (10-29: renaming "OTA publish (ring 0)" would have stopped the smoke after
- * every release.) This reads each workflow's top-level `name:` and each `workflows: [...]` list, and fails on a name
- * no workflow has, and on any subscription it cannot read: a shape it doesn't know is never taken as fine.
+ * Every workflow_run subscription must name a workflow that exists. `on.workflow_run.workflows` lists workflow
+ * names, not files, so a subscription naming no workflow can never fire, and renaming a workflow's `name:` silently
+ * stops every run chained behind it: no error anywhere, the next run just never starts. (10-29: renaming "OTA publish
+ * (ring 0)" would have stopped the smoke after every release.) Whether GitHub matches the workflow's `name:` or a
+ * run's title when the workflow sets run-name is not settled here; this check is right either way, since a renamed
+ * `name:` breaks the subscription under both. It reads each workflow's top-level `name:` and each `workflows: [...]`
+ * list, and fails on a name no workflow has, and on any subscription it cannot read: a shape it doesn't know is
+ * never taken as fine.
  *
  *   node scripts/ci/workflow-run-names.mjs [--dir .github/workflows]
  *
