@@ -136,7 +136,8 @@ describe("a room's Members tab", () => {
     }))
     const tree = show()
     await openMembers(tree)
-    expect(tree.getByTestId(id('RoomMembersUnavailable'))).toHaveTextContent('Rooms.ComingSoon')
+    expect(tree.getByTestId(id('RoomFeatureCard_members'))).toBeTruthy()
+    expect(tree.queryByTestId(id('RoomMembersUnavailable'))).toBeNull()
     expect(list).not.toHaveBeenCalled()
   })
 

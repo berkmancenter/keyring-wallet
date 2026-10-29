@@ -24,6 +24,7 @@ import { localDate } from '../../trust-tasks/screens/localTime'
 import type { CommunityRoomMember, OperationStatus, Room, RoomsService, RoomVerb } from '../types'
 
 import { roomHandle } from './RoomRow'
+import { isComingSoon, RoomFeatureCard } from './RoomFeatureCard'
 import { roomsStatusText } from './roomsStatusText'
 import { accessText, identityText } from './roomWords'
 
@@ -89,6 +90,16 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
     muted: { color: ColorPalette.grayscale.mediumGrey },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
     idWords: { flex: 1 },
+    unavailable: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+    },
   })
 
   const until = room.validUntil
@@ -107,11 +118,16 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
 
   const list = (() => {
     const unavailable = statusWords ?? (room.communityDid ? refusedWords : (t('Rooms.DetailsNotLoaded') as string))
+    if (isComingSoon(status)) return <RoomFeatureCard status={status} feature="members" />
+    // Calm, as the "Coming soon" cards are, but without their badge: this is not on its way.
     if (unavailable)
       return (
-        <ThemedText style={styles.muted} testID={testIdWithKey('RoomMembersUnavailable')}>
-          {unavailable}
-        </ThemedText>
+        <View style={styles.unavailable}>
+          <Icon name="account-lock-outline" size={20} color={ColorPalette.grayscale.mediumGrey} />
+          <ThemedText style={[styles.muted, { flex: 1 }]} testID={testIdWithKey('RoomMembersUnavailable')}>
+            {unavailable}
+          </ThemedText>
+        </View>
       )
     if (listing.kind === 'reading')
       return (

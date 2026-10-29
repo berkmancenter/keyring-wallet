@@ -167,14 +167,26 @@ describe("a room's tabs", () => {
     expect(tree.queryByTestId(id('RoomFilesNone'))).toBeNull()
   })
 
-  test('where files cannot be listed, the tab says why and lists none (control: the library above)', async () => {
+  test('files not built yet: the "on its way" card, and none listed (control: the library above)', async () => {
     const listFiles = jest.spyOn(mockService as RoomsService, 'listFiles')
     withStatuses({ listFiles: NOT_BUILT })
     const tree = show()
     await openFiles(tree)
-    await waitFor(() => expect(tree.getByTestId(id('RoomFilesUnavailable'))).toHaveTextContent('Rooms.ComingSoon'))
+    const card = await waitFor(() => tree.getByTestId(id('RoomFeatureCard_files')))
+    expect(card.props.accessibilityLabel).toBe('Rooms.SoonFilesTitle. Rooms.SoonFilesLine. Rooms.ComingSoon')
+    expect(tree.queryByTestId(id('RoomFilesUnavailable'))).toBeNull()
     expect(tree.queryByTestId(id('RoomFileRow_f1'))).toBeNull()
     expect(listFiles).not.toHaveBeenCalled()
+  })
+
+  test('files the agent is too old for: the plain reason, no card, since nothing is on its way', async () => {
+    withStatuses({ listFiles: { status: 'unavailable', reason: 'agentDoesNotServe', detail: 'old agent' } })
+    const tree = show()
+    await openFiles(tree)
+    await waitFor(() =>
+      expect(tree.getByTestId(id('RoomFilesUnavailable'))).toHaveTextContent('Rooms.AgentNeedsUpdate')
+    )
+    expect(tree.queryByTestId(id('RoomFeatureCard_files'))).toBeNull()
   })
 
   test('where files cannot be opened, a row names the file but opens nothing', async () => {

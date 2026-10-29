@@ -38,6 +38,7 @@ import { localDayKey } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import { RoomComposer } from '../components/RoomComposer'
 import { RoomFileSheet } from '../components/RoomFileSheet'
+import { isComingSoon, RoomFeatureCard } from '../components/RoomFeatureCard'
 import { type NoteEditorTarget, RoomNoteEditor } from '../components/RoomNoteEditor'
 import { RoomFilesTab } from '../components/RoomFilesTab'
 import { RoomMembersTab } from '../components/RoomMembersTab'
@@ -202,7 +203,9 @@ const Room: React.FC = () => {
   const notes = feed.posts?.filter(isNote)
   const items = chatPosts || pendingPosts.length ? withDayPills([...pendingPosts, ...(chatPosts ?? [])]) : []
 
-  const empty = unavailable ? (
+  const empty = isComingSoon(roomCapabilities.listNotes) ? (
+    <RoomFeatureCard status={roomCapabilities.listNotes} feature="notes" />
+  ) : unavailable ? (
     <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsUnavailable')}>
       {unavailable}
     </ThemedText>
@@ -348,7 +351,9 @@ const Room: React.FC = () => {
             ) : null
           }
         />
-        {unavailable ? null : (
+        {unavailable ? null : isComingSoon(roomCapabilities.write) ? (
+          <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
+        ) : (
           <RoomComposer
             onSend={outbox.send}
             unavailable={cannotPost}

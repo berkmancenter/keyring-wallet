@@ -246,10 +246,25 @@ describe('where notes are not written', () => {
     expect(notesList(tree).queryAllByTestId(id('RoomNoteEdit'))).toHaveLength(0)
   })
 
+  test('where the room says writing is on its way (a tier not written to yet): the "Writing notes" card, no plain line', async () => {
+    mockService = {
+      ...base,
+      roomCapabilities: async (roomId) => ({
+        ...(await base.roomCapabilities(roomId)),
+        write: { status: 'comingSoon', reason: 'tierNotYet', detail: 'not in an attributed room yet' },
+      }),
+    }
+    const tree = await show()
+    expect(tree.queryByTestId(id('RoomNoteNew'))).toBeNull()
+    expect(tree.getByTestId(id('RoomFeatureCard_noteWrite'))).toBeTruthy()
+    expect(tree.queryByTestId(id('RoomNotesCannotWrite'))).toBeNull()
+  })
+
   test('control: in an open room this member may only read, the tab gives the reason, not "not yet"', async () => {
     mockService = base
     const tree = await show(WELCOME_DESK)
     expect(tree.queryByTestId(id('RoomNoteNew'))).toBeNull()
     expect(tree.getByTestId(id('RoomNotesCannotWrite'))).toHaveTextContent('Rooms.NoRightWrite')
+    expect(tree.queryByTestId(id('RoomFeatureCard_noteWrite'))).toBeNull()
   })
 })

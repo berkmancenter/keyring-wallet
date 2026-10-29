@@ -136,11 +136,26 @@ describe('posting to a room', () => {
     expect(prepareWrite).not.toHaveBeenCalled()
   })
 
+  test('posting not built yet: the "on its way" strip in the composer\'s place, and no field', async () => {
+    const service = mockService as RoomsService
+    const real = service.roomCapabilities.bind(service)
+    jest.spyOn(service, 'roomCapabilities').mockImplementation(async (roomId) => ({
+      ...(await real(roomId)),
+      write: { status: 'comingSoon', reason: 'clientNotBuilt', detail: 'not built' },
+    }))
+    const tree = show(PLANNING)
+    await waitFor(() => expect(tree.getByTestId(id('RoomFeatureCard_write'))).toBeTruthy())
+    expect(tree.queryByTestId(id('RoomComposerInput'))).toBeNull()
+    expect(tree.queryByTestId(id('RoomComposerUnavailable'))).toBeNull()
+  })
+
   test('a room the member can only read: the reason, and no field', async () => {
     const tree = show(WELCOME_DESK)
     await waitFor(() => expect(tree.getByTestId(id('RoomComposerUnavailable'))).toHaveTextContent('Rooms.NoRightWrite'))
     expect(tree.queryByTestId(id('RoomComposerInput'))).toBeNull()
     expect(tree.queryByTestId(id('RoomComposerPostingAs'))).toBeNull()
+    // A missing right is not on its way: no card.
+    expect(tree.queryByTestId(id('RoomFeatureCard_write'))).toBeNull()
   })
 
   test("a room known only from the agent's keys: details not loaded, and no field", async () => {
@@ -162,10 +177,11 @@ describe('posting to a room', () => {
     } as RoomsService
   }
 
-  test('a room whose tier this build does not write to: the reason, and no field', async () => {
+  test('a room whose tier this build does not write to: posting is on its way, so the strip, and no field', async () => {
     withStatus('write', 'tierNotYet')
     const tree = show(PLANNING)
-    await waitFor(() => expect(tree.getByTestId(id('RoomComposerUnavailable'))).toHaveTextContent('Rooms.TierNotYet'))
+    await waitFor(() => expect(tree.getByTestId(id('RoomFeatureCard_write'))).toBeTruthy())
+    expect(tree.queryByTestId(id('RoomComposerUnavailable'))).toBeNull()
     expect(tree.queryByTestId(id('RoomComposerInput'))).toBeNull()
   })
 

@@ -22,6 +22,7 @@ import type { RoomPost } from '../roomPosts'
 import type { OperationStatus, RoomFile } from '../types'
 import type { RoomPosts } from '../useRoomPosts'
 
+import { isComingSoon, RoomFeatureCard } from './RoomFeatureCard'
 import { RoomNoteCard } from './RoomNoteCard'
 
 export interface RoomNotesTabProps {
@@ -37,7 +38,7 @@ export interface RoomNotesTabProps {
   onEditNote?: (note: RoomPost) => void
   /** Why notes can't be written here, in words; none where they can or the room doesn't say. */
   cannotWrite?: string
-  /** The room's write status, for a card that says a feature is on its way. Not rendered yet. */
+  /** The room's write status: where writing is on its way, a card says so in place of `cannotWrite`. */
   writeStatus?: OperationStatus
 }
 
@@ -55,6 +56,7 @@ export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({
   onNewNote,
   onEditNote,
   cannotWrite,
+  writeStatus,
 }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
@@ -101,6 +103,8 @@ export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({
                 onPress={onNewNote}
                 testID={testIdWithKey('RoomNoteNew')}
               />
+            ) : isComingSoon(writeStatus) ? (
+              <RoomFeatureCard status={writeStatus} feature="noteWrite" />
             ) : cannotWrite ? (
               <ThemedText style={styles.muted} testID={testIdWithKey('RoomNotesCannotWrite')}>
                 {cannotWrite}

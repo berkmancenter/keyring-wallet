@@ -18,6 +18,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import type { OperationStatus, RoomFile } from '../types'
 
 import { FileRow } from './RoomListRows'
+import { isComingSoon, RoomFeatureCard } from './RoomFeatureCard'
 import { roomsStatusText } from './roomsStatusText'
 
 export interface RoomFilesTabProps {
@@ -63,7 +64,9 @@ export const RoomFilesTab: React.FC<RoomFilesTabProps> = ({
     footer: { gap: 12, paddingTop: 12 },
   })
 
-  const empty = unavailable ? (
+  const empty = isComingSoon(status) ? (
+    <RoomFeatureCard status={status} feature="files" />
+  ) : unavailable ? (
     <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomFilesUnavailable')}>
       {unavailable}
     </ThemedText>
