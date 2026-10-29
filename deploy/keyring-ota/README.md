@@ -125,6 +125,25 @@ tests are its pull request's required check, and the simulator checks run after 
 published only by ota-publish.yml (ota-deploy checks that `GITHUB_SHA` is HEAD). To check before asking for the
 approval: `node scripts/ota/strict-proof.mjs --sha <full sha> --repo berkmancenter/keyring-wallet`.
 
+### After release
+
+Every "OTA publish (ring 0)" run that published starts `post-release.yml` from the default branch
+(`scripts/ota/post-release.mjs`). It dispatches Test builds on the released branch and waits for the run built from
+the released commit. Then it dispatches gate-smoke.yml on that run, both platforms, and waits for it. Its job summary
+and the `post-release-handoff-<sha>` artifact give:
+
+- the released commit;
+- the bundle ids;
+- the Test builds and gate-smoke runs;
+- the verdict;
+- the screens (`.tsx` under `screens/` or `components/`) changed since the previous release, or since the store build
+  for the first one.
+
+The screen list is the handoff for the quick simulator check of each changed screen, which follows the widen. A screen
+that is wrong becomes a fix pull request at once; it never withdraws the bundle. A red smoke or red builds fail the job.
+The job dispatches only Test builds and gate-smoke, and publishes, widens and withdraws nothing. A run that published
+nothing, such as a dry run, promote, withdraw or device test, stops at once.
+
 **Withdrawing** a production or preview bundle is the `disable` action, with
 `bundle_id` and the bundle's own `platform`, after the same approval. It checks
 that the bundle is on that channel and platform, disables it, and checks that
