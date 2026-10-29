@@ -57,7 +57,12 @@ export const brakeTargets = (bundles) => {
 const realGh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 
 /** Re-runs a red smoke's failed jobs once and waits; still red only if a platform job is red again. */
-export async function rerunAndJudge({ gateSmoke, repo, gh = realGh, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), pollMs = 60000, log = console.log }) {
+// How long the one re-run may take (two smoke jobs, about 30 minutes) before the brake gives up and says so. Without a
+// bound, a re-run that never starts or finishes would hold the brake "in progress" to GitHub's six-hour limit while the
+// release stays live, looking handled.
+export const RERUN_MAX_WAIT_MS = 45 * 60 * 1000
+
+export async function rerunAndJudge({ gateSmoke, repo, gh = realGh, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), pollMs = 60000, maxWaitMs = RERUN_MAX_WAIT_MS, log = console.log }) {
   const api = (route) => JSON.parse(gh('api', route))
   const before = api(`repos/${repo}/actions/runs/${gateSmoke}`)
   if (before.status !== 'completed') throw new Error(`gate-smoke ${gateSmoke} is still ${before.status}`)
@@ -66,8 +71,11 @@ export async function rerunAndJudge({ gateSmoke, repo, gh = realGh, sleep = (ms)
   gh('run', 'rerun', String(gateSmoke), '--failed', '-R', repo)
   log(`gate-smoke ${gateSmoke} red (${first.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}): re-running its failed jobs once`)
   // The rerun is a new attempt of the same run: wait for it to start, then to finish.
-  for (let r = before; ; ) {
+  for (let r = before, waited = 0; ; ) {
+    if (waited >= maxWaitMs)
+      throw new Error(`the re-run of gate-smoke ${gateSmoke} did not complete in ${Math.round(waited / 60000)} min: NOTHING was withdrawn, and the release is still live`)
     await sleep(pollMs)
+    waited += pollMs
     r = api(`repos/${repo}/actions/runs/${gateSmoke}`)
     if (r.run_attempt > before.run_attempt && r.status === 'completed') break
   }
@@ -135,6 +143,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     }
   } catch (error) {
     console.error(`brake: ${error.message}`)
+    summary([`### Brake: stopped. ${error.message}`, ''])
     process.exitCode = 1
   }
 }

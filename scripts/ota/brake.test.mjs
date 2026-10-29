@@ -138,3 +138,21 @@ test('a published platform with no bundle id: the others are still withdrawn, an
   const none = withdrawAll({ bundles: [], platforms: ['ios', 'android'], withdraw: () => {}, log: () => {} })
   assert.deepEqual([none.allWithdrawn, none.partial, none.unidentified], [false, false, ['ios', 'android']])
 })
+
+test('a re-run that never completes is given up on with an error that says nothing was withdrawn', async () => {
+  // The re-run starts but stays in progress for good.
+  const calls = []
+  const gh = (...args) => {
+    calls.push(args)
+    if (args[0] === 'run') return ''
+    if (String(args[1]).endsWith('/jobs?per_page=100'))
+      return JSON.stringify({ jobs: [{ name: 'iOS smoke (macos-26) · cb36b83a', conclusion: 'success' }, { name: 'Android smoke (ubuntu-latest, KVM) · cb36b83a', conclusion: 'failure' }] })
+    const reran = calls.some((c) => c[0] === 'run')
+    return JSON.stringify({ id: 601, run_attempt: reran ? 2 : 1, status: reran ? 'in_progress' : 'completed' })
+  }
+  await assert.rejects(
+    rerunAndJudge({ gateSmoke: '601', repo: 'o/r', gh, sleep: async () => {}, pollMs: 60000, maxWaitMs: 45 * 60000, log: () => {} }),
+    /the re-run of gate-smoke 601 did not complete in 45 min: NOTHING was withdrawn, and the release is still live/
+  )
+  assert.equal(calls.filter((c) => c[0] === 'run').length, 1)
+})
