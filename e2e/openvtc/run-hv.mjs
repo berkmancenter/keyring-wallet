@@ -15,6 +15,10 @@
 //   hv-vetting-private-shown  "Meet a vetter" → the persona step → the vetting screen, badged (VettingPrivate)
 //   hv-application-created    "Start my application": the phone's own agent creates the PCS application
 //                             (`asked its agent …/vta/pcs/applications/create/0.1`, then `reply verified`)
+//   hv-refused-bad-ticket     (Keyring vetter) the applicant first presents the vetter's ticket with one character of
+//                             its secret changed: the vetter's app refuses it (vetting/request:invalidTicket, the real
+//                             ticket left unspent) and the request reads "Refused" (fr Refusée, pt-BR Recusado), never
+//                             stuck at "Request sent". Coverage of the refusal path, not of one trust-task-error version.
 //   hv-ticket                 the vetter's ticket taken by the applicant; the vetter's desk shows the request
 //   hv-card                   both show the same match code; the vetter receives the applicant's card
 //   hv-attestation-received   the vetter attests (hidden); the applicant's agent verifies it (vta/pcs/verify-attestation)
@@ -33,7 +37,7 @@ import { applicant as applicantRole, textOf, unlockToHome, vetter as vetterRole 
 import { join } from '../lib/pages/join.js';
 import { createHvAdmin, soleMemberSince } from './hvAdmin.js';
 import { clearDeviceLog, deviceLog, keepAlive, openDevice } from './hvDevices.js';
-import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard } from './hvVerdict.js';
+import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard, withWrongSecret } from './hvVerdict.js';
 
 const { values: a } = parseArgs({
   options: {
@@ -72,7 +76,7 @@ const logDir = a['log-dir'] || process.env.LEG_DIR || process.cwd();
 const admin = createHvAdmin({ vtcBase: a['vtc-base'], communityDid: a['community-did'], adminCredential: a['admin-credential'] });
 const appDev = { platform: a.platform, udid: a.udid };
 const vetDev = { platform: a['vetter-platform'] || a.platform, udid: a['vetter-udid'] };
-const ROWS = ['hv-private-badge', 'hv-vetting-private-shown', 'hv-application-created', 'hv-ticket', 'hv-card', 'hv-attestation-received', 'hv-proof', 'hv-admitted', 'hv-member-card', 'hv-vetter-anonymous'];
+const ROWS = ['hv-private-badge', 'hv-vetting-private-shown', 'hv-application-created', ...(a.vetter === 'keyring' ? ['hv-refused-bad-ticket'] : []), 'hv-ticket', 'hv-card', 'hv-attestation-received', 'hv-proof', 'hv-admitted', 'hv-member-card', 'hv-vetter-anonymous'];
 const done = new Set();
 // A FAIL row fails the run (try 4 on 261 printed five FAIL rows and exited 0).
 const mark = (name, status, detail) => { done.add(name); row(name, status, detail); if (status === 'FAIL') process.exitCode = 1; };
@@ -149,6 +153,28 @@ try {
     tui.roles = tuiRoles;
   }
   say(`ticket ${String(ticketUri).slice(0, 60)}…`);
+  // The refusal first: the same ticket with a wrong secret. The vetter's app answers it with a refusal and leaves the real
+  // ticket unspent, so the request below still goes through. "Accepted" here would mean the vetter took a ticket it never
+  // cut; "Request sent" after the wait, that the refusal never reached the applicant or was not read.
+  // HV_BAD_TICKET_CONTROL=1 proves the row can fail: the REAL ticket goes in instead, the vetter accepts it, the row must
+  // read FAIL ("Accepted"), and the run stops there (its ticket is spent). Never set in a gate run.
+  const control = process.env.HV_BAD_TICKET_CONTROL === '1';
+  if (a.vetter === 'keyring') {
+    const asked = Date.now();
+    if (control) say('CONTROL: presenting the real ticket in the refusal row');
+    await applicantRole.request(app, { ticketUri: control ? ticketUri : withWrongSecret(ticketUri), via: 'field' });
+    let status = '';
+    for (const until = Date.now() + 150000; Date.now() < until; await sleep(3000)) {
+      status = await textOf(app, 'VettingRequestStatus').catch(() => '');
+      if (/Refused|Refusée|Recusado|Accepted|Aceit|Declined|Recus/i.test(status)) break;
+    }
+    await screenshot(app, 'hv-refused').catch(() => undefined);
+    const refused = /Refused|Refusée|Recusado/i.test(status);
+    mark('hv-refused-bad-ticket', refused ? 'PASS' : 'FAIL', refused
+      ? `a wrong-secret ticket was refused: the request reads "${status}" ${Math.round((Date.now() - asked) / 1000)} s after asking`
+      : `the request reads "${status || 'nothing'}" ${Math.round((Date.now() - asked) / 1000)} s after asking with a wrong-secret ticket (expected "Refused")`);
+    if (control) throw new Error('HV_BAD_TICKET_CONTROL: stopping after the refusal row');
+  } else row('hv-refused-bad-ticket', 'SKIP', 'the openvtc TUI vetter: the refusal row is a Keyring vetter\'s');
   await applicantRole.request(app, { ticketUri, via: 'field' });
   await applicantRole.awaitAccepted(app, {});
   if (vet) await vetterRole.awaitRequest(vet, {}); else await tui.roles.awaitRequest(tui);
