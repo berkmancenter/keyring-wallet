@@ -20,7 +20,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { newestFirst, postOf, type RoomPost } from './roomPosts'
 import type { HostCheck, Identity, Note, NoteList, NoteSummary, RoomsService } from './types'
 
-export const POSTS_PAGE = 30
+/**
+ * The posts read on opening a room, and on each "Load older". Small on purpose: each is one task for the person's
+ * agent, which the agent client sends one at a time, so a post written just after opening a room waited behind the
+ * whole first page. At 30 the act took 40 s to reach the host on the lab's open room (S0.7, 10-29).
+ */
+export const POSTS_PAGE = 10
 /** How often a room in view asks for new posts. */
 export const ROOM_POLL_MS = 10_000
 /** After a poll that failed, the ticks that pass before the next one. */

@@ -14,6 +14,7 @@ import {
   mergeNewer,
   newestVersion,
   POLL_SKIPS_AFTER_FAILURE,
+  POSTS_PAGE,
   ROOM_POLL_MS,
   type RoomPosts,
   useRoomPosts,
@@ -301,5 +302,29 @@ describe('merging what a poll found', () => {
   test('the newest version held, 0 for an empty room', () => {
     expect(newestVersion([])).toBe(0)
     expect(newestVersion([summaryOf(note('a', 4)), summaryOf(note('b', 2))])).toBe(4)
+  })
+})
+
+// Each read is one task for the person's agent, sent one at a time: a post written just after opening a room waits
+// behind every read of the first page (S0.7, 10-29: 40 s from tap to sent on a first page of 30).
+describe('the first page', () => {
+  const many = () => roomWith(Array.from({ length: 31 }, (_, i) => note(`n${i}`, i + 1)))
+
+  test('opening a room of 31 records reads ten, so a post made at once waits behind ten reads, not thirty', async () => {
+    const { service } = many()
+    const { result } = await open(service, false)
+    expect(POSTS_PAGE).toBe(10)
+    expect(service.readNote).toHaveBeenCalledTimes(10)
+    expect(result.current.posts).toHaveLength(10)
+    expect(result.current.hasOlder).toBe(true)
+  })
+
+  test('"Load older" reads the next ten, and only those', async () => {
+    const { service } = many()
+    const { result } = await open(service, false)
+    await act(async () => result.current.loadOlder())
+    await flush()
+    expect(service.readNote).toHaveBeenCalledTimes(20)
+    expect(result.current.posts).toHaveLength(20)
   })
 })
