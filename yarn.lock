@@ -5682,6 +5682,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openwallet-foundation/askar-react-native@patch:@openwallet-foundation/askar-react-native@npm%3A0.6.0#~/.yarn/patches/@openwallet-foundation-askar-react-native-npm-0.6.0-00f0b09a21.patch":
+  version: 0.6.0
+  resolution: "@openwallet-foundation/askar-react-native@patch:@openwallet-foundation/askar-react-native@npm%3A0.6.0#~/.yarn/patches/@openwallet-foundation-askar-react-native-npm-0.6.0-00f0b09a21.patch::version=0.6.0&hash=5d49b0"
+  dependencies:
+    "@openwallet-foundation/askar-shared": "npm:0.6.0"
+  peerDependencies:
+    react: ">= 16"
+    react-native: ">= 0.71"
+  checksum: 10c0/4448a99a848e192f94f22dcdcb812f1bab868bfc51cc40e737ab99ede25d51e796e1b57d03263d600f3bc8760b05ffce7f999540355734bdd59e16b518b826bb
+  languageName: node
+  linkType: hard
+
 "@openwallet-foundation/askar-shared@npm:0.6.0":
   version: 0.6.0
   resolution: "@openwallet-foundation/askar-shared@npm:0.6.0"
