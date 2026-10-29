@@ -8,8 +8,8 @@
  *
  * @module rooms/components/CommunityRoomsSection
  */
-import { useIsFocused, useNavigation } from '@react-navigation/native'
-import React, { useEffect, useRef } from 'react'
+import { useNavigation } from '@react-navigation/native'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { View } from 'react-native'
 
@@ -17,6 +17,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { useMyRooms } from '../useMyRooms'
+import { useRereadOnReturn } from '../useRereadOnReturn'
 import { useRoomsService } from '../useRoomsService'
 
 import RoomsListBody from './RoomsListBody'
@@ -27,14 +28,7 @@ export const CommunityRoomsSection: React.FC<{ communityDid: string }> = ({ comm
   const service = useRoomsService()
   const myRooms = useMyRooms(service, communityDid)
   const go = useNavigation() as unknown as { navigate: (name: string, params: object) => void }
-  // Read again on coming back (an offer accepted or hidden); the first focus is the mount's own read.
-  const focused = useIsFocused()
-  const wasFocused = useRef(focused)
-  const { reload } = myRooms
-  useEffect(() => {
-    if (focused && !wasFocused.current) reload()
-    wasFocused.current = focused
-  }, [focused, reload])
+  useRereadOnReturn(myRooms)
   if (!service) return null
   return (
     <View style={{ gap: 8 }} testID={testIdWithKey('CommunityRooms')}>

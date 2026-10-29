@@ -29,7 +29,7 @@ import {
   defaultDeviceName,
   heartbeat,
   HEARTBEAT_INTERVAL_MS,
-  listAgentDevices,
+  listRegisteredDevices,
   liveSiblings,
   registerThisDevice,
   type AgentDevice,
@@ -120,7 +120,10 @@ export class AgentPresence {
         }
       }
       await heartbeat(port)
-      const live = liveSiblings(await listAgentDevices(port), now)
+      // device/list alone: an acl/list here held the agent client's one-at-a-time queue for its whole timeout
+      // when the agent did not answer it. Without the access list a narrower key that beats can be
+      // named too; My devices still marks it limited.
+      const live = liveSiblings(await listRegisteredDevices(port), now)
       const liveNow = new Set(live.map((d) => d.did))
       for (const device of live) if (!this.announced.has(device.did)) this.deps.onSiblingSeen(device)
       this.announced = liveNow

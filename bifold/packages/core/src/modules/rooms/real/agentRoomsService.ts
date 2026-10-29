@@ -172,6 +172,7 @@ export class AgentRoomsService implements RoomsService {
   public readonly label = 'rooms: the person’s own agent and communities'
 
   private served?: { types: readonly string[] | undefined }
+  private heldInFlight?: Promise<HeldRoom[]>
   private rooms = new Map<string, KnownRoom>()
   private offers = new Map<string, { community: RoomsCommunity; offer: OfferRecord }>()
   private previews = new Map<string, { offerId: string; at: number }>()
@@ -262,7 +263,22 @@ export class AgentRoomsService implements RoomsService {
     return out
   }
 
-  private async heldRooms(): Promise<HeldRoom[]> {
+  /**
+   * The agent's key list, one read shared by every caller while it is in flight: the screens that list rooms
+   * read again on focus, together, and the agent client sends one task at a time, so each copy queued behind the
+   * last (five in 4.5 s in a tester's run, 10-29). A read that starts after one settles asks again; `holds`
+   * always asks afresh.
+   */
+  private heldRooms(): Promise<HeldRoom[]> {
+    if (this.heldInFlight) return this.heldInFlight
+    const read = this.readHeldRooms().finally(() => {
+      if (this.heldInFlight === read) this.heldInFlight = undefined
+    })
+    this.heldInFlight = read
+    return read
+  }
+
+  private async readHeldRooms(): Promise<HeldRoom[]> {
     const served = this.served?.types ?? []
     if (served.includes(ROOMS_TASK.keysList02))
       return parseKeysList(await this.backend.agentTask(ROOMS_TASK.keysList02, { includePersonal: true }))
@@ -552,6 +568,7 @@ export class AgentRoomsService implements RoomsService {
     const done = () => {
       this.offers.delete(pending.offerId)
       this.rooms = new Map() // the next read lists the room
+      this.heldInFlight = undefined // nor joins a key list asked before the room was held
       return { roomId }
     }
 
@@ -656,7 +673,8 @@ export class AgentRoomsService implements RoomsService {
   }
 
   private async holds(roomId: string, member: string): Promise<boolean> {
-    return (await this.heldRooms()).some((h) => holdsAs(h, roomId, member))
+    // Asked fresh, never joined to a read in flight: after a Welcome, one that left before it would say no.
+    return (await this.readHeldRooms()).some((h) => holdsAs(h, roomId, member))
   }
 
   public async hideOffer(offerId: string): Promise<void> {

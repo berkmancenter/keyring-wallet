@@ -244,3 +244,52 @@ describe('AgentRoomsService', () => {
     expect(agentTask).not.toHaveBeenCalled()
   })
 })
+
+// Screens that list rooms read again on focus, together; the agent client sends one task at a time, so each copy
+// of the key list queued behind the last (five in 4.5 s in a tester's run, 10-29).
+describe('the agent’s key list, read by several screens at once', () => {
+  const keyListAsks = (agentTask: jest.Mock) => agentTask.mock.calls.filter(([type]) => type === ROOMS_TASK.keysList02)
+
+  it('is asked once while one read is in flight, and both callers get the rooms', async () => {
+    const { b, agentTask } = backend()
+    const answer = agentTask.getMockImplementation()!
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysList02) await held
+      return answer(type, payload)
+    })
+    const service = new AgentRoomsService(b)
+
+    const both = Promise.all([service.listMyRooms(), service.listMyRooms()])
+    // Both lists reach the key list before it answers.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    release()
+    const [first, second] = await both
+
+    expect(keyListAsks(agentTask)).toHaveLength(1)
+    expect(first.map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    expect(second.map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+  })
+
+  it('is asked again by a read that starts after the last one answered (control: nothing is kept)', async () => {
+    const { b, agentTask } = backend()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    await service.listMyRooms()
+    expect(keyListAsks(agentTask)).toHaveLength(2)
+  })
+
+  it('is asked again after a read that failed', async () => {
+    const { b, agentTask } = backend()
+    const answer = agentTask.getMockImplementation()!
+    agentTask.mockImplementationOnce(async () => {
+      throw new Error('no answer')
+    })
+    agentTask.mockImplementation(answer)
+    const service = new AgentRoomsService(b)
+    await expect(service.listMyRooms()).rejects.toThrow('no answer')
+    expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    expect(keyListAsks(agentTask)).toHaveLength(2)
+  })
+})

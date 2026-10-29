@@ -39,6 +39,7 @@ import { communityNameIsStale, refreshPublishedNameThrottled } from '../module/c
 import { communityTarget } from '../module/vtiCommunityLink'
 import { RoomsCard } from '../../rooms/components/RoomsCard'
 import { useMyRooms } from '../../rooms/useMyRooms'
+import { useRereadOnReturn } from '../../rooms/useRereadOnReturn'
 import { useRoomOffersCount } from '../../rooms/useRoomOffersCount'
 import { useRoomsService } from '../../rooms/useRoomsService'
 
@@ -313,10 +314,13 @@ const VtaAgentHome: React.FC = () => {
   // card shows it. Each card told it after painting, one render late.
   const held = holdings ? communitiesHeld(holdings) : []
   const journeys = useCommunityJourneysOf(held)
-  // Rooms, while the rooms flag is on: one card, its rooms read once here, its offers badge polled while an agent
+  // Rooms, while the rooms flag is on: one card, its rooms read here, its offers badge polled while an agent
   // is linked and the app is in the foreground (nothing pushes an offer).
   const roomsService = useRoomsService()
   const myRooms = useMyRooms(roomsService)
+  // Read again on coming back here, and on returning to the app after a read that failed: the first read alone
+  // kept a failure until the screen was left (a tester's run, 10-29).
+  useRereadOnReturn(myRooms)
   const roomOffers = useRoomOffersCount(roomsService, link.kind === 'linked')
 
   // Only what still waits: a decided or expired request is not listed. The

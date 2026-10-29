@@ -6,8 +6,8 @@
  *
  * @module rooms/screens/RoomsHome
  */
-import { useIsFocused, useNavigation } from '@react-navigation/native'
-import React, { useEffect, useRef } from 'react'
+import { useNavigation } from '@react-navigation/native'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { RefreshControl, ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -19,6 +19,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import RoomsListBody from '../components/RoomsListBody'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import { useMyRooms } from '../useMyRooms'
+import { useRereadOnReturn } from '../useRereadOnReturn'
 import { useRoomsService } from '../useRoomsService'
 
 const RoomsHome: React.FC = () => {
@@ -30,14 +31,8 @@ const RoomsHome: React.FC = () => {
   const go = navigation as unknown as { navigate: (name: string, params: object) => void }
   const openRoom = (room: { roomId: string }) => go.navigate(Screens.Room, { roomId: room.roomId })
   const openOffer = (offer: { offerId: string }) => go.navigate(Screens.RoomOffer, { offerRef: offer.offerId })
-  // Read again on coming back (an offer accepted or hidden); the first focus is the mount's own read.
-  const focused = useIsFocused()
-  const wasFocused = useRef(focused)
+  useRereadOnReturn(myRooms)
   const { reload } = myRooms
-  useEffect(() => {
-    if (focused && !wasFocused.current) reload()
-    wasFocused.current = focused
-  }, [focused, reload])
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 16, gap: 16 },
