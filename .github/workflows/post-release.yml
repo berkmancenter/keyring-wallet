@@ -11,9 +11,13 @@ name: Post-release smoke
 # nothing (the brake is a separate job that acts only on a red smoke).
 # Runs from the default branch's copy of this file, whatever branch the release came from.
 
+# Each run names the release it smokes: the publish run's own title (ota-publish.yml's run-name).
+run-name: Post-release · ${{ github.event.workflow_run.display_title }}
+
 on:
   workflow_run:
-    workflows: ["OTA publish (ring 0)"]
+    # By name, both: ota-publish.yml is being renamed to "OTA release", and this must follow it across the rename.
+    workflows: ["OTA publish (ring 0)", "OTA release"]
     types: [completed]
 
 permissions:

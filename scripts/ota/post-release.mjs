@@ -3,7 +3,7 @@
 /**
  * The launch smoke after a release, for post-release.yml (the owner's pipeline,
  * 10-29: release on merge, then test the released commit). Given a finished
- * "OTA publish (ring 0)" run, it:
+ * "OTA publish (ring 0)" run (renamed "OTA release"), it:
  *
  *   1. reads which platforms it published: a job whose "Publish to ring 0"
  *      step succeeded. A dry run, a promote, a withdraw or a device-test run
