@@ -99,6 +99,10 @@ const gitOk = (...args) => { try { execFileSync('git', args, { stdio: 'ignore' }
 const realIsAncestor = (a, b) => gitOk('merge-base', '--is-ancestor', a, b)
 const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--match', 'staging-v*', '--abbrev=0', sha], { encoding: 'utf8' }).trim()
 
+// Reading a just-finished job's log: up to six tries, 30 s apart.
+const LOG_ATTEMPTS = 6
+const LOG_RETRY_MS = 30000
+
 // How long a dispatched run may take before this gives up with an error (Test builds about 45 min, the smoke about 30):
 // a bound of its own, so a waiting environment or a stuck runner can't hold the job to GitHub's six-hour limit.
 const MAX_WAIT_MS = 100 * 60 * 1000
@@ -108,12 +112,29 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
   const run = api(`repos/${repo}/actions/runs/${publishRun}`)
   const jobs = api(`repos/${repo}/actions/runs/${publishRun}/jobs?per_page=100`).jobs
   const published = publishedJobs(jobs)
-  const base = { sha: run.head_sha, ref: run.head_branch, bundles: [] }
+  const base = { sha: run.head_sha, ref: run.head_branch, bundles: [], platforms: published.map((j) => j.platform) }
   if (!published.length) {
     log(`publish run ${publishRun} published nothing (a dry run, promote, withdraw or device test): no smoke`)
     return { ...base, verdict: 'none' }
   }
-  const bundles = published.flatMap((j) => bundlesFromLog(gh('api', `repos/${repo}/actions/jobs/${j.id}/logs`)))
+  // A job's log is not always readable the moment its run completes (10-29: the first post-release run failed on
+  // exactly that). Retry for a few minutes; if it still isn't there, smoke anyway with the bundles unknown: the smoke
+  // doesn't need them, and the brake refuses an empty list loudly rather than guessing.
+  const readLog = async (jobId) => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return gh('api', `repos/${repo}/actions/jobs/${jobId}/logs`)
+      } catch (error) {
+        if (attempt >= LOG_ATTEMPTS) {
+          log(`the log of job ${jobId} is still unreadable after ${attempt} tries: bundle ids unknown`)
+          return ''
+        }
+        await sleep(LOG_RETRY_MS)
+      }
+    }
+  }
+  const bundles = []
+  for (const j of published) bundles.push(...bundlesFromLog(await readLog(j.id)))
   let screens = []
   let since
   try {
@@ -167,7 +188,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!/^\d+$/.test(values['publish-run'] ?? '') || !repo) throw new Error('usage: post-release.mjs --publish-run <id> [--repo owner/name]')
     const r = await postRelease({ publishRun: values['publish-run'], repo })
     const out = {
-      verdict: r.verdict, sha: r.sha, ref: r.ref, bundles: JSON.stringify(r.bundles),
+      verdict: r.verdict, sha: r.sha, ref: r.ref, bundles: JSON.stringify(r.bundles), platforms: JSON.stringify(r.platforms ?? []),
       test_builds: r.testBuilds ?? '', gate_smoke: r.gateSmoke ?? '', screens: JSON.stringify(r.screens ?? []),
     }
     // The screen check's handoff (the owner's pipeline: a quick simulator check of each changed screen after release).
@@ -178,6 +199,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         `### Post-release smoke: ${r.verdict}`, '',
         `- released: ${r.ref} at ${r.sha}`,
         ...r.bundles.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel})`),
+        ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (its log was unreadable)`),
         r.testBuilds ? `- Test builds run ${r.testBuilds}` : '', r.gateSmoke ? `- gate-smoke run ${r.gateSmoke}` : '',
         ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`), '',
         `#### Changed screens since ${r.since ?? 'unknown'} (for the screen check)`, '',
