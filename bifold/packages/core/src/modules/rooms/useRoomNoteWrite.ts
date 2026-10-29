@@ -4,8 +4,14 @@
  * can read it before anything leaves the phone; `save` writes exactly what the preview showed.
  *
  * A new note carries one id for as long as its editor is open, the same on every retry, so a note that reached the
- * room before an answer was lost is not written twice. An edit replaces the member's own note with a new version; if
- * the note changed after the preview, nothing is written and the editor offers to read it again.
+ * room before an answer was lost is not written twice. The id lives as long as this hook is mounted: whoever renders
+ * it must mount it afresh for each note (`RoomNoteEditor` does, rendering its body only while it has a note), or a
+ * second note would go out under the first one's id and the room would take it for a retry and drop it.
+ *
+ * An edit replaces the member's own note with a new version; if the note changed after the preview, nothing is
+ * written and the editor offers to read it again. An edit carries no id of its own: a retry after a lost answer
+ * prepares against whatever version is current, so it may save one more version with the same words, but never a
+ * second note.
  *
  * @module rooms/useRoomNoteWrite
  */
@@ -55,7 +61,7 @@ export function useRoomNoteWrite(
   replaceKey?: string
 ): RoomNoteWrite {
   const [state, setState] = useState<NoteWriteState>({ step: 'editing' })
-  // One id per editor: a new note's retries are the same write. An edit is keyed by the note it replaces.
+  // One id per mount (see above): a new note's retries are the same write. An edit is keyed by the note it replaces.
   const noteId = useRef(newEventId()).current
   const draft = useRef<WriteDraft | undefined>(undefined)
 

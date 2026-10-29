@@ -199,6 +199,24 @@ describe('a new note', () => {
     expect(mockService!.confirmWrite).toHaveBeenCalledTimes(2)
     await waitFor(() => notesList(tree).getByText('Stale preview'))
   })
+
+  test('each new note gets its own id: a second note after Cancel is not taken for a retry of the first', async () => {
+    const prepare = jest.spyOn(mockService!, 'prepareWrite')
+    const tree = await show()
+    await press(tree, 'RoomNoteNew')
+    await type(tree, 'First', 'One')
+    await press(tree, 'RoomNoteReview')
+    await waitFor(() => tree.getByTestId(id('RoomNoteBack')))
+    await press(tree, 'RoomNoteBack')
+    await press(tree, 'RoomNoteCancel')
+    await writeNote(tree, 'Second', 'Two')
+    const keys = prepare.mock.calls.map(([, draft]) => draft.idempotencyKey)
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).toBeTruthy()
+    expect(keys[1]).toBeTruthy()
+    expect(keys[1]).not.toBe(keys[0])
+    await waitFor(() => notesList(tree).getByText('Second'))
+  })
 })
 
 describe("editing one's own note", () => {
@@ -271,6 +289,23 @@ describe('where notes are not written', () => {
     expect(tree.queryByTestId(id('RoomNoteNew'))).toBeNull()
     expect(tree.getByTestId(id('RoomFeatureCard_noteWrite'))).toBeTruthy()
     expect(tree.queryByTestId(id('RoomNotesCannotWrite'))).toBeNull()
+  })
+
+  test('the real service before writing is built: the "Writing notes" card, no button and nothing to edit', async () => {
+    mockService = {
+      ...asOpen(base),
+      roomCapabilities: async (roomId) => ({
+        ...(await base.roomCapabilities(roomId)),
+        write: { status: 'comingSoon', reason: 'clientNotBuilt', detail: 'not built in this version of Keyring' },
+      }),
+    }
+    const prepare = jest.spyOn(mockService, 'prepareWrite')
+    const tree = await show()
+    expect(tree.queryByTestId(id('RoomNoteNew'))).toBeNull()
+    expect(tree.getByTestId(id('RoomFeatureCard_noteWrite'))).toBeTruthy()
+    expect(tree.queryByTestId(id('RoomNotesCannotWrite'))).toBeNull()
+    expect(notesList(tree).queryAllByTestId(id('RoomNoteEdit'))).toHaveLength(0)
+    expect(prepare).not.toHaveBeenCalled()
   })
 
   test('control: in an open room this member may only read, the tab gives the reason, not "not yet"', async () => {
