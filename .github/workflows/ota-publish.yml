@@ -379,13 +379,16 @@ jobs:
 
       # The bundle ids, structured, for post-release.yml and its brake: they no longer depend on reading this job's
       # log, or on the wording of its lines. post-release reads the log only for a platform with no record here.
+      # Never fatal: the bundle is already on ring 0 by now, and post-release (the smoke and the brake) runs only on a
+      # successful publish run, so failing this run over a missing record would skip the whole safety net, silently.
       - name: Record the published bundle
         if: ${{ success() && !inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ota-bundle-${{ matrix.platform }}
           path: ${{ runner.temp }}/ota-bundle.jsonl
-          if-no-files-found: error
+          if-no-files-found: warn
 
       # production/preview: widen one bundle past ring 0. A dry run only checks.
       - name: Promote (${{ inputs.channel }})
