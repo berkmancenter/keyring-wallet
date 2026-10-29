@@ -40,6 +40,7 @@ jobs:
       verdict: ${{ steps.smoke.outputs.verdict }}
       sha: ${{ steps.smoke.outputs.sha }}
       bundles: ${{ steps.smoke.outputs.bundles }}
+      platforms: ${{ steps.smoke.outputs.platforms }}
       gate_smoke: ${{ steps.smoke.outputs.gate_smoke }}
     steps:
       # The whole history, so the released commit (on a hotfix branch) and the previous release are both here.
