@@ -52,7 +52,9 @@ TestFlight app or the production key.
    `OTA_SERVER_URL=http://localhost:3080 OTA_SIGNING_KEY=keys/ota-private-key.pem yarn ota:deploy --base <commit the build came from> --channel spike`.
    A store build is named by number instead (`--build 245`, its `staging-v*-245`
    tag); `--base` exists for the spike's untagged build. Either way the base must
-   be an ancestor of HEAD, and `scripts/release/tier.mjs` must say `ota`.
+   be an ancestor of HEAD, and `scripts/release/tier.mjs` must say `ota`
+   (`ota-strict` publishes only from ota-publish.yml, with its conditions proven:
+   see "Strict changes" below).
 6. **Apply.** Cold-start the app twice: the first start downloads and stages the
    bundle, the second runs it. The Developer screen's `Running` line (testID
    `OtaBundleId`) shows the bundle id.
@@ -93,8 +95,68 @@ through, the run says which one widened, and `disable` undoes it.
 After the update it re-reads the record and fails the run unless the record
 shows the new ring with a 0 rollout. **A failed check doesn't undo the
 widening:** the bundle may already be wider, so recover with `disable`, not by
-assuming nothing changed. A publish's tier must be `ota` (ota-deploy refuses everything else, `ota-strict`
-included), so a promoted bundle is always one.
+assuming nothing changed. A publish's tier must be `ota`, or `ota-strict` with its launch smoke proven
+(below); ota-deploy refuses everything else, so a promoted bundle is always one of the two.
+
+### Strict changes
+
+tier.mjs gives `ota-strict` (exit 5) to a JavaScript change that touches sign-in or key handling, or the VTI protocol
+line. The owner's pipeline (10-29) is: a change's tests run as its pull request's required related-tests check before
+it can merge, and a release follows the merge at once. A strict bundle goes out on three conditions, each for the exact
+commit the bundle is built from:
+
+1. **A launch smoke on both platforms:** a green Test builds run built from the commit (pushed, or dispatched on its
+   ref; a pull request's run builds the merge ref, so it doesn't count), and a green gate-smoke.yml run of that Test
+   builds run (`-f run-id=<id>`) whose iOS and Android smoke jobs are both green. Read from GitHub by the publish.
+   Red runs are ignored, so a launch smoke that went green on a rerun counts.
+2. **The owner's single approval:** the ota-approval environment, as for every publish. GitHub can't enforce whose
+   click it is while every maintainer session acts as the owner's account, so this condition rests on a rule: no
+   session approves a publish, a promote or any environment gate itself. An approval counts only when the owner
+   clicks it, or tells the session running it directly, for that run, and the owner's words go in the approval comment.
+3. **Ring 0 first:** every publish reaches ring 0 only. Widening is `promote`, which the owner approves in the same
+   sitting.
+
+Only 1 and 3 are proven by a machine; 2 rests on the rule above. Until 10-29 a strict bundle also needed two attested
+commit statuses (`ota-strict/targeted-tests` and `ota-strict/sim-check`). Those are no longer read: the change's
+tests are its pull request's required check, and the simulator checks run after release.
+
+`scripts/ota/strict-proof.mjs` reads condition 1 for the publish (ota-deploy calls it, only on exit 5 with tier
+`ota-strict`). A smoke missing, red, unreadable, or for another commit, and nothing is published. A strict bundle is
+published only by ota-publish.yml (ota-deploy checks that `GITHUB_SHA` is HEAD). To check before asking for the
+approval: `node scripts/ota/strict-proof.mjs --sha <full sha> --repo berkmancenter/keyring-wallet`.
+
+### After release
+
+Every "OTA publish (ring 0)" run that published starts `post-release.yml` from the default branch
+(`scripts/ota/post-release.mjs`). It dispatches Test builds on the released branch and waits for the run built from
+the released commit. Then it dispatches gate-smoke.yml on that run, both platforms, and waits for it. Its job summary
+and the `post-release-handoff-<sha>` artifact give:
+
+- the released commit;
+- the bundle ids;
+- the Test builds and gate-smoke runs;
+- the verdict;
+- the screens (`.tsx` under `screens/` or `components/`) changed since the previous release, or since the store build
+  for the first one.
+
+**The brake.** If the post-release smoke is red, the `brake` job re-runs its failed jobs once (a red can be the
+runner: on 10-29 the emulator's own launcher hung). If it is still red, the job withdraws that release's bundles at
+once (`scripts/ota/brake.mjs`, through `withdraw.mjs`), and its summary says what it pulled and why.
+
+The brake is the one action that needs no approval, by the owner's decision (10-29). It runs in the `ota` environment,
+which has the update server's token but no reviewers, and never in `ota-approval`. It only withdraws, which only ever
+narrows. The job never gets the signing key and runs nothing but the brake, and `brake.test.mjs` holds it to that.
+Publishing and widening still always need the owner's own approval.
+
+The bundle ids come from the publish run's `ota-bundle-<platform>` artifacts, which ota-deploy writes as each bundle
+reaches ring 0, so neither the brake nor the handoff depends on a log line's wording. Only a platform without a record
+falls back to the job log, as for a release whose branch predates the record. strict-proof and post-release find a
+smoke by gate-smoke's run title ("Test builds <id>"); `scripts/ota/gate-smoke-title.test.mjs` holds that title to both.
+
+The screen list is the handoff for the quick simulator check of each changed screen, which follows the widen. A screen
+that is wrong becomes a fix pull request at once; it never withdraws the bundle. A red smoke or red builds fail the job.
+The smoke job dispatches only Test builds and gate-smoke, and publishes, widens and withdraws nothing. A run that published
+nothing, such as a dry run, promote, withdraw or device test, stops at once.
 
 **Withdrawing** a production or preview bundle is the `disable` action, with
 `bundle_id` and the bundle's own `platform`, after the same approval. It checks
@@ -105,12 +167,20 @@ run checks only that the bundle is there.
 **Store builds stay the main channel.** We keep shipping store builds often;
 OTA supplements them and never replaces them. It carries JavaScript fixes only,
 within store policy: nothing that adds a feature or changes what the app does.
-The tier check enforces the code side (`ota` only). What counts as a fix is the
+The tier check enforces the code side (`ota`, or `ota-strict` with its launch smoke proven). What counts as a fix is the
 publisher's call, and the commit subject is what testers read.
 
 ota-publish's dispatch has ten inputs, GitHub's maximum: a new one has to
 replace an existing input or move to a repository variable (as the soak did).
 Past ten, the workflow stops accepting dispatches.
+
+**Releases are numbered** `<store build>.<n>`, e.g. `276.2`, the second update to store build 276. That's the
+`release` input, which took the place of `build` (the part before the dot is the store build). Every production and
+preview run needs one, and its title names it: "OTA 276.2 · publish to ring 0", "OTA 276.2 · widen to everyone",
+"OTA 276.2 · withdraw ios". A publish and its widen are two runs, each with its own approval. The bundle's message on
+the server carries the release too. The workflow is named "OTA release". post-release.yml subscribes to it by name,
+and `scripts/ci/workflow-run-names.mjs` fails CI when any `workflow_run` subscription names a workflow that doesn't
+exist.
 
 ### Pulling an update from everyone
 
@@ -245,13 +315,13 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 | `OTA_SIGNING_KEY_PEM` | secret, environment `ota` | the store RSA private key (channels production and preview) | ota-publish.yml |
 | `OTA_TEST_SIGNING_KEY_PEM` | secret, environment `ota` | the quick-install test app's throwaway private key (channel device-test only); delete it after a trial | ota-publish.yml |
 | `HOT_UPDATER_AUTH_TOKEN` | secret, environment `ota` | the server's management token | ota-publish.yml |
-| environment `ota-approval` | required reviewers | the two approvers; holds no secrets | ota-publish.yml |
+| environment `ota-approval` | required reviewers | the owner, the one required reviewer; holds no secrets. Every publish, promote and manual withdraw waits for it | ota-publish.yml |
 
 **Channels and keys** (`ota-publish.yml`'s `channel` input; enforced by `scripts/ota/signing-key.mjs`):
 
 | Channel | Who has it | Signed with | Inputs |
 | --- | --- | --- | --- |
-| `production` | store builds | `OTA_SIGNING_KEY_PEM`, which must be `OTA_PUBLIC_KEY`'s pair | publish: `build` (staging tag number), tier check; disable: `bundle_id` and its platform |
+| `production` | store builds | `OTA_SIGNING_KEY_PEM`, which must be `OTA_PUBLIC_KEY`'s pair | publish: `release` (`<store build>.<n>`, e.g. `276.2`: the part before the dot names the staging tag), tier check; disable and promote: `bundle_id` and its platform, with `release` as the run's label |
 | `preview` | an early-access group (no app build yet) | the same store key: store builds carry only `OTA_PUBLIC_KEY` | as production |
 | `device-test` | the quick-install test app only | **only** `OTA_TEST_SIGNING_KEY_PEM`, which must not be the store key; no fallback | `base` (the test app's build commit); tier check skipped; actions publish, tamper, crash, mismatch, disable, cleanup (`scripts/ota/device-test.sh`) |
 

@@ -4,16 +4,20 @@
  * Publish an over-the-air bundle to ring 0, with the checks the OTA plan
  * requires (docs/plans/release-cadence-and-testing-strategy/ota_updates_subtask.md).
  *
- *   node scripts/ota-deploy.mjs --build <N> [--platform ios|android|both]
+ *   node scripts/ota-deploy.mjs --build <N> [--release <N>.<n>] [--platform ios|android|both]
  *        [--channel <name>] [--scope fix|within-purpose] [--message <text>]
  *
  * --build is the store build the bundle targets: its staging-v*-<N> tag names
  * the commit that build was cut from, the same build whose native fingerprint
  * the bundle must match. The change from that commit to HEAD must be
  * JavaScript-only by scripts/release/tier.mjs (exit 0, tier "ota"), with no
- * held class (stored-record deletion, sign-in or key handling, VTI protocol
- * line): those always ship as store builds. Measuring from any other commit
- * could read "ota" for JS that calls a native method the build lacks.
+ * held class (stored-record deletion always ships as a store build). Tier
+ * "ota-strict" (exit 5: sign-in or key handling, the VTI protocol line) is
+ * published only when scripts/ota/strict-proof.mjs proves a launch smoke on
+ * both platforms for HEAD, from ota-publish.yml only (GITHUB_SHA must be
+ * HEAD; GITHUB_REPOSITORY names the repository); otherwise nothing is.
+ * Measuring from any other commit could read "ota" for JS that calls a native
+ * method the build lacks.
  *
  * --base <commit> replaces --build only for a build that has no staging tag
  * (the spike's quick-install build); it must still be an ancestor of HEAD.
@@ -48,11 +52,12 @@
  * requires an approver. Run locally only for the spike, with a throwaway key.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { assertFingerprint } from '../../scripts/ota/check-fingerprint.mjs'
+import { proveStrict } from '../../scripts/ota/strict-proof.mjs'
 
 const SCOPES = ['fix', 'within-purpose']
 const RING0 = 'ring0'
@@ -60,6 +65,7 @@ const RING0 = 'ring0'
 const { values: args } = parseArgs({
   options: {
     build: { type: 'string' },
+    release: { type: 'string' },
     base: { type: 'string' },
     platform: { type: 'string', default: 'both' },
     channel: { type: 'string', default: process.env.OTA_CHANNEL ?? 'production' },
@@ -82,6 +88,16 @@ const repoDir = path.resolve(appDir, '..')
 const git = (...a) => execFileSync('git', a, { cwd: repoDir, encoding: 'utf8' }).trim()
 
 if (!args.build === !args.base) fail('give exactly one of --build <N> (the store build) or --base <commit>')
+// The release number names the bundle on the server, as it names the run: <store build>.<n>, of that store build.
+const isReleaseOf = (release, build) => /^\d+\.\d+$/.test(release) && release.split('.')[0] === build
+if (args.release !== undefined && !isReleaseOf(args.release, args.build)) {
+  const example = `${args.build ?? '276'}.2`
+  fail(
+    `--release ${args.release} is not a release of store build ${
+      args.build ?? '(none)'
+    }: give <store build>.<n>, e.g. ${example}`
+  )
+}
 if (!SCOPES.includes(args.scope)) fail(`--scope must be one of ${SCOPES.join(', ')}`)
 if (args['skip-tier'] && (args.channel !== 'device-test' || !args.base)) {
   fail('--skip-tier is only for the device-test channel with --base (the quick-install test app)')
@@ -148,7 +164,23 @@ if (args['skip-tier']) {
   } catch {
     fail(`tier.mjs gave no verdict (exit ${run.status}): ${run.stderr}`)
   }
-  if (run.status !== 0 || verdict.tier !== 'ota') {
+  const strict = run.status === 5 && verdict.tier === 'ota-strict'
+  if (strict) {
+    // Only with the launch smoke proven for this exact commit (scripts/ota/strict-proof.mjs).
+    const flags = verdict.strict.join('; ')
+    console.log(`ota-deploy: tier ota-strict (${flags}); proving the launch smoke for ${walletHead.slice(0, 8)}`)
+    // The proof is for the commit the run checked out, and the bundle is built from HEAD: they must be one commit.
+    const checkedOut = process.env.GITHUB_SHA || 'unset'
+    if (checkedOut !== walletHead) {
+      fail(
+        `a strict bundle is published only by ota-publish.yml, from the commit it proves (GITHUB_SHA ${checkedOut}, HEAD ${walletHead})`
+      )
+    }
+    const conditions = proveStrict({ sha: walletHead, repo: process.env.GITHUB_REPOSITORY })
+    for (const c of conditions) console.log(`ota-deploy:   ${c.met ? 'met    ' : 'MISSING'} ${c.name}: ${c.detail}`)
+    if (!conditions.every((c) => c.met))
+      fail('tier is "ota-strict" and its launch smoke is not proven: nothing is published')
+  } else if (run.status !== 0 || verdict.tier !== 'ota') {
     const held = verdict.held?.length ? `; held: ${verdict.held.join(', ')}` : ''
     fail(`tier is "${verdict.tier}" (exit ${run.status})${held}: this change ships as a store build`)
   }
@@ -187,7 +219,10 @@ if (expected.size) {
 
 const message =
   args.message ??
-  `[scope: ${args.scope}] wallet ${walletHead.slice(0, 8)} bifold ${bifoldHead.slice(0, 8)} base ${baseRef}`
+  `[${args.release ? `release ${args.release}, ` : ''}scope: ${args.scope}] wallet ${walletHead.slice(
+    0,
+    8
+  )} bifold ${bifoldHead.slice(0, 8)} base ${baseRef}`
 
 const hotUpdater = (...a) => {
   const result = spawnSync('npx', ['hot-updater', ...a], {
@@ -208,6 +243,12 @@ for (const platform of platforms) {
   if (!bundle) fail(`deployed, but cannot find the ${platform} bundle with message "${message}"`)
   hotUpdater('bundle', 'update', bundle.id, '--target-cohorts', RING0, '-y')
   console.log(`ota-deploy: ${platform} bundle ${bundle.id} is on ${RING0} (channel ${args.channel})`)
+  // The bundle's record for what follows a release (post-release.yml, the brake): structured, so a reworded log line
+  // can't lose it. One JSON line per bundle, to the file ota-publish.yml uploads as the ota-bundle-<platform> artifact.
+  if (process.env.OTA_BUNDLE_RECORD) {
+    const record = { platform, id: bundle.id, channel: args.channel, release: args.release ?? null, wallet: walletHead }
+    appendFileSync(process.env.OTA_BUNDLE_RECORD, JSON.stringify(record) + '\n')
+  }
 }
 
 console.log(`ota-deploy: done. wallet ${walletHead} bifold ${bifoldHead}`)
