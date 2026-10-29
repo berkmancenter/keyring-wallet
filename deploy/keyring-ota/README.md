@@ -139,9 +139,18 @@ and the `post-release-handoff-<sha>` artifact give:
 - the screens (`.tsx` under `screens/` or `components/`) changed since the previous release, or since the store build
   for the first one.
 
+**The brake.** If the post-release smoke is red, the `brake` job re-runs its failed jobs once (a red can be the
+runner: on 10-29 the emulator's own launcher hung). If it is still red, the job withdraws that release's bundles at
+once (`scripts/ota/brake.mjs`, through `withdraw.mjs`), and its summary says what it pulled and why.
+
+The brake is the one action that needs no approval, by the owner's decision (10-29). It runs in the `ota` environment,
+which has the update server's token but no reviewers, and never in `ota-approval`. It only withdraws, which only ever
+narrows. The job never gets the signing key and runs nothing but the brake, and `brake.test.mjs` holds it to that.
+Publishing and widening still always need the owner's own approval.
+
 The screen list is the handoff for the quick simulator check of each changed screen, which follows the widen. A screen
 that is wrong becomes a fix pull request at once; it never withdraws the bundle. A red smoke or red builds fail the job.
-The job dispatches only Test builds and gate-smoke, and publishes, widens and withdraws nothing. A run that published
+The smoke job dispatches only Test builds and gate-smoke, and publishes, widens and withdraws nothing. A run that published
 nothing, such as a dry run, promote, withdraw or device test, stops at once.
 
 **Withdrawing** a production or preview bundle is the `disable` action, with
@@ -301,7 +310,7 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 | `OTA_SIGNING_KEY_PEM` | secret, environment `ota` | the store RSA private key (channels production and preview) | ota-publish.yml |
 | `OTA_TEST_SIGNING_KEY_PEM` | secret, environment `ota` | the quick-install test app's throwaway private key (channel device-test only); delete it after a trial | ota-publish.yml |
 | `HOT_UPDATER_AUTH_TOKEN` | secret, environment `ota` | the server's management token | ota-publish.yml |
-| environment `ota-approval` | required reviewers | the owner, the one required reviewer; holds no secrets | ota-publish.yml |
+| environment `ota-approval` | required reviewers | the owner, the one required reviewer; holds no secrets. Every publish, promote and manual withdraw waits for it | ota-publish.yml |
 
 **Channels and keys** (`ota-publish.yml`'s `channel` input; enforced by `scripts/ota/signing-key.mjs`):
 
