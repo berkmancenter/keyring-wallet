@@ -29,16 +29,18 @@ test('a subscription in a shape it cannot read is reported, never taken as fine'
   assert.match(check({ 'x.yml': block }).problems[0], /cannot read/)
 })
 
-test('a subscription to a renamed workflow fails, naming the file and the name', () => {
+test('a subscription none of whose names exists fails, naming the file; a stale name beside a live one is a notice', () => {
   const files = { 'build.yml': wf('OTA release'), 'post.yml': wf('Post', ['OTA publish (ring 0)']) }
-  assert.deepEqual(check(files).problems, ['post.yml: subscribes to "OTA publish (ring 0)", which no workflow is named'])
-  // Listing the old and the new name keeps it working across the rename only once one of them exists.
-  assert.deepEqual(check({ ...files, 'post.yml': wf('Post', ['OTA publish (ring 0)', 'OTA release']) }).problems, [
-    'post.yml: subscribes to "OTA publish (ring 0)", which no workflow is named',
-  ])
+  assert.deepEqual(check(files).problems, ['post.yml: subscribes to "OTA publish (ring 0)", none of which any workflow is named, so it can never fire'])
+  // Across a rename: the old and the new name listed, the new one exists. It fires, so it passes, with a notice.
+  const across = check({ ...files, 'post.yml': wf('Post', ['OTA publish (ring 0)', 'OTA release']) })
+  assert.deepEqual(across.problems, [])
+  assert.deepEqual(across.notices, ['post.yml subscribes to "OTA publish (ring 0)", which no workflow has (harmless beside a name that exists)'])
+  // Both names gone: it can never fire.
+  assert.match(check({ 'build.yml': wf('Something else'), 'post.yml': wf('Post', ['OTA publish (ring 0)', 'OTA release']) }).problems[0], /none of which any workflow is named/)
 })
 
-test("this repository's workflows: every subscribed name exists", () => {
+test("this repository's workflows: every subscription can fire", () => {
   const dir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..', '.github', 'workflows')
   const files = readWorkflows(dir)
   // The control: the repository has at least one subscription, so a pass is not a pass over nothing.
