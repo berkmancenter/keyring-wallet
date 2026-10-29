@@ -49,6 +49,8 @@ export type RoomsOperation =
  *   record of it (rights, host). The operation needs those ("Details not loaded").
  * - `noRight`: this member's rights in the room do not include it ("You can't post here").
  * - `communityUnreachable`: none of the member's communities answered for their rooms; try again later.
+ * - `tierNotYet`: served, but Keyring does not yet do it in a room of this tier, e.g. writing in an `attributed`
+ *   room, whose records are sealed ("not available yet in this kind of room").
  */
 export type RoomsReason =
   | 'ok'
@@ -63,6 +65,7 @@ export type RoomsReason =
   | 'detailsNotLoaded'
   | 'noRight'
   | 'communityUnreachable'
+  | 'tierNotYet'
 
 export type RoomsStatus = 'available' | 'comingSoon' | 'unavailable'
 

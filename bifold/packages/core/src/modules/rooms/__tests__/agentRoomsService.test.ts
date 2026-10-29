@@ -82,6 +82,8 @@ function backend(overrides: Partial<RoomsBackend> = {}) {
     agentTask,
     communities: async () => [COMMUNITY],
     communityTask,
+    sendCompleted: jest.fn(async () => ({})),
+    newId: () => 'id-1',
     leaveCommunity: jest.fn(async () => undefined),
     decodeBase64Url: (s) => Buffer.from(s, 'base64url').toString('utf8'),
     hiddenOffers: async () => [],
@@ -203,7 +205,8 @@ describe('AgentRoomsService', () => {
     const service = new AgentRoomsService(b)
     const caps = await service.roomCapabilities(ROOM)
     expect(caps.listNotes).toMatchObject({ status: 'available' })
-    expect(caps.write).toMatchObject({ status: 'comingSoon', reason: 'clientNotBuilt' })
+    // Built, but this agent cannot complete a write as the member (no rooms/keys/act).
+    expect(caps.write).toMatchObject({ status: 'unavailable', reason: 'agentDoesNotServe' })
     expect((await service.roomCapabilities(CUSTODY_ROOM)).readNote.reason).toBe('detailsNotLoaded')
   })
 
@@ -237,10 +240,10 @@ describe('AgentRoomsService', () => {
       agentServedTypes: async () => [ROOMS_TASK.keysList02, `${SPEC}rooms/keys/act/0.6`],
     })
     const service = new AgentRoomsService(b)
-    const err = await service.prepareWrite().catch((e) => e)
+    const err = await service.listFiles().catch((e) => e)
     expect(err).toBeInstanceOf(RoomsUnavailable)
     expect(err).toMatchObject({ reason: 'clientNotBuilt' })
-    await expect(service.listFiles()).rejects.toMatchObject({ reason: 'clientNotBuilt' })
+    await expect(service.openFile()).rejects.toMatchObject({ reason: 'clientNotBuilt' })
     expect(agentTask).not.toHaveBeenCalled()
   })
 })

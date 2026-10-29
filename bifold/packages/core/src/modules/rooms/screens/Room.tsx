@@ -353,7 +353,7 @@ const Room: React.FC = () => {
             onSend={outbox.send}
             unavailable={cannotPost}
             postingAs={identityText(room.actingAs)}
-            canAttach
+            canAttach={roomCapabilities.listFiles.status === 'available'}
             attachRequest={attachRequest}
           />
         )}

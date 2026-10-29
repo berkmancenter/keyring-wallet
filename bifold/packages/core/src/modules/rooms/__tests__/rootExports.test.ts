@@ -24,6 +24,8 @@ const unlinked: RoomsBackend = {
   hiddenOffers: async () => [],
   hideOffer: async () => undefined,
   warn: () => undefined,
+  sendCompleted: async () => undefined,
+  newId: () => 'id',
 }
 
 describe("the rooms service through the package root, which is what '@bifold/core' means", () => {

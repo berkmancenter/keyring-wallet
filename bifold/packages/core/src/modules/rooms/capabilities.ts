@@ -74,6 +74,7 @@ const STATUS_OF: Record<RoomsReason, RoomsStatus> = {
   detailsNotLoaded: 'unavailable',
   noRight: 'unavailable',
   communityUnreachable: 'unavailable',
+  tierNotYet: 'comingSoon',
 }
 
 const status = (reason: RoomsReason, detail: string): OperationStatus => ({ status: STATUS_OF[reason], reason, detail })

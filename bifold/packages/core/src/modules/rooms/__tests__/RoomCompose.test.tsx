@@ -149,4 +149,34 @@ describe('posting to a room', () => {
     await waitFor(() => expect(tree.queryByTestId(id('RoomReading'))).toBeNull())
     expect(tree.queryByTestId(id('RoomComposerInput'))).toBeNull()
   })
+
+  // Narrows one status of the sample's, as the real service reports it for this build.
+  const withStatus = (op: 'write' | 'listFiles', reason: 'tierNotYet' | 'clientNotBuilt') => {
+    const sample = createSampleRoomsService()
+    mockService = {
+      ...sample,
+      roomCapabilities: async (roomId: string) => ({
+        ...(await sample.roomCapabilities(roomId)),
+        [op]: { status: 'comingSoon', reason, detail: '' },
+      }),
+    } as RoomsService
+  }
+
+  test('a room whose tier this build does not write to: the reason, and no field', async () => {
+    withStatus('write', 'tierNotYet')
+    const tree = show(PLANNING)
+    await waitFor(() => expect(tree.getByTestId(id('RoomComposerUnavailable'))).toHaveTextContent('Rooms.TierNotYet'))
+    expect(tree.queryByTestId(id('RoomComposerInput'))).toBeNull()
+  })
+
+  test('no "+" where the room\'s files are not available; the sample room, where they are, has it', async () => {
+    const sample = show(PLANNING)
+    await waitFor(() => expect(sample.getByTestId(id('RoomComposerAttach'))).toBeTruthy())
+    sample.unmount()
+
+    withStatus('listFiles', 'clientNotBuilt')
+    const tree = show(PLANNING)
+    await waitFor(() => expect(tree.getByTestId(id('RoomComposerInput'))).toBeTruthy())
+    expect(tree.queryByTestId(id('RoomComposerAttach'))).toBeNull()
+  })
 })

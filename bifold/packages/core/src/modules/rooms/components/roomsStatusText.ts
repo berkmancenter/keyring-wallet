@@ -22,6 +22,7 @@ const KEY: Record<Exclude<RoomsReason, 'ok' | 'sample' | 'noRight'>, string> = {
   agentUnknown: 'Rooms.AgentUnknown',
   detailsNotLoaded: 'Rooms.DetailsNotLoaded',
   communityUnreachable: 'Rooms.CommunityUnreachable',
+  tierNotYet: 'Rooms.TierNotYet',
 }
 
 /** A missing right, in the words of what the row would have done. */

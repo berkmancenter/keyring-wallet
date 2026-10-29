@@ -3,7 +3,7 @@
  * community through `vtiAgent`, connected as the persona the phone joined it with. Nothing new is
  * opened: these are the clients joining and leaving a community already use.
  */
-import { TypedArrayEncoder, type Agent } from '@credo-ts/core'
+import { TypedArrayEncoder, utils, type Agent } from '@credo-ts/core'
 
 import { listKeyed, putKeyed } from '../../trust-tasks/module/keyedRecords'
 import { vtaAgent } from '../../trust-tasks/module/vtaAgent'
@@ -22,6 +22,15 @@ const RECORD_TYPE = 'keyring/rooms'
 export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: string } = {}): RoomsBackend {
   const identityStore = new GenericRecordsIdentityStore(agent)
   const communityStore = new GenericRecordsCommunityStore(agent)
+  // The session to a community is the persona the phone joined it with.
+  const connectAs = async (communityDid: string) => {
+    const persona = await identityStore.getPersona(communityDid)
+    if (!persona) throw new Error('rooms: this phone holds no identity for that community')
+    await vtiAgent.connect(agent, options.mediatorDid, {
+      persona,
+      peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+    })
+  }
   const client = async () => {
     const c = await vtaAgent.roomsClient(agent)
     if (!c) throw new Error('rooms: no agent is linked to this phone')
@@ -47,14 +56,16 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     },
 
     communityTask: async (communityDid, type, payload) => {
-      const persona = await identityStore.getPersona(communityDid)
-      if (!persona) throw new Error('rooms: this phone holds no identity for that community')
-      await vtiAgent.connect(agent, options.mediatorDid, {
-        persona,
-        peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
-      })
+      await connectAs(communityDid)
       return vtiAgent.communityTask(communityDid, type, payload)
     },
+
+    sendCompleted: async (communityDid, recipientDid, document) => {
+      await connectAs(communityDid)
+      return vtiAgent.sendCompleted(recipientDid, document)
+    },
+
+    newId: () => utils.uuid(),
 
     leaveCommunity: async (communityDid) => {
       await leaveCommunity(

@@ -14,10 +14,20 @@
  *   Welcome the community answers with. The phone never holds a room key or a KeyPackage's private half.
  *   Renewals the listing carries are stored in place of the credentials they renew; they are never accepted.
  *
- * Writes, files and agent access are later phases and report `clientNotBuilt`.
+ * - **Writes and curation** are requests to the room's host, completed as the member by the agent
+ *   (`rooms/keys/act`), which inserts the member's presentation and signs; the phone sends the completed document
+ *   to the host unchanged, over the same DIDComm session it reaches the community on. The phone adds nothing to it
+ *   and holds no key that could. Writing is built for `open` rooms; a sealed room's record is sealed by the agent
+ *   first, which is a later phase.
+ *
+ * Files and agent access are later phases and report `clientNotBuilt`.
  */
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
+
 import { deriveCapabilities, deriveRoomCapabilities } from '../capabilities'
 import { inertFlags, toInertText } from '../inertText'
+import { chatMessageText } from '../roomPosts'
 import type {
   AgentGrant,
   CommunityRoomMember,
@@ -34,17 +44,29 @@ import type {
   RoomsOperation,
   RoomsService,
   RoomSummary,
+  WriteDraft,
   WritePreview,
 } from '../types'
-import { PREVIEW_TOKEN_TTL_MS, RoomsPreviewExpired, RoomsRefused, RoomsUnavailable } from '../types'
+import {
+  NOTE_BODY_MAX,
+  NOTE_TITLE_MAX,
+  PREVIEW_TOKEN_TTL_MS,
+  RoomsConflict,
+  RoomsPreviewExpired,
+  RoomsRefused,
+  RoomsUnavailable,
+} from '../types'
 
 import {
   parseAccept,
+  parseActed,
   parseBrowse,
+  parseCurate,
   parseKeyPackage,
   parseKeysList,
   parseMemberships,
   parseOffers,
+  parsePut,
   parseRead,
   parseVaultQuery,
   refusalCode,
@@ -75,6 +97,13 @@ export interface RoomsBackend {
   communities(): Promise<RoomsCommunity[]>
   /** Send a Trust Task to a community as this phone's persona for it; resolves with the response payload. */
   communityTask(communityDid: string, type: string, payload: Record<string, unknown>): Promise<unknown>
+  /**
+   * Deliver a document the agent completed (`rooms/keys/act`) to `recipientDid` unchanged, over the session to
+   * `communityDid`; resolves with the response payload.
+   */
+  sendCompleted(communityDid: string, recipientDid: string, document: Record<string, unknown>): Promise<unknown>
+  /** A fresh random identifier (a UUID). */
+  newId(): string
   leaveCommunity(communityDid: string): Promise<void>
   decodeBase64Url(value: string): string
   /** The offers hidden on this phone, by `offerId`. Upstream has no decline, so this is all hiding is. */
@@ -99,13 +128,23 @@ export const R1_BUILT: ReadonlySet<RoomsOperation> = new Set<RoomsOperation>([
   'leaveViaCommunity',
 ])
 
-/** The operations this build implements: R1, and joining by a community's offer. */
+/** The operations this build implements: R1, joining by a community's offer, and writing notes. */
 export const BUILT: ReadonlySet<RoomsOperation> = new Set<RoomsOperation>([
   ...R1_BUILT,
   'listOffers',
   'acceptOffer',
   'hideOffer',
+  'write',
+  'curate',
 ])
+
+/**
+ * A post's record key, from its idempotency key: the same on every retry, so a post sent again after its answer
+ * was lost meets itself (create-only) instead of landing twice. Opaque, as a sealed room's keys must be.
+ */
+export function postKey(idempotencyKey: string): string {
+  return `note/${bytesToHex(sha256(utf8ToBytes(`keyring.rooms.post|${idempotencyKey}`))).slice(0, 32)}`
+}
 
 /** How many pages of a community's membership record, or of its offers, to read before stopping. */
 const MAX_MEMBERSHIP_PAGES = 10
@@ -176,6 +215,7 @@ export class AgentRoomsService implements RoomsService {
   private rooms = new Map<string, KnownRoom>()
   private offers = new Map<string, { community: RoomsCommunity; offer: OfferRecord }>()
   private previews = new Map<string, { offerId: string; at: number }>()
+  private writes = new Map<string, { roomId: string; draft: WriteDraft; at: number; replacedVersion?: number }>()
   /** Renewals stored this run, by room and issue time: a renewal stays listed until the authority it renews lapses. */
   private renewed = new Set<string>()
   /** The offers list each community answered, so the badge's poll asks it once a session, not twice a minute. */
@@ -331,12 +371,28 @@ export class AgentRoomsService implements RoomsService {
   }
 
   public async roomCapabilities(roomId: string): Promise<RoomCapabilities> {
-    return deriveRoomCapabilities(await this.capabilities(), await this.known(roomId))
+    return this.capabilitiesIn(await this.known(roomId))
+  }
+
+  /**
+   * A room's statuses, and what this build does not yet do in a room of its tier: writing is built for `open` rooms
+   * only (cleartext `rooms/records/put`). A sealed room's record is sealed and signed by the agent first
+   * (`rooms/keys/seal/0.2`), which is not built, so the composer says so instead of every post failing.
+   */
+  private async capabilitiesIn(room: KnownRoom): Promise<RoomCapabilities> {
+    const statuses = deriveRoomCapabilities(await this.capabilities(), room)
+    if (statuses.write.status === 'available' && room.tier !== 'open')
+      statuses.write = {
+        status: 'comingSoon',
+        reason: 'tierNotYet',
+        detail: `writing to ${room.tier} rooms is not built yet`,
+      }
+    return statuses
   }
 
   private async requireInRoom(roomId: string, operation: keyof RoomCapabilities): Promise<KnownRoom> {
     const room = await this.known(roomId)
-    const status = deriveRoomCapabilities(await this.capabilities(), room)[operation]
+    const status = (await this.capabilitiesIn(room))[operation]
     if (status.status !== 'available') throw new RoomsUnavailable(operation, status.reason, status.detail)
     if (!room.host) throw new RoomsUnavailable(operation, 'detailsNotLoaded', 'no host is known for this room')
     return room
@@ -531,7 +587,9 @@ export class AgentRoomsService implements RoomsService {
   private requireSealedSupport(offer: OfferRecord): void {
     if (!isSealed(offer.tier)) return
     const served = this.served?.types ?? []
-    const missing = [ROOMS_TASK.keysKeyPackage, ROOMS_TASK.keysWelcome].filter((t) => !served.includes(t))
+    const missing: string[] = [ROOMS_TASK.keysKeyPackage, ROOMS_TASK.keysWelcome].filter((t) => !served.includes(t))
+    // The acceptance carries the agent's KeyPackage, so the agent completes it (`rooms/keys/act`, recipient item 10).
+    if (!this.actType()) missing.push(ROOMS_TASK.keysAct06)
     if (missing.length > 0)
       throw new RoomsUnavailable('acceptOffer', 'agentDoesNotServe', `a ${offer.tier} room needs ${missing.join(', ')}`)
   }
@@ -583,7 +641,7 @@ export class AgentRoomsService implements RoomsService {
     if (offer.state === 'accepted' && (!sealed || (await this.holds(roomId, community.personaDid)))) return done()
 
     for (const what of ['membership', 'authority'] as const) {
-      await this.agentStep(`store the ${what} credential`, ROOMS_TASK.vaultReceive, {
+      await this.agentStep('acceptOffer', `store the ${what} credential`, ROOMS_TASK.vaultReceive, {
         credential: credentialOf(offer.credentials[what], what),
       })
     }
@@ -592,7 +650,7 @@ export class AgentRoomsService implements RoomsService {
     let keyPackage: string | undefined
     if (sealed) {
       keyPackage = parseKeyPackage(
-        await this.agentStep('give a key package', ROOMS_TASK.keysKeyPackage, {
+        await this.agentStep('acceptOffer', 'give a key package', ROOMS_TASK.keysKeyPackage, {
           roomId,
           invitation: offer.credentials.invitation,
         })
@@ -645,24 +703,74 @@ export class AgentRoomsService implements RoomsService {
     return done()
   }
 
-  /** An agent task on the accept path, its refusal reported as the accept's. */
-  private async agentStep(what: string, type: string, payload: Record<string, unknown>): Promise<unknown> {
+  /** An agent task on an operation's path, its refusal reported as the operation's. */
+  private async agentStep(
+    operation: RoomsOperation,
+    what: string,
+    type: string,
+    payload: Record<string, unknown>
+  ): Promise<unknown> {
     try {
       return await this.backend.agentTask(type, payload)
     } catch (e) {
       const code = refusalCode(e)
-      if (code) throw new RoomsRefused('acceptOffer', code, false, `the agent would not ${what}: ${message(e)}`)
+      if (code) throw new RoomsRefused(operation, code, false, `the agent would not ${what}: ${message(e)}`)
       throw e
     }
   }
 
-  /** Sends the accept as the persona; an `admissionPending` answer is sent again, identically, a few times first. */
+  /** The newest `rooms/keys/act` the agent serves, if any. */
+  private actType(): string | undefined {
+    const served = this.served?.types ?? []
+    return [ROOMS_TASK.keysAct06, ROOMS_TASK.keysAct05].find((t) => served.includes(t))
+  }
+
+  /**
+   * One request to `recipient`, completed as the member by the agent (`rooms/keys/act`) and sent by the phone
+   * unchanged, over the session to the member's community. The document is new each time: its id is single-use
+   * at the host, so a request is never sent twice. Resolves with the recipient's answer; its refusals pass through.
+   */
+  private async actAndSend(
+    operation: RoomsOperation,
+    community: RoomsCommunity,
+    recipient: string,
+    type: string,
+    payload: Record<string, unknown>
+  ): Promise<unknown> {
+    const act = this.actType()
+    if (!act)
+      throw new RoomsUnavailable(
+        operation,
+        'agentDoesNotServe',
+        `the agent serves neither ${ROOMS_TASK.keysAct06} nor ${ROOMS_TASK.keysAct05}`
+      )
+    const document = {
+      id: `urn:uuid:${this.backend.newId()}`,
+      type,
+      issuer: community.personaDid,
+      recipient,
+      issuedAt: new Date(this.now()).toISOString(),
+      payload,
+    }
+    const acted = parseActed(await this.agentStep(operation, 'complete the request as the member', act, { document }))
+    if (!acted || acted.principal !== community.personaDid || acted.document.type !== type)
+      throw new Error(`the agent did not complete ${type} as ${community.personaDid}`)
+    return this.backend.sendCompleted(community.did, recipient, acted.document)
+  }
+
+  /**
+   * Sends the accept; an `admissionPending` answer is sent again, identically, a few times first. An accept
+   * carrying the agent's KeyPackage is completed by the agent, the only party that can vouch for the package
+   * (`rooms/keys/act`, recipient item 10); one without is signed on the phone as the persona.
+   */
   private async sendAccept(community: RoomsCommunity, roomId: string, keyPackage?: string) {
     const payload = { roomId, ...(keyPackage ? { keyPackage } : {}) }
     for (let attempt = 0; ; attempt++) {
       let answer: unknown
       try {
-        answer = await this.backend.communityTask(community.did, ROOMS_TASK.offersAccept, payload)
+        answer = keyPackage
+          ? await this.actAndSend('acceptOffer', community, community.did, ROOMS_TASK.offersAccept, payload)
+          : await this.backend.communityTask(community.did, ROOMS_TASK.offersAccept, payload)
       } catch (e) {
         const code = refusalCode(e)
         if (!code) throw e
@@ -696,14 +804,136 @@ export class AgentRoomsService implements RoomsService {
     })
   }
 
-  public prepareWrite(): Promise<WritePreview> {
-    return this.notYet('write')
+  /**
+   * What `confirmWrite` will send, for the confirmation sheet. A note is replaced only at the version read here:
+   * if it changes before the confirmation, the host refuses and `confirmWrite` reports `RoomsConflict`.
+   */
+  public async prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview> {
+    const room = await this.requireInRoom(roomId, 'write')
+    // Files are not built: a post that carries one is refused, never sent without it.
+    if (draft.attachment) throw new RoomsUnavailable('write', 'clientNotBuilt', 'posting a file is not built yet')
+    if (draft.body.trim().length === 0) throw new RoomsRefused('write', 'empty', false, 'the note has no text')
+    // A post's limit is its words, not the keyring.chat/1 message around them, whose escaping (quotes, line breaks)
+    // would refuse a post the composer allowed, on every retry.
+    const words = chatMessageText(draft.body, this.now()) ?? draft.body
+    if (words.length > NOTE_BODY_MAX || draft.title.length > NOTE_TITLE_MAX)
+      throw new RoomsRefused('write', 'tooLong', false, `a note holds ${NOTE_BODY_MAX} characters`)
+    let replacedVersion: number | undefined
+    if (draft.replaceKey) {
+      replacedVersion = await this.versionOf(room, draft.replaceKey)
+      if (replacedVersion === undefined)
+        throw new RoomsRefused('write', 'notFound', false, `no note ${draft.replaceKey} in this room`)
+    }
+    const token = `w${this.nextToken++}`
+    this.writes.set(token, { roomId, draft, at: this.now(), replacedVersion })
+    return {
+      token,
+      roomId,
+      roomName: room.name,
+      communityName: room.communityName,
+      tier: room.tier,
+      actingAs: room.actingAs,
+      visibleTo: 'membersAndHost',
+      authorShown: true,
+      title: toInertText(draft.title),
+      body: toInertText(draft.body),
+      validUntil: room.validUntil,
+    }
   }
-  public confirmWrite(): Promise<{ key: string; version: number }> {
-    return this.notYet('write')
+
+  /**
+   * Writes the previewed note (`rooms/records/put/0.1`, open room: the host reads `cleartext`). A new note is
+   * create-only under a fresh random key; a replacement must still be at the version the preview read.
+   */
+  public async confirmWrite(token: string): Promise<{ key: string; version: number }> {
+    const pending = this.writes.get(token)
+    this.writes.delete(token)
+    if (!pending || this.now() - pending.at > PREVIEW_TOKEN_TTL_MS) throw new RoomsPreviewExpired(token)
+    const room = await this.requireInRoom(pending.roomId, 'write')
+    const { community, host } = this.hostOf(room, 'write')
+    const { title, body, replaceKey, idempotencyKey } = pending.draft
+    const key = replaceKey ?? (idempotencyKey ? postKey(idempotencyKey) : `note/${this.backend.newId()}`)
+    const expectedVersion = pending.replacedVersion ?? 0
+    let answer: unknown
+    try {
+      answer = await this.actAndSend('write', community, host, ROOMS_TASK.recordsPut, {
+        roomId: room.roomId,
+        key,
+        expectedVersion,
+        cleartext: { ...(title.trim() ? { title } : {}), body },
+      })
+    } catch (e) {
+      const refused = await this.hostRefusal('write', room, key, expectedVersion, e)
+      // Sent again after its answer was lost: the key is this post's own, so the record already there is this post.
+      if (!replaceKey && idempotencyKey && refused instanceof RoomsConflict)
+        return { key, version: refused.currentVersion }
+      throw refused
+    }
+    const put = parsePut(answer)
+    if (!put || put.key !== key) throw new Error(`the host answered the write of ${key} with something else`)
+    return put
   }
-  public curate(): Promise<void> {
-    return this.notYet('curate')
+
+  /** Pins, unpins or retracts a note (`rooms/records/curate/0.1`). Any tier: the host sees only the key. */
+  public async curate(roomId: string, key: string, action: 'pin' | 'unpin' | 'retract'): Promise<void> {
+    const room = await this.requireInRoom(roomId, 'curate')
+    const { community, host } = this.hostOf(room, 'curate')
+    let answer: unknown
+    try {
+      answer = await this.actAndSend('curate', community, host, ROOMS_TASK.recordsCurate, {
+        roomId,
+        key,
+        ...(action === 'retract' ? { status: 'retracted' } : { pinned: action === 'pin' }),
+      })
+    } catch (e) {
+      throw await this.hostRefusal('curate', room, key, undefined, e)
+    }
+    if (!parseCurate(answer)) throw new Error(`the host answered the curation of ${key} with something else`)
+  }
+
+  /** The room's host, and the community whose session reaches it. A room only custody knows of has neither. */
+  private hostOf(room: KnownRoom, operation: RoomsOperation): { community: RoomsCommunity; host: string } {
+    if (!room.community || !room.host)
+      throw new RoomsUnavailable(
+        operation,
+        'detailsNotLoaded',
+        'the community’s record of this room has not been loaded'
+      )
+    return { community: room.community, host: room.host }
+  }
+
+  /** A note's current version, read through the agent; undefined when the host has no such note. */
+  private async versionOf(room: KnownRoom, key: string): Promise<number | undefined> {
+    try {
+      return parseRead(
+        await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId: room.roomId, host: room.host, key }),
+        (s) => this.backend.decodeBase64Url(s)
+      )?.version
+    } catch (e) {
+      if (refusalCode(e) === 'notFound') return undefined
+      throw e
+    }
+  }
+
+  /**
+   * A host's refusal as the screen reads it. The note having moved past `expectedVersion` is a conflict, whatever
+   * code the host words it with (a VTC refuses a stale precondition as `taskFailed`, reason `conflict`), so the note is read
+   * again to tell. Anything that is not a refusal passes through.
+   */
+  private async hostRefusal(
+    operation: RoomsOperation,
+    room: KnownRoom,
+    key: string,
+    expectedVersion: number | undefined,
+    e: unknown
+  ): Promise<unknown> {
+    const code = refusalCode(e)
+    if (!code) return e
+    if (expectedVersion !== undefined) {
+      const current = await this.versionOf(room, key).catch(() => undefined)
+      if (current !== undefined && current !== expectedVersion) return new RoomsConflict(key, current)
+    }
+    return new RoomsRefused(operation, code, false, message(e))
   }
   public listFiles(): Promise<RoomFile[]> {
     return this.notYet('listFiles')

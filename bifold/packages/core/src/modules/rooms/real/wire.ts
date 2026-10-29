@@ -1,8 +1,8 @@
 /**
  * The rooms Trust Tasks the real service sends, and parsers for what comes back. Every shape is read from
  * the Trust Task specs (dtgwg-trust-tasks-tf, as `@openvtc/trust-tasks` 0.27 ships them:
- * `rooms/keys/{list,browse,read,key-package,welcome,backfill}`, `vtc/rooms/{memberships,offers}/*`,
- * `vault/credentials/{receive,query,get}`).
+ * `rooms/keys/{list,browse,read,key-package,welcome,backfill,act}`, `vtc/rooms/{memberships,offers}/*`,
+ * `vault/credentials/{receive,query,get}`, `rooms/records/{put,curate}`).
  * The parsers accept only what the specs define and drop anything else, so a malformed or hostile
  * answer can at worst lose a row, never inject one.
  */
@@ -29,6 +29,11 @@ export const ROOMS_TASK = {
   // `credential` is the one a room's credentials (JSON objects) come back in under 0.2 as well.
   vaultGet02: `${SPEC}vault/credentials/get/0.2`,
   vaultGet01: `${SPEC}vault/credentials/get/0.1`,
+  // 0.6 completes everything 0.5 does, and `vtc/rooms/offers/list/0.3` besides.
+  keysAct06: `${SPEC}rooms/keys/act/0.6`,
+  keysAct05: `${SPEC}rooms/keys/act/0.5`,
+  recordsPut: `${SPEC}rooms/records/put/0.1`,
+  recordsCurate: `${SPEC}rooms/records/curate/0.1`,
 } as const
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 ? v : undefined)
@@ -215,6 +220,37 @@ export function parseVaultQuery(payload: unknown): { id: string; validUntil?: st
 /** The subject of a stored credential (`vault/credentials/get/0.2`): who it was issued to. */
 export function vaultCredentialSubject(payload: unknown): string | undefined {
   return str(obj(obj(obj(payload)?.credential)?.credentialSubject)?.id)
+}
+
+/**
+ * A room request the agent completed as the member (`rooms/keys/act`): the member it signed as, and the
+ * document to send to its recipient unaltered. Undefined unless the document is signed and names that member.
+ */
+export function parseActed(payload: unknown): { principal: string; document: Record<string, unknown> } | undefined {
+  const p = obj(payload)
+  const principal = str(p?.principal)
+  const document = obj(p?.document)
+  if (!principal || !document || document.issuer !== principal || !obj(document.proof)) return undefined
+  return { principal, document }
+}
+
+/** The host's answer to a write (`rooms/records/put/0.1`): the record's key and the version it was given. */
+export function parsePut(payload: unknown): { key: string; version: number } | undefined {
+  const p = obj(payload)
+  const key = str(p?.key)
+  const version = int(p?.version)
+  return key && version !== undefined && version >= 1 ? { key, version } : undefined
+}
+
+/** The host's answer to a curation (`rooms/records/curate/0.1`). */
+export function parseCurate(
+  payload: unknown
+): { key: string; version: number; status: RecordMeta['status'] } | undefined {
+  const p = obj(payload)
+  const key = str(p?.key)
+  const version = int(p?.version)
+  if (!key || version === undefined || !STATUSES.includes(p?.status as RecordMeta['status'])) return undefined
+  return { key, version, status: p?.status as RecordMeta['status'] }
 }
 
 /**

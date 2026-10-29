@@ -51,6 +51,7 @@ const ALL_SERVED = [
   ROOMS_TASK.vaultReceive,
   ROOMS_TASK.vaultQuery,
   ROOMS_TASK.vaultGet02,
+  ROOMS_TASK.keysAct06,
 ]
 
 interface Setup {
@@ -91,21 +92,36 @@ function setup(o: Setup = {}) {
         return o.welcome ? o.welcome() : { epoch: 2 }
       case ROOMS_TASK.keysBackfill:
         return { roomId: payload.roomId, earliestReadableEpoch: 1 }
+      case ROOMS_TASK.keysAct06: {
+        // The agent completes the request as the member: issuer and proof added, nothing else changed.
+        const document = payload.document as Record<string, unknown>
+        return { principal: COMMUNITY.personaDid, document: { ...document, proof: { type: 'DataIntegrityProof' } } }
+      }
       default:
         throw new Error(`unexpected agent task ${type}`)
     }
   })
+  const answer = (type: string, payload: Record<string, unknown>): unknown => {
+    if (type === ROOMS_TASK.offersList03) return { items: o.offers ?? [], renewals: o.renewals }
+    if (type === ROOMS_TASK.offersAccept) {
+      if (o.accept) return o.accept(payload)
+      return { roomId: payload.roomId, state: 'admitted', epoch: 1, welcome: 'welcome-bytes' }
+    }
+    throw new Error(`unexpected community task ${type}`)
+  }
   const communityTask = jest.fn(
     async (_did: string, type: string, payload: Record<string, unknown>): Promise<unknown> => {
       calls.push(type)
-      if (type === ROOMS_TASK.offersList03) return { items: o.offers ?? [], renewals: o.renewals }
-      if (type === ROOMS_TASK.offersAccept) {
-        if (o.accept) return o.accept(payload)
-        return { roomId: payload.roomId, state: 'admitted', epoch: 1, welcome: 'welcome-bytes' }
-      }
-      throw new Error(`unexpected community task ${type}`)
+      return answer(type, payload)
     }
   )
+  const sendCompleted = jest.fn(
+    async (_did: string, _recipient: string, document: Record<string, unknown>): Promise<unknown> => {
+      calls.push(String(document.type))
+      return answer(String(document.type), document.payload as Record<string, unknown>)
+    }
+  )
+  let ids = 0
   const sleeps: number[] = []
   let clock = 1_000_000
   const b: RoomsBackend = {
@@ -114,6 +130,8 @@ function setup(o: Setup = {}) {
     agentTask,
     communities: async () => [COMMUNITY],
     communityTask,
+    sendCompleted,
+    newId: () => `id-${++ids}`,
     leaveCommunity: jest.fn(async () => undefined),
     decodeBase64Url: (s) => Buffer.from(s, 'base64url').toString('utf8'),
     hiddenOffers: async () => [...hidden],
@@ -133,6 +151,7 @@ function setup(o: Setup = {}) {
     b,
     agentTask,
     communityTask,
+    sendCompleted,
     calls,
     sleeps,
     advance: (ms: number) => {
@@ -142,6 +161,9 @@ function setup(o: Setup = {}) {
 }
 
 const sent = (mock: jest.Mock, type: string) => mock.mock.calls.filter((c) => c.includes(type))
+/** The documents the phone delivered as the agent completed them, of one type. */
+const delivered = (mock: jest.Mock, type: string): Record<string, unknown>[] =>
+  mock.mock.calls.map((c) => c[2] as Record<string, unknown>).filter((d) => d.type === type)
 
 describe('AgentRoomsService offers', () => {
   it('lists what the member can act on, read from the community as the persona', async () => {
@@ -291,8 +313,10 @@ describe('AgentRoomsService offers', () => {
     expect(calls).not.toContain(ROOMS_TASK.keysWelcome)
   })
 
-  it('accepts a sealed room through the agent: key package, accept, Welcome, backfill', async () => {
-    const { service, calls, communityTask, agentTask } = setup({ offers: [offer(SEALED_ROOM, 'attributed', 'open')] })
+  it('accepts a sealed room through the agent: key package, accept completed by the agent, Welcome, backfill', async () => {
+    const { service, calls, communityTask, sendCompleted, agentTask } = setup({
+      offers: [offer(SEALED_ROOM, 'attributed', 'open')],
+    })
     const preview = await service.previewOffer(offerIdOf(COMMUNITY.did, SEALED_ROOM))
     await service.acceptOffer(preview.token)
 
@@ -300,10 +324,19 @@ describe('AgentRoomsService offers', () => {
       roomId: SEALED_ROOM,
       invitation: credentials(SEALED_ROOM).invitation,
     })
-    expect(communityTask).toHaveBeenCalledWith(COMMUNITY.did, ROOMS_TASK.offersAccept, {
-      roomId: SEALED_ROOM,
-      keyPackage: 'kp-abc',
+    // Only the agent can vouch for its own KeyPackage, so it completes the accept; the phone sends it unchanged.
+    expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysAct06, {
+      document: expect.objectContaining({
+        type: ROOMS_TASK.offersAccept,
+        issuer: COMMUNITY.personaDid,
+        recipient: COMMUNITY.did,
+        payload: { roomId: SEALED_ROOM, keyPackage: 'kp-abc' },
+      }),
     })
+    const [accept] = delivered(sendCompleted, ROOMS_TASK.offersAccept)
+    expect(accept).toMatchObject({ proof: { type: 'DataIntegrityProof' } })
+    expect(sendCompleted).toHaveBeenCalledWith(COMMUNITY.did, COMMUNITY.did, accept)
+    expect(sent(communityTask, ROOMS_TASK.offersAccept)).toHaveLength(0)
     expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysWelcome, {
       roomId: SEALED_ROOM,
       welcome: 'welcome-bytes',
@@ -315,6 +348,7 @@ describe('AgentRoomsService offers', () => {
       ROOMS_TASK.vaultReceive,
       ROOMS_TASK.vaultReceive,
       ROOMS_TASK.keysKeyPackage,
+      ROOMS_TASK.keysAct06,
       ROOMS_TASK.offersAccept,
       ROOMS_TASK.keysWelcome,
       ROOMS_TASK.keysBackfill,
@@ -332,9 +366,10 @@ describe('AgentRoomsService offers', () => {
     })
     await pending.service.acceptOffer((await pending.service.previewOffer(offerIdOf(COMMUNITY.did, SEALED_ROOM))).token)
     expect(pending.sleeps).toEqual([1000, 2000, 4000])
-    const accepts = sent(pending.communityTask, ROOMS_TASK.offersAccept)
+    const accepts = delivered(pending.sendCompleted, ROOMS_TASK.offersAccept)
     expect(accepts).toHaveLength(4)
-    expect(new Set(accepts.map((c) => JSON.stringify(c[2]))).size).toBe(1) // the same KeyPackage every time
+    expect(new Set(accepts.map((d) => JSON.stringify(d.payload))).size).toBe(1) // the same KeyPackage every time
+    expect(new Set(accepts.map((d) => d.id)).size).toBe(4) // a fresh document each time: ids are single-use
 
     const stuck = setup({
       offers: [offer(SEALED_ROOM, 'attributed', 'open')],
@@ -459,6 +494,16 @@ describe('AgentRoomsService offers', () => {
     await expect(s.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))).resolves.toBeDefined()
   })
 
+  it('says a sealed offer needs an agent update when the agent cannot complete the accept as the member', async () => {
+    const s = setup({
+      offers: [offer(SEALED_ROOM, 'attributed', 'open')],
+      served: ALL_SERVED.filter((t) => t !== ROOMS_TASK.keysAct06),
+    })
+    const err = await s.service.previewOffer(offerIdOf(COMMUNITY.did, SEALED_ROOM)).catch((e) => e)
+    expect(err).toMatchObject({ name: 'RoomsUnavailable', reason: 'agentDoesNotServe' })
+    expect((err as Error).message).toContain(ROOMS_TASK.keysAct06)
+  })
+
   it('needs the agent’s vault to accept at all', async () => {
     const s = setup({ served: [ROOMS_TASK.keysList02] })
     expect((await s.service.capabilities()).acceptOffer).toMatchObject({
@@ -484,5 +529,62 @@ describe('AgentRoomsService offers', () => {
     expect(s.b.hideOffer).toHaveBeenCalledWith(offerId)
     expect(await s.service.listOffers()).toEqual([])
     expect(s.calls).not.toContain(ROOMS_TASK.offersAccept)
+  })
+})
+
+// The agent's key list is one read shared by every caller while it is in flight (#725). An accept must never be
+// answered from, or leave behind, a read that left before the room was held.
+describe('the shared key-list read across an accept', () => {
+  /** Holds every key-list answer until released; returns the release. */
+  const gateKeyList = (s: ReturnType<typeof setup>) => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const answer = s.agentTask.getMockImplementation()!
+    s.agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysList02) await gate
+      return answer(type, payload)
+    })
+    return release
+  }
+  const keyListAsks = (s: ReturnType<typeof setup>) => sent(s.agentTask, ROOMS_TASK.keysList02).length
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('a read asked before an accept is not joined after it: the next listing asks again', async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open'), offer(SEALED_ROOM, 'attributed', 'accepted')] })
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))
+    const release = gateKeyList(s)
+    const before = keyListAsks(s)
+
+    const first = s.service.listOffers() // asks the key list for the accepted sealed offer, and waits
+    await settle()
+    expect(await s.service.acceptOffer(preview.token)).toEqual({ roomId: OPEN_ROOM })
+    const second = s.service.listOffers()
+    await settle()
+
+    expect(keyListAsks(s) - before).toBe(2)
+    release()
+    await Promise.all([first, second])
+  })
+
+  it('the accept asks whether the room is held afresh, never from a read already in flight', async () => {
+    const s = setup({ offers: [offer(SEALED_ROOM, 'attributed', 'accepted')] })
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, SEALED_ROOM))
+    const release = gateKeyList(s)
+    const before = keyListAsks(s)
+    // The read in flight is the rooms list's (an offers listing would hold back the offer being accepted).
+    const answer = s.communityTask.getMockImplementation()!
+    s.communityTask.mockImplementation(async (did: string, type: string, payload: Record<string, unknown>) =>
+      type === ROOMS_TASK.membershipsList ? { items: [] } : answer(did, type, payload)
+    )
+
+    const listing = s.service.listMyRooms()
+    await settle()
+    const accepting = s.service.acceptOffer(preview.token)
+    await settle()
+
+    expect(keyListAsks(s) - before).toBe(2)
+    release()
+    expect(await accepting).toEqual({ roomId: SEALED_ROOM })
+    await listing
   })
 })
