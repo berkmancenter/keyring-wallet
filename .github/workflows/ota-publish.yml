@@ -80,8 +80,11 @@ on:
 
 permissions:
   contents: read
-  # Reading the target store build's recorded fingerprint (an artifact of its staging run).
+  # Reading the target store build's recorded fingerprint (an artifact of its staging run), and, for an ota-strict
+  # change, the Test builds and gate-smoke runs that prove its launch smoke (scripts/ota/strict-proof.mjs).
   actions: read
+  # An ota-strict change's attested conditions: the commit statuses ota-strict/targeted-tests and ota-strict/sim-check.
+  statuses: read
 
 concurrency:
   group: ota-publish
@@ -349,6 +352,8 @@ jobs:
           SCOPE: ${{ inputs.scope }}
           EXPECTED: ${{ steps.expected.outputs.hash }}
           RECORDED: ${{ steps.expected.outputs.recorded }}
+          # An ota-strict change: ota-deploy proves its conditions for GITHUB_SHA through gh (strict-proof.mjs).
+          GH_TOKEN: ${{ github.token }}
         run: |
           recorded=()
           [ -n "$RECORDED" ] && recorded=(--recorded-fingerprint "$RECORDED")
@@ -426,17 +431,26 @@ jobs:
           node scripts/ota/native-config.mjs
           node scripts/ota/check-fingerprint.mjs verify --platform "$PLATFORM" --expected "$EXPECTED" --recorded "${RECORDED:-none}"
 
+      # The tier, as the publish will read it; for ota-strict (exit 5), each strict condition, met or missing. The dry
+      # run passes only on exit 0, or on exit 5 with every condition met.
       - name: Dry run
         if: ${{ inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
         env:
           BUILD: ${{ inputs.build }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           tag=$(git tag --list "staging-v*-$BUILD")
           if [ "$(printf '%s\n' "$tag" | grep -c .)" != 1 ]; then
             echo "::error::expected one staging-v*-$BUILD tag, found: ${tag:-none}"
             exit 1
           fi
-          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json
+          code=0
+          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json || code=$?
+          case "$code" in
+            0) ;;
+            5) node scripts/ota/strict-proof.mjs --sha "$GITHUB_SHA" ;;
+            *) echo "::error::tier.mjs exit $code: not publishable over the air"; exit 1 ;;
+          esac
 
       - name: Remove the signing key
         if: ${{ always() }}
