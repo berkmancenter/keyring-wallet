@@ -4,7 +4,7 @@
  * Publish an over-the-air bundle to ring 0, with the checks the OTA plan
  * requires (docs/plans/release-cadence-and-testing-strategy/ota_updates_subtask.md).
  *
- *   node scripts/ota-deploy.mjs --build <N> [--platform ios|android|both]
+ *   node scripts/ota-deploy.mjs --build <N> [--release <N>.<n>] [--platform ios|android|both]
  *        [--channel <name>] [--scope fix|within-purpose] [--message <text>]
  *
  * --build is the store build the bundle targets: its staging-v*-<N> tag names
@@ -65,6 +65,7 @@ const RING0 = 'ring0'
 const { values: args } = parseArgs({
   options: {
     build: { type: 'string' },
+    release: { type: 'string' },
     base: { type: 'string' },
     platform: { type: 'string', default: 'both' },
     channel: { type: 'string', default: process.env.OTA_CHANNEL ?? 'production' },
@@ -87,6 +88,16 @@ const repoDir = path.resolve(appDir, '..')
 const git = (...a) => execFileSync('git', a, { cwd: repoDir, encoding: 'utf8' }).trim()
 
 if (!args.build === !args.base) fail('give exactly one of --build <N> (the store build) or --base <commit>')
+// The release number names the bundle on the server, as it names the run: <store build>.<n>, of that store build.
+const isReleaseOf = (release, build) => /^\d+\.\d+$/.test(release) && release.split('.')[0] === build
+if (args.release !== undefined && !isReleaseOf(args.release, args.build)) {
+  const example = `${args.build ?? '276'}.2`
+  fail(
+    `--release ${args.release} is not a release of store build ${
+      args.build ?? '(none)'
+    }: give <store build>.<n>, e.g. ${example}`
+  )
+}
 if (!SCOPES.includes(args.scope)) fail(`--scope must be one of ${SCOPES.join(', ')}`)
 if (args['skip-tier'] && (args.channel !== 'device-test' || !args.base)) {
   fail('--skip-tier is only for the device-test channel with --base (the quick-install test app)')
@@ -208,7 +219,10 @@ if (expected.size) {
 
 const message =
   args.message ??
-  `[scope: ${args.scope}] wallet ${walletHead.slice(0, 8)} bifold ${bifoldHead.slice(0, 8)} base ${baseRef}`
+  `[${args.release ? `release ${args.release}, ` : ''}scope: ${args.scope}] wallet ${walletHead.slice(
+    0,
+    8
+  )} bifold ${bifoldHead.slice(0, 8)} base ${baseRef}`
 
 const hotUpdater = (...a) => {
   const result = spawnSync('npx', ['hot-updater', ...a], {

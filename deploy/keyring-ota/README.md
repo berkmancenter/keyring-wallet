@@ -141,6 +141,14 @@ ota-publish's dispatch has ten inputs, GitHub's maximum: a new one has to
 replace an existing input or move to a repository variable (as the soak did).
 Past ten, the workflow stops accepting dispatches.
 
+**Releases are numbered** `<store build>.<n>`, e.g. `276.2`, the second update to store build 276. That's the
+`release` input, which took the place of `build` (the part before the dot is the store build). Every production and
+preview run needs one, and its title names it: "OTA 276.2 · publish to ring 0", "OTA 276.2 · widen to everyone",
+"OTA 276.2 · withdraw ios". A publish and its widen are two runs, each with its own approval. The bundle's message on
+the server carries the release too. The workflow is named "OTA release". post-release.yml subscribes to it by name,
+and `scripts/ci/workflow-run-names.mjs` fails CI when any `workflow_run` subscription names a workflow that doesn't
+exist.
+
 ### Pulling an update from everyone
 
 1. **Disable it.** Through ota-publish (`action: disable`, then the approval
@@ -280,7 +288,7 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 
 | Channel | Who has it | Signed with | Inputs |
 | --- | --- | --- | --- |
-| `production` | store builds | `OTA_SIGNING_KEY_PEM`, which must be `OTA_PUBLIC_KEY`'s pair | publish: `build` (staging tag number), tier check; disable: `bundle_id` and its platform |
+| `production` | store builds | `OTA_SIGNING_KEY_PEM`, which must be `OTA_PUBLIC_KEY`'s pair | publish: `release` (`<store build>.<n>`, e.g. `276.2`: the part before the dot names the staging tag), tier check; disable and promote: `bundle_id` and its platform, with `release` as the run's label |
 | `preview` | an early-access group (no app build yet) | the same store key: store builds carry only `OTA_PUBLIC_KEY` | as production |
 | `device-test` | the quick-install test app only | **only** `OTA_TEST_SIGNING_KEY_PEM`, which must not be the store key; no fallback | `base` (the test app's build commit); tier check skipped; actions publish, tamper, crash, mismatch, disable, cleanup (`scripts/ota/device-test.sh`) |
 
