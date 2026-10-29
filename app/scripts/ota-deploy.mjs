@@ -11,9 +11,14 @@
  * the commit that build was cut from, the same build whose native fingerprint
  * the bundle must match. The change from that commit to HEAD must be
  * JavaScript-only by scripts/release/tier.mjs (exit 0, tier "ota"), with no
- * held class (stored-record deletion, sign-in or key handling, VTI protocol
- * line): those always ship as store builds. Measuring from any other commit
- * could read "ota" for JS that calls a native method the build lacks.
+ * held class (stored-record deletion always ships as a store build). Tier
+ * "ota-strict" (exit 5: sign-in or key handling, the VTI protocol line) is
+ * published only when scripts/ota/strict-proof.mjs proves every strict
+ * condition for HEAD (launch smoke on both platforms, the attested targeted
+ * tests and simulator check), from ota-publish.yml only (GITHUB_SHA must be
+ * HEAD; GITHUB_REPOSITORY names the repository); otherwise nothing is.
+ * Measuring from any other commit could read "ota" for JS that calls a native
+ * method the build lacks.
  *
  * --base <commit> replaces --build only for a build that has no staging tag
  * (the spike's quick-install build); it must still be an ancestor of HEAD.
@@ -53,6 +58,7 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { assertFingerprint } from '../../scripts/ota/check-fingerprint.mjs'
+import { proveStrict } from '../../scripts/ota/strict-proof.mjs'
 
 const SCOPES = ['fix', 'within-purpose']
 const RING0 = 'ring0'
@@ -148,7 +154,23 @@ if (args['skip-tier']) {
   } catch {
     fail(`tier.mjs gave no verdict (exit ${run.status}): ${run.stderr}`)
   }
-  if (run.status !== 0 || verdict.tier !== 'ota') {
+  const strict = run.status === 5 && verdict.tier === 'ota-strict'
+  if (strict) {
+    // Only with every strict condition proven for this exact commit (scripts/ota/strict-proof.mjs).
+    const flags = verdict.strict.join('; ')
+    console.log(`ota-deploy: tier ota-strict (${flags}); proving the strict conditions for ${walletHead.slice(0, 8)}`)
+    // The proof is for the commit the run checked out, and the bundle is built from HEAD: they must be one commit.
+    const checkedOut = process.env.GITHUB_SHA || 'unset'
+    if (checkedOut !== walletHead) {
+      fail(
+        `a strict bundle is published only by ota-publish.yml, from the commit it proves (GITHUB_SHA ${checkedOut}, HEAD ${walletHead})`
+      )
+    }
+    const conditions = proveStrict({ sha: walletHead, repo: process.env.GITHUB_REPOSITORY })
+    for (const c of conditions) console.log(`ota-deploy:   ${c.met ? 'met    ' : 'MISSING'} ${c.name}: ${c.detail}`)
+    if (!conditions.every((c) => c.met))
+      fail('tier is "ota-strict" and a strict condition is not proven: nothing is published')
+  } else if (run.status !== 0 || verdict.tier !== 'ota') {
     const held = verdict.held?.length ? `; held: ${verdict.held.join(', ')}` : ''
     fail(`tier is "${verdict.tier}" (exit ${run.status})${held}: this change ships as a store build`)
   }
