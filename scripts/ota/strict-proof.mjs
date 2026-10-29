@@ -97,10 +97,17 @@ export const checkSmoke = (sha, builds, smokes) => {
   }
 }
 
-const ghApi = (route) => JSON.parse(execFileSync('gh', ['api', route], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }))
+const gh = (...args) => JSON.parse(execFileSync('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }))
+const ghApi = (route) => gh(route)
+// Every page of a list (--paginate --slurp: an array of pages): the gate-smoke list has no sha to filter on, so a
+// first page alone would stop finding an older commit's smoke once 100 newer ones were green.
+const ghPages = (route) => gh('--paginate', '--slurp', route)
 
-/** Every condition for the commit, read from GitHub. A read that fails is a condition not met, never a pass. */
-export const proveStrict = ({ sha, repo, api = ghApi }) => {
+/**
+ * Every condition for the commit, read from GitHub. A read that fails is a condition not met, never a pass. api reads
+ * one page; pages reads every page of a list (by default, from an api given in its place: that one page).
+ */
+export const proveStrict = ({ sha, repo, api = ghApi, pages = api === ghApi ? ghPages : (route) => [api(route)] }) => {
   if (!/^[0-9a-f]{40}$/.test(sha ?? '')) return [{ name: 'commit', met: false, detail: `not a full sha: '${sha}'` }]
   if (!repo) return [{ name: 'repository', met: false, detail: 'no repository (--repo or GITHUB_REPOSITORY)' }]
   const read = (name, fn) => {
@@ -115,8 +122,9 @@ export const proveStrict = ({ sha, repo, api = ghApi }) => {
     const builds = api(`repos/${repo}/actions/workflows/test-builds.yml/runs?head_sha=${sha}&status=success&per_page=100`).workflow_runs
     const ids = builds.map((r) => String(r.id))
     // Jobs only for the smokes whose title names one of those builds; checkSmoke applies every rule again.
-    const smokes = api(`repos/${repo}/actions/workflows/gate-smoke.yml/runs?status=success&per_page=100`)
-      .workflow_runs.filter((s) => ids.some((id) => (s.display_title ?? '').includes(`Test builds ${id}`)))
+    const smokes = pages(`repos/${repo}/actions/workflows/gate-smoke.yml/runs?status=success&per_page=100`)
+      .flatMap((page) => page.workflow_runs)
+      .filter((s) => ids.some((id) => (s.display_title ?? '').includes(`Test builds ${id}`)))
       .map((s) => ({ ...s, jobs: api(`repos/${repo}/actions/runs/${s.id}/jobs?per_page=100`).jobs }))
     return [checkSmoke(sha, builds, smokes)]
   })

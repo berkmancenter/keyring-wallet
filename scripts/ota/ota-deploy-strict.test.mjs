@@ -21,9 +21,11 @@ const COPIED = [
 const dirs = []
 after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })))
 
-// A fake gh: `gh api <route>` answers from FAKE_GH (met: every condition proven; anything else: nothing on GitHub).
+// A fake gh: `gh api [--paginate --slurp] <route>` answers from FAKE_GH (met: every condition proven; anything else:
+// nothing on GitHub). --slurp wraps the answer as the one page of a list, as gh does.
 const FAKE_GH = `#!/usr/bin/env node
-const route = process.argv[3] || ''
+const route = process.argv[process.argv.length - 1] || ''
+const slurp = process.argv.includes('--slurp')
 const sha = process.env.FAKE_SHA
 const met = process.env.FAKE_GH === 'met'
 const out = route.includes('/statuses')
@@ -36,7 +38,7 @@ const out = route.includes('/statuses')
         ? { jobs: ['iOS smoke (macos-26)', 'Android smoke (ubuntu-latest, KVM)'].map((n) => ({ name: n + ' · ' + sha.slice(0, 8), conclusion: 'success' })) }
         : null
 if (out === null) { console.error('unexpected route ' + route); process.exit(1) }
-console.log(JSON.stringify(out))
+console.log(JSON.stringify(slurp ? [out] : out))
 `
 
 /**

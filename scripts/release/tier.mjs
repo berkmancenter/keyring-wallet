@@ -56,8 +56,9 @@ export const RULES = [
   // Folders the app never ships.
   ['none', 'e2e, CI and tooling', /^(e2e|\.github|scripts|tsp-reference|deploy|\.claude|\.husky|\.yarn\/releases|\.demo-local|docs)\//],
   // The app's own tooling: the OTA publisher, the ledger refresh. Nothing the bundle imports. A hot fix branch carries
-  // the publisher it is published with, so a change here must never make the fix itself read store.
-  ['none', "the app's tooling (app/scripts: the OTA publisher, the ledger refresh)", /^app\/scripts\//],
+  // the publisher it is published with, so a change here must never make the fix itself read store. Its script files
+  // only: a manifest there (package.json) still reads store, by the rule below.
+  ['none', "the app's tooling (app/scripts: the OTA publisher, the ledger refresh)", /^app\/scripts\/[^/]+\.(mjs|cjs|js)$/],
   ['none', 'server-side package (not in the app)', /^bifold\/packages\/(witness-server|mediator-server|vrc-reference|vrc-shared)\//],
   ['none', "bifold's sample app, tooling or CI", /^bifold\/(samples|scripts|\.github|\.githooks|docs)\//],
   // Store: compiled into the binary.

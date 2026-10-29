@@ -90,6 +90,19 @@ test('proveStrict: every condition met, reading only the smokes that name the bu
   assert.equal(asked.some((r) => r.includes('/runs/299/')), false)
 })
 
+test('proveStrict: the smoke may be on any page of the gate-smoke list', () => {
+  const smokeList = `repos/${R}/actions/workflows/gate-smoke.yml/runs`
+  const pages = (route) =>
+    route.startsWith(smokeList)
+      ? [{ workflow_runs: [{ id: 299, display_title: 'Gate smoke · Test builds 999', conclusion: 'success' }] }, ROUTES[smokeList]]
+      : [fakeApi(ROUTES)(route)]
+  const conditions = proveStrict({ sha: SHA, repo: R, api: fakeApi(ROUTES), pages })
+  assert.equal(conditions[0].met, true)
+  // The first page alone would not have found it.
+  const firstOnly = proveStrict({ sha: SHA, repo: R, api: fakeApi(ROUTES), pages: (route) => [pages(route)[0]] })
+  assert.equal(firstOnly[0].met, false)
+})
+
 test('proveStrict: a read that fails is a condition not met, never a pass', () => {
   const down = proveStrict({ sha: SHA, repo: R, api: fakeApi({ ...ROUTES, [`repos/${R}/commits/${SHA}/statuses`]: new Error('HTTP 502') }) })
   assert.deepEqual(down.map((c) => [c.name, c.met]), [['launch smoke', true], ['attested checks', false]])

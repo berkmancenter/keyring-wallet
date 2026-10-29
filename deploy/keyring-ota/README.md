@@ -117,6 +117,11 @@ for the exact commit the bundle is built from:
    clicks it, or tells the session running it directly, for that run, and the owner's words go in the approval comment.
 5. **Ring 0 first:** every publish reaches ring 0 only. Widening is `promote`, after the owner's own check.
 
+Only 3 and 5 are proven by a machine. 1, 2 and 4 are conventions: any session with write access can set a status
+with any `target_url`, and nothing checks that the tests or the simulator check happened. So they rest on the same
+rule as 4: a status is set only by whoever ran that check, with the evidence it names. Red runs are ignored, so a
+launch smoke that went green on a rerun counts.
+
 `scripts/ota/strict-proof.mjs` reads 1–3 for the publish (ota-deploy calls it, only on exit 5 with tier `ota-strict`).
 Any condition missing, failed, unreadable, or for another commit, and nothing is published. A strict bundle is published
 only by ota-publish.yml (ota-deploy checks that `GITHUB_SHA` is HEAD). To see what is still missing before asking for

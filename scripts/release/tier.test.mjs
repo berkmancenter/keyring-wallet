@@ -57,6 +57,9 @@ test('what the app never ships is none, even a manifest there', () => {
   // The app's tooling: a hot fix branch carries its publisher, which must not make the fix read store.
   assert.equal(tierOf('app/scripts/ota-deploy.mjs', 'app/scripts/refresh-ledgers.cjs'), 'none');
   assert.equal(tierOf('app/scripts/ota-deploy.mjs', 'app/src/screens/Home.tsx'), 'ota');
+  // Only its script files: a manifest or anything deeper there is not tooling by this rule.
+  assert.equal(tierOf('app/scripts/package.json'), 'store');
+  assert.equal(tierOf('app/scripts/lib/x.mjs'), 'store');
 });
 
 test('an unknown path is store, never OTA by default; an unread bifold range too', () => {
