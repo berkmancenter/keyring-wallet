@@ -1,0 +1,67 @@
+name: Post-release smoke
+
+# The owner's pipeline (10-29): a release follows the merge, and the released commit is tested after it.
+# After every "OTA publish (ring 0)" run that published (a dry run, promote, withdraw or device test publishes
+# nothing and this stops at once), scripts/ota/post-release.mjs:
+#   - dispatches Test builds on the released branch and waits for the run built from the released commit,
+#   - dispatches gate-smoke.yml on that run (both platforms) and waits for it,
+#   - lists the screens changed since the previous release, for the quick simulator check of each one.
+# It writes the bundle ids, the runs, the verdict and the screens to the job summary and to the
+# post-release-handoff artifact. A red smoke or red builds fail this job; it publishes, widens and withdraws
+# nothing (the brake is a separate job that acts only on a red smoke).
+# Runs from the default branch's copy of this file, whatever branch the release came from.
+
+on:
+  workflow_run:
+    workflows: ["OTA publish (ring 0)"]
+    types: [completed]
+
+permissions:
+  contents: read
+  # Dispatching Test builds and gate-smoke, and reading runs, jobs and their logs.
+  actions: write
+
+concurrency:
+  group: post-release-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Post-release smoke · ${{ github.event.workflow_run.head_branch }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-22.04
+    # Test builds take about 45 minutes and the smoke about 30; the waits are polls, one read a minute.
+    timeout-minutes: 240
+    outputs:
+      verdict: ${{ steps.smoke.outputs.verdict }}
+      sha: ${{ steps.smoke.outputs.sha }}
+      bundles: ${{ steps.smoke.outputs.bundles }}
+      gate_smoke: ${{ steps.smoke.outputs.gate_smoke }}
+    steps:
+      # The whole history, so the released commit (on a hotfix branch) and the previous release are both here.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      # The changed screens read through the bifold pin move: both pins' objects must be in the submodule.
+      - name: Fetch bifold's history
+        run: git -C bifold fetch --quiet origin '+refs/heads/*:refs/remotes/origin/*'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.2
+
+      - name: Smoke the released commit
+        id: smoke
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_RUN: ${{ github.event.workflow_run.id }}
+        run: node scripts/ota/post-release.mjs --publish-run "$PUBLISH_RUN"
+
+      - name: The screen check's handoff
+        if: ${{ always() && hashFiles('post-release-handoff.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-release-handoff-${{ github.event.workflow_run.head_sha }}
+          path: post-release-handoff.json
