@@ -199,6 +199,11 @@ export interface RoomsAttachment {
   size: number
 }
 
+/** The longest note title, in characters: the room schema's cleartext title (`RecordMetadata.title`). */
+export const NOTE_TITLE_MAX = 512
+/** The longest note body, in characters: the member sprint's 16 KiB cap on a record. */
+export const NOTE_BODY_MAX = 16384
+
 export interface WriteDraft {
   title: string
   body: string

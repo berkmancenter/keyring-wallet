@@ -13,6 +13,9 @@
  * records and the markers of removed ones, which the chat leaves out; and Members, the member's own access and the
  * community's list. Reached only while the rooms flag is on.
  *
+ * In an open room a member who may write can add a titled note from the Notes tab and edit their own, each through
+ * the note editor's check before posting. Other tiers say writing isn't available there yet.
+ *
  * @module rooms/screens/Room
  */
 import { useHeaderHeight } from '@react-navigation/elements'
@@ -34,6 +37,7 @@ import { localDayKey } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import { RoomComposer } from '../components/RoomComposer'
 import { RoomFileSheet } from '../components/RoomFileSheet'
+import { type NoteEditorTarget, RoomNoteEditor } from '../components/RoomNoteEditor'
 import { RoomFilesTab } from '../components/RoomFilesTab'
 import { RoomMembersTab } from '../components/RoomMembersTab'
 import { RoomNotesTab } from '../components/RoomNotesTab'
@@ -115,6 +119,7 @@ const Room: React.FC = () => {
   const [openedFile, setOpenedFile] = useState<RoomFile>()
   const [tab, setTab] = useState<RoomTab>('chat')
   const [attachRequest, setAttachRequest] = useState(0)
+  const [noteEditor, setNoteEditor] = useState<NoteEditorTarget>()
   const { reload } = state
   // The library is read again each time it is shown, so a file just posted from the chat is in it.
   const showTab = (next: RoomTab) => {
@@ -186,6 +191,9 @@ const Room: React.FC = () => {
 
   const unavailable = roomsStatusText(t, roomCapabilities.listNotes, 'listNotes')
   const cannotPost = roomsStatusText(t, roomCapabilities.write, 'write')
+  // Notes are written to open rooms only, for now: elsewhere the tab says so rather than offer a write that fails.
+  const notesNotYet = !cannotPost && room.tier !== 'open' ? (t('Rooms.TierNotYet') as string) : undefined
+  const canWriteNotes = !unavailable && !cannotPost && !notesNotYet
   // Titled records and removed ones are the room's notes, on their own tab; the chat shows the rest.
   const chatPosts = feed.posts?.filter((p) => !isNote(p))
   const notes = feed.posts?.filter(isNote)
@@ -259,6 +267,10 @@ const Room: React.FC = () => {
           feed={feed}
           unavailable={unavailable}
           onOpenFile={canOpenFiles ? setOpenedFile : undefined}
+          onNewNote={canWriteNotes ? () => setNoteEditor({ kind: 'new' }) : undefined}
+          onEditNote={canWriteNotes ? (note) => setNoteEditor({ kind: 'edit', note }) : undefined}
+          cannotWrite={notesNotYet ?? cannotPost}
+          writeStatus={roomCapabilities.write}
         />
       ) : null}
       {tab === 'files' ? (
@@ -344,6 +356,13 @@ const Room: React.FC = () => {
         )}
       </KeyboardAvoidingView>
       <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />
+      <RoomNoteEditor
+        service={service}
+        roomId={roomId}
+        target={noteEditor}
+        onClose={() => setNoteEditor(undefined)}
+        onSaved={feed.refresh}
+      />
     </SafeAreaView>
   )
 }

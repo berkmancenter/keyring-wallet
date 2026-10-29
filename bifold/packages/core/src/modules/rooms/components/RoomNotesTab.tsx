@@ -5,6 +5,9 @@
  *
  * Where notes can't be listed, the tab says why in the rooms screens' usual words, never an empty list.
  *
+ * Where the member may write, "New note" opens the note editor, and each of their own notes offers Edit. Where
+ * writing isn't open to them yet, the tab says so instead of offering a button that would fail.
+ *
  * @module rooms/components/RoomNotesTab
  */
 import React, { useMemo } from 'react'
@@ -16,7 +19,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import type { RoomPost } from '../roomPosts'
-import type { RoomFile } from '../types'
+import type { OperationStatus, RoomFile } from '../types'
 import type { RoomPosts } from '../useRoomPosts'
 
 import { RoomNoteCard } from './RoomNoteCard'
@@ -28,6 +31,14 @@ export interface RoomNotesTabProps {
   /** Why notes can't be listed here, in words; none where they can. */
   unavailable?: string
   onOpenFile?: (file: RoomFile) => void
+  /** Opens the editor for a new note; none where the member can't write one. */
+  onNewNote?: () => void
+  /** Opens the editor on one of the member's own notes. */
+  onEditNote?: (note: RoomPost) => void
+  /** Why notes can't be written here, in words; none where they can or the room doesn't say. */
+  cannotWrite?: string
+  /** The room's write status, for a card that says a feature is on its way. Not rendered yet. */
+  writeStatus?: OperationStatus
 }
 
 /** Pinned first, keeping the order given (newest first) within each. */
@@ -36,7 +47,15 @@ export const pinnedFirst = (notes: RoomPost[]): RoomPost[] => [
   ...notes.filter((n) => !n.pinned || n.retracted),
 ]
 
-export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({ notes, feed, unavailable, onOpenFile }) => {
+export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({
+  notes,
+  feed,
+  unavailable,
+  onOpenFile,
+  onNewNote,
+  onEditNote,
+  cannotWrite,
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const sorted = useMemo(() => (notes ? pinnedFirst(notes) : []), [notes])
@@ -45,6 +64,7 @@ export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({ notes, feed, unavail
     muted: { color: ColorPalette.grayscale.mediumGrey },
     centered: { paddingVertical: 16 },
     footer: { gap: 12, paddingTop: 4 },
+    header: { gap: 10 },
   })
 
   const empty = unavailable ? (
@@ -73,12 +93,26 @@ export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({ notes, feed, unavail
       contentContainerStyle={styles.list}
       ListHeaderComponent={
         unavailable ? null : (
-          <ThemedText variant="caption" style={styles.muted} testID={testIdWithKey('RoomNotesCaption')}>
-            {t('Rooms.NotesCaption')}
-          </ThemedText>
+          <View style={styles.header}>
+            {onNewNote ? (
+              <Button
+                title={t('Rooms.NoteNew')}
+                buttonType={ButtonType.Secondary}
+                onPress={onNewNote}
+                testID={testIdWithKey('RoomNoteNew')}
+              />
+            ) : cannotWrite ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey('RoomNotesCannotWrite')}>
+                {cannotWrite}
+              </ThemedText>
+            ) : null}
+            <ThemedText variant="caption" style={styles.muted} testID={testIdWithKey('RoomNotesCaption')}>
+              {t('Rooms.NotesCaption')}
+            </ThemedText>
+          </View>
         )
       }
-      renderItem={({ item }) => <RoomNoteCard note={item} onOpenFile={onOpenFile} />}
+      renderItem={({ item }) => <RoomNoteCard note={item} onOpenFile={onOpenFile} onEdit={onEditNote} />}
       ListEmptyComponent={empty}
       refreshControl={
         unavailable ? undefined : (
