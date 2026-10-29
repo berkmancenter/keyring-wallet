@@ -73,8 +73,11 @@ export function mergeNewer(listing: Listing, newer: NoteList): { listing: Listin
     byKey.set(note.key, note)
     changed = true
   }
-  // A conflict the agent found shows at once. A partial listing can't be compared, so it never clears one.
-  const check = newer.check.verdict === 'conflict' ? newer.check : listing.check
+  // A conflict the agent found shows at once. A partial listing can't be compared, so it never clears one; and the
+  // same conflict found again is no change, so a standing one redraws nothing. `HostCheck` is exactly
+  // { verdict, detail }: a field added to it must be compared here too.
+  const sameCheck = newer.check.verdict === listing.check.verdict && newer.check.detail === listing.check.detail
+  const check = newer.check.verdict === 'conflict' && !sameCheck ? newer.check : listing.check
   if (!changed && check === listing.check) return undefined
   return {
     listing: { notes: newestFirst([...byKey.values()]), check, complete: listing.complete && newer.complete },
@@ -83,6 +86,23 @@ export function mergeNewer(listing: Listing, newer: NoteList): { listing: Listin
 }
 
 const readKey = (note: NoteSummary) => `${note.key}@${note.version}`
+
+/**
+ * A listing, counted in `inFlight` until it settles, even when the call throws before it returns a promise: left
+ * counted, every later poll would be skipped for the life of the screen.
+ */
+function counted(inFlight: { current: number }, list: () => Promise<NoteList>): Promise<NoteList> {
+  let asked: Promise<NoteList>
+  try {
+    asked = list()
+  } catch (e) {
+    asked = Promise.reject(e)
+  }
+  inFlight.current++
+  return asked.finally(() => {
+    inFlight.current--
+  })
+}
 
 export function useRoomPosts(
   service: RoomsService | undefined,
@@ -104,6 +124,9 @@ export function useRoomPosts(
   const listingsInFlight = useRef(0)
   // Coming back into view catches up at once instead of a tick later.
   const resumed = useRef(false)
+  // Ticks still to pass after a failed poll. Kept across leaving and coming back, so a member whose agent is failing
+  // doesn't ask again on every return; a listing that succeeds clears them.
+  const skips = useRef(0)
   const reads = useRef<{ service?: RoomsService; roomId: string; notes: Map<string, Note> }>({
     roomId,
     notes: new Map(),
@@ -114,22 +137,19 @@ export function useRoomPosts(
   useEffect(() => {
     if (!service || !enabled) return
     let current = true
-    listingsInFlight.current++
-    service
-      .listNotes(roomId)
-      .then(
-        (list) => {
-          if (!current) return
-          setListing({ notes: newestFirst(list.notes), check: list.check, complete: list.complete })
-          setFailed(false)
-        },
-        () => {
-          if (!current) return
-          setFailed(true)
-          setRefreshing(false)
-        }
-      )
-      .finally(() => listingsInFlight.current--)
+    counted(listingsInFlight, () => service.listNotes(roomId)).then(
+      (list) => {
+        skips.current = 0
+        if (!current) return
+        setListing({ notes: newestFirst(list.notes), check: list.check, complete: list.complete })
+        setFailed(false)
+      },
+      () => {
+        if (!current) return
+        setFailed(true)
+        setRefreshing(false)
+      }
+    )
     return () => {
       current = false
     }
@@ -139,33 +159,32 @@ export function useRoomPosts(
   useEffect(() => {
     if (!service || !enabled || !live || !listed) return
     let current = true
-    let skips = 0
     const tick = () => {
-      if (skips > 0) {
-        skips--
+      if (skips.current > 0) {
+        skips.current--
         return
       }
       if (listingsInFlight.current > 0) return
-      listingsInFlight.current++
-      service
-        .listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) })
-        .then(
-          (newer) => {
-            const now = listingNow.current
-            const merged = current && now ? mergeNewer(now, newer) : undefined
-            if (!merged) return
-            setListing(merged.listing)
-            // New posts go on top; the posts already shown stay shown.
-            if (merged.added > 0) setShown((n) => n + merged.added)
-          },
-          () => {
-            // Quietly: what is shown stays, and the next ticks give the agent room.
-            skips = POLL_SKIPS_AFTER_FAILURE
-          }
-        )
-        .finally(() => listingsInFlight.current--)
+      counted(listingsInFlight, () =>
+        service.listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) })
+      ).then(
+        (newer) => {
+          const now = listingNow.current
+          const merged = current && now ? mergeNewer(now, newer) : undefined
+          if (!merged) return
+          setListing(merged.listing)
+          // New posts go on top; the posts already shown stay shown.
+          if (merged.added > 0) setShown((n) => n + merged.added)
+        },
+        () => {
+          // Quietly: what is shown stays, and the next ticks give the agent room.
+          skips.current = POLL_SKIPS_AFTER_FAILURE
+        }
+      )
     }
-    if (resumed.current) tick()
+    // No catch-up while a failure's ticks are still owed: they pass first, up to (skips + 1) ticks. Pull to refresh
+    // is the member's way out at once, and a listing that succeeds clears them.
+    if (resumed.current && skips.current === 0) tick()
     resumed.current = false
     const timer = setInterval(tick, ROOM_POLL_MS)
     return () => {

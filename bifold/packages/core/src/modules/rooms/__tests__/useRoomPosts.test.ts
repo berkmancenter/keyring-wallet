@@ -202,6 +202,37 @@ describe('a room in view', () => {
     expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
   })
 
+  test('a standing conflict shows once, then redraws nothing tick after tick', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const { result } = await open(service)
+    const conflict = { verdict: 'conflict' as const, detail: 'the host contradicts what it served before' }
+    // Each answer a fresh object, as each parse of the agent's answer is.
+    service.listNotes.mockImplementation(async () => ({ notes: [], complete: true, check: { ...conflict } }))
+    await tick()
+    expect(result.current.check?.verdict).toBe('conflict')
+    const shown = result.current.posts
+    await tick()
+    await tick()
+    expect(polls(service)).toHaveLength(3)
+    expect(result.current.posts).toBe(shown)
+  })
+
+  test('a first listing that throws before it returns a promise says so, and polling works after a refresh', async () => {
+    const { service, write } = roomWith([note('a', 1)])
+    service.listNotes.mockImplementationOnce(() => {
+      throw new Error('no agent client')
+    })
+    const { result } = await open(service)
+    expect(result.current.failed).toBe(true)
+    await act(async () => result.current.refresh())
+    await flush()
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['a'])
+    write(note('b', 2))
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+  })
+
   test('a refresh lists the whole room again but reads only what changed', async () => {
     const { service, write } = roomWith([note('a', 1), note('b', 2)])
     const { result } = await open(service, false)
@@ -241,6 +272,23 @@ describe('a room out of view', () => {
     expect(hook.result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
     await tick()
     expect(polls(service)).toHaveLength(3)
+  })
+
+  test("a failed poll's waiting ticks are kept across leaving and coming back: no catch-up while they are owed", async () => {
+    const { service } = roomWith([note('a', 1)])
+    const hook = await open(service)
+    service.listNotes.mockRejectedValueOnce(new Error('the agent did not answer'))
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+
+    hook.rerender({ inView: false })
+    hook.rerender({ inView: true })
+    await flush()
+    expect(polls(service)).toHaveLength(1)
+    for (let i = 0; i < POLL_SKIPS_AFTER_FAILURE; i++) await tick()
+    expect(polls(service)).toHaveLength(1)
+    await tick()
+    expect(polls(service)).toHaveLength(2)
   })
 
   test('a poll answered after the room left view is not shown', async () => {
