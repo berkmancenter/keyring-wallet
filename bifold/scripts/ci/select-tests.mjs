@@ -7,7 +7,7 @@
 // nightly, and on a PR labelled `full-tests` (.github/workflows/full-tests.yaml).
 //
 //   node scripts/ci/select-tests.mjs plan --base origin/main --out plan.json
-//   node scripts/ci/select-tests.mjs run --plan plan.json
+//   node scripts/ci/select-tests.mjs run --plan plan.json [--part 2/4] [--max-workers 4]
 //
 // plan: reads the PR's diff against its merge base and decides each workspace's
 // mode: "all" (its whole suite) or, for @bifold/core only, "related" (jest's
@@ -19,7 +19,10 @@
 // run: lists the selected test files with jest, says "related subset: N of M test
 // files" or "full suite" in the log, the step summary, a notice and the step output
 // `scope`, then runs them. Each workspace runs even when an earlier one failed,
-// and the step fails if any did.
+// and the step fails if any did. With --part i/n it runs only its share: core's
+// selected (or whole) suites through jest's --shard, and another package's whole
+// suite only in the last part. Every part lists the whole selection and reports
+// the same scope.
 //
 // Rules, in order. Each path is judged on its own; the run is the union.
 //   1. Everything (every workspace's whole suite): the install and the jest/babel
@@ -400,64 +403,80 @@ function walk(dir, out = []) {
   return out
 }
 
+/** "2/4" → { part: 2, parts: 4 }; absent → one part. */
+export function parsePart(text) {
+  if (text === undefined) return { part: 1, parts: 1 }
+  const m = /^(\d+)\/(\d+)$/.exec(text)
+  const part = m && Number(m[1])
+  const parts = m && Number(m[2])
+  if (!m || part < 1 || part > parts) throw new Error(`--part must look like 2/4, got ${text}`)
+  return { part, parts }
+}
+
 function runCommand(args) {
   const p = JSON.parse(readFileSync(args.plan, 'utf8'))
+  const { part, parts } = parsePart(args.part)
+  // Core's suites are split across the parts by jest's --shard; another package's whole suite runs in the last part.
+  const shard = parts > 1 ? [`--shard=${part}/${parts}`, '--passWithNoTests'] : []
+  const workers = args['max-workers'] ? [`--maxWorkers=${args['max-workers']}`] : []
   const lines = []
   const failed = []
-  let scope
-  if (p.everything) {
-    scope = 'full suite'
-    lines.push(`Testing: **full suite**, every workspace.`)
-    const r = spawnSync('yarn', ['test'], { cwd: repoRoot, stdio: 'inherit' })
-    if (r.status !== 0) failed.push('yarn test')
-  } else {
-    const scopes = []
-    for (const name of p.testing) {
-      const ws = p.workspaces.find((w) => w.name === name)
-      if (p.modes[name] === 'all') {
-        scopes.push(`${name} full`)
-        lines.push(`- ${name}: **full suite**`)
-        console.log(`\n=== ${name}: full suite ===`)
-        if (yarnIn(ws.dir, ['run', 'test', '--ci']).status !== 0) failed.push(name)
+  const scopes = []
+  const modes = p.everything ? Object.fromEntries(p.testing.map((n) => [n, 'all'])) : p.modes
+  for (const name of p.testing) {
+    const ws = p.workspaces.find((w) => w.name === name)
+    if (modes[name] === 'all') {
+      scopes.push(`${name} full`)
+      lines.push(`- ${name}: **full suite**`)
+      if (name !== RELATED && part !== parts) {
+        console.log(`
+=== ${name}: full suite, in part ${parts}/${parts} ===`)
         continue
       }
-      const pkgRoot = path.join(repoRoot, ws.dir)
-      const every = listTests(ws.dir)
-      const changed = p.related.map((f) => path.join(repoRoot, f))
-      // jest relates only files inside its roots; one outside would silently select nothing.
-      const outside = changed.filter((f) => !f.startsWith(pkgRoot + path.sep))
-      if (outside.length) throw new Error(`related file(s) outside ${ws.dir}: ${outside.join(', ')}`)
-      const rel = listTests(ws.dir, ['--findRelatedTests', ...changed])
-      const testSet = new Set(every)
-      const helpers = walk(pkgRoot).filter(
-        (f) => /\/__tests__\//.test(f) && /\.(tsx?|jsx?|mjs|cjs)$/.test(f) && !testSet.has(f)
-      )
-      const guards = findGuards(every, helpers, (f) => readFileSync(f, 'utf8'))
-      const named = NAMED_GUARDS.map((g) => path.join(pkgRoot, g))
-      const missing = named.filter((g) => !testSet.has(g))
-      if (missing.length) throw new Error(`named guard(s) not among ${name}'s tests: ${missing.join(', ')}`)
-      if (guards.length === 0) throw new Error(`no guard found among ${every.length} tests in ${name}; refusing to run`)
-      const run = [...new Set([...rel, ...guards, ...named])].sort()
-      const head = `${name}: related subset: ${run.length} of ${every.length} test files (${rel.length} related to ${changed.length} changed file(s), ${guards.length + named.length} guards)`
-      scopes.push(`${name} subset ${run.length} of ${every.length}`)
-      lines.push(`- ${head}`)
-      console.log(`\n=== ${head} ===`)
-      for (const f of run) console.log(`  ${path.relative(pkgRoot, f)}${rel.includes(f) ? '' : '  (guard)'}`)
-      lines.push(
-        '',
-        '<details><summary>Files</summary>',
-        '',
-        ...run.map((f) => `- \`${path.relative(pkgRoot, f)}\`${rel.includes(f) ? '' : ' (guard)'}`),
-        '',
-        '</details>'
-      )
-      if (yarnIn(ws.dir, ['run', 'test', '--ci', '--runTestsByPath', ...run]).status !== 0) failed.push(name)
+      console.log(`
+=== ${name}: full suite${name === RELATED && parts > 1 ? `, part ${part}/${parts}` : ''} ===`)
+      const split = name === RELATED ? shard : []
+      if (yarnIn(ws.dir, ['run', 'test', '--ci', ...workers, ...split]).status !== 0) failed.push(name)
+      continue
     }
-    scope = scopes.length === 0 ? 'no jest suite' : scopes.join('; ')
+    const pkgRoot = path.join(repoRoot, ws.dir)
+    const every = listTests(ws.dir)
+    const changed = p.related.map((f) => path.join(repoRoot, f))
+    // jest relates only files inside its roots; one outside would silently select nothing.
+    const outside = changed.filter((f) => !f.startsWith(pkgRoot + path.sep))
+    if (outside.length) throw new Error(`related file(s) outside ${ws.dir}: ${outside.join(', ')}`)
+    const rel = listTests(ws.dir, ['--findRelatedTests', ...changed])
+    const testSet = new Set(every)
+    const helpers = walk(pkgRoot).filter(
+      (f) => /\/__tests__\//.test(f) && /\.(tsx?|jsx?|mjs|cjs)$/.test(f) && !testSet.has(f)
+    )
+    const guards = findGuards(every, helpers, (f) => readFileSync(f, 'utf8'))
+    const named = NAMED_GUARDS.map((g) => path.join(pkgRoot, g))
+    const missing = named.filter((g) => !testSet.has(g))
+    if (missing.length) throw new Error(`named guard(s) not among ${name}'s tests: ${missing.join(', ')}`)
+    if (guards.length === 0) throw new Error(`no guard found among ${every.length} tests in ${name}; refusing to run`)
+    const run = [...new Set([...rel, ...guards, ...named])].sort()
+    const head = `${name}: related subset: ${run.length} of ${every.length} test files (${rel.length} related to ${changed.length} changed file(s), ${guards.length + named.length} guards)${parts > 1 ? `; this is part ${part}/${parts} of them` : ''}`
+    scopes.push(`${name} subset ${run.length} of ${every.length}`)
+    lines.push(`- ${head}`)
+    console.log(`\n=== ${head} ===`)
+    for (const f of run) console.log(`  ${path.relative(pkgRoot, f)}${rel.includes(f) ? '' : '  (guard)'}`)
+    lines.push(
+      '',
+      '<details><summary>Files</summary>',
+      '',
+      ...run.map((f) => `- \`${path.relative(pkgRoot, f)}\`${rel.includes(f) ? '' : ' (guard)'}`),
+      '',
+      '</details>'
+    )
+    if (yarnIn(ws.dir, ['run', 'test', '--ci', ...workers, ...shard, '--runTestsByPath', ...run]).status !== 0)
+      failed.push(name)
   }
+  // The same in every part: it names the whole selection, not this part's share of it.
+  const scope = p.everything ? 'full suite' : scopes.length === 0 ? 'no jest suite' : scopes.join('; ')
   console.log(`\n::notice title=Testing scope::${scope}`)
   summary(
-    `### Testing scope: ${scope}\n\n${lines.join('\n')}\n\n**Why**\n\n${p.reasons.map((r) => `- ${r}`).join('\n')}\n`
+    `### Testing scope: ${scope}${parts > 1 ? ` (part ${part}/${parts})` : ''}\n\n${lines.join('\n')}\n\n**Why**\n\n${p.reasons.map((r) => `- ${r}`).join('\n')}\n`
   )
   output({ scope })
   if (failed.length) {
@@ -481,7 +500,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     if (args._[0] === 'plan') planCommand(args)
     else if (args._[0] === 'run') runCommand(args)
-    else throw new Error('usage: select-tests.mjs plan --base <ref> [--out plan.json] | run --plan plan.json')
+    else
+      throw new Error(
+        'usage: select-tests.mjs plan --base <ref> [--out plan.json] | run --plan plan.json [--part 2/4] [--max-workers 4]'
+      )
   } catch (e) {
     console.error(`::error::select-tests: ${e.message}`)
     process.exit(1)

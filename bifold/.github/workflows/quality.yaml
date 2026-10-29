@@ -123,13 +123,30 @@ jobs:
         run: |
           node --test scripts/ci/select-tests.test.mjs
 
+      - name: every other node test
+        run: |
+          # A *.test.mjs that no step names still runs here: an explicit list silently leaves a new one out
+          # (eslint-rules/require-testid.test.mjs never ran before this step).
+          named=$(grep -ohE 'node --test [^ ]+\.test\.mjs' .github/workflows/*.yaml | awk '{print $3}' | sort -u)
+          files=$(git ls-files '*.test.mjs' | grep -vxF "$named" || true)
+          echo "Not named by any step:"
+          echo "${files:-  (none)}"
+          if [ -n "$files" ]; then node --test $files; fi
+
   # On a PR, Testing runs only the suites the change can reach, plus every guard (scripts/ci/select-tests.mjs says
   # which and why). The full suite with coverage runs on every push to main, nightly, and on a PR labelled
-  # `full-tests`: the "Full test suite" workflow. The job keeps the name Testing, which the ruleset requires.
-  test:
+  # `full-tests`: the "Full test suite" workflow. The selection runs in four parts at once, each on its own runner
+  # (core's suites split by jest's --shard); the job named Testing, which the ruleset requires, passes only when
+  # every part passes.
+  test-part:
     runs-on: ubuntu-22.04
-    name: Testing
+    name: Testing part ${{ matrix.part }}/4
     if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4]
+    # Every part reports the same scope: the whole selection, not its share.
     outputs:
       scope: ${{ steps.run.outputs.scope || steps.plan.outputs.scope }}
     steps:
@@ -196,15 +213,34 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: packages/core/.jest/cache
-          key: jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ github.sha }}
+          key: jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-${{ github.sha }}
           restore-keys: |
-            jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-
+            jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-
 
+      # The runner has 4 vCPUs; jest's default leaves one idle.
       - name: Automated testing
         id: run
         if: steps.plan.outputs.work == 'true'
+        env:
+          PART: ${{ matrix.part }}/4
         run: |
-          node scripts/ci/select-tests.mjs run --plan "$RUNNER_TEMP/test-plan.json"
+          node scripts/ci/select-tests.mjs run --plan "$RUNNER_TEMP/test-plan.json" --part "$PART" --max-workers 4
+
+  test:
+    runs-on: ubuntu-22.04
+    name: Testing
+    needs: test-part
+    if: always() && github.event_name == 'pull_request'
+    outputs:
+      scope: ${{ needs.test-part.outputs.scope }}
+    steps:
+      - name: Every part passed
+        env:
+          RESULT: ${{ needs.test-part.result }}
+          SCOPE: ${{ needs.test-part.outputs.scope }}
+        run: |
+          echo "Testing ran: ${SCOPE:-unknown}; parts: $RESULT"
+          test "$RESULT" = success
 
   # Not required. Its name carries what Testing ran ("@bifold/core subset 63 of 704", "full suite"), where a merge
   # waiter can read it through the API (a job's name; a check run's summary is not readable there). Not run-name:

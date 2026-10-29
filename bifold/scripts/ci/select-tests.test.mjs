@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildSet, findGuards, plan, setupClosure, sourceMapped } from './select-tests.mjs'
+import { buildSet, findGuards, parsePart, plan, setupClosure, sourceMapped } from './select-tests.mjs'
 
 // The shape of this repo's graph: core loads oca and trust-tasks from src (mapped), the adapter from its build, and
 // the adapter loads trust-tasks; remote-logs loads core; witness-server is outside core's graph.
@@ -181,4 +181,10 @@ test('setupClosure follows relative imports to the given depth, not jest.mock ta
     '/p/src/c.tsx',
   ])
   assert.deepEqual([...setupClosure(['/p/jestSetup.js'], read, exists, 1)].sort(), ['/p/jestSetup.js', '/p/src/a.ts'])
+})
+
+test('--part reads "i/n" and refuses anything else', () => {
+  assert.deepEqual(parsePart(undefined), { part: 1, parts: 1 })
+  assert.deepEqual(parsePart('2/4'), { part: 2, parts: 4 })
+  for (const bad of ['0/4', '5/4', '2', 'a/b', '2/4/1']) assert.throws(() => parsePart(bad), /--part/, bad)
 })
