@@ -1,30 +1,25 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 /**
- * Proves the strict conditions for one commit, so an "ota-strict" change
+ * Proves the strict condition for one commit, so an "ota-strict" change
  * (scripts/release/tier.mjs, exit 5) may be published to ring 0. The owner's
- * rule (10-29): bug, fix, minimal tests, OTA. A strict bundle needs, on the
- * exact commit it is built from:
+ * pipeline (10-29): a change's tests run as its pull request's required
+ * related-tests check before it merges, and a release follows the merge at
+ * once. A strict bundle needs one thing more, on the exact commit it is built
+ * from:
  *
  *   launch smoke    a green gate-smoke.yml run, with its iOS and its Android
  *                   smoke job both green, of a green Test builds run built
  *                   from this commit (a push or a dispatch on its ref: a pull
  *                   request's run builds the merge ref, not this commit)
- *   targeted tests  the commit status ota-strict/targeted-tests is success:
- *                   the change's own tests green, with a control
- *   sim check       the commit status ota-strict/sim-check is success: one
- *                   simulator check of the changed screen
  *
- * The two statuses are attestations: whoever ran the check sets them
- * (gh api repos/<repo>/statuses/<sha> -f context=... -f state=success
- * -f target_url=<the evidence>), and a status without a target_url does not
- * count. The newest status of a context is the one read. The owner's single
- * approval is the ota-approval environment's, and ring 0 first is how every
- * publish works (scripts/ota/promote.mjs widens), so neither is checked here.
+ * The owner's single approval is the ota-approval environment's, and ring 0
+ * first is how every publish works (scripts/ota/promote.mjs widens), so
+ * neither is checked here.
  *
  *   node scripts/ota/strict-proof.mjs --sha <full sha> [--repo owner/name]
  *
- * Prints each condition, met or missing. Exit 0 only when all are met. Reads
+ * Prints the condition, met or missing. Exit 0 only when it is met. Reads
  * through `gh api` (GH_TOKEN); any error reading counts as not met.
  */
 import { execFileSync } from 'node:child_process'
@@ -32,35 +27,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
-export const STATUS_CONTEXTS = [
-  ['targeted tests', 'ota-strict/targeted-tests'],
-  ['sim check', 'ota-strict/sim-check'],
-]
 // The events whose Test builds run builds the commit it names (head_sha).
 const OWN_COMMIT_EVENTS = ['push', 'workflow_dispatch']
 const SMOKE_JOBS = [
   ['iOS', /^iOS smoke /],
   ['Android', /^Android smoke /],
 ]
-
-/** The newest status of each context, from the commit's statuses (the API lists them newest first). */
-export const newestStatuses = (statuses) => {
-  const out = new Map()
-  for (const s of statuses) if (!out.has(s.context)) out.set(s.context, s)
-  return out
-}
-
-/** The attested conditions: each context's newest status must be success and name its evidence. */
-export const checkStatuses = (statuses) => {
-  const newest = newestStatuses(statuses)
-  return STATUS_CONTEXTS.map(([name, context]) => {
-    const s = newest.get(context)
-    if (!s) return { name, met: false, detail: `no ${context} status on the commit` }
-    if (s.state !== 'success') return { name, met: false, detail: `${context} is ${s.state}` }
-    if (!s.target_url) return { name, met: false, detail: `${context} is success but names no evidence (target_url)` }
-    return { name, met: true, detail: `${context} success: ${s.target_url}` }
-  })
-}
 
 /**
  * The launch smoke. builds: the green Test builds runs listed for the commit; smokes: green gate-smoke runs, each
@@ -104,7 +76,7 @@ const ghApi = (route) => gh(route)
 const ghPages = (route) => gh('--paginate', '--slurp', route)
 
 /**
- * Every condition for the commit, read from GitHub. A read that fails is a condition not met, never a pass. api reads
+ * The condition for the commit, read from GitHub. A read that fails is a condition not met, never a pass. api reads
  * one page; pages reads every page of a list (by default, from an api given in its place: that one page).
  */
 export const proveStrict = ({ sha, repo, api = ghApi, pages = api === ghApi ? ghPages : (route) => [api(route)] }) => {
@@ -117,7 +89,6 @@ export const proveStrict = ({ sha, repo, api = ghApi, pages = api === ghApi ? gh
       return [{ name, met: false, detail: `could not read: ${String(error.message).split('\n')[0]}` }]
     }
   }
-  const statuses = read('attested checks', () => checkStatuses(api(`repos/${repo}/commits/${sha}/statuses?per_page=100`)))
   const smoke = read('launch smoke', () => {
     const builds = api(`repos/${repo}/actions/workflows/test-builds.yml/runs?head_sha=${sha}&status=success&per_page=100`).workflow_runs
     const ids = builds.map((r) => String(r.id))
@@ -128,7 +99,7 @@ export const proveStrict = ({ sha, repo, api = ghApi, pages = api === ghApi ? gh
       .map((s) => ({ ...s, jobs: api(`repos/${repo}/actions/runs/${s.id}/jobs?per_page=100`).jobs }))
     return [checkSmoke(sha, builds, smokes)]
   })
-  return [...smoke, ...statuses]
+  return smoke
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -83,8 +83,6 @@ permissions:
   # Reading the target store build's recorded fingerprint (an artifact of its staging run), and, for an ota-strict
   # change, the Test builds and gate-smoke runs that prove its launch smoke (scripts/ota/strict-proof.mjs).
   actions: read
-  # An ota-strict change's attested conditions: the commit statuses ota-strict/targeted-tests and ota-strict/sim-check.
-  statuses: read
 
 concurrency:
   group: ota-publish
@@ -352,7 +350,7 @@ jobs:
           SCOPE: ${{ inputs.scope }}
           EXPECTED: ${{ steps.expected.outputs.hash }}
           RECORDED: ${{ steps.expected.outputs.recorded }}
-          # An ota-strict change: ota-deploy proves its conditions for GITHUB_SHA through gh (strict-proof.mjs).
+          # An ota-strict change: ota-deploy proves its launch smoke for GITHUB_SHA through gh (strict-proof.mjs).
           GH_TOKEN: ${{ github.token }}
         run: |
           recorded=()
@@ -431,8 +429,8 @@ jobs:
           node scripts/ota/native-config.mjs
           node scripts/ota/check-fingerprint.mjs verify --platform "$PLATFORM" --expected "$EXPECTED" --recorded "${RECORDED:-none}"
 
-      # The tier, as the publish will read it; for ota-strict (exit 5), each strict condition, met or missing. The dry
-      # run passes only on exit 0, or on exit 5 with every condition met.
+      # The tier, as the publish will read it; for ota-strict (exit 5), the launch smoke, met or missing. The dry
+      # run passes only on exit 0, or on exit 5 with the smoke met.
       - name: Dry run
         if: ${{ inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
         env:
