@@ -634,6 +634,8 @@ jobs:
         run: |
           # Bundle React Native code
           cd ../ && npx react-native bundle --platform android --dev false --reset-cache --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
+          # Rooms' sample data never in a store build: the bundle itself, beside the refusal of ROOMS_SAMPLE.
+          bash ../scripts/ci/check-no-rooms-sample.sh android/app/src/main/assets/index.android.bundle "Android store bundle"
 
           # Clean up Metro cache after bundling (frees ~200-400MB)
           rm -rf node_modules/.cache/metro-* 2>/dev/null || true
@@ -1097,6 +1099,14 @@ jobs:
           -archivePath ../../AriesBifold.xcarchive \
           -sdk iphoneos \
           archive
+
+      # Rooms' sample data never in a store build: the archived app's bundle itself, beside the refusal of
+      # ROOMS_SAMPLE before the build.
+      - name: Check the store bundle carries no rooms sample data
+        run: |
+          set -euo pipefail
+          bundle=$(find AriesBifold.xcarchive -name main.jsbundle -path '*.app/*' | head -1)
+          bash scripts/ci/check-no-rooms-sample.sh "${bundle:-AriesBifold.xcarchive/missing-main.jsbundle}" "iOS store bundle"
 
       - name: Export production archive
         uses: ./.github/workflows/actions/export-ios-archive
