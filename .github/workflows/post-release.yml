@@ -8,7 +8,7 @@ name: Post-release smoke
 #   - lists the screens changed since the previous release, for the quick simulator check of each one.
 # It writes the bundle ids, the runs, the verdict and the screens to the job summary and to the
 # post-release-handoff artifact. A red smoke or red builds fail this job; it publishes, widens and withdraws
-# nothing (the brake is a separate job that acts only on a red smoke).
+# nothing. The brake job below acts only on a red smoke, and only withdraws.
 # Runs from the default branch's copy of this file, whatever branch the release came from.
 
 # Each run names the release it smokes: the publish run's own title (ota-publish.yml's run-name).
@@ -70,3 +70,61 @@ jobs:
         with:
           name: post-release-handoff-${{ github.event.workflow_run.head_sha }}
           path: post-release-handoff.json
+
+  # The emergency brake (the owner's decision, 10-29): a release whose launch smoke is red, and still red after its
+  # failed jobs are re-run once, is withdrawn at once, with no approval to wait for. WITHDRAW ONLY: this job has the
+  # update server's token but never the signing key, and runs nothing but scripts/ota/brake.mjs, whose only write to
+  # the server is scripts/ota/withdraw.mjs (disable). Publishing and widening still need the owner's approval in
+  # ota-publish.yml. brake.test.mjs holds this job to that. Its summary says what it pulled and why.
+  # Only a red SMOKE brakes. Red Test builds (verdict builds-red) deliberately don't: a build failure can be the
+  # infrastructure, and it doesn't show the published bundle is bad. Don't widen this condition to any red.
+  brake:
+    name: Brake · ${{ github.event.workflow_run.head_branch }}
+    needs: smoke
+    if: ${{ always() && needs.smoke.outputs.verdict == 'smoke-red' }}
+    runs-on: ubuntu-22.04
+    environment: ota
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.2
+
+      # A red may be the runner, not the bundle (10-29: the emulator's launcher hung): re-run the failed jobs once.
+      - name: Re-run the red smoke once
+        id: rerun
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GATE_SMOKE: ${{ needs.smoke.outputs.gate_smoke }}
+        run: node scripts/ota/brake.mjs rerun --gate-smoke "$GATE_SMOKE"
+
+      # withdraw.mjs runs the hot-updater CLI from app/, as ota-publish.yml's withdraw does.
+      - name: Check out the submodule for the install
+        if: ${{ steps.rerun.outputs.still_red == 'true' }}
+        run: git submodule update --init --depth 1 bifold
+
+      - name: Setup NodeJS
+        if: ${{ steps.rerun.outputs.still_red == 'true' }}
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Build bifold packages
+        if: ${{ steps.rerun.outputs.still_red == 'true' }}
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Install dependencies
+        if: ${{ steps.rerun.outputs.still_red == 'true' }}
+        run: yarn install --immutable
+
+      - name: Withdraw the release
+        if: ${{ steps.rerun.outputs.still_red == 'true' }}
+        env:
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          BUNDLES: ${{ needs.smoke.outputs.bundles }}
+          PLATFORMS: ${{ needs.smoke.outputs.platforms }}
+        run: node scripts/ota/brake.mjs withdraw --bundles "$BUNDLES" --platforms "$PLATFORMS"
