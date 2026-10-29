@@ -1,6 +1,7 @@
 /**
  * A room as a conversation (rooms member sprint, RoomView): its posts newest first, a day pill above each day's
- * posts, "Load older" at the end, and pull to refresh, since nothing pushes a post to a phone yet. Above the posts,
+ * posts, "Load older" at the end, and pull to refresh. Nothing pushes a post to a phone, so while the room is in view
+ * and the app in the foreground, new posts are asked for every few seconds (`useRoomPosts`). Above the posts,
  * the room's name and tier and who the member posts as; and a warning when the member's agent found the host's
  * answer inconsistent (records dropped or replayed).
  *
@@ -51,6 +52,7 @@ import TierBadge from '../components/TierBadge'
 import { toInertText } from '../inertText'
 import { isNote, type RoomPost } from '../roomPosts'
 import type { RoomFile } from '../types'
+import { useInViewAndActive } from '../useInViewAndActive'
 import { useRoom } from '../useRoom'
 import { POSTS_PAGE, useRoomPosts } from '../useRoomPosts'
 import { type PendingPost, useRoomSend } from '../useRoomSend'
@@ -114,7 +116,8 @@ const Room: React.FC = () => {
   const state = useRoom(service, roomId)
   const { room, roomCapabilities } = state
   const canList = roomCapabilities?.listNotes.status === 'available'
-  const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList)
+  const inView = useInViewAndActive()
+  const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList, inView)
   const outbox = useRoomSend(service, roomId, feed.refresh)
   const [openedFile, setOpenedFile] = useState<RoomFile>()
   const [tab, setTab] = useState<RoomTab>('chat')

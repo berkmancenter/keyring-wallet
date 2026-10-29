@@ -257,9 +257,11 @@ export function createSampleRoomsService(options: { now?: () => number } = {}): 
     async roomCapabilities(roomId) {
       return deriveRoomCapabilities(sampleCapabilities(), room(roomId))
     },
-    async listNotes(roomId) {
+    async listNotes(roomId, { sinceVersion = 0 } = {}) {
       return {
-        notes: room(roomId).notes.map(({ body: _body, ...summary }) => summary),
+        notes: room(roomId)
+          .notes.filter((n) => n.version > sinceVersion)
+          .map(({ body: _body, ...summary }) => summary),
         complete: true,
         check: { verdict: 'consistent' as const, detail: 'sample data' },
       }

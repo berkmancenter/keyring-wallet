@@ -342,9 +342,16 @@ export class AgentRoomsService implements RoomsService {
     return room
   }
 
-  public async listNotes(roomId: string): Promise<NoteList> {
+  public async listNotes(roomId: string, options: { sinceVersion?: number } = {}): Promise<NoteList> {
     const room = await this.requireInRoom(roomId, 'listNotes')
-    const listing = parseBrowse(await this.backend.agentTask(ROOMS_TASK.keysBrowse, { roomId, host: room.host }))
+    const { sinceVersion } = options
+    const listing = parseBrowse(
+      await this.backend.agentTask(ROOMS_TASK.keysBrowse, {
+        roomId,
+        host: room.host,
+        ...(sinceVersion !== undefined ? { sinceVersion } : {}),
+      })
+    )
     return {
       notes: listing.records.map((r) => ({
         key: r.key,
