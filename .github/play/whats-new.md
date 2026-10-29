@@ -1,8 +1,8 @@
 # Google Play release notes for the next build (at most 500 characters).
 # Lines starting with # are ignored.
 
-• Build 260: private vouching draws tokens and counts.
-• Private vetting: apply and vouch in communities that use it, with the same vetting steps; your vetters stay private. Needs your agent on 0.60+.
-• Vetters: enrolment and vouching tokens are automatic.
-• New DTG credential formats for relationships and witnessing.
-• Community identities keep signing in after an update.
+• Data rooms: see the rooms your communities share with you, with Chat, Files, Notes and Members. Writing notes is coming soon.
+• Room offers from your community, which you can accept or hide.
+• Works with the newest agent versions (0.67) as well as older ones.
+• My devices loads reliably on every agent version.
+• Bring back is faster and no longer counts a room as a community.
