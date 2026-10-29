@@ -16,7 +16,7 @@
  *     failed jobs are re-run once, and the brake acts only if the smoke is
  *     still red. Writes still_red=true|false to $GITHUB_OUTPUT.
  *
- *   node scripts/ota/brake.mjs withdraw --bundles '<json from post-release>'
+ *   node scripts/ota/brake.mjs withdraw --bundles '<json>' --platforms '<json>' (both from post-release)
  *     Withdraws each bundle (scripts/ota/withdraw.mjs, which checks the
  *     server's record is that channel's and platform's, and enabled, then
  *     disables it and checks it reads disabled). A bundle that isn't one this
@@ -82,9 +82,15 @@ const realWithdraw = ({ channel, platform, bundleId }) =>
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-/** Withdraws each bundle it may; the rest are refused and named. Never anything but a withdraw. */
-export function withdrawAll({ bundles, withdraw = realWithdraw, log = console.log }) {
+/**
+ * Withdraws each bundle it may; the rest are refused and named. Never anything but a withdraw. platforms: what the
+ * release published. A published platform with no bundle id here (its publish log was unreadable) can't be withdrawn
+ * and is named as unidentified: the rest are still withdrawn, since that limits the harm, and the result says partial.
+ */
+export function withdrawAll({ bundles, platforms = [], withdraw = realWithdraw, log = console.log }) {
   const { ok, refused } = brakeTargets(bundles)
+  const unidentified = platforms.filter((p) => !ok.some((b) => b.platform === p))
+  for (const p of unidentified) log(`${p} was published, but its bundle id is unknown: NOT withdrawn`)
   for (const r of refused) log(`refused ${JSON.stringify(r)}: ${r.why}`)
   const results = ok.map((b) => {
     try {
@@ -97,12 +103,14 @@ export function withdrawAll({ bundles, withdraw = realWithdraw, log = console.lo
       return { ...b, withdrawn: false, why }
     }
   })
-  return { results, refused, allWithdrawn: ok.length > 0 && refused.length === 0 && results.every((r) => r.withdrawn) }
+  const allWithdrawn = ok.length > 0 && refused.length === 0 && unidentified.length === 0 && results.every((r) => r.withdrawn)
+  const anyWithdrawn = results.some((r) => r.withdrawn)
+  return { results, refused, unidentified, allWithdrawn, partial: anyWithdrawn && !allWithdrawn }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [mode, ...rest] = process.argv.slice(2)
-  const { values } = parseArgs({ args: rest, options: { 'gate-smoke': { type: 'string' }, bundles: { type: 'string' }, repo: { type: 'string' } } })
+  const { values } = parseArgs({ args: rest, options: { 'gate-smoke': { type: 'string' }, bundles: { type: 'string' }, platforms: { type: 'string' }, repo: { type: 'string' } } })
   const out = (k, v) => process.env.GITHUB_OUTPUT && appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`)
   const summary = (lines) => process.env.GITHUB_STEP_SUMMARY && appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n')
   try {
@@ -113,9 +121,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       out('still_red', String(r.stillRed))
       summary([`### Brake: ${r.stillRed ? 'smoke still red after one re-run, withdrawing' : 'smoke green on its re-run, nothing withdrawn'}`, '', ...r.rows.map((row) => `- ${row.platform} smoke: ${row.conclusion}`), ''])
     } else if (mode === 'withdraw') {
-      const r = withdrawAll({ bundles: JSON.parse(values.bundles ?? '[]') })
+      const r = withdrawAll({ bundles: JSON.parse(values.bundles || '[]'), platforms: JSON.parse(values.platforms || '[]') })
+      const headline = r.allWithdrawn ? 'the release is withdrawn' : r.partial ? 'the release is PARTIALLY withdrawn' : 'NOTHING was withdrawn'
       summary([
-        `### Brake: ${r.allWithdrawn ? 'withdrawn' : 'NOT everything was withdrawn'}`, '',
+        `### Brake: ${headline}`, '',
+        ...r.unidentified.map((p) => `- ${p}: published, bundle id unknown: NOT withdrawn (withdraw it by hand)`),
         ...r.results.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel}): ${b.withdrawn ? 'withdrawn' : `NOT withdrawn: ${b.why}`}`),
         ...r.refused.map((b) => `- refused ${b.id ?? '?'}: ${b.why}`), '',
       ])

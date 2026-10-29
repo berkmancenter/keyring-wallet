@@ -125,4 +125,5 @@ jobs:
           OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
           HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
           BUNDLES: ${{ needs.smoke.outputs.bundles }}
-        run: node scripts/ota/brake.mjs withdraw --bundles "$BUNDLES"
+          PLATFORMS: ${{ needs.smoke.outputs.platforms }}
+        run: node scripts/ota/brake.mjs withdraw --bundles "$BUNDLES" --platforms "$PLATFORMS"

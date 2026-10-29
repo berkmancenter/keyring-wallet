@@ -125,3 +125,16 @@ test('it acts only on a red post-release smoke, and withdraws only if the re-run
   // The withdraw step itself is gated on the re-run, not only the install before it.
   assert.match(brakeCode, /- name: Withdraw the release\n\s+if: \$\{\{ steps\.rerun\.outputs\.still_red == 'true' \}\}\n/)
 })
+
+test('a published platform with no bundle id: the others are still withdrawn, and the result says partial', () => {
+  const calls = []
+  const r = withdrawAll({ bundles: [BUNDLES[1]], platforms: ['ios', 'android'], withdraw: (t) => calls.push(t.platform), log: () => {} })
+  assert.deepEqual(calls, ['android'])
+  assert.deepEqual([r.unidentified, r.allWithdrawn, r.partial], [['ios'], false, true])
+  // Every published platform identified and withdrawn: complete, not partial.
+  const all = withdrawAll({ bundles: BUNDLES, platforms: ['ios', 'android'], withdraw: () => {}, log: () => {} })
+  assert.deepEqual([all.allWithdrawn, all.partial], [true, false])
+  // Nothing identified: nothing withdrawn, not partial either.
+  const none = withdrawAll({ bundles: [], platforms: ['ios', 'android'], withdraw: () => {}, log: () => {} })
+  assert.deepEqual([none.allWithdrawn, none.partial, none.unidentified], [false, false, ['ios', 'android']])
+})
