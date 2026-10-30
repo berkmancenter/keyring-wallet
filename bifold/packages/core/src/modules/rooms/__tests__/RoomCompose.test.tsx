@@ -185,7 +185,7 @@ describe('posting to a room', () => {
   })
 
   // Narrows one status of the sample's, as the real service reports it for this build.
-  const withStatus = (op: 'write' | 'openFile', reason: 'tierNotYet' | 'clientNotBuilt') => {
+  const withStatus = (op: 'write' | 'uploadFile', reason: 'tierNotYet' | 'clientNotBuilt') => {
     const sample = createSampleRoomsService()
     mockService = {
       ...sample,
