@@ -132,7 +132,10 @@ describe('AgentRoomsService', () => {
     }))
     const rooms = await new AgentRoomsService(b).listMyRooms()
     expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysList01, {})
-    expect(rooms.find((r) => r.roomId === CUSTODY_ROOM)).toMatchObject({ nameFrom: 'roomId', source: 'custody' })
+    const custody = rooms.find((r) => r.roomId === CUSTODY_ROOM)
+    expect(custody).toMatchObject({ nameFrom: 'roomId', source: 'custody' })
+    // What tells it apart (roomRef): this ID has no path, so the end of its SCID, said to be cut; never its last 10.
+    expect(String(custody?.name)).toBe('…room')
   })
 
   it('keeps the other rooms when one community cannot answer, and logs why it did not', async () => {

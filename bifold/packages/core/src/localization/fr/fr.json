@@ -2927,7 +2927,7 @@
     "None": "Aucun salon pour l'instant. Quand une communauté vous propose un salon, il apparaît ici.",
     "Off": "Les salons sont désactivés. Activez-les dans les paramètres Développeur.",
     "CommunityNotKnown": "Communauté pas encore connue",
-    "RoomById": "Salon {{id}}",
+    "RoomById": "{{id}} (aucun nom publié pour l'instant)",
     "SoonWriteTitle": "Publier dans ce salon",
     "SoonWriteLine": "Vous pourrez bientôt écrire à tous les membres de ce salon.",
     "SoonFilesTitle": "Fichiers du salon",

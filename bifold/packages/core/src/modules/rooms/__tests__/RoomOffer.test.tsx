@@ -89,6 +89,30 @@ describe('RoomOffer', () => {
     expect(await mockService.listOffers()).toEqual([])
   })
 
+  test.each([
+    [
+      'a community that published no name is the app\'s label for it, never "undefined" (276.9)',
+      undefined,
+      'Community.UnnamedRef',
+    ],
+    ['a named community is its name (control)', 'Keyring Lab', 'Keyring Lab'],
+  ])('Join confirms with the community: %s', async (_, communityName, said) => {
+    mockService = sample()
+    const service = mockService
+    const original = service.previewOffer.bind(service)
+    jest.spyOn(service, 'previewOffer').mockImplementation(async (ref) => {
+      const preview = await original(ref)
+      const { communityName: _named, ...offer } = preview.offer
+      return { ...preview, offer: communityName ? { ...offer, communityName: communityName as never } : offer }
+    })
+    const tree = show()
+    await waitFor(() => expect(tree.getByTestId(testIdWithKey('RoomOfferAccept'))).toBeTruthy())
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('RoomOfferAccept')))
+    })
+    expect(confirm.mock.calls[0][1]).toBe(said)
+  })
+
   test('declining the confirmation sends nothing (control: the test above accepts)', async () => {
     mockService = sample()
     const acceptOffer = jest.spyOn(mockService, 'acceptOffer')

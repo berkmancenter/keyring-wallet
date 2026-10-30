@@ -2990,7 +2990,7 @@
     "None": "No rooms yet. When a community offers you a room, it appears here.",
     "Off": "Rooms are off. Turn them on in Developer settings.",
     "CommunityNotKnown": "Community not known yet",
-    "RoomById": "Room {{id}}",
+    "RoomById": "{{id}} (no name published yet)",
     "SoonWriteTitle": "Posting in this room",
     "SoonWriteLine": "Soon you can write to everyone in this room.",
     "SoonFilesTitle": "Room files",

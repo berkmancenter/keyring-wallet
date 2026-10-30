@@ -12,6 +12,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
+import { offerCommunity, offerRoom } from '../offerCommunity'
 import { useRoomOffersWaiting } from '../useRoomOffersCount'
 
 import { ROOM_MARK_FILL } from './RoomHeader'
@@ -80,12 +81,12 @@ const RoomOfferCard: React.FC<RoomOfferCardProps> = ({ communityDid, onOpen }) =
   return (
     <View style={styles.list}>
       {offers.map((offer) => {
-        const room = String(offer.roomName)
-        const from = t('Rooms.OfferFrom', { community: String(offer.communityName), ...asWritten }) as string
+        const room = offerRoom(offer, t)
+        const from = t('Rooms.OfferFrom', { community: offerCommunity(offer, t), ...asWritten }) as string
         return (
           <View key={offer.offerId} style={styles.card} testID={testIdWithKey('RoomOfferCard')}>
             <View style={styles.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <ThemedText style={styles.letters}>{initialsOf(room)}</ThemedText>
+              <ThemedText style={styles.letters}>{initialsOf(String(offer.roomName))}</ThemedText>
             </View>
             <View style={styles.words}>
               <ThemedText style={styles.waiting}>{t('Rooms.OfferWaiting')}</ThemedText>
