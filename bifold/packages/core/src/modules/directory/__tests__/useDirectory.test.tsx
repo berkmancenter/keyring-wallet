@@ -2,10 +2,11 @@ import { act, renderHook, waitFor } from '@testing-library/react-native'
 
 import { createFakeDirectoryService } from '../testing/fakeDirectoryService'
 import { DirectoryConflict } from '../types'
-import { keepDirectoryName, loadDirectoryNames } from '../names'
+import { confirmDirectoryNames, keepDirectoryName, loadDirectoryNames } from '../names'
 import {
   MEMBERS_PAGE_SPACING_MS,
   NAME_LOOKUPS_PER_VISIT,
+  NAME_REASK_FLOOR_MS,
   resetDirectoryNameLookups,
   useCommunityMembers,
   useDirectoryNames,
@@ -21,6 +22,7 @@ jest.mock('@bifold/react-hooks', () => ({ useAgent: () => ({ agent: mockAgent })
 // The kept names, in memory: what the encrypted store would hold.
 let mockKept = new Map<string, string>()
 jest.mock('../names', () => ({
+  confirmDirectoryNames: jest.fn(async () => undefined),
   loadDirectoryNames: jest.fn(async () => new Map(mockKept)),
   keepDirectoryName: jest.fn(async (_agent: unknown, _community: string, did: string, name?: string) => {
     if (name) mockKept.set(did, name)
@@ -116,29 +118,83 @@ describe('room authors’ own names', () => {
     resetDirectoryNameLookups()
     jest.mocked(keepDirectoryName).mockClear()
     jest.mocked(loadDirectoryNames).mockClear()
+    jest.mocked(confirmDirectoryNames).mockClear()
+    mockAgent.config.logger.warn.mockClear()
   })
+  afterEach(() => jest.restoreAllMocks())
 
-  it('shows kept names at once and asks only for the others, keeping what it finds', async () => {
+  it('shows kept names at once, then asks about every author, those with none kept first, keeping what changed', async () => {
     mockKept = new Map([[ANA, 'Ana']])
-    const service = createFakeDirectoryService({ shown: { [BO]: 'Bo' } })
+    const service = createFakeDirectoryService({ shown: { [ANA]: 'Ana', [BO]: 'Bo' } })
     const { result } = renderHook(() => useDirectoryNames(service, COMMUNITY, [ANA, BO, BO]))
     await waitFor(() => expect(result.current.get(BO)).toBe('Bo'))
     expect(result.current.get(ANA)).toBe('Ana')
-    expect(service.calls).toEqual([`lookupName ${BO}`])
+    await waitFor(() => expect(service.calls).toEqual([`lookupName ${BO}`, `lookupName ${ANA}`]))
+    // Ana's name is as kept: not rewritten, but confirmed, so it doesn't expire from what a room shows offline.
+    expect(keepDirectoryName).toHaveBeenCalledTimes(1)
     expect(keepDirectoryName).toHaveBeenCalledWith(mockAgent, COMMUNITY, BO, 'Bo')
+    await waitFor(() => expect(confirmDirectoryNames).toHaveBeenCalledWith(mockAgent, COMMUNITY, [ANA]))
   })
 
-  it('drops a kept name the community stopped showing, and does not ask again this run for one with none', async () => {
-    const service = createFakeDirectoryService({ shown: {} })
+  it('a rename shows the next time the room opens: the kept name first, then the new one, kept', async () => {
+    mockKept = new Map([[ANA, 'Ana']])
+    const service = createFakeDirectoryService({ shown: { [ANA]: 'Ana Lopez' } })
+    // The community takes its time to answer, as it does: the room shows the kept name meanwhile.
+    let answer: () => void = () => undefined
+    const answered = new Promise<void>((resolve) => (answer = resolve))
+    const lookup = service.lookupName.bind(service)
+    service.lookupName = async (community, did) => {
+      await answered
+      return lookup(community, did)
+    }
+    const { result } = renderHook(() => useDirectoryNames(service, COMMUNITY, [ANA]))
+    await waitFor(() => expect(result.current.get(ANA)).toBe('Ana'))
+    act(() => answer())
+    await waitFor(() => expect(result.current.get(ANA)).toBe('Ana Lopez'))
+    expect(keepDirectoryName).toHaveBeenCalledWith(mockAgent, COMMUNITY, ANA, 'Ana Lopez')
+  })
+
+  it('a member with no name is asked again on a later open, not within a minute, and a new name shows', async () => {
+    let now = Date.parse('2026-10-30T21:00:00Z')
+    jest.spyOn(Date, 'now').mockImplementation(() => now)
+    const shown: Record<string, string> = {}
+    const service = createFakeDirectoryService({ shown })
     const first = renderHook(() => useDirectoryNames(service, COMMUNITY, [CY]))
     await waitFor(() => expect(service.calls).toEqual([`lookupName ${CY}`]))
-    await waitFor(() => expect(keepDirectoryName).toHaveBeenCalledWith(mockAgent, COMMUNITY, CY, undefined))
     first.unmount()
 
-    const again = renderHook(() => useDirectoryNames(service, COMMUNITY, [CY]))
+    // Opened again at once: not asked again yet.
+    now += NAME_REASK_FLOOR_MS - 1
+    const soon = renderHook(() => useDirectoryNames(service, COMMUNITY, [CY]))
     await waitFor(() => expect(loadDirectoryNames).toHaveBeenCalledTimes(2))
-    expect(again.result.current.size).toBe(0)
-    expect(service.calls).toEqual([`lookupName ${CY}`])
+    expect(service.calls).toHaveLength(1)
+    soon.unmount()
+
+    // Cy has since written a name on their card; the next open after the floor shows it.
+    shown[CY] = 'Cy'
+    now += 1
+    const later = renderHook(() => useDirectoryNames(service, COMMUNITY, [CY]))
+    await waitFor(() => expect(later.result.current.get(CY)).toBe('Cy'))
+    expect(service.calls).toEqual([`lookupName ${CY}`, `lookupName ${CY}`])
+    expect(keepDirectoryName).toHaveBeenCalledWith(mockAgent, COMMUNITY, CY, 'Cy')
+  })
+
+  it('drops a kept name the community stopped showing', async () => {
+    mockKept = new Map([[CY, 'Cy']])
+    const service = createFakeDirectoryService({ shown: {} })
+    const { result } = renderHook(() => useDirectoryNames(service, COMMUNITY, [CY]))
+    await waitFor(() => expect(keepDirectoryName).toHaveBeenCalledWith(mockAgent, COMMUNITY, CY, undefined))
+    await waitFor(() => expect(result.current.size).toBe(0))
+  })
+
+  it('offline, the kept names stay shown: a failed lookup changes nothing kept', async () => {
+    mockKept = new Map([[ANA, 'Ana']])
+    const refusing = createFakeDirectoryService({ refuse: { lookupName: 'communityUnreachable' } })
+    const { result } = renderHook(() => useDirectoryNames(refusing, COMMUNITY, [ANA]))
+    await waitFor(() => expect(mockAgent.config.logger.warn).toHaveBeenCalled())
+    expect(result.current.get(ANA)).toBe('Ana')
+    expect(keepDirectoryName).not.toHaveBeenCalled()
+    expect(confirmDirectoryNames).not.toHaveBeenCalled()
   })
 
   it('asks for at most NAME_LOOKUPS_PER_VISIT authors at a time, and stops at a failure', async () => {

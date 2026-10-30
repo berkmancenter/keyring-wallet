@@ -1,6 +1,6 @@
 import type { Agent } from '@credo-ts/core'
 
-import { NAME_TTL_MS, dropDirectoryNames, keepDirectoryName, loadDirectoryNames } from '../names'
+import { NAME_TTL_MS, confirmDirectoryNames, dropDirectoryNames, keepDirectoryName, loadDirectoryNames } from '../names'
 
 const COMMUNITY = 'did:webvh:community:a'
 const OTHER = 'did:webvh:community:b'
@@ -73,5 +73,34 @@ describe('the names shown for room authors', () => {
       keepDirectoryName(agent, COMMUNITY, BO, 'Bo', 1000),
     ])
     expect((await loadDirectoryNames(agent, COMMUNITY, 2000)).size).toBe(2)
+  })
+
+  it('a name the community confirms is kept another week: written again only past half its week, in one write', async () => {
+    const { agent, genericRecords } = fakeAgent()
+    await keepDirectoryName(agent, COMMUNITY, ANA, 'Ana', 0)
+    await keepDirectoryName(agent, COMMUNITY, BO, 'Bo', 0)
+    genericRecords.update.mockClear()
+
+    // Confirmed early in its week: nothing written.
+    await confirmDirectoryNames(agent, COMMUNITY, [ANA, BO], NAME_TTL_MS / 2 - 1)
+    expect(genericRecords.update).not.toHaveBeenCalled()
+
+    // Past half its week: both written again, once.
+    await confirmDirectoryNames(agent, COMMUNITY, [ANA, BO], NAME_TTL_MS / 2)
+    expect(genericRecords.update).toHaveBeenCalledTimes(1)
+
+    // A week after they were first kept, both still show; unconfirmed, they would not (the test above).
+    expect([...(await loadDirectoryNames(agent, COMMUNITY, NAME_TTL_MS + 1))]).toEqual([
+      [ANA, 'Ana'],
+      [BO, 'Bo'],
+    ])
+  })
+
+  it('confirming names never kept writes nothing and keeps nothing', async () => {
+    const { agent, genericRecords, records } = fakeAgent()
+    await confirmDirectoryNames(agent, COMMUNITY, [ANA], 1000)
+    expect(genericRecords.save).not.toHaveBeenCalled()
+    expect(genericRecords.update).not.toHaveBeenCalled()
+    expect(records.size).toBe(0)
   })
 })

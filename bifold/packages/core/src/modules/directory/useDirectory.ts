@@ -16,7 +16,7 @@ import { useMyName } from '../rooms/useMyName'
 
 import { createDirectoryBackend } from './directoryBackend'
 import { AgentDirectoryService, directoryStatusOf } from './directoryService'
-import { keepDirectoryName, loadDirectoryNames } from './names'
+import { confirmDirectoryNames, keepDirectoryName, loadDirectoryNames } from './names'
 import type {
   CardField,
   CardProposal,
@@ -48,21 +48,30 @@ export function useDirectoryService(mediatorDid?: string): DirectoryService | un
 
 /** At most this many authors are looked up each time a room's authors change, one at a time. */
 export const NAME_LOOKUPS_PER_VISIT = 20
+/**
+ * A member asked about this recently is not asked again yet. A room's authors change as it scrolls and re-renders,
+ * and every ask waits in the same queue as the community's other tasks: a rename shows within a quarter hour, and
+ * reopening rooms doesn't keep asking about the same people.
+ */
+export const NAME_REASK_FLOOR_MS = 15 * 60_000
 
-// Members the community had no name for, this run: not asked again until the app starts again.
-const unnamed = new Map<string, Set<string>>()
+// When each member was last asked about, per community, this run.
+const askedAt = new Map<string, Map<string, number>>()
 
-/** Forget who had no name (tests). */
+/** Forget who was asked about when (tests). */
 export function resetDirectoryNameLookups(): void {
-  unnamed.clear()
+  askedAt.clear()
 }
 
 const NO_NAMES: ReadonlyMap<string, string> = new Map()
 
 /**
  * The names these members wrote on their own cards in this community, by DID, for the ones who show their identity to
- * members. Kept names are shown at once; the others are asked for one at a time, and those the community has no name
- * for are not asked again this run. A failed lookup stops the rest until the authors change.
+ * members. Kept names are shown at once, and then every author is asked about again in the background, one at a time
+ * (those with no kept name first): a new name or a rename shows the next time the room opens, not after the week a
+ * name is kept, and a member who had none is asked again too. A member asked about within {@link NAME_REASK_FLOOR_MS}
+ * is not asked again yet. A failed lookup stops the rest until the authors change, and the kept names stay shown: the
+ * kept names are what a room shows offline.
  */
 export function useDirectoryNames(
   service: DirectoryService | undefined,
@@ -84,22 +93,34 @@ export function useDirectoryNames(
     const run = async () => {
       const kept = new Map(await loadDirectoryNames(agent, communityDid))
       show(new Map(kept))
-      const skip = unnamed.get(communityDid) ?? new Set<string>()
-      unnamed.set(communityDid, skip)
-      const ask = wanted
+      const asked = askedAt.get(communityDid) ?? new Map<string, number>()
+      askedAt.set(communityDid, asked)
+      const now = Date.now()
+      const authors = wanted
         .split('\n')
-        .filter((did) => did && !kept.has(did) && !skip.has(did))
-        .slice(0, NAME_LOOKUPS_PER_VISIT)
-      for (const did of ask) {
-        if (!live) return
-        const name = await service.lookupName(communityDid, did)
-        await keepDirectoryName(agent, communityDid, did, name)
-        if (!name) {
-          skip.add(did)
-          continue
+        .filter((did) => did && now - (asked.get(did) ?? -Infinity) >= NAME_REASK_FLOOR_MS)
+      const ask = [...authors.filter((did) => !kept.has(did)), ...authors.filter((did) => kept.has(did))].slice(
+        0,
+        NAME_LOOKUPS_PER_VISIT
+      )
+      // Names the community answered as kept: their week starts again, in one write at the end (not per name).
+      const confirmed: string[] = []
+      try {
+        for (const did of ask) {
+          if (!live) return
+          asked.set(did, Date.now())
+          const name = await service.lookupName(communityDid, did)
+          if (name === kept.get(did)) {
+            if (name) confirmed.push(did)
+            continue
+          }
+          await keepDirectoryName(agent, communityDid, did, name)
+          if (name) kept.set(did, name)
+          else kept.delete(did)
+          show(new Map(kept))
         }
-        kept.set(did, name)
-        show(new Map(kept))
+      } finally {
+        if (confirmed.length) await confirmDirectoryNames(agent, communityDid, confirmed)
       }
     }
     run().catch((error) => agent.config?.logger?.warn('[Directory] room author names were not read', { error }))
