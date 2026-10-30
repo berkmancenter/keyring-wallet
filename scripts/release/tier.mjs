@@ -14,13 +14,11 @@
 //   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, policy, files}], held,
 //                                    strict, unchecked}
 // Exit: 0 ota, 1 none, 2 store (native, or a held flag), 3 an error (reported as store, never none), 4 unchecked (ota by
-// its paths, but --files cannot read the added lines a held flag looks at: run it with --range), 5 ota-strict (OTA
-// only under the strict conditions, for the bundle's exact commit: a launch smoke on both platforms, the owner's
-// single approval, and ring 0 first; the flags are listed under "strict"). ONLY 0 permits an OTA publish as it
-// stands; 5 permits one only when the publish step has proof of the launch smoke (scripts/ota/strict-proof.mjs, run
-// by app/scripts/ota-deploy.mjs); 1-4 mean do not publish OTA. "tier" is the verdict; "reasons" is the per-file input (a
+// its paths, but --files cannot read the added lines a held flag looks at: run it with --range), 5 ota-strict (OTA,
+// labelled: the change touches sign-in or keys, or the VTI protocol line, listed under "strict"; since 10-29 it publishes
+// like 0, and the label is for reviewers and the release's summary). 0 and 5 permit an OTA publish; 1-4 mean do not
+// publish OTA. "tier" is the verdict; "reasons" is the per-file input (a
 // file there can say ota while the tier is store, unchecked or ota-strict), so never recompute the tier from reasons.
-// tier.mjs names the strict conditions; the publish step proves them, and must fail closed when it cannot.
 // "held" and "strict" name the flags that moved an ota change; when the tier is store for its own reasons (native files)
 // they are empty even if flags were raised: read "flags" for every flag a change raises.
 // While a held flag reads added lines (deletes stored records does), --files can never say ota: a change that is ota
@@ -92,7 +90,7 @@ export const RULES = [
 /**
  * Flags: classes of change that could travel OTA (the OTA lane's question 1 on board #29). The owner's policy (10-11,
  * revised the same day to let features travel OTA): deleting stored records stays store only, since a rollback cannot
- * undo data already changed; sign-in / key handling and the VTI protocol line travel OTA under the strict conditions.
+ * undo data already changed; sign-in / key handling and the VTI protocol line travel OTA, labelled as strict (since 10-29 a label, not a gate).
  * shown to the approver beside an "ota" tier. A flag matches a path, or (with --range, which reads the diff) a line
  * the change adds.
  */
@@ -227,7 +225,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       for (const f of r.flags) console.log(`${{ store: 'hold  ', strict: 'strict' }[f.policy] || 'flag  '} ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
       const why = r.held.length ? ` (held back from OTA: ${r.held.join('; ')})`
         : r.unchecked.length ? ` (ota by its paths; not checked without --range: ${r.unchecked.join('; ')})`
-        : r.strict.length ? ` (OTA only with a launch smoke on both platforms, the owner's approval, ring 0 first: ${r.strict.join('; ')})` : '';
+        : r.strict.length ? ` (OTA, labelled: touches ${r.strict.join('; ')})` : '';
       console.log(`tier=${r.tier}${why}`);
     }
     // exitCode, not exit(): a large --json written to a pipe must finish before the process ends.

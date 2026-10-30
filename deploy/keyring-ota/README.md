@@ -103,35 +103,21 @@ through, the run says which one widened, and `disable` undoes it.
 After the update it re-reads the record and fails the run unless the record
 shows the new ring with a 0 rollout. **A failed check doesn't undo the
 widening:** the bundle may already be wider, so recover with `disable`, not by
-assuming nothing changed. A publish's tier must be `ota`, or `ota-strict` with its launch smoke proven
-(below); ota-deploy refuses everything else, so a promoted bundle is always one of the two.
+assuming nothing changed. A publish's tier must be `ota` or `ota-strict` (a label, below); ota-deploy refuses everything else, so a promoted
+bundle is always one of the two.
 
 ### Strict changes
 
 tier.mjs gives `ota-strict` (exit 5) to a JavaScript change that touches sign-in or key handling, or the VTI protocol
-line. The owner's pipeline (10-29) is: a change's tests run as its pull request's required related-tests check before
-it can merge, and a release follows the merge at once. A strict bundle goes out on three conditions, each for the exact
-commit the bundle is built from:
+line. **Since 10-29 that is a label, not a gate** (the owner's decision): such a change ships like any OTA, on the one
+approval. What protects it is its pull request's required tests, the post-release smoke and the brake after every
+publish (below), and the nightly full gate. The label stays: the publish run's summary says "This release touches: …",
+so reviewers and release notes see it.
 
-1. **A launch smoke on both platforms:** a green Test builds run built from the commit (pushed, or dispatched on its
-   ref; a pull request's run builds the merge ref, so it doesn't count), and a green gate-smoke.yml run of that Test
-   builds run (`-f run-id=<id>`) whose iOS and Android smoke jobs are both green. Read from GitHub by the publish.
-   Red runs are ignored, so a launch smoke that went green on a rerun counts.
-2. **The owner's single approval:** the ota-approval environment, as for every publish. GitHub can't enforce whose
-   click it is while every maintainer session acts as the owner's account, so this condition rests on a rule: no
-   session approves a publish, a promote or any environment gate itself. An approval counts only when the owner
-   clicks it, or tells the session running it directly, for that run, and the owner's words go in the approval comment.
-3. **Ring 0 first:** every publish reaches ring 0 only. Widening is `promote`, which the owner approves in the same
-   sitting.
+`scripts/ota/strict-proof.mjs` is advisory now: nothing calls it before a publish, but anyone can run it to see
+whether a commit has a green launch smoke (`node scripts/ota/strict-proof.mjs --sha <full sha>`).
 
-Only 1 and 3 are proven by a machine; 2 rests on the rule above. Until 10-29 a strict bundle also needed two attested
-commit statuses (`ota-strict/targeted-tests` and `ota-strict/sim-check`). Those are no longer read: the change's
-tests are its pull request's required check, and the simulator checks run after release.
-
-`scripts/ota/strict-proof.mjs` reads condition 1 for the publish (ota-deploy calls it, only on exit 5 with tier
-`ota-strict`). A smoke missing, red, unreadable, or for another commit, and nothing is published. A strict bundle is
-published only by ota-publish.yml (ota-deploy checks that `GITHUB_SHA` is HEAD). To check before asking for the
-approval: `node scripts/ota/strict-proof.mjs --sha <full sha> --repo berkmancenter/keyring-wallet`.
+The store tier is unchanged: native changes and stored-data deletes always ship as a store build.
 
 ### After release
 
@@ -175,7 +161,7 @@ run checks only that the bundle is there.
 **Store builds stay the main channel.** We keep shipping store builds often;
 OTA supplements them and never replaces them. It carries JavaScript fixes only,
 within store policy: nothing that adds a feature or changes what the app does.
-The tier check enforces the code side (`ota`, or `ota-strict` with its launch smoke proven). What counts as a fix is the
+The tier check enforces the code side (`ota` or `ota-strict`; never store). What counts as a fix is the
 publisher's call, and the commit subject is what testers read.
 
 ota-publish's dispatch has ten inputs, GitHub's maximum: a new one has to
