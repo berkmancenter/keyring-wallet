@@ -53,6 +53,17 @@ test('an untouched chat gets its kept draft back', async () => {
   expect(result.current.saved).toBe('half a thought')
 })
 
+// A composer drawn afresh later (a room's, swapped out a while) must not put back words since sent or changed.
+test('the draft handed back is spent once the field is touched', async () => {
+  mockLoad.mockResolvedValue('half a thought')
+  const agent = newAgent()
+  const { result } = renderHook(() => useChatDraft(agent, 'c1'))
+  await flush()
+  expect(result.current.saved).toBe('half a thought')
+  act(() => result.current.onTextChange('half a thought, finished'))
+  expect(result.current.saved).toBeUndefined()
+})
+
 // On main this cleared the kept draft 400 ms after the chat opened, with the draft still on screen.
 test("opening a chat keeps its draft: gifted-chat's '' as it lays out the empty field is not a change", async () => {
   const read = deferred()

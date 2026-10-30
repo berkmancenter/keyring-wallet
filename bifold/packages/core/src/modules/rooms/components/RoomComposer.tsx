@@ -9,6 +9,9 @@
  * "+" on the left picks one file to post (up to 25 MiB), shown above the field until it is sent or taken off; a
  * file too large is refused there and then, before anything is prepared.
  *
+ * The text is kept as a draft by the screen (useRoomDraft): `onTextChange` hears every change, a send's emptied field
+ * included, and `draft` is the kept text handed back, put in the field as it arrives.
+ *
  * Where the member may not post, the composer is replaced by the reason, in the rooms screens' usual words
  * ("You can't post here", "Coming soon"), never by a field that would fail on Send.
  *
@@ -51,6 +54,10 @@ export interface RoomComposerProps {
   onPressPostingAs?: () => void
   /** Opens the file picker each time it changes to a new number above 0 (the Files tab's "Add a file"). */
   attachRequest?: number
+  /** The kept draft, once read: put in the field when it arrives. */
+  draft?: string
+  /** Told of every change to the field's text, including the empty field a send leaves. */
+  onTextChange?: (text: string) => void
 }
 
 export const RoomComposer: React.FC<RoomComposerProps> = ({
@@ -61,10 +68,19 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   onPressPostingAs,
   canAttach,
   attachRequest = 0,
+  draft,
+  onTextChange,
 }) => {
   const { t, i18n } = useTranslation()
   const { ColorPalette } = useTheme()
-  const [text, setText] = useState('')
+  const [text, setText] = useState(draft ?? '')
+  const change = (next: string) => {
+    setText(next)
+    onTextChange?.(next)
+  }
+  useEffect(() => {
+    if (draft !== undefined) setText(draft)
+  }, [draft])
   const [file, setFile] = useState<RoomsAttachment>()
   const [refused, setRefused] = useState<'tooLarge' | 'unreadable'>()
   const canSend = text.trim().length > 0 || !!file
@@ -174,7 +190,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
 
   const send = () => {
     if (!onSend(text, file)) return
-    setText('')
+    change('')
     setFile(undefined)
   }
 
@@ -253,7 +269,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
           <TextInput
             style={styles.input}
             value={text}
-            onChangeText={setText}
+            onChangeText={change}
             multiline
             maxLength={MAX_POST_LENGTH}
             maxFontSizeMultiplier={1.5}

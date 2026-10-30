@@ -311,9 +311,25 @@ describe('coming back after a lock', () => {
   })
 })
 
-// auth.tsx imports this file, so it imports no module: the agent home (which reads the VTA agent) comes from MainStack.
-it('stays a leaf: imports nothing from modules/', () => {
-  const source = fs.readFileSync(path.resolve(__dirname, '../navReturn.ts'), 'utf8')
-  expect(source).toMatch(/from '\.\.\/types\/navigators'/)
-  expect(source).not.toMatch(/from '[^']*modules\//)
+// auth.tsx imports this file, so it stays a leaf: the agent home (which reads the VTA agent) comes from MainStack.
+describe('the agent home comes from MainStack', () => {
+  const source = (file: string) => fs.readFileSync(path.resolve(__dirname, file), 'utf8')
+
+  // The whole set, not a modules/ substring: a new import of any kind is looked at, since one that isn't spelled
+  // modules/ could still pull the VTA agent in.
+  it('navReturn imports only the navigation types and the screen names', () => {
+    const specifiers = [...source('../navReturn.ts').matchAll(/^import [^;]*? from '([^']+)'/gm)].map(
+      ([, spec]) => spec
+    )
+    expect(specifiers.sort()).toEqual(['../types/navigators', '@react-navigation/native'])
+  })
+
+  // The default parameter guaranteed a read at unlock; now the call site does. agentHomeScreen() is called inside
+  // MainStack's mount effect, after the PIN, never a value read earlier or a screen named outright.
+  it('MainStack passes agentHomeScreen() as it mounts after the PIN', () => {
+    const mainStack = source('../../navigators/MainStack.tsx')
+    expect(mainStack).toMatch(/import \{ agentHomeScreen \} from '\.\.\/modules\/trust-tasks\/screens\/agentHome'/)
+    expect(mainStack).toMatch(/useEffect\(\(\) => \{\s*restoreReturnState\(agentHomeScreen\(\)\)\s*\}, \[\]\)/)
+    expect(mainStack.match(/restoreReturnState\(/g)).toHaveLength(1)
+  })
 })

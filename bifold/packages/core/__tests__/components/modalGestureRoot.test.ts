@@ -12,6 +12,11 @@
  *   MessageActions renders ReactionBar. A component that brings its own Modal (DisappearingMessagesSheet) answers
  *   for that Modal itself.
  *
+ * Each Modal is checked on its own, so one Modal's root can't stand in for a sibling's. A Modal is matched from its
+ * open tag to the first close after it, so a nested pair would be scoped wrongly; every file's matched Modals are
+ * therefore counted against the Modals it opens with children, and a nested or unclosed one fails as a mismatch
+ * rather than reading as a pass.
+ *
  * It proves the root is there, not that a tap lands: that's a device check on Android. It doesn't see a Modal
  * wrapper other than SafeAreaModal, or gesture-handler reached through more than one import.
  */
@@ -59,21 +64,38 @@ function gestureComponents(file: string): string[] {
   )
 }
 
-/** For each file rendering a Modal: why each of its Modals needs a gesture root, if it does. */
-const modalFiles = sources(SRC)
+/** Each Modal in `text`: why it needs a gesture root (none when it doesn't), and whether it has one. */
+function modalsIn(text: string, imported: string[]): { reasons: string[]; root: boolean }[] {
+  return [...text.matchAll(MODAL)].map(([modal]) => ({
+    reasons: [
+      ...(RNGH.test(text) ? ['imports gesture-handler'] : []),
+      ...imported.filter((name) => new RegExp(`<${name}\\b`).test(modal)),
+    ],
+    root: /<GestureHandlerRootView\b/.test(modal),
+  }))
+}
+
+/** How many Modals `text` opens with children. A self-closing `<Modal />` has nothing to scope, so isn't counted. */
+function modalOpens(text: string): number {
+  return [...text.matchAll(/<(Modal|SafeAreaModal)\b/g)].filter(({ index = 0 }) => {
+    // The open tag ends at the first `>` outside its props' braces (an arrow function's `=>` is inside them).
+    let depth = 0
+    for (let i = index; i < text.length; i++) {
+      if (text[i] === '{') depth++
+      else if (text[i] === '}') depth--
+      else if (text[i] === '>' && depth === 0) return text[i - 1] !== '/'
+    }
+    return false
+  }).length
+}
+
+const allModalFiles = sources(SRC)
   .filter((file) => file.endsWith('.tsx') && !file.endsWith(`${path.sep}SafeAreaModal.tsx`))
-  .map((file) => {
-    const text = read(file)
-    const imported = gestureComponents(file)
-    const modals = [...text.matchAll(MODAL)].map(([modal]) => {
-      const reasons = [
-        ...(RNGH.test(text) ? ['imports gesture-handler'] : []),
-        ...imported.filter((name) => new RegExp(`<${name}\\b`).test(modal)),
-      ]
-      return { modal, reasons }
-    })
-    return { file, modals }
-  })
+  .filter((file) => /<(Modal|SafeAreaModal)\b/.test(read(file)))
+
+/** For each file rendering a Modal that needs a gesture root: its Modals, each with why and whether it has one. */
+const modalFiles = allModalFiles
+  .map((file) => ({ file, modals: modalsIn(read(file), gestureComponents(file)) }))
   .filter(({ modals }) => modals.some(({ reasons }) => reasons.length > 0))
 
 test('finds the Modals that need a gesture root (a guard that read nothing would pass)', () => {
@@ -90,9 +112,39 @@ test('finds the Modals that need a gesture root (a guard that read nothing would
 test.each(modalFiles.map(({ file, modals }) => [path.relative(SRC, file), modals]))(
   '%s has a GestureHandlerRootView inside each Modal that needs one',
   (_name, modals) => {
-    for (const { modal, reasons } of modals) {
-      if (reasons.length)
-        expect({ reasons, root: /<GestureHandlerRootView\b/.test(modal) }).toEqual({ reasons, root: true })
-    }
+    for (const { reasons, root } of modals)
+      if (reasons.length) expect({ reasons, root }).toEqual({ reasons, root: true })
   }
 )
+
+test('every Modal in src is matched whole: none nested, none left open', () => {
+  const mismatched = allModalFiles
+    .map((file) => ({
+      file: path.relative(SRC, file),
+      opens: modalOpens(read(file)),
+      matched: modalsIn(read(file), []).length,
+    }))
+    .filter(({ opens, matched }) => opens !== matched)
+  expect(allModalFiles.map((file) => path.basename(file))).toEqual(expect.arrayContaining(['MessageActions.tsx']))
+  expect(mismatched).toEqual([])
+})
+
+describe('the rule itself, on fixtures', () => {
+  const gesture = "import { TouchableOpacity } from 'react-native-gesture-handler'\n"
+
+  it('checks two Modals in one file apart: a root in one does not stand in for the other', () => {
+    const text = `${gesture}<Modal><GestureHandlerRootView><A /></GestureHandlerRootView></Modal>\n<Modal><B /></Modal>`
+    expect(modalsIn(text, []).map(({ root }) => root)).toEqual([true, false])
+    expect(modalsIn(text, []).every(({ reasons }) => reasons.length > 0)).toBe(true)
+  })
+
+  it('reads a nested pair as a count mismatch, not a pass', () => {
+    const text = `${gesture}<Modal><Modal><GestureHandlerRootView /></Modal></Modal>`
+    expect({ opens: modalOpens(text), matched: modalsIn(text, []).length }).toEqual({ opens: 2, matched: 1 })
+  })
+
+  it('does not count a self-closing Modal, or an arrow in an open tag', () => {
+    expect(modalOpens('<Modal visible />')).toBe(0)
+    expect(modalOpens('<Modal onRequestClose={() => close()}><A /></Modal>')).toBe(1)
+  })
+})

@@ -20,6 +20,7 @@
  *
  * @module rooms/screens/Room
  */
+import { useAgent } from '@bifold/react-hooks'
 import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -59,6 +60,7 @@ import { useInViewAndActive } from '../useInViewAndActive'
 import { type RoomListing, useRoom } from '../useRoom'
 import { POSTS_PAGE, ROOM_POLL_MS, useRoomPosts } from '../useRoomPosts'
 import { markRoomSeen } from '../useRoomRows'
+import { useRoomDraft } from '../useRoomDraft'
 import { type PendingPost, useRoomSend } from '../useRoomSend'
 import { useRoomsService } from '../useRoomsService'
 
@@ -138,6 +140,9 @@ const Room: React.FC = () => {
     onScreen: inView,
     roomName: room ? roomTitle(t, room) : undefined,
   })
+  // The post being written is kept per room (useRoomDraft), so it comes back with the room after an inactivity lock.
+  const { agent } = useAgent()
+  const draft = useRoomDraft(agent, roomId)
   const [openedFile, setOpenedFile] = useState<RoomFile>()
   // Whose sheet is open: the member's own, from the composer, or another member's, from their name.
   const [sheetFor, setSheetFor] = useState<Identity>()
@@ -391,6 +396,9 @@ const Room: React.FC = () => {
             <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
           ) : (
             <RoomComposer
+              // A screen reused for another room (navigating to a room already in the stack updates its params)
+              // starts its field afresh: the last room's words never sit in this one's, or are saved as its draft.
+              key={roomId}
               onSend={send}
               unavailable={cannotPost}
               postingAs={
@@ -402,6 +410,8 @@ const Room: React.FC = () => {
               onPressPostingAs={() => setSheetFor(room.actingAs)}
               canAttach={canAttach}
               attachRequest={params?.attach}
+              draft={draft.saved}
+              onTextChange={draft.onTextChange}
             />
           )}
         </KeyboardAvoidingView>

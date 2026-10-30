@@ -29,6 +29,7 @@ const Room = require('../screens/Room').default
 const PLANNING = 'did:webvh:sample:planning'
 const WELCOME_DESK = 'did:webvh:sample:welcome-desk'
 const CUSTODY = 'did:webvh:sample:3f9a7c21e0'
+const KERNEL_NOTES = 'did:webvh:sample:kernel-notes'
 const id = (key: string) => testIdWithKey(key)
 
 const show = (roomId: string) => {
@@ -53,6 +54,64 @@ const send = async (tree: ReturnType<typeof show>) => {
 
 beforeEach(() => {
   mockService = createSampleRoomsService()
+})
+
+// The post being written is kept per room (useRoomDraft), in the agent's generic records, as a chat's draft is.
+describe('a kept draft', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const records = require('@bifold/react-hooks').useAgent().agent.genericRecords
+  const draftId = `room-draft:${PLANNING}`
+  beforeEach(() => {
+    jest.clearAllMocks()
+    records.findById.mockImplementation(async (recordId: string) =>
+      recordId === draftId ? { id: draftId, content: { text: 'Half a post' } } : null
+    )
+  })
+  afterEach(() => records.findById.mockImplementation(async () => null))
+
+  test('comes back in the field as the room opens, is saved as it changes, and is cleared at once by a send', async () => {
+    const tree = show(PLANNING)
+    await waitFor(() => expect(tree.getByTestId(id('RoomComposerInput')).props.value).toBe('Half a post'))
+
+    await type(tree, 'Half a post, finished')
+    await waitFor(() =>
+      expect(records.update).toHaveBeenCalledWith(
+        expect.objectContaining({ id: draftId, content: { text: 'Half a post, finished' } })
+      )
+    )
+
+    await send(tree)
+    await waitFor(() => expect(records.delete).toHaveBeenCalledWith(expect.objectContaining({ id: draftId })))
+    expect(tree.getByTestId(id('RoomComposerInput')).props.value).toBe('')
+  })
+
+  // Navigating to a room already in the stack updates the screen's params rather than mounting it afresh.
+  test("a screen reused for another room drops the last room's words", async () => {
+    const tree = show(PLANNING)
+    await waitFor(() => expect(tree.getByTestId(id('RoomComposerInput')).props.value).toBe('Half a post'))
+    await type(tree, 'Half a post, finished')
+
+    mockParams = { roomId: KERNEL_NOTES }
+    tree.rerender(
+      <BasicAppContext>
+        <Room />
+      </BasicAppContext>
+    )
+    await waitFor(() => expect(records.findById).toHaveBeenCalledWith(`room-draft:${KERNEL_NOTES}`))
+    await waitFor(() => tree.getByTestId(id('RoomComposerInput')))
+    await act(async () => undefined)
+    expect(tree.getByTestId(id('RoomComposerInput')).props.value).toBe('')
+  })
+
+  test("another room's draft is not this room's", async () => {
+    records.findById.mockImplementation(async (recordId: string) =>
+      recordId === `room-draft:${WELCOME_DESK}` ? { id: recordId, content: { text: 'Welcome desk words' } } : null
+    )
+    const tree = show(PLANNING)
+    await waitFor(() => expect(records.findById).toHaveBeenCalledWith(draftId))
+    await act(async () => undefined)
+    expect(tree.getByTestId(id('RoomComposerInput')).props.value).toBe('')
+  })
 })
 
 describe('posting to a room', () => {

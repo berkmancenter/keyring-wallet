@@ -19,6 +19,17 @@
  * gifted-chat also reports '' when it first lays out the empty field. That is
  * not a change: it neither touches the field nor clears the kept draft, which
  * it used to do 400 ms after the chat opened, while the draft was on screen.
+ * It is told apart from a send only by the field being empty then, so it
+ * relies on that '' arriving before the first read answers (gifted-chat sends
+ * it as it mounts, before an awaited store read can resolve). Were the read to
+ * answer first, the '' would read as a send and clear the kept draft.
+ *
+ * The draft handed back (`saved`) is spent once the field is touched, so a
+ * composer drawn afresh later (a room's, when it was swapped out a while)
+ * can't put back words since sent or changed.
+ *
+ * A room's composer keeps its draft through the same hook, useKeptDraft, with
+ * the room's own store (rooms/useRoomDraft.ts).
  *
  * @module chat/useChatDraft
  */
@@ -39,7 +50,25 @@ export interface ChatDraft {
   saved: string | undefined
 }
 
+/** Where a composer's draft is kept: how to read and save it by its id, and the name its log lines go by. */
+export interface DraftStore {
+  load: (agent: Agent, id: string) => Promise<string | undefined>
+  save: (agent: Agent, id: string, text: string) => Promise<void>
+  log: string
+}
+
+const CHAT_DRAFTS: DraftStore = {
+  load: (agent, id) => loadChatDraft(agent, id),
+  save: (agent, id, text) => saveChatDraft(agent, id, text),
+  log: 'Chat:draft',
+}
+
 export function useChatDraft(agent: Agent | undefined, connectionId: string): ChatDraft {
+  return useKeptDraft(agent, connectionId, CHAT_DRAFTS)
+}
+
+/** A composer's kept draft, by the id it is kept under (a chat's connection, a room's id) in `store`. */
+export function useKeptDraft(agent: Agent | undefined, connectionId: string, store: DraftStore): ChatDraft {
   const pending = useRef<string | undefined>(undefined)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [saved, setSaved] = useState<string | undefined>(undefined)
@@ -58,16 +87,17 @@ export function useChatDraft(agent: Agent | undefined, connectionId: string): Ch
     const text = pending.current
     pending.current = undefined
     if (text === undefined || !agent) return
-    saveChatDraft(agent, connectionId, text).catch((error) => {
-      agent.config?.logger?.warn(`[Chat:draft] the draft for ${connectionId} was not saved`, { error })
+    store.save(agent, connectionId, text).catch((error) => {
+      agent.config?.logger?.warn(`[${store.log}] the draft for ${connectionId} was not saved`, { error })
     })
-  }, [agent, connectionId])
+  }, [agent, connectionId, store])
 
   const onTextChange = useCallback(
     (text: string) => {
       // An empty field reported empty again (gifted-chat lays it out): nothing changed.
       if (text === '' && field.current === '') return
       field.current = text
+      if (touched.current !== connectionId) setSaved(undefined)
       touched.current = connectionId
       pending.current = text
       if (timer.current) clearTimeout(timer.current)
@@ -86,19 +116,20 @@ export function useChatDraft(agent: Agent | undefined, connectionId: string): Ch
     }
     if (!agent) return
     let live = true
-    loadChatDraft(agent, connectionId)
+    store
+      .load(agent, connectionId)
       .then((text) => {
         if (!live || touched.current === connectionId) return
         field.current = text ?? ''
         setSaved(text)
       })
       .catch((error) => {
-        agent.config?.logger?.warn(`[Chat:draft] the draft for ${connectionId} could not be read`, { error })
+        agent.config?.logger?.warn(`[${store.log}] the draft for ${connectionId} could not be read`, { error })
       })
     return () => {
       live = false
     }
-  }, [agent, connectionId])
+  }, [agent, connectionId, store])
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
