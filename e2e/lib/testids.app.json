@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "ad90167d66f814dc85d3d9654988ca1b82037d2d",
+  "generatedFrom": "a149d2b8fffc0734de09d5491339ee16a5d26efa",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "Accept": ["src/screens/Terms.tsx"],
@@ -40,6 +40,7 @@
     "OtaBundleId": ["src/ota/OtaDeveloperSection.tsx"],
     "OtaJoinRing0": ["src/ota/OtaDeveloperSection.tsx"],
     "OtaLeaveRing0": ["src/ota/OtaDeveloperSection.tsx"],
+    "OtaRelease": ["src/ota/OtaDeveloperSection.tsx"],
     "OtaRing": ["src/ota/OtaDeveloperSection.tsx"],
     "OtaRolledBack": ["src/ota/OtaDeveloperSection.tsx"],
     "ProbeVtaManagerButton": ["src/screens/Developer.tsx"],
