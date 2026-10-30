@@ -701,6 +701,8 @@
     "ConnectionNotFound": "Connection not found",
     "InvalidQrCode": "Invalid QR code. Please try again.",
     "WillScanAutomatically": "A valid QR code will scan automatically.",
+    "CameraStarting": "Starting the camera…",
+    "CameraNotStarting": "The camera isn't starting. Close Keyring and try again; if it still doesn't start, restart your phone.",
     "ScanQRCode": "Scan QR code",
     "MyQRCode": "My QR code",
     "SwitchProfile": "Switch profile",

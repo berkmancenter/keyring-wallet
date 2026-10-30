@@ -22,6 +22,7 @@ jest.mock('react-native-vision-camera', () => ({
   useCameraDevice: jest.fn(() => ({
     id: 'mock-camera',
     position: 'back',
+    physicalDevices: ['wide-angle-camera'],
     supportsFocus: true,
   })),
   useCameraFormat: jest.fn(() => ({})),

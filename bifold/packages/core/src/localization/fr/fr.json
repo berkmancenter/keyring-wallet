@@ -659,6 +659,8 @@
     "ConnectionNotFound": "Connexion non trouvée",
     "InvalidQrCode": "Code QR non valide. Veuillez réessayer.",
     "WillScanAutomatically": "Un code QR valide sera scanné automatiquement.",
+    "CameraStarting": "Démarrage de l'appareil photo…",
+    "CameraNotStarting": "L'appareil photo ne démarre pas. Fermez Keyring et réessayez ; s'il ne démarre toujours pas, redémarrez votre téléphone.",
     "ScanQRCode": "Scanner le code QR",
     "MyQRCode": "Mon code QR",
     "SwitchProfile": "Changer de profil",
