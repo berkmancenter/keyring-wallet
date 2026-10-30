@@ -42,6 +42,8 @@ interface Listing {
   notes: NoteSummary[]
   check: HostCheck
   complete: boolean
+  /** The version of the last prune this listing already reflects: a full listing that carried it. */
+  pruneSeen?: number
 }
 
 export interface RoomPosts {
@@ -91,10 +93,32 @@ export function mergeNewer(listing: Listing, newer: NoteList): { listing: Listin
   const check = newer.check.verdict === 'conflict' && !sameCheck ? newer.check : listing.check
   if (!changed && check === listing.check) return undefined
   return {
-    listing: { notes: newestFirst([...byKey.values()]), check, complete: listing.complete && newer.complete },
+    listing: {
+      notes: newestFirst([...byKey.values()]),
+      check,
+      complete: listing.complete && newer.complete,
+      ...(listing.pruneSeen !== undefined ? { pruneSeen: listing.pruneSeen } : {}),
+    },
     added,
   }
 }
+
+/** A full listing as held: newest first, with the prune it already reflects. */
+const listingOf = (list: NoteList): Listing => ({
+  notes: newestFirst(list.notes),
+  check: list.check,
+  complete: list.complete,
+  ...(list.lastPrune ? { pruneSeen: list.lastPrune.version } : {}),
+})
+
+/**
+ * Whether `newer` names a prune past what is held (browse 0.3's reader rule): records it removed never come in a
+ * poll from the newest version held, so only a full listing drops them. The watermark is the newer of the newest
+ * version held and the last prune already applied: a prune that took the newest post leaves the newest version held
+ * below the prune's own, and the posts alone would ask for a full listing on every poll.
+ */
+const prunedPast = (listing: Listing, newer: NoteList): boolean =>
+  !!newer.lastPrune && newer.lastPrune.version > Math.max(newestVersion(listing.notes), listing.pruneSeen ?? 0)
 
 const readKey = (note: NoteSummary) => `${note.key}@${note.version}`
 
@@ -178,7 +202,7 @@ export function useRoomPosts(
       (list) => {
         skips.current = 0
         if (!current) return
-        setListing({ notes: newestFirst(list.notes), check: list.check, complete: list.complete })
+        setListing(listingOf(list))
         setFailed(false)
         notePoll(false)
       },
@@ -211,6 +235,19 @@ export function useRoomPosts(
         (newer) => {
           if (current) notePoll(false)
           const now = listingNow.current
+          if (current && now && prunedPast(now, newer)) {
+            // Pruned past what is held: one full listing replaces it, new posts in this poll included.
+            counted(listingsInFlight, () => service.listNotes(roomId)).then(
+              (full) => {
+                if (current) setListing(listingOf(full))
+              },
+              () => {
+                skips.current = POLL_SKIPS_AFTER_FAILURE
+                if (current) notePoll(true)
+              }
+            )
+            return
+          }
           const merged = current && now ? mergeNewer(now, newer) : undefined
           if (!merged) return
           setListing(merged.listing)

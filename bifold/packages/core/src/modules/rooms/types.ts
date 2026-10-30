@@ -176,11 +176,23 @@ export interface HostCheck {
   detail: string
 }
 
+/**
+ * A room's last prune (`rooms/_shared/0.2` RecordPrune), as `rooms/keys/browse` 0.3 passes it on: the room version
+ * the prune took it to, when, and how many records it removed outright, tombstones included.
+ */
+export interface RecordPrune {
+  version: number
+  prunedAt: string
+  removed: number
+}
+
 export interface NoteList {
   notes: NoteSummary[]
   /** False when the host's listing stopped early. */
   complete: boolean
   check: HostCheck
+  /** The room's last prune, when the agent passes one on (browse 0.3). */
+  lastPrune?: RecordPrune
 }
 
 export interface InertFlags {

@@ -550,6 +550,7 @@ export class AgentRoomsService implements RoomsService {
       })),
       complete: listing.complete,
       check: listing.check,
+      ...(listing.lastPrune ? { lastPrune: listing.lastPrune } : {}),
     }
   }
 
@@ -920,7 +921,7 @@ export class AgentRoomsService implements RoomsService {
 
   /**
    * The newest `rooms/keys/browse` the agent serves. 0.3 asks the same and answers the same, plus the room's
-   * `lastPrune` (not read here); an agent that lists neither is asked 0.1, as before 0.3.
+   * `lastPrune`, which `listNotes` passes on; an agent that lists neither is asked 0.1, as before 0.3.
    */
   private browseType(): string {
     const served = this.served?.types ?? []

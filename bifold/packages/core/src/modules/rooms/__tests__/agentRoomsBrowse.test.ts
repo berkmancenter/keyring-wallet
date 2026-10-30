@@ -23,8 +23,10 @@ const RECORDS = [
   { key: 'a6-276d-live-204829', version: 38 },
 ]
 
+const PRUNE = { version: 12, prunedAt: '2026-10-29T08:00:00Z', removed: 3 }
+
 /** A browse answer as the agent sends it: 0.1's members, and at 0.3 the room's `lastPrune` too. */
-function browseAnswer(type: string) {
+function browseAnswer(type: string, prune: { lastPrune?: unknown } = { lastPrune: PRUNE }) {
   return {
     roomId: ROOM,
     records: RECORDS.map(({ key, version }) => ({
@@ -36,9 +38,7 @@ function browseAnswer(type: string) {
     })),
     complete: true,
     verification: { priorRoots: 'agrees', anchor: 'notOffered', count: 'agrees' },
-    ...(type === ROOMS_TASK.keysBrowse03
-      ? { lastPrune: { version: 12, prunedAt: '2026-10-29T08:00:00Z', removed: 3 } }
-      : {}),
+    ...(type === ROOMS_TASK.keysBrowse03 && 'lastPrune' in prune ? { lastPrune: prune.lastPrune } : {}),
   }
 }
 
@@ -46,7 +46,11 @@ function browseAnswer(type: string) {
  * An agent that lists `browse` among what it serves and answers `answering` (by default the same), refusing any other
  * browse version as vta-service does. Older agents answer some versions their list leaves out.
  */
-function agentServing(browse: string[], answering: string[] = browse) {
+function agentServing(
+  browse: string[],
+  answering: string[] = browse,
+  prune: { lastPrune?: unknown } = { lastPrune: PRUNE }
+) {
   const served = [ROOMS_TASK.keysList02, ROOMS_TASK.keysRead, ROOMS_TASK.keysAct06, ...browse]
   const agentTask = jest.fn(async (type: string, payload: Record<string, unknown>): Promise<unknown> => {
     if (type === ROOMS_TASK.keysList02)
@@ -67,7 +71,7 @@ function agentServing(browse: string[], answering: string[] = browse) {
       if (!answering.includes(type))
         throw Object.assign(new Error(`${type} is not served`), { code: 'unsupportedType' })
       expect(Object.keys(payload).sort()).toEqual(expect.arrayContaining(['host', 'roomId']))
-      return browseAnswer(type)
+      return browseAnswer(type, prune)
     }
     throw new Error(`unexpected agent task ${type}`)
   })
@@ -165,6 +169,46 @@ describe("a room's listing at the agent's browse version", () => {
       await service.readNote(ROOM, 'a6-276d-live-204829')
       expect(reads()).toEqual(['a6-276d-live-204829'])
     }
+  })
+
+  it("a 0.3 listing carries the room's last prune, for the reader rule in useRoomPosts", async () => {
+    const { b } = agentServing([ROOMS_TASK.keysBrowse03])
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    expect((await service.listNotes(ROOM)).lastPrune).toEqual(PRUNE)
+  })
+
+  it('a prune mark from a host still on rooms/_shared 0.1 (`at`, not `prunedAt`) is read too', async () => {
+    const { b } = agentServing([ROOMS_TASK.keysBrowse03], undefined, {
+      lastPrune: { version: 12, at: PRUNE.prunedAt, removed: 3 },
+    })
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    expect((await service.listNotes(ROOM)).lastPrune).toEqual(PRUNE)
+  })
+
+  it('a mark without a whole version is left out, and a room never pruned has none', async () => {
+    for (const prune of [
+      { lastPrune: { version: '12', prunedAt: PRUNE.prunedAt, removed: 3 } },
+      { lastPrune: { removed: 3 } },
+      { lastPrune: 'pruned' },
+      { lastPrune: null },
+      {},
+    ]) {
+      const { b } = agentServing([ROOMS_TASK.keysBrowse03], undefined, prune)
+      const service = new AgentRoomsService(b)
+      await service.listMyRooms()
+      const list = await service.listNotes(ROOM)
+      expect(list).not.toHaveProperty('lastPrune')
+      expect(list.notes).toHaveLength(2)
+    }
+  })
+
+  it('a 0.1 listing has no prune mark', async () => {
+    const { b } = agentServing([ROOMS_TASK.keysBrowse])
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    expect(await service.listNotes(ROOM)).not.toHaveProperty('lastPrune')
   })
 
   it('every browse and read version Keyring sends shares the read lane', () => {

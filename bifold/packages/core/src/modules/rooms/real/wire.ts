@@ -6,7 +6,7 @@
  * The parsers accept only what the specs define and drop anything else, so a malformed or hostile
  * answer can at worst lose a row, never inject one.
  */
-import type { HostCheck, RoomTier, RoomVerb } from '../types'
+import type { HostCheck, RecordPrune, RoomTier, RoomVerb } from '../types'
 
 const SPEC = 'https://trusttasks.org/spec/'
 
@@ -319,7 +319,24 @@ const STATUSES = ['active', 'deprecated', 'retracted'] as const
 const statusOf = (v: unknown): RecordMeta['status'] =>
   STATUSES.includes(v as RecordMeta['status']) ? (v as RecordMeta['status']) : 'active'
 
-export function parseBrowse(payload: unknown): { records: RecordMeta[]; complete: boolean; check: HostCheck } {
+/**
+ * A listing's `lastPrune`, as the agent passes on the host's mark: `prunedAt` from `rooms/_shared/0.2`, `at` from a
+ * host still on 0.1 (vti-rooms `RecordPrune::to_wire` before it was renamed). Undefined without a whole `version`,
+ * the one member a reader acts on.
+ */
+function parsePrune(v: unknown): RecordPrune | undefined {
+  const p = obj(v)
+  const version = int(p?.version)
+  if (version === undefined) return undefined
+  return { version, prunedAt: str(p?.prunedAt) ?? str(p?.at) ?? '', removed: int(p?.removed) ?? 0 }
+}
+
+export function parseBrowse(payload: unknown): {
+  records: RecordMeta[]
+  complete: boolean
+  check: HostCheck
+  lastPrune?: RecordPrune
+} {
   const p = obj(payload)
   const records = arr(p?.records).flatMap((raw) => {
     const r = obj(raw)
@@ -337,7 +354,13 @@ export function parseBrowse(payload: unknown): { records: RecordMeta[]; complete
       },
     ]
   })
-  return { records, complete: p?.complete !== false, check: hostCheckOf(p?.verification) }
+  const lastPrune = parsePrune(p?.lastPrune)
+  return {
+    records,
+    complete: p?.complete !== false,
+    check: hostCheckOf(p?.verification),
+    ...(lastPrune ? { lastPrune } : {}),
+  }
 }
 
 /**

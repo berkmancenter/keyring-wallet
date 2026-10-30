@@ -48,6 +48,8 @@ const summaryOf = ({ body: _b, flags: _f, check: _c, ...summary }: Note): NoteSu
 /** A room whose records the test changes; listing honours `sinceVersion` as the host does. */
 const roomWith = (initial: Note[]) => {
   const records = new Map(initial.map((n) => [n.key, n]))
+  // The room's last prune, as browse 0.3 passes it on: every answer carries it, the full listing and a poll alike.
+  let lastPrune: NoteList['lastPrune']
   const service = {
     listNotes: jest.fn(async (_roomId: string, options: { sinceVersion?: number } = {}): Promise<NoteList> => {
       const since = options.sinceVersion ?? 0
@@ -55,6 +57,7 @@ const roomWith = (initial: Note[]) => {
         notes: [...records.values()].filter((n) => n.version > since).map(summaryOf),
         complete: true,
         check: CONSISTENT,
+        ...(lastPrune ? { lastPrune } : {}),
       }
     }),
     readNote: jest.fn(async (_roomId: string, key: string) => {
@@ -66,6 +69,11 @@ const roomWith = (initial: Note[]) => {
   return {
     service: service as unknown as RoomsService & { listNotes: jest.Mock; readNote: jest.Mock },
     write: (n: Note) => records.set(n.key, n),
+    /** The host removes these records outright, tombstones included, at room version `version`. */
+    prune: (keys: string[], version: number) => {
+      for (const key of keys) records.delete(key)
+      lastPrune = { version, prunedAt: '2026-10-30T12:00:00Z', removed: keys.length }
+    },
   }
 }
 
@@ -322,6 +330,60 @@ describe('a room in view', () => {
     await flush()
     expect(result.current.posts?.map((p) => p.key)).toEqual(['c', 'b', 'a'])
     expect(service.readNote.mock.calls.map(([, key]) => key)).toEqual(['b', 'a', 'c'])
+  })
+})
+
+// rooms/keys/browse 0.3 passes on the room's `lastPrune`. A prune removes records outright, so a poll from the newest
+// version held never mentions them: a `lastPrune.version` above what this phone has synced means rebuild from a full
+// listing and drop what it no longer holds (browse 0.3 spec, "a caller that keeps its own copy of the room").
+describe('a room pruned while it is open', () => {
+  const keys = (posts?: { key: string }[]) => posts?.map((p) => p.key)
+
+  test('a prune past what the phone holds is caught up from a full listing: the pruned posts go', async () => {
+    const room = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    const { result } = await open(room.service)
+    expect(keys(result.current.posts)).toEqual(['c', 'b', 'a'])
+    room.prune(['b'], 4)
+    await tick()
+    await flush()
+    expect(keys(result.current.posts)).toEqual(['c', 'a'])
+    // One poll, then one full listing to rebuild from.
+    expect(room.service.listNotes.mock.calls.map(([, o]) => o?.sinceVersion)).toEqual([undefined, 3, undefined])
+  })
+
+  test('a prune that took the newest post: rebuilt once, not again on every poll after', async () => {
+    const room = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    const { result } = await open(room.service)
+    room.prune(['c'], 4)
+    await tick()
+    await flush()
+    expect(keys(result.current.posts)).toEqual(['b', 'a'])
+    // The newest version held is now 2, below the prune's 4: the prune already applied is what stops a rebuild loop.
+    await tick()
+    await tick()
+    await flush()
+    const full = room.service.listNotes.mock.calls.filter(([, o]) => o?.sinceVersion === undefined)
+    expect(full).toHaveLength(2)
+  })
+
+  test('a prune the first listing already reflects changes nothing', async () => {
+    const room = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    room.prune(['b'], 2)
+    const { result } = await open(room.service)
+    expect(keys(result.current.posts)).toEqual(['c', 'a'])
+    await tick()
+    await flush()
+    expect(room.service.listNotes.mock.calls.map(([, o]) => o?.sinceVersion)).toEqual([undefined, 3])
+  })
+
+  test('a new post and a prune in the same poll: the full listing has both', async () => {
+    const room = roomWith([note('a', 1), note('b', 2)])
+    const { result } = await open(room.service)
+    room.write(note('d', 4))
+    room.prune(['a'], 5)
+    await tick()
+    await flush()
+    expect(keys(result.current.posts)).toEqual(['d', 'b'])
   })
 })
 
