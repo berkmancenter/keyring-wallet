@@ -52,6 +52,7 @@ import {
   type ProvedSignIn as AgentProvedSignIn,
   type SignInAgentDeps,
 } from './oobSignInAgent'
+import { classifyDid } from './classifyDid'
 import { communityNameIsStale, refreshPublishedName } from './communityNameRefresh'
 import { releaseWarn } from './releaseLog'
 import { readTrigger, triggerAction } from './triggerLink'
@@ -117,7 +118,17 @@ export type SignInSteps = {
   identifyAndProve: (claimed: ClaimedSignIn, enteredNumber: string, identity?: SignInIdentity) => Promise<ProvedSignIn>
   approve: (proved: ProvedSignIn) => Promise<{ status: 'approved' }>
   cancel: (claimed: ClaimedSignIn) => Promise<{ cancelled: boolean }>
+  /**
+   * Whether the sender of a code from a community this phone has not joined is a community it can join (IN-406: a
+   * community's join page shows the same sign-in code). Asked only when the person taps "Check and join", never
+   * before: until they continue, nothing is resolved for an unknown sender (VTI-LNK-050). Undefined when it could
+   * not be checked (its DID host did not answer in time, or the phone is offline), which is not a "no".
+   */
+  joinable?: (vtcDid: string) => Promise<boolean | undefined>
 }
+
+/** How long "Check and join" waits on the sender's DID host before saying the code can't be joined here. */
+export const JOINABLE_WAIT_MS = 15000
 
 // The rule is shared with My Agent's community list (communityNameRefresh); kept exported from here as before.
 export { COMMUNITY_NAME_TTL_MS } from './communityNameRefresh'
@@ -399,6 +410,15 @@ export function agentSignInSteps(agent: Agent): SignInSteps {
       })
     },
     cancel: (claimed) => cancelSignIn(claimed, claimDeps),
+    // The one network touch for an unknown sender, and only once the person has tapped: its DID document, from its
+    // DID host. Nothing goes to the community itself, and the scanned request is never claimed; joining (VtiJoin)
+    // is what first asks the community anything. A host that answered decides it (a community, or not one: none
+    // found, not a DID); one that did not answer in time leaves it unchecked, so the person can try again.
+    joinable: async (vtcDid) => {
+      const kind = await classifyDid(agent, vtcDid, { timeoutMs: JOINABLE_WAIT_MS }).catch(() => undefined)
+      if (!kind || (kind.kind === 'unresolvable' && kind.reason === 'offline')) return undefined
+      return kind.kind === 'community'
+    },
   }
 }
 

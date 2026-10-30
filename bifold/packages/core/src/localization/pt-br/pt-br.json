@@ -2608,6 +2608,10 @@
     "TimedOut": "O tempo acabou, nada foi conectado. Atualize a página de login e escaneie novamente.",
     "NoCode": "Não há código de login para usar. Escaneie o código do site novamente.",
     "OlderAgents": "Se este código for do serviço que hospeda um dos seus agentes: um agente configurado antes desta versão do Keyring não pode entrar nele a partir deste telefone. Obtenha um novo agente desse serviço ou entre de outra forma.",
+    "JoinHint": "Se este código for de uma comunidade em que você gostaria de entrar, o Keyring pode verificar e entrar nela.",
+    "CheckAndJoin": "Verificar e entrar",
+    "NotJoinable": "Este código não é de uma comunidade em que você possa entrar aqui.",
+    "JoinUnchecked": "O Keyring não conseguiu verificar este código agora. Tente de novo.",
     "Service": {
       "ConfirmBody": "Um site está pedindo para você entrar com um dos seus agentes deste serviço. Nada é enviado até você continuar.",
       "Label": "Serviço",

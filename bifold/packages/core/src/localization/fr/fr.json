@@ -2705,6 +2705,10 @@
     "TimedOut": "Le temps est écoulé, rien n'a été connecté. Actualisez la page de connexion et scannez à nouveau.",
     "NoCode": "Aucun code de connexion à utiliser. Scannez à nouveau le code du site web.",
     "OlderAgents": "Si ce code vient du service qui héberge l'un de vos agents : un agent configuré avant cette version de Keyring ne peut pas s'y connecter depuis ce téléphone. Obtenez un nouvel agent auprès de ce service, ou connectez-vous autrement.",
+    "JoinHint": "Si ce code vient d'une communauté que vous aimeriez rejoindre, Keyring peut vérifier et la rejoindre.",
+    "CheckAndJoin": "Vérifier et rejoindre",
+    "NotJoinable": "Ce code ne vient pas d'une communauté que vous pouvez rejoindre ici.",
+    "JoinUnchecked": "Keyring n'a pas pu vérifier ce code pour l'instant. Réessayez.",
     "Service": {
       "ConfirmBody": "Un site web demande à vous connecter avec l'un de vos agents de ce service. Rien n'est envoyé avant que vous continuiez.",
       "Label": "Service",

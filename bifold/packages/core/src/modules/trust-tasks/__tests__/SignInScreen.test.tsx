@@ -4,6 +4,7 @@
  * the browser, Approve or Decline, and every way it can end — against fake
  * steps, so no protocol runs here.
  */
+import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
@@ -14,6 +15,7 @@ import en from '../../../localization/en/en.json'
 import fr from '../../../localization/fr/fr.json'
 import ptBr from '../../../localization/pt-br/pt-br.json'
 import { hasOtaApplyBlockers, otaApplyBlockerReasons, resetOtaApplyBlockers } from '../../../utils/otaApply'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { SIGN_IN_FAILURE_MESSAGES, SignInError, type ClaimedSignIn } from '../module/oobSignIn'
 import {
@@ -29,6 +31,7 @@ import {
   type SignInSteps,
 } from '../module/signInSteps'
 import SignIn, { SignInFlow } from '../screens/SignIn'
+import { communityTarget } from '../module/vtiCommunityLink'
 import { SignInIds } from '../screens/SignIn.ids'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -175,6 +178,95 @@ describe('1. confirm, before anything is sent', () => {
     expect(tree.queryByTestId(id(SignInIds.continue))).toBeNull()
     expect(tree.getByTestId(id(SignInIds.done))).toBeTruthy()
     expect(steps.claim).not.toHaveBeenCalled()
+  })
+
+  // IN-406: a community's join page shows its sign-in code. Whether the sender is a community is asked only on the
+  // tap (VTI-LNK-050), and nothing is claimed or sent to it: Join is what first asks it anything.
+  describe('"Check and join" on a code from a community this phone has not joined', () => {
+    const onJoin = jest.fn()
+    const unjoined = (joinable: SignInSteps['joinable']) =>
+      fakeSteps({ community: jest.fn(async () => ({ member: false, name: 'Elsewhere' })), joinable })
+    const showJoin = async (steps: SignInSteps) => {
+      const tree = render(
+        <BasicAppContext>
+          <SignInFlow link={LINK} steps={steps} now={now} onClose={onClose} onJoin={onJoin} />
+        </BasicAppContext>
+      )
+      await act(async () => undefined)
+      return tree
+    }
+    beforeEach(() => onJoin.mockReset())
+
+    test('offered beside the not-joined words, and nothing is checked until the tap', async () => {
+      const steps = unjoined(jest.fn(async () => true))
+      const tree = await showJoin(steps)
+      expect(message(tree)).toHaveTextContent('SignIn.Failure.notAMember')
+      expect(tree.getByTestId(id(SignInIds.checkAndJoin))).toBeTruthy()
+      expect(steps.joinable).not.toHaveBeenCalled()
+    })
+
+    test('a community: Join opens for it, and the scanned request is never claimed', async () => {
+      const steps = unjoined(jest.fn(async () => true))
+      const tree = await showJoin(steps)
+      await press(tree, SignInIds.checkAndJoin)
+      expect(steps.joinable).toHaveBeenCalledWith(VTC)
+      expect(onJoin).toHaveBeenCalledWith(VTC)
+      expect(steps.claim).not.toHaveBeenCalled()
+      expect(steps.cancel).not.toHaveBeenCalled()
+    })
+
+    test('not a community: said so in place of the offer, and Join does not open', async () => {
+      const steps = unjoined(jest.fn(async () => false))
+      const tree = await showJoin(steps)
+      await press(tree, SignInIds.checkAndJoin)
+      expect(tree.getByTestId(id(SignInIds.notJoinable))).toHaveTextContent('SignIn.NotJoinable')
+      expect(tree.queryByTestId(id(SignInIds.checkAndJoin))).toBeNull()
+      expect(message(tree)).toHaveTextContent('SignIn.Failure.notAMember')
+      expect(onJoin).not.toHaveBeenCalled()
+      expect(steps.claim).not.toHaveBeenCalled()
+    })
+
+    test('not checked (no answer in time, or the check failed): said so, never as a "no", and it can be tried again', async () => {
+      const failures: (() => Promise<boolean | undefined>)[] = [
+        async () => undefined,
+        async () => Promise.reject(new Error('offline')),
+      ]
+      for (const failed of failures) {
+        const joinable = jest.fn(failed)
+        const steps = unjoined(joinable)
+        const tree = await showJoin(steps)
+        await press(tree, SignInIds.checkAndJoin)
+        expect(tree.getByTestId(id(SignInIds.joinUnchecked))).toHaveTextContent('SignIn.JoinUnchecked')
+        expect(tree.queryByTestId(id(SignInIds.notJoinable))).toBeNull()
+        expect(onJoin).not.toHaveBeenCalled()
+        // The host is back: tried again, and Join opens.
+        joinable.mockResolvedValueOnce(true)
+        await press(tree, SignInIds.checkAndJoin)
+        expect(joinable).toHaveBeenCalledTimes(2)
+        expect(onJoin).toHaveBeenCalledWith(VTC)
+        expect(steps.claim).not.toHaveBeenCalled()
+        onJoin.mockReset()
+        tree.unmount()
+      }
+    })
+
+    test('the older-agents line stays, with the offer below it', async () => {
+      const steps = fakeSteps({
+        community: jest.fn(async () => ({ member: false, name: 'Elsewhere', olderAgents: true })),
+        joinable: jest.fn(async () => false),
+      })
+      const tree = await showJoin(steps)
+      expect(tree.getByTestId(id(SignInIds.olderAgents))).toBeTruthy()
+      expect(tree.getByTestId(id(SignInIds.checkAndJoin))).toBeTruthy()
+    })
+
+    test('a member signs in as before: no offer', async () => {
+      const steps = fakeSteps({ joinable: jest.fn(async () => true) })
+      const tree = await showJoin(steps)
+      expect(tree.getByTestId(id(SignInIds.continue))).toBeTruthy()
+      expect(tree.queryByTestId(id(SignInIds.checkAndJoin))).toBeNull()
+      expect(steps.joinable).not.toHaveBeenCalled()
+    })
   })
 
   test('a code that expired on the way is refused before the records are even read', async () => {
@@ -597,6 +689,28 @@ describe('the screen in the stack', () => {
     await act(async () => undefined)
     expect(steps.community).toHaveBeenCalledWith(VTC)
     expect(tree.getByTestId(id(SignInIds.confirm))).toBeTruthy()
+    ;(Date.now as jest.Mock).mockRestore()
+  })
+
+  test('"Check and join" on a community: Join, for that community, in place of this screen (IN-406)', async () => {
+    clock = NOW
+    jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000)
+    const navigation = useNavigation() as unknown as { replace: jest.Mock }
+    navigation.replace.mockClear()
+    const steps = fakeSteps({
+      community: jest.fn(async () => ({ member: false, name: 'Elsewhere' })),
+      joinable: jest.fn(async () => true),
+    })
+    const tree = render(
+      <BasicAppContext>
+        <SignIn steps={steps} route={{ params: { link: LINK } }} />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    await press(tree, SignInIds.checkAndJoin)
+    expect(communityTarget.getViewing()).toMatchObject({ communityDid: VTC })
+    expect(navigation.replace).toHaveBeenCalledWith(Screens.VtiJoin)
+    expect(steps.claim).not.toHaveBeenCalled()
     ;(Date.now as jest.Mock).mockRestore()
   })
 })

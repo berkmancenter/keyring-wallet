@@ -2758,6 +2758,10 @@
     "TimedOut": "Time ran out, so nothing was signed in. Refresh the sign-in page and scan again.",
     "NoCode": "There's no sign-in code to use. Scan the code on the website again.",
     "OlderAgents": "If this code is from the service that hosts one of your agents: an agent set up before this version of Keyring can't sign in there from this phone. Get a new agent from that service, or sign in another way.",
+    "JoinHint": "If this code is from a community you'd like to join, Keyring can check and join it.",
+    "CheckAndJoin": "Check and join",
+    "NotJoinable": "This code isn't from a community you can join here.",
+    "JoinUnchecked": "Keyring couldn't check this code just now. Try again.",
     "Service": {
       "ConfirmBody": "A website is asking to sign you in with one of your agents from this service. Nothing is sent until you continue.",
       "Label": "Service",
