@@ -175,6 +175,8 @@ export const VTA_TASK = {
   aclList03: 'https://trusttasks.org/spec/acl/list/0.3',
   // Only "Send me a test request" sends these (approvalRules.ts TEST_REQUEST_TASKS).
   contextsDelete: 'https://trusttasks.org/spec/vta/contexts/delete/1.0',
+  /** 1.1 (trust-tasks-tf #967, vta-service 1afebe27): 1.0's payload plus `abandonHostCopies`, default false. */
+  contextsDelete11: 'https://trusttasks.org/spec/vta/contexts/delete/1.1',
   // The approval rules' row (vta-sdk trust_tasks.rs:2048-2060). Writing is super-admin.
   policyGet: 'https://trusttasks.org/spec/policy/get/0.1',
   policyUpsert: 'https://trusttasks.org/spec/policy/upsert/0.2',
@@ -235,6 +237,10 @@ export const VTA_TASK_VERSIONS = {
   policyUpsert: [VTA_TASK.policyUpsert03, VTA_TASK.policyUpsert],
   // 0.3 first: every VTA in use serves it (pcsVtaPayloads.ts DISCOVERY_TASK_03).
   discovery: [DISCOVERY_TASK_03, DISCOVERY_TASK],
+  // 1.1 first. vta-service serves only 1.0 up to v0.66.0, both in v0.67.0, and only 1.1 from 61c23f20 (#2332,
+  // 2026-10-29: v0.68.0 and the nightlies). An agent before v0.67.0 steps down to 1.0 on a refusal. The test
+  // request's context holds nothing, so 1.1's host settling has nothing to do and the payload is the same in both.
+  contextsDelete: [VTA_TASK.contextsDelete11, VTA_TASK.contextsDelete],
 } as const
 
 /** The `type` of the DIDComm message a sealed vault secret travels in (vta-sdk didcomm_session.rs:567-570; informational). */
@@ -2252,10 +2258,14 @@ export class VtaClient {
       await this.relayConsentRequests(pending.requests)
       return { kind: 'held' }
     }
-    const cleanedUp = await this.enqueue(VTA_TASK.contextsDelete, { id, force: true }, 30000, {}).then(
-      () => true,
-      () => false
-    )
+    const cleanedUp = await this.versions
+      .ask('contextsDelete', VTA_TASK_VERSIONS.contextsDelete, (type) =>
+        this.enqueue(type, { id, force: true }, 30000, {})
+      )
+      .then(
+        () => true,
+        () => false
+      )
     return { kind: 'letThrough', cleanedUp }
   }
 

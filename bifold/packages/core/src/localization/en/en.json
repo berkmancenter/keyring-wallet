@@ -2610,6 +2610,7 @@
       "keysRevoke": "Deleting a key"
     },
     "SetElsewhereNamed": "Already set from another device",
+    "TurnOnAgain": "Your agent was updated and this no longer asks you. Turn it on again.",
     "SetElsewhereTitle": "Set from another device",
     "HoldsThisPhone": "Your agent waits for an approval before it lets this phone do this, so notifications or devices may stop working. Change it where it was set.",
     "RuleConsent_one": "Needs 1 approval",

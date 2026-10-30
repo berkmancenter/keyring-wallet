@@ -2551,16 +2551,21 @@ export class VtaAgentController {
     const client = await this.signedIn(agent, this.linkedAgent())
     const managerDid = client.managerDid
     if (!managerDid) throw new DeviceActionRefused('notLinked')
-    const [model, me] = await Promise.all([client.readApprovals(), client.whoAmI()]).catch((error: unknown) => {
+    // A rule holds only the version it names, so the rules are read against what the agent dispatches now
+    // (approvalRules.ts OLDER_VERSIONS). supportedTypes never throws: unanswered, nothing is judged against it.
+    const [model, me, served] = await Promise.all([
+      client.readApprovals(),
+      client.whoAmI(),
+      client.supportedTypes(),
+    ]).catch((error: unknown) => {
       throw this.refused(error)
     })
     const roles = me.roles ?? (me.role ? [me.role] : [])
     const scoped = (me.scopes ?? []).length > 0 || (me.contexts ?? []).length > 0
-    return {
-      model,
-      view: approvalsView(model, managerDid),
-      canChange: roles.includes('admin') && !scoped && !model.unreadable,
-    }
+    const view = approvalsView(model, managerDid, served)
+    const renew = view.offered.filter((o) => o.renew).map((o) => o.key)
+    if (renew.length) releaseWarn(`[VTI] ask me before: rules miss a version the agent serves: ${renew.join(', ')}`)
+    return { model, view, canChange: roles.includes('admin') && !scoped && !model.unreadable }
   }
 
   /**
@@ -2579,16 +2584,19 @@ export class VtaAgentController {
       const client = await this.signedIn(agent, vtaDid)
       const managerDid = client.managerDid
       if (!managerDid) throw new DeviceActionRefused('notLinked')
+      // A rule holds only the exact version it names: write one per version the agent dispatches. Unanswered
+      // (undefined), every version Keyring knows.
+      const served = await client.supportedTypes()
       for (let attempt = 0; ; attempt++) {
         try {
           const model = await client.readApprovals()
           if (model.unreadable)
             throw new DeviceActionRefused('failed', 'the approval rules hold something Keyring cannot read')
-          const next = withPhoneRule(model, taskType, on, managerDid)
+          const next = withPhoneRule(model, taskType, on, managerDid, served)
           const version = await client.writeApprovals(next, model.version)
           releaseWarn(`[VTI] ask me before: rules written, version ${model.version} → ${version}`)
           const held = { ...next, version, unreadable: false }
-          return { model: held, view: approvalsView(held, managerDid), canChange: true }
+          return { model: held, view: approvalsView(held, managerDid, served), canChange: true }
         } catch (error) {
           const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
           if (details?.reason === 'conflict' && attempt === 0) continue

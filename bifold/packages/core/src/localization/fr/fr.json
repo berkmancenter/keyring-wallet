@@ -2560,6 +2560,7 @@
       "keysRevoke": "Supprimer une clé"
     },
     "SetElsewhereNamed": "Déjà défini depuis un autre appareil",
+    "TurnOnAgain": "Votre agent a été mis à jour et ne vous demande plus rien ici. Réactivez-le.",
     "SetElsewhereTitle": "Défini depuis un autre appareil",
     "HoldsThisPhone": "Votre agent attend une approbation avant de laisser ce téléphone faire ceci, donc les notifications ou les appareils peuvent cesser de fonctionner. Modifiez-le là où il a été défini.",
     "RuleConsent_one": "1 approbation requise",

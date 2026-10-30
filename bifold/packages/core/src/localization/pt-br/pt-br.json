@@ -2460,6 +2460,7 @@
       "keysRevoke": "Excluir uma chave"
     },
     "SetElsewhereNamed": "Já definido em outro dispositivo",
+    "TurnOnAgain": "Seu agente foi atualizado e isto não pergunta mais a você. Ative de novo.",
     "SetElsewhereTitle": "Definido em outro dispositivo",
     "HoldsThisPhone": "Seu agente espera uma aprovação antes de deixar este telefone fazer isto, então notificações ou dispositivos podem parar de funcionar. Mude onde foi definido.",
     "RuleConsent_one": "Precisa de 1 aprovação",

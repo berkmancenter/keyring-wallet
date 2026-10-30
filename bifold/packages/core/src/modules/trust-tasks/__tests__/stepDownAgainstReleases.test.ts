@@ -50,6 +50,7 @@ const V0_65 = at({
   'device/list': [['0.1'], ['0.2']],
   'device/heartbeat': [['0.1'], ['0.2']],
   'auth/step-up/approve-response': [['0.1', '0.2', '0.3']],
+  'vta/contexts/delete': [['1.0']],
 })
 
 /** vta-service-v0.67.0 (93d36996): the old versions withdrawn, nothing at the edge below the current one. */
@@ -69,6 +70,8 @@ const V0_67 = at({
   'device/list': [['0.3']],
   'device/heartbeat': [['0.3']],
   'auth/step-up/approve-response': [['0.6']],
+  // Both, gated apart; only 1.1 from 61c23f20 (#2332).
+  'vta/contexts/delete': [['1.0', '1.1']],
 })
 
 /**
@@ -83,12 +86,18 @@ const V0_68: Model = {
   edge: [],
 }
 
-/** 0d3f268e (what first.openvtc.net ran on 10-28): as v0.67.0, but acl/* still only at 0.1 and dids/create 1.0-1.2. */
+/**
+ * 0d3f268e (what first.openvtc.net ran on 10-28): as v0.67.0, but acl/* still only at 0.1, dids/create 1.0-1.2, and
+ * contexts/delete only at 1.0.
+ */
 const V0D3F = {
   table: [
-    ...V0_67.table.filter((u) => !u.includes('/acl/') && !u.includes('/dids/create/')),
+    ...V0_67.table.filter(
+      (u) => !u.includes('/acl/') && !u.includes('/dids/create/') && !u.includes('/contexts/delete/')
+    ),
     ...['list', 'grant', 'revoke', 'update'].map((f) => `${SPEC}acl/${f}/0.1`),
     ...['1.0', '1.1', '1.2'].map((v) => `${SPEC}vta/webvh/dids/create/${v}`),
+    `${SPEC}vta/contexts/delete/1.0`,
   ],
   edge: V0_67.edge,
 }
@@ -144,6 +153,7 @@ const ASKS_0_65: Record<string, string[]> = {
   deviceAclList: ['acl/list/0.3', 'acl/list/0.2', 'acl/list/0.1'],
   deviceAclRevoke: ['acl/revoke/0.2', 'acl/revoke/0.1'],
   vaultCredentialsGet: ['vault/credentials/get/0.2', 'vault/credentials/get/0.1'],
+  contextsDelete: ['vta/contexts/delete/1.1', 'vta/contexts/delete/1.0'],
 }
 
 beforeEach(() => forgetAllVersions())
@@ -218,13 +228,15 @@ describe('the same ladders against v0.67.0 and 0d3f268e', () => {
     expect(asked).toEqual([LADDERS[family][0]])
   })
 
-  it('0d3f268e: acl/* still steps down to 0.1, everything else is answered first', async () => {
+  it('0d3f268e: acl/* still steps down to 0.1 and contexts/delete to 1.0, everything else is answered first', async () => {
     for (const family of Object.keys(ASKS_0_65)) {
       const { asked, answer } = agent(V0D3F)
       await new TaskVersions().ask(family, LADDERS[family], answer)
       const acl = LADDERS[family][0].includes('/acl/')
+      const contextsDelete = LADDERS[family][0].includes('/contexts/delete/')
       expect(asked[0]).toBe(LADDERS[family][0])
       if (acl) expect(asked[asked.length - 1]).toMatch(/\/acl\/[a-z]+\/0\.1$/)
+      else if (contextsDelete) expect(short(asked)).toEqual(['vta/contexts/delete/1.1', 'vta/contexts/delete/1.0'])
       else expect(asked).toHaveLength(1)
     }
   })

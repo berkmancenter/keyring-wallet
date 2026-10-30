@@ -212,7 +212,7 @@ const VtaAskMe: React.FC = () => {
           </ThemedText>
         ) : null}
 
-        {state?.view.offered.map(({ key, taskType, on, elsewhere }) => {
+        {state?.view.offered.map(({ key, taskType, on, renew, elsewhere }) => {
           const still = !canChange || elsewhere || busy !== undefined
           // The whole row is the switch, pressed like every button in the app: on
           // the #285 device check the bare RN Switch never turned on under a tap,
@@ -231,6 +231,11 @@ const VtaAskMe: React.FC = () => {
               <View style={styles.grow}>
                 <ThemedText>{t(`AskMe.Task.${key}`)}</ThemedText>
                 {elsewhere ? <ThemedText style={styles.muted}>{t('AskMe.SetElsewhereNamed')}</ThemedText> : null}
+                {renew && !elsewhere ? (
+                  <ThemedText style={styles.muted} testID={testIdWithKey(`AskMeTurnOnAgain_${key}`)}>
+                    {t('AskMe.TurnOnAgain')}
+                  </ThemedText>
+                ) : null}
                 {details ? <ThemedText style={styles.mono}>{taskType}</ThemedText> : null}
               </View>
               {busy === taskType ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
