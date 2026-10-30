@@ -8,7 +8,8 @@
  *   1. reads which platforms it published: a job whose "Publish to ring 0"
  *      step succeeded. A dry run, a promote, a withdraw or a device-test run
  *      publishes nothing, and the script stops there with nothing to do;
- *   2. reads the bundle ids from the run's ota-bundle records, else from
+ *   2. reads the bundle ids from the run's ota-bundle records, else from the
+ *      publish job's ota-bundle notices (check-run annotations), else from
  *      ota-deploy's own log lines ("<platform> bundle <id> is on ring0 (channel <c>)");
  *   3. reuses the release chain's green Test builds of the released commit when
  *      both its push-off builds are still downloadable; otherwise dispatches
@@ -67,6 +68,22 @@ export const bundlesFromRecord = (text) =>
       } catch {
         return []
       }
+    })
+
+/**
+ * The notice ota-publish.yml writes for each bundle it records, read back from the publish job's check-run
+ * annotations: a third place for the ids, apart from both the artifact store and the job log. 10-30: 276.10's records
+ * failed to download with "Egress is over the account limit", one log read got HTTP 503 six times, and gh refused the
+ * other for its terminal escape sequences, so the post-release had no ids at all.
+ */
+export const NOTICE_TITLE = 'ota-bundle'
+export const bundleNotice = (b) => `::notice title=${NOTICE_TITLE}::${b.platform} bundle ${b.id} (channel ${b.channel})`
+export const bundlesFromAnnotations = (annotations) =>
+  (Array.isArray(annotations) ? annotations : [])
+    .filter((a) => a?.title === NOTICE_TITLE)
+    .flatMap((a) => {
+      const m = /^(ios|android) bundle ([0-9a-f-]{36}) \(channel ([\w-]+)\)$/.exec(String(a.message ?? '').trim())
+      return m ? [{ platform: m[1], id: m[2], channel: m[3] }] : []
     })
 
 /** The screens a person would look at: the app's and bifold's .tsx screens and components, not tests. */
@@ -174,10 +191,18 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
   // exactly that). Retry for a few minutes; if it still isn't there, smoke anyway with the bundles unknown: the smoke
   // doesn't need them, and the brake refuses an empty list loudly rather than guessing.
   const readLog = async (jobId) => {
+    let anyway = []
     for (let attempt = 1; ; attempt++) {
       try {
-        return gh('api', `repos/${repo}/actions/jobs/${jobId}/logs`)
+        return gh('api', `repos/${repo}/actions/jobs/${jobId}/logs`, ...anyway)
       } catch (error) {
+        // A newer gh refuses a response with terminal escape sequences (a job log's colours) unless told to print it
+        // (276.10's iOS log). A gh that refuses names the flag and an older one never refuses, so it is passed only
+        // after that refusal, and at once.
+        if (!anyway.length && ghError(error).includes('--allow-escape-sequences')) {
+          anyway = ['--allow-escape-sequences']
+          continue
+        }
         if (attempt >= LOG_ATTEMPTS) {
           log(`the log of job ${jobId} is still unreadable after ${attempt} tries (${ghError(error)}): bundle ids unknown`)
           return ''
@@ -186,8 +211,18 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
       }
     }
   }
+  // The publish job's ota-bundle notices (bundlesFromAnnotations). Any read that fails gives none, and the log is read.
+  const readNotices = (jobId) => {
+    try {
+      return bundlesFromAnnotations(api(`repos/${repo}/check-runs/${jobId}/annotations?per_page=100`))
+    } catch (error) {
+      log(`the notices of job ${jobId} are unreadable: ${ghError(error)}`)
+      return []
+    }
+  }
   // The structured record first (ota-publish.yml's ota-bundle-<platform> artifact, from ota-deploy), so the ids don't
-  // depend on a log's timing or wording. The log only for a platform with no record (a run from before the record).
+  // depend on a log's timing or wording; then the job's notice of the same record; the log only for a platform with
+  // neither (a run from before both). The brake is left with no id for a platform only when all three gave none.
   // Where each published platform's id came from (record, log or none), said rather than inferred from whether ids
   // appeared: a record read is what proves the artifact path works under the workflow's token.
   const recorded = readBundleRecords(publishRun)
@@ -198,7 +233,13 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
       sources[j.platform] = 'record'
       continue
     }
-    log(`no bundle record for ${j.platform}: reading the publish log`)
+    const noticed = readNotices(j.id).filter((b) => b.platform === j.platform)
+    if (noticed.length) {
+      bundles.push(...noticed)
+      sources[j.platform] = 'notice'
+      continue
+    }
+    log(`no bundle record or notice for ${j.platform}: reading the publish log`)
     const fromLog = bundlesFromLog(await readLog(j.id)).filter((b) => b.platform === j.platform)
     bundles.push(...fromLog)
     sources[j.platform] = fromLog.length ? 'log' : 'none'
@@ -289,7 +330,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         `### Post-release smoke: ${r.verdict}`, '',
         `- released: ${r.ref} at ${r.sha}`,
         ...r.bundles.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel}, from its ${r.sources?.[b.platform] ?? 'unknown source'})`),
-        ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (no record, and its log was unreadable)`),
+        ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (no record, no notice, and its log was unreadable)`),
         r.testBuilds ? `- Test builds run ${r.testBuilds}${r.reusedBuilds ? ' (reused: the release chain\'s green build of this commit)' : ''}` : '', r.gateSmoke ? `- gate-smoke run ${r.gateSmoke}` : '',
         ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`), '',
         `#### Changed screens since ${r.since ?? 'unknown'} (for the screen check)`, '',
