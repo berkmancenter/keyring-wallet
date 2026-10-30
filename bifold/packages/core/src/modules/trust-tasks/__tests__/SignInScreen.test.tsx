@@ -439,6 +439,24 @@ describe('6. how it ended: every reason has its words', () => {
     expect(steps.cancel).not.toHaveBeenCalled()
   })
 
+  // IN-390: the Release log never said which check ended a sign-in.
+  test('a failed sign-in leaves one Release line: the reason, its detail and the versions tried', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const failure = new SignInError('agentNeedsUpdate', 'oobUnsupportedType')
+      failure.tried = { prove: ['0.3', '0.2'], grant: ['0.2', '0.1'] }
+      const tree = await toReview(fakeSteps({ approve: jest.fn(async () => Promise.reject(failure)) }))
+      await press(tree, SignInIds.approve)
+      expect(message(tree)).toHaveTextContent('SignIn.Failure.agentNeedsUpdate')
+      const lines = warn.mock.calls.map(([m]) => String(m)).filter((m) => m.startsWith('[SignIn] not signed in'))
+      expect(lines).toEqual([
+        '[SignIn] not signed in: agentNeedsUpdate (oobUnsupportedType); prove 0.3>0.2; grant 0.2>0.1',
+      ])
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   test('an error with no reason is worded generally', async () => {
     const tree = await show(fakeSteps({ claim: jest.fn(async () => Promise.reject(new Error('boom'))) }))
     await press(tree, SignInIds.continue)

@@ -52,7 +52,7 @@ import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
 import {
   agentSignInSteps,
   signInCommunityOf,
-  signInReasonOf,
+  signInEndedBy,
   type ProvedSignIn,
   type SignInEndReason,
   type SignInIdentity,
@@ -182,7 +182,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   const fail = useCallback(
     (error: unknown) => {
       if (endedRef.current) return
-      end({ kind: 'failed', reason: signInReasonOf(error) })
+      end({ kind: 'failed', reason: signInEndedBy(error) })
     },
     [end]
   )
@@ -292,7 +292,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
       end({ kind: 'approved' })
     } catch (e) {
       // Approve began, so the deadline no longer decides: its answer does.
-      end({ kind: 'failed', reason: signInReasonOf(e) })
+      end({ kind: 'failed', reason: signInEndedBy(e) })
     }
   }
 

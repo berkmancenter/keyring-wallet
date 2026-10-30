@@ -25,6 +25,7 @@ import {
   cancelSignIn,
   claimSignIn,
   httpsPost,
+  signInEndLine,
   SignInError,
   type ClaimedSignIn,
   type SignInDeps,
@@ -52,6 +53,7 @@ import {
   type SignInAgentDeps,
 } from './oobSignInAgent'
 import { communityNameIsStale, refreshPublishedName } from './communityNameRefresh'
+import { releaseWarn } from './releaseLog'
 import { readTrigger, triggerAction } from './triggerLink'
 import type { VtaVaultEntry } from './VtaClient'
 import { vtaAgent } from './vtaAgent'
@@ -415,6 +417,15 @@ export function signInCommunityOf(
   }
   const ui = action.kind === 'say' ? action.ui : 'update'
   return { reason: ui === 'pass-on' ? 'invalid' : ui }
+}
+
+/**
+ * How a sign-in that ended in an error is said: its reason for the screen, and one Release line saying which check
+ * ended it, with the versions asked (IN-390). The line names no link, key or document (signInEndLine).
+ */
+export function signInEndedBy(error: unknown): SignInEndReason | undefined {
+  releaseWarn(signInEndLine(error))
+  return signInReasonOf(error)
 }
 
 /** A thrown error's sign-in reason, when it carries one. Read by shape, so a later SignInError counts too. */

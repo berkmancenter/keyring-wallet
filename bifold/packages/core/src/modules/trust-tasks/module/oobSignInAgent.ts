@@ -156,6 +156,8 @@ export type ProvedSignIn = {
   persona: SignInPersona
   /** The `prove` / `grant` / `respond` version the community took: 0.2, or 0.1 from a community before it. */
   version: OobVersion
+  /** The prove versions asked, newest first, ending with `version`. For the Release log. */
+  provesTried?: OobVersion[]
   /**
    * 0.2: the task families the community offers to let the browser's key sign as the member, for the session
    * (step 2's `signingScope`, checked). The grant copies it unchanged; the approval screen says it in words.
@@ -237,6 +239,12 @@ export function signInFailureFromAgent(error: unknown, options: { responded?: bo
     return new SignInError(AGENT_REFUSALS[code] ?? 'agentRefused', code, options)
   }
   return new SignInError('agentUnreachable', error instanceof Error ? error.message : String(error), options)
+}
+
+/** `error`, with the sign-in versions asked noted on it when it is a sign-in error. */
+function withTried(error: unknown, tried: NonNullable<SignInError['tried']>): unknown {
+  if (error instanceof SignInError) error.tried = { ...error.tried, ...tried }
+  return error
 }
 
 export async function resolveOrUnreachable(
@@ -391,6 +399,7 @@ export async function identifyAndProve(
   const ladder: OobVersion[] = ['0.3', '0.2', '0.1']
   let version: OobVersion = ladder[0]
   let prove = proveAt(version)
+  const provesTried: OobVersion[] = [version]
   let step2: Record<string, unknown> | undefined
   for (let i = 0; !step2; ) {
     try {
@@ -398,9 +407,10 @@ export async function identifyAndProve(
     } catch (error) {
       const unsupported =
         error instanceof SignInError && error.reason === 'refused' && isUnsupportedTaskCode(error.detail)
-      if (!unsupported || ++i >= ladder.length) throw error
+      if (!unsupported || ++i >= ladder.length) throw withTried(error, { prove: provesTried })
       version = ladder[i]
       prove = proveAt(version)
+      provesTried.push(version)
     }
   }
   const vtcDocument = await resolveOrUnreachable(deps, vtcDid)
@@ -411,7 +421,7 @@ export async function identifyAndProve(
     persona: persona.did,
     now: nowSeconds(deps),
   })
-  if (problem) throw new SignInError('badAnswer', problem)
+  if (problem) throw withTried(new SignInError('badAnswer', problem), { prove: provesTried })
 
   const payload = step2.payload as Record<string, unknown>
   const requester = payload.requester as Record<string, unknown>
@@ -429,6 +439,7 @@ export async function identifyAndProve(
     identifiedAs: payload.identifiedAs as string,
     persona,
     version,
+    provesTried,
     // Only a 0.2 or 0.3 grant can carry it; checked by step2Problem.
     ...(version !== '0.1' && Array.isArray(payload.signingScope)
       ? { signingScope: [...(payload.signingScope as string[])] }
@@ -514,16 +525,23 @@ export async function approveSignIn(proved: ProvedSignIn, deps: SignInAgentDeps)
   }
 
   let version = proved.version
+  const tried = { prove: proved.provesTried ?? [proved.version], grant: [version] }
   let grant: Record<string, unknown>
   try {
-    grant = await grantAt(version)
+    try {
+      grant = await grantAt(version)
+    } catch (error) {
+      // The member's VTA is older than auth/oob/grant/0.2 (VTI #2190) while the community is not: grant at 0.1
+      // under the same step 2. The community holds the scopes equal only for a 0.2 respond, so this signs in with
+      // nothing delegated. The Face ID approval names one grant's digest, so the 0.1 grant asks once more.
+      if (version !== '0.2' || !(error instanceof SignInError) || error.detail !== 'oobUnsupportedType') throw error
+      version = '0.1'
+      tried.grant.push(version)
+      grant = await grantAt(version)
+    }
   } catch (error) {
-    // The member's VTA is older than auth/oob/grant/0.2 (VTI #2190) while the community is not: grant at 0.1
-    // under the same step 2. The community holds the scopes equal only for a 0.2 respond, so this signs in with
-    // nothing delegated. The Face ID approval names one grant's digest, so the 0.1 grant asks once more.
-    if (version !== '0.2' || !(error instanceof SignInError) || error.detail !== 'oobUnsupportedType') throw error
-    version = '0.1'
-    grant = await grantAt(version)
+    // Which grant versions were asked goes with the error to the Release line (IN-390).
+    throw withTried(error, tried)
   }
 
   const respond = keyA.sign(oobEnvelope(RESPOND_AT[version], { grant }, keyA.did, vtcDid, requestId), 'authentication')

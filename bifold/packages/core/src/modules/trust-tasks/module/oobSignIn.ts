@@ -222,12 +222,44 @@ export class SignInError extends Error {
     this.responded = options.responded ?? false
   }
 
+  /** The sign-in versions asked before this ended: prove's, then the grant's. For the Release log. */
+  tried?: { prove?: OobVersion[]; grant?: OobVersion[] }
+
   /**
    * Whether the grant may already have reached the community (`respond` was
    * sent, answered or not). Then the sign-in must NOT be cancelled: the VTC
    * cancels a request it already approved (findings G2).
    */
   readonly responded: boolean
+}
+
+/**
+ * A detail as the Release log may keep it: no link, no key, no document, a DID to its prefix (releaseLog's rule),
+ * and short. A detail is a check's name or an error's words, which can quote any of these.
+ */
+function forTheLog(detail: string): string {
+  const kept = detail
+    .replace(/https?:\/\/\S+/g, '<link>')
+    .replace(/\{[^]*\}/g, '{…}')
+    .replace(/did:key:z[1-9A-HJ-NP-Za-km-z]+/g, 'did:key:…')
+    .replace(/(did:[a-z0-9]+:)([^\s:"',)]{8})[^\s"',)]*/g, '$1$2…')
+    .replace(/\bz[1-9A-HJ-NP-Za-km-z]{20,}/g, '…')
+  return kept.length > 200 ? `${kept.slice(0, 199)}…` : kept
+}
+
+/**
+ * The one Release line a sign-in that ended leaves (IN-390: nothing said which check ended one): its reason, the
+ * detail, and the versions asked. An error that is not a sign-in error is named by its kind only.
+ */
+export function signInEndLine(error: unknown): string {
+  if (!(error instanceof SignInError)) {
+    const kind = error instanceof Error ? error.name : typeof error
+    return `[SignIn] not signed in: unknown (${kind})`
+  }
+  const parts = [`[SignIn] not signed in: ${error.reason}${error.detail ? ` (${forTheLog(error.detail)})` : ''}`]
+  if (error.tried?.prove?.length) parts.push(`prove ${error.tried.prove.join('>')}`)
+  if (error.tried?.grant?.length) parts.push(`grant ${error.tried.grant.join('>')}`)
+  return parts.join('; ')
 }
 
 /**
