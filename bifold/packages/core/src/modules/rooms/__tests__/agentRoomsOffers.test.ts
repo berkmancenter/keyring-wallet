@@ -134,6 +134,7 @@ function setup(o: Setup = {}) {
     newId: () => `id-${++ids}`,
     leaveCommunity: jest.fn(async () => undefined),
     decodeBase64Url: (s) => Buffer.from(s, 'base64url').toString('utf8'),
+    encodeBase64Url: (text) => Buffer.from(text, 'utf8').toString('base64url'),
     hiddenOffers: async () => [...hidden],
     hideOffer: jest.fn(async (offerId: string) => {
       hidden.push(offerId)

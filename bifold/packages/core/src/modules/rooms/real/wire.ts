@@ -1,7 +1,7 @@
 /**
  * The rooms Trust Tasks the real service sends, and parsers for what comes back. Every shape is read from
  * the Trust Task specs (dtgwg-trust-tasks-tf, as `@openvtc/trust-tasks` 0.27 ships them:
- * `rooms/keys/{list,browse,read,key-package,welcome,backfill,act}`, `vtc/rooms/{memberships,offers}/*`,
+ * `rooms/keys/{list,browse,read,key-package,welcome,backfill,act,seal}`, `vtc/rooms/{memberships,offers}/*`,
  * `vault/credentials/{receive,query,get}`, `rooms/records/{put,curate}`).
  * The parsers accept only what the specs define and drop anything else, so a malformed or hostile
  * answer can at worst lose a row, never inject one.
@@ -32,6 +32,8 @@ export const ROOMS_TASK = {
   // 0.6 completes everything 0.5 does, and `vtc/rooms/offers/list/0.3` besides.
   keysAct06: `${SPEC}rooms/keys/act/0.6`,
   keysAct05: `${SPEC}rooms/keys/act/0.5`,
+  // 0.2 signs the body as the member before sealing it (`signAsPrincipal`); 0.1 cannot write as the member.
+  keysSeal02: `${SPEC}rooms/keys/seal/0.2`,
   recordsPut: `${SPEC}rooms/records/put/0.1`,
   recordsCurate: `${SPEC}rooms/records/curate/0.1`,
 } as const
@@ -240,6 +242,21 @@ export function parsePut(payload: unknown): { key: string; version: number } | u
   const key = str(p?.key)
   const version = int(p?.version)
   return key && version !== undefined && version >= 1 ? { key, version } : undefined
+}
+
+/** One record sealed by the agent (`rooms/keys/seal/0.2`), as `rooms/records/put` takes it: ciphertext only. */
+export interface SealedRecord {
+  ciphertext: string
+  nonce: string
+  epoch: number
+}
+
+export function parseSealed(payload: unknown): SealedRecord | undefined {
+  const s = obj(obj(payload)?.sealed)
+  const ciphertext = str(s?.ciphertext)
+  const nonce = str(s?.nonce)
+  const epoch = int(s?.epoch)
+  return ciphertext && nonce && epoch !== undefined && epoch >= 0 ? { ciphertext, nonce, epoch } : undefined
 }
 
 /** The host's answer to a curation (`rooms/records/curate/0.1`). */

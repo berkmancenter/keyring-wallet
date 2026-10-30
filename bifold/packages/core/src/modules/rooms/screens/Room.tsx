@@ -223,9 +223,8 @@ const Room: React.FC = () => {
 
   const unavailable = roomsStatusText(t, roomCapabilities.listNotes, 'listNotes')
   const cannotPost = roomsStatusText(t, roomCapabilities.write, 'write')
-  // Notes are written to open rooms only, for now: elsewhere the tab says so rather than offer a write that fails.
-  const notesNotYet = !cannotPost && room.tier !== 'open' ? (t('Rooms.TierNotYet') as string) : undefined
-  const canWriteNotes = !unavailable && !cannotPost && !notesNotYet
+  // Notes are written wherever the room's write status allows; where it does not, the tab says why.
+  const canWriteNotes = !unavailable && !cannotPost
   // A file is posted from the composer, so "Add a file" is offered only where the composer can attach one.
   const canAttach = roomCapabilities.listFiles.status === 'available'
   // Titled records and removed ones are the room's notes, on their own tab; the chat shows the rest.
@@ -290,7 +289,7 @@ const Room: React.FC = () => {
             onOpenFile={canOpenFiles ? setOpenedFile : undefined}
             onNewNote={canWriteNotes ? () => setNoteEditor({ kind: 'new' }) : undefined}
             onEditNote={canWriteNotes ? (note) => setNoteEditor({ kind: 'edit', note }) : undefined}
-            cannotWrite={notesNotYet ?? cannotPost}
+            cannotWrite={cannotPost}
             writeStatus={roomCapabilities.write}
           />
         ) : null}
