@@ -86,3 +86,29 @@ export function anonymityVerdict({ vetterDid, memberDid, shown, record }) {
     ? { ok: false, detail: `the vetter's DID appears in ${leaks.join(' and ')}` }
     : { ok: true, detail: "the vetter's DID is in neither the applicant's screens and log nor the community's record (both read: each names the applicant)" };
 }
+
+/**
+ * The hv refusal row's ticket: the vetter's own QR link (`vetting-ticket:?…&ticket=<id>&secret=<secret>`, unsigned, as
+ * @bifold/trust-tasks encodeTicketUri writes it) with one character of its secret changed, and nothing else. The
+ * vetter's app finds no ticket for that id and secret and refuses the request (vetting/request:invalidTicket, the real
+ * ticket left unspent); the link still parses, so the applicant's own check (checkTicketFor) lets it through.
+ */
+export function withWrongSecret(link) {
+  const m = String(link).match(/([?&]secret=)([^&#]*)/);
+  if (!m || !m[2]) throw new Error('not a QR ticket link: it has no secret to change');
+  const secret = m[2];
+  const i = secret.search(/[A-Za-z0-9]/);
+  if (i < 0) throw new Error('the ticket secret has no letter or digit to change');
+  const c = secret[i];
+  const swapped = c === 'A' ? 'B' : c === 'a' ? 'b' : c === '0' ? '1' : /[0-9]/.test(c) ? '0' : /[a-z]/.test(c) ? 'a' : 'A';
+  return link.slice(0, m.index) + m[1] + secret.slice(0, i) + swapped + secret.slice(i + 1) + link.slice(m.index + m[0].length);
+}
+
+/**
+ * The refusal codes the applicant's agent logged (`vtiAgent: <vetter…> refused a task: <code> — …`), in order. The hv
+ * refusal row requires `vetting/request:invalidTicket` here as well as "Refused" on screen: the screen says a refusal
+ * happened, this says it was the wrong secret's (1029-2358 and 1029-2326 logged it once; the control run, none).
+ */
+export function refusalCodes(log) {
+  return [...String(log).matchAll(/refused a task: ([A-Za-z0-9/_.:-]+)/g)].map((m) => m[1]);
+}
