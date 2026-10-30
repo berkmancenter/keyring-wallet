@@ -60,6 +60,7 @@ import {
 } from '../types'
 
 import {
+  KEYS_ACT_TYPES,
   parseAccept,
   parseActed,
   parseBrowse,
@@ -281,6 +282,8 @@ export class AgentRoomsService implements RoomsService {
   private renewed = new Set<string>()
   /** The offers list each community answered, so the badge's poll asks it once a session, not twice a minute. */
   private offersType = new Map<string, string>()
+  /** The `rooms/records/put` each host took, so a host that refused 0.3 is not asked it on every post. */
+  private putTypeOf = new Map<string, string>()
   private nextToken = 1
   private readonly now: () => number
   private readonly sleep: (ms: number) => Promise<void>
@@ -771,7 +774,7 @@ export class AgentRoomsService implements RoomsService {
     const served = this.served?.types ?? []
     const missing: string[] = [ROOMS_TASK.keysKeyPackage, ROOMS_TASK.keysWelcome].filter((t) => !served.includes(t))
     // The acceptance carries the agent's KeyPackage, so the agent completes it (`rooms/keys/act`, recipient item 10).
-    if (!this.actType()) missing.push(ROOMS_TASK.keysAct06)
+    if (!this.actType()) missing.push(KEYS_ACT_TYPES[0])
     if (missing.length > 0)
       throw new RoomsUnavailable('acceptOffer', 'agentDoesNotServe', `a ${offer.tier} room needs ${missing.join(', ')}`)
   }
@@ -913,7 +916,34 @@ export class AgentRoomsService implements RoomsService {
   /** The newest `rooms/keys/act` the agent serves, if any. */
   private actType(): string | undefined {
     const served = this.served?.types ?? []
-    return [ROOMS_TASK.keysAct06, ROOMS_TASK.keysAct05].find((t) => served.includes(t))
+    return KEYS_ACT_TYPES.find((t) => served.includes(t))
+  }
+
+  /**
+   * A record put to `host`, completed as the member by the agent. From act 0.8 the agent completes put 0.3 as well as
+   * 0.1, and which one the host takes is the host's own: VTC 0.16 serves only 0.3, VTC 0.15 both, VTC 0.12 (the lab)
+   * only 0.1 and 0.2. So the version the host last took is sent first (else 0.3), and the other when the host does not
+   * serve it; 0.3 is 0.1 with optional members this client does not send. Before act 0.8 the agent completes only
+   * 0.1. A refused document did nothing, and the one sent again is new (`actAndSend`).
+   */
+  private async put(community: RoomsCommunity, host: string, payload: Record<string, unknown>): Promise<unknown> {
+    const act = this.actType()
+    const types: string[] =
+      act === ROOMS_TASK.keysAct09 || act === ROOMS_TASK.keysAct08
+        ? [ROOMS_TASK.recordsPut03, ROOMS_TASK.recordsPut]
+        : [ROOMS_TASK.recordsPut]
+    const took = this.putTypeOf.get(host)
+    if (took && types.includes(took)) types.sort((a, b) => Number(b === took) - Number(a === took))
+    for (let i = 0; ; i++) {
+      try {
+        const answer = await this.actAndSend('write', community, host, types[i], payload)
+        this.putTypeOf.set(host, types[i])
+        return answer
+      } catch (e) {
+        const code = refusalCode(e)
+        if (i === types.length - 1 || (code !== 'unsupportedVersion' && code !== 'unsupportedType')) throw e
+      }
+    }
   }
 
   /**
@@ -933,7 +963,7 @@ export class AgentRoomsService implements RoomsService {
       throw new RoomsUnavailable(
         operation,
         'agentDoesNotServe',
-        `the agent serves neither ${ROOMS_TASK.keysAct06} nor ${ROOMS_TASK.keysAct05}`
+        `the agent serves none of ${KEYS_ACT_TYPES.join(', ')}`
       )
     const document = {
       id: `urn:uuid:${this.backend.newId()}`,
@@ -1059,7 +1089,7 @@ export class AgentRoomsService implements RoomsService {
       )
     let answer: unknown
     try {
-      answer = await this.actAndSend('write', community, host, ROOMS_TASK.recordsPut, {
+      answer = await this.put(community, host, {
         roomId: room.roomId,
         key,
         expectedVersion,
@@ -1121,7 +1151,7 @@ export class AgentRoomsService implements RoomsService {
       if (!sealed) throw new Error(`the agent answered the seal of ${key} with something else`)
       let answer: unknown
       try {
-        answer = await this.actAndSend('write', community, host, ROOMS_TASK.recordsPut, {
+        answer = await this.put(community, host, {
           roomId: room.roomId,
           key,
           expectedVersion: expected,

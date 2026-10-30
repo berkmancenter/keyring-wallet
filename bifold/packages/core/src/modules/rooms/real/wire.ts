@@ -31,14 +31,29 @@ export const ROOMS_TASK = {
   // `credential` is the one a room's credentials (JSON objects) come back in under 0.2 as well.
   vaultGet02: `${SPEC}vault/credentials/get/0.2`,
   vaultGet01: `${SPEC}vault/credentials/get/0.1`,
-  // 0.6 completes everything 0.5 does, and `vtc/rooms/offers/list/0.3` besides.
+  // The same request and answer at every version; each completes a wider table. 0.9 adds `rooms/records/put/0.4`;
+  // 0.8 adds what 0.7 did (`vtc/rooms/offers/list/0.4`, `rooms/records/put/0.3`, …) and pruning; 0.6 adds
+  // `vtc/rooms/offers/list/0.3` to 0.5. VTAs from 0.68 serve only 0.8 (main adds 0.9); the lab's pin serves 0.5/0.6.
+  keysAct09: `${SPEC}rooms/keys/act/0.9`,
+  keysAct08: `${SPEC}rooms/keys/act/0.8`,
   keysAct06: `${SPEC}rooms/keys/act/0.6`,
   keysAct05: `${SPEC}rooms/keys/act/0.5`,
   // 0.2 signs the body as the member before sealing it (`signAsPrincipal`); 0.1 cannot write as the member.
   keysSeal02: `${SPEC}rooms/keys/seal/0.2`,
   recordsPut: `${SPEC}rooms/records/put/0.1`,
+  // 0.1 with optional members Keyring does not send (`blobs`, an open room's provenance). Completed only by
+  // `rooms/keys/act` from 0.8 (0.7's table added it); hosts from VTA 0.68 serve only 0.3, the lab's pin 0.1 and 0.3.
+  recordsPut03: `${SPEC}rooms/records/put/0.3`,
   recordsCurate: `${SPEC}rooms/records/curate/0.1`,
 } as const
+
+/** The `rooms/keys/act` versions this client speaks, newest first: the agent is asked at the newest it serves. */
+export const KEYS_ACT_TYPES = [
+  ROOMS_TASK.keysAct09,
+  ROOMS_TASK.keysAct08,
+  ROOMS_TASK.keysAct06,
+  ROOMS_TASK.keysAct05,
+] as const
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 ? v : undefined)
 const int = (v: unknown): number | undefined => (typeof v === 'number' && Number.isInteger(v) ? v : undefined)

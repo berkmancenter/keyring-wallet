@@ -58,6 +58,25 @@ describe('deriveCapabilities', () => {
   })
 })
 
+describe('posting needs rooms/keys/act at a version Keyring speaks', () => {
+  const at = (...versions: string[]) =>
+    deriveCapabilities({
+      agentLinked: true,
+      servedTypes: versions.map((v) => `${SPEC}rooms/keys/act/${v}`),
+      built: all,
+    })
+
+  it.each([['0.8'], ['0.9'], ['0.6'], ['0.5']])('an agent serving only act %s may post and curate', (v) => {
+    expect(at(v).write).toMatchObject({ status: 'available', reason: 'ok' })
+    expect(at(v).curate).toMatchObject({ status: 'available', reason: 'ok' })
+  })
+
+  it('control: an agent serving only act 0.1 and 0.7 may not', () => {
+    expect(at('0.1', '0.7').write).toMatchObject({ status: 'unavailable', reason: 'agentDoesNotServe' })
+    expect(at('0.1', '0.7').curate).toMatchObject({ status: 'unavailable', reason: 'agentDoesNotServe' })
+  })
+})
+
 describe('sampleCapabilities', () => {
   it('marks everything that works as sample data, and still shows what no one can do', () => {
     const caps = sampleCapabilities()

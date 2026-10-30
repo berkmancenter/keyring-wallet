@@ -502,7 +502,8 @@ describe('AgentRoomsService offers', () => {
     })
     const err = await s.service.previewOffer(offerIdOf(COMMUNITY.did, SEALED_ROOM)).catch((e) => e)
     expect(err).toMatchObject({ name: 'RoomsUnavailable', reason: 'agentDoesNotServe' })
-    expect((err as Error).message).toContain(ROOMS_TASK.keysAct06)
+    // Named at the newest version this client speaks.
+    expect((err as Error).message).toContain(ROOMS_TASK.keysAct09)
   })
 
   it('needs the agent’s vault to accept at all', async () => {
