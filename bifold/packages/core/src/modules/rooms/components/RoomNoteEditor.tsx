@@ -21,6 +21,7 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import type { RoomPost } from '../roomPosts'
 import { NOTE_BODY_MAX, NOTE_TITLE_MAX, type RoomsService } from '../types'
+import { useMyName } from '../useMyName'
 import { useRoomNoteWrite } from '../useRoomNoteWrite'
 
 import { identityText } from './roomWords'
@@ -62,6 +63,7 @@ const EditorBody: React.FC<Omit<RoomNoteEditorProps, 'target'> & { target: NoteE
   const [title, setTitle] = useState(editing?.title ? String(editing.title) : '')
   const [body, setBody] = useState(editing ? String(editing.text) : '')
   const { state, review, save, edit } = useRoomNoteWrite(service, roomId, editing?.key)
+  const me = useMyName()
 
   // Once, when the note is written: read the room again and close.
   const done = useRef({ onSaved, onClose })
@@ -142,7 +144,10 @@ const EditorBody: React.FC<Omit<RoomNoteEditorProps, 'target'> & { target: NoteE
         {preview ? (
           <>
             <ThemedText testID={testIdWithKey('RoomNotePostingAs')}>
-              {t('Rooms.PostingAs', { who: identityText(preview.actingAs), interpolation: { escapeValue: false } })}
+              {t('Rooms.PostingAs', {
+                who: me.name ?? identityText(preview.actingAs),
+                interpolation: { escapeValue: false },
+              })}
             </ThemedText>
             <ThemedText style={styles.muted} testID={testIdWithKey('RoomNoteVisibleTo')}>
               {preview.visibleTo === 'membersAndHost' ? t('Rooms.TierOpenHint') : t('Rooms.NoteVisibleMembers')}

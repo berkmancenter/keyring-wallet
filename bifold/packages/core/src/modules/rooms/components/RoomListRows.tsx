@@ -22,7 +22,7 @@ import type { NoteSummary, RoomFile } from '../types'
 
 import { fileIcon, fileSizeText, fileTypeText } from './fileWords'
 import { roomHandle } from './RoomRow'
-import { identityText } from './roomWords'
+import { memberText } from './roomWords'
 
 const useRowStyles = () => {
   const { ColorPalette } = useTheme()
@@ -44,10 +44,10 @@ export const noteLine = (t: TFunction, note: NoteSummary): string =>
     note.author
       ? note.byAgent
         ? (t('Rooms.NoteByAgentFor', {
-            who: identityText(note.author),
+            who: memberText(t, note.author),
             interpolation: { escapeValue: false },
           }) as string)
-        : identityText(note.author)
+        : memberText(t, note.author)
       : undefined,
     note.updatedAt ? localDate(note.updatedAt) : undefined,
   ]
@@ -94,7 +94,10 @@ export const fileLines = (t: TFunction, file: RoomFile, language: string): [stri
     .join(' · '),
   [
     file.sharedBy
-      ? (t('Rooms.FileSharedBy', { who: identityText(file.sharedBy), interpolation: { escapeValue: false } }) as string)
+      ? (t('Rooms.FileSharedBy', {
+          who: memberText(t, file.sharedBy),
+          interpolation: { escapeValue: false },
+        }) as string)
       : undefined,
     file.sharedAt ? localDate(file.sharedAt) : undefined,
   ]

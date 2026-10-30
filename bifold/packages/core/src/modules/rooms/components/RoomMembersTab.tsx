@@ -13,7 +13,7 @@
 import type { TFunction } from 'i18next'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ScrollView, StyleSheet, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -21,12 +21,13 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { localDate } from '../../trust-tasks/screens/localTime'
-import type { CommunityRoomMember, OperationStatus, Room, RoomsService, RoomVerb } from '../types'
+import type { CommunityRoomMember, Identity, OperationStatus, Room, RoomsService, RoomVerb } from '../types'
+import type { MyName } from '../useMyName'
 
 import { roomHandle } from './RoomRow'
 import { isComingSoon, RoomFeatureCard } from './RoomFeatureCard'
 import { roomsStatusText } from './roomsStatusText'
-import { accessText, identityText } from './roomWords'
+import { accessText, identityText, memberText } from './roomWords'
 
 /** A member's role in words, from the most a member's rights allow. */
 export const roleText = (t: TFunction, verbs: RoomVerb[]): string => {
@@ -45,9 +46,20 @@ export interface RoomMembersTabProps {
   status: OperationStatus
   /** Opens the community's screen, where leaving it is done; none where the room's community is not known. */
   onLeave?: () => void
+  /** The member's own name, from their profile: shown for them on this phone only. */
+  me?: MyName
+  /** Opens a member's sheet: their name, where it comes from, and the identity the room sees. */
+  onOpenIdentity?: (identity: Identity) => void
 }
 
-export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, status, onLeave }) => {
+export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({
+  service,
+  room,
+  status,
+  onLeave,
+  me,
+  onOpenIdentity,
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const statusWords = roomsStatusText(t, status, 'listCommunityMembers')
@@ -164,23 +176,26 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
         </ThemedText>
         {listing.members.map((member) => {
           const you = member.identity.did === room.actingAs.did
+          const words = you ? (me?.name ?? (t('Rooms.You') as string)) : memberText(t, member.identity)
           return (
-            <View
+            <Pressable
               key={member.identity.did}
               style={styles.row}
-              accessible
-              accessibilityLabel={`${identityText(member.identity)}, ${roleText(t, member.verbs)}`}
+              onPress={onOpenIdentity ? () => onOpenIdentity(member.identity) : undefined}
+              disabled={!onOpenIdentity}
+              accessibilityRole={onOpenIdentity ? 'button' : undefined}
+              accessibilityLabel={`${words}${you && me?.name ? `, ${t('Rooms.You')}` : ''}, ${roleText(t, member.verbs)}`}
               testID={testIdWithKey(`RoomMember_${roomHandle(member.identity.did)}`)}
             >
               <Icon name="account-outline" size={22} color={ColorPalette.brand.primary} />
               <ThemedText style={styles.idWords}>
-                {identityText(member.identity)}
-                {you ? <ThemedText style={styles.muted}>{` · ${t('Rooms.You')}`}</ThemedText> : null}
+                {words}
+                {you && me?.name ? <ThemedText style={styles.muted}>{` · ${t('Rooms.You')}`}</ThemedText> : null}
               </ThemedText>
               <ThemedText variant="caption" style={styles.muted}>
                 {roleText(t, member.verbs)}
               </ThemedText>
-            </View>
+            </Pressable>
           )
         })}
       </View>
@@ -195,7 +210,7 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
         </ThemedText>
         {fact(t('Rooms.MembersYouCan'), accessText(t, room), 'RoomMembersYouCan')}
         {fact(t('Rooms.MembersUntil'), until, 'RoomMembersUntil')}
-        {fact(t('Rooms.MembersAs'), identityText(room.actingAs), 'RoomMembersAs', true)}
+        {fact(t('Rooms.MembersAs'), me?.name ?? identityText(room.actingAs), 'RoomMembersAs', true)}
       </View>
       <View style={{ gap: 6 }}>
         {list}

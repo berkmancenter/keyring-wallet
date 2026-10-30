@@ -25,7 +25,7 @@ import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -43,18 +43,18 @@ import { RoomFileSheet } from '../components/RoomFileSheet'
 import { isComingSoon, RoomFeatureCard } from '../components/RoomFeatureCard'
 import { type NoteEditorTarget, RoomNoteEditor } from '../components/RoomNoteEditor'
 import { RoomFilesTab } from '../components/RoomFilesTab'
+import { RoomHeader } from '../components/RoomHeader'
+import { RoomIdentitySheet } from '../components/RoomIdentitySheet'
 import { RoomMembersTab } from '../components/RoomMembersTab'
 import { RoomNotesTab } from '../components/RoomNotesTab'
 import { RoomPostBubble } from '../components/RoomPostBubble'
-import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
-import { identityText } from '../components/roomWords'
 import { type RoomTab, RoomTabs } from '../components/RoomTabs'
 import { SampleDataBanner } from '../components/SampleDataBanner'
-import TierBadge from '../components/TierBadge'
 import { toInertText } from '../inertText'
 import { isNote, type RoomPost } from '../roomPosts'
-import type { RoomFile } from '../types'
+import type { Identity, RoomFile } from '../types'
+import { useMyName } from '../useMyName'
 import { useInViewAndActive } from '../useInViewAndActive'
 import { useRoom } from '../useRoom'
 import { POSTS_PAGE, useRoomPosts } from '../useRoomPosts'
@@ -133,6 +133,9 @@ const Room: React.FC = () => {
   const [tab, setTab] = useState<RoomTab>('chat')
   const [attachRequest, setAttachRequest] = useState(0)
   const [noteEditor, setNoteEditor] = useState<NoteEditorTarget>()
+  // Whose sheet is open: the member's own, from the composer, or another member's, from their name.
+  const [sheetFor, setSheetFor] = useState<Identity>()
+  const me = useMyName()
   const { reload } = state
   // The library is read again each time it is shown, so a file just posted from the chat is in it.
   const showTab = (next: RoomTab) => {
@@ -162,7 +165,6 @@ const Room: React.FC = () => {
   )
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
-    header: { paddingHorizontal: 16, paddingVertical: 10, gap: 4 },
     list: { paddingHorizontal: 12, paddingBottom: 16, gap: 2 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     centered: { padding: 16, gap: 8 },
@@ -177,7 +179,6 @@ const Room: React.FC = () => {
       borderColor: ColorPalette.notification.warnBorder,
     },
     warnText: { flex: 1, color: ColorPalette.notification.warnText },
-    idName: { fontFamily: Platform.select({ ios: 'Courier', default: 'monospace' }) },
   })
 
   if (!service)
@@ -251,26 +252,7 @@ const Room: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomScreen')}>
       <SampleDataBanner service={service} />
-      <View style={styles.header} testID={testIdWithKey('RoomHeader')}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <ThemedText
-            variant="headingFour"
-            style={room.nameFrom === 'roomId' ? styles.idName : undefined}
-            testID={testIdWithKey('RoomTitle')}
-          >
-            {roomTitle(t, room)}
-          </ThemedText>
-          <TierBadge tier={room.tier} />
-        </View>
-        <ThemedText style={styles.muted} testID={testIdWithKey('RoomActingAs')}>
-          {[
-            room.communityName,
-            t('Rooms.ActingAs', { who: identityText(room.actingAs), interpolation: { escapeValue: false } }) as string,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </ThemedText>
-      </View>
+      <RoomHeader room={room} />
       {feed.check?.verdict === 'conflict' ? (
         <View style={styles.warn} accessibilityRole="alert" testID={testIdWithKey('RoomHostConflict')}>
           <Icon name="alert-outline" size={22} color={ColorPalette.notification.warnText} />
@@ -280,6 +262,8 @@ const Room: React.FC = () => {
       <RoomTabs tabs={['chat', 'files', 'notes', 'members']} selected={tab} onSelect={showTab} />
       {tab === 'members' ? (
         <RoomMembersTab
+          me={me}
+          onOpenIdentity={setSheetFor}
           service={service}
           room={room}
           status={roomCapabilities.listCommunityMembers}
@@ -349,6 +333,7 @@ const Room: React.FC = () => {
                 onRetry={item.post.delivery === 'failed' ? () => outbox.retry(item.post.key) : undefined}
                 onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
                 onOpenFile={canOpenFiles ? setOpenedFile : undefined}
+                onOpenAuthor={setSheetFor}
               />
             )
           }
@@ -387,13 +372,25 @@ const Room: React.FC = () => {
           <RoomComposer
             onSend={send}
             unavailable={cannotPost}
-            postingAs={identityText(room.actingAs)}
+            postingAs={
+              me.name
+                ? (t('Rooms.PostingAs', { who: me.name, interpolation: { escapeValue: false } }) as string)
+                : (t('Rooms.PostingAsAddName') as string)
+            }
+            onPressPostingAs={() => setSheetFor(room.actingAs)}
             canAttach={canAttach}
             attachRequest={attachRequest}
           />
         )}
       </KeyboardAvoidingView>
       <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />
+      <RoomIdentitySheet
+        identity={sheetFor}
+        mine={sheetFor?.did === room.actingAs.did}
+        me={me}
+        onClose={() => setSheetFor(undefined)}
+        onOpenProfile={(profileId) => navigation.navigate(Screens.EditRCard, profileId ? { profileId } : {})}
+      />
       <RoomNoteEditor
         service={service}
         roomId={roomId}

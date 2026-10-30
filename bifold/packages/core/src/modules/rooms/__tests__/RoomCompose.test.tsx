@@ -88,8 +88,8 @@ describe('posting to a room', () => {
     expect(chatMessageText(draft.body)).toBe('See you Thursday.')
     expect(confirmWrite).toHaveBeenCalledTimes(1)
     expect(tree.getByTestId(id('RoomComposerInput')).props.value).toBe('')
-    // Who the member posts as is in view at the composer, not only in the header.
-    expect(tree.getByTestId(id('RoomComposerPostingAs'))).toHaveTextContent('Rooms.PostingAs')
+    // Who the member posts as is said at the composer. No profile name in this store: the line says so.
+    expect(tree.getByTestId(id('RoomComposerPostingAs'))).toHaveTextContent('Rooms.PostingAsAddName')
 
     // The room's list carries it, as the member's own, and nothing is left sending.
     await waitFor(() => expect(tree.getByText('See you Thursday.')).toBeTruthy())

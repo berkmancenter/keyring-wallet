@@ -20,7 +20,7 @@ import type { RoomFile } from '../types'
 
 import { RoomFileChip } from './RoomFileChip'
 import { roomHandle } from './RoomRow'
-import { identityText } from './roomWords'
+import { memberText } from './roomWords'
 
 export const RoomNoteCard: React.FC<{
   note: RoomPost
@@ -45,10 +45,11 @@ export const RoomNoteCard: React.FC<{
     muted: { color: muted },
     quiet: { color: muted, fontStyle: 'italic' },
   })
-  const who = note.author
+  const author = note.author ? (note.mine ? (t('Rooms.You') as string) : memberText(t, note.author)) : undefined
+  const who = author
     ? note.byAgent
-      ? (t('Rooms.NoteByAgentFor', { who: identityText(note.author), interpolation: { escapeValue: false } }) as string)
-      : identityText(note.author)
+      ? (t('Rooms.NoteByAgentFor', { who: author, interpolation: { escapeValue: false } }) as string)
+      : author
     : undefined
   const editable = !!onEdit && note.mine && !note.retracted && !note.unread && !note.delivery
   const line = [who, note.at ? localDate(note.at.toISOString()) : undefined].filter(Boolean).join(' · ')

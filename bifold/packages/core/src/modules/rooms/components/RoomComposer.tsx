@@ -42,8 +42,10 @@ export interface RoomComposerProps {
   canAttach?: boolean
   /** Why the member can't post here; the composer shows this instead of a field. */
   unavailable?: string
-  /** Who the member posts as, in words ("…negative-weird"). */
+  /** Who the member posts as, as the whole line ("Posting as Alberto L"). */
   postingAs?: string
+  /** Opens the member's own sheet: their name, where it comes from, and the identity the room sees. */
+  onPressPostingAs?: () => void
   /** Opens the file picker each time it changes to a new number above 0 (the Files tab's "Add a file"). */
   attachRequest?: number
 }
@@ -52,6 +54,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   onSend,
   unavailable,
   postingAs,
+  onPressPostingAs,
   canAttach,
   attachRequest = 0,
 }) => {
@@ -113,13 +116,16 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
       backgroundColor: ColorPalette.brand.primaryBackground,
     },
     refused: { paddingHorizontal: 22, paddingTop: 6, fontSize: 12, color: ColorPalette.semantic.error },
-    postingAs: {
+    postingAsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      minHeight: 32,
       paddingHorizontal: 22,
       paddingTop: 6,
-      fontSize: 12,
-      color: ColorPalette.grayscale.mediumGrey,
       backgroundColor: ColorPalette.brand.secondaryBackground,
     },
+    postingAsText: { flexShrink: 1, fontSize: 12, color: ColorPalette.grayscale.mediumGrey },
   })
 
   const attach = async () => {
@@ -158,9 +164,18 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   return (
     <>
       {postingAs ? (
-        <ThemedText style={styles.postingAs} numberOfLines={1} testID={testIdWithKey('RoomComposerPostingAs')}>
-          {t('Rooms.PostingAs', { who: postingAs, interpolation: { escapeValue: false } })}
-        </ThemedText>
+        <Pressable
+          style={styles.postingAsRow}
+          onPress={onPressPostingAs}
+          disabled={!onPressPostingAs}
+          accessibilityRole={onPressPostingAs ? 'button' : undefined}
+          testID={testIdWithKey('RoomComposerPostingAsButton')}
+        >
+          <ThemedText style={styles.postingAsText} numberOfLines={1} testID={testIdWithKey('RoomComposerPostingAs')}>
+            {postingAs}
+          </ThemedText>
+          {onPressPostingAs ? <Icon name="chevron-right" size={16} color={ColorPalette.brand.primary} /> : null}
+        </Pressable>
       ) : null}
       {file ? (
         <View style={styles.attached} testID={testIdWithKey('RoomComposerFile')}>

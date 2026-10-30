@@ -111,7 +111,9 @@ describe('a room, on sample data', () => {
     await waitFor(() => expect(tree.getByTestId(id('RoomTitle'))).toHaveTextContent('Planning'))
     expect(tree.getByTestId(id('RoomsSampleDataBanner'))).toBeTruthy()
     expect(tree.getByTestId(id('RoomTier'))).toBeTruthy()
-    expect(tree.getByTestId(id('RoomActingAs'))).toHaveTextContent(/Rooms\.ActingAs/)
+    // Where it is, in the header; who the member acts as is said once, in the composer.
+    expect(tree.getByTestId(id('RoomWhere'))).toHaveTextContent(/Rooms\.RoomIn/)
+    expect(tree.queryByTestId(id('RoomActingAs'))).toBeNull()
     await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(4))
     const order = tree.getAllByTestId(/RoomPost_/).map((n) => n.props.testID)
     expect(order[0]).toBe(id(`RoomPost_${roomHandle('m4')}`)) // newest: Oct 22, 09:31

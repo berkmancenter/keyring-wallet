@@ -23,7 +23,7 @@ import type { RoomFile, RoomsService } from '../types'
 import { useRoomFile } from '../useRoomFile'
 
 import { fileSizeText, fileTypeText } from './fileWords'
-import { identityText } from './roomWords'
+import { memberText } from './roomWords'
 
 export interface RoomFileSheetProps {
   service: RoomsService | undefined
@@ -77,7 +77,7 @@ const SheetBody: React.FC<
   })
   const type = fileTypeText(file)
   const shared = [
-    file.sharedBy ? identityText(file.sharedBy) : undefined,
+    file.sharedBy ? memberText(t, file.sharedBy) : undefined,
     file.sharedAt ? localDate(file.sharedAt) : undefined,
   ]
     .filter(Boolean)
