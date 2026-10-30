@@ -50,6 +50,7 @@ import { PetnamesProvider } from '../components/memberWords'
 import { RoomMembersTab } from '../components/RoomMembersTab'
 import { RoomNotesTab } from '../components/RoomNotesTab'
 import { RoomPostBubble } from '../components/RoomPostBubble'
+import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { type RoomTab, RoomTabs } from '../components/RoomTabs'
 import { SampleDataBanner } from '../components/SampleDataBanner'
@@ -131,7 +132,11 @@ const Room: React.FC = () => {
   const canList = roomCapabilities?.listNotes.status === 'available'
   const inView = useInViewAndActive()
   const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList, inView)
-  const outbox = useRoomSend(service, roomId, feed.refresh)
+  // On screen, a post that fails is marked in the list; away from it, a notice says so (useRoomNotices).
+  const outbox = useRoomSend(service, roomId, feed.refresh, {
+    onScreen: inView,
+    roomName: room ? roomTitle(t, room) : undefined,
+  })
   const [openedFile, setOpenedFile] = useState<RoomFile>()
   const [tab, setTab] = useState<RoomTab>('chat')
   const [attachRequest, setAttachRequest] = useState(0)

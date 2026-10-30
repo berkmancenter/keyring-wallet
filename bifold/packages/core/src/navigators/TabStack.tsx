@@ -49,6 +49,7 @@ import { useVtiVetterGrantedNotice } from '../modules/trust-tasks/screens/vetter
 import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { useVtiTurnedDownNotice } from '../modules/trust-tasks/screens/turnedDownNotice'
+import { useRoomNotices } from '../modules/rooms/roomNotices'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
 
@@ -133,6 +134,9 @@ const TabStack: React.FC = () => {
   useVtiVetterGrantedNotice()
   // …and a community turning a request down, once, when the app first learns it.
   useVtiTurnedDownNotice()
+  // …and the member's rooms: a new offer, an admission, a post that didn't send. Runs the offers poll, so a new
+  // offer is said from the start, not only once My Agent has been opened.
+  useRoomNotices()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
