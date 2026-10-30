@@ -4,8 +4,9 @@
  * place; the host check warns only on `conflict`; a custody-only room is never asked for posts.
  */
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
+import { FlatList } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
@@ -173,6 +174,26 @@ describe('posts', () => {
       'ChatDayPill',
     ])
     expect(tree.getByText('Rooms.You')).toBeTruthy()
+  })
+
+  test('scrolling floats the day of the posts at the top of the screen, as the person-to-person chat does', async () => {
+    const tree = open(withPosts([post('a', 'today'), post('c', 'a day before', { updatedAt: '2026-10-25T09:00:00Z' })]))
+    await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(2))
+    expect(tree.queryByTestId(id('RoomFloatingDay'))).toBeNull()
+    const chat = tree.UNSAFE_getAllByType(FlatList).find((l) => l.props.testID === id('RoomPosts'))
+    if (!chat) throw new Error('no chat list')
+    const viewableItems = (chat.props.data as { key: string }[]).map((item, index) => ({
+      item,
+      index,
+      key: item.key,
+      isViewable: true,
+    }))
+    await act(async () => {
+      chat.props.onViewableItemsChanged({ viewableItems, changed: [] })
+      chat.props.onScrollBeginDrag()
+    })
+    // The topmost post in view (the highest index, drawn bottom up) is the older one: its day floats.
+    expect(within(tree.getByTestId(id('RoomFloatingDay'))).getByTestId(id('ChatDayPill'))).toBeTruthy()
   })
 
   test("a post that couldn't be read keeps its place, and the rest show", async () => {

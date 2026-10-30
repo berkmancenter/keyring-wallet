@@ -26,7 +26,7 @@ import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -41,6 +41,7 @@ import { localDayKey } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import { RoomComposer } from '../components/RoomComposer'
 import { RoomFileSheet } from '../components/RoomFileSheet'
+import { useFloatingDay } from '../components/useFloatingDay'
 import { isComingSoon, RoomFeatureCard } from '../components/RoomFeatureCard'
 import { type NoteEditorTarget, RoomNoteEditor } from '../components/RoomNoteEditor'
 import { RoomFilesTab } from '../components/RoomFilesTab'
@@ -172,6 +173,8 @@ const Room: React.FC = () => {
   )
   // The list is drawn from the bottom up, so offset 0 is the newest post: a post just sent shows there.
   const list = useRef<FlatList<Item>>(null)
+  // The day of the posts at the top of the screen, floated while the member scrolls (as the person-to-person chat's).
+  const floating = useFloatingDay()
   const { send: outboxSend } = outbox
   const send = useCallback(
     (text: string, file?: Parameters<typeof outboxSend>[1]) => {
@@ -186,6 +189,7 @@ const Room: React.FC = () => {
     list: { paddingHorizontal: 12, paddingBottom: 16, gap: 2 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     centered: { padding: 16, gap: 8 },
+    floatingDay: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
     warn: {
       flexDirection: 'row',
       gap: 10,
@@ -393,6 +397,12 @@ const Room: React.FC = () => {
             // its top. No button.
             onEndReached={feed.hasOlder && !feed.loadingOlder ? feed.loadOlder : undefined}
             onEndReachedThreshold={0.25}
+            onViewableItemsChanged={floating.onViewableItemsChanged}
+            viewabilityConfig={floating.viewabilityConfig}
+            onScrollBeginDrag={floating.onScrollStart}
+            onMomentumScrollBegin={floating.onScrollStart}
+            onScrollEndDrag={floating.onScrollStop}
+            onMomentumScrollEnd={floating.onScrollStop}
             // The footer of a list drawn bottom up is at its top, above the oldest post shown: the app's spinner while
             // older posts are read.
             ListFooterComponent={
@@ -410,6 +420,16 @@ const Room: React.FC = () => {
               ) : null
             }
           />
+          {/* Over the top of the list, which is the top of this view: pinned there, never in the way of a tap. */}
+          {floating.day && shown.length > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.floatingDay, { opacity: floating.opacity }]}
+              testID={testIdWithKey('RoomFloatingDay')}
+            >
+              <DayPill date={floating.day} />
+            </Animated.View>
+          ) : null}
           {unavailable ? null : isComingSoon(roomCapabilities.write) ? (
             <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
           ) : (
