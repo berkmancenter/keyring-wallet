@@ -25,6 +25,7 @@ export const VTA_READ_LANE_TYPES: ReadonlySet<string> = new Set([
   'https://trusttasks.org/spec/rooms/keys/read/0.1',
   'https://trusttasks.org/spec/rooms/keys/browse/0.1',
   'https://trusttasks.org/spec/rooms/keys/browse/0.2',
+  'https://trusttasks.org/spec/rooms/keys/browse/0.3',
 ])
 
 export function inReadLane(type: string): boolean {

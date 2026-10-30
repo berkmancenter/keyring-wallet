@@ -13,6 +13,8 @@ const SPEC = 'https://trusttasks.org/spec/'
 export const ROOMS_TASK = {
   keysList01: `${SPEC}rooms/keys/list/0.1`,
   keysList02: `${SPEC}rooms/keys/list/0.2`,
+  // Agents from vta-service 0.67's nightly (upstream e6380bf1) serve browse at 0.3 only; older ones at 0.1.
+  keysBrowse03: `${SPEC}rooms/keys/browse/0.3`,
   keysBrowse: `${SPEC}rooms/keys/browse/0.1`,
   keysRead: `${SPEC}rooms/keys/read/0.1`,
   membershipsList: `${SPEC}vtc/rooms/memberships/list/0.1`,

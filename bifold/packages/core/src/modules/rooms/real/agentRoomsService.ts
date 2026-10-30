@@ -515,7 +515,7 @@ export class AgentRoomsService implements RoomsService {
   private async readListing(roomId: string, sinceVersion: number | undefined): Promise<NoteList> {
     const room = await this.requireInRoom(roomId, 'listNotes')
     const listing = parseBrowse(
-      await this.backend.agentTask(ROOMS_TASK.keysBrowse, {
+      await this.backend.agentTask(this.browseType(), {
         roomId,
         host: room.host,
         ...(sinceVersion !== undefined ? { sinceVersion } : {}),
@@ -901,6 +901,15 @@ export class AgentRoomsService implements RoomsService {
     }
   }
 
+  /**
+   * The newest `rooms/keys/browse` the agent serves. 0.3 asks the same and answers the same, plus the room's
+   * `lastPrune` (not read here); an agent that lists neither is asked 0.1, as before 0.3.
+   */
+  private browseType(): string {
+    const served = this.served?.types ?? []
+    return [ROOMS_TASK.keysBrowse03, ROOMS_TASK.keysBrowse].find((t) => served.includes(t)) ?? ROOMS_TASK.keysBrowse
+  }
+
   /** The newest `rooms/keys/act` the agent serves, if any. */
   private actType(): string | undefined {
     const served = this.served?.types ?? []
@@ -1141,7 +1150,7 @@ export class AgentRoomsService implements RoomsService {
   /** The newest version among the room's records, as the agent lists them; 0 for an empty room. */
   private async headVersion(room: KnownRoom): Promise<number> {
     const listing = parseBrowse(
-      await this.agentStep('write', 'list the room', ROOMS_TASK.keysBrowse, { roomId: room.roomId, host: room.host })
+      await this.agentStep('write', 'list the room', this.browseType(), { roomId: room.roomId, host: room.host })
     )
     return listing.records.reduce((head, r) => Math.max(head, r.version), 0)
   }
@@ -1217,7 +1226,7 @@ export class AgentRoomsService implements RoomsService {
    */
   public async listFiles(roomId: string): Promise<RoomFile[]> {
     const room = await this.requireInRoom(roomId, 'listFiles')
-    const listing = parseBrowse(await this.backend.agentTask(ROOMS_TASK.keysBrowse, { roomId, host: room.host }))
+    const listing = parseBrowse(await this.backend.agentTask(this.browseType(), { roomId, host: room.host }))
     const files: RoomFile[] = []
     let opened = 0
     let failure: unknown
