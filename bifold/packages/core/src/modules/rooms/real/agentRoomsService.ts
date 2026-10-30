@@ -24,7 +24,9 @@
  */
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
+import { DeviceEventEmitter } from 'react-native'
 
+import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
 import { deriveCapabilities, deriveRoomCapabilities } from '../capabilities'
 import { inertFlags, toInertText } from '../inertText'
 import { chatMessageText } from '../roomPosts'
@@ -215,6 +217,22 @@ const shortId = (id: string) => id.replace(/^did:[^:]+:/, '').slice(-10)
 
 /** Where an opened record is kept: a record's version never changes once written, so key and version name it. */
 const openedKey = (roomId: string, key: string, version: number) => `${roomId}\n${key}@${version}`
+/** A record in a room, whatever its version: what the room's last listing said its version is. */
+const listedKey = (roomId: string, key: string) => `${roomId}\n${key}`
+
+/**
+ * The most opened records a service keeps. An opened record is a decrypted body, kept in memory only; past this the
+ * least recently used goes. Ten rooms of fifty posts each fit.
+ */
+export const MAX_OPENED_RECORDS = 500
+
+// The services that hold opened records. When the wallet locks or the person logs out, each forgets them and the set
+// is emptied, so it never keeps a service alive past a lock; a service joins again the next time it keeps a record.
+const holdingOpened = new Set<{ dropOpenedRecords(): void }>()
+DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, () => {
+  for (const service of holdingOpened) service.dropOpenedRecords()
+  holdingOpened.clear()
+})
 
 /** A record's file as a screen lists it: the name is untrusted text, shown inert. */
 const roomFileOf = (file: FileManifest, record: Pick<OpenedRecord, 'author' | 'updatedAt'>): RoomFile => ({
@@ -240,8 +258,17 @@ export class AgentRoomsService implements RoomsService {
   private offers = new Map<string, { community: RoomsCommunity; offer: OfferRecord }>()
   private previews = new Map<string, { offerId: string; at: number }>()
   private writes = new Map<string, { roomId: string; draft: WriteDraft; at: number; replacedVersion?: number }>()
-  // Records opened through the agent, by room, key and version: what a file listing reuses.
+  // Records opened through the agent, by room, key and version: what a file listing and a second read of a post
+  // reuse. Kept through keepOpened, oldest use first, within MAX_OPENED_RECORDS; forgotten on lock and on leaving.
   private opened = new Map<string, OpenedRecord>()
+  /** Each record's version as the room's last listing gave it, so a read knows which opened copy is current. */
+  private listed = new Map<string, number>()
+  /**
+   * A room's listing being asked now, by room and the version it starts from. Opening a room lists it twice at once
+   * (its posts and its notes tab), and the agent client sends one task at a time, so the posts waited a whole second
+   * listing before their first read (+0.6–0.9 s on each open, lab sim 10-30).
+   */
+  private listingInFlight = new Map<string, Promise<NoteList>>()
   /** Renewals stored this run, by room and issue time: a renewal stays listed until the authority it renews lapses. */
   private renewed = new Set<string>()
   /** The offers list each community answered, so the badge's poll asks it once a session, not twice a minute. */
@@ -440,9 +467,22 @@ export class AgentRoomsService implements RoomsService {
     return room
   }
 
-  public async listNotes(roomId: string, options: { sinceVersion?: number } = {}): Promise<NoteList> {
+  public listNotes(roomId: string, options: { sinceVersion?: number } = {}): Promise<NoteList> {
+    const flightKey = `${roomId}\n${options.sinceVersion ?? 'all'}`
+    let flight = this.listingInFlight.get(flightKey)
+    if (!flight) {
+      const asked = this.readListing(roomId, options.sinceVersion).finally(() => {
+        if (this.listingInFlight.get(flightKey) === asked) this.listingInFlight.delete(flightKey)
+      })
+      this.listingInFlight.set(flightKey, asked)
+      flight = asked
+    }
+    // Each caller its own list, so one sorting or trimming it can't change what another holds.
+    return flight.then((list) => ({ ...list, notes: [...list.notes] }))
+  }
+
+  private async readListing(roomId: string, sinceVersion: number | undefined): Promise<NoteList> {
     const room = await this.requireInRoom(roomId, 'listNotes')
-    const { sinceVersion } = options
     const listing = parseBrowse(
       await this.backend.agentTask(ROOMS_TASK.keysBrowse, {
         roomId,
@@ -450,6 +490,11 @@ export class AgentRoomsService implements RoomsService {
         ...(sinceVersion !== undefined ? { sinceVersion } : {}),
       })
     )
+    for (const r of listing.records) {
+      // A version only goes up: an answer that arrives late never takes a record back.
+      const k = listedKey(roomId, r.key)
+      this.listed.set(k, Math.max(r.version, this.listed.get(k) ?? 0))
+    }
     return {
       notes: listing.records.map((r) => ({
         key: r.key,
@@ -465,13 +510,24 @@ export class AgentRoomsService implements RoomsService {
     }
   }
 
+  /**
+   * A post or note, from what was opened before when the room's last listing names that same version, else from the
+   * agent. Reopening a room read its whole first page again, one task at a time (ten reads, ~5 s on the lab sim,
+   * 10-30); a record at a new version (an edit, a retract) is read afresh.
+   */
   public async readNote(roomId: string, key: string): Promise<Note> {
     const room = await this.requireInRoom(roomId, 'readNote')
+    const held = this.openedNow(roomId, key)
+    if (held) return this.noteOf(held)
     const opened = parseRead(await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key }), (s) =>
       this.backend.decodeBase64Url(s)
     )
     if (!opened) throw new Error(`the agent's answer for note ${key} could not be read`)
-    this.opened.set(openedKey(roomId, opened.key, opened.version), opened)
+    this.keepOpened(roomId, opened)
+    return this.noteOf(opened)
+  }
+
+  private noteOf(opened: OpenedRecord): Note {
     const body = toInertText(opened.body)
     return {
       key: opened.key,
@@ -488,10 +544,51 @@ export class AgentRoomsService implements RoomsService {
     }
   }
 
+  /** The opened copy of the version the room's last listing names, if there is one (and it is now the newest used). */
+  private openedNow(roomId: string, key: string): OpenedRecord | undefined {
+    const version = this.listed.get(listedKey(roomId, key))
+    if (version === undefined) return undefined
+    const k = openedKey(roomId, key, version)
+    const held = this.opened.get(k)
+    if (held) {
+      this.opened.delete(k)
+      this.opened.set(k, held)
+    }
+    return held
+  }
+
+  /** Keep an opened record as the newest used, dropping the least recently used past MAX_OPENED_RECORDS. */
+  private keepOpened(roomId: string, record: OpenedRecord): void {
+    const k = openedKey(roomId, record.key, record.version)
+    this.opened.delete(k)
+    this.opened.set(k, record)
+    for (const oldest of this.opened.keys()) {
+      if (this.opened.size <= MAX_OPENED_RECORDS) break
+      this.opened.delete(oldest)
+    }
+    holdingOpened.add(this)
+  }
+
+  /** Drop every opened record and listed version (the wallet locked, or the person logged out). */
+  public dropOpenedRecords(): void {
+    this.opened.clear()
+    this.listed.clear()
+  }
+
+  private dropRoomReads(roomId: string): void {
+    const prefix = `${roomId}\n`
+    for (const k of [...this.opened.keys()]) if (k.startsWith(prefix)) this.opened.delete(k)
+    for (const k of [...this.listed.keys()]) if (k.startsWith(prefix)) this.listed.delete(k)
+  }
+
   public async leaveViaCommunity(communityDid: string): Promise<void> {
     await this.require('leaveViaCommunity')
     await this.backend.leaveCommunity(communityDid)
-    for (const [id, room] of this.rooms) if (room.communityDid === communityDid) this.rooms.delete(id)
+    for (const [id, room] of this.rooms)
+      if (room.communityDid === communityDid) {
+        this.rooms.delete(id)
+        this.dropRoomReads(id)
+      }
   }
 
   /**
@@ -1096,7 +1193,7 @@ export class AgentRoomsService implements RoomsService {
           continue
         }
         if (!read) continue
-        this.opened.set(openedKey(roomId, read.key, read.version), read)
+        this.keepOpened(roomId, read)
       }
       opened++
       if (read.file) files.push(roomFileOf(read.file, read))
