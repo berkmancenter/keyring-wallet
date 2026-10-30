@@ -18,6 +18,8 @@ export interface RoomState {
   files?: RoomFile[]
   /** The room itself could not be read. */
   failed: boolean
+  /** The room's own read is out (not its notes or files). */
+  reading: boolean
   notesFailed: boolean
   filesFailed: boolean
   /** A reload asked for by the member (pull to refresh) is under way; the first read is not one. */
@@ -28,6 +30,7 @@ export interface RoomState {
 export function useRoom(service: RoomsService | undefined, roomId: string): RoomState {
   const [state, setState] = useState<Omit<RoomState, 'reload'>>({
     failed: false,
+    reading: false,
     notesFailed: false,
     filesFailed: false,
     refreshing: false,
@@ -44,6 +47,7 @@ export function useRoom(service: RoomsService | undefined, roomId: string): Room
     const set = (next: Partial<Omit<RoomState, 'reload'>>) => {
       if (live) setState((s) => ({ ...s, ...next }))
     }
+    set({ reading: true })
     void (async () => {
       let roomCapabilities: RoomCapabilities
       try {
@@ -53,9 +57,9 @@ export function useRoom(service: RoomsService | undefined, roomId: string): Room
           service.capabilities({ refresh: generation > 0 }),
         ])
         roomCapabilities = perRoom
-        set({ room, roomCapabilities, capabilities, failed: false })
+        set({ room, roomCapabilities, capabilities, failed: false, reading: false })
       } catch {
-        set({ failed: true, refreshing: false })
+        set({ failed: true, reading: false, refreshing: false })
         return
       }
       const listing: Promise<void>[] = []

@@ -5,7 +5,9 @@
  *
  * @module rooms/useMyRooms
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+
+import { vtaAgent } from '../trust-tasks/module/vtaAgent'
 
 import { RoomsUnavailable } from './types'
 import type { OperationStatus, RoomOffer, RoomsCapabilities, RoomsService, RoomSummary } from './types'
@@ -33,13 +35,21 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
     setState((s) => ({ ...s, refreshing: true }))
     setGeneration((g) => g + 1)
   }, [])
+  // The agent the reads are for. An Add given up passes through "no agent": coming back to the screen read the rooms
+  // then, and the agent came back after (it signs in again), so the card said "Link your agent first" until the
+  // screen was left (nightly, 10-30). A read is made again whenever the agent changes, and one for another agent than
+  // the last read's asks its services afresh: the service keeps one agent's answer (A, then B, then A read B's).
+  const agentKey = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.agentAddress())
+  const lastAgent = useRef(agentKey)
 
   useEffect(() => {
     if (!service) return
     let live = true
     void (async () => {
       try {
-        const capabilities = await service.capabilities({ refresh: generation > 0 })
+        const refresh = generation > 0 || agentKey !== lastAgent.current
+        lastAgent.current = agentKey
+        const capabilities = await service.capabilities({ refresh })
         const listRooms = capabilities.listMyRooms.status === 'available'
         const listOffers = capabilities.listOffers.status === 'available'
         const [rooms, offers] = await Promise.all([
@@ -64,7 +74,7 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
     return () => {
       live = false
     }
-  }, [service, communityDid, generation])
+  }, [service, communityDid, generation, agentKey])
 
   return { ...state, reload }
 }
