@@ -1,7 +1,7 @@
 // node --test e2e/openvtc/hvVerdict.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { appLevelLines, applicationVerdict, lineSeconds, taskRound, withoutOwnRequestCard, withWrongSecret } from './hvVerdict.js';
+import { appLevelLines, applicationVerdict, lineSeconds, taskRound, withoutOwnRequestCard, withWrongSecret, refusalCodes } from './hvVerdict.js';
 
 const AGENT = 'did:webvh:QmWj8ssa:dids.ic3.dev:hidden-vet-vta';
 // The 257 check's lines (2026-10-16, mini), with the logcat prefix as Android prints it.
@@ -184,4 +184,16 @@ test('the refusal row\'s ticket: one character of the secret changed, everything
   assert.match(withWrongSecret('vetting-ticket:?v=1&secret=-_x&ticket=t'), /secret=-_a&ticket=t$/);
   // A code ticket has no secret to change.
   assert.throws(() => withWrongSecret('vetting-ticket:?v=1&community=c&vetter=v&code=ABCD-EFGH'), /no secret/);
+});
+
+test('the refusal codes the applicant logged: the wrong secret\'s, or none', () => {
+  // As 1029-2358 logged it (the vetter's DID shortened as the app shortens it).
+  const refused = [
+    '10-29 18:09:40.101  4948  4981 I ReactNativeJS: vtiAgent: inbound https://trusttasks.org/spec/trust-task-error/0.5 from did:webvh:QmbvV7otshbjHx… (session did:webvh:QmVF1Zd648TQ5h…)',
+    '10-29 18:09:43.313  4948  4981 W ReactNativeJS: vtiAgent: did:webvh:QmbvV7otshbjHx… refused a task: vetting/request:invalidTicket — vetting/request:invalidTicket  ',
+  ].join('\n');
+  assert.deepEqual(refusalCodes(refused), ['vetting/request:invalidTicket']);
+  // The control run (the real ticket, accepted): no refusal at all.
+  assert.deepEqual(refusalCodes('10-29 17:50:02.000  1 1 I ReactNativeJS: vtiAgent: inbound https://trusttasks.org/spec/vetting/accept/0.1'), []);
+  assert.deepEqual(refusalCodes('vtiAgent: did:x refused a task: vetting/request:notEligible — the grant was revoked'), ['vetting/request:notEligible']);
 });

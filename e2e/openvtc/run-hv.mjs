@@ -37,7 +37,7 @@ import { applicant as applicantRole, textOf, unlockToHome, vetter as vetterRole 
 import { join } from '../lib/pages/join.js';
 import { createHvAdmin, soleMemberSince } from './hvAdmin.js';
 import { clearDeviceLog, deviceLog, keepAlive, openDevice } from './hvDevices.js';
-import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard, withWrongSecret } from './hvVerdict.js';
+import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard, withWrongSecret, refusalCodes } from './hvVerdict.js';
 
 const { values: a } = parseArgs({
   options: {
@@ -157,7 +157,8 @@ try {
   // ticket unspent, so the request below still goes through. "Accepted" here would mean the vetter took a ticket it never
   // cut; "Request sent" after the wait, that the refusal never reached the applicant or was not read.
   // HV_BAD_TICKET_CONTROL=1 proves the row can fail: the REAL ticket goes in instead, the vetter accepts it, the row must
-  // read FAIL ("Accepted"), and the run stops there (its ticket is spent). Never set in a gate run.
+  // read FAIL ("Accepted"), and the run stops there (its ticket is spent). Never set in a gate run. The stop lands in
+  // the catch below, so every later row also prints FAIL "not reached": in a control run only this row's FAIL counts.
   const control = process.env.HV_BAD_TICKET_CONTROL === '1';
   if (a.vetter === 'keyring') {
     const asked = Date.now();
@@ -176,10 +177,15 @@ try {
       if (/Refused|Refusée|Recusado|Accepted|Aceit|Declined|Recus/i.test(status)) break;
     }
     await screenshot(app, 'hv-refused').catch(() => undefined);
-    const refused = /Refused|Refusée|Recusado/i.test(status);
-    mark('hv-refused-bad-ticket', refused ? 'PASS' : 'FAIL', refused
-      ? `a wrong-secret ticket was refused: the request reads "${status}" ${Math.round((Date.now() - asked) / 1000)} s after asking`
-      : `the request reads "${status || 'nothing'}" ${Math.round((Date.now() - asked) / 1000)} s after asking with a wrong-secret ticket (expected "Refused")`);
+    // The screen says a refusal happened; the code the applicant's agent logged says it was the wrong secret's (a vetter
+    // that refused for any other reason, or crashed on the link, would read "Refused" too). Both are required.
+    const shown = /Refused|Refusée|Recusado/i.test(status);
+    const codes = refusalCodes(deviceLog(appDev, asked));
+    const why = codes.includes('vetting/request:invalidTicket');
+    const secs = Math.round((Date.now() - asked) / 1000);
+    mark('hv-refused-bad-ticket', shown && why ? 'PASS' : 'FAIL', shown && why
+      ? `a wrong-secret ticket was refused: the request reads "${status}" ${secs} s after asking, and the applicant's agent logged vetting/request:invalidTicket`
+      : `the request reads "${status || 'nothing'}" ${secs} s after asking with a wrong-secret ticket (expected "Refused"); refusal codes logged: ${codes.length ? codes.join(', ') : 'none'} (expected vetting/request:invalidTicket)`);
     if (control) throw new Error('HV_BAD_TICKET_CONTROL: stopping after the refusal row');
   } else row('hv-refused-bad-ticket', 'SKIP', 'the openvtc TUI vetter: the refusal row is a Keyring vetter\'s');
   await applicantRole.request(app, { ticketUri, via: 'field' });
