@@ -17,6 +17,7 @@ const COPIED = [
   'scripts/ota/strict-proof.mjs',
   'scripts/ota/check-fingerprint.mjs',
   'scripts/ota/fingerprint-report.mjs',
+  'scripts/ota/release-stamp.mjs',
 ]
 const dirs = []
 after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })))

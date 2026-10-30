@@ -1421,6 +1421,21 @@ exports[`Developer Screen screen renders correctly 1`] = `
           State: off (this build names no update server)
         </Text>
         <Text
+          accessibilityLabel="store build 1"
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+          testID="com.ariesbifold:id/OtaRelease"
+        >
+          Release: store build 1
+        </Text>
+        <Text
           accessibilityLabel="embedded (00000000-0000-0000-0000-000000000000)"
           style={
             {
