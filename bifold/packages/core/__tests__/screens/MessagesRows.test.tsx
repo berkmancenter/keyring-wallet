@@ -21,6 +21,7 @@ import {
   scheduleChatDelete,
 } from '../../src/modules/chat/pendingChatDeletes'
 import Messages from '../../src/screens/Messages'
+import { Screens, Stacks, TabStacks } from '../../src/types/navigators'
 import { testIdWithKey } from '../../src/utils/testable'
 import { testDefaultState } from '../contexts/store'
 import { BasicAppContext } from '../helpers/app'
@@ -45,6 +46,31 @@ let mockUnread: Record<string, number> = {}
 jest.mock('../../src/hooks/useUnreadMessages', () => ({
   useUnreadMessages: () => ({ unreadByConnection: mockUnread, totalUnread: 0 }),
 }))
+
+// Rooms in Messages (R1): the room rows and the offers card are the rooms module's (#787), stood in for here.
+let mockRoomRows: Record<string, unknown>[] = []
+let mockRoomsFailed = false
+const mockReloadRooms = jest.fn()
+jest.mock('../../src/modules/rooms/useRoomRows', () => ({
+  useRoomRows: () => ({ rows: mockRoomRows, reload: mockReloadRooms, failed: mockRoomsFailed }),
+}))
+const mockOfferCard = jest.fn()
+jest.mock('../../src/modules/rooms/components/RoomOfferCard', () => ({
+  __esModule: true,
+  default: (props: unknown) => {
+    mockOfferCard(props)
+    return null
+  },
+}))
+jest.mock('../../src/modules/rooms/components/RoomMessageRow', () => {
+  const { createElement } = jest.requireActual('react')
+  const { Pressable } = jest.requireActual('react-native')
+  return {
+    __esModule: true,
+    default: ({ row, onOpen }: { row: { roomId: string }; onOpen: (roomId: string) => void }) =>
+      createElement(Pressable, { testID: `room:${row.roomId}`, onPress: () => onOpen(row.roomId) }),
+  }
+})
 
 const connection = (
   id: string,
@@ -111,6 +137,8 @@ const opened = (tree: ReturnType<typeof render>) => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockRoomRows = []
+  mockRoomsFailed = false
   mockLinks = new Map()
   mockUnread = {}
   ;(useConnections as jest.Mock).mockReturnValue({ records, loading: false })
@@ -265,5 +293,144 @@ describe('search by name (L5)', () => {
   test('nothing to search before the first conversation', () => {
     mockSaid = []
     expect(list(false).queryByTestId(testIdWithKey('MessagesSearch'))).toBeNull()
+  })
+})
+
+describe('rooms in Messages (R1)', () => {
+  const LAB = 'did:webvh:lab'
+  const VTC = 'did:webvh:vtc'
+  const roomRow = (roomId: string, communityDid: string, communityName: string, at?: Date) => ({
+    key: roomId,
+    roomId,
+    roomName: `Room ${roomId}`,
+    nameFrom: 'name',
+    communityDid,
+    communityName,
+    lastActivityAt: at,
+    unread: 0,
+  })
+  // Newest first, around the people: Bob's latest two exchanges are 25 Oct, Ada and Bob's first 15 Oct.
+  const threeRooms = () => [
+    roomRow('r-new', LAB, 'Keyring Lab', new Date(Date.UTC(2026, 9, 26))),
+    roomRow('r-mid', VTC, 'Test VTC', new Date(Date.UTC(2026, 9, 20))),
+    roomRow('r-empty', LAB, 'Keyring Lab'),
+  ]
+  const order = (tree: ReturnType<typeof render>) =>
+    tree
+      .queryAllByTestId(/^room:|^com\.ariesbifold:id\/Contact$/)
+      .map((node) => (String(node.props.testID).startsWith('room:') ? node.props.testID : 'person'))
+  const chip = (tree: ReturnType<typeof render>, id: string, n = 0) =>
+    tree.getAllByTestId(testIdWithKey(`MessagesChip${id}`))[n]
+  const lastCard = () => mockOfferCard.mock.calls[mockOfferCard.mock.calls.length - 1]?.[0]
+
+  test('people and rooms in one list, newest first; a room with nothing in it yet last', () => {
+    mockRoomRows = threeRooms()
+    expect(order(list(false))).toEqual([
+      'room:r-new',
+      'person',
+      'person',
+      'room:r-mid',
+      'person',
+      'person',
+      'room:r-empty',
+    ])
+  })
+
+  test('no rooms: no chips, and the list is the conversations alone', () => {
+    const tree = list(false)
+    expect(tree.queryByTestId(testIdWithKey('MessagesChips'))).toBeNull()
+    expect(order(tree)).toEqual(['person', 'person', 'person', 'person'])
+  })
+
+  test('chips: People shows the conversations; a community only its rooms; All everything again', () => {
+    mockRoomRows = threeRooms()
+    const tree = list(false)
+    fireEvent.press(chip(tree, 'People'))
+    expect(order(tree)).toEqual(['person', 'person', 'person', 'person'])
+    // Communities A to Z: Keyring Lab, then Test VTC.
+    fireEvent.press(chip(tree, 'Community', 0))
+    expect(order(tree)).toEqual(['room:r-new', 'room:r-empty'])
+    expect(chip(tree, 'Community', 0).props.accessibilityState).toEqual({ selected: true })
+    fireEvent.press(chip(tree, 'All'))
+    expect(order(tree)).toHaveLength(7)
+  })
+
+  test('the offers card: every offer under All, a community’s under its chip, none under People', () => {
+    mockRoomRows = threeRooms()
+    const tree = list(false)
+    expect(lastCard()).toMatchObject({ communityDid: undefined })
+    fireEvent.press(chip(tree, 'Community', 1))
+    expect(lastCard()).toMatchObject({ communityDid: VTC })
+    mockOfferCard.mockClear()
+    fireEvent.press(chip(tree, 'People'))
+    expect(mockOfferCard).not.toHaveBeenCalled()
+  })
+
+  test('no rooms yet: no chips, but the offers card is there, for every offer (a first room arrives as one)', () => {
+    const tree = list(false)
+    expect(tree.queryByTestId(testIdWithKey('MessagesChips'))).toBeNull()
+    expect(mockOfferCard).toHaveBeenCalled()
+    expect(lastCard()).toMatchObject({ communityDid: undefined })
+  })
+
+  test('rooms that could not be read: said once, with Try again; the people and the rooms read before stay', () => {
+    mockRoomRows = threeRooms()
+    mockRoomsFailed = true
+    const tree = list(false)
+    expect(tree.getByTestId(testIdWithKey('MessagesRoomsFailed'))).toBeTruthy()
+    expect(order(tree)).toHaveLength(7)
+    fireEvent.press(tree.getByTestId(testIdWithKey('MessagesRoomsTryAgain')))
+    expect(mockReloadRooms).toHaveBeenCalledTimes(1)
+    // People shows no room, so nothing about rooms either.
+    fireEvent.press(chip(tree, 'People'))
+    expect(tree.queryByTestId(testIdWithKey('MessagesRoomsFailed'))).toBeNull()
+  })
+
+  test('rooms read fine: no failure line', () => {
+    mockRoomRows = threeRooms()
+    expect(list(false).queryByTestId(testIdWithKey('MessagesRoomsFailed'))).toBeNull()
+  })
+
+  test('search finds a room by its community’s name, within the chip; People never finds a room', () => {
+    mockRoomRows = threeRooms()
+    const tree = list(false)
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('MessagesSearch')), 'lab')
+    expect(order(tree)).toEqual(['room:r-new', 'room:r-empty'])
+    fireEvent.press(chip(tree, 'People'))
+    expect(order(tree)).toEqual([])
+    expect(tree.getByTestId(testIdWithKey('MessagesNoMatch'))).toBeTruthy()
+  })
+
+  test('a room opens under My Agent, with "Your agent" kept below it; an offer opens its screen there too', () => {
+    mockRoomRows = threeRooms()
+    const tree = list(false)
+    fireEvent.press(tree.getByTestId('room:r-mid'))
+    expect(navigation.navigate).toHaveBeenCalledWith(Stacks.TabStack, {
+      screen: TabStacks.MyAgentStack,
+      params: { screen: Screens.Room, params: { roomId: 'r-mid' }, initial: false },
+    })
+    lastCard().onOpen('offer-1')
+    expect(navigation.navigate).toHaveBeenLastCalledWith(Stacks.TabStack, {
+      screen: TabStacks.MyAgentStack,
+      params: { screen: Screens.RoomOffer, params: { offerRef: 'offer-1' }, initial: false },
+    })
+  })
+
+  test('a community chip whose last room has gone falls back to All', () => {
+    mockRoomRows = threeRooms()
+    const state = { ...testDefaultState }
+    const ui = () => (
+      <StoreContext.Provider value={[state, () => undefined]}>
+        <BasicAppContext>
+          <Messages navigation={navigation as never} />
+        </BasicAppContext>
+      </StoreContext.Provider>
+    )
+    const tree = render(ui())
+    fireEvent.press(chip(tree, 'Community', 1))
+    expect(order(tree)).toEqual(['room:r-mid'])
+    mockRoomRows = threeRooms().filter((room) => room.communityDid !== VTC)
+    tree.rerender(ui())
+    expect(order(tree)).toEqual(['room:r-new', 'person', 'person', 'person', 'person', 'room:r-empty'])
   })
 })

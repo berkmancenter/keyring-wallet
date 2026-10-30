@@ -2797,7 +2797,11 @@
     "Undo": "Annuler",
     "Search": "Rechercher",
     "SearchClear": "Effacer la recherche",
-    "NoMatch": "Aucune discussion ne correspond à « {{query}} »"
+    "NoMatch": "Aucune discussion ne correspond à « {{query}} »",
+    "ChipsLabel": "Afficher",
+    "ChipAll": "Tout",
+    "ChipPeople": "Personnes",
+    "RoomsFailed": "Impossible de lire vos salons. Keyring réessaie bientôt."
   },
   "Relationship": {
     "ResignUnavailable": "Signer à nouveau : vos cartes sont déjà signées avec du matériel sécurisé.",

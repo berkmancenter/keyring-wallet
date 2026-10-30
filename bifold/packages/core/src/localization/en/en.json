@@ -2849,7 +2849,11 @@
     "Undo": "Undo",
     "Search": "Search",
     "SearchClear": "Clear search",
-    "NoMatch": "No chats match “{{query}}”"
+    "NoMatch": "No chats match “{{query}}”",
+    "ChipsLabel": "Show",
+    "ChipAll": "All",
+    "ChipPeople": "People",
+    "RoomsFailed": "Couldn't read your rooms. Keyring tries again soon."
   },
   "Relationship": {
     "ResignUnavailable": "Sign again: your cards are already signed with secure hardware.",

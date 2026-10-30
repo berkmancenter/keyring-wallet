@@ -3,11 +3,20 @@ import { useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../components/buttons/Button'
+import {
+  ALL,
+  communityChips,
+  itemsForChip,
+  mergeByTime,
+  sameChip,
+  searchItems,
+  type MessagesChip,
+} from '../components/listItems/messagesListItems'
 import IconButton, { ButtonLocation } from '../components/buttons/IconButton'
 import { ThemedText } from '../components/texts/ThemedText'
 import { useStore } from '../contexts/store'
@@ -15,18 +24,24 @@ import { connectionDisplayName } from '../hooks/connections'
 import { useConnectionActivity } from '../hooks/useConnectionActivity'
 import { pendingChatDeletes } from '../modules/chat/pendingChatDeletes'
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
-import { conversations, isConversationPartner, messageRows, searchRows } from '../modules/vrc/contacts/messageRows'
+import RoomMessageRow from '../modules/rooms/components/RoomMessageRow'
+import RoomOfferCard from '../modules/rooms/components/RoomOfferCard'
+import { roomTitle } from '../modules/rooms/components/RoomRow'
+import { useRoomRows } from '../modules/rooms/useRoomRows'
+import { communityLabelOf } from '../modules/trust-tasks/screens/communityName'
+import { conversations, isConversationPartner, messageRows, type MessageRow } from '../modules/vrc/contacts/messageRows'
 import { useVrcNameCache } from '../modules/vrc/context/VrcNameCacheProvider'
 import { useConnectionRelationships } from '../modules/vrc/contacts/useContactFacts'
 import { useContactLinks } from '../modules/vrc/contacts/useContactLinks'
 import { useTheme } from '../contexts/theme'
-import { MessageStackParams, Screens, Stacks } from '../types/navigators'
+import { MessageStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
 import { messageWakeFetching, useReportMessagesListFocus } from '../utils/messageWake'
 import { testIdWithKey } from '../utils/testable'
 import { TOKENS, useServices } from '../container-api'
 
 const SEARCH_FIELD = '#EAE6EA'
 const SEARCH_HINT = '#666666'
+const CHIP_BORDER = '#D3CCD3'
 
 interface MessagesProps {
   navigation: StackNavigationProp<MessageStackParams, Screens.Messages>
@@ -82,18 +97,43 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
     [connections, relationshipOf, contactLinks, activity, unreadByConnection, deleting]
   )
 
-  // Search (L5): by name only, as approved, never the words of a message; the name each row shows.
+  // Rooms in Messages (R1): every room the member holds is a row too, merged with the conversations newest first.
+  const { rows: roomRows, failed: roomsFailed, reload: reloadRooms } = useRoomRows()
+  const items = useMemo(
+    () => mergeByTime(rows, (row) => Math.max(...row.connectionIds.map((id) => activity(id))), roomRows),
+    [rows, roomRows, activity]
+  )
+  // The chips: All, People, then one per community that has a room. Only shown once there is a room to tell apart.
+  const chips = useMemo(() => communityChips(roomRows), [roomRows])
+  const [picked, setPicked] = useState<MessagesChip>(ALL)
+  // A community chip whose last room has gone falls back to All.
+  const chip = picked.kind === 'community' && !chips.some((c) => c.communityDid === picked.communityDid) ? ALL : picked
+  const chipItems = useMemo(() => itemsForChip(items, chip), [items, chip])
+
+  // Search (L5): by name only, as approved, never the words of a message, within the chip. A person by the name their
+  // row shows; a room by the title its row shows, or its community's name.
   const [query, setQuery] = useState('')
   const { getVrcName } = useVrcNameCache()
   const shown = useMemo(
     () =>
-      searchRows(
-        rows,
-        (row) =>
+      searchItems(
+        chipItems,
+        (row: MessageRow) =>
           connectionDisplayName(row.connection, store.preferences.alternateContactNames, getVrcName(row.connection.id)),
-        query
+        query,
+        (room) => roomTitle(t, { name: room.roomName, nameFrom: room.nameFrom })
       ),
-    [rows, query, store.preferences.alternateContactNames, getVrcName]
+    [chipItems, query, store.preferences.alternateContactNames, getVrcName, t]
+  )
+
+  // A room and an offer open under My Agent, where their screens are, with "Your agent" kept below them.
+  const openUnderMyAgent = useCallback(
+    (screen: Screens, params: object) =>
+      (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(Stacks.TabStack, {
+        screen: TabStacks.MyAgentStack,
+        params: { screen, params, initial: false },
+      }),
+    [navigation]
   )
 
   const style = StyleSheet.create({
@@ -115,6 +155,24 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
     },
     searchInput: { flex: 1, minWidth: 0, fontSize: 16, color: '#010B13', paddingVertical: 0 },
     noMatch: { padding: 24, textAlign: 'center', color: '#4A4A4A' },
+    chips: { gap: 8, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8 },
+    chip: {
+      minHeight: 32,
+      paddingHorizontal: 14,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: CHIP_BORDER,
+      backgroundColor: '#FFFFFF',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    chipOn: { backgroundColor: ColorPalette.brand.primary, borderColor: ColorPalette.brand.primary },
+    chipText: { fontSize: 15, color: '#4A4A4A' },
+    chipTextOn: { color: '#FFFFFF', fontWeight: '600' },
+    roomsFailed: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 16, marginVertical: 6 },
+    roomsFailedText: { flex: 1, fontSize: 14, lineHeight: 19, color: '#4A4A4A' },
+    roomsFailedAction: { fontSize: 14, fontWeight: '700', color: ColorPalette.brand.primary },
     fetchingText: { color: ColorPalette.grayscale.mediumGrey },
     empty: {
       flex: 1,
@@ -195,13 +253,21 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
         contentContainerStyle={{ flexGrow: 1 }}
         data={shown}
         keyboardShouldPersistTaps="handled"
-        keyExtractor={(row) => row.key}
-        renderItem={({ item: row }) => (
-          <ContactListItem contact={row.connection} connectionIds={row.connectionIds} navigation={navigation as any} />
-        )}
+        keyExtractor={(item) => item.key}
+        renderItem={({ item }) =>
+          item.kind === 'room' ? (
+            <RoomMessageRow row={item.row} onOpen={(roomId) => openUnderMyAgent(Screens.Room, { roomId })} />
+          ) : (
+            <ContactListItem
+              contact={item.row.connection}
+              connectionIds={item.row.connectionIds}
+              navigation={navigation as any}
+            />
+          )
+        }
         ListEmptyComponent={() =>
-          // Conversations, but none by that name: said so, not the "no chats yet" state.
-          rows.length > 0 ? (
+          // Something under this chip, but nothing by that name: said so, not the "no chats yet" state.
+          chipItems.length > 0 ? (
             <ThemedText style={style.noMatch} testID={testIdWithKey('MessagesNoMatch')}>
               {t('MessagesList.NoMatch', { query: query.trim(), interpolation: { escapeValue: false } })}
             </ThemedText>
@@ -235,7 +301,7 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
-            {rows.length > 0 ? (
+            {items.length > 0 ? (
               <View style={style.search}>
                 <Icon name="magnify" size={20} color={SEARCH_HINT} />
                 <TextInput
@@ -264,6 +330,66 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
                 ) : null}
               </View>
             ) : null}
+            {chips.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={style.chips}
+                accessibilityLabel={t('MessagesList.ChipsLabel')}
+                testID={testIdWithKey('MessagesChips')}
+              >
+                {[
+                  { chip: ALL, label: t('MessagesList.ChipAll'), id: 'All' },
+                  { chip: { kind: 'people' } as MessagesChip, label: t('MessagesList.ChipPeople'), id: 'People' },
+                  ...chips.map((c) => ({
+                    chip: { kind: 'community', communityDid: c.communityDid } as MessagesChip,
+                    label: c.communityName ? String(c.communityName) : communityLabelOf(c.communityDid, t),
+                    id: 'Community',
+                  })),
+                ].map(({ chip: option, label, id }) => {
+                  const on = sameChip(option, chip)
+                  return (
+                    <Pressable
+                      key={option.kind === 'community' ? option.communityDid : option.kind}
+                      onPress={() => setPicked(option)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on }}
+                      accessibilityLabel={label}
+                      hitSlop={{ top: 6, bottom: 6 }}
+                      style={[style.chip, on && style.chipOn]}
+                      testID={testIdWithKey(`MessagesChip${id}`)}
+                    >
+                      {on && option.kind === 'community' ? <Icon name="check" size={14} color="#FFFFFF" /> : null}
+                      <Text style={[style.chipText, on && style.chipTextOn]} maxFontSizeMultiplier={1.5}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </ScrollView>
+            ) : null}
+            {/* Rooms that couldn't be read are said once, above the list; the people, and any rooms read before, stay. */}
+            {roomsFailed && chip.kind !== 'people' ? (
+              <View style={style.roomsFailed} testID={testIdWithKey('MessagesRoomsFailed')}>
+                <ThemedText style={style.roomsFailedText}>{t('MessagesList.RoomsFailed')}</ThemedText>
+                <Pressable
+                  onPress={reloadRooms}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  testID={testIdWithKey('MessagesRoomsTryAgain')}
+                >
+                  <ThemedText style={style.roomsFailedAction}>{t('Rooms.TryAgain')}</ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
+            {/* Room offers wait at the top: every one under All (a first room arrives as one, so with no chips too), a
+                community's under its chip, none under People. */}
+            {chip.kind === 'people' ? null : (
+              <RoomOfferCard
+                communityDid={chip.kind === 'community' ? chip.communityDid : undefined}
+                onOpen={(offerId) => openUnderMyAgent(Screens.RoomOffer, { offerRef: offerId })}
+              />
+            )}
             {fetchingNew ? (
               <View style={style.fetching} testID={testIdWithKey('MessagesFetchingNew')}>
                 <ActivityIndicator color={ColorPalette.brand.primary} />

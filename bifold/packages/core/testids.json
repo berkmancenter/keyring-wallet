@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "045c457f915409b2acaa5a29dae294ecc8af7c37",
+  "generatedFrom": "931b5adda146a957b97e62aaab7dd7d597b87b08",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -784,6 +784,7 @@
     "MemberCardWhose": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
     "Message": ["src/navigators/TabStack.tsx"],
     "Messages": ["src/modules/vrc/screens/WhatAreConnections.tsx"],
+    "MessagesChips": ["src/screens/Messages.tsx"],
     "MessagesEmpty": ["src/screens/Messages.tsx"],
     "MessagesEmptyAddContact": ["src/screens/Messages.tsx"],
     "MessagesEmptyNewMessage": ["src/screens/Messages.tsx"],
@@ -797,6 +798,8 @@
     ],
     "MessagesNewMessage": ["src/screens/Messages.tsx"],
     "MessagesNoMatch": ["src/screens/Messages.tsx"],
+    "MessagesRoomsFailed": ["src/screens/Messages.tsx"],
+    "MessagesRoomsTryAgain": ["src/screens/Messages.tsx"],
     "MessagesSearch": ["src/screens/Messages.tsx"],
     "MessagesSearchClear": ["src/screens/Messages.tsx"],
     "MyAgent": ["src/navigators/TabStack.tsx"],
@@ -1491,6 +1494,7 @@
     "JoinWay_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "KeepMessages_": ["src/screens/Settings.tsx"],
     "MemberCardField_": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
+    "MessagesChip": ["src/screens/Messages.tsx"],
     "MyProfilesRow-": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "OfferChoice_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],
     "OfferDevice_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],

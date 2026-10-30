@@ -2699,7 +2699,11 @@
     "Undo": "Desfazer",
     "Search": "Buscar",
     "SearchClear": "Limpar a busca",
-    "NoMatch": "Nenhuma conversa corresponde a “{{query}}”"
+    "NoMatch": "Nenhuma conversa corresponde a “{{query}}”",
+    "ChipsLabel": "Mostrar",
+    "ChipAll": "Tudo",
+    "ChipPeople": "Pessoas",
+    "RoomsFailed": "Não foi possível ler suas salas. O Keyring tenta de novo em breve."
   },
   "Relationship": {
     "ResignUnavailable": "Assinar de novo: seus cartões já estão assinados com hardware seguro.",
