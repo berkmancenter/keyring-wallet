@@ -18,6 +18,11 @@
  *   draft-emoji-then-send     A types words, adds 😀 from the composer's picker and taps Send at once: the field ends up
  *                             empty and Send goes (a Send handled in the render that hands text over used to put the
  *                             sent words back), and B gets the message
+ * These rows read the fixes end to end; they are not the regression guard. That is the unit tests: #765's in
+ * modules/chat/__tests__/useChatDraft.test.ts, #763's "sent" block in __tests__/components/chat/useComposerText.test.tsx
+ * (with its own control: "without it, the sent words stay in the field"). No pre-fix build ran these rows, and
+ * draft-emoji-then-send closes the picker before Send, which may settle the hand-over and close #763's race window: its
+ * green says the send path works, not that the race cannot come back.
  *
  * Emoji picker (bifold #574; rich messaging Step 2, W2). Each side reads the other's change from its own screen:
  *   pair-react-picker         B sends A a message; A long-presses it, opens the full picker from the reaction bar's
@@ -177,12 +182,11 @@ async function sendChat(d, text) {
   await sleep(2000);
 }
 
-/** The open chat's field as typed, '' while it shows only its placeholder. */
+/** The open chat's field as typed. An empty field has no value: RN draws its placeholder as a separate element. */
 async function fieldText(d) {
   const input = await d.$("-ios class chain:**/XCUIElementTypeTextView");
   if (!(await input.isExisting())) return "(no field)";
-  const v = ((await input.getAttribute("value").catch(() => "")) || "").trim();
-  return v === "Message" ? "" : v;
+  return ((await input.getAttribute("value").catch(() => "")) || "").trim();
 }
 
 /** Type `text` into the open chat's field and read it back: the simulator's keyboard can move a character. */
@@ -403,6 +407,9 @@ try {
       return { ok: shown === DRAFT && after === DRAFT, detail: `reopened: "${shown}" · after leaving without typing, a restart and the PIN: "${after}" (want "${DRAFT}")` };
     });
     await rows.row("draft-sent-not-back", async () => {
+      // Opens the chat itself, not relying on where the row above ended (a draft kept over a reopen is that row's claim).
+      await openChatWith(a, B);
+      await sleep(3000);
       const before = await fieldText(a);
       await tapSend(a);
       const onB = Boolean(await waitForText(b, DRAFT));
