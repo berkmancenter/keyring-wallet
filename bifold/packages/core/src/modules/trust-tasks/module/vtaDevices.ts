@@ -259,9 +259,12 @@ export async function registerThisDevice(
   }
 }
 
-/** Tell the agent this phone is still here. */
-export async function heartbeat(port: AgentDevicePort): Promise<void> {
-  await sendHeartbeat(port, {})
+/**
+ * Tell the agent this phone is still here, with `ext` when the beat carries one (the sign-in's UV key,
+ * oobSignInAgent enrolUvKey).
+ */
+export async function heartbeat(port: AgentDevicePort, ext?: Record<string, unknown>): Promise<void> {
+  await sendHeartbeat(port, ext ? { ext } : {})
 }
 
 /** A heartbeat in the newest version the agent serves (0.3, else 0.2). */

@@ -50,7 +50,7 @@ import {
   type SignInFailure,
 } from './oobSignIn'
 import type { VtaClient, VtaSealedSecret, VtaVaultEntry } from './VtaClient'
-import { AGENT_DEVICE_TASK, defaultDeviceName, registerThisDevice } from './vtaDevices'
+import { defaultDeviceName, heartbeat as beatAgent, registerThisDevice } from './vtaDevices'
 import { VtiRefusal } from './vtiAgent'
 import { didKeyVerificationMethod, getUvDid, resetUvKey, uvSign, UvKeyError } from './uvKey'
 
@@ -697,9 +697,18 @@ export function vtaSignInPort(client: VtaClient, device: { platform: string; now
     vaultList: (filters) => client.vaultList(filters),
     vaultUpsert: (payload) => client.vaultUpsert(payload),
     sealVaultSecret: (secret) => client.sealVaultSecret(secret),
-    heartbeat: async (ext) => {
-      await client.task(AGENT_DEVICE_TASK.heartbeat, { ext })
-    },
+    // In the newest version the agent serves (0.3, else 0.2): from vta-service 0.67 (#2309) it serves only 0.3, and
+    // a beat at 0.2 alone ended every sign-in "Your agent needs an update" (IN-390). Newest first, so a current agent
+    // pays nothing and an older one one refused beat, remembered per agent for the session (taskVersions); it steps
+    // down only on a version the agent says it does not serve, never on another refusal.
+    heartbeat: (ext) =>
+      beatAgent(
+        {
+          managerDid: client.managerDid,
+          task: <T>(type: string, payload: Record<string, unknown>) => client.task<T>(type, payload),
+        },
+        ext
+      ),
     register: (ext) =>
       registerThisDevice(
         {
