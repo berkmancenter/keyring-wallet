@@ -55,6 +55,10 @@ export const RoomPostBubble: React.FC<{
       borderColor: mine ? ColorPalette.brand.primary : ColorPalette.grayscale.lightGrey,
     },
     meta: { color: muted, fontSize: 12 },
+    // Another member's name in the brand's colour, as mocked (header B); the member's own "You" stays quiet.
+    author: mine
+      ? { color: ColorPalette.grayscale.white, fontSize: 13, opacity: 0.85 }
+      : { color: ColorPalette.brand.primary, fontSize: 13, fontWeight: '600' },
     agent: { fontWeight: '700' },
     text: { color: ink },
     quiet: { color: muted, fontStyle: 'italic' },
@@ -64,7 +68,7 @@ export const RoomPostBubble: React.FC<{
   const openAuthor = !mine && by && onOpenAuthor ? () => onOpenAuthor(by) : undefined
   const time = post.at ? timeLabel(post.at, words, use24h) : undefined
   const meta = (
-    <ThemedText style={styles.meta}>
+    <ThemedText style={styles.author}>
       {author}
       {post.byAgent ? (
         <ThemedText style={[styles.meta, styles.agent]} testID={testIdWithKey('RoomPostAgent')}>

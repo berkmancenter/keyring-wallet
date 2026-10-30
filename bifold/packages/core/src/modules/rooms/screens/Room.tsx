@@ -421,6 +421,7 @@ const Room: React.FC = () => {
                   ? (t('Rooms.PostingAs', { who: me.name, interpolation: { escapeValue: false } }) as string)
                   : (t('Rooms.PostingAsAddName') as string)
               }
+              postingAsName={me.name}
               onPressPostingAs={() => setSheetFor(room.actingAs)}
               canAttach={canAttach}
               attachRequest={attachRequest}
