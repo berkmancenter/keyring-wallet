@@ -97,6 +97,8 @@ export enum Screens {
   RoomsHome = 'Rooms',
   Room = 'Room',
   RoomOffer = 'Room offer',
+  CommunityMembers = 'Community members',
+  CommunityCard = 'Your community card',
 }
 
 export enum Stacks {
@@ -155,6 +157,9 @@ export type TabStackParams = {
 export type MyAgentStackParams = {
   [Screens.MyAgent]: undefined
   [Screens.VtiCommunity]: { communityDid: string }
+  // A member's view of a community's directory: its members, and their own card there.
+  [Screens.CommunityMembers]: { communityDid: string }
+  [Screens.CommunityCard]: { communityDid: string }
   [Screens.VtiVetting]: undefined
   /**
    * `ticket`: a vetting ticket the person already pasted somewhere else — the

@@ -23,6 +23,7 @@ import { ToastType } from '../../../components/toast/BaseToast'
 import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { CommunityDirectorySection } from '../../directory/components/CommunityDirectorySection'
 import { dropDirectoryNames } from '../../directory/names'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
@@ -324,6 +325,8 @@ const VtiCommunity: React.FC = () => {
         ) : null}
         {/* A member's rooms and room offers in this community, beside membership and vetting (rooms flag on only). */}
         {membership ? <CommunityRoomsSection communityDid={communityDid} /> : null}
+        {/* The community's member directory: its members, and the member's own card there. */}
+        {membership ? <CommunityDirectorySection communityDid={communityDid} /> : null}
 
         {membership || heldElsewhere || standingUnknown ? null : (
           <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.WhatIsAsked')}</Text>

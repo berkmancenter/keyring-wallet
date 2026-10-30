@@ -20,6 +20,7 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import SafeAreaModal from '../../../components/modals/SafeAreaModal'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { initialsOf } from '../../../utils/initials'
 import { testIdWithKey } from '../../../utils/testable'
 import { communityLabelOf } from '../../trust-tasks/screens/communityName'
 import type { Identity } from '../types'
@@ -31,15 +32,7 @@ import { useDirectoryName } from './memberWords'
 import { memberText } from './roomWords'
 
 /** Up to two letters for a name's circle; "?" when there is no name. */
-export const initialsOf = (name?: string): string => {
-  const letters = (name ?? '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0].toUpperCase())
-    .join('')
-  return letters || '?'
-}
+export { initialsOf }
 
 export interface RoomIdentitySheetProps {
   /** Whose sheet; none closes it. */
