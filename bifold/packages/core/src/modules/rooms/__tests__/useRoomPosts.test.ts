@@ -184,7 +184,7 @@ describe('a room in view', () => {
     expect(polls(service)).toHaveLength(0)
   })
 
-  test('a failed poll changes nothing on screen and waits two ticks before the next', async () => {
+  test('a failed poll keeps the posts shown and waits two ticks before the next', async () => {
     const { service, write } = roomWith([note('a', 1)])
     const { result } = await open(service)
     const before = result.current.posts
@@ -200,6 +200,86 @@ describe('a room in view', () => {
     await tick()
     expect(polls(service)).toHaveLength(2)
     expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+  })
+
+  test('a failed poll is said once: more failures redraw nothing, and the next success clears it with one redraw', async () => {
+    const { service } = roomWith([note('a', 1)])
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders++
+      return useRoomPosts(service, ROOM, ME, true, true)
+    })
+    await flush()
+    await flush()
+    expect(result.current.pollFailed).toBe(false)
+    service.listNotes.mockRejectedValueOnce(new Error('the agent did not answer'))
+    await tick()
+    expect(result.current.pollFailed).toBe(true)
+    const afterFirst = renders
+
+    // The skipped ticks, then a second failure: still failed, and nothing redrawn.
+    for (let i = 0; i < POLL_SKIPS_AFTER_FAILURE; i++) await tick()
+    service.listNotes.mockRejectedValueOnce(new Error('still not answering'))
+    await tick()
+    expect(polls(service)).toHaveLength(2)
+    expect(result.current.pollFailed).toBe(true)
+    expect(renders).toBe(afterFirst)
+
+    // A success with nothing new clears it: one redraw, for the flip alone.
+    for (let i = 0; i < POLL_SKIPS_AFTER_FAILURE; i++) await tick()
+    await tick()
+    expect(polls(service)).toHaveLength(3)
+    expect(result.current.pollFailed).toBe(false)
+    expect(renders).toBe(afterFirst + 1)
+
+    // And a success while none is said redraws nothing.
+    await tick()
+    expect(polls(service)).toHaveLength(4)
+    expect(renders).toBe(afterFirst + 1)
+  })
+
+  test('pollNow asks at once, without waiting out the skipped ticks; a success clears the failure', async () => {
+    const { service, write } = roomWith([note('a', 1)])
+    const { result } = await open(service)
+    service.listNotes.mockRejectedValueOnce(new Error('the agent did not answer'))
+    await tick()
+    expect(result.current.pollFailed).toBe(true)
+    write(note('b', 2))
+    await act(async () => result.current.pollNow())
+    await flush()
+    expect(polls(service)).toHaveLength(2)
+    expect(polls(service)[1][1]).toEqual({ sinceVersion: 1 })
+    expect(result.current.pollFailed).toBe(false)
+    await flush()
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+  })
+
+  test('pollNow keeps one ask in flight: taps while it is asked send nothing more, and a tap after it fails asks once', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const { result } = await open(service)
+    service.listNotes.mockRejectedValueOnce(new Error('the agent did not answer'))
+    await tick()
+    expect(result.current.pollFailed).toBe(true)
+    let fail: (e: Error) => void = () => undefined
+    service.listNotes.mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)))
+    await act(async () => {
+      for (let i = 0; i < 10; i++) result.current.pollNow()
+    })
+    expect(polls(service)).toHaveLength(2)
+    await act(async () => fail(new Error('still not answering')))
+    await flush()
+    expect(result.current.pollFailed).toBe(true)
+    await act(async () => result.current.pollNow())
+    await flush()
+    expect(polls(service)).toHaveLength(3)
+  })
+
+  test('pollNow asks nothing while the room is not polled', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const { result } = await open(service, false)
+    await act(async () => result.current.pollNow())
+    await flush()
+    expect(polls(service)).toHaveLength(0)
   })
 
   test('a standing conflict shows once, then redraws nothing tick after tick', async () => {

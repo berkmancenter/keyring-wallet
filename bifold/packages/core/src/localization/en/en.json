@@ -2970,6 +2970,7 @@
     "PostRemoved": "Removed",
     "PostUnread": "This post couldn't be read.",
     "PostsFailed": "Couldn't read this room's posts. Pull down to try again.",
+    "RefreshFailed": "Couldn't refresh",
     "PostsNone": "No posts yet.",
     "LoadOlder": "Load older posts",
     "Offer": "Room offer",

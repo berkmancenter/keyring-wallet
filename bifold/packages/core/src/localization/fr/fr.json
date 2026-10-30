@@ -2918,6 +2918,7 @@
     "PostRemoved": "Retiré",
     "PostUnread": "Ce message n'a pas pu être lu.",
     "PostsFailed": "Impossible de lire les messages de ce salon. Tirez vers le bas pour réessayer.",
+    "RefreshFailed": "Actualisation impossible",
     "PostsNone": "Aucun message pour l'instant.",
     "LoadOlder": "Charger les messages plus anciens",
     "Offer": "Invitation à un salon",

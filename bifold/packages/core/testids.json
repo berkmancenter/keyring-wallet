@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "bf3bdaaa3b32c60ef01ab893a011411e5fc7a9c8",
+  "generatedFrom": "c8b73dd9d58a5869984962d755e854ce856fe286",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -995,6 +995,8 @@
     "RoomOfferUnavailable": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferUntil": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOffers": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomPollFailed": ["src/modules/rooms/screens/Room.tsx"],
+    "RoomPollTryAgain": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostAgent": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostAuthor": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostCancel": ["src/modules/rooms/components/RoomPostBubble.tsx"],

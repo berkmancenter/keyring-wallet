@@ -13,6 +13,9 @@
  * The agent client sends one task at a time, so a poll is skipped while a listing of the room is still being asked:
  * it never queues behind itself, and a member's own post waits behind one listing at most.
  *
+ * A poll that fails says so (`pollFailed`) until a listing succeeds, and `pollNow` asks again at once. Only the change
+ * redraws: a failure repeated while one is already said, or a success while none is, redraws nothing.
+ *
  * @module rooms/useRoomPosts
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -52,6 +55,10 @@ export interface RoomPosts {
   loadingOlder: boolean
   loadOlder: () => void
   refresh: () => void
+  /** The last poll failed. Cleared by the next listing that succeeds; it changes only on that flip. */
+  pollFailed: boolean
+  /** Asks for new posts at once, without waiting out the ticks a failure skips. Nothing while the room isn't polled. */
+  pollNow: () => void
 }
 
 /** The newest version a listing holds: a poll asks for the records above it. 0 for an empty room. */
@@ -127,6 +134,16 @@ export function useRoomPosts(
   // Ticks still to pass after a failed poll. Kept across leaving and coming back, so a member whose agent is failing
   // doesn't ask again on every return; a listing that succeeds clears them.
   const skips = useRef(0)
+  // Whether the last poll failed, as said on screen. Mirrored in a ref so that only a flip sets state.
+  const [pollFailed, setPollFailed] = useState(false)
+  const pollFailedNow = useRef(false)
+  const notePoll = useCallback((failedNow: boolean) => {
+    if (pollFailedNow.current === failedNow) return
+    pollFailedNow.current = failedNow
+    setPollFailed(failedNow)
+  }, [])
+  // The poll of the room while it is polled, for `pollNow`.
+  const tickNow = useRef<(() => void) | undefined>(undefined)
   const reads = useRef<{ service?: RoomsService; roomId: string; notes: Map<string, Note> }>({
     roomId,
     notes: new Map(),
@@ -143,6 +160,7 @@ export function useRoomPosts(
         if (!current) return
         setListing({ notes: newestFirst(list.notes), check: list.check, complete: list.complete })
         setFailed(false)
+        notePoll(false)
       },
       () => {
         if (!current) return
@@ -153,7 +171,7 @@ export function useRoomPosts(
     return () => {
       current = false
     }
-  }, [service, roomId, enabled, generation])
+  }, [service, roomId, enabled, generation, notePoll])
 
   const listed = !!listing
   useEffect(() => {
@@ -169,30 +187,37 @@ export function useRoomPosts(
         service.listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) })
       ).then(
         (newer) => {
+          if (current) notePoll(false)
           const now = listingNow.current
           const merged = current && now ? mergeNewer(now, newer) : undefined
           if (!merged) return
           setListing(merged.listing)
-          // New posts go on top; the posts already shown stay shown.
+          // New posts go first (the chat draws them at its bottom); the posts already shown stay shown.
           if (merged.added > 0) setShown((n) => n + merged.added)
         },
         () => {
-          // Quietly: what is shown stays, and the next ticks give the agent room.
+          // What is shown stays, and the next ticks give the agent room. The first failure is said; more say nothing.
           skips.current = POLL_SKIPS_AFTER_FAILURE
+          if (current) notePoll(true)
         }
       )
     }
-    // No catch-up while a failure's ticks are still owed: they pass first, up to (skips + 1) ticks. Pull to refresh
-    // is the member's way out at once, and a listing that succeeds clears them.
+    // No catch-up while a failure's ticks are still owed: they pass first, up to (skips + 1) ticks. "Try again"
+    // (`pollNow`) is the member's way out at once, and a listing that succeeds clears them.
     if (resumed.current && skips.current === 0) tick()
     resumed.current = false
     const timer = setInterval(tick, ROOM_POLL_MS)
+    tickNow.current = () => {
+      skips.current = 0
+      tick()
+    }
     return () => {
       current = false
       clearInterval(timer)
       resumed.current = true
+      tickNow.current = undefined
     }
-  }, [service, roomId, enabled, live, listed])
+  }, [service, roomId, enabled, live, listed, notePoll])
 
   useEffect(() => {
     if (!service || !listing) return
@@ -229,6 +254,7 @@ export function useRoomPosts(
     setShown(POSTS_PAGE)
     setGeneration((g) => g + 1)
   }, [])
+  const pollNow = useCallback(() => tickNow.current?.(), [])
 
   return {
     posts,
@@ -240,5 +266,7 @@ export function useRoomPosts(
     loadingOlder,
     loadOlder,
     refresh,
+    pollFailed,
+    pollNow,
   }
 }
