@@ -2786,7 +2786,12 @@
     "TimerOn": "disappearing messages on",
     "RowLabel": "{{name}}, {{preview}}, {{when}}",
     "Unread_one": "{{count}} unread message",
-    "Unread_other": "{{count}} unread messages"
+    "Unread_other": "{{count}} unread messages",
+    "NewMessage": "New message",
+    "EmptyTitle": "No chats yet",
+    "EmptyBody": "Chats with your contacts show here. Each one is encrypted between your phones.",
+    "AddContact": "Add a contact",
+    "PickerEmpty": "No contacts yet. Add one to start a chat."
   },
   "Relationship": {
     "ResignUnavailable": "Sign again: your cards are already signed with secure hardware.",

@@ -1,7 +1,12 @@
-import { DidCommConnectionRecord, DidCommDidExchangeRole, DidCommDidExchangeState } from '@credo-ts/didcomm'
+import {
+  DidCommConnectionRecord,
+  DidCommConnectionType,
+  DidCommDidExchangeRole,
+  DidCommDidExchangeState,
+} from '@credo-ts/didcomm'
 
 import { NO_CONTACT_LINKS } from '../contactLinks'
-import { connectionToOpen, messageRows } from '../messageRows'
+import { connectionToOpen, conversations, isConversationPartner, messageRows } from '../messageRows'
 
 const connection = (id: string) =>
   new DidCommConnectionRecord({
@@ -90,5 +95,55 @@ describe('which connection to open', () => {
 
   test('a tie keeps the earlier', () => {
     expect(connectionToOpen(['a', 'b'], at({ a: 2, b: 2 }), unread({}))).toBe('a')
+  })
+})
+
+describe('conversations (L3)', () => {
+  const rows = messageRows([a, b, c, ada], relationshipOf, merged, () => 0)
+  const said = (times: Record<string, number>) => (id: string) => times[id] ?? -Infinity
+
+  test('only contacts with something said, newest first, by the newest message on any of their connections', () => {
+    // Bob's newest message is on his first exchange; Ada's is newer still.
+    expect(conversations(rows, said({ 'conn-a': 300, 'conn-c': 100, 'conn-ada': 400 })).map((r) => r.key)).toEqual([
+      'contact:did:ada:1',
+      'contact:did:bob:1',
+    ])
+  })
+
+  test('nothing said with a contact on any connection: no row', () => {
+    expect(conversations(rows, said({ 'conn-ada': 5 })).map((r) => r.key)).toEqual(['contact:did:ada:1'])
+    expect(conversations(rows, said({}))).toEqual([])
+  })
+
+  test('equal times keep the list order', () => {
+    expect(conversations(rows, said({ 'conn-a': 7, 'conn-ada': 7 })).map((r) => r.key)).toEqual([
+      'contact:did:bob:1',
+      'contact:did:ada:1',
+    ])
+  })
+})
+
+describe('someone to talk to', () => {
+  const build = (over: Partial<ConstructorParameters<typeof DidCommConnectionRecord>[0]> = {}) =>
+    new DidCommConnectionRecord({
+      id: 'x',
+      createdAt: new Date(Date.UTC(2026, 9, 15)),
+      state: DidCommDidExchangeState.Completed,
+      role: DidCommDidExchangeRole.Requester,
+      theirLabel: 'Ada',
+      ...over,
+    })
+
+  test('a completed connection to a person is', () => {
+    expect(isConversationPartner(build())).toBe(true)
+  })
+
+  test('never the mediator, a witness service, one not yet completed, or one hidden by name', () => {
+    expect(isConversationPartner(build({ connectionTypes: [DidCommConnectionType.Mediator] }))).toBe(false)
+    const witness = build({ theirLabel: 'keyring-witness' })
+    witness.metadata.set('witnessConnection', { witnessDid: 'did:example:w' })
+    expect(isConversationPartner(witness)).toBe(false)
+    expect(isConversationPartner(build({ state: DidCommDidExchangeState.RequestSent }))).toBe(false)
+    expect(isConversationPartner(build(), ['Ada'])).toBe(false)
   })
 })

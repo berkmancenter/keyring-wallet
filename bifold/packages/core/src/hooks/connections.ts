@@ -47,39 +47,41 @@ export const useOutOfBandByConnectionId = (connectionId: string): DidCommOutOfBa
  * 3. connection.theirLabel
  * 4. connection.alias
  * 5. connection.id (fallback)
- * 
+ *
  * This hook automatically updates when VRC credentials are received or when
  * the user changes the alternate contact name.
- * 
+ *
  * Performance optimized:
  * - Uses centralized VRC name cache (no per-component database lookups)
  * - Synchronous cache lookup (no async delays or loading states)
  * - Single source of truth updated when credentials change
- * 
+ *
  * @param connectionId - The connection ID to get the display name for
  * @returns The display name for the connection
  */
+/**
+ * A connection's name as the app shows it: the name the person gave it; else the name on the contact's card (the
+ * VRC issuer's, cached); else the connection's own label (getConnectionName). One rule for every place a name is
+ * shown or searched.
+ */
+export function connectionDisplayName(
+  connection: DidCommConnectionRecord | undefined,
+  alternateContactNames: Record<string, string>,
+  vrcName: string | null | undefined
+): string {
+  if (connection?.id && alternateContactNames[connection.id]) return alternateContactNames[connection.id]
+  if (vrcName) return vrcName
+  return getConnectionName(connection, alternateContactNames)
+}
+
 export const useConnectionDisplayName = (connectionId: string | undefined): string => {
   const connection = useConnectionById(connectionId ?? '')
   const [store] = useStore()
   const { getVrcName } = useVrcNameCache()
 
   // Memoize the final display name with proper priority
-  return useMemo(() => {
-    const alternateContactNames = store.preferences.alternateContactNames
-
-    // Priority 1: User-set alternate name
-    if (connection?.id && alternateContactNames[connection.id]) {
-      return alternateContactNames[connection.id]
-    }
-
-    // Priority 2: VRC issuer name (synchronous cache lookup)
-    const vrcName = getVrcName(connectionId)
-    if (vrcName) {
-      return vrcName
-    }
-
-    // Priority 3-5: Fall back to standard getConnectionName logic
-    return getConnectionName(connection, alternateContactNames)
-  }, [connection, connectionId, getVrcName, store.preferences.alternateContactNames])
+  return useMemo(
+    () => connectionDisplayName(connection, store.preferences.alternateContactNames, getVrcName(connectionId)),
+    [connection, connectionId, getVrcName, store.preferences.alternateContactNames]
+  )
 }

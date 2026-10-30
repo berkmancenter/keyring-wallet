@@ -2734,7 +2734,12 @@
     "TimerOn": "messages éphémères activés",
     "RowLabel": "{{name}}, {{preview}}, {{when}}",
     "Unread_one": "{{count}} message non lu",
-    "Unread_other": "{{count}} messages non lus"
+    "Unread_other": "{{count}} messages non lus",
+    "NewMessage": "Nouveau message",
+    "EmptyTitle": "Aucune discussion pour l'instant",
+    "EmptyBody": "Vos discussions avec vos contacts s'affichent ici. Chacune est chiffrée entre vos téléphones.",
+    "AddContact": "Ajouter un contact",
+    "PickerEmpty": "Aucun contact pour l'instant. Ajoutez-en un pour commencer une discussion."
   },
   "Relationship": {
     "ResignUnavailable": "Signer à nouveau : vos cartes sont déjà signées avec du matériel sécurisé.",

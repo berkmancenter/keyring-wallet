@@ -1,6 +1,7 @@
 /**
- * The Messages list: one row per contact, as the Contacts list groups them, and never the mediator or a connection
- * not yet completed, developer mode or not. Before, each of a merged contact's connections was its own
+ * The Messages list: one row per contact, as the Contacts list groups them, conversations only (L3: a contact appears
+ * once a message has been exchanged, newest first), and never the mediator, a witness service or a connection not
+ * yet completed, developer mode or not. Before, each of a merged contact's connections was its own
  * conversation, and developer mode listed every connection, the mediator among them.
  */
 import { useBasicMessages, useConnections } from '@bifold/react-hooks'
@@ -54,7 +55,9 @@ const connection = (
     connectionTypes: opts.mediator ? [DidCommConnectionType.Mediator] : [],
   })
 
-// Bob Backer's three exchanges, Ada, the mediator, and a connection still being made.
+// Bob Backer's three exchanges, Ada, the mediator, a witness service and a connection still being made.
+const witness = connection('conn-witness', 'keyring-witness')
+witness.metadata.set('witnessConnection', { witnessDid: 'did:example:witness' })
 const records = [
   connection('conn-a', 'Bob Backer', { createdAt: new Date(Date.UTC(2026, 9, 15, 9)) }),
   connection('conn-b', 'Bob Backer', { createdAt: new Date(Date.UTC(2026, 9, 25, 19, 47)) }),
@@ -62,7 +65,16 @@ const records = [
   connection('conn-ada', 'Ada'),
   connection('conn-mediator', 'My Mediator', { mediator: true }),
   connection('conn-pending', 'Someone', { state: DidCommDidExchangeState.RequestSent }),
+  witness,
 ]
+// A message on every connection, infrastructure included, at the time each was made: so the rows are conversations,
+// newest first (Bob's latest exchange, Bob's earlier one, Ada, Bob's first), and what is left out is left out by
+// rule, not for having nothing said.
+const said = (connectionId: string) => ({
+  connectionId,
+  createdAt: records.find((r) => r.id === connectionId)?.createdAt ?? new Date(Date.UTC(2026, 9, 15, 10)),
+})
+let mockSaid: { connectionId: string; createdAt: Date }[] = []
 const bobMerged = new Map([
   ['did:bob:2', 'did:bob:1'],
   ['did:bob:3', 'did:bob:1'],
@@ -97,7 +109,8 @@ beforeEach(() => {
   mockLinks = new Map()
   mockUnread = {}
   ;(useConnections as jest.Mock).mockReturnValue({ records, loading: false })
-  ;(useBasicMessages as jest.Mock).mockReturnValue({ records: [] })
+  mockSaid = records.map((record) => said(record.id))
+  ;(useBasicMessages as jest.Mock).mockImplementation(() => ({ records: mockSaid }))
 })
 
 // The tab's own name, in the app's language: no longer "Secure Connection Messaging", in English only.
@@ -108,8 +121,8 @@ test('the title is "Messages", in the app language', () => {
 
 describe('never infrastructure', () => {
   test.each([false, true])('no mediator and no unfinished connection (developer mode %s)', (developerMode) => {
-    // Six connections, four of them people: nothing linked, so a row each.
-    expect(opened(list(developerMode))).toEqual(['conn-a', 'conn-b', 'conn-c', 'conn-ada'])
+    // Seven connections, four of them people: nothing linked, so a row each, newest message first.
+    expect(opened(list(developerMode))).toEqual(['conn-c', 'conn-b', 'conn-ada', 'conn-a'])
   })
 })
 
@@ -119,7 +132,7 @@ describe('one row per contact', () => {
     expect(opened(list(false))).toEqual(['conn-c', 'conn-ada'])
 
     mockLinks = new Map()
-    expect(opened(list(false))).toEqual(['conn-a', 'conn-b', 'conn-c', 'conn-ada'])
+    expect(opened(list(false))).toEqual(['conn-c', 'conn-b', 'conn-ada', 'conn-a'])
   })
 
   // A chat shows, and marks seen, only its own connection's messages: a row whose badge counts messages on an older
@@ -150,5 +163,47 @@ describe('one row per contact', () => {
     const tree = list(false)
     expect(tree.getByText('3')).toBeTruthy()
     expect(tree.getByText('4')).toBeTruthy()
+  })
+})
+
+describe('conversations only (L3)', () => {
+  test('a contact with nothing said is not a row; once a message comes, it is, at the top', () => {
+    mockSaid = [said('conn-a'), said('conn-b')]
+    expect(opened(list(false))).toEqual(['conn-b', 'conn-a'])
+
+    mockSaid = [...mockSaid, { connectionId: 'conn-ada', createdAt: new Date(Date.UTC(2026, 9, 26, 8)) }]
+    expect(opened(list(false))).toEqual(['conn-ada', 'conn-b', 'conn-a'])
+  })
+
+  test('a chat cleared on this phone leaves the list until either side writes again', () => {
+    mockSaid = mockSaid.filter((m) => m.connectionId !== 'conn-ada')
+    expect(opened(list(false))).not.toContain('conn-ada')
+
+    mockSaid = [...mockSaid, { connectionId: 'conn-ada', createdAt: new Date(Date.UTC(2026, 9, 27, 8)) }]
+    expect(opened(list(false))[0]).toBe('conn-ada')
+  })
+
+  test('nothing said with anyone: the empty state, with New message and Add a contact', () => {
+    mockSaid = []
+    const tree = list(false)
+    expect(rows(tree)).toHaveLength(0)
+    expect(tree.getByTestId(testIdWithKey('MessagesEmpty'))).toBeTruthy()
+    expect(tree.getByText('MessagesList.EmptyTitle')).toBeTruthy()
+    fireEvent.press(tree.getByTestId(testIdWithKey('MessagesEmptyNewMessage')))
+    expect(navigation.navigate).toHaveBeenCalledWith('New Message')
+    fireEvent.press(tree.getByTestId(testIdWithKey('MessagesEmptyAddContact')))
+    expect(navigate).toHaveBeenCalledWith('Connect Stack', expect.objectContaining({ screen: 'Scan' }))
+  })
+
+  test('with conversations there is no empty state', () => {
+    expect(list(false).queryByTestId(testIdWithKey('MessagesEmpty'))).toBeNull()
+  })
+
+  test('New message is in the header too', () => {
+    list(false)
+    const options = navigation.setOptions.mock.calls.map(([o]) => o).find((o) => o.headerRight)
+    const header = render(<BasicAppContext>{options.headerRight({})}</BasicAppContext>)
+    fireEvent.press(header.getByTestId(testIdWithKey('MessagesNewMessage')))
+    expect(navigation.navigate).toHaveBeenCalledWith('New Message')
   })
 })

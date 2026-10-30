@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useTheme } from '../contexts/theme'
 import Messages from '../screens/Messages'
+import NewMessage from '../screens/NewMessage'
 import WhatAreConnections from '../modules/vrc/screens/WhatAreConnections'
 import { MessageStackParams, Screens } from '../types/navigators'
 
@@ -23,6 +24,11 @@ const MessageStack: React.FC = () => {
         name={Screens.Messages}
         component={Messages}
         options={{ title: t('Screens.Messages'), ...ScreenOptionsDictionary[Screens.Messages] }}
+      />
+      <Stack.Screen
+        name={Screens.NewMessage}
+        component={NewMessage}
+        options={{ title: t('MessagesList.NewMessage'), ...ScreenOptionsDictionary[Screens.NewMessage] }}
       />
       <Stack.Screen
         name={Screens.WhatAreConnections}

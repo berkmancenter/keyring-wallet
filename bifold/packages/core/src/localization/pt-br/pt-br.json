@@ -2636,7 +2636,12 @@
     "TimerOn": "mensagens temporárias ativadas",
     "RowLabel": "{{name}}, {{preview}}, {{when}}",
     "Unread_one": "{{count}} mensagem não lida",
-    "Unread_other": "{{count}} mensagens não lidas"
+    "Unread_other": "{{count}} mensagens não lidas",
+    "NewMessage": "Nova mensagem",
+    "EmptyTitle": "Nenhuma conversa ainda",
+    "EmptyBody": "Suas conversas com seus contatos aparecem aqui. Cada uma é criptografada entre os seus telefones.",
+    "AddContact": "Adicionar um contato",
+    "PickerEmpty": "Nenhum contato ainda. Adicione um para começar uma conversa."
   },
   "Relationship": {
     "ResignUnavailable": "Assinar de novo: seus cartões já estão assinados com hardware seguro.",
