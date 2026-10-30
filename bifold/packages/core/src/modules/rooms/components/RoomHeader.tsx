@@ -5,12 +5,15 @@
  * As mocked (header B): the letters on a lilac tile, the title near-black, the line below smaller and grey, the tier
  * an outlined chip, all centred on one row.
  *
+ * Above a room's chat, the header opens the room's details (rooms in Messages, R2: the title opens them, as a group
+ * chat's does), with a chevron saying so.
+ *
  * @module rooms/components/RoomHeader
  */
 import type { TFunction } from 'i18next'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Platform, StyleSheet, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -46,7 +49,7 @@ export const roomWhere = (
   return undefined
 }
 
-export const RoomHeader: React.FC<{ room: RoomSummary }> = ({ room }) => {
+export const RoomHeader: React.FC<{ room: RoomSummary; onPress?: () => void }> = ({ room, onPress }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const where = roomWhere(t, room)
@@ -75,7 +78,7 @@ export const RoomHeader: React.FC<{ room: RoomSummary }> = ({ room }) => {
     idName: { fontFamily: Platform.select({ ios: 'Courier', default: 'monospace' }) },
     where: { fontSize: 15, color: ColorPalette.grayscale.mediumGrey },
   })
-  return (
+  const header = (
     <View style={styles.header} testID={testIdWithKey('RoomHeader')}>
       <View style={styles.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {byId ? (
@@ -102,7 +105,20 @@ export const RoomHeader: React.FC<{ room: RoomSummary }> = ({ room }) => {
         ) : null}
       </View>
       <TierBadge tier={room.tier} />
+      {onPress ? <Icon name="chevron-right" size={24} color={ColorPalette.grayscale.mediumGrey} /> : null}
     </View>
+  )
+  if (!onPress) return header
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={[roomTitle(t, room), where].filter(Boolean).join(', ')}
+      accessibilityHint={t('Rooms.DetailsHint') as string}
+      testID={testIdWithKey('RoomDetailsOpen')}
+    >
+      {header}
+    </Pressable>
   )
 }
 

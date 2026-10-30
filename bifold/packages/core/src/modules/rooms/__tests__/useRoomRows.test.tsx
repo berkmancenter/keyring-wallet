@@ -15,6 +15,7 @@ import { toInertText } from '../inertText'
 import { chatMessageBody } from '../roomPosts'
 import type { Identity, Note, NoteList, NoteSummary, RoomsService, RoomSummary } from '../types'
 import {
+  canHideRoom,
   hideRoom,
   markRoomSeen,
   ROOMS_HIDDEN_KEY,
@@ -256,6 +257,14 @@ describe('rooms as Messages rows', () => {
     await act(async () => refreshRoomRows())
     expect(again.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['planning', 'desk'])
     expect(again.list.result.current.unread).toBe(1)
+  })
+
+  test("a room's details offer Hide only for a room Messages has as a row (control: one it hasn't read)", async () => {
+    expect(canHideRoom('planning')).toBe(false)
+    mount(serviceWith([room('planning')], { planning: [note('n1', 1)] }))
+    await flush()
+    expect(canHideRoom('planning')).toBe(true)
+    expect(canHideRoom('elsewhere')).toBe(false)
   })
 
   test('a read that fails says so and keeps the rows; no agent linked, no rows and nothing asked', async () => {

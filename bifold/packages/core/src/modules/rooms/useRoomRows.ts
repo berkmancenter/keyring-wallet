@@ -290,6 +290,12 @@ function recount(service: RoomsService, roomId: string, track: Track): void {
  * comes back, only what came after counts. Kept on this phone. The room stays under My Agent and on its community.
  * Returns the Undo, which puts back exactly what was there.
  */
+/** Whether Messages has this room as a row, so that hiding it there means something. */
+export const canHideRoom = (roomId: string): boolean => {
+  const service = feed.service
+  return !!service && !!tracks.get(service)?.has(roomId)
+}
+
 export function hideRoom(roomId: string): (() => void) | undefined {
   const service = feed.service
   const track = service ? tracks.get(service)?.get(roomId) : undefined

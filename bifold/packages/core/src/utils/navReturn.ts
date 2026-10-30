@@ -57,6 +57,8 @@ const RESTORABLE: ReadonlySet<string> = new Set<string>([
   Screens.JSONDetails,
   Screens.RoomsHome,
   Screens.Room,
+  Screens.RoomInfo,
+  Screens.RoomPart,
   Screens.VtiCommunity,
 ])
 

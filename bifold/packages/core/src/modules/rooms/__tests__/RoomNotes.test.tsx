@@ -1,7 +1,7 @@
 /**
- * A room's notes (data rooms mock, Notes): titled records and the markers of removed ones, on their own tab and out
- * of the chat; pinned first, then newest; each shown exactly as written, an AI agent's labelled as the agent's; a
- * removed note keeps its place with no text. Where notes can't be listed, or the host wouldn't give them, the tab
+ * A room's notes (data rooms mock, Notes): titled records and the markers of removed ones, on their own screen since
+ * R2 (RoomPart, from the room's details) and out of the chat; pinned first, then newest; each shown exactly as written, an AI agent's labelled as the agent's; a
+ * removed note keeps its place with no text. Where notes can't be listed, or the host wouldn't give them, the screen
  * says so.
  */
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
@@ -26,26 +26,24 @@ jest.mock('@react-navigation/native', () => ({
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const Room = require('../screens/Room').default
+const RoomPart = require('../screens/RoomPart').default
 
 const PLANNING = 'did:webvh:sample:planning'
 const CUSTODY = 'did:webvh:sample:3f9a7c21e0'
 const id = (key: string) => testIdWithKey(key)
 
 const show = (roomId = PLANNING) => {
-  mockParams = { roomId }
+  mockParams = { roomId, part: 'notes' }
   return render(
     <BasicAppContext>
-      <Room />
+      <RoomPart />
     </BasicAppContext>
   )
 }
 
 const openNotes = async (tree: ReturnType<typeof show>) => {
-  await waitFor(() => tree.getByTestId(id('RoomTabNotes')))
-  await act(async () => {
-    fireEvent.press(tree.getByTestId(id('RoomTabNotes')))
-  })
+  await waitFor(() => tree.getByTestId(id('RoomPart')))
+  await act(async () => undefined)
 }
 
 const post = (over: Partial<RoomPost>): RoomPost => ({
@@ -125,7 +123,6 @@ describe("a room's Notes tab", () => {
     }))
     const tree = show()
     await openNotes(tree)
-    // The m2 chat post carries it too, hidden with the chat: press the one on the note.
     const note = await waitFor(() => tree.getByTestId(id(`RoomNote_${roomHandle('n2')}`)))
     fireEvent.press(within(note).getByTestId(id('RoomFileChip_f1')))
     expect(tree.getByTestId(id('RoomFileSheet'))).toBeTruthy()

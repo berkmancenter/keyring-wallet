@@ -27,7 +27,15 @@ export interface RoomState {
   reload: () => void
 }
 
-export function useRoom(service: RoomsService | undefined, roomId: string): RoomState {
+/** The room's listings a screen shows: each is a task for the agent, so a screen reads only those it shows. */
+export type RoomListing = 'notes' | 'files'
+const BOTH: readonly RoomListing[] = ['notes', 'files']
+
+export function useRoom(
+  service: RoomsService | undefined,
+  roomId: string,
+  lists: readonly RoomListing[] = BOTH
+): RoomState {
   const [state, setState] = useState<Omit<RoomState, 'reload'>>({
     failed: false,
     reading: false,
@@ -36,6 +44,7 @@ export function useRoom(service: RoomsService | undefined, roomId: string): Room
     refreshing: false,
   })
   const [generation, setGeneration] = useState(0)
+  const wants = lists.join()
   const reload = useCallback(() => {
     setState((s) => ({ ...s, refreshing: true }))
     setGeneration((g) => g + 1)
@@ -63,14 +72,14 @@ export function useRoom(service: RoomsService | undefined, roomId: string): Room
         return
       }
       const listing: Promise<void>[] = []
-      if (roomCapabilities.listNotes.status === 'available')
+      if (wants.includes('notes') && roomCapabilities.listNotes.status === 'available')
         listing.push(
           service.listNotes(roomId).then(
             (notes) => set({ notes, notesFailed: false }),
             () => set({ notesFailed: true })
           )
         )
-      if (roomCapabilities.listFiles.status === 'available')
+      if (wants.includes('files') && roomCapabilities.listFiles.status === 'available')
         listing.push(
           service.listFiles(roomId).then(
             (files) => set({ files, filesFailed: false }),
@@ -83,7 +92,7 @@ export function useRoom(service: RoomsService | undefined, roomId: string): Room
     return () => {
       live = false
     }
-  }, [service, roomId, generation])
+  }, [service, roomId, generation, wants])
 
   return { ...state, reload }
 }

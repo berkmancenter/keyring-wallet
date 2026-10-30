@@ -135,6 +135,60 @@ describe('restorableState', () => {
   })
 })
 
+// MainStack's state with the Messages tab focused and `messageRoutes` in its stack: a room opened from its row in
+// Messages is in MessageStack (rooms in Messages, R2).
+const mainInMessages = (messageRoutes: any[]) => ({
+  type: 'stack',
+  index: 0,
+  routes: [
+    {
+      name: Stacks.TabStack,
+      state: {
+        type: 'tab',
+        index: 1,
+        routes: [
+          { name: TabStacks.ContactStack },
+          {
+            name: TabStacks.MessageStack,
+            state: { type: 'stack', index: messageRoutes.length - 1, routes: messageRoutes },
+          },
+        ],
+      },
+    },
+  ],
+})
+const messageStackOf = (state: any) => state.routes[0].state.routes[1].state
+
+describe('restorableState in a room opened from Messages', () => {
+  it('keeps the room, its details and the part open over them, with their params, and the Messages tab focused', () => {
+    const info = { name: Screens.RoomInfo, params: { roomId: 'room-1' } }
+    const notes = { name: Screens.RoomPart, params: { roomId: 'room-1', part: 'notes' } }
+    const state = restorableState(
+      mainInMessages([{ name: Screens.Messages }, room, info, notes]) as any,
+      landsOn
+    ) as any
+    expect(state.routes[0].state.index).toBe(1)
+    const messages = messageStackOf(state)
+    expect(messages.routes.map((r: any) => r.name)).toEqual([
+      Screens.Messages,
+      Screens.Room,
+      Screens.RoomInfo,
+      Screens.RoomPart,
+    ])
+    expect(messages.index).toBe(3)
+    expect(messages.routes[3].params).toEqual({ roomId: 'room-1', part: 'notes' })
+  })
+
+  it('cuts a room offer off, and lands on Messages below it (control: the screens above are kept)', () => {
+    const offer = { name: Screens.RoomOffer, params: { offerRef: 'offer-1' } }
+    const messages = messageStackOf(
+      restorableState(mainInMessages([{ name: Screens.Messages }, offer]) as any, landsOn)
+    )
+    expect(messages.routes.map((r: any) => r.name)).toEqual([Screens.Messages])
+    expect(messages.index).toBe(0)
+  })
+})
+
 describe('restorableState in rooms (the My Agent stack)', () => {
   beforeEach(() => {
     landsOn = Screens.VtaAgent

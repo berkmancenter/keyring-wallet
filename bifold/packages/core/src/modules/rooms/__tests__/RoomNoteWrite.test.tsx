@@ -1,5 +1,5 @@
 /**
- * Writing a note (rooms member features, chunk 2): "New note" in an open room's Notes tab opens the editor; Review
+ * Writing a note (rooms member features, chunk 2): "New note" in an open room's notes (RoomPart) opens the editor; Review
  * asks for the preview, which names who it posts as and who can read it; Post writes it and the note shows. The
  * member's own notes offer Edit, which saves a new version. A failed write keeps the words and, retried, is the same
  * write; a stale preview is prepared once more; a note that changed under an edit is not written. An attributed
@@ -27,7 +27,7 @@ jest.mock('@react-navigation/native', () => ({
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const Room = require('../screens/Room').default
+const RoomPart = require('../screens/RoomPart').default
 
 // Planning is attributed in the sample, where the member may write; shown here as open unless a test says otherwise.
 // Welcome desk is open, and read-only for this member.
@@ -41,16 +41,12 @@ const asOpen = (base: RoomsService): RoomsService => ({
 })
 
 const show = async (roomId = PLANNING) => {
-  mockParams = { roomId }
+  mockParams = { roomId, part: 'notes' }
   const tree = render(
     <BasicAppContext>
-      <Room />
+      <RoomPart />
     </BasicAppContext>
   )
-  await waitFor(() => tree.getByTestId(id('RoomTabNotes')))
-  await act(async () => {
-    fireEvent.press(tree.getByTestId(id('RoomTabNotes')))
-  })
   await waitFor(() => tree.getByTestId(id('RoomNotesCaption')))
   return tree
 }

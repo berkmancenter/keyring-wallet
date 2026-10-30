@@ -3131,6 +3131,13 @@
     "FileRemove": "Remove the file",
     "FileTooLarge": "That file is too large. Files can be up to 25 MB.",
     "FileUnreadable": "Couldn't read that file. Try another.",
-    "PostSendingPercent": "Sending… {{percent}}%"
+    "PostSendingPercent": "Sending… {{percent}}%",
+    "Details": "Room details",
+    "DetailsHint": "Opens the room's details, files, notes and members",
+    "InThisRoom": "In this room",
+    "YouHere": "You here",
+    "HideFromMessages": "Hide from Messages",
+    "OpenCommunity": "Open {{community}}",
+    "OpenCommunityUnnamed": "Open the room's community"
   }
 }

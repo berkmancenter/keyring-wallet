@@ -2981,6 +2981,13 @@
     "FileRemove": "Remover o arquivo",
     "FileTooLarge": "Esse arquivo é grande demais. Os arquivos podem ter até 25 MB.",
     "FileUnreadable": "Não foi possível ler esse arquivo. Tente outro.",
-    "PostSendingPercent": "Enviando… {{percent}}%"
+    "PostSendingPercent": "Enviando… {{percent}}%",
+    "Details": "Detalhes da sala",
+    "DetailsHint": "Abre os detalhes, arquivos, notas e membros da sala",
+    "InThisRoom": "Nesta sala",
+    "YouHere": "Você aqui",
+    "HideFromMessages": "Ocultar em Mensagens",
+    "OpenCommunity": "Abrir {{community}}",
+    "OpenCommunityUnnamed": "Abrir a comunidade da sala"
   }
 }

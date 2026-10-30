@@ -21,7 +21,7 @@ import {
   scheduleChatDelete,
 } from '../../src/modules/chat/pendingChatDeletes'
 import Messages from '../../src/screens/Messages'
-import { Screens, Stacks, TabStacks } from '../../src/types/navigators'
+import { Screens, Stacks } from '../../src/types/navigators'
 import { testIdWithKey } from '../../src/utils/testable'
 import { testDefaultState } from '../contexts/store'
 import { BasicAppContext } from '../helpers/app'
@@ -401,19 +401,15 @@ describe('rooms in Messages (R1)', () => {
     expect(tree.getByTestId(testIdWithKey('MessagesNoMatch'))).toBeTruthy()
   })
 
-  test('a room opens under My Agent, with "Your agent" kept below it; an offer opens its screen there too', () => {
+  test('a room opens here in Messages, so Back comes back to the list; an offer opens its screen here too', () => {
     mockRoomRows = threeRooms()
     const tree = list(false)
     fireEvent.press(tree.getByTestId('room:r-mid'))
-    expect(navigation.navigate).toHaveBeenCalledWith(Stacks.TabStack, {
-      screen: TabStacks.MyAgentStack,
-      params: { screen: Screens.Room, params: { roomId: 'r-mid' }, initial: false },
-    })
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.Room, { roomId: 'r-mid' })
     lastCard().onOpen('offer-1')
-    expect(navigation.navigate).toHaveBeenLastCalledWith(Stacks.TabStack, {
-      screen: TabStacks.MyAgentStack,
-      params: { screen: Screens.RoomOffer, params: { offerRef: 'offer-1' }, initial: false },
-    })
+    expect(navigation.navigate).toHaveBeenLastCalledWith(Screens.RoomOffer, { offerRef: 'offer-1' })
+    // Not under My Agent any more (control: R1 opened them there).
+    expect(navigation.navigate).not.toHaveBeenCalledWith(Stacks.TabStack, expect.anything())
   })
 
   test('a community chip whose last room has gone falls back to All', () => {

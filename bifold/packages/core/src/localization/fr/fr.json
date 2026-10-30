@@ -3079,6 +3079,13 @@
     "FileRemove": "Retirer le fichier",
     "FileTooLarge": "Ce fichier est trop volumineux. Les fichiers peuvent faire jusqu'à 25 Mo.",
     "FileUnreadable": "Impossible de lire ce fichier. Essayez-en un autre.",
-    "PostSendingPercent": "Envoi… {{percent}} %"
+    "PostSendingPercent": "Envoi… {{percent}} %",
+    "Details": "Détails du salon",
+    "DetailsHint": "Ouvre les détails, fichiers, notes et membres du salon",
+    "InThisRoom": "Dans ce salon",
+    "YouHere": "Vous ici",
+    "HideFromMessages": "Masquer dans Messages",
+    "OpenCommunity": "Ouvrir {{community}}",
+    "OpenCommunityUnnamed": "Ouvrir la communauté du salon"
   }
 }

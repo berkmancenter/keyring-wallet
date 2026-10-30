@@ -34,7 +34,7 @@ import { useVrcNameCache } from '../modules/vrc/context/VrcNameCacheProvider'
 import { useConnectionRelationships } from '../modules/vrc/contacts/useContactFacts'
 import { useContactLinks } from '../modules/vrc/contacts/useContactLinks'
 import { useTheme } from '../contexts/theme'
-import { MessageStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
+import { MessageStackParams, Screens, Stacks } from '../types/navigators'
 import { messageWakeFetching, useReportMessagesListFocus } from '../utils/messageWake'
 import { testIdWithKey } from '../utils/testable'
 import { TOKENS, useServices } from '../container-api'
@@ -124,16 +124,6 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
         (room) => roomTitle(t, { name: room.roomName, nameFrom: room.nameFrom })
       ),
     [chipItems, query, store.preferences.alternateContactNames, getVrcName, t]
-  )
-
-  // A room and an offer open under My Agent, where their screens are, with "Your agent" kept below them.
-  const openUnderMyAgent = useCallback(
-    (screen: Screens, params: object) =>
-      (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(Stacks.TabStack, {
-        screen: TabStacks.MyAgentStack,
-        params: { screen, params, initial: false },
-      }),
-    [navigation]
   )
 
   const style = StyleSheet.create({
@@ -256,7 +246,7 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
         keyExtractor={(item) => item.key}
         renderItem={({ item }) =>
           item.kind === 'room' ? (
-            <RoomMessageRow row={item.row} onOpen={(roomId) => openUnderMyAgent(Screens.Room, { roomId })} />
+            <RoomMessageRow row={item.row} onOpen={(roomId) => navigation.navigate(Screens.Room, { roomId })} />
           ) : (
             <ContactListItem
               contact={item.row.connection}
@@ -387,7 +377,7 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
             {chip.kind === 'people' ? null : (
               <RoomOfferCard
                 communityDid={chip.kind === 'community' ? chip.communityDid : undefined}
-                onOpen={(offerId) => openUnderMyAgent(Screens.RoomOffer, { offerRef: offerId })}
+                onOpen={(offerId) => navigation.navigate(Screens.RoomOffer, { offerRef: offerId })}
               />
             )}
             {fetchingNew ? (

@@ -27,7 +27,9 @@ import SignIn from '../modules/trust-tasks/screens/SignIn'
 import VtaClaim from '../modules/trust-tasks/screens/VtaClaim'
 import RoomsHome from '../modules/rooms/screens/RoomsHome'
 import Room from '../modules/rooms/screens/Room'
+import RoomInfo from '../modules/rooms/screens/RoomInfo'
 import RoomOffer from '../modules/rooms/screens/RoomOffer'
+import RoomPart, { roomPartTitle } from '../modules/rooms/screens/RoomPart'
 import CommunityCard from '../modules/directory/screens/CommunityCard'
 import CommunityMemberCard from '../modules/directory/screens/CommunityMemberCard'
 import CommunityMembers from '../modules/directory/screens/CommunityMembers'
@@ -199,6 +201,19 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.Room}
         component={Room}
         options={{ title: t('Rooms.Room'), ...ScreenOptionsDictionary[Screens.Room] }}
+      />
+      <Stack.Screen
+        name={Screens.RoomInfo}
+        component={RoomInfo}
+        options={{ title: t('Rooms.Details'), ...ScreenOptionsDictionary[Screens.RoomInfo] }}
+      />
+      <Stack.Screen
+        name={Screens.RoomPart}
+        component={RoomPart}
+        options={({ route }) => ({
+          title: roomPartTitle(t, route.params?.part),
+          ...ScreenOptionsDictionary[Screens.RoomPart],
+        })}
       />
       <Stack.Screen
         name={Screens.RoomOffer}

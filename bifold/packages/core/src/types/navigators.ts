@@ -97,6 +97,8 @@ export enum Screens {
   RoomsHome = 'Rooms',
   Room = 'Room',
   RoomOffer = 'Room offer',
+  RoomInfo = 'Room details',
+  RoomPart = 'Room part',
   CommunityMembers = 'Community members',
   CommunityCard = 'Your community card',
   CommunityMemberCard = 'Member card',
@@ -189,7 +191,15 @@ export type MyAgentStackParams = {
   [Screens.EditRCard]: { profileId: string } | undefined
   // Every room and offer the member has (rooms flag on only).
   [Screens.RoomsHome]: undefined
-  [Screens.Room]: { roomId: string }
+} & RoomScreenParams
+
+/** What a room opens on, in My Agent and in Messages alike (rooms in Messages, R2). */
+export type RoomScreenParams = {
+  // `attach`: a file asked for from the room's files, so the composer opens its "+" (a new number each time).
+  [Screens.Room]: { roomId: string; attach?: number }
+  // The room's details, and its files, notes and members, one part a screen.
+  [Screens.RoomInfo]: { roomId: string }
+  [Screens.RoomPart]: { roomId: string; part: 'files' | 'notes' | 'members' }
   // One offer's consent screen. `offerRef` names the offer however it was reached: the offers list today, a join
   // link or QR later.
   [Screens.RoomOffer]: { offerRef: string }
@@ -251,7 +261,7 @@ export type MessageStackParams = {
   [Screens.ProofDetails]: { recordId: string; isHistory?: boolean }
   [Screens.ProofRequest]: { proofId: string }
   [Screens.JSONDetails]: { jsonBlob: any }
-}
+} & RoomScreenParams
 
 export type ProofRequestsStackParams = {
   [Screens.ProofRequests]: { connectionId?: string }

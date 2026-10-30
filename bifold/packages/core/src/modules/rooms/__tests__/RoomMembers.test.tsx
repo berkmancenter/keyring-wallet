@@ -1,18 +1,18 @@
 /**
  * A room's members (data rooms mock, Members): the member's own access first (what they can do, until when, as
- * which identity); then the community's list of who it admitted, read only when the tab is shown and only where the
+ * which identity); then the community's list of who it admitted, read only on its own screen (RoomPart, since R2) and only where the
  * service allows it, each with a role, the member marked as themselves; then the way out, which opens the
  * community's screen, where leaving is done. Where the list may not be seen, can't be read, or the room's community
  * isn't known, the tab says so.
  */
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
+import { fireEvent, render, waitFor } from '@testing-library/react-native'
 import i18next from 'i18next'
 import React from 'react'
 import { StyleSheet } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
-import { Screens } from '../../../types/navigators'
+import { Screens, Stacks, TabStacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { deriveRoomCapabilities, sampleCapabilities } from '../capabilities'
 import { roleText } from '../components/RoomMembersTab'
@@ -31,6 +31,8 @@ jest.mock('@react-navigation/native', () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Room = require('../screens/Room').default
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const RoomPart = require('../screens/RoomPart').default
 // The mock's one navigation object, the same one the screen gets.
 const navigation = jest.requireMock('@react-navigation/native').useNavigation() as { navigate: jest.Mock }
 
@@ -41,19 +43,16 @@ const RIVER = { identityWords: '…river-stone', did: 'did:peer:2.sample-river' 
 const id = (key: string) => testIdWithKey(key)
 
 const show = (roomId = PLANNING) => {
-  mockParams = { roomId }
+  mockParams = { roomId, part: 'members' }
   return render(
     <BasicAppContext>
-      <Room />
+      <RoomPart />
     </BasicAppContext>
   )
 }
 
 const openMembers = async (tree: ReturnType<typeof show>) => {
-  await waitFor(() => tree.getByTestId(id('RoomTabMembers')))
-  await act(async () => {
-    fireEvent.press(tree.getByTestId(id('RoomTabMembers')))
-  })
+  await waitFor(() => tree.getByTestId(id('RoomMembersYouCan')))
 }
 
 const listed: CommunityRoomMember[] = [
@@ -108,14 +107,21 @@ describe("a room's Members tab", () => {
     expect(StyleSheet.flatten(tree.getByTestId(id('RoomMembersAs')).props.style).minWidth).toBe(220)
   })
 
-  test("the community's list, read only once the tab is shown, with roles and you marked", async () => {
+  test("the community's list, read only on its own screen, never by the chat, with roles and you marked", async () => {
     const service = mockService as RoomsService
     listAllowed(service)
     const list = jest.spyOn(service, 'listCommunityMembers').mockResolvedValue(listed)
-    const tree = show()
-    await waitFor(() => tree.getByTestId(id('RoomTabMembers')))
+    mockParams = { roomId: PLANNING }
+    const chat = render(
+      <BasicAppContext>
+        <Room />
+      </BasicAppContext>
+    )
+    await waitFor(() => chat.getByTestId(id('RoomComposerInput')))
     expect(list).not.toHaveBeenCalled()
+    chat.unmount()
 
+    const tree = show()
     await openMembers(tree)
     await waitFor(() => expect(tree.getByTestId(id('RoomMembersList'))).toBeTruthy())
     expect(list).toHaveBeenCalledWith('did:webvh:sample:test-vtc', PLANNING)
@@ -157,13 +163,14 @@ describe("a room's Members tab", () => {
     expect(list).not.toHaveBeenCalled()
   })
 
-  test("leaving opens the community's screen, where it is done", async () => {
+  test("leaving opens the community's screen in My Agent, where it is done", async () => {
     const tree = show()
     await openMembers(tree)
     expect(tree.getByTestId(id('RoomMembersLeave'))).toHaveTextContent(/Rooms\.MembersLeave/)
     fireEvent.press(tree.getByTestId(id('RoomMembersLeave')))
-    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiCommunity, {
-      communityDid: 'did:webvh:sample:test-vtc',
+    expect(navigation.navigate).toHaveBeenCalledWith(Stacks.TabStack, {
+      screen: TabStacks.MyAgentStack,
+      params: { screen: Screens.VtiCommunity, params: { communityDid: 'did:webvh:sample:test-vtc' }, initial: false },
     })
   })
 
