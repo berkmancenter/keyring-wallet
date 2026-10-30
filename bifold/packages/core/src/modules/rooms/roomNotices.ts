@@ -33,6 +33,7 @@ import { DeviceEventEmitter } from 'react-native'
 import Toast from 'react-native-toast-message'
 
 import { ToastType } from '../../components/toast/BaseToast'
+import { TOKENS, useServices } from '../../container-api'
 import { Screens, Stacks, TabStacks } from '../../types/navigators'
 import { vtaAgent } from '../trust-tasks/module/vtaAgent'
 import { useToastAboveTabBar } from '../trust-tasks/screens/aboveTabBar'
@@ -151,6 +152,8 @@ export function useRoomNotices(): void {
   const navigation = useNavigation() as unknown as { navigate: (name: string, params?: object) => void }
   const service = useRoomsService()
   const linked = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().link.kind === 'linked')
+  const [logger] = useServices([TOKENS.UTIL_LOGGER])
+  const logRows = useCallback((line: string) => logger.info(line), [logger])
 
   // Through the main stack, as an agent link does, so the screen comes to the top over whatever is open. Every room
   // notice opens in Messages, where the rooms are (R2), with Messages kept below what it opens.
@@ -212,7 +215,7 @@ export function useRoomNotices(): void {
     [t, bottomOffset, openInMessages]
   )
   // The rooms as Messages rows, read by one poll for the app: Messages and the tab's badge both read it.
-  useRoomRowsPoll(service, linked)
+  useRoomRowsPoll(service, linked, logRows)
 
   useEffect(() => {
     const admitted = DeviceEventEmitter.addListener(ROOM_ADMITTED_EVENT, (e: RoomAdmitted) => {

@@ -38,6 +38,12 @@ jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
   useNavigation: () => ({ navigate: mockNavigate }),
 }))
+// The app's logger, the one service the notices take from the container: the rows poll logs through it.
+const mockLogger = { info: jest.fn() }
+jest.mock('../../../container-api', () => ({
+  ...jest.requireActual('../../../container-api'),
+  useServices: () => [mockLogger],
+}))
 jest.mock('../../trust-tasks/module/vtaAgent', () => ({
   vtaAgent: { subscribe: () => () => undefined, getState: () => ({ link: { kind: 'linked' } }) },
 }))
@@ -317,6 +323,16 @@ describe('room access', () => {
     const said = show.mock.calls.map(([o]) => o).filter((o) => o.text1 === 'Rooms.NoticeRemoved')
     expect(said).toHaveLength(1)
     expect(said[0].onPress).toBeUndefined()
+    notices.unmount()
+  })
+
+  test("the rows poll's line reaches the app's log, so a report says when the rows came", async () => {
+    mockLogger.info.mockClear()
+    mockService = listing(() => [summary('planning')])
+    const notices = renderHook(() => useRoomNotices())
+    await flush()
+    await flush()
+    expect(mockLogger.info).toHaveBeenCalledWith(expect.stringMatching(/^\[Rooms:rows\] 1 rooms listed, /))
     notices.unmount()
   })
 
