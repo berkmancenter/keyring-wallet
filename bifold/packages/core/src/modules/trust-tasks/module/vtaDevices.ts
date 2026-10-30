@@ -72,7 +72,8 @@ const EXT_DEVICE_NAME = 'org.openvtc.device-name'
 /** What these calls need from the agent client: its task call and this phone's own DID. */
 export interface AgentDevicePort {
   managerDid?: string
-  task<T = unknown>(type: string, payload: Record<string, unknown>): Promise<T>
+  /** `timeoutMs` bounds the wait for the answer; the client's own default when absent. */
+  task<T = unknown>(type: string, payload: Record<string, unknown>, timeoutMs?: number): Promise<T>
 }
 
 export interface AgentDevice {
@@ -263,16 +264,20 @@ export async function registerThisDevice(
  * Tell the agent this phone is still here, with `ext` when the beat carries one (the sign-in's UV key,
  * oobSignInAgent enrolUvKey).
  */
-export async function heartbeat(port: AgentDevicePort, ext?: Record<string, unknown>): Promise<void> {
-  await sendHeartbeat(port, ext ? { ext } : {})
+export async function heartbeat(
+  port: AgentDevicePort,
+  ext?: Record<string, unknown>,
+  timeoutMs?: number
+): Promise<void> {
+  await sendHeartbeat(port, ext ? { ext } : {}, timeoutMs)
 }
 
 /** A heartbeat in the newest version the agent serves (0.3, else 0.2). */
-const sendHeartbeat = (port: AgentDevicePort, payload: Record<string, unknown>) =>
+const sendHeartbeat = (port: AgentDevicePort, payload: Record<string, unknown>, timeoutMs?: number) =>
   versionsFor(port.managerDid ?? port).ask(
     'deviceHeartbeat',
     [AGENT_DEVICE_TASK.heartbeat03, AGENT_DEVICE_TASK.heartbeat],
-    (uri) => port.task(uri, payload)
+    (uri) => (timeoutMs === undefined ? port.task(uri, payload) : port.task(uri, payload, timeoutMs))
   )
 
 /** Rename this phone: a heartbeat carrying the corrected name, the only way a binding's name changes. */

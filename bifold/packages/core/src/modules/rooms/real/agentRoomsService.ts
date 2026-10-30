@@ -271,6 +271,9 @@ export class AgentRoomsService implements RoomsService {
   /** How many asks of what the agent serves were started: only the latest one's answer is kept. */
   private servedAsks = 0
   private heldInFlight?: Promise<HeldRoom[]>
+  private roomsInFlight?: Promise<RoomSummary[]>
+  /** Counts the accepts and leaves: a listing asked before one is neither joined nor kept after it. */
+  private roomsChanged = 0
   private rooms = new Map<string, KnownRoom>()
   private offers = new Map<string, { community: RoomsCommunity; offer: OfferRecord }>()
   private previews = new Map<string, { offerId: string; at: number }>()
@@ -339,8 +342,29 @@ export class AgentRoomsService implements RoomsService {
     if (status.status !== 'available') throw new RoomsUnavailable(operation, status.reason, status.detail)
   }
 
-  public async listMyRooms(): Promise<RoomSummary[]> {
+  /**
+   * The member's rooms, one listing shared by every caller while it is out. Each surface that lists rooms (the
+   * Messages rows' poll, My Agent, a community's screen, a room met before it was listed) asked on its own, and a
+   * community is sent its membership list again for each, as a read (six answers at once in a tester's run, 10-30).
+   * A listing that starts after one settles asks again, and so does one after an accept or a leave.
+   */
+  public listMyRooms(): Promise<RoomSummary[]> {
+    if (this.roomsInFlight) return this.roomsInFlight
+    const listing = this.readMyRooms().finally(() => {
+      if (this.roomsInFlight === listing) this.roomsInFlight = undefined
+    })
+    this.roomsInFlight = listing
+    return listing
+  }
+
+  private async readMyRooms(): Promise<RoomSummary[]> {
     await this.require('listMyRooms')
+    const changes = this.roomsChanged
+    // The agent's key list is asked beside the communities' lists, not after them: they are other parties, and
+    // the key list waited out a whole community sign-in first (12 s in a tester's run, 10-30). When no community
+    // answers, the listing fails on that, and the key list's own failure is not left unhandled.
+    const heldAsked = this.heldRooms()
+    heldAsked.catch(() => undefined)
     const communities = await this.backend.communities()
     // A community that cannot answer loses only its own details: its rooms still show from custody,
     // as `detailsNotLoaded`, and the other communities' rooms are unaffected. Why it did not answer is logged.
@@ -363,7 +387,7 @@ export class AgentRoomsService implements RoomsService {
         'communityUnreachable',
         `no community answered for this member's rooms (${unreachable.join(', ')})`
       )
-    const held = await this.heldRooms()
+    const held = await heldAsked
 
     const next = new Map<string, KnownRoom>()
     for (const { community, records } of memberships) {
@@ -380,7 +404,10 @@ export class AgentRoomsService implements RoomsService {
       }
     }
     for (const custody of held) if (!next.has(custody.roomId)) next.set(custody.roomId, this.fromCustody(custody))
-    this.rooms = next
+    // A listing asked before an accept or a leave answers its callers, but does not undo what that changed. Its
+    // callers may see a room just left once more: the next listing, asked afresh after the leave, drops it. Answering
+    // them from this.rooms instead would show no rooms at all after an accept, which empties it.
+    if (changes === this.roomsChanged) this.rooms = next
     return [...next.values()].map(({ community: _community, actingAs: _actingAs, ...summary }) => summary)
   }
 
@@ -637,6 +664,8 @@ export class AgentRoomsService implements RoomsService {
   public async leaveViaCommunity(communityDid: string): Promise<void> {
     await this.require('leaveViaCommunity')
     await this.backend.leaveCommunity(communityDid)
+    this.roomsChanged++
+    this.roomsInFlight = undefined
     for (const [id, room] of this.rooms)
       if (room.communityDid === communityDid) {
         this.rooms.delete(id)
@@ -840,6 +869,8 @@ export class AgentRoomsService implements RoomsService {
       this.offers.delete(pending.offerId)
       this.rooms = new Map() // the next read lists the room
       this.heldInFlight = undefined // nor joins a key list asked before the room was held
+      this.roomsChanged++
+      this.roomsInFlight = undefined
       return { roomId }
     }
 

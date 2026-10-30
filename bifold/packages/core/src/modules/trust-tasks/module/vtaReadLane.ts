@@ -31,3 +31,30 @@ export const VTA_READ_LANE_TYPES: ReadonlySet<string> = new Set([
 export function inReadLane(type: string): boolean {
   return VTA_READ_LANE_TYPES.has(type)
 }
+
+/**
+ * The tasks that go beside the queue once this session's agent threads its replies: started at once, behind
+ * nothing, with nothing waiting for them. Only the presence heartbeat: saying the phone is here again changes
+ * nothing a second time, no task waits on its answer, and an unanswered one held whoami and the rooms' key list for
+ * its whole 30 s (a tester's run, 10-30). A heartbeat that carries the sign-in's UV key goes beside too; the sign-in
+ * waits for its answer before the grant, so the order of the two is the caller's, as before.
+ *
+ * ROLLBACK: set {@link VTA_HEARTBEAT_BESIDE} to false (an OTA can ship that alone); the heartbeat then runs alone in
+ * the queue, as before.
+ */
+export const VTA_HEARTBEAT_BESIDE = true
+/**
+ * Every heartbeat version Keyring sends (vtaDevices' ladder), newest first. One added to the ladder and missed here
+ * would put the heartbeat back in the queue with nothing else failing, so the version guard reads this as a ladder,
+ * and vtaClientHeartbeatBeside.test.ts holds it to each `device/heartbeat` in AGENT_DEVICE_TASK.
+ *
+ * @versionLadder device/heartbeat
+ */
+export const VTA_BESIDE_TYPES: ReadonlySet<string> = new Set([
+  'https://trusttasks.org/spec/device/heartbeat/0.3',
+  'https://trusttasks.org/spec/device/heartbeat/0.2',
+])
+
+export function besideQueue(type: string): boolean {
+  return VTA_BESIDE_TYPES.has(type)
+}

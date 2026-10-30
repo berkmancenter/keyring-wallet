@@ -93,7 +93,10 @@ describe('registerRoomsService after an unlock', () => {
 
     expect(resolve(c)).toBe(replacement)
     await expect(resolve(c)?.getRoom(ROOM)).rejects.toThrow()
-    expect(after.agentTask).not.toHaveBeenCalled() // failed before the agent was asked, as on the simulator
+    // It listed through the community, which was down, so nothing of the room was read: the agent was asked only its
+    // key list, which goes beside the community's list rather than after it.
+    expect(after.communityTask).toHaveBeenCalled()
+    expect(after.agentTask.mock.calls.map(([type]) => type)).toEqual([ROOMS_TASK.keysList02])
   })
 
   test('a service that names no agent (the sample) always replaces what is there', () => {

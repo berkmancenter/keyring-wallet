@@ -102,7 +102,7 @@ import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type Ts
 import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
-import { inReadLane, VTA_READ_LANE_SIZE } from './vtaReadLane'
+import { besideQueue, inReadLane, VTA_HEARTBEAT_BESIDE, VTA_READ_LANE_SIZE } from './vtaReadLane'
 import {
   DECLARATIVE_POLICY_ID,
   DECLARATIVE_POLICY_NAME,
@@ -1118,6 +1118,13 @@ export class VtaClient {
     return Math.max(1, this.options.readLaneSize ?? VTA_READ_LANE_SIZE)
   }
 
+  /** Whether a task of `type` goes beside the queue now (vtaReadLane.ts, besideQueue). */
+  private goesBeside(type: string): boolean {
+    return (
+      (this.options.heartbeatBeside ?? VTA_HEARTBEAT_BESIDE) && this.replyThreading === 'threaded' && besideQueue(type)
+    )
+  }
+
   /** Grants this client is waiting for, by the payload digest the VTA names. */
   private grantWaiters = new Map<string, () => void>()
   /** Which version of each family this agent was found to serve (taskVersions.ts). */
@@ -1165,6 +1172,8 @@ export class VtaClient {
       probeStore?: TspProbeStore
       /** How many read-lane tasks may be on the wire at once (vtaReadLane.ts); its default when absent. */
       readLaneSize?: number
+      /** Whether the heartbeat goes beside the queue (vtaReadLane.ts); its default when absent. */
+      heartbeatBeside?: boolean
     } = {}
   ) {
     this.breaker = options.breaker ?? new TspReplyBreaker()
@@ -1435,6 +1444,8 @@ export class VtaClient {
    * One send in the queue, behind whatever is in flight — no step-up or consent handling. Oldest first: a task in the
    * read lane (vtaReadLane.ts) may start beside other lane tasks, up to the lane's size, once this session's agent is
    * known to thread its replies; any other task starts only when nothing is on the wire, and the tasks behind it wait.
+   * Once that is known, a heartbeat goes beside the queue (vtaReadLane.ts, besideQueue): at once, and nothing waits
+   * for it.
    */
   private enqueue<T>(
     type: string,
@@ -1449,10 +1460,18 @@ export class VtaClient {
         ticket <= this.droppedThrough
           ? Promise.reject(new VtaTaskDropped(type))
           : this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent)
+      // What may start is decided by the running counts in pump(), which a task beside the queue never touches;
+      // inFlight, where it does show, only names what a task waits behind (below).
+      if (this.goesBeside(type)) {
+        void Promise.resolve().then(() => run().then(resolve, reject))
+        return
+      }
       this.waiting.push({ ticket, type, start: () => run().then(resolve, reject) })
       // One task at a time: one queued behind another says what it waits on, so a
       // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
-      const ahead = [...this.inFlight.values()][0]
+      // A heartbeat beside the queue holds nothing: what is named is the other task on the wire, if there is one.
+      const onWire = [...this.inFlight.values()]
+      const ahead = onWire.find((t) => !besideQueue(t.type)) ?? onWire[0]
       if (ahead && !this.mayStart(type)) {
         this.agent.config.logger.info(
           `${LOG_PREFIX} ${type} waits behind ${ahead.type} (in flight ${Math.round((Date.now() - ahead.since) / 1000)} s, ${ahead.id})`
