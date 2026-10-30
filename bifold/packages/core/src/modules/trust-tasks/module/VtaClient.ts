@@ -102,6 +102,7 @@ import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type Ts
 import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
+import { inReadLane, VTA_READ_LANE_SIZE } from './vtaReadLane'
 import {
   DECLARATIVE_POLICY_ID,
   DECLARATIVE_POLICY_NAME,
@@ -807,6 +808,13 @@ export function isReadOnlyVtaTask(type: string): boolean {
   return /\/(whoami|list|show|status|get)\/\d+(\.\d+)*$/.test(type)
 }
 
+/** A task asked for and not yet started: `start` sends it and settles when its answer (or failure) is in. */
+interface QueuedTask {
+  ticket: number
+  type: string
+  start: () => Promise<void>
+}
+
 export class TspReplyBreaker {
   /** TSP asks in a row that got no answer; any reply resets it. */
   noAnswerInARow = 0
@@ -898,16 +906,29 @@ export class VtaClient {
    */
   private attemptsByKey = new Map<string, string[]>()
 
-  private pending?: {
-    resolve: (plaintext: DidCommV2PlaintextMessage) => void
-    sentAt: number
-    /** What the reply may name as its thread: our DIDComm message, our document, our thread. */
-    ids: Set<string>
-    /** Of `ids`, those an earlier attempt of the same keyed request was sent with. */
-    earlier?: Set<string>
-  }
-  /** The task on the wire now: what a task queued behind it logs that it waits on. */
-  private inFlight?: { type: string; since: number; id: string }
+  /** The tasks on the wire, each waiting for its reply (more than one only in the read lane, vtaReadLane.ts). */
+  private pendings = new Map<
+    number,
+    {
+      resolve: (plaintext: DidCommV2PlaintextMessage) => void
+      sentAt: number
+      /** What the reply may name as its thread: our DIDComm message, our document, our thread. */
+      ids: Set<string>
+      /** Of `ids`, those an earlier attempt of the same keyed request was sent with. */
+      earlier?: Set<string>
+    }
+  >()
+  private nextSlot = 0
+  /** The tasks on the wire now: what a task queued behind them logs that it waits on. */
+  private inFlight = new Map<number, { type: string; since: number; id: string }>()
+  /**
+   * Whether this session's agent threads its replies. Until one comes back threaded, and for the rest of a session
+   * where one did not, every task goes one at a time: an unthreaded reply can be matched only to the one task on the
+   * wire. Cleared at each (re)connect.
+   */
+  private replyThreading: 'unknown' | 'threaded' | 'unthreaded' = 'unknown'
+  /** When an unanswered TSP ask last counted against the breaker: an ask sent before then was on the wire with it. */
+  private lastStrikeAt = 0
   /** The manager's TSP identity, when this build and this wallet can supply one. */
   private tsp?: TspSessionIdentity
   /** §4.2's per-peer decision, taken once per session. */
@@ -941,12 +962,16 @@ export class VtaClient {
   private heardFromAgent = false
   /** This agent's reply breaker: the caller's, shared by every client it makes for the agent, else this client's own. */
   private readonly breaker: TspReplyBreaker
-  private queue: Promise<unknown> = Promise.resolve()
+  /** Tasks asked for and not yet started, oldest first. */
+  private waiting: QueuedTask[] = []
+  /** Lane tasks on the wire now; and whether a task that runs alone is. */
+  private readsRunning = 0
+  private aloneRunning = false
   /** Each task's place in the queue; {@link dropQueued} drops those not yet sent. */
   private tickets = 0
   private droppedThrough = 0
-  /** Stops the wait of the task in flight ({@link dropQueued}). */
-  private cancelInFlight?: () => void
+  /** Stop the waits of the tasks in flight ({@link dropQueued}). */
+  private cancelInFlight = new Set<() => void>()
 
   /**
    * Drop every task queued and not yet sent, and stop waiting for the one in
@@ -958,7 +983,7 @@ export class VtaClient {
    */
   dropQueued(): void {
     this.droppedThrough = this.tickets
-    this.cancelInFlight?.()
+    for (const cancel of [...this.cancelInFlight]) cancel()
   }
 
   /** Keep a keyed attempt's ids; the oldest keys go first, past a few dozen. */
@@ -1021,8 +1046,7 @@ export class VtaClient {
       this.options.onInbound?.(plaintext)
       return
     }
-    const pending = this.pending
-    if (!pending) {
+    if (this.pendings.size === 0) {
       this.options.onInbound?.(plaintext)
       return
     }
@@ -1036,31 +1060,56 @@ export class VtaClient {
       (body as { threadId?: unknown } | undefined)?.threadId,
     ].filter((ref): ref is string => typeof ref === 'string' && ref.length > 0)
     if (threadRefs.length > 0) {
-      if (!threadRefs.some((ref) => pending.ids.has(ref))) {
+      const match = [...this.pendings].find(([, p]) => threadRefs.some((ref) => p.ids.has(ref)))
+      if (!match) {
         // Threaded to another request: a late answer to an earlier task.
         this.options.onInbound?.(plaintext)
         return
       }
+      const [slot, pending] = match
       if (pending.earlier && threadRefs.some((ref) => pending.earlier?.has(ref)))
         this.agent.config.logger.info(
           `${LOG_PREFIX} took the answer to an earlier attempt of the same keyed request (${body?.type ?? 'no type'})`
         )
-      this.pending = undefined
+      if (this.replyThreading === 'unknown') {
+        this.replyThreading = 'threaded'
+        if (this.readLaneSize > 1)
+          this.agent.config.logger.info(
+            `${LOG_PREFIX} ${this.vtaDid} threads its replies: up to ${this.readLaneSize} reads at a time this session`
+          )
+      }
+      this.pendings.delete(slot)
       pending.resolve(plaintext)
       return
     }
     // No thread at all: the old rule, the next message after the request — but
-    // never one older than it (a poll draining the queue) — and say so.
-    const stale = typeof plaintext.created_time === 'number' && plaintext.created_time * 1000 < pending.sentAt - 5000
+    // never one older than it (a poll draining the queue) — and say so. With
+    // more than one task on the wire there is no telling whose it is: none
+    // takes it, and the rest of the session goes one at a time.
+    const [only] = this.pendings.size === 1 ? [...this.pendings] : []
+    const sentAt = only ? only[1].sentAt : Math.min(...[...this.pendings.values()].map((p) => p.sentAt))
+    const stale = typeof plaintext.created_time === 'number' && plaintext.created_time * 1000 < sentAt - 5000
     if (stale) {
+      this.options.onInbound?.(plaintext)
+      return
+    }
+    this.replyThreading = 'unthreaded'
+    if (!only) {
+      this.agent.config.logger.warn(
+        `${LOG_PREFIX} a reply with no thread came while ${this.pendings.size} tasks were on the wire; taken by none, and one at a time from now (${body?.type ?? 'no type'})`
+      )
       this.options.onInbound?.(plaintext)
       return
     }
     this.agent.config.logger.warn(
       `${LOG_PREFIX} a reply with no thread was taken as the answer to the task in flight (${body?.type ?? 'no type'})`
     )
-    this.pending = undefined
-    pending.resolve(plaintext)
+    this.pendings.delete(only[0])
+    only[1].resolve(plaintext)
+  }
+
+  private get readLaneSize(): number {
+    return Math.max(1, this.options.readLaneSize ?? VTA_READ_LANE_SIZE)
   }
 
   /** Grants this client is waiting for, by the payload digest the VTA names. */
@@ -1108,6 +1157,8 @@ export class VtaClient {
       peerRevisionStore?: TspPeerRevisionStore
       /** Where probe outcomes are kept; the wallet's generic records when absent. */
       probeStore?: TspProbeStore
+      /** How many read-lane tasks may be on the wire at once (vtaReadLane.ts); its default when absent. */
+      readLaneSize?: number
     } = {}
   ) {
     this.breaker = options.breaker ?? new TspReplyBreaker()
@@ -1176,6 +1227,7 @@ export class VtaClient {
     // session's (D7FG-2Y9J: resetting it here, at every reconnect, was half of why the hold never held).
     this.carriageByPeer.clear()
     this.heardFromAgent = false
+    this.replyThreading = 'unknown'
     this.probeWaiter = undefined
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {
       onError: (error) => this.options.onError?.(error),
@@ -1215,8 +1267,9 @@ export class VtaClient {
   async disconnect(): Promise<void> {
     await this.session?.stop()
     this.session = undefined
-    this.pending = undefined
-    this.inFlight = undefined
+    this.pendings.clear()
+    this.inFlight.clear()
+    this.replyThreading = 'unknown'
     this.probeWaiter = undefined
   }
 
@@ -1372,7 +1425,11 @@ export class VtaClient {
     return done.finally(release)
   }
 
-  /** One send in the queue, behind whatever is in flight — no step-up or consent handling. */
+  /**
+   * One send in the queue, behind whatever is in flight — no step-up or consent handling. Oldest first: a task in the
+   * read lane (vtaReadLane.ts) may start beside other lane tasks, up to the lane's size, once this session's agent is
+   * known to thread its replies; any other task starts only when nothing is on the wire, and the tasks behind it wait.
+   */
   private enqueue<T>(
     type: string,
     payload: Record<string, unknown>,
@@ -1381,24 +1438,48 @@ export class VtaClient {
     onSent?: () => void
   ): Promise<T> {
     const ticket = ++this.tickets
-    const run = (): Promise<T> =>
-      ticket <= this.droppedThrough
-        ? Promise.reject(new VtaTaskDropped(type))
-        : this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent).finally(() => {
-            this.inFlight = undefined
-          })
-    // One task at a time: one queued behind another says what it waits on, so a
-    // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
-    const ahead = this.inFlight
-    if (ahead) {
-      this.agent.config.logger.info(
-        `${LOG_PREFIX} ${type} waits behind ${ahead.type} (in flight ${Math.round((Date.now() - ahead.since) / 1000)} s, ${ahead.id})`
-      )
+    return new Promise<T>((resolve, reject) => {
+      const run = (): Promise<T> =>
+        ticket <= this.droppedThrough
+          ? Promise.reject(new VtaTaskDropped(type))
+          : this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent)
+      this.waiting.push({ ticket, type, start: () => run().then(resolve, reject) })
+      // One task at a time: one queued behind another says what it waits on, so a
+      // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
+      const ahead = [...this.inFlight.values()][0]
+      if (ahead && !this.mayStart(type)) {
+        this.agent.config.logger.info(
+          `${LOG_PREFIX} ${type} waits behind ${ahead.type} (in flight ${Math.round((Date.now() - ahead.since) / 1000)} s, ${ahead.id})`
+        )
+      }
+      // Scheduled, not started: nothing of the task runs before the caller has its promise (task(), the OTA blocker).
+      void Promise.resolve().then(() => this.pump())
+    })
+  }
+
+  private sharesLane(type: string): boolean {
+    return this.readLaneSize > 1 && this.replyThreading === 'threaded' && inReadLane(type)
+  }
+
+  /** Whether a task of `type` at the head of the queue could start now. */
+  private mayStart(type: string): boolean {
+    if (this.aloneRunning) return false
+    return this.sharesLane(type) ? this.readsRunning < this.readLaneSize : this.readsRunning === 0
+  }
+
+  /** Start what may start, oldest first; a task that must wait holds back everything behind it. */
+  private pump(): void {
+    while (this.waiting.length > 0 && this.mayStart(this.waiting[0].type)) {
+      const next = this.waiting.shift() as QueuedTask
+      const shared = this.sharesLane(next.type)
+      if (shared) this.readsRunning++
+      else this.aloneRunning = true
+      void next.start().finally(() => {
+        if (shared) this.readsRunning--
+        else this.aloneRunning = false
+        this.pump()
+      })
     }
-    // Chain behind whatever is in flight, but do not let one failure poison the next.
-    const next = this.queue.then(run, run)
-    this.queue = next.catch(() => undefined)
-    return next
   }
 
   /**
@@ -1479,68 +1560,89 @@ export class VtaClient {
       const key = typeof documentExtras.idempotencyKey === 'string' ? documentExtras.idempotencyKey : undefined
       const earlier = new Set(key ? (this.attemptsByKey.get(key) ?? []) : [])
       if (key) this.rememberAttempt(key, [envelopeId, documentId, threadId])
+      const slot = ++this.nextSlot
       const reply = new Promise<DidCommV2PlaintextMessage>((resolve) => {
-        this.pending = { resolve, sentAt, ids: new Set([envelopeId, documentId, threadId, ...earlier]), earlier }
-        this.inFlight = { type, since: sentAt, id: documentId }
-      })
-      // §4.2 on the VTA leg: read what the VTA advertises and speak TSP when it
-      // offers it and this wallet can introduce itself. A VTA built without the
-      // `tsp` feature advertises nothing, and this stays on DIDComm.
-      const carriage = await chooseCarriage(
-        this.agent,
-        this.vtaDid,
-        Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS,
-        {
-          decided: this.carriageByPeer,
-          freshV1: async (peer) => isFreshV1(await this.peerRevisions.get(peer)),
-          onProbeWanted: (_peer, serviceId) => this.startProbe(serviceId),
-        }
-      )
-      const overTsp = carriage === 'tsp' && Boolean(this.tsp)
-      // The breaker (vta-sdk's D4 breaker, VTI #1978): after two TSP asks in a
-      // row went unanswered, nothing more is sent until the window passes; the
-      // first ask after it goes as the probe, with a fresh greeting.
-      if (overTsp && this.breaker.holding(Date.now())) {
-        this.pending = undefined
-        throw new VtaRepliesNotArriving(type, this.breaker.noAnswerInARow)
-      }
-      if (carriage === 'tsp' && this.tsp) {
-        if (!this.greeted) {
-          // Our mediator, then us: §5.3.3 ends a hop list at our own VID.
-          const route = [this.mediator!.did, did]
-          const invite = await tsp.packInviteV1(did, this.vtaDid, this.tsp.identity, this.tsp.resolver, { route })
-          await session.sendTspFrame(invite.bytes)
-          this.greeted = true
-          this.agent.config.logger.info(`${LOG_PREFIX} greeted ${this.vtaDid} with an XRFI invite`)
-        }
-        // To an upstream service TSP means TSP 1.0 (cutover plan §6.2).
-        const packed = await packTrustTaskForPeer(this.tsp, did, this.vtaDid, document, 'v1')
-        await session.sendTspFrame(packed.bytes)
-        this.agent.config.logger.info(
-          `${LOG_PREFIX} asked ${agentNamedFor(type, this.vtaDid)} ${type} over ${packed.revision}`
-        )
-      } else
-        await session.sendTo(this.vtaDid, {
-          id: envelopeId,
-          typ: 'application/didcomm-plain+json',
-          type: TRUST_TASK_V2_ENVELOPE_TYPE,
-          from: did,
-          to: [this.vtaDid],
-          thid: threadId,
-          created_time: nowSec(),
-          expires_time: nowSec() + 300,
-          body: document,
+        this.pendings.set(slot, {
+          resolve,
+          sentAt,
+          ids: new Set([envelopeId, documentId, threadId, ...earlier]),
+          earlier,
         })
-      onSent?.()
+        this.inFlight.set(slot, { type, since: sentAt, id: documentId })
+      })
+      const settle = () => {
+        this.pendings.delete(slot)
+        this.inFlight.delete(slot)
+      }
+      let overTsp = false
+      // Nothing sent, or a send that failed, leaves no reply waiting.
+      try {
+        // §4.2 on the VTA leg: read what the VTA advertises and speak TSP when it
+        // offers it and this wallet can introduce itself. A VTA built without the
+        // `tsp` feature advertises nothing, and this stays on DIDComm.
+        const carriage = await chooseCarriage(
+          this.agent,
+          this.vtaDid,
+          Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS,
+          {
+            decided: this.carriageByPeer,
+            freshV1: async (peer) => isFreshV1(await this.peerRevisions.get(peer)),
+            onProbeWanted: (_peer, serviceId) => this.startProbe(serviceId),
+          }
+        )
+        overTsp = carriage === 'tsp' && Boolean(this.tsp)
+        // The breaker (vta-sdk's D4 breaker, VTI #1978): after two TSP asks in a
+        // row went unanswered, nothing more is sent until the window passes; the
+        // first ask after it goes as the probe, with a fresh greeting.
+        if (overTsp && this.breaker.holding(Date.now())) {
+          settle()
+          throw new VtaRepliesNotArriving(type, this.breaker.noAnswerInARow)
+        }
+        if (carriage === 'tsp' && this.tsp) {
+          if (!this.greeted) {
+            // Our mediator, then us: §5.3.3 ends a hop list at our own VID.
+            const route = [this.mediator!.did, did]
+            const invite = await tsp.packInviteV1(did, this.vtaDid, this.tsp.identity, this.tsp.resolver, { route })
+            await session.sendTspFrame(invite.bytes)
+            this.greeted = true
+            this.agent.config.logger.info(`${LOG_PREFIX} greeted ${this.vtaDid} with an XRFI invite`)
+          }
+          // To an upstream service TSP means TSP 1.0 (cutover plan §6.2).
+          const packed = await packTrustTaskForPeer(this.tsp, did, this.vtaDid, document, 'v1')
+          await session.sendTspFrame(packed.bytes)
+          this.agent.config.logger.info(
+            `${LOG_PREFIX} asked ${agentNamedFor(type, this.vtaDid)} ${type} over ${packed.revision}`
+          )
+        } else
+          await session.sendTo(this.vtaDid, {
+            id: envelopeId,
+            typ: 'application/didcomm-plain+json',
+            type: TRUST_TASK_V2_ENVELOPE_TYPE,
+            from: did,
+            to: [this.vtaDid],
+            thid: threadId,
+            created_time: nowSec(),
+            expires_time: nowSec() + 300,
+            body: document,
+          })
+        onSent?.()
+      } catch (error) {
+        settle()
+        throw error
+      }
       let timer: ReturnType<typeof setTimeout> | undefined
+      let cancel: (() => void) | undefined
       const answer = await Promise.race([
         reply,
         new Promise<undefined>((resolve) => (timer = setTimeout(() => resolve(undefined), timeoutMs))),
-        new Promise<'dropped'>((resolve) => (this.cancelInFlight = () => resolve('dropped'))),
+        new Promise<'dropped'>((resolve) => {
+          cancel = () => resolve('dropped')
+          this.cancelInFlight.add(cancel)
+        }),
       ])
       clearTimeout(timer)
-      this.cancelInFlight = undefined
-      this.pending = undefined
+      if (cancel) this.cancelInFlight.delete(cancel)
+      settle()
       if (answer === 'dropped') throw new VtaTaskDropped(type)
       if (!answer) {
         // A VTA that restarted may have forgotten the relationship, and a
@@ -1554,7 +1656,11 @@ export class VtaClient {
         if (overTsp) {
           this.greeted = false
           const wasOpen = this.breaker.open
-          const holdMs = this.breaker.unanswered(Date.now())
+          // Asks on the wire together go unanswered together: the first counts, and one sent before it adds nothing
+          // (three reads in the lane timing out are one silence, not three).
+          const counts = sentAt >= this.lastStrikeAt
+          if (counts) this.lastStrikeAt = Date.now()
+          const holdMs = counts ? this.breaker.unanswered(this.lastStrikeAt) : undefined
           if (holdMs !== undefined) {
             // A VTA that found this phone not collecting drops its replies and
             // sends no accept for 5 min (VTI #1978): greeting it at every ask

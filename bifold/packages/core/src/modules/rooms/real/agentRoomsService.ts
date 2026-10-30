@@ -1178,9 +1178,11 @@ export class AgentRoomsService implements RoomsService {
   }
   /**
    * The room's files. No task lists them: a file is described in its record's sealed body, so the room is browsed
-   * and each live record opened, one at a time (the agent sends one task at a time), keeping what was opened by key
-   * and version so a second look reads only what changed. A record that can't be opened is left out; if none could
-   * be and there were some to open, that failure is the answer rather than "no files".
+   * and each live record opened in turn, keeping what was opened by key and version so a second look reads only
+   * what changed. This loop awaits each read, so it does not use the client's read lane (up to VTA_READ_LANE_SIZE
+   * reads at once, see trust-tasks/module/vtaReadLane.ts). Because a second look reuses what was opened, the
+   * one-after-another cost falls on a first open; a warm open hides it. A record that can't be opened is left out;
+   * if none could be and there were some to open, that failure is the answer rather than "no files".
    */
   public async listFiles(roomId: string): Promise<RoomFile[]> {
     const room = await this.requireInRoom(roomId, 'listFiles')

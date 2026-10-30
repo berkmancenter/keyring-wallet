@@ -36,10 +36,10 @@ function waitingClient() {
   )
   const resolve = jest.fn()
   const internals = client as unknown as {
-    pending?: { resolve: (m: unknown) => void; sentAt: number; ids: Set<string> }
+    pendings: Map<number, { resolve: (m: unknown) => void; sentAt: number; ids: Set<string> }>
     deliver: (m: unknown) => void
   }
-  internals.pending = { resolve, sentAt: Date.now(), ids: new Set(Object.values(SENT)) }
+  internals.pendings.set(1, { resolve, sentAt: Date.now(), ids: new Set(Object.values(SENT)) })
   return { onInbound, resolve, warn, deliver: (m: unknown) => internals.deliver(m), internals }
 }
 const reply = (
@@ -59,7 +59,7 @@ describe('a message the agent sends of its own accord, while a task waits for it
     expect(onInbound).toHaveBeenCalledWith(request)
     expect(resolve).not.toHaveBeenCalled()
     // The task still waits for its own answer, and gets it.
-    expect(internals.pending).toBeDefined()
+    expect(internals.pendings.size).toBe(1)
     const answer = reply({ type: HEARTBEAT, payload: { ok: true } })
     deliver(answer)
     expect(resolve).toHaveBeenCalledWith(answer)
@@ -111,7 +111,7 @@ describe('a reply is matched to its request by thread', () => {
     deliver(stale)
     expect(resolve).not.toHaveBeenCalled()
     expect(onInbound).toHaveBeenCalledWith(stale)
-    expect(internals.pending).toBeDefined()
+    expect(internals.pendings.size).toBe(1)
   })
 
   it('a reply with no thread at all falls back to arriving next, and says so', () => {
@@ -151,12 +151,12 @@ describe('a task that queues behind another says what it waits on', () => {
     const send = jest
       .spyOn(internals, 'sendTask')
       .mockImplementationOnce(async function (this: unknown) {
-        const internal = client as unknown as { inFlight?: object }
-        internal.inFlight = {
+        const internal = client as unknown as { inFlight: Map<number, object> }
+        internal.inFlight.set(1, {
           type: HEARTBEAT,
           since: Date.now() - 2000,
           id: 'urn:uuid:doc-hb',
-        }
+        })
         return first
       })
       .mockResolvedValueOnce({ entries: [] })

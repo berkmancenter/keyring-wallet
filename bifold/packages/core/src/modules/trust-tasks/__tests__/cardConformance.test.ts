@@ -721,7 +721,8 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
         sendTo: async (_to: string, message: { body: Record<string, unknown> }) => {
           toVta.push(message.body)
           // Answer at once, so each task settles without waiting out a clock.
-          const pending = (client as unknown as { pending?: { resolve(m: unknown): void } }).pending
+          const pendings = (client as unknown as { pendings: Map<number, { resolve(m: unknown): void }> }).pendings
+          const [pending] = pendings.values()
           pending?.resolve({ type: `${String(message.body.type)}#response`, body: { payload: {} } })
         },
       },
