@@ -18,7 +18,9 @@ export const ROOMS_TASK = {
   keysBrowse: `${SPEC}rooms/keys/browse/0.1`,
   keysRead: `${SPEC}rooms/keys/read/0.1`,
   membershipsList: `${SPEC}vtc/rooms/memberships/list/0.1`,
-  // 0.3 adds the renewals of rooms the member is already in; 0.2 is asked of a community without it.
+  // 0.4 renames a renewal's `renews` to `renewsAt` (VTC 0.16 serves only 0.4; 0.15 serves 0.2 and 0.4); 0.3 adds the
+  // renewals of rooms the member is already in; 0.2 is asked of a community without them.
+  offersList04: `${SPEC}vtc/rooms/offers/list/0.4`,
   offersList03: `${SPEC}vtc/rooms/offers/list/0.3`,
   offersList02: `${SPEC}vtc/rooms/offers/list/0.2`,
   offersAccept: `${SPEC}vtc/rooms/offers/accept/0.1`,
@@ -127,7 +129,7 @@ export function parseMemberships(payload: unknown): { items: RoomMembershipRecor
 }
 
 /**
- * One offer of a room the community owns (`vtc/rooms/offers/list` 0.2/0.3 `OfferV2`). The credentials are the
+ * One offer of a room the community owns (`vtc/rooms/offers/list` 0.2–0.4 `OfferV2`). The credentials are the
  * community's JSON text, stored in the member's agent on accept and never shown.
  */
 export interface OfferRecord {
@@ -143,7 +145,7 @@ export interface OfferRecord {
   credentials: { invitation: string; membership: string; authority: string }
 }
 
-/** A renewal of an admission the member holds (`vtc/rooms/offers/list/0.3` `renewals`). */
+/** A renewal of an admission the member holds (`vtc/rooms/offers/list` 0.3 and 0.4 `renewals`). */
 export interface RenewalRecord {
   roomId: string
   host: string
@@ -165,6 +167,9 @@ const credentialsOf = <K extends string>(v: unknown, keys: readonly K[]): Record
   }
   return out
 }
+
+/** The `vtc/rooms/offers/list` versions this client speaks, newest first. */
+export const OFFERS_LIST_TYPES = [ROOMS_TASK.offersList04, ROOMS_TASK.offersList03, ROOMS_TASK.offersList02] as const
 
 export function parseOffers(payload: unknown): {
   items: OfferRecord[]
@@ -200,7 +205,8 @@ export function parseOffers(payload: unknown): {
     const roomId = str(r?.roomId)
     const host = str(r?.host)
     const validUntil = str(r?.validUntil)
-    const renews = str(r?.renews)
+    // 0.4 names it `renewsAt`, 0.3 `renews`; the same instant.
+    const renews = str(r?.renewsAt) ?? str(r?.renews)
     const issuedAt = str(r?.issuedAt)
     const credentials = credentialsOf(r?.credentials, ['membership', 'authority'] as const)
     if (!roomId || !host || !validUntil || !renews || !issuedAt || !credentials) return []

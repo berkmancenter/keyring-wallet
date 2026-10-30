@@ -1,5 +1,5 @@
 import { AgentRoomsService, offerIdOf, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
-import { ROOMS_TASK } from '../real/wire'
+import { OFFERS_LIST_TYPES, ROOMS_TASK } from '../real/wire'
 import { PREVIEW_TOKEN_TTL_MS, RoomsPreviewExpired, RoomsRefused, RoomsUnavailable } from '../types'
 
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', personaDid: 'did:key:persona-a' }
@@ -62,6 +62,21 @@ interface Setup {
   hidden?: string[]
   accept?: (payload: Record<string, unknown>) => unknown
   welcome?: () => unknown
+  /** The `vtc/rooms/offers/list` versions the community serves: all three unless given. */
+  lists?: string[]
+}
+
+/**
+ * A community's answer to `vtc/rooms/offers/list` at `type`, as the spec shapes it: 0.4's renewals name the instant
+ * `renewsAt` (vtc/_shared/0.4 `Renewal`), 0.3's `renews` (0.1), and 0.2 carries no renewals.
+ */
+const listAnswer = (type: string, offers: Record<string, unknown>[], renewals?: Record<string, unknown>[]) => {
+  if (type === ROOMS_TASK.offersList02) return { items: offers }
+  if (type === ROOMS_TASK.offersList03) return { items: offers, renewals }
+  return {
+    items: offers,
+    renewals: renewals?.map(({ renews, ...rest }) => ({ ...rest, renewsAt: renews })),
+  }
 }
 
 function setup(o: Setup = {}) {
@@ -102,7 +117,11 @@ function setup(o: Setup = {}) {
     }
   })
   const answer = (type: string, payload: Record<string, unknown>): unknown => {
-    if (type === ROOMS_TASK.offersList03) return { items: o.offers ?? [], renewals: o.renewals }
+    if ((OFFERS_LIST_TYPES as readonly string[]).includes(type)) {
+      const lists: readonly string[] = o.lists ?? OFFERS_LIST_TYPES
+      if (!lists.includes(type)) throw new FakeRefusal('unsupportedVersion')
+      return listAnswer(type, o.offers ?? [], o.renewals)
+    }
     if (type === ROOMS_TASK.offersAccept) {
       if (o.accept) return o.accept(payload)
       return { roomId: payload.roomId, state: 'admitted', epoch: 1, welcome: 'welcome-bytes' }
@@ -181,7 +200,7 @@ describe('AgentRoomsService offers', () => {
     })
     const offers = await service.listOffers()
 
-    expect(communityTask).toHaveBeenCalledWith(COMMUNITY.did, ROOMS_TASK.offersList03, {})
+    expect(communityTask).toHaveBeenCalledWith(COMMUNITY.did, ROOMS_TASK.offersList04, {})
     expect(offers.map((x) => x.roomId)).toEqual([OPEN_ROOM, SEALED_ROOM])
     expect(offers[0]).toMatchObject({
       offerId: offerIdOf(COMMUNITY.did, OPEN_ROOM),
@@ -196,35 +215,88 @@ describe('AgentRoomsService offers', () => {
   })
 
   it('reads a community without renewals at 0.2', async () => {
-    const { service, communityTask } = setup()
-    communityTask.mockImplementation(async (_did: string, type: string) => {
-      if (type === ROOMS_TASK.offersList03) throw new FakeRefusal('unsupportedVersion')
-      return { items: [offer(OPEN_ROOM, 'open', 'open')] }
+    const { service, communityTask } = setup({
+      offers: [offer(OPEN_ROOM, 'open', 'open')],
+      lists: [ROOMS_TASK.offersList02],
     })
     expect((await service.listOffers()).map((x) => x.roomId)).toEqual([OPEN_ROOM])
-    expect(communityTask).toHaveBeenLastCalledWith(COMMUNITY.did, ROOMS_TASK.offersList02, {})
+    expect(communityTask.mock.calls.map((c) => c[1])).toEqual([...OFFERS_LIST_TYPES])
   })
 
   it('remembers a community answered at 0.2, and asks it 0.2 alone from then on', async () => {
-    const { service, communityTask } = setup()
-    communityTask.mockImplementation(async (_did: string, type: string) => {
-      if (type === ROOMS_TASK.offersList03) throw new FakeRefusal('unsupportedVersion')
-      return { items: [offer(OPEN_ROOM, 'open', 'open')] }
+    const { service, communityTask } = setup({
+      offers: [offer(OPEN_ROOM, 'open', 'open')],
+      lists: [ROOMS_TASK.offersList02],
     })
     await service.listOffers()
     await service.listOffers()
     await service.listOffers()
-    // One refused 0.3 on the first listing, then 0.2 only: four requests for three listings, not six.
+    // 0.4 and 0.3 refused once on the first listing, then 0.2 only: five requests for three listings, not nine.
+    expect(sent(communityTask, ROOMS_TASK.offersList04)).toHaveLength(1)
     expect(sent(communityTask, ROOMS_TASK.offersList03)).toHaveLength(1)
     expect(sent(communityTask, ROOMS_TASK.offersList02)).toHaveLength(3)
   })
 
-  it('keeps asking 0.3 of a community that serves it', async () => {
+  it('keeps asking 0.4 of a community that serves it', async () => {
     const { service, communityTask } = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
     await service.listOffers()
     await service.listOffers()
-    expect(sent(communityTask, ROOMS_TASK.offersList03)).toHaveLength(2)
-    expect(sent(communityTask, ROOMS_TASK.offersList02)).toHaveLength(0)
+    expect(sent(communityTask, ROOMS_TASK.offersList04)).toHaveLength(2)
+    expect(communityTask).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads a community that moved on to 0.4 alone (VTC 0.16) after it answered 0.2', async () => {
+    const lists: string[] = [ROOMS_TASK.offersList02]
+    const { service, communityTask } = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')], lists })
+    await service.listOffers()
+    lists.splice(0, 1, ROOMS_TASK.offersList04)
+    communityTask.mockClear()
+    expect((await service.listOffers()).map((x) => x.roomId)).toEqual([OPEN_ROOM])
+    expect(communityTask.mock.calls.map((c) => c[1])).toEqual([ROOMS_TASK.offersList02, ROOMS_TASK.offersList04])
+  })
+
+  it('control: any other refusal of 0.4 is passed on, not asked again at 0.3', async () => {
+    const { service, communityTask } = setup()
+    communityTask.mockImplementation(async () => {
+      throw new FakeRefusal('taskFailed', { code: 'vtc/rooms/offers/list:notAMember' })
+    })
+    // Asked of the one community, so its refusal reaches the caller rather than a warning.
+    await expect(service.listOffers(COMMUNITY.did)).rejects.toThrow()
+    expect(communityTask.mock.calls.map((c) => c[1])).toEqual([ROOMS_TASK.offersList04])
+  })
+
+  describe('a renewal, by the version the community serves', () => {
+    const renewal = {
+      roomId: JOINED_ROOM,
+      host: COMMUNITY.did,
+      validUntil: '2027-01-01T00:00:00Z',
+      renews: '2026-11-01T00:00:00Z',
+      issuedAt: '2026-10-26T00:00:00Z',
+      credentials: { membership: '{"id":"urn:vmc:new"}', authority: '{"id":"urn:vac:new"}' },
+    }
+
+    it.each([
+      ['VTC 0.16: 0.4 only (renewsAt)', [ROOMS_TASK.offersList04], ROOMS_TASK.offersList04],
+      ['VTC 0.15: 0.2 and 0.4', [ROOMS_TASK.offersList02, ROOMS_TASK.offersList04], ROOMS_TASK.offersList04],
+      ['a community at 0.3 (renews)', [ROOMS_TASK.offersList02, ROOMS_TASK.offersList03], ROOMS_TASK.offersList03],
+    ])('%s: is stored in place of what it renews', async (_label, lists, answered) => {
+      const { service, agentTask, communityTask } = setup({ renewals: [renewal], held: [JOINED_ROOM], lists })
+      await service.listOffers()
+      expect(communityTask).toHaveBeenLastCalledWith(COMMUNITY.did, answered, {})
+      expect(sent(agentTask, ROOMS_TASK.vaultReceive)).toHaveLength(2)
+    })
+
+    it('control: a renewal naming neither renewsAt nor renews is left, and nothing is stored', async () => {
+      const unnamed: Record<string, unknown> = { ...renewal }
+      delete unnamed.renews
+      const { service, agentTask } = setup({
+        renewals: [unnamed],
+        held: [JOINED_ROOM],
+        lists: [ROOMS_TASK.offersList03],
+      })
+      await service.listOffers()
+      expect(sent(agentTask, ROOMS_TASK.vaultReceive)).toHaveLength(0)
+    })
   })
 
   it('stores a renewal in place of what it renews, once, and never accepts it', async () => {
@@ -344,7 +416,7 @@ describe('AgentRoomsService offers', () => {
       invitation: credentials(SEALED_ROOM).invitation,
     })
     expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysBackfill, { roomId: SEALED_ROOM, host: COMMUNITY.did })
-    const after = calls.slice(calls.lastIndexOf(ROOMS_TASK.offersList03) + 1)
+    const after = calls.slice(calls.lastIndexOf(ROOMS_TASK.offersList04) + 1)
     expect(after).toEqual([
       ROOMS_TASK.vaultReceive,
       ROOMS_TASK.vaultReceive,

@@ -61,6 +61,7 @@ import {
 
 import {
   KEYS_ACT_TYPES,
+  OFFERS_LIST_TYPES,
   parseAccept,
   parseActed,
   parseBrowse,
@@ -685,16 +686,21 @@ export class AgentRoomsService implements RoomsService {
 
   /** Every page of a community's offers to this member, and the renewals the first page carries. */
   private async offersOf(community: RoomsCommunity): Promise<{ items: OfferRecord[]; renewals: RenewalRecord[] }> {
-    let type: string = this.offersType.get(community.did) ?? ROOMS_TASK.offersList03
+    // The version the community last answered first, then the others newest first: a community older than renewals
+    // is read at 0.2, which carries none, and one that moved on to 0.4 alone (VTC 0.16) is still read.
+    const known = this.offersType.get(community.did)
+    const types: string[] = known ? [known, ...OFFERS_LIST_TYPES.filter((t) => t !== known)] : [...OFFERS_LIST_TYPES]
+    let type = types[0]
     let first: unknown
-    try {
-      first = await this.backend.communityTask(community.did, type, {})
-    } catch (e) {
-      const code = refusalCode(e)
-      // A community older than renewals is read at 0.2, which carries none.
-      if (type !== ROOMS_TASK.offersList03 || (code !== 'unsupportedVersion' && code !== 'unsupportedType')) throw e
-      type = ROOMS_TASK.offersList02
-      first = await this.backend.communityTask(community.did, type, {})
+    for (let i = 0; ; i++) {
+      type = types[i]
+      try {
+        first = await this.backend.communityTask(community.did, type, {})
+        break
+      } catch (e) {
+        const code = refusalCode(e)
+        if (i === types.length - 1 || (code !== 'unsupportedVersion' && code !== 'unsupportedType')) throw e
+      }
     }
     this.offersType.set(community.did, type)
     const page = parseOffers(first)
@@ -710,7 +716,7 @@ export class AgentRoomsService implements RoomsService {
 
   /**
    * Stores each renewal's credentials in the agent's vault in place of the ones they renew, never beside them: a
-   * key holder holding two authorities from one room cannot choose between them (`vtc/rooms/offers/list/0.3`).
+   * key holder holding two authorities from one room cannot choose between them (`vtc/rooms/offers/list` 0.3/0.4).
    * Storing one already stored is success, so whichever surface collects it first wins.
    */
   private async takeRenewals(community: RoomsCommunity, renewals: RenewalRecord[]): Promise<void> {
