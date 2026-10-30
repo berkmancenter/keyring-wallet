@@ -9,6 +9,23 @@ import { TOKENS, useServices } from '../../container-api'
 
 const defaultIconSize = 26
 
+/**
+ * An IconButton's touch area reaches only 12 below its icon, so a header button stays inside the header. On Android a
+ * hit slop reaches past its parent and wins the touch there, so the shared 44 below took taps meant for the screen
+ * under the header: Messages' search Clear, 30 points down, opened New message (276.9).
+ *
+ * - Android's header is 56 points (@react-navigation/elements' default, in portrait and landscape; the app sets no
+ *   height), with the 26-point icon centred, 15 below it: 12 stays inside. iOS's is 44 (32 in landscape), but iOS
+ *   doesn't give a touch past the header to a button in it (Clear worked there under the old 44).
+ * - Every IconButton gets it, not only a header's: nearly all are (headerRight, Chat's menu, the scanner, FauxHeader's
+ *   drawn header), and the one in a screen's content, Settings' section edit pencil, keeps a target of 26 plus 44
+ *   above and 12 below, well over the 44-point minimum. The only loss is reach from below, where nothing overlapped.
+ *
+ * Above and to the sides it is still the shared 44, read as the button renders: `constants` can still be loading when
+ * this module is (a cycle through it), and a copy made here would have none of it.
+ */
+export const ICON_BUTTON_HIT_SLOP_BOTTOM = 12
+
 export enum ButtonLocation {
   Left,
   Right,
@@ -100,7 +117,7 @@ const IconButton: React.FC<IconButtonProps> = ({
       accessibilityRole={'button'}
       testID={testID}
       onPress={onPress}
-      hitSlop={hitSlop}
+      hitSlop={{ ...hitSlop, bottom: ICON_BUTTON_HIT_SLOP_BOTTOM }}
     >
       <View style={style.container}>{layoutForButtonLocation(buttonLocation)}</View>
     </Pressable>

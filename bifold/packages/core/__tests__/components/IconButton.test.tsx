@@ -75,4 +75,28 @@ describe('IconButton Component', () => {
 
     expect(callback).toHaveBeenCalledTimes(1)
   })
+
+  // On Android a hit slop reaches past the header and wins taps below it: Messages' search Clear opened New message.
+  test.each([
+    ['Left', ButtonLocation.Left],
+    ['Right', ButtonLocation.Right],
+  ])('%s: its touch area reaches only 12 below the icon, staying inside the header', (_name, location) => {
+    const tree = render(
+      <BasicAppContext>
+        <IconButton
+          buttonLocation={location}
+          accessibilityLabel={'HeaderButton'}
+          testID={testIdWithKey('HeaderButton')}
+          onPress={jest.fn()}
+          icon="information"
+        />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(testIdWithKey('HeaderButton')).props.hitSlop).toEqual({
+      top: 44,
+      bottom: 12,
+      left: 44,
+      right: 44,
+    })
+  })
 })
