@@ -93,8 +93,7 @@ on:
 
 permissions:
   contents: read
-  # Reading the target store build's recorded fingerprint (an artifact of its staging run), and, for an ota-strict
-  # change, the Test builds and gate-smoke runs that prove its launch smoke (scripts/ota/strict-proof.mjs).
+  # Reading the target store build's recorded fingerprint (an artifact of its staging run).
   actions: read
 
 concurrency:
@@ -367,8 +366,6 @@ jobs:
           SCOPE: ${{ inputs.scope }}
           EXPECTED: ${{ steps.expected.outputs.hash }}
           RECORDED: ${{ steps.expected.outputs.recorded }}
-          # An ota-strict change: ota-deploy proves its launch smoke for GITHUB_SHA through gh (strict-proof.mjs).
-          GH_TOKEN: ${{ github.token }}
           # Each bundle put on ring 0, as a JSON line, for the next step to upload (post-release.yml reads it).
           OTA_BUNDLE_RECORD: ${{ runner.temp }}/ota-bundle.jsonl
         run: |
@@ -483,13 +480,11 @@ jobs:
           node scripts/ota/native-config.mjs
           node scripts/ota/check-fingerprint.mjs verify --platform "$PLATFORM" --expected "$EXPECTED" --recorded "${RECORDED:-none}"
 
-      # The tier, as the publish will read it; for ota-strict (exit 5), the launch smoke, met or missing. The dry
-      # run passes only on exit 0, or on exit 5 with the smoke met.
+      # The tier, as the publish will read it. The dry run passes on exit 0 or 5 (ota-strict, a label since 10-29).
       - name: Dry run
         if: ${{ inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
         env:
           RELEASE: ${{ inputs.release }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           # The store build is the release number before its dot: 276.2 targets build 276.
           BUILD="${RELEASE%%.*}"
@@ -502,7 +497,8 @@ jobs:
           node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json || code=$?
           case "$code" in
             0) ;;
-            5) node scripts/ota/strict-proof.mjs --sha "$GITHUB_SHA" ;;
+            # ota-strict: a label since 10-29 (sign-in / keys / the VTI protocol line), published like ota.
+            5) echo "tier ota-strict: published like ota; the release touches what its strict flags name" ;;
             *) echo "::error::tier.mjs exit $code: not publishable over the air"; exit 1 ;;
           esac
 

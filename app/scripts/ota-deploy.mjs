@@ -13,9 +13,8 @@
  * JavaScript-only by scripts/release/tier.mjs (exit 0, tier "ota"), with no
  * held class (stored-record deletion always ships as a store build). Tier
  * "ota-strict" (exit 5: sign-in or key handling, the VTI protocol line) is
- * published only when scripts/ota/strict-proof.mjs proves a launch smoke on
- * both platforms for HEAD, from ota-publish.yml only (GITHUB_SHA must be
- * HEAD; GITHUB_REPOSITORY names the repository); otherwise nothing is.
+ * published the same way: since 10-29 the strict flags are a label, said in the
+ * log and the run's summary, not a gate.
  * Measuring from any other commit could read "ota" for JS that calls a native
  * method the build lacks.
  *
@@ -57,7 +56,6 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { assertFingerprint } from '../../scripts/ota/check-fingerprint.mjs'
-import { proveStrict } from '../../scripts/ota/strict-proof.mjs'
 
 const SCOPES = ['fix', 'within-purpose']
 const RING0 = 'ring0'
@@ -166,20 +164,16 @@ if (args['skip-tier']) {
   }
   const strict = run.status === 5 && verdict.tier === 'ota-strict'
   if (strict) {
-    // Only with the launch smoke proven for this exact commit (scripts/ota/strict-proof.mjs).
+    // A label, not a gate (the owner's decision, 10-29): a change that touches sign-in or keys, or the VTI protocol line,
+    // ships like any OTA on the one approval. Its PR tests, the post-release smoke and brake, and the nightly full gate
+    // protect it. The flags are said here and in the run's summary, so the release names what it touches.
     const flags = verdict.strict.join('; ')
-    console.log(`ota-deploy: tier ota-strict (${flags}); proving the launch smoke for ${walletHead.slice(0, 8)}`)
-    // The proof is for the commit the run checked out, and the bundle is built from HEAD: they must be one commit.
-    const checkedOut = process.env.GITHUB_SHA || 'unset'
-    if (checkedOut !== walletHead) {
-      fail(
-        `a strict bundle is published only by ota-publish.yml, from the commit it proves (GITHUB_SHA ${checkedOut}, HEAD ${walletHead})`
+    console.log(`ota-deploy: tier ota-strict, published like ota; this release touches: ${flags}`)
+    if (process.env.GITHUB_STEP_SUMMARY)
+      appendFileSync(
+        process.env.GITHUB_STEP_SUMMARY,
+        `### This release touches: ${flags}\n\nA label, not a gate: published like any OTA.\n`
       )
-    }
-    const conditions = proveStrict({ sha: walletHead, repo: process.env.GITHUB_REPOSITORY })
-    for (const c of conditions) console.log(`ota-deploy:   ${c.met ? 'met    ' : 'MISSING'} ${c.name}: ${c.detail}`)
-    if (!conditions.every((c) => c.met))
-      fail('tier is "ota-strict" and its launch smoke is not proven: nothing is published')
   } else if (run.status !== 0 || verdict.tier !== 'ota') {
     const held = verdict.held?.length ? `; held: ${verdict.held.join(', ')}` : ''
     fail(`tier is "${verdict.tier}" (exit ${run.status})${held}: this change ships as a store build`)
