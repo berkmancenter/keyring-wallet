@@ -2776,6 +2776,18 @@
   "MessageWake": {
     "Fetching": "Fetching new messages…"
   },
+  "MessagesList": {
+    "Title": "Messages",
+    "You": "You: {{text}}",
+    "ReactedTo": "{{name}} reacted {{emoji}} to “{{text}}”",
+    "Reacted": "{{name}} reacted {{emoji}}",
+    "YouReactedTo": "You reacted {{emoji}} to “{{text}}”",
+    "YouReacted": "You reacted {{emoji}}",
+    "TimerOn": "disappearing messages on",
+    "RowLabel": "{{name}}, {{preview}}, {{when}}",
+    "Unread_one": "{{count}} unread message",
+    "Unread_other": "{{count}} unread messages"
+  },
   "Relationship": {
     "ResignUnavailable": "Sign again: your cards are already signed with secure hardware.",
     "WitnessUnavailable": "Add a witness: connect to a witness first. Tap the shield at the top of Contacts.",

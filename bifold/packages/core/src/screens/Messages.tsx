@@ -82,11 +82,6 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
     },
     fetching: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
     fetchingText: { color: ColorPalette.grayscale.mediumGrey },
-    itemSeparator: {
-      backgroundColor: ColorPalette.brand.primaryBackground,
-      height: 1,
-      marginHorizontal: 16,
-    },
   })
 
   const onPressAddContact = useCallback(() => {
@@ -95,7 +90,8 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
 
   useEffect(() => {
     navigation.setOptions({
-      title: 'Secure Connection Messaging',
+      // The tab's own name, in the app's language: encryption is said once, in the empty state.
+      title: t('MessagesList.Title'),
       headerTitleAlign: 'center',
     })
 
@@ -124,7 +120,6 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
         style={style.list}
         contentContainerStyle={{ flexGrow: 1 }}
         data={rows}
-        ItemSeparatorComponent={() => <View style={style.itemSeparator} />}
         keyExtractor={(row) => row.key}
         renderItem={({ item: row }) => (
           <ContactListItem contact={row.connection} connectionIds={row.connectionIds} navigation={navigation as any} />

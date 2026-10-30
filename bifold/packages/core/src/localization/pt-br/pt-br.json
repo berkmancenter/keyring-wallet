@@ -2626,6 +2626,18 @@
   "MessageWake": {
     "Fetching": "Buscando novas mensagens…"
   },
+  "MessagesList": {
+    "Title": "Mensagens",
+    "You": "Você: {{text}}",
+    "ReactedTo": "{{name}} reagiu {{emoji}} a “{{text}}”",
+    "Reacted": "{{name}} reagiu {{emoji}}",
+    "YouReactedTo": "Você reagiu {{emoji}} a “{{text}}”",
+    "YouReacted": "Você reagiu {{emoji}}",
+    "TimerOn": "mensagens temporárias ativadas",
+    "RowLabel": "{{name}}, {{preview}}, {{when}}",
+    "Unread_one": "{{count}} mensagem não lida",
+    "Unread_other": "{{count}} mensagens não lidas"
+  },
   "Relationship": {
     "ResignUnavailable": "Assinar de novo: seus cartões já estão assinados com hardware seguro.",
     "WitnessUnavailable": "Adicionar uma testemunha: conecte-se primeiro a uma testemunha. Toque no escudo no topo de Contatos.",

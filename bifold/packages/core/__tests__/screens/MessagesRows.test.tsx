@@ -100,6 +100,12 @@ beforeEach(() => {
   ;(useBasicMessages as jest.Mock).mockReturnValue({ records: [] })
 })
 
+// The tab's own name, in the app's language: no longer "Secure Connection Messaging", in English only.
+test('the title is "Messages", in the app language', () => {
+  list(false)
+  expect(navigation.setOptions).toHaveBeenCalledWith(expect.objectContaining({ title: 'MessagesList.Title' }))
+})
+
 describe('never infrastructure', () => {
   test.each([false, true])('no mediator and no unfinished connection (developer mode %s)', (developerMode) => {
     // Six connections, four of them people: nothing linked, so a row each.

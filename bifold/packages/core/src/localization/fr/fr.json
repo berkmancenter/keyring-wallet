@@ -2724,6 +2724,18 @@
   "MessageWake": {
     "Fetching": "Récupération des nouveaux messages…"
   },
+  "MessagesList": {
+    "Title": "Messages",
+    "You": "Vous : {{text}}",
+    "ReactedTo": "{{name}} a réagi {{emoji}} à « {{text}} »",
+    "Reacted": "{{name}} a réagi {{emoji}}",
+    "YouReactedTo": "Vous avez réagi {{emoji}} à « {{text}} »",
+    "YouReacted": "Vous avez réagi {{emoji}}",
+    "TimerOn": "messages éphémères activés",
+    "RowLabel": "{{name}}, {{preview}}, {{when}}",
+    "Unread_one": "{{count}} message non lu",
+    "Unread_other": "{{count}} messages non lus"
+  },
   "Relationship": {
     "ResignUnavailable": "Signer à nouveau : vos cartes sont déjà signées avec du matériel sécurisé.",
     "WitnessUnavailable": "Ajouter un témoin : connectez-vous d'abord à un témoin. Touchez le bouclier en haut de Contacts.",
