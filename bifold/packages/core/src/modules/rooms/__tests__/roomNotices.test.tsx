@@ -85,7 +85,7 @@ describe('a new room offer', () => {
     expect(toast(0)).toMatchObject({ text1: 'Rooms.NoticeOffered', text2: 'Rooms.NoticeSeeOffer', position: 'bottom' })
     act(() => toast(0).onPress())
     expect(navigate).toHaveBeenCalledWith(Stacks.TabStack, {
-      screen: TabStacks.MyAgentStack,
+      screen: TabStacks.MessageStack,
       params: { screen: Screens.RoomOffer, initial: false, params: { offerRef: offers[0].offerId } },
     })
     first.unmount()
@@ -111,7 +111,7 @@ describe('a new room offer', () => {
     expect(show).toHaveBeenCalledTimes(2)
     act(() => toast(1).onPress())
     expect(navigate).toHaveBeenLastCalledWith(Stacks.TabStack, {
-      screen: TabStacks.MyAgentStack,
+      screen: TabStacks.MessageStack,
       params: { screen: Screens.RoomOffer, initial: false, params: { offerRef: offers[1].offerId } },
     })
     later.unmount()
@@ -128,7 +128,7 @@ describe('a new room offer', () => {
     hook.unmount()
   })
 
-  test('several at once are counted, and a tap opens Rooms', async () => {
+  test('several at once are counted, and a tap opens Messages, whose offers card lists them', async () => {
     mockService = offering(() => [offer('planning'), offer('welcome-desk')])
     const hook = renderHook(() => useRoomNotices())
     await flush()
@@ -136,8 +136,8 @@ describe('a new room offer', () => {
     expect(toast(0)).toMatchObject({ text1: 'Rooms.NoticeOfferedMany', text2: 'Rooms.NoticeSeeOffers' })
     act(() => toast(0).onPress())
     expect(navigate).toHaveBeenCalledWith(Stacks.TabStack, {
-      screen: TabStacks.MyAgentStack,
-      params: { screen: Screens.RoomsHome, initial: false },
+      screen: TabStacks.MessageStack,
+      params: { screen: Screens.Messages },
     })
     hook.unmount()
   })
@@ -265,7 +265,7 @@ describe('room access', () => {
     await AsyncStorage.setItem(ACCESS_KEPT_KEY, '{}')
   })
 
-  test('access ending is said once, from the rows poll, and a tap opens the room', async () => {
+  test('access ending is said once, from the rows poll, and a tap opens the room in Messages', async () => {
     const rooms = [summary('planning', { validUntil: soon() })]
     mockService = listing(() => rooms)
     const notices = renderHook(() => useRoomNotices())
@@ -276,7 +276,7 @@ describe('room access', () => {
     expect(said[0]).toMatchObject({ type: 'warn', text2: 'Rooms.NoticeSeeRoom', position: 'bottom' })
     act(() => said[0].onPress())
     expect(navigate).toHaveBeenCalledWith(Stacks.TabStack, {
-      screen: TabStacks.MyAgentStack,
+      screen: TabStacks.MessageStack,
       params: { screen: Screens.Room, initial: false, params: { roomId: 'planning' } },
     })
 
@@ -284,6 +284,21 @@ describe('room access', () => {
     await flush()
     await flush()
     expect(show.mock.calls.filter(([o]) => o.text1 === 'Rooms.NoticeAccessEndsIn')).toHaveLength(1)
+    notices.unmount()
+  })
+
+  test('several rooms ending at once are counted, and a tap opens Messages', async () => {
+    mockService = listing(() => [summary('planning', { validUntil: soon() }), summary('board', { validUntil: soon() })])
+    const notices = renderHook(() => useRoomNotices())
+    await flush()
+    await flush()
+    const said = show.mock.calls.map(([o]) => o).filter((o) => o.text1 === 'Rooms.NoticeAccessEndingMany')
+    expect(said).toHaveLength(1)
+    act(() => said[0].onPress())
+    expect(navigate).toHaveBeenCalledWith(Stacks.TabStack, {
+      screen: TabStacks.MessageStack,
+      params: { screen: Screens.Messages },
+    })
     notices.unmount()
   })
 

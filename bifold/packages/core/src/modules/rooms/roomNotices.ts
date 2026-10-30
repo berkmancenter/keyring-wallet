@@ -3,14 +3,16 @@
  * community's own ("You're now a member of …", joinedNotice): above the tab bar, for a few seconds, while the app is
  * open. Mounted once, from the tab navigator.
  *
- * - A new room offer: "You've been offered a room in …"; a tap opens it (several at once open Rooms). Offers are
+ * - A new room offer: "You've been offered a room in …"; a tap opens it in Messages, with Messages below it
+ *   (several at once open Messages, whose offers card lists them). Offers are
  *   pulled, not pushed, so this runs the offers poll (useRoomOffersCount) from here, which My Agent's badge reads.
  *   Each offer is said once: the offers already said are kept on this phone, as short hashes of their ids, so a
  *   lock, a relaunch or the next poll does not say them again.
  * - An admission: "You've been admitted to …", when an accept the member sent is answered (useRoomOffer).
  * - A post that failed while its room was not on screen: "Your post to … didn't send"; a tap sends it again, as the
  *   same event (useRoomSend). In the room, the post itself says so.
- * - Access ending: "Your access to … ends in 5 days", then "… ends tomorrow" (or today); a tap opens the room.
+ * - Access ending: "Your access to … ends in 5 days", then "… ends tomorrow" (or today); a tap opens the room in
+ *   Messages, with Messages below it (several at once open Messages).
  * - Access gone: "You no longer have access to …", or "Your access to … has ended" once its end has passed.
  *   Both are read from the rows poll's listing of the member's rooms (roomAccess.ts says which, once each).
  *
@@ -150,12 +152,13 @@ export function useRoomNotices(): void {
   const service = useRoomsService()
   const linked = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().link.kind === 'linked')
 
-  // Through the main stack, as an agent link does, so the screen comes to the top over whatever is open.
-  const openInMyAgent = useCallback(
+  // Through the main stack, as an agent link does, so the screen comes to the top over whatever is open. Every room
+  // notice opens in Messages, where the rooms are (R2), with Messages kept below what it opens.
+  const openInMessages = useCallback(
     (screen: Screens, params?: object) =>
       navigation.navigate(Stacks.TabStack, {
-        screen: TabStacks.MyAgentStack,
-        params: { screen, initial: false, ...(params ? { params } : {}) },
+        screen: TabStacks.MessageStack,
+        params: screen === Screens.Messages ? { screen } : { screen, initial: false, ...(params ? { params } : {}) },
       }),
     [navigation]
   )
@@ -173,13 +176,13 @@ export function useRoomNotices(): void {
           bottomOffset,
           onPress: () => {
             Toast.hide()
-            if (fresh.length === 1) openInMyAgent(Screens.RoomOffer, { offerRef: fresh[0].offerId })
-            else openInMyAgent(Screens.RoomsHome)
+            if (fresh.length === 1) openInMessages(Screens.RoomOffer, { offerRef: fresh[0].offerId })
+            else openInMessages(Screens.Messages)
           },
         })
       })
     },
-    [service, t, bottomOffset, openInMyAgent]
+    [service, t, bottomOffset, openInMessages]
   )
   useRoomOffersCount(service, linked, onOffers)
 
@@ -199,14 +202,14 @@ export function useRoomNotices(): void {
             onPress: ending
               ? () => {
                   Toast.hide()
-                  if (notice.rooms.length === 1) openInMyAgent(Screens.Room, { roomId: notice.rooms[0].room.roomId })
-                  else openInMyAgent(Screens.RoomsHome)
+                  if (notice.rooms.length === 1) openInMessages(Screens.Room, { roomId: notice.rooms[0].room.roomId })
+                  else openInMessages(Screens.Messages)
                 }
               : undefined,
           })
         })
       }),
-    [t, bottomOffset, openInMyAgent]
+    [t, bottomOffset, openInMessages]
   )
   // The rooms as Messages rows, read by one poll for the app: Messages and the tab's badge both read it.
   useRoomRowsPoll(service, linked)
