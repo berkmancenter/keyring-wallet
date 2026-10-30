@@ -7,20 +7,27 @@
  * Who wrote it is said as the room says it: the member's own name for them, else the name they wrote on their
  * directory card when this phone already has it, else the community's words. The list never looks a name up itself.
  *
+ * Behind it, Hide (R3): a swipe, a long press or the screen reader's action takes the room off Messages until someone
+ * posts in it again, with Undo. Not Delete: a room's posts live with its community, not on this phone. No question
+ * first, since Undo puts it back.
+ *
  * @module rooms/components/RoomMessageRow
  */
-import React from 'react'
+import React, { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, TouchableOpacity, View } from 'react-native'
+import Toast from 'react-native-toast-message'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { rowTime } from '../../../components/listItems/messagesListRow'
+import SwipeRow from '../../../components/listItems/SwipeRow'
+import { UNDO_WINDOW_MS } from '../../chat/pendingChatDeletes'
 import { useTheme } from '../../../contexts/theme'
 import { useDateWords, useUses24HourClock } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import { useDirectoryNames, useDirectoryService } from '../../directory/useDirectory'
-import type { RoomRow } from '../useRoomRows'
+import { hideRoom, type RoomRow } from '../useRoomRows'
 import { usePetnames } from '../usePetname'
 
 import { ROOM_MARK_FILL } from './RoomHeader'
@@ -136,6 +143,17 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
     divider: { height: StyleSheet.hairlineWidth, backgroundColor: DIVIDER, marginLeft: 16 + MARK_SIZE + 12 },
   })
 
+  const hide = useCallback(() => {
+    const undo = hideRoom(row.roomId)
+    if (!undo) return
+    Toast.show({
+      type: 'undo',
+      text1: t('Rooms.Hidden', { room: name, ...asWritten }) as string,
+      visibilityTime: UNDO_WINDOW_MS,
+      props: { onUndo: undo },
+    })
+  }, [row.roomId, t, name])
+
   // One sentence for a screen reader: which room, where, what was said, when, and how many are unread.
   const label = [
     t(community ? 'Rooms.RowLabelIn' : 'Rooms.RowLabel', { room: name, community, preview: line, ...asWritten }),
@@ -146,50 +164,65 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
     .join(', ')
 
   return (
-    <TouchableOpacity
-      onPress={() => onOpen(row.roomId)}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      testID={testIdWithKey('RoomMessageRow')}
+    <SwipeRow
+      action={{
+        name: 'hide',
+        label: t('Rooms.Hide'),
+        icon: 'eye-off-outline',
+        tone: 'neutral',
+        width: 96,
+        onPress: hide,
+        testID: testIdWithKey('RoomMessageRowHide'),
+      }}
     >
-      <View style={styles.row}>
-        <View style={styles.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          {row.nameFrom === 'roomId' ? (
-            <Icon name="door" size={22} color={ColorPalette.brand.primary} />
-          ) : (
-            <ThemedText style={styles.letters}>{initialsOf(name)}</ThemedText>
-          )}
-        </View>
-        <View style={styles.middle}>
-          <View style={styles.top}>
-            <View style={styles.nameWrap}>
-              <ThemedText style={styles.name} numberOfLines={1}>
-                {name}
-              </ThemedText>
-              {community ? (
-                <View style={styles.tag}>
-                  <ThemedText style={styles.tagText} numberOfLines={1}>
-                    {community}
-                  </ThemedText>
-                </View>
-              ) : null}
+      {(touch) => (
+        <TouchableOpacity
+          onPress={() => onOpen(row.roomId)}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          testID={testIdWithKey('RoomMessageRow')}
+          {...touch}
+        >
+          <View style={styles.row}>
+            <View style={styles.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              {row.nameFrom === 'roomId' ? (
+                <Icon name="door" size={22} color={ColorPalette.brand.primary} />
+              ) : (
+                <ThemedText style={styles.letters}>{initialsOf(name)}</ThemedText>
+              )}
             </View>
-            {when ? <ThemedText style={styles.when}>{when}</ThemedText> : null}
-          </View>
-          <View style={styles.bottom}>
-            <ThemedText style={styles.preview} numberOfLines={1} ellipsizeMode="tail">
-              {line}
-            </ThemedText>
-            {unread ? (
-              <View style={styles.badge} testID={testIdWithKey('MessagesListUnread')}>
-                <ThemedText style={styles.badgeText}>{row.unread > 99 ? '99+' : row.unread}</ThemedText>
+            <View style={styles.middle}>
+              <View style={styles.top}>
+                <View style={styles.nameWrap}>
+                  <ThemedText style={styles.name} numberOfLines={1}>
+                    {name}
+                  </ThemedText>
+                  {community ? (
+                    <View style={styles.tag}>
+                      <ThemedText style={styles.tagText} numberOfLines={1}>
+                        {community}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                </View>
+                {when ? <ThemedText style={styles.when}>{when}</ThemedText> : null}
               </View>
-            ) : null}
+              <View style={styles.bottom}>
+                <ThemedText style={styles.preview} numberOfLines={1} ellipsizeMode="tail">
+                  {line}
+                </ThemedText>
+                {unread ? (
+                  <View style={styles.badge} testID={testIdWithKey('MessagesListUnread')}>
+                    <ThemedText style={styles.badgeText}>{row.unread > 99 ? '99+' : row.unread}</ThemedText>
+                  </View>
+                ) : null}
+              </View>
+            </View>
           </View>
-        </View>
-      </View>
-      <View style={styles.divider} />
-    </TouchableOpacity>
+          <View style={styles.divider} />
+        </TouchableOpacity>
+      )}
+    </SwipeRow>
   )
 }
 

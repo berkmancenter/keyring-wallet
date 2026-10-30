@@ -6,6 +6,7 @@
  * pt-BR.
  */
 import { fireEvent, render } from '@testing-library/react-native'
+import Toast from 'react-native-toast-message'
 import { readFileSync } from 'fs'
 import i18n from 'i18next'
 import path from 'path'
@@ -28,6 +29,9 @@ jest.mock('../../directory/useDirectory', () => ({
   useDirectoryNames: () => new Map(),
 }))
 jest.mock('../usePetname', () => ({ usePetnames: () => new Map([['did:key:z6MkLena', 'Lena']]) }))
+const mockUndo = jest.fn()
+let mockHide: jest.Mock = jest.fn(() => mockUndo)
+jest.mock('../useRoomRows', () => ({ hideRoom: (roomId: string) => mockHide(roomId) }))
 let mockOffers: RoomOffer[] = []
 jest.mock('../useRoomOffersCount', () => ({
   useRoomOffersWaiting: (communityDid?: string) =>
@@ -95,6 +99,31 @@ describe("a room's Messages row", () => {
   })
 })
 
+describe("Hide, behind a room's row", () => {
+  test('the swipe action and a long press both hide the room, with Undo; nothing hidden, no toast (control)', () => {
+    const toast = jest.spyOn(Toast, 'show').mockImplementation(() => undefined)
+    mockHide = jest.fn(() => mockUndo)
+    const tree = show(<RoomMessageRow row={row()} onOpen={jest.fn()} />)
+    fireEvent.press(tree.getByTestId(id('RoomMessageRowHide')))
+    expect(mockHide).toHaveBeenCalledWith('planning')
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'undo', text1: 'Rooms.Hidden', props: { onUndo: mockUndo } })
+    )
+    fireEvent(tree.getByTestId(id('RoomMessageRow')), 'longPress')
+    expect(mockHide).toHaveBeenCalledTimes(2)
+    // The screen reader's own action, under its name.
+    expect(tree.getByTestId(id('RoomMessageRow')).props.accessibilityActions).toEqual([
+      { name: 'hide', label: 'Rooms.Hide' },
+    ])
+
+    toast.mockClear()
+    mockHide = jest.fn(() => undefined)
+    fireEvent.press(tree.getByTestId(id('RoomMessageRowHide')))
+    expect(toast).not.toHaveBeenCalled()
+    toast.mockRestore()
+  })
+})
+
 describe('the "Waiting for you" card', () => {
   test('one per offer, a community chip shows only its own, none waiting shows nothing', () => {
     mockOffers = [offer('kernel'), offer('desk', 'did:webvh:QmTest:vtc.example')]
@@ -147,6 +176,8 @@ describe('the words', () => {
       i.t('Rooms.OfferWaiting'),
       i.t('Rooms.OfferLook'),
       i.t('Rooms.OfferLookLabel', { room: 'Kernel notes' }),
+      i.t('Rooms.Hide'),
+      i.t('Rooms.Hidden', { room: 'Planning' }),
     ]
     for (const words of said) expect(words).not.toMatch(/\{\{|Rooms\./)
     expect(said[6]).toContain('Keyring Lab')

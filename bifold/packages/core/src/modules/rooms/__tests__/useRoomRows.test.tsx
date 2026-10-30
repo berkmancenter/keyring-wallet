@@ -15,7 +15,9 @@ import { toInertText } from '../inertText'
 import { chatMessageBody } from '../roomPosts'
 import type { Identity, Note, NoteList, NoteSummary, RoomsService, RoomSummary } from '../types'
 import {
+  hideRoom,
   markRoomSeen,
+  ROOMS_HIDDEN_KEY,
   resetRoomRows,
   ROOMS_SEEN_KEY,
   ROWS_POLL_MS,
@@ -86,6 +88,7 @@ beforeEach(async () => {
   jest.useFakeTimers()
   resetRoomRows()
   await AsyncStorage.setItem(ROOMS_SEEN_KEY, '{}')
+  await AsyncStorage.setItem(ROOMS_HIDDEN_KEY, '{}')
   focus = undefined
   ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => (() => void) | void) => {
     focus = effect
@@ -216,6 +219,43 @@ describe('rooms as Messages rows', () => {
     act(() => leave?.())
     await step(ROWS_POLL_MS)
     expect(s.listMyRooms).toHaveBeenCalledTimes(4)
+  })
+
+  test('Hide takes a room off Messages and the badge until someone posts; Undo puts back exactly what was there', async () => {
+    const notes: Record<string, NoteSummary[]> = { planning: [note('n1', 1)], desk: [note('d1', 1)] }
+    const s = serviceWith([room('planning'), room('desk')], notes)
+    const first = mount(s)
+    await flush()
+    notes.planning.push(note('n2', 2))
+    await act(async () => refreshRoomRows())
+    expect(first.list.result.current.unread).toBe(1)
+
+    let undo: (() => void) | undefined
+    act(() => {
+      undo = hideRoom('planning')
+    })
+    expect(first.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['desk'])
+    expect(first.list.result.current.unread).toBe(0)
+    act(() => undo?.())
+    expect(first.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['planning', 'desk'])
+    expect(first.list.result.current.unread).toBe(1)
+
+    // Hidden again, and still hidden after a relaunch.
+    act(() => void hideRoom('planning'))
+    first.poll.unmount()
+    first.list.unmount()
+    resetRoomRows()
+    const again = mount(s)
+    await flush()
+    expect(again.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['desk'])
+    const kept = (await AsyncStorage.getItem(ROOMS_HIDDEN_KEY)) as string
+    expect(kept).not.toContain('planning')
+
+    // Someone posts: it's back, and only what came after the hide counts (n2 was put away as read).
+    notes.planning.push(note('n3', 3))
+    await act(async () => refreshRoomRows())
+    expect(again.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['planning', 'desk'])
+    expect(again.list.result.current.unread).toBe(1)
   })
 
   test('a read that fails says so and keeps the rows; no agent linked, no rows and nothing asked', async () => {

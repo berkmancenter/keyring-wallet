@@ -3115,6 +3115,8 @@
     "OfferWaiting": "Waiting for you",
     "OfferLook": "Look",
     "OfferLookLabel": "Look at the offer for {{room}}",
+    "Hide": "Hide",
+    "Hidden": "{{room}} is hidden from Messages. It comes back when someone posts.",
     "FileOpenHint": "Shows the file's details and lets you download it.",
     "FileTypeAsShared": "{{type}}, as shared",
     "FileSharedBy": "Shared by {{who}}",

@@ -2965,6 +2965,8 @@
     "OfferWaiting": "Esperando por você",
     "OfferLook": "Ver",
     "OfferLookLabel": "Ver o convite para {{room}}",
+    "Hide": "Ocultar",
+    "Hidden": "{{room}} está oculta em Mensagens. Ela volta quando alguém publicar.",
     "FileOpenHint": "Mostra os detalhes do arquivo e permite baixá-lo.",
     "FileTypeAsShared": "{{type}}, como compartilhado",
     "FileSharedBy": "Compartilhado por {{who}}",

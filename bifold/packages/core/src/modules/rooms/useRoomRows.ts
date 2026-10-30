@@ -18,6 +18,9 @@
  * new. A room met for the first time starts seen up to its newest post: nothing written before Messages showed rooms
  * counts as unread. The member's own posts never count.
  *
+ * A room can be hidden from Messages until someone posts in it again ({@link hideRoom}); that is kept on this phone
+ * the same way.
+ *
  * Everything else is in memory only, per rooms service, and not named `*Store`: tier.mjs reads a `.delete(` on such a
  * name as deleting stored records.
  *
@@ -43,6 +46,8 @@ export const ROWS_FOCUS_FLOOR_MS = 10_000
 
 /** Where the newest post seen in each room is kept: by a hash of the room's ID. */
 export const ROOMS_SEEN_KEY = 'rooms.seenVersions'
+/** Where hidden rooms are kept, by a hash of the room's ID: the newest post when it was hidden. */
+export const ROOMS_HIDDEN_KEY = 'rooms.hiddenUntil'
 
 export interface RoomRowPost {
   /** Who wrote it; absent when the host didn't say. */
@@ -81,6 +86,8 @@ interface Track {
 
 interface Feed {
   service?: RoomsService
+  /** Every room read; `rows` leaves out the hidden ones. */
+  all?: RoomRow[]
   rows?: RoomRow[]
   failed: boolean
   asking: boolean
@@ -97,27 +104,42 @@ let tracks = new WeakMap<RoomsService, Map<string, Track>>()
 const hashOf = (roomId: string) => bytesToHex(sha256(utf8ToBytes(roomId))).slice(0, 16)
 
 let seenVersions: Record<string, number> | undefined
+let hiddenUntil: Record<string, number> | undefined
 let seenRead: Promise<void> | undefined
+
+const versionsAt = async (key: string): Promise<Record<string, number>> => {
+  const versions: Record<string, number> = {}
+  try {
+    const raw = await AsyncStorage.getItem(key)
+    const kept: unknown = raw ? JSON.parse(raw) : {}
+    if (kept && typeof kept === 'object')
+      for (const [k, v] of Object.entries(kept as Record<string, unknown>)) if (typeof v === 'number') versions[k] = v
+  } catch {
+    // Nothing kept, or not readable: start from nothing.
+  }
+  return versions
+}
+
 const readSeen = () =>
   (seenRead ??= (async () => {
-    try {
-      const raw = await AsyncStorage.getItem(ROOMS_SEEN_KEY)
-      const kept: unknown = raw ? JSON.parse(raw) : {}
-      seenVersions = {}
-      if (kept && typeof kept === 'object')
-        for (const [k, v] of Object.entries(kept as Record<string, unknown>))
-          if (typeof v === 'number') seenVersions[k] = v
-    } catch {
-      seenVersions = {}
-    }
+    seenVersions = await versionsAt(ROOMS_SEEN_KEY)
+    hiddenUntil = await versionsAt(ROOMS_HIDDEN_KEY)
   })())
 
-const keepSeen = async () => {
+// Written whole each time, never removed key by key: a room's entry goes by writing the rest.
+const keep = async (key: string, versions: Record<string, number> | undefined) => {
   try {
-    await AsyncStorage.setItem(ROOMS_SEEN_KEY, JSON.stringify(seenVersions ?? {}))
+    await AsyncStorage.setItem(key, JSON.stringify(versions ?? {}))
   } catch {
-    // Kept in memory for this run; a relaunch counts from the last version kept.
+    // Kept in memory for this run; a relaunch starts from what was last kept.
   }
+}
+const keepSeen = () => keep(ROOMS_SEEN_KEY, seenVersions)
+const keepHidden = () => keep(ROOMS_HIDDEN_KEY, hiddenUntil)
+
+const without = (versions: Record<string, number> | undefined, hash: string): Record<string, number> => {
+  const { [hash]: _gone, ...rest } = versions ?? {}
+  return rest
 }
 
 const publish = () => feed.listeners.forEach((listener) => listener())
@@ -181,6 +203,25 @@ const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | unde
   lastPost: track?.last,
 })
 
+/**
+ * The rows Messages shows: every room read but the hidden ones. A hidden room someone has posted in since is back,
+ * and its entry goes.
+ */
+function showRows(service: RoomsService): void {
+  const byRoom = tracks.get(service)
+  let back = false
+  feed.rows = (feed.all ?? []).filter((row) => {
+    const hash = hashOf(row.roomId)
+    const until = hiddenUntil?.[hash]
+    if (until === undefined) return true
+    if ((byRoom?.get(row.roomId)?.newest ?? 0) <= until) return false
+    hiddenUntil = without(hiddenUntil, hash)
+    back = true
+    return true
+  })
+  if (back) void keepHidden()
+}
+
 const shown = (room: RoomSummary): room is RoomSummary & { communityDid: string } =>
   room.source === 'community' && room.standing === 'member' && !!room.communityDid
 
@@ -202,7 +243,8 @@ async function readAll(service: RoomsService): Promise<void> {
       }
     }
     if (feed.service !== service) return
-    feed.rows = rooms.map((room) => rowOf(room, byRoom?.get(room.roomId)))
+    feed.all = rooms.map((room) => rowOf(room, byRoom?.get(room.roomId)))
+    showRows(service)
     feed.failed = false
   } catch {
     if (feed.service === service) feed.failed = true
@@ -234,13 +276,48 @@ export function markRoomSeen(service: RoomsService | undefined, roomId: string, 
   if (!track) return
   track.seen = Math.max(track.seen, version)
   for (const [key, v] of [...track.unread]) if (v <= track.seen) track.unread.delete(key)
-  feed.rows = feed.rows?.map((row) => (row.roomId === roomId ? { ...row, unread: track.unread.size } : row))
+  recount(service, roomId, track)
+}
+
+function recount(service: RoomsService, roomId: string, track: Track): void {
+  feed.all = feed.all?.map((row) => (row.roomId === roomId ? { ...row, unread: track.unread.size } : row))
+  showRows(service)
   publish()
+}
+
+/**
+ * Hide: takes a room off Messages until someone posts in it again (rooms in Messages, R3). Put away as read: when it
+ * comes back, only what came after counts. Kept on this phone. The room stays under My Agent and on its community.
+ * Returns the Undo, which puts back exactly what was there.
+ */
+export function hideRoom(roomId: string): (() => void) | undefined {
+  const service = feed.service
+  const track = service ? tracks.get(service)?.get(roomId) : undefined
+  if (!service || !track) return undefined
+  const hash = hashOf(roomId)
+  const before = { hidden: hiddenUntil?.[hash], seen: track.seen, kept: seenVersions?.[hash], unread: track.unread }
+  hiddenUntil = { ...(hiddenUntil ?? {}), [hash]: track.newest }
+  track.seen = Math.max(track.seen, track.newest)
+  track.unread = new Map()
+  seenVersions = { ...(seenVersions ?? {}), [hash]: track.seen }
+  void keepHidden()
+  void keepSeen()
+  recount(service, roomId, track)
+  return () => {
+    hiddenUntil = before.hidden === undefined ? without(hiddenUntil, hash) : { ...hiddenUntil, [hash]: before.hidden }
+    seenVersions = before.kept === undefined ? without(seenVersions, hash) : { ...seenVersions, [hash]: before.kept }
+    track.seen = before.seen
+    track.unread = before.unread
+    void keepHidden()
+    void keepSeen()
+    if (feed.service === service) recount(service, roomId, track)
+  }
 }
 
 /** For tests: forget everything read and kept in memory. */
 export function resetRoomRows(): void {
   feed.service = undefined
+  feed.all = undefined
   feed.rows = undefined
   feed.failed = false
   feed.asking = false
@@ -248,6 +325,7 @@ export function resetRoomRows(): void {
   feed.inView = 0
   tracks = new WeakMap()
   seenVersions = undefined
+  hiddenUntil = undefined
   seenRead = undefined
 }
 
@@ -265,6 +343,7 @@ export function useRoomRowsPoll(service: RoomsService | undefined, linked: boole
     const next = service && linked ? service : undefined
     if (feed.service === next) return
     feed.service = next
+    feed.all = undefined
     feed.rows = undefined
     feed.failed = false
     feed.lastAsk = 0

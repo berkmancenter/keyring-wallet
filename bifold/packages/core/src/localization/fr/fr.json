@@ -3063,6 +3063,8 @@
     "OfferWaiting": "En attente",
     "OfferLook": "Voir",
     "OfferLookLabel": "Voir l'invitation pour {{room}}",
+    "Hide": "Masquer",
+    "Hidden": "{{room}} est masqué dans Messages. Il revient quand quelqu'un publie.",
     "FileOpenHint": "Affiche les détails du fichier et permet de le télécharger.",
     "FileTypeAsShared": "{{type}}, tel que partagé",
     "FileSharedBy": "Partagé par {{who}}",
