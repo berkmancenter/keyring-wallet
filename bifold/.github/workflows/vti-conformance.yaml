@@ -24,6 +24,8 @@ on:
       - 'packages/core/src/modules/trust-tasks/**'
       - 'packages/trust-tasks/**'
       - '.github/workflows/vti-conformance.yaml'
+  # Dispatched on main, it saves a fresh cache of the checker's build (see the cache step).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -63,9 +65,15 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
+      # Only main saves; a PR restores main's copy. A copy saved per PR was ~850 MiB of the repo's 10 GiB cache store
+      # each. The checker is the wallet's main (not pinned), so a bifold PR can't change it, but a wallet change can:
+      # rust-cache keys on the lockfile and toolchain it finds, so that gives a new key and a miss, never a wrong
+      # restore. After a miss or an eviction, PRs build cold until a push to main on the paths above, or a run
+      # dispatched on main, saves a new copy.
       - name: Cache the checker's build
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             ${{ runner.temp }}/wallet/scripts/openvtc/card-verify -> target
             ${{ runner.temp }}/wallet/scripts/openvtc/card-verify-v047 -> target
