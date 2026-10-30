@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/android/app/src/main/ic_launcher-playstore.png" alt="Keyring" width="128" />
+  <img src="app/ios/Media.xcassets/AppIcon.appiconset/keyring_icon_black_1024.png" alt="Keyring" width="128" />
 </p>
 
 <h1 align="center">Keyring</h1>
