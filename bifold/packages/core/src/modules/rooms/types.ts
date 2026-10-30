@@ -66,6 +66,8 @@ export type RoomsReason =
   | 'noRight'
   | 'communityUnreachable'
   | 'tierNotYet'
+  // Never in this kind of room: files exist on attributed and private rooms only (upstream refuses them on open ones).
+  | 'notOnThisTier'
 
 export type RoomsStatus = 'available' | 'comingSoon' | 'unavailable'
 

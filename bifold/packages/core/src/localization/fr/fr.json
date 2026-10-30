@@ -2861,6 +2861,7 @@
     "NoteRemoved": "Cette note a été retirée. Sa place reste, pour que l'historique du salon soit fidèle.",
     "Files": "Fichiers",
     "FilesNone": "Aucun fichier pour l'instant.",
+    "FilesNotOnOpenRooms": "Les fichiers se partagent dans les salons attribués et privés, pas dans les salons ouverts.",
     "FilesFailed": "Impossible de lire les fichiers. Réessayez plus tard.",
     "FilesAdd": "Ajouter un fichier",
     "FilesCaution": "Un fichier n'est téléchargé que lorsque vous l'ouvrez. Keyring ne peut pas vérifier ce qu'il contient.",

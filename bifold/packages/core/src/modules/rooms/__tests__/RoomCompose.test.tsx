@@ -185,7 +185,7 @@ describe('posting to a room', () => {
   })
 
   // Narrows one status of the sample's, as the real service reports it for this build.
-  const withStatus = (op: 'write' | 'listFiles', reason: 'tierNotYet' | 'clientNotBuilt') => {
+  const withStatus = (op: 'write' | 'openFile', reason: 'tierNotYet' | 'clientNotBuilt') => {
     const sample = createSampleRoomsService()
     mockService = {
       ...sample,
@@ -204,12 +204,13 @@ describe('posting to a room', () => {
     expect(tree.queryByTestId(id('RoomComposerInput'))).toBeNull()
   })
 
-  test('no "+" where the room\'s files are not available; the sample room, where they are, has it', async () => {
+  // Posting a file seals it with the cipher that opens one: a room whose files are only listed offers no "+".
+  test('no "+" where the room\'s files can\'t be opened; the sample room, where they can, has it', async () => {
     const sample = show(PLANNING)
     await waitFor(() => expect(sample.getByTestId(id('RoomComposerAttach'))).toBeTruthy())
     sample.unmount()
 
-    withStatus('listFiles', 'clientNotBuilt')
+    withStatus('openFile', 'clientNotBuilt')
     const tree = show(PLANNING)
     await waitFor(() => expect(tree.getByTestId(id('RoomComposerInput'))).toBeTruthy())
     expect(tree.queryByTestId(id('RoomComposerAttach'))).toBeNull()

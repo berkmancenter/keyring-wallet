@@ -47,7 +47,8 @@ export const ROOMS_REQUIREMENTS: Record<RoomsOperation, Requirement> = {
   // offer, since an open room needs neither.
   acceptOffer: { from: 'agent', anyOf: [`${SPEC}vault/credentials/receive/0.1`] },
   hideOffer: { from: 'local' },
-  listFiles: { from: 'agent', anyOf: [`${SPEC}rooms/keys/file-key/0.2`] },
+  // A record's file is described in its sealed body, so listing reads each record; opening needs the file key.
+  listFiles: { from: 'agent', anyOf: [`${SPEC}rooms/keys/read/0.1`] },
   openFile: { from: 'agent', anyOf: [`${SPEC}rooms/keys/file-key/0.2`] },
   listCommunityMembers: {
     from: 'adminOnly',
@@ -75,6 +76,7 @@ const STATUS_OF: Record<RoomsReason, RoomsStatus> = {
   noRight: 'unavailable',
   communityUnreachable: 'unavailable',
   tierNotYet: 'comingSoon',
+  notOnThisTier: 'unavailable',
 }
 
 const status = (reason: RoomsReason, detail: string): OperationStatus => ({ status: STATUS_OF[reason], reason, detail })
