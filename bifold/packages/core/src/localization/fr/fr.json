@@ -300,10 +300,10 @@
   },
   "PINChangeSuccess": {
     "InfoBox": {
-      "Title": "Your PIN has been changed (FR)",
-      "Description": "You can now log-in with your new PIN (FR)"
+      "Title": "Votre NIP a été modifié",
+      "Description": "Vous pouvez maintenant vous connecter avec votre nouveau NIP."
     },
-    "PrimaryButton": "Go back to settings (FR)"
+    "PrimaryButton": "Retour aux réglages"
   },
   "PINEnter": {
     "AppTitle": "Aries Bifold",
@@ -341,7 +341,7 @@
     "ForgotPINModalTitle": "Forgot your PIN? (FR)",
     "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (FR)",
     "Loading": "Logging in (FR)",
-    "DeveloperMenuTrigger": "App information (FR)"
+    "DeveloperMenuTrigger": "Informations sur l'application"
   },
   "AttemptLockout": {
     "Title": "Votre portefeuille est temporairement verrouillé",
@@ -816,8 +816,8 @@
     "RequestProcessing": "Juste un instant...",
     "OfferDelay": "Retard de l'offre",
     "ChangeCredential": "Modifier l'attestations d'identification",
-    "SelectCredential": "Select credential (FR)",
-    "PredicateInput": "Enter value for {{label}} (FR)",
+    "SelectCredential": "Sélectionner l'attestation",
+    "PredicateInput": "Saisissez la valeur de {{label}}",
     "GetThisCredential": "Obtenir cette attestation d'identification",
     "RejectThisProof?": "Rejeter cette preuve?",
     "AcceptingProof": "Acceptation de la preuve",

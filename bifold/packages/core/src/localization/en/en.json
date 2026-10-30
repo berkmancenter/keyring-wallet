@@ -272,7 +272,15 @@
     "RememberChangePIN": "Change your PIN to secure your wallet.",
     "ChangePIN": "Change PIN"
   },
+  "PINChangeSuccess": {
+    "InfoBox": {
+      "Title": "Your PIN has been changed",
+      "Description": "You can now log in with your new PIN."
+    },
+    "PrimaryButton": "Go back to settings"
+  },
   "PINEnter": {
+    "DeveloperMenuTrigger": "App information",
     "Title": "Welcome back",
     "SubText": "Sign-in to access your wallet.",
     "EnterPIN": "Enter your wallet PIN",
@@ -838,6 +846,8 @@
     "DeleteOfferDescription": "Don't recognize the organization? Check your Contacts list. You only receive notifications from Contacts you've initiated"
   },
   "ProofRequest": {
+    "SelectCredential": "Select credential",
+    "PredicateInput": "Enter value for {{label}}",
     "RequestForProof": "Request for proof",
     "ReceiveProofTitle": "Received an information request from",
     "JustAMoment": "Just a moment while we prepare things for you...",
