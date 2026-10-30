@@ -40,6 +40,8 @@ export interface RoomComposerProps {
   onSend: (text: string, file?: RoomsAttachment) => boolean
   /** Offer "+" to post a file. */
   canAttach?: boolean
+  /** The largest file this room takes, where that is less than the picker's own limit. */
+  maxFileBytes?: number
   /** Why the member can't post here; the composer shows this instead of a field. */
   unavailable?: string
   /** Who the member posts as, as the whole line ("Posting as Alberto L"). */
@@ -56,13 +58,14 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   postingAs,
   onPressPostingAs,
   canAttach,
+  maxFileBytes,
   attachRequest = 0,
 }) => {
   const { t, i18n } = useTranslation()
   const { ColorPalette } = useTheme()
   const [text, setText] = useState('')
   const [file, setFile] = useState<RoomsAttachment>()
-  const [refused, setRefused] = useState<'tooLarge' | 'unreadable'>()
+  const [refused, setRefused] = useState<'tooLarge' | 'tooLargeHere' | 'unreadable'>()
   const canSend = text.trim().length > 0 || !!file
   const styles = StyleSheet.create({
     bar: {
@@ -132,7 +135,8 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
     setRefused(undefined)
     const picked = await pickRoomFile()
     if (!picked) return
-    if (picked.ok) setFile(picked.file)
+    if (picked.ok && maxFileBytes !== undefined && picked.file.size > maxFileBytes) setRefused('tooLargeHere')
+    else if (picked.ok) setFile(picked.file)
     else setRefused(picked.reason)
   }
 
@@ -200,7 +204,9 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
           accessibilityLiveRegion="polite"
           testID={testIdWithKey('RoomComposerFileRefused')}
         >
-          {t(refused === 'tooLarge' ? 'Rooms.FileTooLarge' : 'Rooms.FileUnreadable')}
+          {refused === 'tooLargeHere'
+            ? t('Rooms.FileTooLargeHere', { megabytes: Math.floor((maxFileBytes ?? 0) / 1_000_000) })
+            : t(refused === 'tooLarge' ? 'Rooms.FileTooLarge' : 'Rooms.FileUnreadable')}
         </ThemedText>
       ) : null}
       <View style={styles.bar} testID={testIdWithKey('RoomComposer')}>

@@ -193,6 +193,22 @@ describe('sending a file', () => {
     expect(tree.getByTestId(id('RoomComposerSend'))).toBeDisabled()
   })
 
+  test('a room whose host takes less says so at once; a file within it attaches (control)', async () => {
+    Object.assign(mockService as RoomsService, { fileLimit: async () => 2_000_000 })
+    pickMock.mockResolvedValueOnce([picked({ size: 2_000_001 })])
+    const tree = show()
+    await waitFor(() => tree.getByTestId(id('RoomComposerAttach')))
+    await act(async () => undefined)
+    await press(tree, 'RoomComposerAttach')
+    expect(tree.getByTestId(id('RoomComposerFileRefused'))).toHaveTextContent('Rooms.FileTooLargeHere')
+    expect(tree.queryByTestId(id('RoomComposerFile'))).toBeNull()
+
+    pickMock.mockResolvedValueOnce([picked({ size: 2_000_000 })])
+    await press(tree, 'RoomComposerAttach')
+    expect(tree.queryByTestId(id('RoomComposerFileRefused'))).toBeNull()
+    expect(tree.getByTestId(id('RoomComposerFile'))).toBeTruthy()
+  })
+
   test('a file taken off before sending is not sent', async () => {
     const prepareWrite = jest.spyOn(mockService as RoomsService, 'prepareWrite')
     const tree = show()

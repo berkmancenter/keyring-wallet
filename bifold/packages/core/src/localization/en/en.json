@@ -3031,6 +3031,7 @@
     "FileRemove": "Remove the file",
     "FileTooLarge": "That file is too large. Files can be up to 25 MB.",
     "FileUnreadable": "Couldn't read that file. Try another.",
+    "FileTooLargeHere": "This community takes files up to {{megabytes}} MB for now.",
     "PostSendingPercent": "Sending… {{percent}}%"
   }
 }

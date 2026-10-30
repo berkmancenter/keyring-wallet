@@ -35,6 +35,7 @@ export const ROOMS_TASK = {
   // 0.2 signs the body as the member before sealing it (`signAsPrincipal`); 0.1 cannot write as the member.
   keysSeal02: `${SPEC}rooms/keys/seal/0.2`,
   recordsPut: `${SPEC}rooms/records/put/0.1`,
+  recordsPut02: `${SPEC}rooms/records/put/0.2`,
   recordsCurate: `${SPEC}rooms/records/curate/0.1`,
 } as const
 

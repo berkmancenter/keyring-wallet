@@ -205,12 +205,12 @@ describe('posting to a room', () => {
   })
 
   // Posting a file seals it with the cipher that opens one: a room whose files are only listed offers no "+".
-  test('no "+" where the room\'s files can\'t be opened; the sample room, where they can, has it', async () => {
+  test('no "+" where the room can\'t take a file; the sample room, where it can, has it', async () => {
     const sample = show(PLANNING)
     await waitFor(() => expect(sample.getByTestId(id('RoomComposerAttach'))).toBeTruthy())
     sample.unmount()
 
-    withStatus('openFile', 'clientNotBuilt')
+    withStatus('uploadFile', 'clientNotBuilt')
     const tree = show(PLANNING)
     await waitFor(() => expect(tree.getByTestId(id('RoomComposerInput'))).toBeTruthy())
     expect(tree.queryByTestId(id('RoomComposerAttach'))).toBeNull()

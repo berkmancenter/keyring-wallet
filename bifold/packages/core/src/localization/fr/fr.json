@@ -2979,6 +2979,7 @@
     "FileRemove": "Retirer le fichier",
     "FileTooLarge": "Ce fichier est trop volumineux. Les fichiers peuvent faire jusqu'à 25 Mo.",
     "FileUnreadable": "Impossible de lire ce fichier. Essayez-en un autre.",
+    "FileTooLargeHere": "Pour l'instant, cette communauté accepte des fichiers jusqu'à {{megabytes}} Mo.",
     "PostSendingPercent": "Envoi… {{percent}} %"
   }
 }

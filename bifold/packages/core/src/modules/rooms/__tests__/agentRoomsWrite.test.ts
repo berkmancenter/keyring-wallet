@@ -437,7 +437,7 @@ describe('a post sent again', () => {
     expect(Object.keys(versions)).toHaveLength(2)
   })
 
-  it('refuses a post carrying a file, sending nothing: files are not built', async () => {
+  it('refuses a post carrying a file to an open room, sending nothing: files are for sealed rooms', async () => {
     const { service, agentTask, sendCompleted } = setup()
     const err = await service
       .prepareWrite(OPEN_ROOM, {
@@ -447,7 +447,7 @@ describe('a post sent again', () => {
       })
       .catch((e) => e)
     expect(err).toBeInstanceOf(RoomsUnavailable)
-    expect(err).toMatchObject({ reason: 'clientNotBuilt' })
+    expect(err).toMatchObject({ operation: 'uploadFile', reason: 'notOnThisTier' })
     expect(acted(agentTask)).toEqual([])
     expect(sendCompleted).not.toHaveBeenCalled()
   })

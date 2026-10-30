@@ -26,6 +26,7 @@ export type RoomsOperation =
   | 'hideOffer'
   | 'listFiles'
   | 'openFile'
+  | 'uploadFile'
   | 'listCommunityMembers'
   | 'agentAccess'
   | 'leaveViaCommunity'
@@ -130,6 +131,7 @@ export type RoomOperation =
   | 'curate'
   | 'listFiles'
   | 'openFile'
+  | 'uploadFile'
   | 'agentAccess'
   | 'listCommunityMembers'
 
@@ -423,6 +425,8 @@ export interface RoomsService {
   hideOffer(offerId: string): Promise<void>
 
   listFiles(roomId: string): Promise<RoomFile[]>
+  /** The largest file this room's host takes, in bytes, where that is less than the picker's own limit. */
+  fileLimit?(roomId: string): Promise<number>
   openFile(roomId: string, fileId: string, options?: RoomsTransferOptions): Promise<OpenedFile>
   /**
    * Deletes the protected local copy a completed `openFile` made (a cancelled one keeps none). Call it when the viewer closes. The service also

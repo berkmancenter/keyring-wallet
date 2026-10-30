@@ -148,6 +148,20 @@ const Room: React.FC = () => {
     setTab(next)
   }
   const canOpenFiles = roomCapabilities?.openFile.status === 'available'
+  // How large a file this room's host takes, asked once posting a file is possible here.
+  const uploadOn = roomCapabilities?.uploadFile.status === 'available'
+  const [fileLimit, setFileLimit] = useState<number>()
+  useEffect(() => {
+    if (!uploadOn || !service?.fileLimit) return
+    let live = true
+    service
+      .fileLimit(roomId)
+      .then((limit) => live && setFileLimit(limit))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [uploadOn, service, roomId])
   const { settle } = outbox
   // A sent post leaves the outbox once the room's own list shows it.
   useEffect(() => {
@@ -225,10 +239,11 @@ const Room: React.FC = () => {
   const cannotPost = roomsStatusText(t, roomCapabilities.write, 'write')
   // Notes are written wherever the room's write status allows; where it does not, the tab says why.
   const canWriteNotes = !unavailable && !cannotPost
-  // A file is posted from the composer, so "Add a file" is offered only where the composer can attach one. Posting seals
-  // the file with the cipher that opens one, so attaching waits for opening: a room whose files are only listed offers
-  // no "+" (the service would refuse the post).
-  const canAttach = roomCapabilities.openFile.status === 'available'
+  // A file is posted from the composer, so "Add a file" is offered only where the room takes one (`uploadFile`: an
+  // attributed room whose member may write, with an agent that gives file keys) and its files can be listed, so a
+  // posted file is seen.
+  const canAttach =
+    roomCapabilities.uploadFile.status === 'available' && roomCapabilities.listFiles.status === 'available'
   // Titled records and removed ones are the room's notes, on their own tab; the chat shows the rest.
   const chatPosts = feed.posts?.filter((p) => !isNote(p))
   const notes = feed.posts?.filter(isNote)
@@ -405,6 +420,7 @@ const Room: React.FC = () => {
               }
               onPressPostingAs={() => setSheetFor(room.actingAs)}
               canAttach={canAttach}
+              maxFileBytes={fileLimit}
               attachRequest={attachRequest}
             />
           )}

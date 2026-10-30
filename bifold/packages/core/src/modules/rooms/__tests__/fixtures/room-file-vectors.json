@@ -1,0 +1,134 @@
+{
+  "cases": [
+    {
+      "blobManifest": {
+        "chunks": {
+          "chunkCount": 1,
+          "chunkDigests": [
+            "zQmayscM3Z2DNoT1PnmjGB568seTb7WGudusqSdM4CVRZA2"
+          ],
+          "chunkSize": 16384
+        },
+        "digest": "zQmayscM3Z2DNoT1PnmjGB568seTb7WGudusqSdM4CVRZA2",
+        "size": 16
+      },
+      "chunkSha256": [
+        "zQmayscM3Z2DNoT1PnmjGB568seTb7WGudusqSdM4CVRZA2"
+      ],
+      "fileManifest": {
+        "blobRef": "zQmcUR9L55PDz7k65dTaP3VjE7yTCK2RD1hpgHRKdGUdLcp",
+        "digest": "zQmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+        "epoch": 7,
+        "fileId": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "mediaType": "application/octet-stream",
+        "name": "vector.bin",
+        "segmentSize": 16368,
+        "size": 0
+      },
+      "firstChunkHead": "o7bfzn76XrjeVS5AEMsjFw",
+      "padding": "none",
+      "plaintext": "bytes i % 256 for i in 0..plaintextLength",
+      "plaintextLength": 0
+    },
+    {
+      "blobManifest": {
+        "chunks": {
+          "chunkCount": 1,
+          "chunkDigests": [
+            "zQmSpqAfj8dtZpby8x5YiYGkdxApBh5bh8pJBBXMo7gYpqr"
+          ],
+          "chunkSize": 16384
+        },
+        "digest": "zQmSpqAfj8dtZpby8x5YiYGkdxApBh5bh8pJBBXMo7gYpqr",
+        "size": 21
+      },
+      "chunkSha256": [
+        "zQmSpqAfj8dtZpby8x5YiYGkdxApBh5bh8pJBBXMo7gYpqr"
+      ],
+      "fileManifest": {
+        "blobRef": "zQmdCERT97VVvLdY3PAdMnMJRfQtVfpjrsMTavNGdWAymmr",
+        "digest": "zQmNvjgShoDRwACxTKU3m7bMajS1pGFPM3gJtakCwEFyMp8",
+        "epoch": 7,
+        "fileId": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "mediaType": "application/octet-stream",
+        "name": "vector.bin",
+        "segmentSize": 16368,
+        "size": 5
+      },
+      "firstChunkHead": "m2iVsTQva50G1m4LQvbubouC4ak2",
+      "padding": "none",
+      "plaintext": "bytes i % 256 for i in 0..plaintextLength",
+      "plaintextLength": 5
+    },
+    {
+      "blobManifest": {
+        "chunks": {
+          "chunkCount": 2,
+          "chunkDigests": [
+            "zQmd7TReEpMCgWniBkWTZcDcR2zz2NGfPBJtS8kdWu7ssy9",
+            "zQmRb963k1JjrqnmQRCS8k7hZegbsJ6wBci2rrkDV178N7J"
+          ],
+          "chunkSize": 16384
+        },
+        "digest": "zQmf2HvFjxx7h225BoaYbZx7yXcLFRcZVumf4oa7SNHPj6F",
+        "size": 16403
+      },
+      "chunkSha256": [
+        "zQmd7TReEpMCgWniBkWTZcDcR2zz2NGfPBJtS8kdWu7ssy9",
+        "zQmRb963k1JjrqnmQRCS8k7hZegbsJ6wBci2rrkDV178N7J"
+      ],
+      "fileManifest": {
+        "blobRef": "zQmejwwXPUMBFgBFJPLLKuhDhU7yYYECBfuCJvZNmcNkqBD",
+        "digest": "zQmbLj1rjsGX39pRdFiwNt58KFWdjjPJQh5zBm3AEznFNsB",
+        "epoch": 7,
+        "fileId": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "mediaType": "application/octet-stream",
+        "name": "vector.bin",
+        "segmentSize": 16368,
+        "size": 16371
+      },
+      "firstChunkHead": "m2iVsTSR7PWIJA5MHqJ9m4r8UMAcN7vL7zDZsXHQAp0",
+      "padding": "none",
+      "plaintext": "bytes i % 256 for i in 0..plaintextLength",
+      "plaintextLength": 16371
+    },
+    {
+      "blobManifest": {
+        "chunks": {
+          "chunkCount": 1,
+          "chunkDigests": [
+            "zQmc2zKSSK8f4ycgT1KW8QCN2uUDRFBSny6i7eNzLEAngmQ"
+          ],
+          "chunkSize": 16384
+        },
+        "digest": "zQmc2zKSSK8f4ycgT1KW8QCN2uUDRFBSny6i7eNzLEAngmQ",
+        "size": 120
+      },
+      "chunkSha256": [
+        "zQmc2zKSSK8f4ycgT1KW8QCN2uUDRFBSny6i7eNzLEAngmQ"
+      ],
+      "fileManifest": {
+        "blobRef": "zQmQCbRuZokGtJvQjk98iL8Nr6y6Bb9umSVGoCWSmXXdhJh",
+        "digest": "zQmb3x564ZXBuDvFEjeLgdUMc3WyqEhmf9kQoTpnFdQWYRF",
+        "epoch": 7,
+        "fileId": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "mediaType": "application/octet-stream",
+        "name": "vector.bin",
+        "padding": "padme",
+        "segmentSize": 16368,
+        "size": 100
+      },
+      "firstChunkHead": "m2iVsTSR7PWIJA5MHqJ9m4r8UMAcN7vL7zDZsXHQAp0",
+      "padding": "padme",
+      "plaintext": "bytes i % 256 for i in 0..plaintextLength",
+      "plaintextLength": 100
+    }
+  ],
+  "description": "Test vectors for the room file construction (rooms/_shared/0.1/blobs.schema.json FileManifest). fileId and roomId enter the KDF and AAD as raw bytes and UTF-8 respectively.",
+  "epoch": 7,
+  "fileId": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "fileKey": "f2tJp-JX34elrE_Ut0XrqAm8HgLzh-nlTJ_LsI35vpw",
+  "roomId": "did:webvh:QmExampleRoom:rooms.example",
+  "segmentSize": 16368,
+  "storageKey": "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
+}

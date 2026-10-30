@@ -50,6 +50,9 @@ export const ROOMS_REQUIREMENTS: Record<RoomsOperation, Requirement> = {
   // A record's file is described in its sealed body, so listing reads each record; opening needs the file key.
   listFiles: { from: 'agent', anyOf: [`${SPEC}rooms/keys/read/0.1`] },
   openFile: { from: 'agent', anyOf: [`${SPEC}rooms/keys/file-key/0.2`] },
+  // Posting a file seals it under the file key, then writes its record as an attributed write does; the room's tier
+  // and the write it rides on are checked per room.
+  uploadFile: { from: 'agent', anyOf: [`${SPEC}rooms/keys/file-key/0.2`] },
   listCommunityMembers: {
     from: 'adminOnly',
     why: 'vtc/rooms/community/members/list needs vtc.rooms.manage; a member can list only their own memberships',
@@ -130,6 +133,7 @@ const ROOM_OPERATION_RIGHT: Record<RoomOperation, RoomVerb | undefined> = {
   curate: 'curate',
   listFiles: 'read',
   openFile: 'read',
+  uploadFile: 'write',
   agentAccess: 'read',
   // Its status is already adminOnly service-wide; a room cannot widen it.
   listCommunityMembers: undefined,
