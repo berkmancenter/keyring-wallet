@@ -15,7 +15,7 @@
  * list as the whole truth, found nothing it speaks in it and gave up, though 0.2 is answered at the edge.
  */
 import { VTA_TASK_VERSIONS } from '../module/VtaClient'
-import { approveResponseTypesFor, STEP_UP_REQUEST_TYPES } from '../module/stepUp'
+import { approveResponseTypesFor, STEP_UP_REQUEST_TYPES, STEP_UP_TASK } from '../module/stepUp'
 import { forgetAllVersions, TaskVersions } from '../module/taskVersions'
 import { AGENT_DEVICE_TASK, heartbeat, listAgentDevices } from '../module/vtaDevices'
 import { VAULT_GET, VAULT_GET_02 } from '../module/vtiCardVault'
@@ -70,6 +70,18 @@ const V0_67 = at({
   'device/heartbeat': [['0.3']],
   'auth/step-up/approve-response': [['0.6']],
 })
+
+/**
+ * vta-service-v0.68.0 (84ed3250 on): as v0.67.0 for these families, but a step-up is answered only in
+ * approve-response/0.7 (IN-390 sweep, 2026-10-30). It mints approve-request/0.5.
+ */
+const V0_68: Model = {
+  table: [
+    ...V0_67.table.filter((u) => !u.includes('/auth/step-up/approve-response/')),
+    `${SPEC}auth/step-up/approve-response/0.7`,
+  ],
+  edge: [],
+}
 
 /** 0d3f268e (what first.openvtc.net ran on 10-28): as v0.67.0, but acl/* still only at 0.1 and dids/create 1.0-1.2. */
 const V0D3F = {
@@ -154,7 +166,7 @@ describe('every ladder against a v0.65.0 agent (v0.60.0 to v0.66.0)', () => {
     expect(uri.slice(SPEC.length)).toBe(expected[expected.length - 1])
   })
 
-  it('answers each step-up in the request’s own version, after one refusal of 0.6', async () => {
+  it('answers each step-up in the request’s own version, after refusals of 0.7 and 0.6', async () => {
     for (const request of STEP_UP_REQUEST_TYPES) {
       const ladder = approveResponseTypesFor(request)
       const own = ladder[ladder.length - 1]
@@ -163,7 +175,11 @@ describe('every ladder against a v0.65.0 agent (v0.60.0 to v0.66.0)', () => {
       const ask = new TaskVersions().ask('stepUpResponse', LADDERS[`stepUpResponse:${request}`], answer)
       if (served) {
         await expect(ask).resolves.toMatchObject({ uri: own })
-        expect(short(asked)).toEqual(['auth/step-up/approve-response/0.6', own.slice(SPEC.length)])
+        expect(short(asked)).toEqual([
+          'auth/step-up/approve-response/0.7',
+          'auth/step-up/approve-response/0.6',
+          own.slice(SPEC.length),
+        ])
       } else {
         // Request versions past 0.3 are 0d3f268e's and later: a v0.65.0 agent never mints them.
         await expect(ask).rejects.toBeInstanceOf(VtiRefusal)
@@ -177,6 +193,21 @@ describe('every ladder against a v0.65.0 agent (v0.60.0 to v0.66.0)', () => {
     await versions.ask('deviceList', LADDERS.deviceList, answer)
     await versions.ask('deviceList', LADDERS.deviceList, answer)
     expect(short(asked)).toEqual(['device/list/0.3', 'device/list/0.2', 'device/list/0.2'])
+  })
+})
+
+describe('the same ladders against v0.68.0', () => {
+  it.each(Object.keys(ASKS_0_65))('%s is answered at its first ask by v0.68.0', async (family) => {
+    const { asked, answer } = agent(V0_68)
+    await new TaskVersions().ask(family, LADDERS[family], answer)
+    expect(asked).toEqual([LADDERS[family][0]])
+  })
+
+  it('a step-up to the approve-request it mints (0.5) is answered at the first ask, in approve-response 0.7', async () => {
+    const family = `stepUpResponse:${STEP_UP_TASK.approveRequest05}`
+    const { asked, answer } = agent(V0_68)
+    await new TaskVersions().ask(family, LADDERS[family], answer)
+    expect(short(asked)).toEqual(['auth/step-up/approve-response/0.7'])
   })
 })
 

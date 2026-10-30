@@ -41,6 +41,12 @@ export const STEP_UP_TASK = {
   approveResponse05: 'https://trusttasks.org/spec/auth/step-up/approve-response/0.5',
   /** The answer to an approve-request 0.4 or 0.5 (approve-response/0.6 spec.md:85). */
   approveResponse06: 'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
+  /**
+   * 0.7 (trust-tasks-tf a91f2e76), the answer to an approve-request 0.5, and the only one vta-service answers from
+   * 84ed3250 (v0.68.0). The same members as 0.6: it lets a passkey assertion stand without a proof, a path this
+   * phone never takes (every answer here is `didSigned`, with the approver's own proof).
+   */
+  approveResponse07: 'https://trusttasks.org/spec/auth/step-up/approve-response/0.7',
 } as const
 
 /** Every approve-request version this phone reads, oldest first. */
@@ -76,14 +82,14 @@ export const approveResponseTypeFor = (requestType: string): string => {
 }
 
 /**
- * The approve-response types to try for a request, in order: 0.6, then the request's own
- * ({@link approveResponseTypeFor}) as the step-down. Agents from 0d3f268e (vta-service #2313) serve only
- * approve-response/0.6 while still minting approve-request/0.2; v0.60.0 to v0.66.0 serve only 0.1-0.3.
+ * The approve-response types to try for a request, in order: 0.7, 0.6, then the request's own
+ * ({@link approveResponseTypeFor}) as the step-down, each once. v0.68.0 (84ed3250) serves only 0.7; agents from
+ * 0d3f268e (vta-service #2313) to v0.67.0 serve only 0.6 while minting approve-request/0.2 or 0.5; v0.60.0 to
+ * v0.66.0 serve only 0.1-0.3. Newest first: a current agent is answered at the first ask.
  */
-export const approveResponseTypesFor = (requestType: string): string[] => {
-  const own = approveResponseTypeFor(requestType)
-  return own === STEP_UP_TASK.approveResponse06 ? [own] : [STEP_UP_TASK.approveResponse06, own]
-}
+export const approveResponseTypesFor = (requestType: string): string[] => [
+  ...new Set([STEP_UP_TASK.approveResponse07, STEP_UP_TASK.approveResponse06, approveResponseTypeFor(requestType)]),
+]
 
 const STEP_UP_REQUIRED = 'auth:step_up_required'
 

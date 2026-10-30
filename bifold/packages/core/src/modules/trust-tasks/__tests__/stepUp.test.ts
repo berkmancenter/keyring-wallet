@@ -325,8 +325,8 @@ describe('a task that needs a step-up', () => {
     expect(ask).toHaveBeenCalledWith(expect.objectContaining({ reason: REASON, challenge: CHALLENGE }), {
       taskType: DEVICES_ADD,
     })
-    // 0.6 first: what an agent from 0d3f268e takes (a 0.2 request's own response is the step-down).
-    expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse06, DEVICES_ADD])
+    // 0.7 first: what a v0.68.0 agent takes (0.6, then a 0.2 request's own response, are the step-down).
+    expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse07, DEVICES_ADD])
     // The answer waits for the agent's reply like any task.
     expect(send.mock.calls[1][2]).toBe(30000)
     expect(send.mock.calls[1][1]).toEqual({
@@ -339,7 +339,7 @@ describe('a task that needs a step-up', () => {
     expect(STEP_UP_TASK.approveResponse).toBe('https://trusttasks.org/spec/auth/step-up/approve-response/0.2')
   })
 
-  it('answers a 0.4 approve-request with approve-response 0.6, the same members', async () => {
+  it('answers a 0.4 approve-request first in approve-response 0.7, the same members as 0.6', async () => {
     const ask = jest.fn(async () => 'approve' as const)
     const { vta, send } = client(ask)
     send
@@ -350,7 +350,7 @@ describe('a task that needs a step-up', () => {
     await expect(vta.task(DEVICES_ADD, {})).resolves.toEqual({ granted: true })
     expect(send.mock.calls.map((c) => c[0])).toEqual([
       DEVICES_ADD,
-      'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
+      'https://trusttasks.org/spec/auth/step-up/approve-response/0.7',
       DEVICES_ADD,
     ])
     expect(send.mock.calls[1][1]).toEqual({
@@ -362,13 +362,20 @@ describe('a task that needs a step-up', () => {
     })
   })
 
-  // 0.6 first for any request (group 1b): from 0d3f268e the agent mints approve-request/0.2 yet serves only
-  // approve-response/0.6; v0.60.0 to v0.66.0 serve only 0.1-0.3, so the request's own version is the step-down.
+  // 0.7 first for any request: v0.68.0 (84ed3250) serves only approve-response/0.7; from 0d3f268e to v0.67.0 the
+  // agent serves only 0.6; v0.60.0 to v0.66.0 serve only 0.1-0.3, so the request's own version is the last step down.
   it.each([
-    ['0.5', ['https://trusttasks.org/spec/auth/step-up/approve-response/0.6']],
+    [
+      '0.5',
+      [
+        'https://trusttasks.org/spec/auth/step-up/approve-response/0.7',
+        'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
+      ],
+    ],
     [
       '0.3',
       [
+        'https://trusttasks.org/spec/auth/step-up/approve-response/0.7',
         'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
         'https://trusttasks.org/spec/auth/step-up/approve-response/0.5',
       ],
@@ -376,6 +383,7 @@ describe('a task that needs a step-up', () => {
     [
       '0.2',
       [
+        'https://trusttasks.org/spec/auth/step-up/approve-response/0.7',
         'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
         'https://trusttasks.org/spec/auth/step-up/approve-response/0.2',
       ],
@@ -405,22 +413,52 @@ describe('a task that needs a step-up', () => {
     ['0.2', 'https://trusttasks.org/spec/auth/step-up/approve-response/0.2'],
     ['0.3', 'https://trusttasks.org/spec/auth/step-up/approve-response/0.5'],
   ] as const)(
-    'an agent that refuses approve-response/0.6 (v0.66.0 or before) is answered a %s request in %s, the same members',
+    'an agent that refuses approve-response/0.7 and 0.6 (v0.66.0 or before) is answered a %s request in %s, the same members',
     async (version, own) => {
       const ask = jest.fn(async () => 'approve' as const)
       const { vta, send } = client(ask)
       send
         .mockRejectedValueOnce(stepUpRefusal(approveRequest(version)))
+        .mockRejectedValueOnce(new VtiRefusal('unsupportedType', 'approve-response/0.7 is not served'))
         .mockRejectedValueOnce(new VtiRefusal('unsupportedType', 'approve-response/0.6 is not served'))
         .mockResolvedValueOnce({ status: 'elevated' })
         .mockResolvedValueOnce({ granted: true })
 
       await expect(vta.task(DEVICES_ADD, {})).resolves.toEqual({ granted: true })
       const types = send.mock.calls.map((c) => c[0])
-      expect(types).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse06, own, DEVICES_ADD])
-      expect(send.mock.calls[2][1]).toEqual(send.mock.calls[1][1])
+      expect(types).toEqual([
+        DEVICES_ADD,
+        STEP_UP_TASK.approveResponse07,
+        STEP_UP_TASK.approveResponse06,
+        own,
+        DEVICES_ADD,
+      ])
+      expect(send.mock.calls[3][1]).toEqual(send.mock.calls[1][1])
     }
   )
+
+  it('an agent from 0d3f268e to v0.67.0 (0.6, not 0.7) is answered a 0.5 request in 0.6, the same members', async () => {
+    const ask = jest.fn(async () => 'approve' as const)
+    const { vta, send } = client(ask)
+    send
+      .mockRejectedValueOnce(stepUpRefusal(approveRequest('0.5')))
+      .mockRejectedValueOnce(
+        new VtiRefusal('unsupportedVersion', 'approve-response/0.7 is not served', {
+          servedVersions: [STEP_UP_TASK.approveResponse06],
+        })
+      )
+      .mockResolvedValueOnce({ status: 'elevated' })
+      .mockResolvedValueOnce({ granted: true })
+
+    await expect(vta.task(DEVICES_ADD, {})).resolves.toEqual({ granted: true })
+    expect(send.mock.calls.map((c) => c[0])).toEqual([
+      DEVICES_ADD,
+      STEP_UP_TASK.approveResponse07,
+      STEP_UP_TASK.approveResponse06,
+      DEVICES_ADD,
+    ])
+    expect(send.mock.calls[2][1]).toEqual(send.mock.calls[1][1])
+  })
 
   it('sends a signed denial when the person says no, and does not re-submit', async () => {
     const ask = jest.fn(async () => 'deny' as const)
@@ -428,7 +466,7 @@ describe('a task that needs a step-up', () => {
     send.mockRejectedValueOnce(stepUpRefusal()).mockResolvedValueOnce({ status: 'denied' })
 
     await expect(vta.task(DEVICES_ADD, {})).rejects.toBeInstanceOf(StepUpDeclined)
-    expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse06])
+    expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse07])
     expect(send.mock.calls[1][1]).toMatchObject({ decision: 'denied', deniedReason: 'Declined on this phone' })
   })
 

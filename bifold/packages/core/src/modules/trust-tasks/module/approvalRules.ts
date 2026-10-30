@@ -53,6 +53,7 @@ export const PHONE_SENDS: readonly string[] = [
   'auth/step-up/approve-response/0.2',
   'auth/step-up/approve-response/0.5',
   'auth/step-up/approve-response/0.6',
+  'auth/step-up/approve-response/0.7',
   'config/show/0.1',
   'vta/contexts/list/1.0',
   'vta/webvh/dids/list/1.0',
