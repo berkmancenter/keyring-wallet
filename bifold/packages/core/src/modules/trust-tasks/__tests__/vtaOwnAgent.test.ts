@@ -35,6 +35,8 @@ const PHONE = 'did:peer:2.phone'
 const BACKUP = 'did:peer:2.backup'
 const TEMPORARY = 'did:key:z6Mktemporary'
 const PERMANENT = 'did:peer:2.permanent'
+/** The Farm a claimed agent came from (the vta-claim code's `_from`). */
+const FARM = 'did:webvh:QmHost:farm.example'
 
 type Plain = { from: string; body: { type: string; payload: Record<string, unknown> } }
 type Row = { role: string; scopes?: string[]; label?: string; expiresAt?: string }
@@ -1043,6 +1045,67 @@ describe('creating an agent', () => {
     expect(vta.getState().ownsAgent).toBe(true)
     expect(mockVta.acl.has(PERMANENT)).toBe(true)
     expect(mockVta.acl.has(TEMPORARY)).toBe(false)
+  })
+
+  // IN-388: the Farm signs the person in by the key the agent was claimed with (vtafarm-api c437bfbb, the
+  // binding is `mobile_connections.admin_did`), not by the long-term key the phone swaps onto.
+  it('a claimed agent keeps its Farm and claim key after the swap onto the long-term key, and the key is not deleted', async () => {
+    const { vta, disk } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    const deleteKey = jest.fn()
+    const withKms = { ...(agent as object), kms: { deleteKey } } as never
+    const key = await vta.createClaimKey(withKms)
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.finishClaimedLink(withKms, VTA, key, FARM)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    // Swapped: the agent knows the long-term key only, and the phone acts as it.
+    expect(mockVta.acl.has(PERMANENT)).toBe(true)
+    expect(mockVta.acl.has(TEMPORARY)).toBe(false)
+    expect(disk.manager?.did).toBe(PERMANENT)
+    expect(disk.link?.farmLogin).toEqual({ farmDid: FARM, did: TEMPORARY })
+    expect(deleteKey).not.toHaveBeenCalled()
+  })
+
+  it('a claimed agent that takes its key only later still keeps its Farm', async () => {
+    const { vta, disk } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    const key = await vta.createClaimKey(agent)
+    await vta.finishClaimedLink(agent, VTA, key, FARM)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: VTA, did: TEMPORARY })
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link?.farmLogin).toEqual({ farmDid: FARM, did: TEMPORARY })
+  })
+
+  // A guard: on main nothing records a Farm at all, so this passes there too.
+  it('a claim given up records no Farm on a later link of the same agent made with another key', async () => {
+    const { vta, disk } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    // Restored, as in the app: a cancel then forgets the key given up (IN-135), and the next link makes a new one.
+    await vta.restore(agent)
+    await vta.finishClaimedLink(agent, VTA, 'did:key:z6MkClaimedThenGivenUp', FARM)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: VTA })
+    vta.cancelLink()
+    await until(() => vta.getState().link.kind === 'notLinked' && disk.manager === undefined)
+    mockMinted = []
+    await vta.startManualLink(agent, VTA, 'farm.example')
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link?.farmLogin).toBeUndefined()
+  })
+
+  it("the Farm sign-in key stays on the link through the link's later writes", async () => {
+    const farmLogin = { farmDid: FARM, did: TEMPORARY }
+    const p = phone({
+      manager: linkedManager,
+      link: { vtaDid: VTA, label: 'farm.example', linkedAt: 'x', owner: true, farmLogin },
+    })
+    const vta = new VtaAgentController()
+    alive.push(vta)
+    vta.configure({ linkStore: () => p.links, identityStore: () => p.identities as never })
+    await vta.restore(agent)
+    await until(() => p.disk.link?.lastOnlineAt !== undefined)
+    await vta.nameAgent(agent, VTA, 'Home agent')
+    expect(p.disk.link).toMatchObject({ nickname: 'Home agent', farmLogin })
   })
 
   it('a claimed agent that has not taken the key yet waits on it, and a later check finishes', async () => {

@@ -27,6 +27,16 @@ export interface VtaLink {
    */
   owner?: boolean
   /**
+   * The Farm this agent was claimed from (`vta-claim`), and the did:key the
+   * phone claimed it with: the Farm's sign-in binding for the person's account
+   * there (vtafarm-api c437bfbb walletauth, `mobile_connections.admin_did`),
+   * which Keyring signs in to the Farm with. The key is swapped off the
+   * agent's access list once linked, so it no longer administers the agent;
+   * it only signs in to the Farm, and nothing on the phone deletes it. Absent
+   * for an agent linked any other way, or claimed before this was kept.
+   */
+  farmLogin?: { farmDid: string; did: string }
+  /**
    * When this phone last reached the agent, and the first time since that its
    * address was answered "not found" (epoch ms). Not whether it is reachable
    * now — that stays live — but the history that says an agent is gone for

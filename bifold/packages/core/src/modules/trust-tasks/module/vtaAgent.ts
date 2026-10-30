@@ -652,6 +652,11 @@ export class VtaAgentController {
   private namesAsked = new Set<string>()
   /** The agent the current link attempt is creating from this phone ("Create my agent"), if it is one. */
   private ownerFor?: string
+  /**
+   * Agents claimed from a Farm in this run, with the Farm and the claim key, until their link is kept: the link
+   * records them (`farmLogin`) only if it finished as that key, so an attempt given up leaves nothing behind.
+   */
+  private readonly claimedFrom = new Map<string, { farmDid: string; did: string }>()
   /** The agent that was current when "Add another agent" began: the way back. */
   private addingFrom?: string
   /** A pick-up of a link left part-way is under way (resumeLink). */
@@ -1798,7 +1803,12 @@ export class VtaAgentController {
     const links = this.linkStore(agent)
     const owner = this.ownerFor === vtaDid
     this.ownerFor = undefined
-    await links.set({ vtaDid, label, linkedAt, ...(owner ? { owner: true } : {}) })
+    // Read before the swap below moves the manager record onto the long-term key.
+    const claimed = this.claimedFrom.get(vtaDid)
+    this.claimedFrom.delete(vtaDid)
+    const linkedAs = claimed ? (await identities.getManager(vtaDid).catch(() => undefined))?.did : undefined
+    const farmLogin = claimed && claimed.did === linkedAs ? { farmLogin: { ...claimed } } : {}
+    await links.set({ vtaDid, label, linkedAt, ...(owner ? { owner: true } : {}), ...farmLogin })
     // The agent just linked is the one this phone acts with: the store keeps
     // every linked agent, and a link no longer replaces another one's record.
     await links.use?.(vtaDid)
@@ -2115,13 +2125,23 @@ export class VtaAgentController {
    * The person already compared the claim check and confirmed as owner, so
    * nothing is asked here. With an agent already current it is the "add
    * another agent" path, which keeps that one.
+   *
+   * `farmDid`, the Farm the code came from: the link keeps it with `did`
+   * (`farmLogin`), the key the Farm signs this person in by.
    */
-  async finishClaimedLink(agent: Agent, vtaDid: string, did: string, label: string = vtaDid): Promise<void> {
+  async finishClaimedLink(
+    agent: Agent,
+    vtaDid: string,
+    did: string,
+    farmDid?: string,
+    label: string = vtaDid
+  ): Promise<void> {
     if (this.hasAgent(vtaDid)) throw new AgentAlreadyOnPhone(vtaDid)
     const current = this.state.link
     if (current.kind === 'linked' || current.kind === 'revoked') await this.startAddingAgent()
     if (this.state.link.kind !== 'notLinked') throw new Error('vtaAgent: another link is in progress')
     this.ownerFor = vtaDid
+    if (farmDid) this.claimedFrom.set(vtaDid, { farmDid, did })
     const token = ++this.attemptToken
     try {
       await resolveVtaMediator(agent, vtaDid)
