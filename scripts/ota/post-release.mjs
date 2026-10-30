@@ -95,9 +95,13 @@ export const pickDispatched = (runs, { sha, title, since }) => {
   return matches[0]
 }
 
-/** A gate-smoke run's verdict from its jobs: green only with both platform jobs green (a skipped one is not). */
-export const smokeVerdict = (jobs) => {
-  const rows = SMOKE_JOBS.map(([platform, re]) => {
+/** A gate-smoke run's verdict from its jobs: green only with every judged platform's job green (skipped is not). */
+export const smokeVerdict = (jobs, platforms = SMOKE_JOBS.map(([p]) => p)) => {
+  // Only the platforms the release published are judged: a platform that never got a bundle (its job failed before
+  // publishing) has nothing for its smoke to say about this release, and must not withdraw the other's healthy one.
+  const judged = SMOKE_JOBS.filter(([platform]) => platforms.includes(platform))
+  if (!judged.length) return { green: false, rows: [] }
+  const rows = judged.map(([platform, re]) => {
     const job = jobs.find((j) => re.test(j.name))
     return { platform, conclusion: job?.conclusion ?? 'missing' }
   })
@@ -223,7 +227,7 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     return { ...base, bundles, screens, since, verdict: 'builds-red', testBuilds: builds.id }
   }
   const smoke = await dispatchAndWait('gate-smoke.yml', [`run-id=${builds.id}`, 'platform=both'], { title: `Test builds ${builds.id}` })
-  const verdict = smokeVerdict(api(`repos/${repo}/actions/runs/${smoke.id}/jobs?per_page=100`).jobs)
+  const verdict = smokeVerdict(api(`repos/${repo}/actions/runs/${smoke.id}/jobs?per_page=100`).jobs, base.platforms)
   log(`gate-smoke ${smoke.id}: ${verdict.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}`)
   return { ...base, bundles, screens, since, verdict: verdict.green ? 'green' : 'smoke-red', testBuilds: builds.id, gateSmoke: smoke.id, rows: verdict.rows }
 }

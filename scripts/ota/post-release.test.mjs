@@ -279,3 +279,21 @@ test('the record path never writes: download is the one non-api call besides the
   const nonApi = all.filter((c) => c[0] !== 'api').map((c) => `${c[0]} ${c[1]}`)
   assert.deepEqual([...new Set(nonApi)].sort(), ['run download', 'workflow run'])
 })
+
+test('only the platforms the release published are judged; nothing published is never green', () => {
+  const job = (name, conclusion) => ({ name, conclusion })
+  const iosGreenAndroidRed = [job('iOS smoke (macos-26) · cb36b83a', 'success'), job('Android smoke (ubuntu-latest, KVM) · cb36b83a', 'failure')]
+  // Only iOS published (Android's job died before its publish step): Android's red says nothing about this release.
+  assert.deepEqual(smokeVerdict(iosGreenAndroidRed, ['ios']), { green: true, rows: [{ platform: 'ios', conclusion: 'success' }] })
+  // Both published: both are judged, as before.
+  assert.equal(smokeVerdict(iosGreenAndroidRed, ['ios', 'android']).green, false)
+  assert.equal(smokeVerdict(iosGreenAndroidRed).green, false)
+  // Nothing to judge: never green.
+  assert.deepEqual(smokeVerdict(iosGreenAndroidRed, []), { green: false, rows: [] })
+})
+
+test("a one-platform release isn't called red for the other platform's smoke", async () => {
+  const red = [GREEN[0], { ...GREEN[1], conclusion: 'failure' }]
+  const r = await postRelease(opts(fakeGh({ publishJobs: [publishJob('ios'), publishJob('android', false)], smokeJobs: red }).gh))
+  assert.deepEqual([r.platforms, r.verdict], [['ios'], 'green'])
+})

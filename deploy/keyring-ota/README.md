@@ -79,7 +79,9 @@ stays 0.
 after its one ota-approval click, each platform's bundle reaches ring 0 and is widened to every install in the same
 run ("OTA 276.4 · publish to everyone"). `to_ring: ring0` is a deliberate staged release that stops at ring 0, to be
 widened later with `promote`. If the widen fails, the bundle stays on ring 0 and the run fails, naming it. Post-release
-still smokes it, since it runs after a failed run too.
+still smokes it, since it runs after a failed run too. **This depends on `OTA_PROMOTE_SOAK_HOURS` being 0**: promote
+refuses a bundle younger than the soak, so restoring a soak (or deleting the variable, which gives back 24 h) makes every
+one-click publish stop at ring 0 with a failed widen. Change the two together.
 
 **Widening** is ota-publish.yml's `promote` action, with `bundle_id`, the
 bundle's own `platform` and `to_ring`, after one ota-approval click per

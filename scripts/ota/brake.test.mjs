@@ -156,3 +156,16 @@ test('a re-run that never completes is given up on with an error that says nothi
   )
   assert.equal(calls.filter((c) => c[0] === 'run').length, 1)
 })
+
+test("the re-run judges only the platforms the release published", async () => {
+  // Android red on both attempts, but only iOS was published: not still red, so nothing is withdrawn.
+  const r = await rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios'], gh: fakeSmoke({ firstGreen: false, rerunGreen: false }).gh, sleep: async () => {}, log: () => {} })
+  assert.equal(r.stillRed, false)
+  // Both published: Android's red counts.
+  const both = await rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh: fakeSmoke({ rerunGreen: false }).gh, sleep: async () => {}, log: () => {} })
+  assert.equal(both.stillRed, true)
+})
+
+test('the brake job hands the re-run the platforms the release published', () => {
+  assert.match(brakeCode, /brake\.mjs rerun --gate-smoke "\$GATE_SMOKE" --platforms "\$PLATFORMS"/)
+})
