@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "6cee9fb17841cd340f3c4e42995f8b9f61473d73",
+  "generatedFrom": "07419c4a458c41c54e2d2de2e017434d27ea6c0c",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -977,6 +977,7 @@
     "RoomComposerPostingAsButton": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerSend": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerUnavailable": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomDetailsOpen": ["src/modules/rooms/components/RoomHeader.tsx"],
     "RoomFileCancel": ["src/modules/rooms/components/RoomFileSheet.tsx"],
     "RoomFileDownload": ["src/modules/rooms/components/RoomFileSheet.tsx"],
     "RoomFileFacts": ["src/modules/rooms/components/RoomFileSheet.tsx"],
@@ -1015,6 +1016,13 @@
     "RoomIdentitySource": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomIdentityStandIn": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomIdentityViewCard": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
+    "RoomInfo": ["src/modules/rooms/screens/RoomInfo.tsx"],
+    "RoomInfoCommunity": ["src/modules/rooms/screens/RoomInfo.tsx"],
+    "RoomInfoFiles": ["src/modules/rooms/screens/RoomInfo.tsx"],
+    "RoomInfoHide": ["src/modules/rooms/screens/RoomInfo.tsx"],
+    "RoomInfoMembers": ["src/modules/rooms/screens/RoomInfo.tsx"],
+    "RoomInfoNotes": ["src/modules/rooms/screens/RoomInfo.tsx"],
+    "RoomInfoYou": ["src/modules/rooms/screens/RoomInfo.tsx"],
     "RoomLoadingOlder": ["src/modules/rooms/screens/Room.tsx"],
     "RoomMembers": ["src/modules/rooms/components/RoomMembersTab.tsx"],
     "RoomMembersCaption": ["src/modules/rooms/components/RoomMembersTab.tsx"],
@@ -1073,6 +1081,7 @@
     "RoomOfferUnavailable": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferUntil": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOffers": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomPart": ["src/modules/rooms/screens/RoomPart.tsx"],
     "RoomPollFailed": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPollTryAgain": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostAgent": ["src/modules/rooms/components/RoomPostBubble.tsx"],
@@ -1089,20 +1098,24 @@
     "RoomPostsNone": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsReading": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsUnavailable": ["src/modules/rooms/screens/Room.tsx"],
-    "RoomReadFailed": ["src/modules/rooms/screens/Room.tsx"],
-    "RoomReading": ["src/modules/rooms/screens/Room.tsx"],
+    "RoomReadFailed": [
+      "src/modules/rooms/screens/Room.tsx",
+      "src/modules/rooms/screens/RoomInfo.tsx",
+      "src/modules/rooms/screens/RoomPart.tsx"
+    ],
+    "RoomReading": [
+      "src/modules/rooms/screens/Room.tsx",
+      "src/modules/rooms/screens/RoomInfo.tsx",
+      "src/modules/rooms/screens/RoomPart.tsx"
+    ],
     "RoomScreen": ["src/modules/rooms/screens/Room.tsx"],
-    "RoomTabChat": ["src/modules/rooms/components/RoomTabs.tsx"],
-    "RoomTabFiles": ["src/modules/rooms/components/RoomTabs.tsx"],
-    "RoomTabMembers": ["src/modules/rooms/components/RoomTabs.tsx"],
-    "RoomTabNotes": ["src/modules/rooms/components/RoomTabs.tsx"],
-    "RoomTabs": ["src/modules/rooms/components/RoomTabs.tsx"],
-    "RoomTabsMoreLeft": ["src/modules/rooms/components/RoomTabs.tsx"],
-    "RoomTabsMoreRight": ["src/modules/rooms/components/RoomTabs.tsx"],
-    "RoomTabsScroll": ["src/modules/rooms/components/RoomTabs.tsx"],
     "RoomTier": ["src/modules/rooms/components/TierBadge.tsx"],
     "RoomTitle": ["src/modules/rooms/components/RoomHeader.tsx"],
-    "RoomTryAgain": ["src/modules/rooms/screens/Room.tsx"],
+    "RoomTryAgain": [
+      "src/modules/rooms/screens/Room.tsx",
+      "src/modules/rooms/screens/RoomInfo.tsx",
+      "src/modules/rooms/screens/RoomPart.tsx"
+    ],
     "RoomWhere": ["src/modules/rooms/components/RoomHeader.tsx"],
     "RoomsCard": ["src/modules/rooms/components/RoomsCard.tsx"],
     "RoomsCardBadge": ["src/modules/rooms/components/RoomsCard.tsx"],
@@ -1112,7 +1125,9 @@
     "RoomsNone": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomsOff": [
       "src/modules/rooms/screens/Room.tsx",
+      "src/modules/rooms/screens/RoomInfo.tsx",
       "src/modules/rooms/screens/RoomOffer.tsx",
+      "src/modules/rooms/screens/RoomPart.tsx",
       "src/modules/rooms/screens/RoomsHome.tsx"
     ],
     "RoomsReadFailed": ["src/modules/rooms/components/RoomsListBody.tsx"],
@@ -1166,6 +1181,7 @@
     "SiblingNoticeDismiss": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
     "SiblingNoticeOpen": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
     "SignIn": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInAgent": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInApprove": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInBrowser": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInBusy": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
@@ -1188,11 +1204,13 @@
     "SignInNumber": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInNumberContinue": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInNumberInput": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInOlderAgents": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInReportedBy": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInResult": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInResultMessage": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInReview": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSameNetwork": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInService": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSessionOnly": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSigningScope": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSystem": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
@@ -1656,7 +1674,7 @@
       "src/modules/rooms/components/RoomMembersTab.tsx": "testID"
     },
     {
-      "src/modules/rooms/components/RoomTabs.tsx": "TEST_ID[tab]"
+      "src/modules/rooms/screens/RoomInfo.tsx": "PART_TEST_ID[part]"
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Copy`"
