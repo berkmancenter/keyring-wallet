@@ -206,4 +206,13 @@ describe("a room's tabs", () => {
     await waitFor(() => tree.getByTestId(id('RoomFileRow_f1')))
     expect(tree.queryByTestId(id('RoomFilesAdd'))).toBeNull()
   })
+
+  test('files not built yet, in a room the member can post to: no "Add a file" (control: "Add a file" above)', async () => {
+    withStatuses({ listFiles: NOT_BUILT })
+    const tree = show()
+    await openFiles(tree)
+    await waitFor(() => tree.getByTestId(id('RoomFeatureCard_files')))
+    expect(tree.queryByTestId(id('RoomFilesAdd'))).toBeNull()
+    expect(tree.getByTestId(id('RoomTabFiles')).props.accessibilityState).toEqual({ selected: true })
+  })
 })
