@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "c8b73dd9d58a5869984962d755e854ce856fe286",
+  "generatedFrom": "516881847e4273ca9c9bdc47bb40c5b21e75d87a",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -937,10 +937,16 @@
     "RoomIdentityCopy": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomIdentityDid": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomIdentityName": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
+    "RoomIdentityNameCancel": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
+    "RoomIdentityNameInput": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
+    "RoomIdentityNameSave": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
+    "RoomIdentityNameThem": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomIdentityOpenProfile": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomIdentityOthersSee": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
+    "RoomIdentityRename": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomIdentitySheet": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomIdentitySource": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
+    "RoomIdentityStandIn": ["src/modules/rooms/components/RoomIdentitySheet.tsx"],
     "RoomLoadOlder": ["src/modules/rooms/screens/Room.tsx"],
     "RoomMembers": ["src/modules/rooms/components/RoomMembersTab.tsx"],
     "RoomMembersCaption": ["src/modules/rooms/components/RoomMembersTab.tsx"],
