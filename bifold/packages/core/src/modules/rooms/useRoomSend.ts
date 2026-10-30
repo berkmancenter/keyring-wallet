@@ -81,7 +81,9 @@ interface Outbox {
 
 const NO_POSTS: PendingPost[] = []
 
-// Per service, so a new agent (and its service) starts with none, and per room.
+// Per service, so a new agent (and its service) starts with none, and per room. These two maps are in memory only,
+// never a stored record: tier.mjs reads a `.delete(` on a name like `outboxStore` as deleting stored records, so a
+// rename to `*Store` would move this file out of an OTA.
 const outboxes = new WeakMap<RoomsService, Map<string, Outbox>>()
 // By post: an upload's Cancel.
 const controllers = new Map<string, AbortController>()

@@ -49,7 +49,8 @@ const NEXT: Record<Outcome, number> = {
   failed: OFFERS_ERROR_POLL_MS,
 }
 
-// What the running poll last read, and how to ask it again, for the badge on My Agent.
+// What the running poll last read, and how to ask it again, for the badge on My Agent. In memory only; not named
+// `*Store`, which tier.mjs reads, with a `.delete(`, as deleting stored records.
 const badge: { count?: number; refresh?: () => void; listeners: Set<() => void> } = { listeners: new Set() }
 
 function publish(count: number | undefined) {

@@ -12,6 +12,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
+import { stopAllAdmissionResends } from '../admissionResend'
 import { createSampleRoomsService } from '../sample/sampleRooms'
 import { PREVIEW_TOKEN_TTL_MS, RoomsUnavailable, type RoomsService } from '../types'
 
@@ -54,6 +55,8 @@ beforeEach(() => {
   navigation.replace.mockClear()
   navigation.goBack.mockClear()
 })
+// An accept answered "admission pending" starts tries in the background (admissionResend): none outlives its test.
+afterEach(() => stopAllAdmissionResends())
 
 describe('RoomOffer', () => {
   test('from an offerRef alone: who offers which room, what the member could do, and who they join as', async () => {
