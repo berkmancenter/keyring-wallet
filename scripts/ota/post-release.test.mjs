@@ -324,3 +324,61 @@ test('an unreadable artifact list is reported with its status, and the logs are 
   assert.ok(lines.includes("the publish run's artifacts are unreadable: gh: Resource not accessible by integration (HTTP 403)"))
   assert.deepEqual(r.sources, { ios: 'log', android: 'log' })
 })
+
+/** The fake gh, plus earlier green Test builds runs of the released commit with the given artifacts. */
+const withEarlierBuilds = (base, runs) => (...args) => {
+  if ((args[1] ?? '').startsWith(`repos/${R}/actions/workflows/test-builds.yml/runs?head_sha=${SHA}&status=success`))
+    return JSON.stringify({ workflow_runs: runs.map(({ id, head_sha = SHA, conclusion = 'success' }) => ({ id, head_sha, conclusion, status: 'completed' })) })
+  const arts = /actions\/runs\/(\d+)\/artifacts\?per_page=100$/.exec(args[1] ?? '')
+  const earlier = arts && runs.find((r) => String(r.id) === arts[1])
+  if (earlier) return JSON.stringify({ artifacts: earlier.artifacts })
+  return base(...args)
+}
+const pushOff = (expired = false) => [
+  { name: `keyring-ios-sim-${SHA.slice(0, 8)}-bf2b97dcc9`, expired },
+  { name: `keyring-android-${SHA.slice(0, 8)}-bf2b97dcc9`, expired },
+]
+
+test("the release chain's green Test builds of the published commit are reused: no rebuild, the smoke runs on them", async () => {
+  const { gh, calls } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const lines = []
+  const r = await postRelease({ ...opts(withEarlierBuilds(gh, [{ id: 450, artifacts: pushOff() }])), log: (l) => lines.push(l) })
+  assert.deepEqual([r.verdict, r.testBuilds, r.reusedBuilds, r.gateSmoke], ['green', 450, true, 601])
+  const runs = calls.filter((c) => c[0] === 'workflow')
+  assert.deepEqual(runs.map((c) => c[2]), ['gate-smoke.yml'])
+  assert.ok(runs[0].includes('run-id=450'), 'the smoke runs on the reused build')
+  assert.ok(lines.includes(`reusing Test builds 450: green, built from ${SHA.slice(0, 8)}, the commit that was published`))
+})
+
+test('Test builds are rebuilt when no earlier run is reusable: expired, push-on only, one platform, or another commit', async () => {
+  const sha8 = SHA.slice(0, 8)
+  for (const earlier of [
+    [{ id: 450, artifacts: pushOff(true) }],
+    [{ id: 450, artifacts: [{ name: `keyring-ios-sim-${sha8}-bf2b97dcc9-push-on`, expired: false }, { name: `keyring-android-${sha8}-bf2b97dcc9-push-on`, expired: false }] }],
+    [{ id: 450, artifacts: pushOff().slice(0, 1) }],
+    [{ id: 450, head_sha: PREV, artifacts: pushOff() }],
+    [{ id: 450, conclusion: 'failure', artifacts: pushOff() }],
+    [],
+  ]) {
+    const { gh, calls } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+    const r = await postRelease(opts(withEarlierBuilds(gh, earlier)))
+    assert.deepEqual([r.testBuilds, r.reusedBuilds], [501, false], JSON.stringify(earlier))
+    assert.deepEqual(calls.filter((c) => c[0] === 'workflow').map((c) => c[2]), ['test-builds.yml', 'gate-smoke.yml'])
+  }
+})
+
+test('earlier Test builds that cannot be read mean a fresh build, never no smoke', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const refused = (...args) => {
+    if ((args[1] ?? '').includes('test-builds.yml/runs?head_sha=')) throw ghFailure('gh: Server Error (HTTP 502)')
+    return gh(...args)
+  }
+  const lines = []
+  const r = await postRelease({ ...opts(refused), log: (l) => lines.push(l) })
+  assert.deepEqual([r.verdict, r.testBuilds, r.reusedBuilds], ['green', 501, false])
+  assert.ok(lines.includes(`earlier Test builds of ${SHA.slice(0, 8)} are unreadable (gh: Server Error (HTTP 502)): building afresh`))
+})
+
+test("ghError keeps a thrown non-Error's own text", () => {
+  assert.equal(ghError('a bare string'), 'a bare string')
+})

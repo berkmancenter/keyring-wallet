@@ -8,10 +8,12 @@
  *   1. reads which platforms it published: a job whose "Publish to ring 0"
  *      step succeeded. A dry run, a promote, a withdraw or a device-test run
  *      publishes nothing, and the script stops there with nothing to do;
- *   2. reads the bundle ids from ota-deploy's own log lines
- *      ("<platform> bundle <id> is on ring0 (channel <c>)");
- *   3. dispatches Test builds on the released branch, finds that run by its
- *      head_sha and dispatch time, and waits for it;
+ *   2. reads the bundle ids from the run's ota-bundle records, else from
+ *      ota-deploy's own log lines ("<platform> bundle <id> is on ring0 (channel <c>)");
+ *   3. reuses the release chain's green Test builds of the released commit when
+ *      both its push-off builds are still downloadable; otherwise dispatches
+ *      Test builds on the released branch, finds that run by its head_sha and
+ *      dispatch time, and waits for it;
  *   4. dispatches gate-smoke.yml with that run's id, on the same branch, and
  *      waits for it;
  *   5. lists the screens changed since the previous release (or the store
@@ -123,7 +125,7 @@ const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--matc
  * else the first line of the error. execFileSync's message alone is only "Command failed: gh api …".
  */
 export const ghError = (error) =>
-  String(error?.stderr ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? String(error?.message).split('\n')[0]
+  String(error?.stderr ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? String(error?.message ?? error).split('\n')[0]
 
 // Reading a just-finished job's log: up to six tries, 30 s apart.
 const LOG_ATTEMPTS = 6
@@ -237,15 +239,36 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     }
   }
 
-  const builds = await dispatchAndWait('test-builds.yml', ['platform=both', 'push=off'], { sha: run.head_sha })
+  // The release chain has usually built and smoked this exact commit already, about 50 minutes of work. Reuse that run
+  // when it's green and both its push-off builds are still downloadable, so the brake's verdict lands minutes after
+  // the widen instead of an hour; build afresh only when there's no such run.
+  const reusableBuilds = () => {
+    const sha8 = run.head_sha.slice(0, 8)
+    const wanted = [new RegExp(`^keyring-ios-sim-${sha8}-bf[0-9a-f]+$`), new RegExp(`^keyring-android-${sha8}-bf[0-9a-f]+$`)]
+    try {
+      const runs = api(`repos/${repo}/actions/workflows/test-builds.yml/runs?head_sha=${run.head_sha}&status=success&per_page=20`)
+        .workflow_runs.filter((r) => r.head_sha === run.head_sha && r.conclusion === 'success')
+      for (const r of runs) {
+        const names = api(`repos/${repo}/actions/runs/${r.id}/artifacts?per_page=100`).artifacts.filter((a) => !a.expired).map((a) => a.name)
+        if (wanted.every((re) => names.some((n) => re.test(n)))) return r
+      }
+      log(`no green Test builds of ${sha8} with both push-off builds still downloadable: building afresh`)
+    } catch (error) {
+      log(`earlier Test builds of ${sha8} are unreadable (${ghError(error)}): building afresh`)
+    }
+    return undefined
+  }
+  const reused = reusableBuilds()
+  if (reused) log(`reusing Test builds ${reused.id}: green, built from ${run.head_sha.slice(0, 8)}, the commit that was published`)
+  const builds = reused ?? (await dispatchAndWait('test-builds.yml', ['platform=both', 'push=off'], { sha: run.head_sha }))
   if (builds.conclusion !== 'success') {
     log(`Test builds ${builds.id} ended ${builds.conclusion}: no smoke`)
-    return { ...base, bundles, sources, screens, since, verdict: 'builds-red', testBuilds: builds.id }
+    return { ...base, bundles, sources, screens, since, verdict: 'builds-red', testBuilds: builds.id, reusedBuilds: Boolean(reused) }
   }
   const smoke = await dispatchAndWait('gate-smoke.yml', [`run-id=${builds.id}`, 'platform=both'], { title: `Test builds ${builds.id}` })
   const verdict = smokeVerdict(api(`repos/${repo}/actions/runs/${smoke.id}/jobs?per_page=100`).jobs, base.platforms)
   log(`gate-smoke ${smoke.id}: ${verdict.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}`)
-  return { ...base, bundles, sources, screens, since, verdict: verdict.green ? 'green' : 'smoke-red', testBuilds: builds.id, gateSmoke: smoke.id, rows: verdict.rows }
+  return { ...base, bundles, sources, screens, since, verdict: verdict.green ? 'green' : 'smoke-red', testBuilds: builds.id, reusedBuilds: Boolean(reused), gateSmoke: smoke.id, rows: verdict.rows }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -267,7 +290,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         `- released: ${r.ref} at ${r.sha}`,
         ...r.bundles.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel}, from its ${r.sources?.[b.platform] ?? 'unknown source'})`),
         ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (no record, and its log was unreadable)`),
-        r.testBuilds ? `- Test builds run ${r.testBuilds}` : '', r.gateSmoke ? `- gate-smoke run ${r.gateSmoke}` : '',
+        r.testBuilds ? `- Test builds run ${r.testBuilds}${r.reusedBuilds ? ' (reused: the release chain\'s green build of this commit)' : ''}` : '', r.gateSmoke ? `- gate-smoke run ${r.gateSmoke}` : '',
         ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`), '',
         `#### Changed screens since ${r.since ?? 'unknown'} (for the screen check)`, '',
         ...((r.screens ?? []).length ? r.screens.map((f) => `- ${f}`) : ['- none found']), '',
