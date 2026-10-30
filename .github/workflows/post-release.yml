@@ -32,7 +32,10 @@ concurrency:
 jobs:
   smoke:
     name: Post-release smoke · ${{ github.event.workflow_run.head_branch }}
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # A failed run counts too: a release run can publish to ring 0 and then fail to widen, and that bundle must still
+    # be smoked. post-release.mjs reads what the run actually published, and does nothing for a run that published none.
+    # A cancelled run deliberately doesn't: a cancel is a person stopping the run, who can dispatch the smoke by hand.
+    if: ${{ contains(fromJSON('["success","failure"]'), github.event.workflow_run.conclusion) }}
     runs-on: ubuntu-22.04
     # Test builds take about 45 minutes and the smoke about 30; the waits are polls, one read a minute.
     timeout-minutes: 240
@@ -98,7 +101,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GATE_SMOKE: ${{ needs.smoke.outputs.gate_smoke }}
-        run: node scripts/ota/brake.mjs rerun --gate-smoke "$GATE_SMOKE"
+          PLATFORMS: ${{ needs.smoke.outputs.platforms }}
+        run: node scripts/ota/brake.mjs rerun --gate-smoke "$GATE_SMOKE" --platforms "$PLATFORMS"
 
       # withdraw.mjs runs the hot-updater CLI from app/, as ota-publish.yml's withdraw does.
       - name: Check out the submodule for the install

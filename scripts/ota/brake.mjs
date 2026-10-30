@@ -62,11 +62,11 @@ const realGh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuff
 // release stays live, looking handled.
 export const RERUN_MAX_WAIT_MS = 45 * 60 * 1000
 
-export async function rerunAndJudge({ gateSmoke, repo, gh = realGh, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), pollMs = 60000, maxWaitMs = RERUN_MAX_WAIT_MS, log = console.log }) {
+export async function rerunAndJudge({ gateSmoke, repo, platforms, gh = realGh, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), pollMs = 60000, maxWaitMs = RERUN_MAX_WAIT_MS, log = console.log }) {
   const api = (route) => JSON.parse(gh('api', route))
   const before = api(`repos/${repo}/actions/runs/${gateSmoke}`)
   if (before.status !== 'completed') throw new Error(`gate-smoke ${gateSmoke} is still ${before.status}`)
-  const first = smokeVerdict(api(`repos/${repo}/actions/runs/${gateSmoke}/jobs?per_page=100`).jobs)
+  const first = smokeVerdict(api(`repos/${repo}/actions/runs/${gateSmoke}/jobs?per_page=100`).jobs, platforms)
   if (first.green) return { stillRed: false, rows: first.rows, rerun: false }
   gh('run', 'rerun', String(gateSmoke), '--failed', '-R', repo)
   log(`gate-smoke ${gateSmoke} red (${first.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}): re-running its failed jobs once`)
@@ -79,7 +79,7 @@ export async function rerunAndJudge({ gateSmoke, repo, gh = realGh, sleep = (ms)
     r = api(`repos/${repo}/actions/runs/${gateSmoke}`)
     if (r.run_attempt > before.run_attempt && r.status === 'completed') break
   }
-  const again = smokeVerdict(api(`repos/${repo}/actions/runs/${gateSmoke}/jobs?per_page=100`).jobs)
+  const again = smokeVerdict(api(`repos/${repo}/actions/runs/${gateSmoke}/jobs?per_page=100`).jobs, platforms)
   log(`gate-smoke ${gateSmoke} re-run: ${again.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}`)
   return { stillRed: !again.green, rows: again.rows, rerun: true }
 }
@@ -125,7 +125,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (mode === 'rerun') {
       const repo = values.repo ?? process.env.GITHUB_REPOSITORY
       if (!/^\d+$/.test(values['gate-smoke'] ?? '') || !repo) throw new Error('usage: brake.mjs rerun --gate-smoke <run id>')
-      const r = await rerunAndJudge({ gateSmoke: values['gate-smoke'], repo })
+      const platforms = values.platforms ? JSON.parse(values.platforms) : undefined
+      const r = await rerunAndJudge({ gateSmoke: values['gate-smoke'], repo, platforms })
       out('still_red', String(r.stillRed))
       summary([`### Brake: ${r.stillRed ? 'smoke still red after one re-run, withdrawing' : 'smoke green on its re-run, nothing withdrawn'}`, '', ...r.rows.map((row) => `- ${row.platform} smoke: ${row.conclusion}`), ''])
     } else if (mode === 'withdraw') {
