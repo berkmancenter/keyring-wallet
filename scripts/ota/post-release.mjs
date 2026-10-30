@@ -50,9 +50,15 @@ export const publishedJobs = (jobs) =>
     .map((j) => ({ id: j.id, platform: /\((ios|android)\)/.exec(j.name)?.[1] }))
     .filter((j) => j.platform)
 
-/** The bundles ota-deploy says it put on ring 0, from a job's log. */
+// Terminal escape sequences (CSI: colours, cursor moves). A log gh was told to print anyway still carries them.
+const ESCAPES = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
+
+/**
+ * The bundles ota-deploy says it put on ring 0, from a job's log, with any escape sequences taken out first. 10-30:
+ * 276.10's logs had escapes on about 500 lines each, none on ota-deploy's own lines, which nothing keeps that way.
+ */
 export const bundlesFromLog = (log) =>
-  [...String(log).matchAll(/ota-deploy: (ios|android) bundle ([0-9a-f-]{36}) is on ring0 \(channel ([\w-]+)\)/g)].map(
+  [...String(log).replace(ESCAPES, '').matchAll(/ota-deploy: (ios|android) bundle ([0-9a-f-]{36}) is on ring0 \(channel ([\w-]+)\)/g)].map(
     ([, platform, id, channel]) => ({ platform, id, channel })
   )
 
@@ -74,7 +80,8 @@ export const bundlesFromRecord = (text) =>
  * The notice ota-publish.yml writes for each bundle it records, read back from the publish job's check-run
  * annotations: a third place for the ids, apart from both the artifact store and the job log. 10-30: 276.10's records
  * failed to download with "Egress is over the account limit", one log read got HTTP 503 six times, and gh refused the
- * other for its terminal escape sequences, so the post-release had no ids at all.
+ * other for its terminal escape sequences, so the post-release had no ids at all. GitHub keeps only about ten notices
+ * per step, which is plenty for the one bundle a publish job records but not a place to list many.
  */
 export const NOTICE_TITLE = 'ota-bundle'
 export const bundleNotice = (b) => `::notice title=${NOTICE_TITLE}::${b.platform} bundle ${b.id} (channel ${b.channel})`
