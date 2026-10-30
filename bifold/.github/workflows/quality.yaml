@@ -134,8 +134,8 @@ jobs:
           if [ -n "$files" ]; then node --test $files; fi
 
   # On a PR, Testing runs only the suites the change can reach, plus every guard (scripts/ci/select-tests.mjs says
-  # which and why). The full suite with coverage runs on every push to main, nightly, and on a PR labelled
-  # `full-tests`: the "Full test suite" workflow. The selection runs in four parts at once, each on its own runner
+  # which and why). The full suite with coverage runs on every push to main, nightly, and on dispatch:
+  # the "Full test suite" workflow. The selection runs in four parts at once, each on its own runner
   # (core's suites split by jest's --shard); the job named Testing, which the ruleset requires, passes only when
   # every part passes.
   test-part:

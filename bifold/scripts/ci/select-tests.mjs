@@ -4,7 +4,7 @@
 //
 // The whole suite of every package, with coverage, takes 20 to 30 minutes. A PR
 // runs only what its change can reach. The whole suite runs on every push to main,
-// nightly, and on a PR labelled `full-tests` (.github/workflows/full-tests.yaml).
+// nightly, and on dispatch (.github/workflows/full-tests.yaml).
 //
 //   node scripts/ci/select-tests.mjs plan --base origin/main --out plan.json
 //   node scripts/ci/select-tests.mjs run --plan plan.json [--part 2/4] [--max-workers 4]

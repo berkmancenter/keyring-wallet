@@ -2,7 +2,9 @@ name: Full test suite
 # Every package's whole jest suite, with coverage: core in four shards, the other packages in a fifth job. A PR's
 # Testing job (quality.yaml) runs only the suites its change can reach; this is what catches anything that selection
 # misses, within one merge. Gate on the job named exactly "Full suite", in a run of this workflow on main
-# (branch=main&event=push): it fails when any part fails. A run on a PR without the label concludes skipped.
+# (branch=main&event=push): it fails when any part fails. To run it on a PR's branch, dispatch it on that branch; a
+# dispatched run is a check for that branch only and never counts for the gate, even on main. To clear a red on main,
+# re-run that push run's failed jobs (the event stays push); don't dispatch a new run.
 
 on:
   push:
@@ -11,21 +13,12 @@ on:
     # Nightly, on main's head.
     - cron: '23 7 * * *'
   workflow_dispatch:
-  # On a PR only when it carries the `full-tests` label.
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
 
-concurrency:
-  group: full-tests-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   shard:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-tests')
     runs-on: ubuntu-22.04
     # Not "Full suite (...)": a gate matching the roll-up by prefix would read one part as the whole suite.
     name: Jest part (${{ matrix.part }})
@@ -84,7 +77,7 @@ jobs:
   full:
     name: Full suite
     needs: shard
-    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-tests'))
+    if: always()
     runs-on: ubuntu-22.04
     steps:
       - name: Every shard passed
