@@ -1,7 +1,9 @@
 /**
- * A room as a conversation (rooms member sprint, RoomView): its posts newest first, a day pill above each day's
- * posts, "Load older" at the end, and pull to refresh. Nothing pushes a post to a phone, so while the room is in view
- * and the app in the foreground, new posts are asked for every few seconds (`useRoomPosts`). Above the posts,
+ * A room as a conversation (rooms member sprint, RoomView), read as the person-to-person chat reads: newest at the
+ * bottom, where it opens, a day pill above each day's posts, and "Load older" at the top. Nothing pushes a post to a
+ * phone, so while the room is in view and the app in the foreground, new posts are asked for every few seconds
+ * (`useRoomPosts`); one arrives at the bottom, in view only if the member is there already. Sending goes to the
+ * bottom, as the person-to-person chat does. Pull to refresh is offered while there are no posts to show. Above the posts,
  * the room's name and tier and who the member posts as; and a warning when the member's agent found the host's
  * answer inconsistent (records dropped or replayed).
  *
@@ -21,7 +23,7 @@
  */
 import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation, useRoute } from '@react-navigation/native'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
@@ -61,16 +63,23 @@ import { useRoomsService } from '../useRoomsService'
 
 type Item = { kind: 'day'; key: string; date: Date } | { kind: 'post'; key: string; post: RoomPost }
 
-/** Posts newest first, each day's posts led by that day's pill. Posts with no time take no pill. */
+/**
+ * Posts newest first, for a list drawn from the bottom up (`inverted`, as the person-to-person chat's): each day's
+ * pill comes after that day's posts, so it shows above them. Posts with no time take no pill.
+ */
 export const withDayPills = (posts: RoomPost[]): Item[] => {
   const items: Item[] = []
-  let day: string | undefined
+  let day: { key: string; date: Date } | undefined
+  const pill = (d: { key: string; date: Date }): Item => ({ kind: 'day', key: `day-${d.key}`, date: d.date })
   for (const post of posts) {
     const key = post.at ? localDayKey(post.at) : undefined
-    if (post.at && key && key !== day) items.push({ kind: 'day', key: `day-${key}`, date: post.at })
-    if (key) day = key
+    if (post.at && key && key !== day?.key) {
+      if (day) items.push(pill(day))
+      day = { key, date: post.at }
+    }
     items.push({ kind: 'post', key: `post-${post.key}-${post.version}`, post })
   }
+  if (day) items.push(pill(day))
   return items
 }
 
@@ -140,6 +149,17 @@ const Room: React.FC = () => {
     () => outbox.pending.map((p) => pendingAsPost(p, room?.actingAs)),
     [outbox.pending, room?.actingAs]
   )
+  // The list is drawn from the bottom up, so offset 0 is the newest post: a post just sent shows there.
+  const list = useRef<FlatList<Item>>(null)
+  const { send: outboxSend } = outbox
+  const send = useCallback(
+    (text: string, file?: Parameters<typeof outboxSend>[1]) => {
+      const sending = outboxSend(text, file)
+      if (sending) list.current?.scrollToOffset({ offset: 0, animated: true })
+      return sending
+    },
+    [outboxSend]
+  )
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     header: { paddingHorizontal: 16, paddingVertical: 10, gap: 4 },
@@ -204,6 +224,7 @@ const Room: React.FC = () => {
   const chatPosts = feed.posts?.filter((p) => !isNote(p))
   const notes = feed.posts?.filter(isNote)
   const items = chatPosts || pendingPosts.length ? withDayPills([...pendingPosts, ...(chatPosts ?? [])]) : []
+  const shown = unavailable ? [] : items
 
   const empty = isComingSoon(roomCapabilities.listNotes) ? (
     <RoomFeatureCard status={roomCapabilities.listNotes} feature="notes" />
@@ -309,10 +330,14 @@ const Room: React.FC = () => {
         keyboardVerticalOffset={keyboard.offset}
       >
         <FlatList
+          ref={list}
           testID={testIdWithKey('RoomPosts')}
-          data={unavailable ? [] : items}
+          data={shown}
           keyExtractor={(item) => item.key}
-          // A page is small (POSTS_PAGE posts and their day pills): draw it whole, so "Load older" sits under it.
+          // Newest at the bottom, as the person-to-person chat (gifted-chat's list is inverted too). Only with posts:
+          // an empty list's message reads from the top.
+          inverted={shown.length > 0}
+          // A page is small (POSTS_PAGE posts and their day pills): draw it whole, so "Load older" sits above it.
           initialNumToRender={POSTS_PAGE * 2}
           contentContainerStyle={styles.list}
           renderItem={({ item }) =>
@@ -328,8 +353,10 @@ const Room: React.FC = () => {
             )
           }
           ListEmptyComponent={empty}
+          // Only while there are no posts, where it is the way to try again. Drawn bottom up, a list would put the
+          // control at the bottom; with posts, the room is read again every few seconds while it is in view.
           refreshControl={
-            unavailable ? undefined : (
+            unavailable || shown.length > 0 ? undefined : (
               <RefreshControl
                 refreshing={feed.refreshing}
                 onRefresh={feed.refresh}
@@ -337,6 +364,7 @@ const Room: React.FC = () => {
               />
             )
           }
+          // The footer of a list drawn bottom up is at its top, above the oldest post shown.
           ListFooterComponent={
             feed.hasOlder ? (
               <Button
@@ -357,7 +385,7 @@ const Room: React.FC = () => {
           <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
         ) : (
           <RoomComposer
-            onSend={outbox.send}
+            onSend={send}
             unavailable={cannotPost}
             postingAs={identityText(room.actingAs)}
             canAttach={canAttach}

@@ -6,6 +6,7 @@
  */
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { FlatList } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
@@ -55,6 +56,24 @@ beforeEach(() => {
 })
 
 describe('posting to a room', () => {
+  test('Send goes to the newest post, at the bottom, as the person-to-person chat does; nothing to send, no move', async () => {
+    const scroll = jest.spyOn(FlatList.prototype, 'scrollToOffset')
+    try {
+      const tree = show(PLANNING)
+      await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/).length).toBeGreaterThan(0))
+      await type(tree, '   ')
+      await send(tree)
+      expect(scroll).not.toHaveBeenCalled()
+      await type(tree, 'On my way.')
+      await send(tree)
+      expect(scroll).toHaveBeenCalledTimes(1)
+      expect(scroll).toHaveBeenCalledWith({ offset: 0, animated: true })
+      await waitFor(() => expect(tree.getByText('On my way.')).toBeTruthy())
+    } finally {
+      scroll.mockRestore()
+    }
+  })
+
   test("Send writes the text as a chat message, and the post becomes the member's own", async () => {
     const service = mockService as RoomsService
     const prepareWrite = jest.spyOn(service, 'prepareWrite')

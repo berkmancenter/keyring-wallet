@@ -1,6 +1,6 @@
 /**
- * A room as a conversation (R3, RoomView): posts newest first with a day pill per day, "Load older", pull to
- * refresh; a chat message shows its text and anything else shows as written, inert; an unreadable post holds its
+ * A room as a conversation (R3, RoomView): newest at the bottom, as the person-to-person chat, with a day pill above
+ * each day's posts and "Load older" at the top; pull to refresh while there are no posts; a chat message shows its text and anything else shows as written, inert; an unreadable post holds its
  * place; the host check warns only on `conflict`; a custody-only room is never asked for posts.
  */
 import { useNavigation } from '@react-navigation/native'
@@ -28,6 +28,8 @@ jest.mock('@react-navigation/native', () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Room = require('../screens/Room').default
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { withDayPills } = require('../screens/Room')
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const RoomsHome = require('../screens/RoomsHome').default
 
@@ -148,7 +150,7 @@ describe('posts', () => {
     expect(tree.getByText('{"not": "a chat event"')).toBeTruthy()
   })
 
-  test("a day pill above each day, and the member's own post marked as theirs", async () => {
+  test("newest at the bottom with a day pill above each day, and the member's own post marked as theirs", async () => {
     const tree = open(
       withPosts([
         post('a', 'today', { author: ME }),
@@ -157,7 +159,17 @@ describe('posts', () => {
       ])
     )
     await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(3))
-    expect(tree.getAllByTestId(id('ChatDayPill'))).toHaveLength(2)
+    // Drawn from the bottom up, as the person-to-person chat: the first in the list, the newest, is at the bottom,
+    // and a day's pill follows its posts in the list so that it shows above them.
+    expect(tree.getByTestId(id('RoomPosts')).props.inverted).toBe(true)
+    const drawn = tree.getAllByTestId(/RoomPost_|ChatDayPill/).map((n) => n.props.testID.replace(/^.*\//, ''))
+    expect(drawn).toEqual([
+      `RoomPost_${roomHandle('a')}`,
+      `RoomPost_${roomHandle('b')}`,
+      'ChatDayPill',
+      `RoomPost_${roomHandle('c')}`,
+      'ChatDayPill',
+    ])
     expect(tree.getByText('Rooms.You')).toBeTruthy()
   })
 
@@ -177,26 +189,68 @@ describe('posts', () => {
     const tree = open(withPosts(many))
     await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE))
     expect(tree.queryByText(`post ${POSTS_PAGE}`)).toBeNull()
+    // The list's footer, which a list drawn from the bottom up shows at its top, above the oldest post.
+    const list = tree.getByTestId(id('RoomPosts'))
+    expect(list.props.inverted).toBe(true)
+    expect(list.props.ListFooterComponent.props.testID).toBe(id('RoomLoadOlder'))
     fireEvent.press(tree.getByTestId(id('RoomLoadOlder')))
     await waitFor(() => expect(tree.getByText(`post ${POSTS_PAGE}`)).toBeTruthy())
     expect(tree.queryByTestId(id('RoomLoadOlder'))).toBeNull()
   })
 
-  test('pulling down reads the room again, and a new post appears', async () => {
-    const posts = [post('a', 'first')]
+  test('with no posts yet, pulling down reads the room again, and a new post appears', async () => {
+    const posts: Note[] = []
     const service = withPosts(posts)
     const tree = open(service)
-    await waitFor(() => expect(tree.getByText('first')).toBeTruthy())
+    await waitFor(() => expect(tree.getByTestId(id('RoomPostsNone'))).toBeTruthy())
+    // An empty list reads from the top, so its message is where the eye starts.
+    expect(tree.getByTestId(id('RoomPosts')).props.inverted).toBe(false)
     const before = service.listNotes.mock.calls.length
-    posts.unshift(post('b', 'arrived later', { updatedAt: '2026-10-26T10:00:00Z' }))
+    posts.push(post('b', 'arrived later', { updatedAt: '2026-10-26T10:00:00Z' }))
     await act(async () => tree.getByTestId(id('RoomPosts')).props.refreshControl.props.onRefresh())
     await waitFor(() => expect(tree.getByText('arrived later')).toBeTruthy())
     expect(service.listNotes).toHaveBeenCalledTimes(before + 1)
   })
 
+  test('with posts shown there is no pull to refresh: drawn bottom up it would sit at the bottom', async () => {
+    const tree = open(withPosts([post('a', 'first')]))
+    await waitFor(() => expect(tree.getByText('first')).toBeTruthy())
+    expect(tree.getByTestId(id('RoomPosts')).props.refreshControl).toBeUndefined()
+  })
+
   test('no posts yet: says so', async () => {
     const tree = open(withPosts([]))
     await waitFor(() => expect(tree.getByTestId(id('RoomPostsNone'))).toBeTruthy())
+  })
+})
+
+describe('withDayPills, for a list drawn from the bottom up', () => {
+  const at = (iso?: string) => ({ key: iso ?? 'none', version: 1, at: iso ? new Date(iso) : undefined })
+  const shape = (posts: ReturnType<typeof at>[]) =>
+    withDayPills(posts).map((i: { kind: string; key: string; post?: { key: string } }) =>
+      i.kind === 'day' ? i.key : i.post?.key
+    )
+
+  test("each day's pill comes after its posts, the oldest day's last", () => {
+    expect(shape([at('2026-10-26T10:00:00'), at('2026-10-26T08:00:00'), at('2026-10-25T09:00:00')])).toEqual([
+      '2026-10-26T10:00:00',
+      '2026-10-26T08:00:00',
+      'day-2026-10-26',
+      '2026-10-25T09:00:00',
+      'day-2026-10-25',
+    ])
+  })
+
+  test('a post with no time takes no pill and stays among its neighbours', () => {
+    expect(shape([at('2026-10-26T10:00:00'), at(), at('2026-10-25T09:00:00')])).toEqual([
+      '2026-10-26T10:00:00',
+      'none',
+      'day-2026-10-26',
+      '2026-10-25T09:00:00',
+      'day-2026-10-25',
+    ])
+    expect(shape([at()])).toEqual(['none'])
+    expect(shape([])).toEqual([])
   })
 })
 
