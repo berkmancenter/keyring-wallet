@@ -479,10 +479,19 @@ export async function clearLocalityPreflightIfUp(driver) {
  * sibling of the others, so it appears whenever another test phone goes live
  * — mid-ceremony, above the tabs, pushing the screen down. It is dismissed
  * the way a person would (OK), never "My devices".
+ *
+ * Since bifold #845 it is a strip under the header whose OK shows only once
+ * the strip is opened, so a closed strip (its line, SiblingNotice, with no OK)
+ * is opened first. The old card shows OK at once and is tapped as before.
  */
 export async function clearSiblingNoticeIfUp(driver) {
   const ok = byTestId(driver, "SiblingNoticeDismiss");
-  if (!(await ok.isExisting().catch(() => false))) return false;
+  if (!(await ok.isExisting().catch(() => false))) {
+    const strip = byTestId(driver, "SiblingNotice");
+    if (!(await strip.isExisting().catch(() => false))) return false;
+    await strip.click().catch(() => undefined);
+    if (!(await ok.waitForExist({ timeout: 3000 }).catch(() => false))) return false;
+  }
   await ok.click().catch(() => undefined);
   console.log(`[e2e] ${deviceTag(driver)}: "also open as you" notice — tapped OK`);
   await new Promise((r) => setTimeout(r, 800));
