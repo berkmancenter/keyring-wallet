@@ -95,3 +95,28 @@ export function conversations(
     .sort((a, b) => b.at - a.at || a.index - b.index)
     .map(({ row }) => row)
 }
+
+/** For matching names: lower case, accents taken off ("Zoé" and "zoe" match), spaces kept. */
+export function foldName(text: string): string {
+  let folded = text.toLowerCase()
+  try {
+    folded = folded.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  } catch {
+    // An engine without normalize: case is still ignored.
+  }
+  return folded.trim()
+}
+
+/**
+ * The rows whose contact's name matches `query` (the Messages list redesign, L5): names only, as approved, never
+ * the words of any message. Every word of the query must appear in the name ("ana rib" finds "Ana Ribeiro"),
+ * ignoring case and accents; an empty query keeps every row, in order.
+ */
+export function searchRows<T>(rows: readonly T[], nameOf: (row: T) => string, query: string): T[] {
+  const words = foldName(query).split(/\s+/).filter(Boolean)
+  if (words.length === 0) return [...rows]
+  return rows.filter((row) => {
+    const name = foldName(nameOf(row))
+    return words.every((word) => name.includes(word))
+  })
+}

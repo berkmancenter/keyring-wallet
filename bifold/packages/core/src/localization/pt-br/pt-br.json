@@ -2649,7 +2649,10 @@
     "DeleteContactStays": "{{name}} continua nos seus contatos. A conversa volta aqui quando um de vocês escrever de novo.",
     "DeleteConfirm": "Apagar conversa",
     "Deleted": "Conversa com {{name}} apagada",
-    "Undo": "Desfazer"
+    "Undo": "Desfazer",
+    "Search": "Buscar",
+    "SearchClear": "Limpar a busca",
+    "NoMatch": "Nenhuma conversa corresponde a “{{query}}”"
   },
   "Relationship": {
     "ResignUnavailable": "Assinar de novo: seus cartões já estão assinados com hardware seguro.",

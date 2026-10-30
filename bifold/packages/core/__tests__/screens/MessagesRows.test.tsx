@@ -239,3 +239,31 @@ describe('deleting from the list (L4)', () => {
     expect(opened(list(false))).toEqual(['conn-ada'])
   })
 })
+
+describe('search by name (L5)', () => {
+  const type = (tree: ReturnType<typeof list>, text: string) =>
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('MessagesSearch')), text)
+
+  test('narrows the list to the names that match, ignoring case and accents', () => {
+    const tree = list(false)
+    type(tree, 'ADA')
+    expect(opened(tree)).toEqual(['conn-ada'])
+    type(tree, 'bób')
+    expect(opened(tree)).toEqual(['conn-c', 'conn-b', 'conn-a'])
+  })
+
+  test('no name matches: says so, not "no chats yet"; Clear brings every row back', () => {
+    const tree = list(false)
+    type(tree, 'xyz')
+    expect(rows(tree)).toHaveLength(0)
+    expect(tree.getByTestId(testIdWithKey('MessagesNoMatch'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('MessagesEmpty'))).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('MessagesSearchClear')))
+    expect(opened(tree)).toEqual(['conn-c', 'conn-b', 'conn-ada', 'conn-a'])
+  })
+
+  test('nothing to search before the first conversation', () => {
+    mockSaid = []
+    expect(list(false).queryByTestId(testIdWithKey('MessagesSearch'))).toBeNull()
+  })
+})

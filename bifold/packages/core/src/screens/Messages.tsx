@@ -1,9 +1,9 @@
 import { useConnections } from '@bifold/react-hooks'
 import { useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -11,10 +11,12 @@ import Button, { ButtonType } from '../components/buttons/Button'
 import IconButton, { ButtonLocation } from '../components/buttons/IconButton'
 import { ThemedText } from '../components/texts/ThemedText'
 import { useStore } from '../contexts/store'
+import { connectionDisplayName } from '../hooks/connections'
 import { useConnectionActivity } from '../hooks/useConnectionActivity'
 import { pendingChatDeletes } from '../modules/chat/pendingChatDeletes'
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
-import { conversations, isConversationPartner, messageRows } from '../modules/vrc/contacts/messageRows'
+import { conversations, isConversationPartner, messageRows, searchRows } from '../modules/vrc/contacts/messageRows'
+import { useVrcNameCache } from '../modules/vrc/context/VrcNameCacheProvider'
 import { useConnectionRelationships } from '../modules/vrc/contacts/useContactFacts'
 import { useContactLinks } from '../modules/vrc/contacts/useContactLinks'
 import { useTheme } from '../contexts/theme'
@@ -22,6 +24,9 @@ import { MessageStackParams, Screens, Stacks } from '../types/navigators'
 import { messageWakeFetching, useReportMessagesListFocus } from '../utils/messageWake'
 import { testIdWithKey } from '../utils/testable'
 import { TOKENS, useServices } from '../container-api'
+
+const SEARCH_FIELD = '#EAE6EA'
+const SEARCH_HINT = '#666666'
 
 interface MessagesProps {
   navigation: StackNavigationProp<MessageStackParams, Screens.Messages>
@@ -77,11 +82,39 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
     [connections, relationshipOf, contactLinks, activity, unreadByConnection, deleting]
   )
 
+  // Search (L5): by name only, as approved, never the words of a message; the name each row shows.
+  const [query, setQuery] = useState('')
+  const { getVrcName } = useVrcNameCache()
+  const shown = useMemo(
+    () =>
+      searchRows(
+        rows,
+        (row) =>
+          connectionDisplayName(row.connection, store.preferences.alternateContactNames, getVrcName(row.connection.id)),
+        query
+      ),
+    [rows, query, store.preferences.alternateContactNames, getVrcName]
+  )
+
   const style = StyleSheet.create({
     list: {
       backgroundColor: ColorPalette.brand.secondaryBackground,
     },
     fetching: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+    search: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      height: 36,
+      marginHorizontal: 16,
+      marginTop: 10,
+      marginBottom: 6,
+      paddingHorizontal: 10,
+      borderRadius: 10,
+      backgroundColor: SEARCH_FIELD,
+    },
+    searchInput: { flex: 1, minWidth: 0, fontSize: 16, color: '#010B13', paddingVertical: 0 },
+    noMatch: { padding: 24, textAlign: 'center', color: '#4A4A4A' },
     fetchingText: { color: ColorPalette.grayscale.mediumGrey },
     empty: {
       flex: 1,
@@ -160,13 +193,19 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
       <FlatList
         style={style.list}
         contentContainerStyle={{ flexGrow: 1 }}
-        data={rows}
+        data={shown}
+        keyboardShouldPersistTaps="handled"
         keyExtractor={(row) => row.key}
         renderItem={({ item: row }) => (
           <ContactListItem contact={row.connection} connectionIds={row.connectionIds} navigation={navigation as any} />
         )}
         ListEmptyComponent={() =>
-          // Not while a tapped notification's messages are still coming in: the list is about to fill.
+          // Conversations, but none by that name: said so, not the "no chats yet" state.
+          rows.length > 0 ? (
+            <ThemedText style={style.noMatch} testID={testIdWithKey('MessagesNoMatch')}>
+              {t('MessagesList.NoMatch', { query: query.trim(), interpolation: { escapeValue: false } })}
+            </ThemedText>
+          ) : // Not while a tapped notification's messages are still coming in: the list is about to fill.
           fetchingNew ? null : (
             <View style={style.empty} testID={testIdWithKey('MessagesEmpty')}>
               <View style={style.emptyMark}>
@@ -195,12 +234,43 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
         }
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          fetchingNew ? (
-            <View style={style.fetching} testID={testIdWithKey('MessagesFetchingNew')}>
-              <ActivityIndicator color={ColorPalette.brand.primary} />
-              <Text style={style.fetchingText}>{t('MessageWake.Fetching')}</Text>
-            </View>
-          ) : null
+          <>
+            {rows.length > 0 ? (
+              <View style={style.search}>
+                <Icon name="magnify" size={20} color={SEARCH_HINT} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder={t('MessagesList.Search')}
+                  placeholderTextColor={SEARCH_HINT}
+                  accessibilityLabel={t('MessagesList.Search')}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                  clearButtonMode="never"
+                  style={style.searchInput}
+                  testID={testIdWithKey('MessagesSearch')}
+                />
+                {query ? (
+                  <Pressable
+                    onPress={() => setQuery('')}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('MessagesList.SearchClear')}
+                    hitSlop={8}
+                    testID={testIdWithKey('MessagesSearchClear')}
+                  >
+                    <Icon name="close-circle" size={18} color={SEARCH_HINT} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+            {fetchingNew ? (
+              <View style={style.fetching} testID={testIdWithKey('MessagesFetchingNew')}>
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+                <Text style={style.fetchingText}>{t('MessageWake.Fetching')}</Text>
+              </View>
+            ) : null}
+          </>
         }
       />
     </GestureHandlerRootView>

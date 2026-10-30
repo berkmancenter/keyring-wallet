@@ -2799,7 +2799,10 @@
     "DeleteContactStays": "{{name}} stays in your contacts. The chat comes back here when either of you writes again.",
     "DeleteConfirm": "Delete chat",
     "Deleted": "Chat with {{name}} deleted",
-    "Undo": "Undo"
+    "Undo": "Undo",
+    "Search": "Search",
+    "SearchClear": "Clear search",
+    "NoMatch": "No chats match “{{query}}”"
   },
   "Relationship": {
     "ResignUnavailable": "Sign again: your cards are already signed with secure hardware.",

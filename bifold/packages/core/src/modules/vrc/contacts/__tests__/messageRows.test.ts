@@ -6,7 +6,14 @@ import {
 } from '@credo-ts/didcomm'
 
 import { NO_CONTACT_LINKS } from '../contactLinks'
-import { connectionToOpen, conversations, isConversationPartner, messageRows } from '../messageRows'
+import {
+  connectionToOpen,
+  conversations,
+  foldName,
+  isConversationPartner,
+  messageRows,
+  searchRows,
+} from '../messageRows'
 
 const connection = (id: string) =>
   new DidCommConnectionRecord({
@@ -145,5 +152,28 @@ describe('someone to talk to', () => {
     expect(isConversationPartner(witness)).toBe(false)
     expect(isConversationPartner(build({ state: DidCommDidExchangeState.RequestSent }))).toBe(false)
     expect(isConversationPartner(build(), ['Ada'])).toBe(false)
+  })
+})
+
+describe('search by name (L5)', () => {
+  const people = ['Ana Ribeiro', 'Zoé Martin', 'Bob Backer', 'Anaïs Okafor']
+  const find = (query: string) => searchRows(people, (name) => name, query)
+
+  test('case and accents do not matter, either way round', () => {
+    expect(foldName('  Zoé MARTIN ')).toBe('zoe martin')
+    expect(find('zoe')).toEqual(['Zoé Martin'])
+    expect(find('ZOÉ')).toEqual(['Zoé Martin'])
+    expect(find('anais')).toEqual(['Anaïs Okafor'])
+  })
+
+  test('every word must appear in the name: "ana rib" finds Ana Ribeiro, not Anaïs', () => {
+    expect(find('ana')).toEqual(['Ana Ribeiro', 'Anaïs Okafor'])
+    expect(find('ana rib')).toEqual(['Ana Ribeiro'])
+    expect(find('ana zzz')).toEqual([])
+  })
+
+  test('an empty or blank query keeps every row, in order', () => {
+    expect(find('')).toEqual(people)
+    expect(find('   ')).toEqual(people)
   })
 })
