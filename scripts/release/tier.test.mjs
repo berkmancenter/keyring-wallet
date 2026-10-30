@@ -193,6 +193,21 @@ test('deletes stored records: storage deletes hold, a Map or Set delete does not
     'await walletStorage.remove(key)', 'await store.delete(id)', 'await deleteRecord(r)', 'forgetConnection(id)', 'wipeWallet()']) assert.equal(held(l), true, l);
 });
 
+test('deletes stored records: the device-store deletes hold; their reads and writes do not', () => {
+  const held = (line) => flagsOf(['app/src/screens/X.tsx'], { 'app/src/screens/X.tsx': [line] }).some((f) => f.flag === 'deletes stored records');
+  for (const l of ["await AsyncStorage.removeItem('draft:' + id)", 'await AsyncStorage.multiRemove(keys)', 'await AsyncStorage.clear()',
+    'await SecureStore.deleteItemAsync(KEY, { keychainService })']) assert.equal(held(l), true, l);
+  for (const l of ["await AsyncStorage.setItem('draft:' + id, text)", 'await AsyncStorage.getItem(key)', 'await AsyncStorage.multiGet(keys)',
+    'await SecureStore.setItemAsync(KEY, value)', 'await SecureStore.getItemAsync(KEY)']) assert.equal(held(l), false, l);
+  // The false-positive side, pinned: clear() is the commonest Map and Set method, so it holds only on AsyncStorage. A bare
+  // \bclear\( would grade in-memory bookkeeping as store and keep ordinary JS changes off OTAs.
+  for (const l of ['listeners.clear()', 'controllers.clear()', 'seen.clear()', 'map.clear()', 'this.cache.clear()', 'pending.removeItem(i)'])
+    assert.equal(held(l), false, l);
+  // A shipped file's added delete moves the range to store.
+  const f = 'bifold/packages/core/src/modules/chat/useChatDraft.ts';
+  assert.equal(verdict([f], { added: { [f]: ['    await AsyncStorage.removeItem(key)'] } }).tier, 'store');
+});
+
 test('verdict: --files never says ota (or ota-strict) while a store flag reads added lines; --range (added lines) can', () => {
   const f = ['app/src/screens/X.tsx'];
   const v = verdict(f);
