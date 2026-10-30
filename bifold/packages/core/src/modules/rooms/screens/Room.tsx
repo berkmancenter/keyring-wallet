@@ -226,8 +226,10 @@ const Room: React.FC = () => {
   // Notes are written to open rooms only, for now: elsewhere the tab says so rather than offer a write that fails.
   const notesNotYet = !cannotPost && room.tier !== 'open' ? (t('Rooms.TierNotYet') as string) : undefined
   const canWriteNotes = !unavailable && !cannotPost && !notesNotYet
-  // A file is posted from the composer, so "Add a file" is offered only where the composer can attach one.
-  const canAttach = roomCapabilities.listFiles.status === 'available'
+  // A file is posted from the composer, so "Add a file" is offered only where the composer can attach one. Posting seals
+  // the file with the cipher that opens one, so attaching waits for opening: a room whose files are only listed offers
+  // no "+" (the service would refuse the post).
+  const canAttach = roomCapabilities.openFile.status === 'available'
   // Titled records and removed ones are the room's notes, on their own tab; the chat shows the rest.
   const chatPosts = feed.posts?.filter((p) => !isNote(p))
   const notes = feed.posts?.filter(isNote)

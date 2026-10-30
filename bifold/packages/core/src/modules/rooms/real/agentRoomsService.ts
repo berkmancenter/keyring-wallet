@@ -72,8 +72,10 @@ import {
   refusalCode,
   ROOMS_TASK,
   vaultCredentialSubject,
+  type FileManifest,
   type HeldRoom,
   type OfferRecord,
+  type OpenedRecord,
   type RenewalRecord,
   type RoomMembershipRecord,
 } from './wire'
@@ -136,6 +138,7 @@ export const BUILT: ReadonlySet<RoomsOperation> = new Set<RoomsOperation>([
   'hideOffer',
   'write',
   'curate',
+  'listFiles',
 ])
 
 /**
@@ -202,6 +205,19 @@ const RENEWED = [
 
 const shortId = (id: string) => id.replace(/^did:[^:]+:/, '').slice(-10)
 
+/** Where an opened record is kept: a record's version never changes once written, so key and version name it. */
+const openedKey = (roomId: string, key: string, version: number) => `${roomId}\n${key}@${version}`
+
+/** A record's file as a screen lists it: the name is untrusted text, shown inert. */
+const roomFileOf = (file: FileManifest, record: Pick<OpenedRecord, 'author' | 'updatedAt'>): RoomFile => ({
+  fileId: file.fileId,
+  name: toInertText(file.name),
+  ...(file.mediaType ? { mediaType: file.mediaType } : {}),
+  size: file.size,
+  ...(record.author ? { sharedBy: { did: record.author } } : {}),
+  ...(record.updatedAt ? { sharedAt: record.updatedAt } : {}),
+})
+
 interface KnownRoom extends Room {
   community?: RoomsCommunity
 }
@@ -216,6 +232,8 @@ export class AgentRoomsService implements RoomsService {
   private offers = new Map<string, { community: RoomsCommunity; offer: OfferRecord }>()
   private previews = new Map<string, { offerId: string; at: number }>()
   private writes = new Map<string, { roomId: string; draft: WriteDraft; at: number; replacedVersion?: number }>()
+  // Records opened through the agent, by room, key and version: what a file listing reuses.
+  private opened = new Map<string, OpenedRecord>()
   /** Renewals stored this run, by room and issue time: a renewal stays listed until the authority it renews lapses. */
   private renewed = new Set<string>()
   /** The offers list each community answered, so the badge's poll asks it once a session, not twice a minute. */
@@ -381,6 +399,14 @@ export class AgentRoomsService implements RoomsService {
    */
   private async capabilitiesIn(room: KnownRoom): Promise<RoomCapabilities> {
     const statuses = deriveRoomCapabilities(await this.capabilities(), room)
+    // Files exist on attributed and private rooms only: upstream refuses them on an open room.
+    if (room.tier === 'open')
+      for (const op of ['listFiles', 'openFile'] as const)
+        statuses[op] = {
+          status: 'unavailable',
+          reason: 'notOnThisTier',
+          detail: 'files are shared in attributed and private rooms',
+        }
     if (statuses.write.status === 'available' && room.tier !== 'open')
       statuses.write = {
         status: 'comingSoon',
@@ -429,6 +455,7 @@ export class AgentRoomsService implements RoomsService {
       this.backend.decodeBase64Url(s)
     )
     if (!opened) throw new Error(`the agent's answer for note ${key} could not be read`)
+    this.opened.set(openedKey(roomId, opened.key, opened.version), opened)
     const body = toInertText(opened.body)
     return {
       key: opened.key,
@@ -441,6 +468,7 @@ export class AgentRoomsService implements RoomsService {
       body,
       flags: inertFlags(body),
       check: opened.check,
+      ...(opened.file ? { files: [roomFileOf(opened.file, opened)] } : {}),
     }
   }
 
@@ -935,8 +963,40 @@ export class AgentRoomsService implements RoomsService {
     }
     return new RoomsRefused(operation, code, false, message(e))
   }
-  public listFiles(): Promise<RoomFile[]> {
-    return this.notYet('listFiles')
+  /**
+   * The room's files. No task lists them: a file is described in its record's sealed body, so the room is browsed
+   * and each live record opened, one at a time (the agent sends one task at a time), keeping what was opened by key
+   * and version so a second look reads only what changed. A record that can't be opened is left out; if none could
+   * be and there were some to open, that failure is the answer rather than "no files".
+   */
+  public async listFiles(roomId: string): Promise<RoomFile[]> {
+    const room = await this.requireInRoom(roomId, 'listFiles')
+    const listing = parseBrowse(await this.backend.agentTask(ROOMS_TASK.keysBrowse, { roomId, host: room.host }))
+    const files: RoomFile[] = []
+    let opened = 0
+    let failure: unknown
+    for (const record of listing.records) {
+      if (record.status === 'retracted') continue
+      const cacheKey = openedKey(roomId, record.key, record.version)
+      let read = this.opened.get(cacheKey)
+      if (!read) {
+        try {
+          read = parseRead(
+            await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key: record.key }),
+            (s) => this.backend.decodeBase64Url(s)
+          )
+        } catch (e) {
+          failure = e
+          continue
+        }
+        if (!read) continue
+        this.opened.set(openedKey(roomId, read.key, read.version), read)
+      }
+      opened++
+      if (read.file) files.push(roomFileOf(read.file, read))
+    }
+    if (opened === 0 && failure !== undefined) throw failure
+    return files
   }
   public openFile(): Promise<OpenedFile> {
     return this.notYet('openFile')

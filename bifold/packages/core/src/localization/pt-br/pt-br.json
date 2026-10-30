@@ -2763,6 +2763,7 @@
     "NoteRemoved": "Esta nota foi removida. O lugar dela fica, para que o histórico da sala seja fiel.",
     "Files": "Arquivos",
     "FilesNone": "Nenhum arquivo ainda.",
+    "FilesNotOnOpenRooms": "Arquivos são compartilhados em salas atribuídas e privadas, não em salas abertas.",
     "FilesFailed": "Não foi possível ler os arquivos. Tente mais tarde.",
     "FilesAdd": "Adicionar um arquivo",
     "FilesCaution": "Um arquivo só é baixado quando você o abre. O Keyring não consegue verificar o que um arquivo contém.",

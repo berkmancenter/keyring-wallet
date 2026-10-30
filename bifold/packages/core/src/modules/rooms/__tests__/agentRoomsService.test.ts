@@ -240,10 +240,9 @@ describe('AgentRoomsService', () => {
       agentServedTypes: async () => [ROOMS_TASK.keysList02, `${SPEC}rooms/keys/act/0.6`],
     })
     const service = new AgentRoomsService(b)
-    const err = await service.listFiles().catch((e) => e)
+    const err = await service.openFile().catch((e) => e)
     expect(err).toBeInstanceOf(RoomsUnavailable)
     expect(err).toMatchObject({ reason: 'clientNotBuilt' })
-    await expect(service.openFile()).rejects.toMatchObject({ reason: 'clientNotBuilt' })
     expect(agentTask).not.toHaveBeenCalled()
   })
 })

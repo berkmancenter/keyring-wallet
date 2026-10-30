@@ -300,10 +300,73 @@ export function parseBrowse(payload: unknown): { records: RecordMeta[]; complete
   return { records, complete: p?.complete !== false, check: hostCheckOf(p?.verification) }
 }
 
+/**
+ * A sealed record's file: what its author signed about it, sealed with the record (`FileManifest`,
+ * `rooms/_shared/0.1/blobs.schema.json`; vti-rooms `files.rs` @ vta-service-v0.67.0). No host task carries it: only a
+ * member who opened the record has it. `name` is untrusted text.
+ */
+export interface FileManifest {
+  /** 32 random bytes, base64url without padding. */
+  fileId: string
+  name: string
+  mediaType?: string
+  /** Plaintext bytes, before padding. */
+  size: number
+  /** Digest of the plaintext. */
+  digest: string
+  epoch: number
+  segmentSize: number
+  padding?: 'none' | 'padme'
+  blobRef: string
+}
+
+const FILE_MANIFEST_FIELDS = new Set([
+  'fileId',
+  'name',
+  'mediaType',
+  'size',
+  'digest',
+  'epoch',
+  'segmentSize',
+  'padding',
+  'blobRef',
+])
+const FILE_ID = /^[A-Za-z0-9_-]{43}$/
+
+/** A body's `file`, or undefined when it is missing or not a manifest: as upstream, an unknown member is refused. */
+export function parseFileManifest(v: unknown): FileManifest | undefined {
+  const m = obj(v)
+  if (!m || Object.keys(m).some((k) => !FILE_MANIFEST_FIELDS.has(k))) return undefined
+  const fileId = str(m.fileId)
+  const name = typeof m.name === 'string' ? m.name : undefined
+  const size = int(m.size)
+  const digest = str(m.digest)
+  const epoch = int(m.epoch)
+  const segmentSize = int(m.segmentSize)
+  const blobRef = str(m.blobRef)
+  if (!fileId || !FILE_ID.test(fileId) || name === undefined || size === undefined || size < 0) return undefined
+  if (!digest || epoch === undefined || segmentSize === undefined || segmentSize <= 0 || !blobRef) return undefined
+  if (m.mediaType !== undefined && typeof m.mediaType !== 'string') return undefined
+  if (m.padding !== undefined && m.padding !== 'none' && m.padding !== 'padme') return undefined
+  return {
+    fileId,
+    name,
+    ...(typeof m.mediaType === 'string' ? { mediaType: m.mediaType } : {}),
+    size,
+    digest,
+    epoch,
+    segmentSize,
+    ...(m.padding !== undefined ? { padding: m.padding as 'none' | 'padme' } : {}),
+    blobRef,
+  }
+}
+
 /** One opened record (`rooms/keys/read`). The body is decoded text, or the open room's cleartext as JSON text. */
 export interface OpenedRecord extends RecordMeta {
   body: string
   check: HostCheck
+  /** The file a sealed record carries, from its body's `file`. */
+  file?: FileManifest
 }
 
 export function parseRead(payload: unknown, decodeBase64Url: (s: string) => string): OpenedRecord | undefined {
@@ -316,13 +379,17 @@ export function parseRead(payload: unknown, decodeBase64Url: (s: string) => stri
   const cleartext = obj(p.cleartext)
   const raw =
     status === 'retracted' ? '' : plaintext ? decodeBase64Url(plaintext) : cleartext ? JSON.stringify(cleartext) : ''
-  // A record body is application-defined. Keyring's notes are `{ title, body }` JSON; anything else is shown whole.
+  // A record body is application-defined. Keyring's notes are `{ title, body }` JSON, and a sealed room's body is a
+  // signed SealedRecordBody with the same members. A file record has no `body`: its words are none, and its file is
+  // the body's `file`, never the JSON shown as text (the 276 display bug). Anything else is shown whole.
   let title: string | undefined
   let body = raw
+  let file: FileManifest | undefined
   try {
     const parsed = obj(JSON.parse(raw))
-    if (parsed && typeof parsed.body === 'string') {
-      body = parsed.body
+    file = parseFileManifest(parsed?.file)
+    if (parsed && (typeof parsed.body === 'string' || file)) {
+      body = typeof parsed.body === 'string' ? parsed.body : ''
       title = str(parsed.title)
     }
   } catch {
@@ -337,6 +404,7 @@ export function parseRead(payload: unknown, decodeBase64Url: (s: string) => stri
     title,
     body,
     check: hostCheckOf(p.verification),
+    ...(file ? { file } : {}),
   }
 }
 
