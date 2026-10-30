@@ -483,6 +483,9 @@ export async function clearLocalityPreflightIfUp(driver) {
  * Since bifold #845 it is a strip under the header whose OK shows only once
  * the strip is opened, so a closed strip (its line, SiblingNotice, with no OK)
  * is opened first. The old card shows OK at once and is tapped as before.
+ * A strip tapped open that shows no OK within 3 s is left open, and this
+ * returns false: false means nothing was dismissed, not that the screen is
+ * untouched.
  */
 export async function clearSiblingNoticeIfUp(driver) {
   const ok = byTestId(driver, "SiblingNoticeDismiss");
