@@ -56,7 +56,7 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { assertFingerprint } from '../../scripts/ota/check-fingerprint.mjs'
-import { stampRelease } from '../../scripts/ota/release-stamp.mjs'
+import { restoreOnExit, stampRelease } from '../../scripts/ota/release-stamp.mjs'
 
 const SCOPES = ['fix', 'within-purpose']
 const RING0 = 'ring0'
@@ -230,9 +230,10 @@ const hotUpdater = (...a) => {
 }
 
 // The release, in the bundle itself, for the Developer screen and problem reports (scripts/ota/release-stamp.mjs).
-// After the clean-tree check, and put back on exit, so the checkout reads clean again however this run ends.
+// After the clean-tree check. Put back on exit and on SIGINT/SIGTERM/SIGHUP; a SIGKILL leaves it stamped, and the
+// next publish then stops at the clean-tree check above.
 if (args.release) {
-  process.on('exit', stampRelease(appDir, args.release))
+  restoreOnExit(stampRelease(appDir, args.release))
   console.log(`ota-deploy: the bundle names itself release ${args.release}`)
 }
 

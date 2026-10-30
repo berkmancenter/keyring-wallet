@@ -12,6 +12,11 @@
  *                   from this commit (a push or a dispatch on its ref: a pull
  *                   request's run builds the merge ref, not this commit)
  *
+ * What it proves is the commit's tree, not byte for byte the published bundle:
+ * since the release stamp (scripts/ota/release-stamp.mjs), ota-deploy writes
+ * the release into app/src/ota/otaRelease.ts just before it builds the bundle,
+ * so what ships differs from this commit by that one line (null → "276.10").
+ *
  * The owner's single approval is the ota-approval environment's, and ring 0
  * first is how every publish works (scripts/ota/promote.mjs widens), so
  * neither is checked here.

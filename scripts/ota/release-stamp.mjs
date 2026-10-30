@@ -30,3 +30,21 @@ export const stampRelease = (appDir, release) => {
     restored = true
   }
 }
+
+/** The signals a publish is stopped by in practice (Ctrl-C, a runner's cancel, a closed terminal). */
+export const RESTORED_ON = ['SIGINT', 'SIGTERM', 'SIGHUP']
+
+/**
+ * Runs `restore` when this process ends: on a normal exit or process.exit(), and on SIGINT, SIGTERM or SIGHUP, after
+ * which the signal is raised again so the process still ends by it. SIGKILL cannot be caught: a publish killed that
+ * way leaves the file stamped, and the next publish then refuses to run on a working tree with changes.
+ */
+export const restoreOnExit = (restore) => {
+  process.on('exit', restore)
+  for (const signal of RESTORED_ON) {
+    process.once(signal, () => {
+      restore()
+      process.kill(process.pid, signal)
+    })
+  }
+}
