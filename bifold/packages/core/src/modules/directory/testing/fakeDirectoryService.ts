@@ -24,7 +24,9 @@ export interface FakeDirectoryOptions {
   /** The name already on your card. */
   cardName?: string
   /** Make a call fail as the community would refuse it, by the task's code (e.g. `unsupportedType`, `rateLimited`). */
-  refuse?: Partial<Record<'listMembers' | 'showMyCard' | 'setMyName', string>>
+  refuse?: Partial<Record<'listMembers' | 'showMyCard' | 'setMyName' | 'lookupName', string>>
+  /** The names members show by DID, as `lookupName` finds them; anyone else has none. */
+  shown?: Record<string, string>
 }
 
 const field = (
@@ -59,7 +61,7 @@ export function createFakeDirectoryService(options: FakeDirectoryOptions = {}): 
     updatedAt: '2026-10-30T00:00:00Z',
   }
   const calls: string[] = []
-  const refuse = (operation: 'listMembers' | 'showMyCard' | 'setMyName') => {
+  const refuse = (operation: 'listMembers' | 'showMyCard' | 'setMyName' | 'lookupName') => {
     const code = options.refuse?.[operation]
     if (code)
       throw new DirectoryRefused(
@@ -99,6 +101,11 @@ export function createFakeDirectoryService(options: FakeDirectoryOptions = {}): 
       if (expectedRevision !== card.revision) throw new DirectoryConflict(communityDid)
       card = { ...card, name: toInertText(name), revision: card.revision + 1 }
       return card
+    },
+    async lookupName(_communityDid, memberDid) {
+      calls.push(`lookupName ${memberDid}`)
+      refuse('lookupName')
+      return options.shown?.[memberDid]
     },
     changeElsewhere(name) {
       card = { ...card, name: toInertText(name), revision: card.revision + 1 }

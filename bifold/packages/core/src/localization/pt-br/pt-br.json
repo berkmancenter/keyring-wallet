@@ -2874,6 +2874,8 @@
     "AddYourName": "Adicionar seu nome",
     "PetnameLabel": "{{name}} (nome dado por você)",
     "PetnameSource": "Seu nome para este membro, guardado neste telefone",
+    "DirectoryNameLabel": "{{name}} (o próprio nome)",
+    "NameTheirOwn": "O próprio nome em {{community}}",
     "NameThem": "Dar um nome",
     "Rename": "Renomear",
     "PetnamePlaceholder": "Um nome que só você vê",

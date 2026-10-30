@@ -18,7 +18,7 @@ import {
   type MemberPage,
   type MyCard,
 } from './types'
-import { DIRECTORY_TASK, MEMBERS_PAGE, parseCard, parseEntries, parseFields } from './wire'
+import { DIRECTORY_TASK, MEMBERS_PAGE, parseCard, parseEntries, parseFields, parseQueryName } from './wire'
 
 export interface DirectoryBackend {
   /** Send a Trust Task to a community as this phone's persona for it; resolves with the response payload. */
@@ -68,6 +68,20 @@ export class AgentDirectoryService implements DirectoryService {
     const card = parseCard(answer)
     if (!card) throw new Error(`${communityDid} answered the card update with something else`)
     return card
+  }
+
+  public async lookupName(communityDid: string, memberDid: string): Promise<string | undefined> {
+    try {
+      // `fields` narrows the answer to the name: nothing else about the member is asked for or kept.
+      return parseQueryName(
+        await this.ask('lookupName', communityDid, DIRECTORY_TASK.query, { subject: memberDid, fields: NAME_FIELD }),
+        memberDid
+      )
+    } catch (e) {
+      // "No such member" and "not shown to you" are one answer by design: either way there is no name to show.
+      if (e instanceof DirectoryRefused && e.code === 'notFound') return undefined
+      throw e
+    }
   }
 
   /** A request to the community; its refusal reported by the task's own code. */

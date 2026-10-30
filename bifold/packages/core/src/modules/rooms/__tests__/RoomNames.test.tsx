@@ -33,6 +33,16 @@ jest.mock('../usePetname', () => ({
   }),
   usePetnames: () => mockNames,
 }))
+// The names other members wrote on their own directory cards, as the directory gives them to the room.
+let mockDirectoryNames = new Map<string, string>()
+const mockUseDirectoryNames = jest.fn(
+  (_service: unknown, _communityDid?: string, _dids?: readonly string[]) => mockDirectoryNames
+)
+jest.mock('../../directory/useDirectory', () => ({
+  useDirectoryService: () => undefined,
+  useDirectoryNames: (service: unknown, communityDid?: string, dids?: readonly string[]) =>
+    mockUseDirectoryNames(service, communityDid, dids),
+}))
 jest.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 100 }))
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
@@ -110,6 +120,8 @@ const sheet = (tree: Tree) => within(tree.getByTestId(id('RoomIdentitySheet')))
 beforeEach(() => {
   mockMe = {}
   mockNames = new Map()
+  mockDirectoryNames = new Map()
+  mockUseDirectoryNames.mockClear()
   mockSetPetname.mockClear()
   ;(Clipboard.setString as jest.Mock | undefined)?.mockClear?.()
 })
@@ -208,6 +220,28 @@ describe('names in a room, step 1', () => {
     expect(sheet(tree).getByTestId(id('RoomIdentityStandIn'))).toHaveTextContent('Rooms.MemberTail')
     expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.PetnameSource')
     expect(sheet(tree).getByTestId(id('RoomIdentityRename'))).toBeTruthy()
+  })
+
+  test('their own name, where they show it: asked for other authors only, marked as theirs in the chat and on their sheet', async () => {
+    mockDirectoryNames = new Map([[THEM.did, 'Saddle Q']])
+    const tree = await show()
+    expect(mockUseDirectoryNames).toHaveBeenLastCalledWith(undefined, 'did:webvh:lab', [THEM.did])
+    expect(tree.getByTestId(id('RoomPostAuthor'))).toHaveTextContent('Rooms.DirectoryNameLabel')
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).getByTestId(id('RoomIdentityName'))).toHaveTextContent('Saddle Q')
+    // A self-chosen name can claim anything: the stand-in stays beside it.
+    expect(sheet(tree).getByTestId(id('RoomIdentityStandIn'))).toHaveTextContent('Rooms.MemberTail')
+    expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.NameTheirOwn')
+  })
+
+  test('a name you gave comes before their own name', async () => {
+    mockNames = new Map([[THEM.did, 'River']])
+    mockDirectoryNames = new Map([[THEM.did, 'Saddle Q']])
+    const tree = await show()
+    expect(tree.getByTestId(id('RoomPostAuthor'))).toHaveTextContent('Rooms.PetnameLabel')
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).getByTestId(id('RoomIdentityName'))).toHaveTextContent('River')
+    expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.PetnameSource')
   })
 
   test('your own sheet offers your profile, never a name of your own for yourself', async () => {

@@ -21,11 +21,13 @@ import SafeAreaModal from '../../../components/modals/SafeAreaModal'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
+import { communityLabelOf } from '../../trust-tasks/screens/communityName'
 import type { Identity } from '../types'
 import { PETNAME_MAX } from '../petnames'
 import type { MyName } from '../useMyName'
 import { usePetname } from '../usePetname'
 
+import { useDirectoryName } from './memberWords'
 import { memberText } from './roomWords'
 
 /** Up to two letters for a name's circle; "?" when there is no name. */
@@ -88,20 +90,26 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
   // Another member's name of the member's own: given or changed here, never left blank.
   const naming = !mine && !!communityDid
   const petname = usePetname(naming ? communityDid : undefined, naming ? identity.did : undefined)
+  const theirOwn = useDirectoryName(mine ? undefined : identity.did)
   const [draft, setDraft] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
-  const name = mine ? me.name : (petname.name ?? identity.identityWords)
-  const title = mine ? (me.name ?? (t('Rooms.You') as string)) : (petname.name ?? memberText(t, identity))
+  const name = mine ? me.name : (petname.name ?? theirOwn ?? identity.identityWords)
+  const title = mine ? (me.name ?? (t('Rooms.You') as string)) : (petname.name ?? theirOwn ?? memberText(t, identity))
   const source = mine
     ? me.name
       ? t('Rooms.NameFromProfile')
       : t('Rooms.NameNotSet')
     : petname.name
       ? t('Rooms.PetnameSource')
-      : identity.identityWords
-        ? t('Rooms.NameFromCommunity')
-        : t('Rooms.NameNotKnown')
+      : theirOwn
+        ? t('Rooms.NameTheirOwn', {
+            community: communityDid ? communityLabelOf(communityDid, t) : '',
+            interpolation: { escapeValue: false },
+          })
+        : identity.identityWords
+          ? t('Rooms.NameFromCommunity')
+          : t('Rooms.NameNotKnown')
   const canSave = !!draft?.trim() && !saving
   const save = async () => {
     if (!draft?.trim()) return
@@ -178,7 +186,7 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
             <ThemedText variant="headingFour" accessibilityRole="header" testID={testIdWithKey('RoomIdentityName')}>
               {title}
             </ThemedText>
-            {!mine && petname.name ? (
+            {!mine && (petname.name || theirOwn) ? (
               <ThemedText style={styles.muted} testID={testIdWithKey('RoomIdentityStandIn')}>
                 {memberText(t, identity)}
               </ThemedText>

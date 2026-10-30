@@ -26,6 +26,7 @@ export const DIRECTORY_TASK = {
   cardShow: `${SPEC}vtc/directory/card/show/0.1`,
   cardUpdate: `${SPEC}vtc/directory/card/update/0.1`,
   fieldsList: `${SPEC}vtc/directory/fields/list/0.1`,
+  query: `${SPEC}vtc/directory/query/0.1`,
 } as const
 
 /** A page as the community serves it by default; at most 100 (`entries/list/0.1`). */
@@ -66,6 +67,13 @@ export function parseEntries(payload: unknown): MemberPage {
     ]
   })
   return { rows, nextCursor: str(p?.nextCursor) }
+}
+
+/** The name in a `query/0.1` answer, if it is about `memberDid` and carries one. */
+export function parseQueryName(payload: unknown, memberDid: string): string | undefined {
+  const p = obj(payload)
+  if (str(p?.subject) !== memberDid) return undefined
+  return text(obj(p?.fields)?.[NAME_FIELD], 64)
 }
 
 /** The member's own card (`card/show/0.1` and `card/update/0.1` responses). */

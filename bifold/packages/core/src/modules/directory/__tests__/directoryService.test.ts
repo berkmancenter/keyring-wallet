@@ -212,3 +212,32 @@ describe('what a screen shows when the directory cannot be read', () => {
     await expect(service.listMembers(COMMUNITY)).rejects.toMatchObject({ code: 'rateLimited', retryable: true })
   })
 })
+
+describe('a room author’s own name', () => {
+  const ANA = 'did:key:ana'
+
+  it('asks the community by DID for the name only, and reads it from the answer about that member', async () => {
+    const { service, communityTask } = setup(() => ({ subject: ANA, fields: { displayName: ' Ana ', did: ANA } }))
+    expect(await service.lookupName(COMMUNITY, ANA)).toBe('Ana')
+    expect(communityTask).toHaveBeenCalledWith(COMMUNITY, DIRECTORY_TASK.query, {
+      subject: ANA,
+      fields: 'displayName',
+    })
+  })
+
+  it('has no name for a member the community does not show, nor from an answer about someone else', async () => {
+    const hidden = setup(() => {
+      throw new FakeRefusal('taskFailed', { code: 'vtc/directory/query:notFound' })
+    })
+    expect(await hidden.service.lookupName(COMMUNITY, ANA)).toBeUndefined()
+    const other = setup(() => ({ subject: 'did:key:bo', fields: { displayName: 'Bo' } }))
+    expect(await other.service.lookupName(COMMUNITY, ANA)).toBeUndefined()
+  })
+
+  it('passes any other refusal on', async () => {
+    const { service } = setup(() => {
+      throw new FakeRefusal('taskFailed', { code: 'vtc/directory/query:rateLimited' })
+    })
+    await expect(service.lookupName(COMMUNITY, ANA)).rejects.toMatchObject({ code: 'rateLimited' })
+  })
+})

@@ -46,6 +46,7 @@ import { type NoteEditorTarget, RoomNoteEditor } from '../components/RoomNoteEdi
 import { RoomFilesTab } from '../components/RoomFilesTab'
 import { RoomHeader } from '../components/RoomHeader'
 import { RoomIdentitySheet } from '../components/RoomIdentitySheet'
+import { useDirectoryNames, useDirectoryService } from '../../directory/useDirectory'
 import { PetnamesProvider } from '../components/memberWords'
 import { RoomMembersTab } from '../components/RoomMembersTab'
 import { RoomNotesTab } from '../components/RoomNotesTab'
@@ -146,6 +147,13 @@ const Room: React.FC = () => {
   const me = useMyName(room?.communityDid)
   // The member's own names for the community's members, read once for every label on this screen.
   const petnames = usePetnames(room?.communityDid)
+  // The names other authors wrote on their own directory cards, where they show them to members.
+  const directory = useDirectoryService()
+  const authors = useMemo(
+    () => (feed.posts ?? []).flatMap((p) => (!p.mine && p.author ? [p.author.did] : [])),
+    [feed.posts]
+  )
+  const directoryNames = useDirectoryNames(directory, room?.communityDid, authors)
   const { reload } = state
   // The library is read again each time it is shown, so a file just posted from the chat is in it.
   const showTab = (next: RoomTab) => {
@@ -264,7 +272,7 @@ const Room: React.FC = () => {
   )
 
   return (
-    <PetnamesProvider names={petnames}>
+    <PetnamesProvider names={petnames} directoryNames={directoryNames}>
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomScreen')}>
         <SampleDataBanner service={service} />
         <RoomHeader room={room} />

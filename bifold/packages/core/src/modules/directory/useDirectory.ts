@@ -11,10 +11,12 @@
 import { useAgent } from '@bifold/react-hooks'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { TOKENS, useServices } from '../../container-api'
 import { useMyName } from '../rooms/useMyName'
 
 import { createDirectoryBackend } from './directoryBackend'
 import { AgentDirectoryService, directoryStatusOf } from './directoryService'
+import { keepDirectoryName, loadDirectoryNames } from './names'
 import type {
   CardField,
   CardProposal,
@@ -29,13 +31,83 @@ import { NAME_FIELD } from './types'
 /** The least time between two pages, so scrolling stays under a community's read limit (60 a minute by default). */
 export const MEMBERS_PAGE_SPACING_MS = 1000
 
-/** The directory client for this phone's agent; undefined until there is an agent. */
+/**
+ * The directory client for this phone's agent; undefined until there is an agent. The mediator is the build's
+ * (`config.vti.mediatorDid`) unless a screen names one.
+ */
 export function useDirectoryService(mediatorDid?: string): DirectoryService | undefined {
   const { agent } = useAgent()
+  const [config] = useServices([TOKENS.CONFIG])
+  const mediator = mediatorDid ?? config.vti?.mediatorDid
   return useMemo(
-    () => (agent ? new AgentDirectoryService(createDirectoryBackend(agent, { mediatorDid })) : undefined),
-    [agent, mediatorDid]
+    () => (agent ? new AgentDirectoryService(createDirectoryBackend(agent, { mediatorDid: mediator })) : undefined),
+    [agent, mediator]
   )
+}
+
+/** At most this many authors are looked up each time a room's authors change, one at a time. */
+export const NAME_LOOKUPS_PER_VISIT = 20
+
+// Members the community had no name for, this run: not asked again until the app starts again.
+const unnamed = new Map<string, Set<string>>()
+
+/** Forget who had no name (tests). */
+export function resetDirectoryNameLookups(): void {
+  unnamed.clear()
+}
+
+const NO_NAMES: ReadonlyMap<string, string> = new Map()
+
+/**
+ * The names these members wrote on their own cards in this community, by DID, for the ones who show their identity to
+ * members. Kept names are shown at once; the others are asked for one at a time, and those the community has no name
+ * for are not asked again this run. A failed lookup stops the rest until the authors change.
+ */
+export function useDirectoryNames(
+  service: DirectoryService | undefined,
+  communityDid: string | undefined,
+  memberDids: readonly string[]
+): ReadonlyMap<string, string> {
+  const { agent } = useAgent()
+  const [state, setState] = useState<{ communityDid?: string; names: ReadonlyMap<string, string> }>({
+    names: NO_NAMES,
+  })
+  const wanted = [...new Set(memberDids)].sort().join('\n')
+
+  useEffect(() => {
+    if (!agent || !service || !communityDid) return
+    let live = true
+    const show = (names: ReadonlyMap<string, string>) => {
+      if (live) setState({ communityDid, names })
+    }
+    const run = async () => {
+      const kept = new Map(await loadDirectoryNames(agent, communityDid))
+      show(new Map(kept))
+      const skip = unnamed.get(communityDid) ?? new Set<string>()
+      unnamed.set(communityDid, skip)
+      const ask = wanted
+        .split('\n')
+        .filter((did) => did && !kept.has(did) && !skip.has(did))
+        .slice(0, NAME_LOOKUPS_PER_VISIT)
+      for (const did of ask) {
+        if (!live) return
+        const name = await service.lookupName(communityDid, did)
+        await keepDirectoryName(agent, communityDid, did, name)
+        if (!name) {
+          skip.add(did)
+          continue
+        }
+        kept.set(did, name)
+        show(new Map(kept))
+      }
+    }
+    run().catch((error) => agent.config?.logger?.warn('[Directory] room author names were not read', { error }))
+    return () => {
+      live = false
+    }
+  }, [agent, service, communityDid, wanted])
+
+  return state.communityDid === communityDid ? state.names : NO_NAMES
 }
 
 export interface CommunityMembers {

@@ -79,7 +79,7 @@ export interface CardProposal {
 }
 
 /** The directory operations, each with a status a screen shows instead of guessing. */
-export type DirectoryOperation = 'listMembers' | 'showMyCard' | 'updateMyCard'
+export type DirectoryOperation = 'listMembers' | 'showMyCard' | 'updateMyCard' | 'lookupName'
 
 /** The card changed since it was read (`superseded`): nothing was written. Read it again, then decide. */
 export class DirectoryConflict extends Error {
@@ -115,6 +115,11 @@ export interface DirectoryService {
    * `DirectoryRefused` when the community refused it. Visibility is left as it is: the field's default.
    */
   setMyName(communityDid: string, name: string, expectedRevision: number): Promise<MyCard>
+  /**
+   * The name a member wrote on their card, looked up by their DID (`query/0.1`). The community answers only for a
+   * member who shows their identity to members; anyone else, and anyone who shows no name, is undefined.
+   */
+  lookupName(communityDid: string, memberDid: string): Promise<string | undefined>
 }
 
 /** A status from a failure, for a screen: what it shows instead of the list or the card. */

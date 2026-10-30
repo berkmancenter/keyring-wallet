@@ -3024,6 +3024,8 @@
     "AddYourName": "Add your name",
     "PetnameLabel": "{{name}} (named by you)",
     "PetnameSource": "Your name for them, kept on this phone",
+    "DirectoryNameLabel": "{{name}} (their own name)",
+    "NameTheirOwn": "Their own name in {{community}}",
     "NameThem": "Name them",
     "Rename": "Rename",
     "PetnamePlaceholder": "A name only you will see",
