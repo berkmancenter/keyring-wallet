@@ -35,6 +35,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
+import { egressWarning, isEgress, withBackoff } from '../ci/download-artifact.mjs'
 import { changedFiles } from '../release/tier.mjs'
 
 const PUBLISH_STEP = 'Publish to ring 0'
@@ -170,9 +171,10 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     log(`publish run ${publishRun} published nothing (a dry run, promote, withdraw or device test): no smoke`)
     return { ...base, verdict: 'none' }
   }
-  // Each ota-bundle-<platform> artifact of the publish run, downloaded and read. Any read that fails gives no record,
-  // and the log is read instead.
-  const readBundleRecords = (runId) => {
+  // Each ota-bundle-<platform> artifact of the publish run, downloaded and read. A download that can pass (an HTTP 5xx,
+  // GitHub's egress limit) is tried again with backoff, and an egress refusal is named as a github-egress-503 warning
+  // (scripts/ci/download-artifact.mjs). Any read that still fails gives no record, and the notice and log are read.
+  const readBundleRecords = async (runId) => {
     let names = []
     try {
       names = api(`repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`)
@@ -185,8 +187,14 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     const out = []
     for (const name of names) {
       try {
-        const dir = mkdtempSync(path.join(tmpdir(), 'ota-bundle-'))
-        gh('run', 'download', String(runId), '-R', repo, '-n', name, '-D', dir)
+        const dir = await withBackoff(
+          () => {
+            const d = mkdtempSync(path.join(tmpdir(), 'ota-bundle-'))
+            gh('run', 'download', String(runId), '-R', repo, '-n', name, '-D', d)
+            return d
+          },
+          { where: 'post-release record', what: `artifact ${name} of run ${runId}`, sleep, now, warn: log, log }
+        )
         out.push(...bundlesFromRecord(readFileSync(path.join(dir, 'ota-bundle.jsonl'), 'utf8')))
       } catch (error) {
         log(`the ${name} record is unreadable: ${ghError(error)}`)
@@ -204,6 +212,7 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
       try {
         return gh('api', `repos/${repo}/actions/jobs/${jobId}/logs`, ...anyway)
       } catch (error) {
+        if (isEgress(error)) log(egressWarning({ at: new Date(now()).toISOString(), where: 'post-release log', what: `log of job ${jobId}` }))
         // A newer gh refuses a response with terminal escape sequences (a job log's colours) unless told to print it
         // (276.10's iOS log). A gh that refuses names the flag and an older one never refuses, so it is passed only
         // after that refusal, and at once.
@@ -233,7 +242,7 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
   // neither (a run from before both). The brake is left with no id for a platform only when all three gave none.
   // Where each published platform's id came from (record, log or none), said rather than inferred from whether ids
   // appeared: a record read is what proves the artifact path works under the workflow's token.
-  const recorded = readBundleRecords(publishRun)
+  const recorded = await readBundleRecords(publishRun)
   const bundles = [...recorded]
   const sources = {}
   for (const j of published) {
