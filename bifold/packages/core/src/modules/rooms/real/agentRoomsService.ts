@@ -96,6 +96,11 @@ export interface RoomsCommunity {
 
 /** What the service needs from the rest of the app. The adapter wires it to VtaClient and vtiAgent. */
 export interface RoomsBackend {
+  /**
+   * The app's agent this backend talks through. An unlock restarts that same agent, and a service registered
+   * again for it is the one already registered (register.ts).
+   */
+  readonly runsOn?: object
   agentLinked(): boolean
   /** The agent's `trust-task-discovery` answer; undefined when it could not be asked. */
   agentServedTypes(): Promise<readonly string[] | undefined>
@@ -258,6 +263,9 @@ interface KnownRoom extends Room {
 export class AgentRoomsService implements RoomsService {
   public readonly isSample = false
   public readonly label = 'rooms: the person’s own agent and communities'
+  public get runsOn(): object | undefined {
+    return this.backend.runsOn
+  }
 
   private served?: { types: readonly string[] | undefined; at: number }
   private servedInFlight?: Promise<void>

@@ -39,6 +39,7 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
   }
 
   return {
+    runsOn: agent,
     agentLinked: () => vtaAgent.agentAddress() !== undefined,
     agentServedTypes: async () => (await vtaAgent.roomsClient(agent))?.supportedTypes(),
     agentTask: async (type, payload) => (await client()).task(type, payload),
