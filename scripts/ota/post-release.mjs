@@ -50,15 +50,16 @@ export const publishedJobs = (jobs) =>
     .map((j) => ({ id: j.id, platform: /\((ios|android)\)/.exec(j.name)?.[1] }))
     .filter((j) => j.platform)
 
-// Terminal escape sequences (CSI: colours, cursor moves). A log gh was told to print anyway still carries them.
-const ESCAPES = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
+// CSI escape sequences (colours, cursor moves; every ECMA-48 parameter byte, so colon truecolour too). A log gh was
+// told to print anyway still carries them. OSC (hyperlinks, \x1b]8;;…) is not taken out; the notice source covers that.
+const CSI = /\x1b\[[\x30-\x3F]*[\x20-\x2F]*[\x40-\x7E]/g
 
 /**
- * The bundles ota-deploy says it put on ring 0, from a job's log, with any escape sequences taken out first. 10-30:
+ * The bundles ota-deploy says it put on ring 0, from a job's log, with its CSI escape sequences taken out first. 10-30:
  * 276.10's logs had escapes on about 500 lines each, none on ota-deploy's own lines, which nothing keeps that way.
  */
 export const bundlesFromLog = (log) =>
-  [...String(log).replace(ESCAPES, '').matchAll(/ota-deploy: (ios|android) bundle ([0-9a-f-]{36}) is on ring0 \(channel ([\w-]+)\)/g)].map(
+  [...String(log).replace(CSI, '').matchAll(/ota-deploy: (ios|android) bundle ([0-9a-f-]{36}) is on ring0 \(channel ([\w-]+)\)/g)].map(
     ([, platform, id, channel]) => ({ platform, id, channel })
   )
 

@@ -482,6 +482,10 @@ test('the brake is left without a platform\'s id only when record, notice and lo
 test("a log line with colours in it still gives its bundle; the escapes are taken out before the match", () => {
   const coloured = `2026-10-30T20:23:08Z \x1b[36;1mota-deploy:\x1b[0m ios bundle \x1b[1m${IOS}\x1b[22m is on ring0 (channel \x1b[32mproduction\x1b[39m)\n`
   assert.deepEqual(bundlesFromLog(coloured), [{ platform: 'ios', id: IOS, channel: 'production' }])
+  // Truecolour written with colons (ECMA-48 parameter bytes), not semicolons.
+  assert.deepEqual(bundlesFromLog(`ota-deploy: android bundle \x1b[38:2:255:0:0m${ANDROID}\x1b[39m is on ring0 (channel production)`), [
+    { platform: 'android', id: ANDROID, channel: 'production' },
+  ])
   // Control: the same line without colours reads the same.
   assert.deepEqual(bundlesFromLog(LOG('ios', IOS)), [{ platform: 'ios', id: IOS, channel: 'production' }])
 })
