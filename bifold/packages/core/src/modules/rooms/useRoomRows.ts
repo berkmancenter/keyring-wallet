@@ -21,6 +21,10 @@
  * A room can be hidden from Messages until someone posts in it again ({@link hideRoom}); that is kept on this phone
  * the same way.
  *
+ * A room whose posts haven't been read yet (its first read failed: on a cold launch the agent may not be ready) is a
+ * row that says it is reading, never "No posts yet", and the rows are read again soon ({@link ROWS_RETRY_MS}), not
+ * only at the next return or Messages coming into view.
+ *
  * Each listing of the member's rooms is also handed, whole, to whoever asked for it ({@link onRoomsListed}): the room
  * notices read access ending and access gone from it, including the rooms Messages leaves out.
  *
@@ -46,6 +50,8 @@ export const ROWS_POLL_MS = 120_000
 export const ROWS_RETURN_FLOOR_MS = 60_000
 /** Messages coming into view reads again, unless the last read is this recent. */
 export const ROWS_FOCUS_FLOOR_MS = 10_000
+/** After a read that left a room unread, or failed: read again after each of these in turn, then wait as usual. */
+export const ROWS_RETRY_MS = [15_000, 30_000, 60_000] as const
 
 /** Where the newest post seen in each room is kept: by a hash of the room's ID. */
 export const ROOMS_SEEN_KEY = 'rooms.seenVersions'
@@ -75,6 +81,8 @@ export interface RoomRow {
   /** Posts by others after the newest one the member has seen. */
   unread: number
   lastPost?: RoomRowPost
+  /** Its posts not read yet: the row says it is reading, not that there are none. */
+  reading?: boolean
 }
 
 interface Track {
@@ -159,6 +167,10 @@ const rowPostOf = (note: NoteSummary, actingAs: Identity | undefined): RoomRowPo
 async function readRoom(service: RoomsService, room: RoomSummary, track: Track | undefined): Promise<Track> {
   const actingAs = track?.actingAs ?? (await service.getRoom(room.roomId)).actingAs
   const listing = await service.listNotes(room.roomId, track ? { sinceVersion: track.newest } : undefined)
+  // A first listing that stopped early with nothing in it says nothing about the room: still unread, not empty. Only a
+  // first read: a listing asked with `sinceVersion` is never complete (types.ts), so this on a refresh would leave every
+  // room unread for ever. readAll catches it per room, so the other rooms read on.
+  if (!track && listing.notes.length === 0 && !listing.complete) throw new Error('first listing stopped early')
   const kept = seenVersions?.[hashOf(room.roomId)]
   const next: Track = track
     ? { ...track, unread: new Map(track.unread) }
@@ -204,6 +216,7 @@ const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | unde
   lastActivityAt: track?.at && !Number.isNaN(track.at.getTime()) ? track.at : undefined,
   unread: track?.unread.size ?? 0,
   lastPost: track?.last,
+  ...(track ? {} : { reading: true }),
 })
 
 /**
@@ -267,12 +280,65 @@ async function readAll(service: RoomsService): Promise<void> {
     feed.all = rooms.map((room) => rowOf(room, byRoom?.get(room.roomId)))
     showRows(service)
     feed.failed = false
+    retrySoon(
+      service,
+      feed.all.some((row) => row.reading)
+    )
   } catch {
-    if (feed.service === service) feed.failed = true
+    if (feed.service === service) {
+      feed.failed = true
+      retrySoon(service, true)
+    }
   } finally {
     feed.asking = false
     publish()
   }
+}
+
+const retry: { timer?: ReturnType<typeof setTimeout>; tries: number; pending?: boolean } = { tries: 0 }
+
+/**
+ * After a read that left a room unread, or failed, reads again after the next of {@link ROWS_RETRY_MS}; after the
+ * last, it waits for the usual moments. A read that has every room read starts the count again. A retry due while a
+ * read is out is that read's to decide (refreshRoomRows reads one at a time). One due while the app is away reads
+ * nothing and waits, with no timer, for the app to come back, which then reads at once (no return floor) and counts it:
+ * a cold launch sent straight to the background still has its retries, and nothing wakes the app while it is away.
+ */
+function retrySoon(service: RoomsService, needed: boolean): void {
+  if (retry.timer) clearTimeout(retry.timer)
+  retry.timer = undefined
+  if (!needed) {
+    retry.tries = 0
+    return
+  }
+  if (retry.tries >= ROWS_RETRY_MS.length) return
+  const delay = ROWS_RETRY_MS[retry.tries]
+  const due = () => {
+    retry.timer = undefined
+    if (feed.service !== service) return
+    if (AppState.currentState !== 'active') {
+      retry.pending = true
+      return
+    }
+    retry.tries++
+    refreshRoomRows()
+  }
+  retry.timer = setTimeout(due, delay)
+}
+
+const stopRetrying = () => {
+  if (retry.timer) clearTimeout(retry.timer)
+  retry.timer = undefined
+  retry.tries = 0
+  retry.pending = false
+}
+
+/** Coming back to the app: a retry that came due while away reads now, else a read unless the last is recent. */
+const readOnReturn = () => {
+  if (!retry.pending) return refreshRoomRows(ROWS_RETURN_FLOOR_MS)
+  retry.pending = false
+  retry.tries++
+  refreshRoomRows()
 }
 
 /** Reads again, unless a read is out or the last one is under `floor` old. */
@@ -351,6 +417,7 @@ export function resetRoomRows(): void {
   feed.lastAsk = 0
   feed.inView = 0
   tracks = new WeakMap()
+  stopRetrying()
   seenVersions = undefined
   hiddenUntil = undefined
   seenRead = undefined
@@ -370,6 +437,7 @@ export function useRoomRowsPoll(service: RoomsService | undefined, linked: boole
     const next = service && linked ? service : undefined
     if (feed.service === next) return
     feed.service = next
+    stopRetrying()
     feed.all = undefined
     feed.rows = undefined
     feed.failed = false
@@ -380,7 +448,7 @@ export function useRoomRowsPoll(service: RoomsService | undefined, linked: boole
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refreshRoomRows(ROWS_RETURN_FLOOR_MS)
+      if (state === 'active') readOnReturn()
     })
     const timer = setInterval(() => {
       if (feed.inView > 0 && AppState.currentState === 'active') refreshRoomRows()
@@ -388,6 +456,8 @@ export function useRoomRowsPoll(service: RoomsService | undefined, linked: boole
     return () => {
       sub?.remove()
       clearInterval(timer)
+      // Nothing scheduled outlives the poll: a retry due after it unmounts would read for no one.
+      stopRetrying()
     }
   }, [])
 }

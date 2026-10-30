@@ -15,7 +15,7 @@
  */
 import React, { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native'
 import Toast from 'react-native-toast-message'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -62,8 +62,11 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
   const name = roomTitle(t, { name: row.roomName, nameFrom: row.nameFrom })
   const community = row.communityName ? String(row.communityName) : undefined
   const post = row.lastPost
+  // Not read yet (the agent not ready on a cold launch): the app's spinner, as the rooms card shows (#775), never "No
+  // posts yet" for a room that may have some. The words stay in the row's label, for a screen reader.
+  const reading = !post && !!row.reading
   const what = !post
-    ? (t('Rooms.RowNoPosts') as string)
+    ? (t(row.reading ? 'Rooms.Reading' : 'Rooms.RowNoPosts') as string)
     : post.kind === 'note'
       ? (t('Rooms.RowNote', { title: post.text, ...asWritten }) as string)
       : post.kind === 'file'
@@ -122,6 +125,8 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
       fontWeight: unread ? '600' : '400',
     },
     bottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    previewSlot: { flex: 1, minWidth: 0, justifyContent: 'center' },
+    spinner: { position: 'absolute', left: 0 },
     preview: {
       flex: 1,
       minWidth: 0,
@@ -208,9 +213,24 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
                 {when ? <ThemedText style={styles.when}>{when}</ThemedText> : null}
               </View>
               <View style={styles.bottom}>
-                <ThemedText style={styles.preview} numberOfLines={1} ellipsizeMode="tail">
-                  {line}
-                </ThemedText>
+                {reading ? (
+                  // The preview's own empty line keeps the row's height at any text size; the spinner sits over it.
+                  <View style={styles.previewSlot}>
+                    <ThemedText style={styles.preview} numberOfLines={1} importantForAccessibility="no">
+                      {' '}
+                    </ThemedText>
+                    <ActivityIndicator
+                      size="small"
+                      color={ColorPalette.brand.primary}
+                      style={styles.spinner}
+                      accessibilityLabel={line}
+                    />
+                  </View>
+                ) : (
+                  <ThemedText style={styles.preview} numberOfLines={1} ellipsizeMode="tail">
+                    {line}
+                  </ThemedText>
+                )}
                 {unread ? (
                   <View style={styles.badge} testID={testIdWithKey('MessagesListUnread')}>
                     <ThemedText style={styles.badgeText}>{row.unread > 99 ? '99+' : row.unread}</ThemedText>

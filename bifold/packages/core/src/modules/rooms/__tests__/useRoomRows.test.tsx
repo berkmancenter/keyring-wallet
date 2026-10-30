@@ -22,6 +22,7 @@ import {
   resetRoomRows,
   ROOMS_SEEN_KEY,
   ROWS_POLL_MS,
+  ROWS_RETRY_MS,
   ROWS_RETURN_FLOOR_MS,
   refreshRoomRows,
   useRoomRows,
@@ -281,5 +282,108 @@ describe('rooms as Messages rows', () => {
     renderHook(() => useRoomRowsPoll(unlinked, false))
     await flush()
     expect(unlinked.listMyRooms).not.toHaveBeenCalled()
+  })
+})
+
+// On a cold launch the agent may not be ready, and a room's first read fails (276.9, once).
+describe('a room not read yet', () => {
+  const rowOf = (list: { result: { current: { rows: { rows: readonly unknown[] } } } }) =>
+    list.result.current.rows.rows[0] as { reading?: boolean; lastPost?: { text: string } }
+
+  test('is reading, not empty, and is read again soon without waiting for a return or Messages', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    s.listNotes.mockRejectedValueOnce(new Error('agent not ready'))
+    const { list } = mount(s)
+    await flush()
+    expect(rowOf(list)).toMatchObject({ reading: true })
+    expect(rowOf(list).lastPost).toBeUndefined()
+
+    await step(ROWS_RETRY_MS[0])
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+    expect(rowOf(list).reading).toBeUndefined()
+    expect(rowOf(list).lastPost?.text).toBe('n1')
+    // Every room read: no more reads until the usual moments.
+    await step(ROWS_RETRY_MS[2] * 2)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+  })
+
+  test('a first listing that stopped early with nothing in it is still reading; a complete empty one has no posts', async () => {
+    const s = serviceWith([room('planning'), room('quiet')], { planning: [note('n1', 1)] })
+    s.listNotes.mockImplementationOnce(async () => ({
+      notes: [],
+      complete: false,
+      check: { verdict: 'consistent', detail: '' },
+    }))
+    const { list } = mount(s)
+    await flush()
+    const { rows } = list.result.current.rows
+    expect(rows.find((r) => r.roomId === 'planning')?.reading).toBe(true)
+    expect(rows.find((r) => r.roomId === 'quiet')?.reading).toBeUndefined()
+  })
+
+  test('tries again three times, sooner then later, then waits for the usual moments; a read that fails entirely too', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    s.listNotes.mockRejectedValue(new Error('agent not ready'))
+    mount(s)
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+    for (const [i, ms] of ROWS_RETRY_MS.entries()) {
+      await step(ms - 1)
+      expect(s.listMyRooms).toHaveBeenCalledTimes(i + 1)
+      await step(1)
+      expect(s.listMyRooms).toHaveBeenCalledTimes(i + 2)
+    }
+    await step(ROWS_RETRY_MS[2] * 3)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(ROWS_RETRY_MS.length + 1)
+
+    resetRoomRows()
+    const down = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    down.listMyRooms.mockRejectedValueOnce(new Error('agent unreachable'))
+    const { list } = mount(down)
+    await flush()
+    expect(list.result.current.rows.failed).toBe(true)
+    await step(ROWS_RETRY_MS[0])
+    expect(down.listMyRooms).toHaveBeenCalledTimes(2)
+    expect(list.result.current.rows.failed).toBe(false)
+  })
+
+  test('away from the app, a retry due reads nothing and keeps no timer; coming back reads at once and counts it', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    s.listNotes.mockRejectedValue(new Error('agent not ready'))
+    mount(s)
+    await flush()
+    Object.defineProperty(AppState, 'currentState', { value: 'background', writable: true, configurable: true })
+    await step(ROWS_RETRY_MS[0])
+    // Nothing read, and no retry armed again: nothing wakes the app while it is away.
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+    const armed = jest.spyOn(global, 'setTimeout')
+    await step(ROWS_RETRY_MS[2] * 10)
+    expect(armed.mock.calls.filter(([, ms]) => (ROWS_RETRY_MS as readonly unknown[]).includes(ms))).toHaveLength(0)
+    armed.mockRestore()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+    // Back within the return floor: it reads at once all the same, and the rest of the retries follow.
+    Object.defineProperty(AppState, 'currentState', { value: 'active', writable: true, configurable: true })
+    await act(async () => onAppState?.('active'))
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+    await step(ROWS_RETRY_MS[1] + ROWS_RETRY_MS[2])
+    expect(s.listMyRooms).toHaveBeenCalledTimes(ROWS_RETRY_MS.length + 1)
+    await step(ROWS_RETRY_MS[2] * 3)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(ROWS_RETRY_MS.length + 1)
+  })
+
+  test('a retry armed when the poll unmounts never runs, and leaves no timer', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    s.listNotes.mockRejectedValue(new Error('agent not ready'))
+    const { poll, list } = mount(s)
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+    const armed = jest.spyOn(global, 'setTimeout')
+    list.unmount()
+    poll.unmount()
+    await step(ROWS_RETRY_MS[2] * 3)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+    expect(armed.mock.calls.filter(([, ms]) => (ROWS_RETRY_MS as readonly unknown[]).includes(ms))).toHaveLength(0)
+    armed.mockRestore()
+    expect(jest.getTimerCount()).toBe(0)
   })
 })
