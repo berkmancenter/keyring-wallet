@@ -198,10 +198,15 @@ runner (the link, the push probe, the agent header) print `SKIP — no Farm in C
   Mac's persistent AVD, which did that registration long ago, and would fail the same way on a re-created one.
   "Boot complete" is not settled: on run 38045665103 System UI hung during a 195 s boot and its "isn't
   responding" dialog covered the app from before the plain launch to the welcome driver (both welcome rows FAIL,
-  never seen locally). `ci/android-settle.sh` now waits after the boot (no ANR window, launcher focused, guest
-  load at or under its cores, 90 s at most; `ci/android-anr.sh` taps the dialog's Wait), a step of its own in the
-  table; the welcome driver waits 45 s for the first slide on Android and once taps Wait itself, and the leg runs
-  it a second time when System UI stopped responding during the first, saying so in the rows.
+  never seen locally). `ci/android-settle.sh` now waits after the boot (no ANR window, launcher focused and
+  answering a HOME start, guest load at or under its cores, 90 s at most; `ci/android-anr.sh` taps the dialog's
+  Wait), a step of its own in the table; the welcome driver waits 45 s for the first slide on Android and once taps
+  Wait itself, and the leg runs it a second time when a system app stopped responding during the first, saying so
+  in the rows. A cold boot can hang the launcher instead (runs 40982883110 and 40990403361, first attempts: its
+  dialog came back after every BACK and every Wait, and the slides never moved on either try), so a launcher's
+  dialog is not waited out: `android-anr.sh` force-stops the launcher and HOME starts it again. Before each welcome
+  try the leg settles the emulator once more in "responsive" mode (no load test; the launcher answers twice in a
+  row, 60 s at most). `ci/android-settle.test.sh` covers both scripts against a fake adb.
 - Timing: every workflow step marks the clock (`ci/mark.sh`), the leg writes its own steps to `steps.tsv`, and
   `ci/summary.mjs` puts one table (and the rows) on the job summary. The leg dir is uploaded as an artifact.
 - The job fails only when a ROW says FAIL or the leg broke before its rows; SKIP rows and a driver's exit 3 do not.
