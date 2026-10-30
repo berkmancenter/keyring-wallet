@@ -263,3 +263,20 @@ test("flags read only what the app ships: the update server's own store.remove h
   // An unknown path is store, and still raises its flags, so the approver sees them.
   assert.equal(flagsOf(['somewhere/new.ts'], { 'somewhere/new.ts': added[server] }).length, 1);
 });
+
+test('the VTI protocol line reads strict whatever the case of its file names', () => {
+  const module = 'bifold/packages/core/src/modules/trust-tasks/module/'
+  // Every protocol-line file at bifold main on 10-29, both namings.
+  const files = ['TspCarriage.ts', 'VtiCommunityStore.ts', 'VtiIdentityStore.ts', 'VtiMediatorTransport.ts', 'joinManifest.ts',
+    'joinSubmission.ts', 'joinWire.ts', 'triggerLink.ts', 'tspCapability.ts', 'tspFrameUnopenable.ts', 'tspProbe.ts', 'vtcBusy.ts',
+    'vtiAdoptIdentities.ts', 'vtiAgent.ts', 'vtiCardStanding.ts', 'vtiCardStatusRetry.ts', 'vtiCardVault.ts', 'vtiCommunityLink.ts',
+    'vtiCommunityNotices.ts', 'vtiDeliveredCheck.ts', 'vtiEligibility.ts', 'vtiGrantState.ts', 'vtiIdentityListeners.ts', 'vtiInbox.ts',
+    'vtiInvitation.ts', 'vtiInvitationOffer.ts', 'vtiJoin.ts', 'vtiJoinSeed.ts', 'vtiLinks.ts', 'vtiMemberVmc.ts', 'vtiPersonaInbox.ts',
+    'vtiReciprocate.ts', 'vtiStatusList.ts', 'vtiTsp.ts', 'vtiVetting.ts', 'vtiWalletCards.ts']
+  for (const f of files) {
+    const v = verdict([module + f], { added: {} })
+    assert.deepEqual([f, v.tier, v.strict], [f, 'ota-strict', ['VTI protocol line']])
+  }
+  // A module file outside the line stays plain ota.
+  assert.equal(verdict([module + 'cardVault.ts'], { added: {} }).tier, 'ota')
+})

@@ -101,7 +101,9 @@ export const FLAGS = [
   // .remove on a receiver named for storage, and the record-removing helpers.
   { flag: 'deletes stored records', policy: 'store', added: /\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
   { flag: 'sign-in / key handling', policy: 'strict', path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
-  { flag: 'VTI protocol line', policy: 'strict', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
+  // Case-insensitive: the protocol line's files are named both ways (vtiAgent.ts, VtiMediatorTransport.ts, TspCarriage.ts),
+  // and without /i the capitalised ones read plain ota (found 10-29).
+  { flag: 'VTI protocol line', policy: 'strict', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/i },
 ];
 
 const POLICIES = ['store', 'strict', 'advisory'];
