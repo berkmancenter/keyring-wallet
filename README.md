@@ -33,9 +33,13 @@ It is one of the first mobile wallets for the
 > Testers get new builds every few days, and data or behaviour may change between
 > builds. See [issues](https://github.com/berkmancenter/keyring-wallet/issues).
 
-**Getting the app.** Keyring is available only as a test build: through
-TestFlight on iOS, and through Google Play open testing on Android. It has no
+**Getting the app.** Keyring is available only as a test build. It has no
 public store listing.
+
+- **iPhone:** join the beta on [TestFlight](https://testflight.apple.com/join/NQYt25SQ).
+- **Android:** join [Google Play open testing](https://play.google.com/store/apps/details?id=asml.bkc.harvard.wallet).
+
+Both links are also on [openvtc.net](https://openvtc.net) as QR codes, to scan from a computer screen.
 
 ## Talk to us
 
