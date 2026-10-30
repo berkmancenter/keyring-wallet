@@ -2641,7 +2641,15 @@
     "EmptyTitle": "Nenhuma conversa ainda",
     "EmptyBody": "Suas conversas com seus contatos aparecem aqui. Cada uma é criptografada entre os seus telefones.",
     "AddContact": "Adicionar um contato",
-    "PickerEmpty": "Nenhum contato ainda. Adicione um para começar uma conversa."
+    "PickerEmpty": "Nenhum contato ainda. Adicione um para começar uma conversa.",
+    "Delete": "Apagar",
+    "DeleteTitle": "Apagar sua conversa com {{name}}?",
+    "DeleteBody": "Todas as mensagens e fotos dela são apagadas deste telefone. Você pode desfazer por alguns segundos.",
+    "DeleteTheyKeep": "{{name}} continua com a própria cópia. Nada é enviado.",
+    "DeleteContactStays": "{{name}} continua nos seus contatos. A conversa volta aqui quando um de vocês escrever de novo.",
+    "DeleteConfirm": "Apagar conversa",
+    "Deleted": "Conversa com {{name}} apagada",
+    "Undo": "Desfazer"
   },
   "Relationship": {
     "ResignUnavailable": "Assinar de novo: seus cartões já estão assinados com hardware seguro.",

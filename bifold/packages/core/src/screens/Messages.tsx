@@ -4,6 +4,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../components/buttons/Button'
@@ -11,6 +12,7 @@ import IconButton, { ButtonLocation } from '../components/buttons/IconButton'
 import { ThemedText } from '../components/texts/ThemedText'
 import { useStore } from '../contexts/store'
 import { useConnectionActivity } from '../hooks/useConnectionActivity'
+import { pendingChatDeletes } from '../modules/chat/pendingChatDeletes'
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import { conversations, isConversationPartner, messageRows } from '../modules/vrc/contacts/messageRows'
 import { useConnectionRelationships } from '../modules/vrc/contacts/useContactFacts'
@@ -56,6 +58,8 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
   const relationshipOf = useConnectionRelationships()
   const activity = useConnectionActivity()
   const { unreadByConnection } = useUnreadMessages()
+  // A chat being deleted (L4) leaves the list at once; it comes back on Undo, or if deleting it fails.
+  const deleting = useSyncExternalStore(pendingChatDeletes.subscribe, pendingChatDeletes.get)
   // Conversations only, newest first (L3): a contact appears once a message has been exchanged with them; a chat
   // cleared on this phone leaves the list until either side writes again. New ones start from New message.
   const rows = useMemo(
@@ -69,8 +73,8 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
           (connection) => unreadByConnection[connection.id] ?? 0
         ),
         (connectionId) => activity(connectionId)
-      ),
-    [connections, relationshipOf, contactLinks, activity, unreadByConnection]
+      ).filter((row) => !row.connectionIds.some((id) => deleting.has(id))),
+    [connections, relationshipOf, contactLinks, activity, unreadByConnection, deleting]
   )
 
   const style = StyleSheet.create({
@@ -150,8 +154,9 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
     defaultScreenOptionsDict,
   ])
 
+  // The rows swipe to delete (L4): gesture-handler needs a root view above them, and the app has none of its own.
   return (
-    <View style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }} testID={testIdWithKey('MessagesGestureRoot')}>
       <FlatList
         style={style.list}
         contentContainerStyle={{ flexGrow: 1 }}
@@ -198,7 +203,7 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
           ) : null
         }
       />
-    </View>
+    </GestureHandlerRootView>
   )
 }
 

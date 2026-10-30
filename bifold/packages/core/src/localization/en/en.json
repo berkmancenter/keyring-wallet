@@ -2791,7 +2791,15 @@
     "EmptyTitle": "No chats yet",
     "EmptyBody": "Chats with your contacts show here. Each one is encrypted between your phones.",
     "AddContact": "Add a contact",
-    "PickerEmpty": "No contacts yet. Add one to start a chat."
+    "PickerEmpty": "No contacts yet. Add one to start a chat.",
+    "Delete": "Delete",
+    "DeleteTitle": "Delete your chat with {{name}}?",
+    "DeleteBody": "Every message and photo in it is deleted from this phone. You can undo it for a few seconds.",
+    "DeleteTheyKeep": "{{name}} keeps their copy. Nothing is sent to them.",
+    "DeleteContactStays": "{{name}} stays in your contacts. The chat comes back here when either of you writes again.",
+    "DeleteConfirm": "Delete chat",
+    "Deleted": "Chat with {{name}} deleted",
+    "Undo": "Undo"
   },
   "Relationship": {
     "ResignUnavailable": "Sign again: your cards are already signed with secure hardware.",

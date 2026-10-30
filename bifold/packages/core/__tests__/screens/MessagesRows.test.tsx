@@ -11,10 +11,15 @@ import {
   DidCommDidExchangeRole,
   DidCommDidExchangeState,
 } from '@credo-ts/didcomm'
-import { fireEvent, render } from '@testing-library/react-native'
+import { fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 
 import { StoreContext } from '../../src'
+import {
+  cancelChatDelete,
+  resetPendingChatDeletes,
+  scheduleChatDelete,
+} from '../../src/modules/chat/pendingChatDeletes'
 import Messages from '../../src/screens/Messages'
 import { testIdWithKey } from '../../src/utils/testable'
 import { testDefaultState } from '../contexts/store'
@@ -205,5 +210,32 @@ describe('conversations only (L3)', () => {
     const header = render(<BasicAppContext>{options.headerRight({})}</BasicAppContext>)
     fireEvent.press(header.getByTestId(testIdWithKey('MessagesNewMessage')))
     expect(navigation.navigate).toHaveBeenCalledWith('New Message')
+  })
+})
+
+describe('deleting from the list (L4)', () => {
+  afterEach(() => resetPendingChatDeletes())
+
+  test('a chat being deleted leaves the list at once; Undo brings it back', () => {
+    const deleteChat = jest.fn(async () => undefined)
+    scheduleChatDelete({ key: 'conn-ada', connectionIds: ['conn-ada'], deleteChat })
+    expect(opened(list(false))).not.toContain('conn-ada')
+    cancelChatDelete('conn-ada')
+    expect(opened(list(false))).toContain('conn-ada')
+    expect(deleteChat).not.toHaveBeenCalled()
+  })
+
+  test('the rows swipe inside a gesture-handler root view (the app has none above the screen)', () => {
+    const tree = list(false)
+    expect(rows(tree).length).toBeGreaterThan(0)
+    expect(
+      within(tree.getByTestId(testIdWithKey('MessagesGestureRoot'))).queryAllByTestId(testIdWithKey('Contact'))
+    ).toHaveLength(rows(tree).length)
+  })
+
+  test("a merged contact's row leaves whole while any of its connections is being deleted", () => {
+    mockLinks = bobMerged
+    scheduleChatDelete({ key: 'bob', connectionIds: ['conn-a', 'conn-b', 'conn-c'], deleteChat: async () => undefined })
+    expect(opened(list(false))).toEqual(['conn-ada'])
   })
 })

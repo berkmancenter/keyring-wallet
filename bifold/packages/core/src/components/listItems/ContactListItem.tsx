@@ -1,9 +1,12 @@
+import { useAgent } from '@bifold/react-hooks'
 import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
 
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, StyleSheet, TouchableOpacity } from 'react-native'
+import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable'
+import Toast from 'react-native-toast-message'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { useTheme } from '../../contexts/theme'
@@ -17,9 +20,13 @@ import { TOKENS, useServices } from '../../container-api'
 import ContactPhoto from '../../modules/vrc/components/ContactPhoto'
 import { useConnectionFacts } from '../../modules/vrc/contacts/useContactFacts'
 import { useChatEvents } from '../../modules/chat/chatEventsStore'
+import { deleteChatMessages } from '../../modules/chat/history'
+import { UNDO_WINDOW_MS, cancelChatDelete, scheduleChatDelete } from '../../modules/chat/pendingChatDeletes'
 import { timerOf } from '../../modules/chat/timer'
 import { ThemedText } from '../texts/ThemedText'
+import { ToastType } from '../toast/BaseToast'
 
+import DeleteChatSheet from './DeleteChatSheet'
 import { rowPreview, rowTime } from './messagesListRow'
 
 export interface ContactListItemProps {
@@ -40,6 +47,7 @@ const AVATAR_SIZE = 44
 const NAME_COLOR = '#010B13'
 const PREVIEW_COLOR = '#666666'
 const DIVIDER = '#E3DEE3'
+const DELETE_RED = '#D21E30'
 
 /**
  * A Messages row (the Messages list redesign, L2): a 44 pt photo or initials on a muted tone; the name, with a timer
@@ -139,8 +147,49 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, connectionId
       justifyContent: 'center',
     },
     badgeText: { color: '#FFFFFF', fontSize: 12, lineHeight: 16, fontWeight: '700' },
+    deleteAction: {
+      width: 88,
+      backgroundColor: DELETE_RED,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+    },
+    deleteText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
     divider: { height: StyleSheet.hairlineWidth, backgroundColor: DIVIDER, marginLeft: 16 + AVATAR_SIZE + 12 },
   })
+
+  // Delete (L4): a swipe, a long press or a screen reader's action, then the question, then the row goes at once and
+  // the chat is deleted when the Undo window ends (pendingChatDeletes), even if the person has left the list.
+  const { agent } = useAgent()
+  const swipeable = useRef<SwipeableMethods>(null)
+  const [confirming, setConfirming] = useState(false)
+  const ids = useMemo(() => connectionIds ?? [contact.id], [connectionIds, contact.id])
+  const askToDelete = useCallback(() => {
+    swipeable.current?.close()
+    setConfirming(true)
+  }, [])
+  const deleteChat = useCallback(() => {
+    setConfirming(false)
+    if (!agent) return
+    const key = ids.join(',')
+    const scheduled = scheduleChatDelete({
+      key,
+      connectionIds: ids,
+      // No ids: the whole chat, its draft included (#612).
+      deleteChat: (connectionId) => deleteChatMessages(agent, connectionId),
+      onFailed: (error) => {
+        agent.config.logger.warn(`[chat] Delete from the Messages list failed: ${String(error)}`)
+        Toast.show({ type: ToastType.Error, text1: t('Chat.ClearChatFailed') })
+      },
+    })
+    if (!scheduled) return
+    Toast.show({
+      type: 'undo',
+      text1: t('MessagesList.Deleted', { name: contactLabel, interpolation: { escapeValue: false } }),
+      visibilityTime: UNDO_WINDOW_MS,
+      props: { onUndo: () => cancelChatDelete(key) },
+    })
+  }, [agent, ids, t, contactLabel])
 
   const navigateToContact = useCallback(() => {
     navigation.getParent()?.navigate(Stacks.ContactStack, {
@@ -158,53 +207,87 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, connectionId
     .filter(Boolean)
     .join(', ')
 
-  return (
+  const deleteAction = () => (
     <TouchableOpacity
-      onPress={navigateToContact}
-      testID={testIdWithKey('Contact')}
-      accessibilityLabel={label}
+      onPress={askToDelete}
       accessibilityRole="button"
+      accessibilityLabel={t('MessagesList.Delete')}
+      testID={testIdWithKey('MessagesListDelete')}
+      style={styles.deleteAction}
     >
-      <View style={styles.row}>
-        <ContactPhoto
-          photo={facts.photo}
-          name={contactLabel}
-          fallbackUrl={contact.imageUrl}
-          size={AVATAR_SIZE}
-          initials={2}
-          muted
-        />
-        <View style={styles.middle}>
-          <View style={styles.top}>
-            <View style={styles.nameWrap}>
-              <ThemedText style={styles.name} numberOfLines={1}>
-                {contactLabel}
-              </ThemedText>
-              {timerOn ? (
-                <Icon
-                  name="timer-outline"
-                  size={14}
-                  color={PREVIEW_COLOR}
-                  testID={testIdWithKey('MessagesListTimer')}
-                />
-              ) : null}
-            </View>
-            {when ? <ThemedText style={styles.when}>{when}</ThemedText> : null}
-          </View>
-          <View style={styles.bottom}>
-            <ThemedText style={styles.preview} numberOfLines={1} ellipsizeMode="tail">
-              {line}
-            </ThemedText>
-            {unread ? (
-              <View style={styles.badge} testID={testIdWithKey('MessagesListUnread')}>
-                <ThemedText style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</ThemedText>
-              </View>
-            ) : null}
-          </View>
-        </View>
-      </View>
-      <View style={styles.divider} />
+      <Icon name="trash-can-outline" size={22} color="#FFFFFF" />
+      <ThemedText style={styles.deleteText}>{t('MessagesList.Delete')}</ThemedText>
     </TouchableOpacity>
+  )
+
+  return (
+    <>
+      <ReanimatedSwipeable
+        ref={swipeable}
+        renderRightActions={deleteAction}
+        rightThreshold={40}
+        overshootRight={false}
+        friction={2}
+      >
+        <TouchableOpacity
+          onPress={navigateToContact}
+          onLongPress={askToDelete}
+          testID={testIdWithKey('Contact')}
+          accessibilityLabel={label}
+          accessibilityRole="button"
+          accessibilityActions={[{ name: 'delete', label: t('MessagesList.Delete') }]}
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === 'delete') askToDelete()
+          }}
+        >
+          <View style={styles.row}>
+            <ContactPhoto
+              photo={facts.photo}
+              name={contactLabel}
+              fallbackUrl={contact.imageUrl}
+              size={AVATAR_SIZE}
+              initials={2}
+              muted
+            />
+            <View style={styles.middle}>
+              <View style={styles.top}>
+                <View style={styles.nameWrap}>
+                  <ThemedText style={styles.name} numberOfLines={1}>
+                    {contactLabel}
+                  </ThemedText>
+                  {timerOn ? (
+                    <Icon
+                      name="timer-outline"
+                      size={14}
+                      color={PREVIEW_COLOR}
+                      testID={testIdWithKey('MessagesListTimer')}
+                    />
+                  ) : null}
+                </View>
+                {when ? <ThemedText style={styles.when}>{when}</ThemedText> : null}
+              </View>
+              <View style={styles.bottom}>
+                <ThemedText style={styles.preview} numberOfLines={1} ellipsizeMode="tail">
+                  {line}
+                </ThemedText>
+                {unread ? (
+                  <View style={styles.badge} testID={testIdWithKey('MessagesListUnread')}>
+                    <ThemedText style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</ThemedText>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </View>
+          <View style={styles.divider} />
+        </TouchableOpacity>
+      </ReanimatedSwipeable>
+      <DeleteChatSheet
+        visible={confirming}
+        name={contactLabel}
+        onDelete={deleteChat}
+        onCancel={() => setConfirming(false)}
+      />
+    </>
   )
 }
 

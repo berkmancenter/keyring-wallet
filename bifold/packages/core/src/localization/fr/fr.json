@@ -2739,7 +2739,15 @@
     "EmptyTitle": "Aucune discussion pour l'instant",
     "EmptyBody": "Vos discussions avec vos contacts s'affichent ici. Chacune est chiffrée entre vos téléphones.",
     "AddContact": "Ajouter un contact",
-    "PickerEmpty": "Aucun contact pour l'instant. Ajoutez-en un pour commencer une discussion."
+    "PickerEmpty": "Aucun contact pour l'instant. Ajoutez-en un pour commencer une discussion.",
+    "Delete": "Supprimer",
+    "DeleteTitle": "Supprimer votre discussion avec {{name}} ?",
+    "DeleteBody": "Tous les messages et toutes les photos qu'elle contient sont supprimés de ce téléphone. Vous pouvez annuler pendant quelques secondes.",
+    "DeleteTheyKeep": "{{name}} garde sa copie. Rien ne lui est envoyé.",
+    "DeleteContactStays": "{{name}} reste dans vos contacts. La discussion revient ici dès que l'un de vous écrit à nouveau.",
+    "DeleteConfirm": "Supprimer la discussion",
+    "Deleted": "Discussion avec {{name}} supprimée",
+    "Undo": "Annuler"
   },
   "Relationship": {
     "ResignUnavailable": "Signer à nouveau : vos cartes sont déjà signées avec du matériel sécurisé.",

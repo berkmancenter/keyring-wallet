@@ -3,6 +3,7 @@ import { ToastShowParams } from 'react-native-toast-message'
 
 import BaseToast, { ToastType } from './BaseToast'
 import MessageNotificationToast from './MessageNotificationToast'
+import UndoToast from './UndoToast'
 
 export const Config = {
   success: (props: ToastShowParams) => (
@@ -16,6 +17,10 @@ export const Config = {
   ),
   info: (props: ToastShowParams) => (
     <BaseToast title={props?.text1} body={props?.text2} toastType={ToastType.Info} onPress={props?.onPress} />
+  ),
+  // What was just done, with Undo (the Messages list's delete): `props.onUndo` undoes it.
+  undo: (params: ToastShowParams) => (
+    <UndoToast text={params?.text1} onUndo={(params?.props as { onUndo?: () => void } | undefined)?.onUndo} />
   ),
   message: (params: any) => (
     <MessageNotificationToast
