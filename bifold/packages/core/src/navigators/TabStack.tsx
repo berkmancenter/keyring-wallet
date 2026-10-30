@@ -50,6 +50,7 @@ import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { useVtiTurnedDownNotice } from '../modules/trust-tasks/screens/turnedDownNotice'
 import { useRoomNotices } from '../modules/rooms/roomNotices'
+import { useRoomsUnreadCount } from '../modules/rooms/useRoomRows'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
 
@@ -145,7 +146,10 @@ const TabStack: React.FC = () => {
   // label's last letter was clipped with no ellipsis ("Contact" for "Contacts" at font scale 1.15).
   const labelGap = { paddingHorizontal: 2 }
   const [showQRCodeBottomSheet, setShowQRCodeBottomSheet] = React.useState(false)
-  const { totalUnread } = useUnreadMessages()
+  const { totalUnread: peopleUnread } = useUnreadMessages()
+  // Rooms shown in Messages add their posts by others the member hasn't seen; the badge and its spoken label say one
+  // number (rooms in Messages, R1).
+  const totalUnread = peopleUnread + useRoomsUnreadCount()
   // Requests waiting for this phone's decision: said on the tab, wherever the person is.
   const myAgentBadge = myAgentTabBadge(useWaitingRequestsCount(), t)
   const styles = StyleSheet.create({

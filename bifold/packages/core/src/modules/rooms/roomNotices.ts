@@ -13,6 +13,8 @@
  *
  * The sample rooms (no agent) say none of this: their offers are fixtures.
  *
+ * It also runs the poll for the rooms' Messages rows (useRoomRows), the one place that knows the service and the link.
+ *
  * @module rooms/roomNotices
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -33,6 +35,7 @@ import { communityLabelOf } from '../trust-tasks/screens/communityName'
 
 import type { RoomOffer } from './types'
 import { useRoomOffersCount } from './useRoomOffersCount'
+import { useRoomRowsPoll } from './useRoomRows'
 import { ROOM_ADMITTED_EVENT, type RoomAdmitted } from './useRoomOffer'
 import { ROOM_POST_FAILED_EVENT, retryRoomPost, type RoomPostFailed } from './useRoomSend'
 import { useRoomsService } from './useRoomsService'
@@ -148,6 +151,8 @@ export function useRoomNotices(): void {
     [service, t, bottomOffset, openInMyAgent]
   )
   useRoomOffersCount(service, linked, onOffers)
+  // The rooms as Messages rows, read by one poll for the app: Messages and the tab's badge both read it.
+  useRoomRowsPoll(service, linked)
 
   useEffect(() => {
     const admitted = DeviceEventEmitter.addListener(ROOM_ADMITTED_EVENT, (e: RoomAdmitted) => {

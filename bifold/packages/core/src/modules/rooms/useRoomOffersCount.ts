@@ -21,7 +21,7 @@
  * @module rooms/useRoomOffersCount
  */
 import { useFocusEffect } from '@react-navigation/native'
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
 
 import type { RoomOffer, RoomsService } from './types'
@@ -49,24 +49,40 @@ const NEXT: Record<Outcome, number> = {
   failed: OFFERS_ERROR_POLL_MS,
 }
 
-// What the running poll last read, and how to ask it again, for the badge on My Agent. In memory only; not named
-// `*Store`, which tier.mjs reads, with a `.delete(`, as deleting stored records.
-const badge: { count?: number; refresh?: () => void; listeners: Set<() => void> } = { listeners: new Set() }
+// What the running poll last read, and how to ask it again, for the badge on My Agent and the offers card in
+// Messages. In memory only; not named `*Store`, which tier.mjs reads, with a `.delete(`, as deleting stored records.
+const badge: {
+  count?: number
+  offers?: readonly RoomOffer[]
+  refresh?: () => void
+  listeners: Set<() => void>
+} = { listeners: new Set() }
 
-function publish(count: number | undefined) {
-  badge.count = count
+function publish(offers: readonly RoomOffer[]) {
+  badge.count = offers.length
+  badge.offers = offers
   badge.listeners.forEach((listener) => listener())
+}
+
+const subscribeBadge = (listener: () => void) => {
+  badge.listeners.add(listener)
+  return () => void badge.listeners.delete(listener)
+}
+
+const NO_OFFERS: readonly RoomOffer[] = []
+
+/** The offers the poll last read, for Messages' "Waiting for you" card: all, or one community's. */
+export function useRoomOffersWaiting(communityDid?: string): readonly RoomOffer[] {
+  const offers = useSyncExternalStore(subscribeBadge, () => badge.offers ?? NO_OFFERS)
+  return useMemo(
+    () => (communityDid ? offers.filter((o) => o.communityDid === communityDid) : offers),
+    [offers, communityDid]
+  )
 }
 
 /** My Agent's badge: the count the poll last read; coming into focus asks again (within the floor). */
 export function useRoomOffersBadge(): number | undefined {
-  const count = useSyncExternalStore(
-    useCallback((listener: () => void) => {
-      badge.listeners.add(listener)
-      return () => void badge.listeners.delete(listener)
-    }, []),
-    () => badge.count
-  )
+  const count = useSyncExternalStore(subscribeBadge, () => badge.count)
   useFocusEffect(
     useCallback(() => {
       badge.refresh?.()
@@ -114,7 +130,7 @@ export function useRoomOffersCount(
         const offers = await service.listOffers()
         if (live) {
           setCount(offers.length)
-          publish(offers.length)
+          publish(offers)
           onOffersRef.current?.(offers)
         }
         return offers.length > 0 ? 'waiting' : 'none'

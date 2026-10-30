@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f3645a064f2e2ad361ad1238b1cce3574ae56377",
+  "generatedFrom": "16533d8e997266692a22627ee403c9344ed4000c",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -749,7 +749,10 @@
     "MessagesGestureRoot": ["src/screens/Messages.tsx"],
     "MessagesListDelete": ["src/components/listItems/ContactListItem.tsx"],
     "MessagesListTimer": ["src/components/listItems/ContactListItem.tsx"],
-    "MessagesListUnread": ["src/components/listItems/ContactListItem.tsx"],
+    "MessagesListUnread": [
+      "src/components/listItems/ContactListItem.tsx",
+      "src/modules/rooms/components/RoomMessageRow.tsx"
+    ],
     "MessagesNewMessage": ["src/screens/Messages.tsx"],
     "MyAgent": ["src/navigators/TabStack.tsx"],
     "MyAgentActivity": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -972,6 +975,7 @@
     "RoomMembersReading": ["src/modules/rooms/components/RoomMembersTab.tsx"],
     "RoomMembersUnavailable": ["src/modules/rooms/components/RoomMembersTab.tsx"],
     "RoomMembersYourAccess": ["src/modules/rooms/components/RoomMembersTab.tsx"],
+    "RoomMessageRow": ["src/modules/rooms/components/RoomMessageRow.tsx"],
     "RoomMonogram": ["src/modules/rooms/components/RoomHeader.tsx"],
     "RoomNoteBack": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteBodyInput": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
@@ -1003,6 +1007,8 @@
     "RoomOfferAccept": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferAccess": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferActingAs": ["src/modules/rooms/screens/RoomOffer.tsx"],
+    "RoomOfferCard": ["src/modules/rooms/components/RoomOfferCard.tsx"],
+    "RoomOfferCardLook": ["src/modules/rooms/components/RoomOfferCard.tsx"],
     "RoomOfferDisclosure": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferFailed": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferNotNow": ["src/modules/rooms/screens/RoomOffer.tsx"],

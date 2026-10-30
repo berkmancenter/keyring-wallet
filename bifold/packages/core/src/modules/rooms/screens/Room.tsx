@@ -64,6 +64,7 @@ import { usePetnames } from '../usePetname'
 import { useInViewAndActive } from '../useInViewAndActive'
 import { useRoom } from '../useRoom'
 import { POSTS_PAGE, useRoomPosts } from '../useRoomPosts'
+import { markRoomSeen } from '../useRoomRows'
 import { type PendingPost, useRoomSend } from '../useRoomSend'
 import { useRoomsService } from '../useRoomsService'
 
@@ -167,6 +168,10 @@ const Room: React.FC = () => {
   useEffect(() => {
     if (feed.posts) settle(new Set(feed.posts.map((p) => p.key)))
   }, [feed.posts, settle])
+  // What the member has on screen is seen: Messages counts only the posts after it (rooms in Messages, R1).
+  useEffect(() => {
+    if (inView && feed.posts?.length) markRoomSeen(service, roomId, Math.max(...feed.posts.map((p) => p.version)))
+  }, [inView, feed.posts, service, roomId])
   const pendingPosts = useMemo(
     () => outbox.pending.map((p) => pendingAsPost(p, room?.actingAs)),
     [outbox.pending, room?.actingAs]
