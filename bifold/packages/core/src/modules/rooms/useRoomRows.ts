@@ -21,6 +21,9 @@
  * A room can be hidden from Messages until someone posts in it again ({@link hideRoom}); that is kept on this phone
  * the same way.
  *
+ * Each listing of the member's rooms is also handed, whole, to whoever asked for it ({@link onRoomsListed}): the room
+ * notices read access ending and access gone from it, including the rooms Messages leaves out.
+ *
  * Everything else is in memory only, per rooms service, and not named `*Store`: tier.mjs reads a `.delete(` on such a
  * name as deleting stored records.
  *
@@ -225,13 +228,31 @@ function showRows(service: RoomsService): void {
 const shown = (room: RoomSummary): room is RoomSummary & { communityDid: string } =>
   room.source === 'community' && room.standing === 'member' && !!room.communityDid
 
+type Listed = (service: RoomsService, rooms: RoomSummary[]) => void
+const listedListeners = new Set<Listed>()
+
+/** Told of each listing of the member's rooms the poll reads, all of it, the rooms Messages leaves out included. */
+export function onRoomsListed(listener: Listed): () => void {
+  listedListeners.add(listener)
+  return () => void listedListeners.delete(listener)
+}
+
 /** Reads every room once, one after another. A room that can't be read keeps what was read of it before. */
 async function readAll(service: RoomsService): Promise<void> {
   feed.asking = true
   feed.lastAsk = Date.now()
   try {
     await readSeen()
-    const rooms = (await service.listMyRooms()).filter(shown)
+    const listed = await service.listMyRooms()
+    if (feed.service === service)
+      for (const listener of listedListeners) {
+        try {
+          listener(service, listed)
+        } catch {
+          // A listener's failure is its own; the rows read on.
+        }
+      }
+    const rooms = listed.filter(shown)
     let byRoom = tracks.get(service)
     if (!byRoom) tracks.set(service, (byRoom = new Map()))
     for (const room of rooms) {

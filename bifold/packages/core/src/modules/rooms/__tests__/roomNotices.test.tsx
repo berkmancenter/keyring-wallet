@@ -15,10 +15,19 @@ import fr from '../../../localization/fr/fr.json'
 import ptBr from '../../../localization/pt-br/pt-br.json'
 import { Screens, Stacks, TabStacks } from '../../../types/navigators'
 import { sampleCapabilities } from '../capabilities'
-import { OFFERS_SAID_KEY, offeredWords, postFailedWords, resetOffersSaid, useRoomNotices } from '../roomNotices'
+import { ACCESS_KEPT_KEY, resetAccessKept } from '../roomAccess'
+import {
+  accessWords,
+  OFFERS_SAID_KEY,
+  offeredWords,
+  postFailedWords,
+  resetOffersSaid,
+  useRoomNotices,
+} from '../roomNotices'
 import { createSampleRoomsService } from '../sample/sampleRooms'
-import type { RoomOffer, RoomsService } from '../types'
+import type { RoomOffer, RoomsService, RoomSummary } from '../types'
 import { ROOM_ADMITTED_EVENT, useRoomOffer } from '../useRoomOffer'
+import { refreshRoomRows, resetRoomRows } from '../useRoomRows'
 import { ROOM_POST_FAILED_EVENT, useRoomSend } from '../useRoomSend'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -231,6 +240,81 @@ describe("a post that didn't send", () => {
   })
 })
 
+describe('room access', () => {
+  const summary = (roomId: string, over: Partial<RoomSummary> = {}): RoomSummary => ({
+    roomId,
+    name: roomId as RoomSummary['name'],
+    nameFrom: 'community',
+    source: 'community',
+    communityDid: LAB,
+    tier: 'open',
+    standing: 'member',
+    ...over,
+  })
+  // The rows poll lists the member's rooms; reading each room's posts fails here, which the rows shrug off.
+  const listing = (rooms: () => RoomSummary[], isSample = false) =>
+    ({
+      ...offering(() => [], isSample),
+      listMyRooms: jest.fn(async () => rooms()),
+    }) as unknown as RoomsService
+  const soon = () => new Date(Date.now() + 5 * 86_400_000 + 60_000).toISOString()
+
+  beforeEach(async () => {
+    resetRoomRows()
+    resetAccessKept()
+    await AsyncStorage.setItem(ACCESS_KEPT_KEY, '{}')
+  })
+
+  test('access ending is said once, from the rows poll, and a tap opens the room', async () => {
+    const rooms = [summary('planning', { validUntil: soon() })]
+    mockService = listing(() => rooms)
+    const notices = renderHook(() => useRoomNotices())
+    await flush()
+    await flush()
+    const said = show.mock.calls.map(([options]) => options).filter((o) => o.text1 === 'Rooms.NoticeAccessEndsIn')
+    expect(said).toHaveLength(1)
+    expect(said[0]).toMatchObject({ type: 'warn', text2: 'Rooms.NoticeSeeRoom', position: 'bottom' })
+    act(() => said[0].onPress())
+    expect(navigate).toHaveBeenCalledWith(Stacks.TabStack, {
+      screen: TabStacks.MyAgentStack,
+      params: { screen: Screens.Room, initial: false, params: { roomId: 'planning' } },
+    })
+
+    refreshRoomRows()
+    await flush()
+    await flush()
+    expect(show.mock.calls.filter(([o]) => o.text1 === 'Rooms.NoticeAccessEndsIn')).toHaveLength(1)
+    notices.unmount()
+  })
+
+  test('a room removed after it was seen is said, with nothing to open; one first seen removed is not', async () => {
+    let rooms = [summary('planning'), summary('board', { standing: 'removed' })]
+    mockService = listing(() => rooms)
+    const notices = renderHook(() => useRoomNotices())
+    await flush()
+    await flush()
+    expect(show.mock.calls.filter(([o]) => String(o.text1).startsWith('Rooms.NoticeRemoved'))).toHaveLength(0)
+
+    rooms = [summary('planning', { standing: 'removed' }), summary('board', { standing: 'removed' })]
+    refreshRoomRows()
+    await flush()
+    await flush()
+    const said = show.mock.calls.map(([o]) => o).filter((o) => o.text1 === 'Rooms.NoticeRemoved')
+    expect(said).toHaveLength(1)
+    expect(said[0].onPress).toBeUndefined()
+    notices.unmount()
+  })
+
+  test('the sample rooms say nothing', async () => {
+    mockService = listing(() => [summary('planning', { validUntil: soon() })], true)
+    const notices = renderHook(() => useRoomNotices())
+    await flush()
+    await flush()
+    expect(show.mock.calls.filter(([o]) => String(o.text1).startsWith('Rooms.NoticeAccess'))).toHaveLength(0)
+    notices.unmount()
+  })
+})
+
 describe('the words', () => {
   test.each([
     ['en', en],
@@ -252,6 +336,45 @@ describe('the words', () => {
       postFailedWords(undefined, t),
       t('Rooms.NoticeTryAgain'),
     ]
+    const planning = { roomId: 'planning', name: 'Planning' } as RoomSummary
+    const board = { roomId: 'board', name: 'Board' } as RoomSummary
+    const access = [
+      accessWords({ kind: 'ending', rooms: [{ room: planning, days: 5 }] }, t),
+      accessWords({ kind: 'ending', rooms: [{ room: planning, days: 1 }] }, t),
+      accessWords({ kind: 'ending', rooms: [{ room: planning, days: 0 }] }, t),
+      accessWords({ kind: 'gone', rooms: [{ room: planning, ended: false }] }, t),
+      accessWords({ kind: 'gone', rooms: [{ room: planning, ended: true }] }, t),
+    ]
+    const counted = [
+      accessWords(
+        {
+          kind: 'ending',
+          rooms: [
+            { room: planning, days: 5 },
+            { room: board, days: 3 },
+          ],
+        },
+        t
+      ),
+      accessWords(
+        {
+          kind: 'gone',
+          rooms: [
+            { room: planning, ended: false },
+            { room: board, ended: true },
+          ],
+        },
+        t
+      ),
+    ]
+    for (const words of [...access, ...counted]) {
+      expect(words.text1).not.toMatch(/\{\{|Rooms\./)
+      if (words.text2) expect(words.text2).not.toMatch(/\{\{|Rooms\./)
+    }
+    for (const words of access) expect(words.text1).toContain('Planning')
+    expect(access[0].text1).toContain('5')
+    expect(new Set(access.map((w) => w.text1)).size).toBe(access.length)
+    for (const words of counted) expect(words.text1).toContain('2')
     for (const words of said) {
       expect(words).not.toMatch(/\{\{|Rooms\./)
     }

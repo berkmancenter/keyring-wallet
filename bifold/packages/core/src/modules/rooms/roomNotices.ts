@@ -10,6 +10,9 @@
  * - An admission: "You've been admitted to …", when an accept the member sent is answered (useRoomOffer).
  * - A post that failed while its room was not on screen: "Your post to … didn't send"; a tap sends it again, as the
  *   same event (useRoomSend). In the room, the post itself says so.
+ * - Access ending: "Your access to … ends in 5 days", then "… ends tomorrow" (or today); a tap opens the room.
+ * - Access gone: "You no longer have access to …", or "Your access to … has ended" once its end has passed.
+ *   Both are read from the rows poll's listing of the member's rooms (roomAccess.ts says which, once each).
  *
  * The sample rooms (no agent) say none of this: their offers are fixtures.
  *
@@ -33,9 +36,10 @@ import { vtaAgent } from '../trust-tasks/module/vtaAgent'
 import { useToastAboveTabBar } from '../trust-tasks/screens/aboveTabBar'
 import { communityLabelOf } from '../trust-tasks/screens/communityName'
 
+import { type AccessNotice, nextAccessNotice } from './roomAccess'
 import type { RoomOffer } from './types'
 import { useRoomOffersCount } from './useRoomOffersCount'
-import { useRoomRowsPoll } from './useRoomRows'
+import { onRoomsListed, useRoomRowsPoll } from './useRoomRows'
 import { ROOM_ADMITTED_EVENT, type RoomAdmitted } from './useRoomOffer'
 import { ROOM_POST_FAILED_EVENT, retryRoomPost, type RoomPostFailed } from './useRoomSend'
 import { useRoomsService } from './useRoomsService'
@@ -112,6 +116,33 @@ export function postFailedWords(roomName: string | undefined, t: TFunction): str
     : (t('Rooms.NoticePostFailedNoRoom') as string)
 }
 
+/** The words for an access notice: one room is named, several are counted. */
+export function accessWords(notice: AccessNotice, t: TFunction): { text1: string; text2?: string } {
+  const named = { interpolation: { escapeValue: false } }
+  if (notice.kind === 'gone') {
+    if (notice.rooms.length > 1) return { text1: t('Rooms.NoticeGoneMany', { number: notice.rooms.length }) as string }
+    const { room, ended } = notice.rooms[0]
+    return {
+      text1: t(ended ? 'Rooms.NoticeAccessEnded' : 'Rooms.NoticeRemoved', { room: room.name, ...named }) as string,
+    }
+  }
+  if (notice.rooms.length > 1)
+    return {
+      text1: t('Rooms.NoticeAccessEndingMany', { number: notice.rooms.length }) as string,
+      text2: t('Rooms.NoticeSeeRooms') as string,
+    }
+  const { room, days } = notice.rooms[0]
+  const text1 =
+    days <= 0
+      ? t('Rooms.NoticeAccessEndsToday', { room: room.name, ...named })
+      : days === 1
+        ? t('Rooms.NoticeAccessEndsTomorrow', { room: room.name, ...named })
+        : // Only 2 to 7 days come here, so `NoticeAccessEndsIn_one` is never shown; it is there because i18next wants
+          // every count-bearing key's forms.
+          t('Rooms.NoticeAccessEndsIn', { room: room.name, count: days, ...named })
+  return { text1: text1 as string, text2: t('Rooms.NoticeSeeRoom') as string }
+}
+
 export function useRoomNotices(): void {
   const { t } = useTranslation()
   const bottomOffset = useToastAboveTabBar()
@@ -151,6 +182,32 @@ export function useRoomNotices(): void {
     [service, t, bottomOffset, openInMyAgent]
   )
   useRoomOffersCount(service, linked, onOffers)
+
+  useEffect(
+    () =>
+      onRoomsListed((listedBy, rooms) => {
+        if (listedBy.isSample) return
+        void nextAccessNotice(rooms).then((notice) => {
+          if (!notice) return
+          const ending = notice.kind === 'ending'
+          Toast.show({
+            type: ending ? ToastType.Warn : ToastType.Info,
+            ...accessWords(notice, t),
+            visibilityTime: NOTICE_MS,
+            position: 'bottom',
+            bottomOffset,
+            onPress: ending
+              ? () => {
+                  Toast.hide()
+                  if (notice.rooms.length === 1) openInMyAgent(Screens.Room, { roomId: notice.rooms[0].room.roomId })
+                  else openInMyAgent(Screens.RoomsHome)
+                }
+              : undefined,
+          })
+        })
+      }),
+    [t, bottomOffset, openInMyAgent]
+  )
   // The rooms as Messages rows, read by one poll for the app: Messages and the tab's badge both read it.
   useRoomRowsPoll(service, linked)
 
