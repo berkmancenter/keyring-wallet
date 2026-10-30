@@ -16,10 +16,14 @@
  * A poll that fails says so (`pollFailed`) until a listing succeeds, and `pollNow` asks again at once. Only the change
  * redraws: a failure repeated while one is already said, or a success while none is, redraws nothing.
  *
+ * While the agent is being reached again (an unlock reopens its session) neither failure is said, and a listing or a
+ * poll that failed is asked again once the moment a session opens after it was sent (#772, 276.9), not at a tick.
+ *
  * @module rooms/useRoomPosts
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useAgentSession } from './agentSession'
 import { newestFirst, postOf, type RoomPost } from './roomPosts'
 import type { HostCheck, Identity, Note, NoteList, NoteSummary, RoomsService } from './types'
 
@@ -159,10 +163,17 @@ export function useRoomPosts(
   })
   if (reads.current.service !== service || reads.current.roomId !== roomId)
     reads.current = { service, roomId, notes: new Map() }
+  const session = useAgentSession()
+  // The agent session each failed ask was sent on: a session opened since asks again.
+  const openedAt = useRef(session.openedAt)
+  openedAt.current = session.openedAt
+  const listFailedOn = useRef<number | undefined>(undefined)
+  const pollFailedOn = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     if (!service || !enabled) return
     let current = true
+    const sentOn = openedAt.current
     counted(listingsInFlight, () => service.listNotes(roomId)).then(
       (list) => {
         skips.current = 0
@@ -173,6 +184,7 @@ export function useRoomPosts(
       },
       () => {
         if (!current) return
+        listFailedOn.current = sentOn
         setFailed(true)
         setRefreshing(false)
       }
@@ -192,6 +204,7 @@ export function useRoomPosts(
         return
       }
       if (listingsInFlight.current > 0) return
+      const sentOn = openedAt.current
       counted(listingsInFlight, () =>
         service.listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) })
       ).then(
@@ -207,6 +220,7 @@ export function useRoomPosts(
         () => {
           // What is shown stays, and the next ticks give the agent room. The first failure is said; more say nothing.
           skips.current = POLL_SKIPS_AFTER_FAILURE
+          pollFailedOn.current = sentOn
           if (current) notePoll(true)
         }
       )
@@ -297,17 +311,30 @@ export function useRoomPosts(
   }, [])
   const pollNow = useCallback(() => tickNow.current?.(), [])
 
+  // The agent is back: a first listing that failed is asked again, else a poll that did. Once per session opened.
+  const back = session.openedAt
+  useEffect(() => {
+    if (back === undefined) return
+    if (failed && !listing && back !== listFailedOn.current) {
+      listFailedOn.current = back
+      setGeneration((g) => g + 1)
+    } else if (pollFailed && back !== pollFailedOn.current && tickNow.current) {
+      pollFailedOn.current = back
+      tickNow.current?.()
+    }
+  }, [back, failed, listing, pollFailed])
+
   return {
     posts,
     hasOlder: !!listing && listing.notes.length > shown,
     check: listing?.check,
     incomplete: !!listing && !listing.complete,
-    failed,
+    failed: failed && !session.reconnecting,
     refreshing,
     loadingOlder,
     loadOlder,
     refresh,
-    pollFailed,
+    pollFailed: pollFailed && !session.reconnecting,
     pollNow,
   }
 }

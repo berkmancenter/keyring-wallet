@@ -182,6 +182,14 @@ export interface VtaAgentState {
    */
   repliesStalled?: boolean
   /**
+   * A session to the linked agent is being opened, the quiet reopen after an unlock included (the link stays
+   * shown online then): a screen whose read failed meanwhile waits for it rather than saying the agent is
+   * unreachable (#772, 276.9: "Couldn't reach your agent" for 10–20 s after the PIN).
+   */
+  sessionOpening?: boolean
+  /** When a session to the linked agent last opened: a screen whose read failed reads again then. */
+  sessionOpenedAt?: number
+  /**
    * The devices an agent's list named when last read, by DID: what a request
    * card calls the device that asked (Alberto's iPhone, 10-06: a request from
    * his computer read "Someone asks"). Filled by every read of the list.
@@ -644,6 +652,11 @@ export class VtaAgentController {
   private resumeRetry?: { timer?: ReturnType<typeof setTimeout>; subscription?: { remove(): void } }
   private reconnecting = false
   private opening?: { client: VtaClient; done: Promise<void> }
+  /** The sign-in shared by every caller, and `sessionOpening` with it. */
+  private setOpening(opening: { client: VtaClient; done: Promise<void> } | undefined) {
+    this.opening = opening
+    if (Boolean(this.state.sessionOpening) !== Boolean(opening)) this.set({ sessionOpening: Boolean(opening) })
+  }
   /** The VTA whose client an unlock just retired; its replacement opens quietly. */
   private handedOver?: string
   /** Identities whose keys moved into memory in this run; their stored copies go at the next (plan part E). */
@@ -835,7 +848,7 @@ export class VtaAgentController {
         await client.whoAmI().catch((error: unknown) => {
           if (refusedAsNotOnAcl(error)) throw error
         })
-        this.set({ status: 'connected', managerDid: client.managerDid })
+        this.set({ status: 'connected', managerDid: client.managerDid, sessionOpenedAt: this.now() })
         this.learnAgentName(client, vtaDid)
       } catch (error) {
         this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
@@ -845,11 +858,11 @@ export class VtaAgentController {
         throw error
       }
     })()
-    this.opening = { client, done }
+    this.setOpening({ client, done })
     try {
       await done
     } finally {
-      if (this.opening?.done === done) this.opening = undefined
+      if (this.opening?.done === done) this.setOpening(undefined)
     }
   }
 
@@ -3199,7 +3212,7 @@ export class VtaAgentController {
         // go, or the next attempt would wait on the same one.
         const stuck = this.opening
         if (stuck) {
-          this.opening = undefined
+          this.setOpening(undefined)
           void stuck.client.disconnect().catch(() => undefined)
         }
         reject(new Error(`the VTA did not answer: signing in took over ${SESSION_CONNECT_DEADLINE_MS / 1000} s`))

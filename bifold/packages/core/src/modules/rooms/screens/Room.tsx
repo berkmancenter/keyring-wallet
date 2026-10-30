@@ -159,10 +159,9 @@ const Room: React.FC = () => {
   const directoryNames = useDirectoryNames(directory, room?.communityDid, authors)
   const { reload } = state
   // A room that could not be read is read again while it is in view, at the posts' pace: nothing else reads it (the
-  // posts poll waits for the room). After an unlock the read can land while the agent's session is still reopening,
-  // and the screen stayed on "Couldn't reach your agent" until Try again (#772, 10-30). Once per failed read, never
-  // while one is out: the agent's client sends one task at a time, and reads piled up behind a slow one would hold a
-  // post behind them.
+  // posts poll waits for the room). useRoom reads it again the moment the agent's session opens; this is the fallback
+  // for a read that failed with nothing to wait for (#772, 10-30). Once per failed read, never while one is out: the
+  // agent's client sends one task at a time, and reads piled up behind a slow one would hold a post behind them.
   const readFailed = state.failed && !room
   useEffect(() => {
     if (!readFailed || !inView || state.reading) return
@@ -230,7 +229,7 @@ const Room: React.FC = () => {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomScreen')}>
         <SampleDataBanner service={service} />
-        {state.failed ? (
+        {state.unreachable ? (
           <View style={styles.centered}>
             <ThemedText testID={testIdWithKey('RoomReadFailed')}>{t('Rooms.AgentUnknown')}</ThemedText>
             <Button

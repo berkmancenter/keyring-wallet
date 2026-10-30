@@ -113,7 +113,7 @@ const RoomInfo: React.FC = () => {
   if (!room)
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomInfo')}>
-        {state.failed ? (
+        {state.unreachable ? (
           <View style={styles.centered}>
             <ThemedText testID={testIdWithKey('RoomReadFailed')}>{t('Rooms.AgentUnknown')}</ThemedText>
             <Button
