@@ -2755,6 +2755,19 @@
     "Declined": "Declined. Nothing was signed in.",
     "TimedOut": "Time ran out, so nothing was signed in. Refresh the sign-in page and scan again.",
     "NoCode": "There's no sign-in code to use. Scan the code on the website again.",
+    "OlderAgents": "If this code is from the service that hosts one of your agents: an agent set up before this version of Keyring can't sign in there from this phone. Get a new agent from that service, or sign in another way.",
+    "Service": {
+      "ConfirmBody": "A website is asking to sign you in with one of your agents from this service. Nothing is sent until you continue.",
+      "Label": "Service",
+      "HostLabel": "Service's address",
+      "Unverified": "Not verified yet. Keyring checks this service after you continue.",
+      "Claiming": "Contacting the service…",
+      "ChooseTitle": "Sign in with which agent?",
+      "ChooseBody": "You have more than one agent from this service. Choose the one whose account to sign in to.",
+      "ChooseCurrent": "The agent this phone uses now",
+      "ReportedBy": "Reported by the service. Keyring can't check these.",
+      "Agent": "Agent"
+    },
     "Failure": {
       "expired": "This code has expired. Get a new one.",
       "invalid": "This code can't be used.",

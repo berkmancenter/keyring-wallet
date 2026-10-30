@@ -2605,6 +2605,19 @@
     "Declined": "Recusado. Nada foi conectado.",
     "TimedOut": "O tempo acabou, nada foi conectado. Atualize a página de login e escaneie novamente.",
     "NoCode": "Não há código de login para usar. Escaneie o código do site novamente.",
+    "OlderAgents": "Se este código for do serviço que hospeda um dos seus agentes: um agente configurado antes desta versão do Keyring não pode entrar nele a partir deste telefone. Obtenha um novo agente desse serviço ou entre de outra forma.",
+    "Service": {
+      "ConfirmBody": "Um site está pedindo para você entrar com um dos seus agentes deste serviço. Nada é enviado até você continuar.",
+      "Label": "Serviço",
+      "HostLabel": "Endereço do serviço",
+      "Unverified": "Ainda não verificado. O Keyring verifica este serviço depois que você continuar.",
+      "Claiming": "Contatando o serviço…",
+      "ChooseTitle": "Entrar com qual agente?",
+      "ChooseBody": "Você tem mais de um agente deste serviço. Escolha aquele em cuja conta deseja entrar.",
+      "ChooseCurrent": "O agente que este telefone usa agora",
+      "ReportedBy": "Informado pelo serviço. O Keyring não pode verificar isso.",
+      "Agent": "Agente"
+    },
     "Failure": {
       "expired": "Este código expirou. Obtenha um novo.",
       "invalid": "Este código não pode ser usado.",

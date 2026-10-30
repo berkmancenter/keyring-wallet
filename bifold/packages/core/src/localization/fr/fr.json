@@ -2703,6 +2703,19 @@
     "Declined": "Refusé. Rien n'a été connecté.",
     "TimedOut": "Le temps est écoulé, rien n'a été connecté. Actualisez la page de connexion et scannez à nouveau.",
     "NoCode": "Aucun code de connexion à utiliser. Scannez à nouveau le code du site web.",
+    "OlderAgents": "Si ce code vient du service qui héberge l'un de vos agents : un agent configuré avant cette version de Keyring ne peut pas s'y connecter depuis ce téléphone. Obtenez un nouvel agent auprès de ce service, ou connectez-vous autrement.",
+    "Service": {
+      "ConfirmBody": "Un site web demande à vous connecter avec l'un de vos agents de ce service. Rien n'est envoyé avant que vous continuiez.",
+      "Label": "Service",
+      "HostLabel": "Adresse du service",
+      "Unverified": "Pas encore vérifié. Keyring vérifie ce service une fois que vous continuez.",
+      "Claiming": "Contact du service…",
+      "ChooseTitle": "Se connecter avec quel agent ?",
+      "ChooseBody": "Vous avez plusieurs agents de ce service. Choisissez celui dont le compte doit être connecté.",
+      "ChooseCurrent": "L'agent que ce téléphone utilise actuellement",
+      "ReportedBy": "Indiqué par le service. Keyring ne peut pas le vérifier.",
+      "Agent": "Agent"
+    },
     "Failure": {
       "expired": "Ce code a expiré. Obtenez-en un nouveau.",
       "invalid": "Ce code ne peut pas être utilisé.",

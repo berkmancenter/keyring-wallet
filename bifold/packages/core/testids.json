@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f2e284d1f14e1b878b4932eb9ad45beb52bd0894",
+  "generatedFrom": "07419c4a458c41c54e2d2de2e017434d27ea6c0c",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -1181,6 +1181,7 @@
     "SiblingNoticeDismiss": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
     "SiblingNoticeOpen": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
     "SignIn": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInAgent": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInApprove": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInBrowser": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInBusy": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
@@ -1203,11 +1204,13 @@
     "SignInNumber": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInNumberContinue": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInNumberInput": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInOlderAgents": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInReportedBy": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInResult": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInResultMessage": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInReview": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSameNetwork": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInService": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSessionOnly": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSigningScope": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSystem": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],

@@ -21,7 +21,13 @@ import {
   type ProvedSignIn as AgentProvedSignIn,
   type SignInRequester,
 } from '../module/oobSignInAgent'
-import { type ProvedSignIn, type SignInIdentity, type SignInSteps } from '../module/signInSteps'
+import {
+  type FarmProvedSignIn,
+  type FarmSignInIdentity,
+  type ProvedSignIn,
+  type SignInIdentity,
+  type SignInSteps,
+} from '../module/signInSteps'
 import SignIn, { SignInFlow } from '../screens/SignIn'
 import { SignInIds } from '../screens/SignIn.ids'
 
@@ -574,5 +580,123 @@ describe('the screen in the stack', () => {
     expect(steps.community).toHaveBeenCalledWith(VTC)
     expect(tree.getByTestId(id(SignInIds.confirm))).toBeTruthy()
     ;(Date.now as jest.Mock).mockRestore()
+  })
+})
+
+// IN-388: a code from the service that hosts agents this phone got there. The UI never names the provider.
+describe("the service that hosts the person's agents", () => {
+  const home: FarmSignInIdentity = {
+    source: 'farm',
+    vtaDid: 'did:webvh:QmA:host.example:agents:home',
+    agentName: 'Home',
+    current: true,
+    did: 'did:key:z6MkClaimKeyOfHome',
+  }
+  const work: FarmSignInIdentity = {
+    ...home,
+    vtaDid: 'did:webvh:QmB:host.example:agents:work',
+    agentName: 'Work',
+    current: false,
+    did: 'did:key:z6MkClaimKeyOfWork',
+  }
+  const serviceProved: FarmProvedSignIn = {
+    claimed,
+    step2: {},
+    sessionKey: 'did:key:z6MkBrowserSessionKey',
+    requester: { browser: 'Safari', os: 'macOS', location: 'unknown', createdAt: '2026-10-30T08:59:00Z' },
+    identifiedAs: home.did,
+    farm: { vtaDid: home.vtaDid, agentName: 'Home', serviceName: 'Agent Host' },
+  }
+  const serviceSteps = (identities: FarmSignInIdentity[] = [home], proved: ProvedSignIn = serviceProved) =>
+    fakeSteps({
+      community: jest.fn(async () => ({ member: true, identities, farm: true })),
+      identifyAndProve: jest.fn(async () => proved),
+    })
+
+  test("confirm: in the service's words, by its address until it names itself; nothing sent before Continue", async () => {
+    const steps = serviceSteps()
+    const tree = await show(steps)
+    expect(tree.getByTestId(id(SignInIds.service))).toHaveTextContent('webvh.storm.ws/test-vtc')
+    expect(tree.queryByTestId(id(SignInIds.community))).toBeNull()
+    expect(tree.getByText('SignIn.Service.ConfirmBody')).toBeTruthy()
+    expect(tree.getByTestId(id(SignInIds.unverified))).toHaveTextContent('SignIn.Service.Unverified')
+    expect(steps.claim).not.toHaveBeenCalled()
+  })
+
+  test('two agents from it: the agents are the choice, the one in use marked, and their keys never shown', async () => {
+    const steps = serviceSteps([home, work])
+    const tree = await show(steps)
+    await press(tree, SignInIds.continue)
+    expect(tree.getByText('SignIn.Service.ChooseTitle')).toBeTruthy()
+    expect(tree.getByTestId(id(`${SignInIds.identityAgent}-0`))).toHaveTextContent('Home')
+    expect(tree.getByTestId(id(`${SignInIds.identityOption}-0`))).toHaveTextContent(/SignIn\.Service\.ChooseCurrent/)
+    expect(tree.getByTestId(id(`${SignInIds.identityAgent}-1`))).toHaveTextContent('Work')
+    expect(tree.queryByText(/did:key/)).toBeNull()
+    await press(tree, `${SignInIds.identityOption}-1`)
+    await typeNumber(tree, '42')
+    await press(tree, SignInIds.numberContinue)
+    expect(steps.identifyAndProve).toHaveBeenCalledWith(claimed, '42', work)
+  })
+
+  test('review: the service as it names itself, the verified website and the agent; never the key', async () => {
+    const steps = serviceSteps()
+    const tree = await toReview(steps)
+    expect(tree.getByTestId(id(SignInIds.service))).toHaveTextContent('Agent Host')
+    expect(tree.getByTestId(id(SignInIds.website))).toHaveTextContent('https://portal.example.org')
+    expect(tree.getByTestId(id(SignInIds.agent))).toHaveTextContent('Home')
+    expect(tree.queryByTestId(id(SignInIds.identifiedAs))).toBeNull()
+    expect(tree.queryByText(/did:key/)).toBeNull()
+    expect(tree.getByTestId(id(SignInIds.reportedBy))).toHaveTextContent('SignIn.Service.ReportedBy')
+    // The service could not tell: not reported, never "no".
+    expect(tree.getByTestId(id(SignInIds.sameNetwork))).toHaveTextContent('SignIn.NotReported')
+    expect(tree.getByTestId(id(SignInIds.sessionOnly))).toBeTruthy()
+
+    await press(tree, SignInIds.approve)
+    expect(steps.approve).toHaveBeenCalledWith(serviceProved)
+    expect(message(tree)).toHaveTextContent('SignIn.SignedIn')
+  })
+
+  test('a service whose answer gives no name: its address', async () => {
+    const unnamed = { ...serviceProved, farm: { vtaDid: home.vtaDid, agentName: 'Home' } }
+    const tree = await toReview(serviceSteps([home], unnamed))
+    expect(tree.getByTestId(id(SignInIds.service))).toHaveTextContent('webvh.storm.ws/test-vtc')
+  })
+
+  test('a sender that is neither, on a phone with an agent that kept no key for its host: said so', async () => {
+    const older = await show(
+      fakeSteps({ community: jest.fn(async () => ({ member: false, name: 'Elsewhere', olderAgents: true })) })
+    )
+    expect(older.getByTestId(id(SignInIds.olderAgents))).toHaveTextContent('SignIn.OlderAgents')
+    const plain = await show(fakeSteps({ community: jest.fn(async () => ({ member: false, name: 'Elsewhere' })) }))
+    expect(plain.queryByTestId(id(SignInIds.olderAgents))).toBeNull()
+  })
+
+  test('the words are in every language, and never name the provider', () => {
+    for (const lang of [en, fr, ptBr] as unknown as {
+      SignIn: { Service: Record<string, string>; OlderAgents: string }
+    }[]) {
+      for (const key of [
+        'ConfirmBody',
+        'Label',
+        'HostLabel',
+        'Unverified',
+        'Claiming',
+        'ChooseTitle',
+        'ChooseBody',
+        'ChooseCurrent',
+        'ReportedBy',
+        'Agent',
+      ])
+        expect(lang.SignIn.Service[key]).toBeTruthy()
+      expect(lang.SignIn.OlderAgents).toBeTruthy()
+      expect(JSON.stringify([lang.SignIn.Service, lang.SignIn.OlderAgents])).not.toMatch(/farm/i)
+    }
+  })
+
+  test('older agents are told both ways out, and not to wait for a fix', () => {
+    const older = (en as unknown as { SignIn: { OlderAgents: string } }).SignIn.OlderAgents
+    expect(older).toMatch(/get a new agent from that service/i)
+    expect(older).toMatch(/sign in another way/)
+    expect(older).not.toMatch(/\byet\b|for now/)
   })
 })
