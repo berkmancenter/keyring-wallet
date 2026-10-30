@@ -57,24 +57,32 @@ welcome_rows() {
   grep -E '^ROW |^LAYOUT |^LAYOUT-ALLOWED |^LEG [^ ]+ BROKEN' "$WELCOME_OUT" | sed -E "/^ROW /s/\$/$note/"
   driver_rc "welcome-driver-$PLATFORM" "$WELCOME_RC" "$WELCOME_OUT"
 }
-# Android: a System UI ANR dialog (the emulator's own, on a loaded runner) covers the app and the driver finds no
-# slide. One up before the driver is dismissed first; one that appeared during the try (its window, or an "ANR in
-# com.android.systemui" line in logcat since the try began) is dismissed and the driver is run once more, and the
-# rows say so. The same lines otherwise as iOS.
+# Android: an ANR dialog of a system app (System UI, or the launcher on a cold boot: runs 40982883110 and
+# 40990403361) covers the app and the driver finds no slide. Before each try the emulator is settled until the
+# launcher answers twice in a row, with any such dialog dismissed (android-settle.sh, mode "responsive"; a hung
+# launcher is restarted); one that appeared during the try (its window, or an "ANR in" line for any package but the
+# wallet in logcat since the try began) is dismissed and the driver is run once more, and the rows say so. The
+# same lines otherwise as iOS.
+anr_lines() { grep 'ANR in ' "$LEG_DIR/android-logcat-all.txt" | grep -vc "ANR in $BID"; }
+settle_note() {
+  local f=$LEG_DIR/android-settle-$1.txt
+  "$SETTLE" "$E" 60 responsive > "$f" 2>&1
+  grep -qE 'dismissed [1-9]|ANR still up' "$f" && echo " (an ANR dialog was up before the driver: $(tr '\n' ';' < "$f"))"
+}
 welcome_android() {
-  local note="" anr0 anr1 rc
-  "$CI" "$E" > "$LEG_DIR/android-anr-before-welcome.txt" 2>&1; rc=$?
-  case $rc in 2) note=" (a System UI ANR dialog was up before the driver: $(tr '\n' ';' < "$LEG_DIR/android-anr-before-welcome.txt"))";; 1) note=" (a System UI ANR dialog is up and would not go: $(tr '\n' ';' < "$LEG_DIR/android-anr-before-welcome.txt"))";; esac
-  anr0=$(grep -c 'ANR in com.android.systemui' "$LEG_DIR/android-logcat-all.txt")
+  local note anr0 anr1 rc
+  note=$(settle_note before-welcome)
+  anr0=$(anr_lines)
   welcome_try
-  anr1=$(grep -c 'ANR in com.android.systemui' "$LEG_DIR/android-logcat-all.txt")
+  anr1=$(anr_lines)
   "$CI" "$E" > "$LEG_DIR/android-anr-after-welcome.txt" 2>&1; rc=$?
   if grep -qE '^(ROW .* FAIL|LEG .* BROKEN)' "$WELCOME_OUT" && { [ "$anr1" -gt "$anr0" ] || [ "$rc" != 0 ] || grep -q 'ANR dialog' "$WELCOME_OUT"; }; then
-    echo "welcome: System UI not responding during the first try (logcat ANR lines $anr0 -> $anr1; after it: $(tr '\n' ';' < "$LEG_DIR/android-anr-after-welcome.txt")); retrying once"
+    echo "welcome: a system app was not responding during the first try (logcat ANR lines $anr0 -> $anr1; after it: $(tr '\n' ';' < "$LEG_DIR/android-anr-after-welcome.txt")); retrying once"
     grep -E '^(ROW|LEG)' "$WELCOME_OUT" | sed 's/^/  first try: /'
-    adb -s "$E" shell am force-stop $BID; sleep 3
+    adb -s "$E" shell am force-stop $BID
+    settle_note before-retry >/dev/null; echo "  before the retry: $(tail -1 "$LEG_DIR/android-settle-before-retry.txt")"
     welcome_try -retry
-    note=" (second try: the first found no slide while System UI was not responding, logcat ANR lines $anr0 -> $anr1; dialog dismissed, driver run again)"
+    note=" (second try: the first found no slide while a system app was not responding, logcat ANR lines $anr0 -> $anr1; dialog dismissed, emulator settled, driver run again)"
   fi
   welcome_rows "$note"
 }
@@ -134,7 +142,7 @@ android)
   adb -s "$E" shell am force-stop $BID
   # The welcome slides on the fresh install (the same driver as iOS; its icon row is iOS-only and says so).
   export PLATFORM=android APPIUM_PORT=${APPIUM_PORT:-4723} ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E UDID=$E E2E_RELEASE=1
-  CI=$(cd "$(dirname "$0")/../ci" && pwd)/android-anr.sh
+  CI=$(cd "$(dirname "$0")/../ci" && pwd)/android-anr.sh SETTLE=$(cd "$(dirname "$0")/../ci" && pwd)/android-settle.sh
   welcome_android
   farm_rows android
   skip android-no-token-activity-through-onboarding "counted through onboarding and the probe"
