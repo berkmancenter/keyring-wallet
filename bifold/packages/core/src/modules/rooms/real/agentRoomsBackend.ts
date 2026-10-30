@@ -81,6 +81,7 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     },
 
     decodeBase64Url: (value) => TypedArrayEncoder.toUtf8String(TypedArrayEncoder.fromBase64Url(value)),
+    encodeBase64Url: (text) => TypedArrayEncoder.toBase64Url(TypedArrayEncoder.fromUtf8String(text)),
 
     hiddenOffers: async () =>
       (await listKeyed<{ offerId?: unknown }>(agent, RECORD_TYPE, 'hiddenOffer')).flatMap((r) =>

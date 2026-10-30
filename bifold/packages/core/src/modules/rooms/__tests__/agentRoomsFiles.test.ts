@@ -84,6 +84,7 @@ function backend(records: HostRecord[], tier: 'open' | 'attributed' = 'attribute
     newId: () => 'id-1',
     leaveCommunity: jest.fn(async () => undefined),
     decodeBase64Url: (s) => Buffer.from(s, 'base64url').toString('utf8'),
+    encodeBase64Url: (s) => Buffer.from(s, 'utf8').toString('base64url'),
     hiddenOffers: async () => [],
     hideOffer: jest.fn(async () => undefined),
     warn: jest.fn(),

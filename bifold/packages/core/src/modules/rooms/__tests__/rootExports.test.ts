@@ -21,6 +21,7 @@ const unlinked: RoomsBackend = {
   communityTask: async () => undefined,
   leaveCommunity: async () => undefined,
   decodeBase64Url: (value: string) => value,
+  encodeBase64Url: (text: string) => text,
   hiddenOffers: async () => [],
   hideOffer: async () => undefined,
   warn: () => undefined,

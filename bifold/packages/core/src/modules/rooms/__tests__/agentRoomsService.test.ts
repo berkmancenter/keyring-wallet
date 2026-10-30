@@ -86,6 +86,7 @@ function backend(overrides: Partial<RoomsBackend> = {}) {
     newId: () => 'id-1',
     leaveCommunity: jest.fn(async () => undefined),
     decodeBase64Url: (s) => Buffer.from(s, 'base64url').toString('utf8'),
+    encodeBase64Url: (text) => Buffer.from(text, 'utf8').toString('base64url'),
     hiddenOffers: async () => [],
     hideOffer: jest.fn(async () => undefined),
     warn: jest.fn(),

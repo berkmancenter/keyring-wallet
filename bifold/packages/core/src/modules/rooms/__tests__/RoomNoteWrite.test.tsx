@@ -2,8 +2,9 @@
  * Writing a note (rooms member features, chunk 2): "New note" in an open room's Notes tab opens the editor; Review
  * asks for the preview, which names who it posts as and who can read it; Post writes it and the note shows. The
  * member's own notes offer Edit, which saves a new version. A failed write keeps the words and, retried, is the same
- * write; a stale preview is prepared once more; a note that changed under an edit is not written. Rooms other than
- * open ones say writing isn't available there yet, and a member without the right gets no button at all.
+ * write; a stale preview is prepared once more; a note that changed under an edit is not written. An attributed
+ * room is written to like an open one; a room whose write status says writing is on its way shows that instead,
+ * and a member without the right gets no button at all.
  */
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
@@ -28,8 +29,8 @@ jest.mock('@react-navigation/native', () => ({
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Room = require('../screens/Room').default
 
-// Planning is attributed in the sample, where the member may write; shown here as open, the one tier notes are
-// written to for now. Welcome desk is open, and read-only for this member.
+// Planning is attributed in the sample, where the member may write; shown here as open unless a test says otherwise.
+// Welcome desk is open, and read-only for this member.
 const PLANNING = 'did:webvh:sample:planning'
 const WELCOME_DESK = 'did:webvh:sample:welcome-desk'
 const id = (key: string) => testIdWithKey(key)
@@ -268,13 +269,13 @@ describe("editing one's own note", () => {
   })
 })
 
-describe('where notes are not written', () => {
-  test('a room that is not open says writing is not available yet, with no button', async () => {
+describe('where notes are written, by the room’s write status', () => {
+  test('an attributed room where the member may write offers "New note", as an open one does', async () => {
     mockService = base
+    expect((await base.getRoom(PLANNING)).tier).toBe('attributed')
     const tree = await show()
-    expect(tree.queryByTestId(id('RoomNoteNew'))).toBeNull()
-    expect(tree.getByTestId(id('RoomNotesCannotWrite'))).toHaveTextContent('Rooms.TierNotYet')
-    expect(notesList(tree).queryAllByTestId(id('RoomNoteEdit'))).toHaveLength(0)
+    expect(tree.getByTestId(id('RoomNoteNew'))).toBeTruthy()
+    expect(tree.queryByTestId(id('RoomNotesCannotWrite'))).toBeNull()
   })
 
   test('where the room says writing is on its way (a tier not written to yet): the "Writing notes" card, no plain line', async () => {
