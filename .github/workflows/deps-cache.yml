@@ -1,0 +1,74 @@
+name: Dependency cache
+
+# Saves the yarn cache that Code Quality's Lint+Format+Types and Testing jobs restore. They only restore: a pull
+# request's own save lands on refs/pull/<n>/merge, which no other pull request can read, so before this every PR
+# saved its own 176 MiB copy and the repository's 10 GB cache filled with them (10-30). A save on main is readable by
+# every pull request into main.
+#
+# The key is the same one Code Quality restores (the yarn.lock hash), so a pull request that keeps yarn.lock gets an
+# exact hit and one that changes it falls back to main's newest copy through restore-keys. The weekly run puts the
+# entry back if GitHub evicted it (an entry unread for 7 days goes).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - yarn.lock
+      - .github/workflows/deps-cache.yml
+  # A change to this file runs it on its pull request too, without the save, so the reviewer sees the install work.
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/deps-cache.yml
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: deps-cache-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  yarn:
+    runs-on: ubuntu-22.04
+    name: Save the yarn cache
+    steps:
+      - name: Checkout KeyRing
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      # Same path and key as Code Quality's restore, or the entry would not match it.
+      - name: Is this yarn.lock's entry there already?
+        id: lookup
+        uses: actions/cache/restore@v4
+        with:
+          path: .yarn/cache
+          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+          lookup-only: true
+
+      - name: Install dependencies
+        if: steps.lookup.outputs.cache-hit != 'true'
+        working-directory: app
+        run: yarn install --immutable
+
+      - name: Save the yarn cache
+        if: steps.lookup.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: .yarn/cache
+          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+
+      - name: Report
+        run: |
+          echo "entry ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}: hit=${{ steps.lookup.outputs.cache-hit || 'no' }}, event=${{ github.event_name }}"
