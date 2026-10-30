@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fakeDriver } from "./pages/testing/fakeDriver.mjs";
 import { pinCount, readPinField, wrongPinFor } from "../run-wrong-pin.mjs";
-import { fromOf, labelForm, readsAsDid, signInLink, triggerId } from "../run-signin-unjoined.mjs";
+import { addressOf, fromOf, labelForm, readsAsDid, signInLink, triggerId } from "../run-signin-unjoined.mjs";
 import { cardStatusOutcome, cutHeld, noticeIn, statusHostOf, statusListHostIn, TRACKED } from "../run-card-status.mjs";
 
 // ------------------------------------------------------------------ IN-257
@@ -105,6 +105,12 @@ test("labelForm says which form the label took", () => {
   assert.equal(labelForm("test-vtc (no name published yet)", "Keyring Lab Community"), "its handle, unnamed");
   assert.equal(labelForm("Something else", "Keyring Lab Community"), "other words");
   assert.equal(labelForm("", "x"), "empty");
+  // An unjoined sender with no name on record is shown by its address (bifold #848), which is not its DID either.
+  assert.equal(labelForm("webvh.example.org:8443/test-vtc", "Keyring Lab Community", DID), "its address");
+  assert.equal(readsAsDid("webvh.example.org:8443/test-vtc", DID), false);
+  assert.equal(labelForm("webvh.example.org:8443/test-vtc", "Keyring Lab Community"), "other words");
+  assert.equal(addressOf("did:web:example.org:people:alice"), "example.org/people/alice");
+  assert.equal(addressOf("did:key:z6Mk"), undefined);
 });
 
 // ------------------------------------------------------------------ IN-258
