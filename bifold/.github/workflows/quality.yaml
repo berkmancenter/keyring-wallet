@@ -217,14 +217,15 @@ jobs:
           restore-keys: |
             jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-
 
-      # The runner has 4 vCPUs; jest's default leaves one idle.
+      # Jest's default workers: on the runner's 4 vCPUs that leaves one free for jest itself and the tests' timers.
+      # Four workers measured 0.3 min faster (within one run's noise) and left 1 s waits short of CPU.
       - name: Automated testing
         id: run
         if: steps.plan.outputs.work == 'true'
         env:
           PART: ${{ matrix.part }}/4
         run: |
-          node scripts/ci/select-tests.mjs run --plan "$RUNNER_TEMP/test-plan.json" --part "$PART" --max-workers 4
+          node scripts/ci/select-tests.mjs run --plan "$RUNNER_TEMP/test-plan.json" --part "$PART"
 
   test:
     runs-on: ubuntu-22.04
