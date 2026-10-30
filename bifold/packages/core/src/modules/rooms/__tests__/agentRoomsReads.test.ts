@@ -160,6 +160,18 @@ describe('opening a room asks the agent less', () => {
     expect(String(held.body)).toBe('edited words')
   })
 
+  it('a read that finds a newer version than the listing named reuses that newer copy next time', async () => {
+    const records = [record('p1', 1, 'first words')]
+    const { b, reads } = backend(records)
+    const service = new AgentRoomsService(b)
+    await service.listNotes(ROOM)
+    records[0] = record('p1', 2, 'edited words') // edited after the listing, before the read
+    await service.readNote(ROOM, 'p1')
+    const again = await service.readNote(ROOM, 'p1')
+    expect(reads()).toEqual(['p1'])
+    expect(String(again.body)).toBe('edited words')
+  })
+
   it('what was opened is forgotten when the wallet locks', async () => {
     const { b, reads } = backend([record('p1', 1)])
     const service = new AgentRoomsService(b)
@@ -182,6 +194,27 @@ describe('opening a room asks the agent less', () => {
     await service.listNotes(ROOM)
     await service.readNote(ROOM, 'p1')
     expect(reads()).toEqual(['p1', 'p1'])
+  })
+
+  it('a record the files tab reuses counts as used, and outlasts one nothing reused since', async () => {
+    const records = [record('p0', 1), record('p1', 1)]
+    const { b, reads } = backend(records)
+    const service = new AgentRoomsService(b)
+    await service.listNotes(ROOM)
+    await service.readNote(ROOM, 'p0')
+    await service.readNote(ROOM, 'p1') // p0 is now the least recently used
+    records.splice(1, 1) // p1 leaves the host's listing, so the files tab reuses only p0
+    await service.listFiles(ROOM) // the files tab reuses p0: now p1 is the least recently used
+    // Fill the cache with other posts until exactly one of p0 and p1 has to go.
+    for (let i = 2; i <= MAX_OPENED_RECORDS; i++) records.push(record(`p${i}`, 1))
+    records.push(record('p1', 1))
+    await service.listNotes(ROOM)
+    for (let i = 2; i <= MAX_OPENED_RECORDS; i++) await service.readNote(ROOM, `p${i}`)
+    const before = reads().length
+    await service.readNote(ROOM, 'p0') // the files tab's reuse kept it
+    expect(reads()).toHaveLength(before)
+    await service.readNote(ROOM, 'p1') // nothing reused it since: dropped
+    expect(reads().slice(before)).toEqual(['p1'])
   })
 
   it(`keeps at most ${MAX_OPENED_RECORDS} opened posts, dropping the one used least recently`, async () => {

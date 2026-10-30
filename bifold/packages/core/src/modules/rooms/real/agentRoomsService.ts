@@ -513,7 +513,8 @@ export class AgentRoomsService implements RoomsService {
   /**
    * A post or note, from what was opened before when the room's last listing names that same version, else from the
    * agent. Reopening a room read its whole first page again, one task at a time (ten reads, ~5 s on the lab sim,
-   * 10-30); a record at a new version (an edit, a retract) is read afresh.
+   * 10-30); a record at a new version (an edit, a retract) is read afresh. A copy reused this way carries the host
+   * check of the read that opened it, not a fresh one: a conflict found since shows on the listing's banner.
    */
   public async readNote(roomId: string, key: string): Promise<Note> {
     const room = await this.requireInRoom(roomId, 'readNote')
@@ -524,6 +525,11 @@ export class AgentRoomsService implements RoomsService {
     )
     if (!opened) throw new Error(`the agent's answer for note ${key} could not be read`)
     this.keepOpened(roomId, opened)
+    // A read can find a newer version than the listing named (an edit since): that copy is the one to reuse. Only a
+    // version a listing already named moves; a read never starts one, so with no listing a read always asks.
+    const k = listedKey(roomId, opened.key)
+    const named = this.listed.get(k)
+    if (named !== undefined && opened.version > named) this.listed.set(k, opened.version)
     return this.noteOf(opened)
   }
 
@@ -547,7 +553,11 @@ export class AgentRoomsService implements RoomsService {
   /** The opened copy of the version the room's last listing names, if there is one (and it is now the newest used). */
   private openedNow(roomId: string, key: string): OpenedRecord | undefined {
     const version = this.listed.get(listedKey(roomId, key))
-    if (version === undefined) return undefined
+    return version === undefined ? undefined : this.openedAt(roomId, key, version)
+  }
+
+  /** The opened copy of one version, made the newest used: a reuse from the files tab counts as much as the chat's. */
+  private openedAt(roomId: string, key: string, version: number): OpenedRecord | undefined {
     const k = openedKey(roomId, key, version)
     const held = this.opened.get(k)
     if (held) {
@@ -1180,8 +1190,7 @@ export class AgentRoomsService implements RoomsService {
     let failure: unknown
     for (const record of listing.records) {
       if (record.status === 'retracted') continue
-      const cacheKey = openedKey(roomId, record.key, record.version)
-      let read = this.opened.get(cacheKey)
+      let read = this.openedAt(roomId, record.key, record.version)
       if (!read) {
         try {
           read = parseRead(
