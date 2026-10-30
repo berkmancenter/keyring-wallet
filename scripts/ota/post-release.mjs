@@ -118,6 +118,13 @@ const gitOk = (...args) => { try { execFileSync('git', args, { stdio: 'ignore' }
 const realIsAncestor = (a, b) => gitOk('merge-base', '--is-ancestor', a, b)
 const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--match', 'staging-v*', '--abbrev=0', sha], { encoding: 'utf8' }).trim()
 
+/**
+ * What a failed gh call says: gh's own line from stderr (it names the HTTP status, e.g. "gh: Not Found (HTTP 404)"),
+ * else the first line of the error. execFileSync's message alone is only "Command failed: gh api …".
+ */
+export const ghError = (error) =>
+  String(error?.stderr ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? String(error?.message).split('\n')[0]
+
 // Reading a just-finished job's log: up to six tries, 30 s apart.
 const LOG_ATTEMPTS = 6
 const LOG_RETRY_MS = 30000
@@ -145,7 +152,7 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
         .artifacts.filter((a) => !a.expired && /^ota-bundle-(ios|android)$/.test(a.name))
         .map((a) => a.name)
     } catch (error) {
-      log(`the publish run's artifacts are unreadable: ${String(error.message).split('\n')[0]}`)
+      log(`the publish run's artifacts are unreadable: ${ghError(error)}`)
       return []
     }
     const out = []
@@ -155,7 +162,7 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
         gh('run', 'download', String(runId), '-R', repo, '-n', name, '-D', dir)
         out.push(...bundlesFromRecord(readFileSync(path.join(dir, 'ota-bundle.jsonl'), 'utf8')))
       } catch (error) {
-        log(`the ${name} record is unreadable: ${String(error.message).split('\n')[0]}`)
+        log(`the ${name} record is unreadable: ${ghError(error)}`)
       }
     }
     return out
@@ -170,7 +177,7 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
         return gh('api', `repos/${repo}/actions/jobs/${jobId}/logs`)
       } catch (error) {
         if (attempt >= LOG_ATTEMPTS) {
-          log(`the log of job ${jobId} is still unreadable after ${attempt} tries: bundle ids unknown`)
+          log(`the log of job ${jobId} is still unreadable after ${attempt} tries (${ghError(error)}): bundle ids unknown`)
           return ''
         }
         await sleep(LOG_RETRY_MS)
@@ -179,13 +186,22 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
   }
   // The structured record first (ota-publish.yml's ota-bundle-<platform> artifact, from ota-deploy), so the ids don't
   // depend on a log's timing or wording. The log only for a platform with no record (a run from before the record).
+  // Where each published platform's id came from (record, log or none), said rather than inferred from whether ids
+  // appeared: a record read is what proves the artifact path works under the workflow's token.
   const recorded = readBundleRecords(publishRun)
   const bundles = [...recorded]
+  const sources = {}
   for (const j of published) {
-    if (recorded.some((b) => b.platform === j.platform)) continue
+    if (recorded.some((b) => b.platform === j.platform)) {
+      sources[j.platform] = 'record'
+      continue
+    }
     log(`no bundle record for ${j.platform}: reading the publish log`)
-    bundles.push(...bundlesFromLog(await readLog(j.id)).filter((b) => b.platform === j.platform))
+    const fromLog = bundlesFromLog(await readLog(j.id)).filter((b) => b.platform === j.platform)
+    bundles.push(...fromLog)
+    sources[j.platform] = fromLog.length ? 'log' : 'none'
   }
+  log(`bundle id sources: ${Object.entries(sources).map(([p, s]) => `${p} ${s}`).join(', ')}`)
   let screens = []
   let since
   try {
@@ -224,12 +240,12 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
   const builds = await dispatchAndWait('test-builds.yml', ['platform=both', 'push=off'], { sha: run.head_sha })
   if (builds.conclusion !== 'success') {
     log(`Test builds ${builds.id} ended ${builds.conclusion}: no smoke`)
-    return { ...base, bundles, screens, since, verdict: 'builds-red', testBuilds: builds.id }
+    return { ...base, bundles, sources, screens, since, verdict: 'builds-red', testBuilds: builds.id }
   }
   const smoke = await dispatchAndWait('gate-smoke.yml', [`run-id=${builds.id}`, 'platform=both'], { title: `Test builds ${builds.id}` })
   const verdict = smokeVerdict(api(`repos/${repo}/actions/runs/${smoke.id}/jobs?per_page=100`).jobs, base.platforms)
   log(`gate-smoke ${smoke.id}: ${verdict.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}`)
-  return { ...base, bundles, screens, since, verdict: verdict.green ? 'green' : 'smoke-red', testBuilds: builds.id, gateSmoke: smoke.id, rows: verdict.rows }
+  return { ...base, bundles, sources, screens, since, verdict: verdict.green ? 'green' : 'smoke-red', testBuilds: builds.id, gateSmoke: smoke.id, rows: verdict.rows }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -243,14 +259,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       test_builds: r.testBuilds ?? '', gate_smoke: r.gateSmoke ?? '', screens: JSON.stringify(r.screens ?? []),
     }
     // The screen check's handoff (the owner's pipeline: a quick simulator check of each changed screen after release).
-    writeFileSync('post-release-handoff.json', JSON.stringify({ sha: r.sha, ref: r.ref, bundles: r.bundles, since: r.since, screens: r.screens ?? [], verdict: r.verdict, testBuilds: r.testBuilds, gateSmoke: r.gateSmoke }, null, 2))
+    writeFileSync('post-release-handoff.json', JSON.stringify({ sha: r.sha, ref: r.ref, bundles: r.bundles, sources: r.sources ?? {}, since: r.since, screens: r.screens ?? [], verdict: r.verdict, testBuilds: r.testBuilds, gateSmoke: r.gateSmoke }, null, 2))
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(out).map(([k, v]) => `${k}=${v}\n`).join(''))
     if (process.env.GITHUB_STEP_SUMMARY) {
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
         `### Post-release smoke: ${r.verdict}`, '',
         `- released: ${r.ref} at ${r.sha}`,
-        ...r.bundles.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel})`),
-        ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (its log was unreadable)`),
+        ...r.bundles.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel}, from its ${r.sources?.[b.platform] ?? 'unknown source'})`),
+        ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (no record, and its log was unreadable)`),
         r.testBuilds ? `- Test builds run ${r.testBuilds}` : '', r.gateSmoke ? `- gate-smoke run ${r.gateSmoke}` : '',
         ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`), '',
         `#### Changed screens since ${r.since ?? 'unknown'} (for the screen check)`, '',
