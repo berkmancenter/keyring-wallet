@@ -27,7 +27,8 @@ import type { MyName } from '../useMyName'
 import { roomHandle } from './RoomRow'
 import { isComingSoon, RoomFeatureCard } from './RoomFeatureCard'
 import { roomsStatusText } from './roomsStatusText'
-import { accessText, identityText, memberText } from './roomWords'
+import { useMemberWords } from './memberWords'
+import { accessText, identityText } from './roomWords'
 
 /** A member's role in words, from the most a member's rights allow. */
 export const roleText = (t: TFunction, verbs: RoomVerb[]): string => {
@@ -61,6 +62,7 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({
   onOpenIdentity,
 }) => {
   const { t } = useTranslation()
+  const memberWords = useMemberWords()
   const { ColorPalette } = useTheme()
   const statusWords = roomsStatusText(t, status, 'listCommunityMembers')
   const [listing, setListing] = useState<Listing>({ kind: 'reading' })
@@ -176,7 +178,7 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({
         </ThemedText>
         {listing.members.map((member) => {
           const you = member.identity.did === room.actingAs.did
-          const words = you ? (me?.name ?? (t('Rooms.You') as string)) : memberText(t, member.identity)
+          const words = you ? (me?.name ?? (t('Rooms.You') as string)) : memberWords(member.identity)
           return (
             <Pressable
               key={member.identity.did}

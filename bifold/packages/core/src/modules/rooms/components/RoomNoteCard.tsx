@@ -20,7 +20,7 @@ import type { RoomFile } from '../types'
 
 import { RoomFileChip } from './RoomFileChip'
 import { roomHandle } from './RoomRow'
-import { memberText } from './roomWords'
+import { useMemberWords } from './memberWords'
 
 export const RoomNoteCard: React.FC<{
   note: RoomPost
@@ -29,6 +29,7 @@ export const RoomNoteCard: React.FC<{
   onEdit?: (note: RoomPost) => void
 }> = ({ note, onOpenFile, onEdit }) => {
   const { t } = useTranslation()
+  const memberWords = useMemberWords()
   const { ColorPalette } = useTheme()
   const muted = ColorPalette.grayscale.mediumGrey
   const styles = StyleSheet.create({
@@ -45,7 +46,7 @@ export const RoomNoteCard: React.FC<{
     muted: { color: muted },
     quiet: { color: muted, fontStyle: 'italic' },
   })
-  const author = note.author ? (note.mine ? (t('Rooms.You') as string) : memberText(t, note.author)) : undefined
+  const author = note.author ? (note.mine ? (t('Rooms.You') as string) : memberWords(note.author)) : undefined
   const who = author
     ? note.byAgent
       ? (t('Rooms.NoteByAgentFor', { who: author, interpolation: { escapeValue: false } }) as string)

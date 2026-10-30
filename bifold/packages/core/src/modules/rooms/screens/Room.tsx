@@ -46,6 +46,7 @@ import { type NoteEditorTarget, RoomNoteEditor } from '../components/RoomNoteEdi
 import { RoomFilesTab } from '../components/RoomFilesTab'
 import { RoomHeader } from '../components/RoomHeader'
 import { RoomIdentitySheet } from '../components/RoomIdentitySheet'
+import { PetnamesProvider } from '../components/memberWords'
 import { RoomMembersTab } from '../components/RoomMembersTab'
 import { RoomNotesTab } from '../components/RoomNotesTab'
 import { RoomPostBubble } from '../components/RoomPostBubble'
@@ -56,6 +57,7 @@ import { toInertText } from '../inertText'
 import { isNote, type RoomPost } from '../roomPosts'
 import type { Identity, RoomFile } from '../types'
 import { useMyName } from '../useMyName'
+import { usePetnames } from '../usePetname'
 import { useInViewAndActive } from '../useInViewAndActive'
 import { useRoom } from '../useRoom'
 import { POSTS_PAGE, useRoomPosts } from '../useRoomPosts'
@@ -136,7 +138,9 @@ const Room: React.FC = () => {
   const [noteEditor, setNoteEditor] = useState<NoteEditorTarget>()
   // Whose sheet is open: the member's own, from the composer, or another member's, from their name.
   const [sheetFor, setSheetFor] = useState<Identity>()
-  const me = useMyName()
+  const me = useMyName(room?.communityDid)
+  // The member's own names for the community's members, read once for every label on this screen.
+  const petnames = usePetnames(room?.communityDid)
   const { reload } = state
   // The library is read again each time it is shown, so a file just posted from the chat is in it.
   const showTab = (next: RoomTab) => {
@@ -253,172 +257,176 @@ const Room: React.FC = () => {
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomScreen')}>
-      <SampleDataBanner service={service} />
-      <RoomHeader room={room} />
-      {feed.check?.verdict === 'conflict' ? (
-        <View style={styles.warn} accessibilityRole="alert" testID={testIdWithKey('RoomHostConflict')}>
-          <Icon name="alert-outline" size={22} color={ColorPalette.notification.warnText} />
-          <ThemedText style={styles.warnText}>{t('Rooms.HostConflict')}</ThemedText>
-        </View>
-      ) : null}
-      <RoomTabs tabs={['chat', 'files', 'notes', 'members']} selected={tab} onSelect={showTab} />
-      {tab === 'members' ? (
-        <RoomMembersTab
-          me={me}
-          onOpenIdentity={setSheetFor}
-          service={service}
-          room={room}
-          status={roomCapabilities.listCommunityMembers}
-          onLeave={
-            room.communityDid
-              ? () => navigation.navigate(Screens.VtiCommunity, { communityDid: room.communityDid })
-              : undefined
-          }
-        />
-      ) : null}
-      {tab === 'notes' ? (
-        <RoomNotesTab
-          notes={notes}
-          feed={feed}
-          unavailable={unavailable}
-          onOpenFile={canOpenFiles ? setOpenedFile : undefined}
-          onNewNote={canWriteNotes ? () => setNoteEditor({ kind: 'new' }) : undefined}
-          onEditNote={canWriteNotes ? (note) => setNoteEditor({ kind: 'edit', note }) : undefined}
-          cannotWrite={notesNotYet ?? cannotPost}
-          writeStatus={roomCapabilities.write}
-        />
-      ) : null}
-      {tab === 'files' ? (
-        <RoomFilesTab
-          files={state.files}
-          failed={state.filesFailed}
-          status={roomCapabilities.listFiles}
-          refreshing={state.refreshing}
-          onRefresh={reload}
-          onOpenFile={canOpenFiles ? setOpenedFile : undefined}
-          onAddFile={
-            unavailable || cannotPost || !canAttach
-              ? undefined
-              : () => {
-                  setTab('chat')
-                  setAttachRequest((n) => n + 1)
-                }
-          }
-        />
-      ) : null}
-      {/* The chat stays mounted on the other tabs, hidden, so its draft and a post on its way are kept.
-          keyboard-controller's view, which lifts on Android too: the app draws under the system bars there. */}
-      <KeyboardAvoidingView
-        ref={keyboard.ref}
-        onLayout={keyboard.onLayout}
-        style={tab === 'chat' ? { flex: 1 } : { display: 'none' }}
-        behavior="padding"
-        keyboardVerticalOffset={keyboard.offset}
-      >
-        <FlatList
-          ref={list}
-          testID={testIdWithKey('RoomPosts')}
-          data={shown}
-          keyExtractor={(item) => item.key}
-          // Newest at the bottom, as the person-to-person chat (gifted-chat's list is inverted too). Only with posts:
-          // an empty list's message reads from the top.
-          inverted={shown.length > 0}
-          // A page is small (POSTS_PAGE posts and their day pills): draw it whole, so "Load older" sits above it.
-          initialNumToRender={POSTS_PAGE * 2}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) =>
-            item.kind === 'day' ? (
-              <DayPill date={item.date} />
-            ) : (
-              <RoomPostBubble
-                post={item.post}
-                onRetry={item.post.delivery === 'failed' ? () => outbox.retry(item.post.key) : undefined}
-                onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
-                onOpenFile={canOpenFiles ? setOpenedFile : undefined}
-                onOpenAuthor={setSheetFor}
-              />
-            )
-          }
-          ListEmptyComponent={empty}
-          // Only while there are no posts, where it is the way to try again. Drawn bottom up, a list would put the
-          // control at the bottom; with posts, the room is read again every few seconds while it is in view.
-          refreshControl={
-            unavailable || shown.length > 0 ? undefined : (
-              <RefreshControl
-                refreshing={feed.refreshing}
-                onRefresh={feed.refresh}
-                tintColor={ColorPalette.brand.primary}
-              />
-            )
-          }
-          // The header of a list drawn bottom up is at its bottom, under the newest post: where a failed poll is said.
-          ListHeaderComponent={
-            feed.pollFailed && shown.length > 0 ? (
-              <View style={styles.pollFailed} testID={testIdWithKey('RoomPollFailed')}>
-                <ThemedText style={styles.muted}>{t('Rooms.RefreshFailed')}</ThemedText>
-                <ThemedText style={styles.muted}>·</ThemedText>
-                <Pressable
-                  onPress={feed.pollNow}
-                  accessibilityRole="button"
-                  hitSlop={12}
-                  testID={testIdWithKey('RoomPollTryAgain')}
-                >
-                  <ThemedText style={styles.tryAgain}>{t('Rooms.TryAgain')}</ThemedText>
-                </Pressable>
-              </View>
-            ) : null
-          }
-          // The footer of a list drawn bottom up is at its top, above the oldest post shown.
-          ListFooterComponent={
-            feed.hasOlder ? (
-              <Button
-                title={t('Rooms.LoadOlder')}
-                buttonType={ButtonType.Secondary}
-                onPress={feed.loadOlder}
-                disabled={feed.loadingOlder}
-                testID={testIdWithKey('RoomLoadOlder')}
-              />
-            ) : feed.incomplete ? (
-              <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsIncomplete')}>
-                {t('Rooms.NotesIncomplete')}
-              </ThemedText>
-            ) : null
-          }
-        />
-        {unavailable ? null : isComingSoon(roomCapabilities.write) ? (
-          <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
-        ) : (
-          <RoomComposer
-            onSend={send}
-            unavailable={cannotPost}
-            postingAs={
-              me.name
-                ? (t('Rooms.PostingAs', { who: me.name, interpolation: { escapeValue: false } }) as string)
-                : (t('Rooms.PostingAsAddName') as string)
+    <PetnamesProvider names={petnames}>
+      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomScreen')}>
+        <SampleDataBanner service={service} />
+        <RoomHeader room={room} />
+        {feed.check?.verdict === 'conflict' ? (
+          <View style={styles.warn} accessibilityRole="alert" testID={testIdWithKey('RoomHostConflict')}>
+            <Icon name="alert-outline" size={22} color={ColorPalette.notification.warnText} />
+            <ThemedText style={styles.warnText}>{t('Rooms.HostConflict')}</ThemedText>
+          </View>
+        ) : null}
+        <RoomTabs tabs={['chat', 'files', 'notes', 'members']} selected={tab} onSelect={showTab} />
+        {tab === 'members' ? (
+          <RoomMembersTab
+            me={me}
+            onOpenIdentity={setSheetFor}
+            service={service}
+            room={room}
+            status={roomCapabilities.listCommunityMembers}
+            onLeave={
+              room.communityDid
+                ? () => navigation.navigate(Screens.VtiCommunity, { communityDid: room.communityDid })
+                : undefined
             }
-            onPressPostingAs={() => setSheetFor(room.actingAs)}
-            canAttach={canAttach}
-            attachRequest={attachRequest}
           />
-        )}
-      </KeyboardAvoidingView>
-      <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />
-      <RoomIdentitySheet
-        identity={sheetFor}
-        mine={sheetFor?.did === room.actingAs.did}
-        me={me}
-        onClose={() => setSheetFor(undefined)}
-        onOpenProfile={(profileId) => navigation.navigate(Screens.EditRCard, profileId ? { profileId } : {})}
-      />
-      <RoomNoteEditor
-        service={service}
-        roomId={roomId}
-        target={noteEditor}
-        onClose={() => setNoteEditor(undefined)}
-        onSaved={feed.refresh}
-      />
-    </SafeAreaView>
+        ) : null}
+        {tab === 'notes' ? (
+          <RoomNotesTab
+            notes={notes}
+            feed={feed}
+            unavailable={unavailable}
+            onOpenFile={canOpenFiles ? setOpenedFile : undefined}
+            onNewNote={canWriteNotes ? () => setNoteEditor({ kind: 'new' }) : undefined}
+            onEditNote={canWriteNotes ? (note) => setNoteEditor({ kind: 'edit', note }) : undefined}
+            cannotWrite={notesNotYet ?? cannotPost}
+            writeStatus={roomCapabilities.write}
+          />
+        ) : null}
+        {tab === 'files' ? (
+          <RoomFilesTab
+            files={state.files}
+            failed={state.filesFailed}
+            status={roomCapabilities.listFiles}
+            refreshing={state.refreshing}
+            onRefresh={reload}
+            onOpenFile={canOpenFiles ? setOpenedFile : undefined}
+            onAddFile={
+              unavailable || cannotPost || !canAttach
+                ? undefined
+                : () => {
+                    setTab('chat')
+                    setAttachRequest((n) => n + 1)
+                  }
+            }
+          />
+        ) : null}
+        {/* The chat stays mounted on the other tabs, hidden, so its draft and a post on its way are kept.
+          keyboard-controller's view, which lifts on Android too: the app draws under the system bars there. */}
+        <KeyboardAvoidingView
+          ref={keyboard.ref}
+          onLayout={keyboard.onLayout}
+          style={tab === 'chat' ? { flex: 1 } : { display: 'none' }}
+          behavior="padding"
+          keyboardVerticalOffset={keyboard.offset}
+        >
+          <FlatList
+            ref={list}
+            testID={testIdWithKey('RoomPosts')}
+            data={shown}
+            keyExtractor={(item) => item.key}
+            // Newest at the bottom, as the person-to-person chat (gifted-chat's list is inverted too). Only with posts:
+            // an empty list's message reads from the top.
+            inverted={shown.length > 0}
+            // A page is small (POSTS_PAGE posts and their day pills): draw it whole, so "Load older" sits above it.
+            initialNumToRender={POSTS_PAGE * 2}
+            contentContainerStyle={styles.list}
+            renderItem={({ item }) =>
+              item.kind === 'day' ? (
+                <DayPill date={item.date} />
+              ) : (
+                <RoomPostBubble
+                  post={item.post}
+                  onRetry={item.post.delivery === 'failed' ? () => outbox.retry(item.post.key) : undefined}
+                  onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
+                  onOpenFile={canOpenFiles ? setOpenedFile : undefined}
+                  onOpenAuthor={setSheetFor}
+                />
+              )
+            }
+            ListEmptyComponent={empty}
+            // Only while there are no posts, where it is the way to try again. Drawn bottom up, a list would put the
+            // control at the bottom; with posts, the room is read again every few seconds while it is in view.
+            refreshControl={
+              unavailable || shown.length > 0 ? undefined : (
+                <RefreshControl
+                  refreshing={feed.refreshing}
+                  onRefresh={feed.refresh}
+                  tintColor={ColorPalette.brand.primary}
+                />
+              )
+            }
+            // The header of a list drawn bottom up is at its bottom, under the newest post: where a failed poll is said.
+            ListHeaderComponent={
+              feed.pollFailed && shown.length > 0 ? (
+                <View style={styles.pollFailed} testID={testIdWithKey('RoomPollFailed')}>
+                  <ThemedText style={styles.muted}>{t('Rooms.RefreshFailed')}</ThemedText>
+                  <ThemedText style={styles.muted}>·</ThemedText>
+                  <Pressable
+                    onPress={feed.pollNow}
+                    accessibilityRole="button"
+                    hitSlop={12}
+                    testID={testIdWithKey('RoomPollTryAgain')}
+                  >
+                    <ThemedText style={styles.tryAgain}>{t('Rooms.TryAgain')}</ThemedText>
+                  </Pressable>
+                </View>
+              ) : null
+            }
+            // The footer of a list drawn bottom up is at its top, above the oldest post shown.
+            ListFooterComponent={
+              feed.hasOlder ? (
+                <Button
+                  title={t('Rooms.LoadOlder')}
+                  buttonType={ButtonType.Secondary}
+                  onPress={feed.loadOlder}
+                  disabled={feed.loadingOlder}
+                  testID={testIdWithKey('RoomLoadOlder')}
+                />
+              ) : feed.incomplete ? (
+                <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsIncomplete')}>
+                  {t('Rooms.NotesIncomplete')}
+                </ThemedText>
+              ) : null
+            }
+          />
+          {unavailable ? null : isComingSoon(roomCapabilities.write) ? (
+            <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
+          ) : (
+            <RoomComposer
+              onSend={send}
+              unavailable={cannotPost}
+              postingAs={
+                me.name
+                  ? (t('Rooms.PostingAs', { who: me.name, interpolation: { escapeValue: false } }) as string)
+                  : (t('Rooms.PostingAsAddName') as string)
+              }
+              onPressPostingAs={() => setSheetFor(room.actingAs)}
+              canAttach={canAttach}
+              attachRequest={attachRequest}
+            />
+          )}
+        </KeyboardAvoidingView>
+        <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />
+        <RoomIdentitySheet
+          identity={sheetFor}
+          communityDid={room.communityDid}
+          mine={sheetFor?.did === room.actingAs.did}
+          me={me}
+          onClose={() => setSheetFor(undefined)}
+          onOpenProfile={(profileId) => navigation.navigate(Screens.EditRCard, profileId ? { profileId } : {})}
+        />
+        <RoomNoteEditor
+          service={service}
+          roomId={roomId}
+          communityDid={room.communityDid}
+          target={noteEditor}
+          onClose={() => setNoteEditor(undefined)}
+          onSaved={feed.refresh}
+        />
+      </SafeAreaView>
+    </PetnamesProvider>
   )
 }
 

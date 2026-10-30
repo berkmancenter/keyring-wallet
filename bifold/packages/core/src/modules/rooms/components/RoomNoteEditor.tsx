@@ -32,6 +32,8 @@ export type NoteEditorTarget = { kind: 'new' } | { kind: 'edit'; note: RoomPost 
 export interface RoomNoteEditorProps {
   service: RoomsService | undefined
   roomId: string
+  /** The room's community, whose profile names the member in the check; none names the active profile. */
+  communityDid?: string
   /** What to write; none closes the editor. */
   target?: NoteEditorTarget
   onClose: () => void
@@ -39,13 +41,27 @@ export interface RoomNoteEditorProps {
   onSaved: () => void
 }
 
-export const RoomNoteEditor: React.FC<RoomNoteEditorProps> = ({ service, roomId, target, onClose, onSaved }) => (
+export const RoomNoteEditor: React.FC<RoomNoteEditorProps> = ({
+  service,
+  roomId,
+  communityDid,
+  target,
+  onClose,
+  onSaved,
+}) => (
   // A modal is its own window, outside the app's safe-area provider: without one of its own the editor's SafeAreaView
   // reads no insets and its top bar sits under the status bar, out of reach.
   <SafeAreaModal visible={!!target} animationType="slide" onRequestClose={onClose}>
     {/* Mounted afresh for each note, so words and a new note's id never carry over to the next. */}
     {target ? (
-      <EditorBody service={service} roomId={roomId} target={target} onClose={onClose} onSaved={onSaved} />
+      <EditorBody
+        service={service}
+        roomId={roomId}
+        communityDid={communityDid}
+        target={target}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
     ) : null}
   </SafeAreaModal>
 )
@@ -53,6 +69,7 @@ export const RoomNoteEditor: React.FC<RoomNoteEditorProps> = ({ service, roomId,
 const EditorBody: React.FC<Omit<RoomNoteEditorProps, 'target'> & { target: NoteEditorTarget }> = ({
   service,
   roomId,
+  communityDid,
   target,
   onClose,
   onSaved,
@@ -63,7 +80,7 @@ const EditorBody: React.FC<Omit<RoomNoteEditorProps, 'target'> & { target: NoteE
   const [title, setTitle] = useState(editing?.title ? String(editing.title) : '')
   const [body, setBody] = useState(editing ? String(editing.text) : '')
   const { state, review, save, edit } = useRoomNoteWrite(service, roomId, editing?.key)
-  const me = useMyName()
+  const me = useMyName(communityDid)
 
   // Once, when the note is written: read the room again and close.
   const done = useRef({ onSaved, onClose })

@@ -4,14 +4,15 @@
  * never as a label: the room's words for a person are a name, "You", or "Member …saddle".
  *
  * The member's own name is their Keyring profile's, shown on this phone only: the sheet says that the room's
- * members see the identity, not the name. Another member's name is not known yet, so the sheet says that plainly.
+ * members see the identity, not the name. Another member can be given a name of the member's own ("Name them"), kept
+ * on this phone and always shown as theirs; a name can be given or changed here, not left blank.
  *
  * @module rooms/components/RoomIdentitySheet
  */
 import Clipboard from '@react-native-clipboard/clipboard'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Platform, Pressable, StyleSheet, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -21,7 +22,9 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import type { Identity } from '../types'
+import { PETNAME_MAX } from '../petnames'
 import type { MyName } from '../useMyName'
+import { usePetname } from '../usePetname'
 
 import { memberText } from './roomWords'
 
@@ -39,6 +42,8 @@ export const initialsOf = (name?: string): string => {
 export interface RoomIdentitySheetProps {
   /** Whose sheet; none closes it. */
   identity?: Identity
+  /** The room's community: another member's name of the member's own is kept for it. None offers no naming. */
+  communityDid?: string
   /** Whether it is the member's own identity in this room. */
   mine: boolean
   me: MyName
@@ -47,16 +52,31 @@ export interface RoomIdentitySheetProps {
   onOpenProfile: (profileId?: string) => void
 }
 
-export const RoomIdentitySheet: React.FC<RoomIdentitySheetProps> = ({ identity, mine, me, onClose, onOpenProfile }) => (
+export const RoomIdentitySheet: React.FC<RoomIdentitySheetProps> = ({
+  identity,
+  communityDid,
+  mine,
+  me,
+  onClose,
+  onOpenProfile,
+}) => (
   <SafeAreaModal visible={!!identity} transparent animationType="slide" onRequestClose={onClose}>
     {identity ? (
-      <SheetBody identity={identity} mine={mine} me={me} onClose={onClose} onOpenProfile={onOpenProfile} />
+      <SheetBody
+        identity={identity}
+        communityDid={communityDid}
+        mine={mine}
+        me={me}
+        onClose={onClose}
+        onOpenProfile={onOpenProfile}
+      />
     ) : null}
   </SafeAreaModal>
 )
 
 const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity: Identity }> = ({
   identity,
+  communityDid,
   mine,
   me,
   onClose,
@@ -65,15 +85,37 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const [copied, setCopied] = useState(false)
-  const name = mine ? me.name : identity.identityWords
-  const title = mine ? (me.name ?? (t('Rooms.You') as string)) : memberText(t, identity)
+  // Another member's name of the member's own: given or changed here, never left blank.
+  const naming = !mine && !!communityDid
+  const petname = usePetname(naming ? communityDid : undefined, naming ? identity.did : undefined)
+  const [draft, setDraft] = useState<string>()
+  const [saving, setSaving] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
+  const name = mine ? me.name : (petname.name ?? identity.identityWords)
+  const title = mine ? (me.name ?? (t('Rooms.You') as string)) : (petname.name ?? memberText(t, identity))
   const source = mine
     ? me.name
       ? t('Rooms.NameFromProfile')
       : t('Rooms.NameNotSet')
-    : identity.identityWords
-      ? t('Rooms.NameFromCommunity')
-      : t('Rooms.NameNotKnown')
+    : petname.name
+      ? t('Rooms.PetnameSource')
+      : identity.identityWords
+        ? t('Rooms.NameFromCommunity')
+        : t('Rooms.NameNotKnown')
+  const canSave = !!draft?.trim() && !saving
+  const save = async () => {
+    if (!draft?.trim()) return
+    setSaving(true)
+    setSaveFailed(false)
+    try {
+      await petname.set(draft)
+      setDraft(undefined)
+    } catch {
+      setSaveFailed(true)
+    } finally {
+      setSaving(false)
+    }
+  }
   const styles = StyleSheet.create({
     backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)' },
     sheet: {
@@ -105,9 +147,19 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
       fontSize: 13,
     },
     copy: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, alignSelf: 'flex-start' },
+    input: {
+      ...TextTheme.normal,
+      borderWidth: 1,
+      borderRadius: 8,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    error: { color: ColorPalette.semantic.error },
   })
   return (
-    <View style={{ flex: 1 }}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable
         style={styles.backdrop}
         onPress={onClose}
@@ -126,6 +178,11 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
             <ThemedText variant="headingFour" accessibilityRole="header" testID={testIdWithKey('RoomIdentityName')}>
               {title}
             </ThemedText>
+            {!mine && petname.name ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey('RoomIdentityStandIn')}>
+                {memberText(t, identity)}
+              </ThemedText>
+            ) : null}
             <ThemedText style={styles.muted} testID={testIdWithKey('RoomIdentitySource')}>
               {source}
             </ThemedText>
@@ -158,6 +215,50 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
             </ThemedText>
           ) : null}
         </View>
+        {naming && petname.loaded ? (
+          draft === undefined ? (
+            <Button
+              title={petname.name ? t('Rooms.Rename') : t('Rooms.NameThem')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => setDraft(petname.name ?? '')}
+              testID={testIdWithKey(petname.name ? 'RoomIdentityRename' : 'RoomIdentityNameThem')}
+            />
+          ) : (
+            <View style={{ gap: 10 }}>
+              <TextInput
+                style={styles.input}
+                value={draft}
+                onChangeText={setDraft}
+                maxLength={PETNAME_MAX}
+                autoFocus
+                placeholder={t('Rooms.PetnamePlaceholder') as string}
+                placeholderTextColor={ColorPalette.grayscale.mediumGrey}
+                accessibilityLabel={t('Rooms.NameThem') as string}
+                returnKeyType="done"
+                onSubmitEditing={canSave ? save : undefined}
+                testID={testIdWithKey('RoomIdentityNameInput')}
+              />
+              {saveFailed ? (
+                <ThemedText style={styles.error} accessibilityLiveRegion="polite">
+                  {t('Rooms.PetnameSaveFailed')}
+                </ThemedText>
+              ) : null}
+              <Button
+                title={t('Global.Save')}
+                buttonType={ButtonType.Primary}
+                onPress={save}
+                disabled={!canSave}
+                testID={testIdWithKey('RoomIdentityNameSave')}
+              />
+              <Button
+                title={t('Global.Cancel')}
+                buttonType={ButtonType.Secondary}
+                onPress={() => setDraft(undefined)}
+                testID={testIdWithKey('RoomIdentityNameCancel')}
+              />
+            </View>
+          )
+        ) : null}
         {mine ? (
           <Button
             title={me.name ? t('Rooms.OpenProfile') : t('Rooms.AddYourName')}
@@ -176,7 +277,7 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
           testID={testIdWithKey('RoomIdentityClose')}
         />
       </SafeAreaView>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 

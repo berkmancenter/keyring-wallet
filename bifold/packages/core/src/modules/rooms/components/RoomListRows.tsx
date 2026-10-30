@@ -18,9 +18,10 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { localDate } from '../../trust-tasks/screens/localTime'
 import { testIdWithKey } from '../../../utils/testable'
-import type { NoteSummary, RoomFile } from '../types'
+import type { Identity, NoteSummary, RoomFile } from '../types'
 
 import { fileIcon, fileSizeText, fileTypeText } from './fileWords'
+import { useMemberWords } from './memberWords'
 import { roomHandle } from './RoomRow'
 import { memberText } from './roomWords'
 
@@ -36,18 +37,22 @@ const useRowStyles = () => {
 export const noteTitle = (t: TFunction, note: Pick<NoteSummary, 'title'>): string =>
   note.title ?? (t('Rooms.NoteEncrypted') as string)
 
-/** Who wrote it and when, and its curation state, in one line. */
-export const noteLine = (t: TFunction, note: NoteSummary): string =>
+/** Who wrote it and when, and its curation state, in one line; `words` names the author (see useMemberWords). */
+export const noteLine = (
+  t: TFunction,
+  note: NoteSummary,
+  words: (identity: Identity) => string = (identity) => memberText(t, identity)
+): string =>
   [
     note.status === 'retracted' ? (t('Rooms.NoteRetracted') as string) : undefined,
     note.status === 'deprecated' ? (t('Rooms.NoteOutdated') as string) : undefined,
     note.author
       ? note.byAgent
         ? (t('Rooms.NoteByAgentFor', {
-            who: memberText(t, note.author),
+            who: words(note.author),
             interpolation: { escapeValue: false },
           }) as string)
-        : memberText(t, note.author)
+        : words(note.author)
       : undefined,
     note.updatedAt ? localDate(note.updatedAt) : undefined,
   ]
@@ -88,14 +93,19 @@ export const NoteRow: React.FC<{ note: NoteSummary }> = ({ note }) => {
 }
 
 /** The type and size the sharer gave, in the app's words ("PDF · 84 KB"), then who shared it and when. */
-export const fileLines = (t: TFunction, file: RoomFile, language: string): [string, string] => [
+export const fileLines = (
+  t: TFunction,
+  file: RoomFile,
+  language: string,
+  words: (identity: Identity) => string = (identity) => memberText(t, identity)
+): [string, string] => [
   [fileTypeText(file), file.size !== undefined ? fileSizeText(t, file.size, language) : undefined]
     .filter(Boolean)
     .join(' · '),
   [
     file.sharedBy
       ? (t('Rooms.FileSharedBy', {
-          who: memberText(t, file.sharedBy),
+          who: words(file.sharedBy),
           interpolation: { escapeValue: false },
         }) as string)
       : undefined,
@@ -110,7 +120,8 @@ export const FileRow: React.FC<{ file: RoomFile; onPress?: (file: RoomFile) => v
   const { t, i18n } = useTranslation()
   const { ColorPalette } = useTheme()
   const styles = useRowStyles()
-  const [facts, shared] = fileLines(t, file, i18n.language)
+  const memberWords = useMemberWords()
+  const [facts, shared] = fileLines(t, file, i18n.language, memberWords)
   const label = [String(file.name), facts, shared].filter(Boolean).join(', ')
   const testID = testIdWithKey(`RoomFileRow_${roomHandle(file.fileId)}`)
   const content = (

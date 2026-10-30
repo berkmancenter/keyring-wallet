@@ -20,8 +20,19 @@ import type { MyName } from '../useMyName'
 
 let mockService: RoomsService | undefined
 let mockMe: MyName = {}
+let mockNames = new Map<string, string>()
+const mockSetPetname = jest.fn(async (_name: string) => undefined)
 jest.mock('../useRoomsService', () => ({ useRoomsService: () => mockService }))
 jest.mock('../useMyName', () => ({ useMyName: () => mockMe }))
+// The member's names for others, as a2's store gives them: one for the sheet, all of them for the labels.
+jest.mock('../usePetname', () => ({
+  usePetname: (communityDid?: string, memberDid?: string) => ({
+    name: communityDid && memberDid ? mockNames.get(memberDid) : undefined,
+    loaded: !!(communityDid && memberDid),
+    set: mockSetPetname,
+  }),
+  usePetnames: () => mockNames,
+}))
 jest.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 100 }))
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
@@ -98,6 +109,8 @@ const sheet = (tree: Tree) => within(tree.getByTestId(id('RoomIdentitySheet')))
 
 beforeEach(() => {
   mockMe = {}
+  mockNames = new Map()
+  mockSetPetname.mockClear()
   ;(Clipboard.setString as jest.Mock | undefined)?.mockClear?.()
 })
 
@@ -167,5 +180,41 @@ describe('names in a room, step 1', () => {
     expect(sheet(tree).getByText('Rooms.IdCopied')).toBeTruthy()
     await press(tree, 'RoomIdentityClose')
     expect(tree.queryByTestId(id('RoomIdentitySheet'))).toBeNull()
+  })
+
+  test('another member can be given a name of your own: never blank, saved as typed', async () => {
+    const tree = await show()
+    await press(tree, 'RoomPostAuthor')
+    await press(tree, 'RoomIdentityNameThem')
+    expect(tree.getByTestId(id('RoomIdentityNameSave'))).toBeDisabled()
+    await act(async () => {
+      fireEvent.changeText(tree.getByTestId(id('RoomIdentityNameInput')), '   ')
+    })
+    expect(tree.getByTestId(id('RoomIdentityNameSave'))).toBeDisabled()
+    await act(async () => {
+      fireEvent.changeText(tree.getByTestId(id('RoomIdentityNameInput')), 'River')
+    })
+    await press(tree, 'RoomIdentityNameSave')
+    expect(mockSetPetname).toHaveBeenCalledWith('River')
+    expect(tree.queryByTestId(id('RoomIdentityNameInput'))).toBeNull()
+  })
+
+  test('a name you gave is shown as yours: in the chat, and on their sheet beside "Member …saddle"', async () => {
+    mockNames = new Map([[THEM.did, 'River']])
+    const tree = await show()
+    expect(tree.getByTestId(id('RoomPostAuthor'))).toHaveTextContent('Rooms.PetnameLabel')
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).getByTestId(id('RoomIdentityName'))).toHaveTextContent('River')
+    expect(sheet(tree).getByTestId(id('RoomIdentityStandIn'))).toHaveTextContent('Rooms.MemberTail')
+    expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.PetnameSource')
+    expect(sheet(tree).getByTestId(id('RoomIdentityRename'))).toBeTruthy()
+  })
+
+  test('your own sheet offers your profile, never a name of your own for yourself', async () => {
+    mockMe = { name: 'Alberto L', profileId: 'p1' }
+    const tree = await show()
+    await press(tree, 'RoomComposerPostingAsButton')
+    expect(sheet(tree).queryByTestId(id('RoomIdentityNameThem'))).toBeNull()
+    expect(sheet(tree).getByTestId(id('RoomIdentityOpenProfile'))).toBeTruthy()
   })
 })

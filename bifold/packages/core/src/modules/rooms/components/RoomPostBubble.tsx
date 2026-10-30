@@ -20,7 +20,7 @@ import type { Identity, RoomFile } from '../types'
 
 import { RoomFileChip } from './RoomFileChip'
 import { roomHandle } from './RoomRow'
-import { memberText } from './roomWords'
+import { useMemberWords } from './memberWords'
 
 export const RoomPostBubble: React.FC<{
   post: RoomPost
@@ -32,6 +32,7 @@ export const RoomPostBubble: React.FC<{
   onOpenAuthor?: (author: Identity) => void
 }> = ({ post, onRetry, onCancel, onOpenFile, onOpenAuthor }) => {
   const { t } = useTranslation()
+  const memberWords = useMemberWords()
   const { ColorPalette } = useTheme()
   const words = useDateWords()
   const use24h = useUses24HourClock()
@@ -59,7 +60,7 @@ export const RoomPostBubble: React.FC<{
     quiet: { color: muted, fontStyle: 'italic' },
   })
   const by = post.author
-  const author = mine ? (t('Rooms.You') as string) : by ? memberText(t, by) : undefined
+  const author = mine ? (t('Rooms.You') as string) : by ? memberWords(by) : undefined
   const openAuthor = !mine && by && onOpenAuthor ? () => onOpenAuthor(by) : undefined
   const time = post.at ? timeLabel(post.at, words, use24h) : undefined
   const meta = (
