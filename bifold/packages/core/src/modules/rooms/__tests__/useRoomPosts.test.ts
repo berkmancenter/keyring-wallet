@@ -8,6 +8,7 @@ import { act, renderHook } from '@testing-library/react-native'
 import { AppState } from 'react-native'
 
 import { toInertText } from '../inertText'
+import { isChatPost, type RoomPost } from '../roomPosts'
 import type { Note, NoteList, NoteSummary, RoomsService } from '../types'
 import { useInViewAndActive } from '../useInViewAndActive'
 import {
@@ -500,5 +501,65 @@ describe('the first page', () => {
     await flush()
     expect(service.readNote).toHaveBeenCalledTimes(20)
     expect(result.current.posts).toHaveLength(20)
+  })
+})
+
+// 276.9: a reopened room drew 8 of its posts and stopped, with no read slow or failed. Its newest ten records held
+// notes, which the chat leaves out, so the page drew fewer than ten and filled the screen; the rest came only with a
+// scroll up. A chat's page counts chat posts.
+describe('a page counted in chat posts', () => {
+  /** A room of `count` records, n1 oldest; the ones in `notes` have a title (notes, which the chat leaves out). */
+  const roomOf = (count: number, notes: string[]) =>
+    roomWith(
+      Array.from({ length: count }, (_, i) =>
+        note(`n${i + 1}`, i + 1, notes.includes(`n${i + 1}`) ? { title: toInertText(`note n${i + 1}`) } : {})
+      )
+    )
+  const openCounting = async (service: RoomsService) => {
+    const hook = renderHook(() => useRoomPosts(service, ROOM, ME, true, false, isChatPost))
+    for (let i = 0; i < 6; i++) await flush()
+    return hook
+  }
+  const chat = (posts?: RoomPost[]) => (posts ?? []).filter(isChatPost)
+
+  test('notes among the newest records are read too, and the page holds ten chat posts', async () => {
+    const { service } = roomOf(14, ['n13', 'n11'])
+    const { result } = await openCounting(service)
+    expect(chat(result.current.posts)).toHaveLength(10)
+    expect(result.current.posts).toHaveLength(12)
+    expect(service.readNote).toHaveBeenCalledTimes(12)
+    expect(result.current.hasOlder).toBe(true)
+  })
+
+  test("a private room's note, known as one only once read, does not count either", async () => {
+    const { service } = roomOf(14, ['n13', 'n11'])
+    const list = service.listNotes.getMockImplementation()!
+    // Sealed: the listing does not carry the title, only the read record does.
+    service.listNotes.mockImplementation(async (...args: [string, { sinceVersion?: number }?]) => {
+      const listed = await list(...args)
+      return { ...listed, notes: listed.notes.map(({ title: _t, ...summary }: NoteSummary) => summary) }
+    })
+    const { result } = await openCounting(service)
+    expect(chat(result.current.posts)).toHaveLength(10)
+    expect(service.readNote).toHaveBeenCalledTimes(12)
+  })
+
+  test('"Load older" reads on to the next ten chat posts', async () => {
+    const { service } = roomOf(31, ['n30', 'n25', 'n18'])
+    const { result } = await openCounting(service)
+    expect(chat(result.current.posts)).toHaveLength(10)
+    await act(async () => result.current.loadOlder())
+    for (let i = 0; i < 6; i++) await flush()
+    expect(chat(result.current.posts)).toHaveLength(20)
+    expect(result.current.posts).toHaveLength(23)
+    expect(result.current.loadingOlder).toBe(false)
+  })
+
+  test('a room with fewer chat posts than a page reads every record once and stops', async () => {
+    const { service } = roomOf(5, ['n4', 'n2'])
+    const { result } = await openCounting(service)
+    expect(chat(result.current.posts)).toHaveLength(3)
+    expect(service.readNote).toHaveBeenCalledTimes(5)
+    expect(result.current.hasOlder).toBe(false)
   })
 })

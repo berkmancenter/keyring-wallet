@@ -205,6 +205,21 @@ describe('posts', () => {
     expect(tree.queryByText('hidden')).toBeNull()
   })
 
+  // 276.9: a reopened room drew 8 posts and stopped: notes among its newest records took places in the page.
+  test(`notes among the newest records leave the chat its ${POSTS_PAGE} posts, with no scroll`, async () => {
+    const at = (i: number) => new Date(Date.UTC(2026, 9, 26, 9, 0, 0) - i * 60_000).toISOString()
+    const records = Array.from({ length: POSTS_PAGE + 4 }, (_, i) =>
+      i === 1 || i === 4
+        ? post(`note${i}`, `note body ${i}`, { updatedAt: at(i), title: toInertText(`Note ${i}`) })
+        : post(`p${i}`, `chat ${i}`, { updatedAt: at(i) })
+    )
+    const tree = open(withPosts(records))
+    await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE))
+    const chat = records.filter((r) => !r.title).slice(0, POSTS_PAGE)
+    for (const r of chat) expect(tree.getByText(String(r.body))).toBeTruthy()
+    expect(tree.queryByText('note body 1')).toBeNull()
+  })
+
   test(`${POSTS_PAGE} at a time: scrolling up to the oldest post reads the next page, with the spinner and no button`, async () => {
     const many = Array.from({ length: POSTS_PAGE + 1 }, (_, i) =>
       post(`p${i}`, `post ${i}`, { updatedAt: new Date(Date.UTC(2026, 9, 26, 9, 0, 0) - i * 60_000).toISOString() })

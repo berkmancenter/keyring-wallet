@@ -51,7 +51,7 @@ import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import { toInertText } from '../inertText'
-import { isNote, type RoomPost } from '../roomPosts'
+import { isChatPost, type RoomPost } from '../roomPosts'
 import { openInMyAgent } from '../roomLinks'
 import type { Identity, RoomFile } from '../types'
 import { useMyName } from '../useMyName'
@@ -134,7 +134,8 @@ const Room: React.FC = () => {
   const { room, roomCapabilities } = state
   const canList = roomCapabilities?.listNotes.status === 'available'
   const inView = useInViewAndActive()
-  const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList, inView)
+  // The chat draws its posts and not the room's notes: a page is counted in chat posts.
+  const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList, inView, isChatPost)
   // On screen, a post that fails is marked in the list; away from it, a notice says so (useRoomNotices).
   const outbox = useRoomSend(service, roomId, feed.refresh, {
     onScreen: inView,
@@ -257,7 +258,7 @@ const Room: React.FC = () => {
   const canAttach =
     roomCapabilities.listFiles.status === 'available' && roomCapabilities.openFile.status === 'available'
   // Titled records and removed ones are the room's notes, on their own screen; the chat shows the rest.
-  const chatPosts = feed.posts?.filter((p) => !isNote(p))
+  const chatPosts = feed.posts?.filter(isChatPost)
   const items = chatPosts || pendingPosts.length ? withDayPills([...pendingPosts, ...(chatPosts ?? [])]) : []
   const shown = unavailable ? [] : items
 

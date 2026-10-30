@@ -116,10 +116,19 @@ export function useRoomPosts(
   roomId: string,
   actingAs: Identity | undefined,
   enabled: boolean,
-  live = false
+  live = false,
+  /**
+   * The posts a page is counted in, when the screen draws only some of them: a room's chat leaves its notes out, so
+   * its page is POSTS_PAGE chat posts, and the notes among them are read too. Every post counts when absent.
+   */
+  counts?: (post: RoomPost) => boolean
 ): RoomPosts {
   const [listing, setListing] = useState<Listing>()
+  // Records read and drawn: `wanted` counted posts, and as many more records as it takes to reach them.
   const [shown, setShown] = useState(POSTS_PAGE)
+  const wanted = useRef(POSTS_PAGE)
+  const countsNow = useRef(counts)
+  countsNow.current = counts
   const [posts, setPosts] = useState<RoomPost[]>()
   const [failed, setFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -224,10 +233,19 @@ export function useRoomPosts(
     let current = true
     const read = reads.current.notes
     const page = listing.notes.slice(0, shown)
-    const draw = (notes: NoteSummary[]) =>
-      setPosts(notes.map((summary) => postOf(read.get(readKey(summary)) ?? summary, actingAs)))
+    const postsOf = (notes: NoteSummary[]) =>
+      notes.map((summary) => postOf(read.get(readKey(summary)) ?? summary, actingAs))
+    const draw = (notes: NoteSummary[]) => setPosts(postsOf(notes))
     const show = () => {
-      draw(page)
+      const drawn = postsOf(page)
+      setPosts(drawn)
+      // A page short of the posts it is counted in, with records left, reads on by the shortfall. Only once a page
+      // is read: on a private room a note's title is sealed with its body, so the listing cannot tell one.
+      const counted = countsNow.current ? drawn.filter(countsNow.current).length : drawn.length
+      if (counted < wanted.current && listing.notes.length > page.length) {
+        setShown(page.length + wanted.current - counted)
+        return
+      }
       setRefreshing(false)
       setLoadingOlder(false)
     }
@@ -268,10 +286,12 @@ export function useRoomPosts(
 
   const loadOlder = useCallback(() => {
     setLoadingOlder(true)
+    wanted.current += POSTS_PAGE
     setShown((n) => n + POSTS_PAGE)
   }, [])
   const refresh = useCallback(() => {
     setRefreshing(true)
+    wanted.current = POSTS_PAGE
     setShown(POSTS_PAGE)
     setGeneration((g) => g + 1)
   }, [])
