@@ -2933,7 +2933,6 @@
     "PostsFailed": "Impossible de lire les messages de ce salon. Tirez vers le bas pour réessayer.",
     "RefreshFailed": "Actualisation impossible",
     "PostsNone": "Aucun message pour l'instant.",
-    "LoadOlder": "Charger les messages plus anciens",
     "Offer": "Invitation à un salon",
     "OfferFrom": "{{community}} vous invite dans un salon",
     "OfferWhatJoiningShares": "Ce que rejoindre partage",

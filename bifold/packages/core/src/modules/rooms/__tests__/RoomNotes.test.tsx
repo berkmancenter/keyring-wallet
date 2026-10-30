@@ -131,6 +131,44 @@ describe("a room's Notes tab", () => {
     expect(tree.getByTestId(id('RoomFileSheet'))).toBeTruthy()
   })
 
+  test('more notes than a page: scrolling down to the last one reads the next page, with no button', async () => {
+    const sample = createSampleRoomsService()
+    const PAGE = jest.requireActual('../useRoomPosts').POSTS_PAGE as number
+    const keys = Array.from({ length: PAGE + 1 }, (_, i) => `t${i}`)
+    const at = (i: number) => new Date(Date.UTC(2026, 9, 26, 9, 0, 0) - i * 60_000).toISOString()
+    mockService = {
+      ...sample,
+      listNotes: async () => ({
+        notes: keys.map((key, i) => ({ key, version: 1, status: 'active' as const, pinned: false, updatedAt: at(i) })),
+        complete: true,
+        check: { verdict: 'consistent' as const, detail: '' },
+      }),
+      readNote: async (_roomId: string, key: string) => {
+        const i = keys.indexOf(key)
+        const body = toInertText(`note ${i}`)
+        return {
+          key,
+          version: 1,
+          status: 'active' as const,
+          pinned: false,
+          updatedAt: at(i),
+          title: toInertText(`Title ${i}`),
+          body,
+          flags: { containsLink: false, looksLikeInstruction: false },
+          check: { verdict: 'consistent' as const, detail: '' },
+        }
+      },
+    } as RoomsService
+    const tree = show()
+    await openNotes(tree)
+    await waitFor(() => expect(tree.getAllByTestId(/RoomNote_/)).toHaveLength(PAGE))
+    expect(tree.queryByText('Rooms.LoadOlder')).toBeNull()
+    await act(async () => tree.getByTestId(id('RoomNotes')).props.onEndReached({ distanceFromEnd: 0 }))
+    // The list holds the next page; it draws rows as they scroll into view, so its data is what to count.
+    await waitFor(() => expect(tree.getByTestId(id('RoomNotes')).props.data).toHaveLength(PAGE + 1))
+    expect(tree.getByTestId(id('RoomNotes')).props.onEndReached).toBeUndefined()
+  })
+
   test('a room with no notes says so (control: Planning above)', async () => {
     const service = mockService as RoomsService
     const real = await service.listNotes(PLANNING)

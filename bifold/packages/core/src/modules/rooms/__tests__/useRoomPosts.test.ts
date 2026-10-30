@@ -435,6 +435,52 @@ describe('merging what a poll found', () => {
 
 // Each read is one task for the person's agent, sent one at a time: a post written just after opening a room waits
 // behind every read of the first page (S0.7, 10-29: 40 s from tap to sent on a first page of 30).
+describe('drawing posts as their reads land', () => {
+  /** A room of three posts whose reads answer when the test says: c is newest, a oldest. */
+  const heldRoom = () => {
+    const { service } = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    const answers = new Map<string, { ok: () => void; fail: () => void }>()
+    service.readNote.mockImplementation(
+      (_roomId: string, key: string) =>
+        new Promise<Note>((resolve, reject) =>
+          answers.set(key, {
+            ok: () => resolve(note(key, { a: 1, b: 2, c: 3 }[key] ?? 1)),
+            fail: () => reject(new Error(`could not read ${key}`)),
+          })
+        )
+    )
+    const answer = async (key: string, how: 'ok' | 'fail' = 'ok') => {
+      await act(async () => answers.get(key)?.[how]())
+      await flush()
+    }
+    return { service, answer }
+  }
+  const keys = (posts?: { key: string }[]) => posts?.map((p) => p.key)
+
+  test('newest first, each as it lands: the list grows only at its oldest end', async () => {
+    const { service, answer } = heldRoom()
+    const { result } = await open(service)
+    expect(result.current.posts).toBeUndefined()
+    await answer('c')
+    expect(keys(result.current.posts)).toEqual(['c'])
+    // An older post that lands before a newer one waits for it: nothing is drawn out of order.
+    await answer('a')
+    expect(keys(result.current.posts)).toEqual(['c'])
+    await answer('b')
+    expect(keys(result.current.posts)).toEqual(['c', 'b', 'a'])
+  })
+
+  test('a read that fails holds the older ones until every read has answered; then it shows as unread', async () => {
+    const { service, answer } = heldRoom()
+    const { result } = await open(service)
+    await answer('c')
+    await answer('b', 'fail')
+    await answer('a')
+    expect(keys(result.current.posts)).toEqual(['c', 'b', 'a'])
+    expect(result.current.posts?.[1].unread).toBe(true)
+  })
+})
+
 describe('the first page', () => {
   const many = () => roomWith(Array.from({ length: 31 }, (_, i) => note(`n${i}`, i + 1)))
 

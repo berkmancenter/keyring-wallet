@@ -180,6 +180,18 @@ describe('the Rooms card', () => {
     expect(on.getByTestId(id('RoomsCard'))).toBeTruthy()
   })
 
+  test("reading: the app's spinner in place of the line, with the words kept for a screen reader", () => {
+    const tree = inApp(<RoomsCard service={service} myRooms={myRooms({ capabilities: caps() })} onOpen={jest.fn()} />)
+    expect(tree.getByTestId(id('RoomsCardReading'))).toBeTruthy()
+    expect(tree.queryByTestId(id('RoomsCardDetail'))).toBeNull()
+    expect(tree.queryByText('Rooms.Reading')).toBeNull()
+    expect(tree.getByTestId(id('RoomsCard')).props.accessibilityLabel).toContain('Rooms.Reading')
+    // Control: once the rooms are read, the line is back and the spinner gone.
+    const read = inApp(<RoomsCard service={service} myRooms={listed()} onOpen={jest.fn()} />)
+    expect(read.getByTestId(id('RoomsCardDetail'))).toBeTruthy()
+    expect(read.queryByTestId(id('RoomsCardReading'))).toBeNull()
+  })
+
   test('a read no community answered: the card says so', () => {
     const tree = inApp(
       <RoomsCard

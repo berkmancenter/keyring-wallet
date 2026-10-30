@@ -2985,7 +2985,6 @@
     "PostsFailed": "Couldn't read this room's posts. Pull down to try again.",
     "RefreshFailed": "Couldn't refresh",
     "PostsNone": "No posts yet.",
-    "LoadOlder": "Load older posts",
     "Offer": "Room offer",
     "OfferFrom": "{{community}} offers you a room",
     "OfferWhatJoiningShares": "What joining shares",

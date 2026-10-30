@@ -224,20 +224,41 @@ export function useRoomPosts(
     let current = true
     const read = reads.current.notes
     const page = listing.notes.slice(0, shown)
+    const draw = (notes: NoteSummary[]) =>
+      setPosts(notes.map((summary) => postOf(read.get(readKey(summary)) ?? summary, actingAs)))
     const show = () => {
-      setPosts(page.map((summary) => postOf(read.get(readKey(summary)) ?? summary, actingAs)))
+      draw(page)
       setRefreshing(false)
       setLoadingOlder(false)
     }
-    const unread = page.filter((summary) => summary.status !== 'retracted' && !read.has(readKey(summary)))
+    const ready = (summary: NoteSummary) => summary.status === 'retracted' || read.has(readKey(summary))
+    // The posts that can be drawn now: newest first, up to the first one still being read.
+    const readSoFar = () => {
+      const waiting = page.findIndex((summary) => !ready(summary))
+      return waiting === -1 ? page : page.slice(0, waiting)
+    }
+    const unread = page.filter((summary) => !ready(summary))
     if (unread.length === 0) {
       show()
       return
     }
-    void Promise.allSettled(unread.map((summary) => service.readNote(roomId, summary.key))).then((results) => {
-      results.forEach((r, i) => {
-        if (r.status === 'fulfilled') read.set(readKey(unread[i]), r.value)
+    // Each post is drawn as its read lands rather than once every read has: the list grows only at its oldest end
+    // (the top of the chat, drawn bottom up), so nothing shown moves. What was drawn before is not drawn again, and a
+    // read that fails holds the rest until every read has answered; then the page is drawn whole, the failed post
+    // marked as unread.
+    let drawn = readSoFar().length
+    const asks = unread.map((summary) =>
+      service.readNote(roomId, summary.key).then((note) => {
+        read.set(readKey(summary), note)
+        if (!current) return
+        const soFar = readSoFar()
+        if (soFar.length > drawn && soFar.length < page.length) {
+          drawn = soFar.length
+          draw(soFar)
+        }
       })
+    )
+    void Promise.allSettled(asks).then(() => {
       if (current) show()
     })
     return () => {

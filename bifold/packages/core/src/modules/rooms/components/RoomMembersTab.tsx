@@ -13,7 +13,7 @@
 import type { TFunction } from 'i18next'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -151,9 +151,11 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({
       )
     if (listing.kind === 'reading')
       return (
-        <ThemedText style={styles.muted} testID={testIdWithKey('RoomMembersReading')}>
-          {t('Rooms.Reading')}
-        </ThemedText>
+        <ActivityIndicator
+          color={ColorPalette.brand.primary}
+          accessibilityLabel={t('Rooms.Reading')}
+          testID={testIdWithKey('RoomMembersReading')}
+        />
       )
     if (listing.kind === 'failed')
       return (

@@ -184,20 +184,33 @@ describe('posts', () => {
     expect(tree.queryByText('hidden')).toBeNull()
   })
 
-  test(`${POSTS_PAGE} at a time: "Load older" shows the next page, and goes once all are shown`, async () => {
+  test(`${POSTS_PAGE} at a time: scrolling up to the oldest post reads the next page, with the spinner and no button`, async () => {
     const many = Array.from({ length: POSTS_PAGE + 1 }, (_, i) =>
       post(`p${i}`, `post ${i}`, { updatedAt: new Date(Date.UTC(2026, 9, 26, 9, 0, 0) - i * 60_000).toISOString() })
     )
-    const tree = open(withPosts(many))
+    const service = withPosts(many)
+    // The older post's read waits until the test lets it answer, so the spinner can be seen.
+    let answer: () => void = () => undefined
+    const answered = new Promise<void>((resolve) => (answer = resolve))
+    const readNote = service.readNote.bind(service)
+    jest.spyOn(service, 'readNote').mockImplementation(async (roomId: string, key: string) => {
+      if (key === `p${POSTS_PAGE}`) await answered
+      return readNote(roomId, key)
+    })
+    const tree = open(service)
     await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE))
     expect(tree.queryByText(`post ${POSTS_PAGE}`)).toBeNull()
-    // The list's footer, which a list drawn from the bottom up shows at its top, above the oldest post.
+    expect(tree.queryByText('Rooms.LoadOlder')).toBeNull()
+    // Drawn bottom up, the list's end is its top: reaching it reads the next page.
     const list = tree.getByTestId(id('RoomPosts'))
     expect(list.props.inverted).toBe(true)
-    expect(list.props.ListFooterComponent.props.testID).toBe(id('RoomLoadOlder'))
-    fireEvent.press(tree.getByTestId(id('RoomLoadOlder')))
+    await act(async () => list.props.onEndReached({ distanceFromEnd: 0 }))
+    expect(tree.getByTestId(id('RoomPosts')).props.ListFooterComponent.props.testID).toBe(id('RoomLoadingOlder'))
+    await act(async () => answer())
     await waitFor(() => expect(tree.getByText(`post ${POSTS_PAGE}`)).toBeTruthy())
-    expect(tree.queryByTestId(id('RoomLoadOlder'))).toBeNull()
+    // Everything is shown: nothing more to read, and no spinner.
+    expect(tree.getByTestId(id('RoomPosts')).props.onEndReached).toBeUndefined()
+    expect(tree.queryByTestId(id('RoomLoadingOlder'))).toBeNull()
   })
 
   test('with no posts yet, pulling down reads the room again, and a new post appears', async () => {
