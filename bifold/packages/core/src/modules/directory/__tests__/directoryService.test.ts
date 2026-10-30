@@ -51,8 +51,8 @@ describe('reading the members list', () => {
     const second = await service.listMembers(COMMUNITY, 'c2')
     expect(second.nextCursor).toBeUndefined()
     expect(communityTask.mock.calls.map((c) => [c[0], c[1], c[2]])).toEqual([
-      [COMMUNITY, DIRECTORY_TASK.entriesList, { limit: 25 }],
-      [COMMUNITY, DIRECTORY_TASK.entriesList, { limit: 25, cursor: 'c2' }],
+      [COMMUNITY, DIRECTORY_TASK.entriesList02, { limit: 25 }],
+      [COMMUNITY, DIRECTORY_TASK.entriesList02, { limit: 25, cursor: 'c2' }],
     ])
   })
 

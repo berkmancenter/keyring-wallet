@@ -25,6 +25,8 @@ import {
 const SPEC = 'https://trusttasks.org/spec/'
 
 export const DIRECTORY_TASK = {
+  // vtc-service 0.16 serves the members list at 0.2 only, 0.12 at 0.1 only; 0.2's last page has no `nextCursor`.
+  entriesList02: `${SPEC}vtc/directory/entries/list/0.2`,
   entriesList: `${SPEC}vtc/directory/entries/list/0.1`,
   cardShow: `${SPEC}vtc/directory/card/show/0.1`,
   cardUpdate: `${SPEC}vtc/directory/card/update/0.1`,

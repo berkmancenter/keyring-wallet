@@ -42,15 +42,26 @@ export const CARD_NAME_MAX = 64
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export class AgentDirectoryService implements DirectoryService {
+  /** The members-list version each community last answered, so a page after the first goes at that one. */
+  private readonly listVersion = new Map<string, string>()
+
   public constructor(private readonly backend: DirectoryBackend) {}
 
   public async listMembers(communityDid: string, cursor?: string): Promise<MemberPage> {
-    return parseEntries(
-      await this.ask('listMembers', communityDid, DIRECTORY_TASK.entriesList, {
-        limit: MEMBERS_PAGE,
-        ...(cursor ? { cursor } : {}),
-      })
-    )
+    const payload = { limit: MEMBERS_PAGE, ...(cursor ? { cursor } : {}) }
+    const first = this.listVersion.get(communityDid) ?? DIRECTORY_TASK.entriesList02
+    let type: string = first
+    let answer: unknown
+    try {
+      answer = await this.ask('listMembers', communityDid, type, payload)
+    } catch (e) {
+      // A community serves one of the two (0.16: 0.2 only; 0.12: 0.1 only). The other is asked once.
+      if (!(e instanceof DirectoryRefused) || (e.code !== 'unsupportedType' && e.code !== 'unsupportedVersion')) throw e
+      type = first === DIRECTORY_TASK.entriesList02 ? DIRECTORY_TASK.entriesList : DIRECTORY_TASK.entriesList02
+      answer = await this.ask('listMembers', communityDid, type, payload)
+    }
+    this.listVersion.set(communityDid, type)
+    return parseEntries(answer)
   }
 
   public async showMyCard(communityDid: string): Promise<MyCard> {
