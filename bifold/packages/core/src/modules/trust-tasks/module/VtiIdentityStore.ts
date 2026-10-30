@@ -52,6 +52,14 @@ export interface VtiManagerIdentity {
    * when this phone may not change them.
    */
   approversFrom?: string
+  /**
+   * The Farm this temporary key claimed the agent from (`vta-claim`): the
+   * Farm signs the person in by this key (VtaLink `farmLogin`). Kept while the
+   * key is the one linking, through a swap that never happened, so a Try
+   * again with it still records the Farm; a new key for the agent, or the
+   * swap onto the long-term one, writes a record without it.
+   */
+  claimedFrom?: string
 }
 
 export interface VtiPersona {

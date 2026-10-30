@@ -1093,6 +1093,41 @@ describe('creating an agent', () => {
     expect(disk.link?.farmLogin).toBeUndefined()
   })
 
+  // A swap the agent never makes undoes the link, Farm and all, and keeps the claim key for a Try again (IN-135).
+  // The Farm still knows that key, so the link a Try again makes must know its Farm too.
+  it('a claim whose swap is refused, tried again with the same key, keeps its Farm', async () => {
+    const deviceCanOwn = jest.fn(async () => true)
+    const { vta, disk } = freshPhone({ deviceCanOwn })
+    const key = await vta.createClaimKey(agent)
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    mockVta.refuseNext.set(SWAP, { code: 'permissionDenied', message: 'forbidden: super admin role required' })
+    await vta.finishClaimedLink(agent, VTA, key, FARM)
+    await until(() => vta.getState().link.kind === 'notLinked')
+    expect(disk.link).toBeUndefined()
+    expect(await vta.pendingLinkKey(agent, VTA)).toMatchObject({ did: TEMPORARY })
+    await vta.startManualLink(agent, VTA, 'farm.example')
+    await vta.checkManualGrant(agent)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link?.farmLogin).toEqual({ farmDid: FARM, did: TEMPORARY })
+  })
+
+  it('the same after the app restarts between the refused swap and the Try again', async () => {
+    const deviceCanOwn = jest.fn(async () => true)
+    const { vta, disk, links, identities } = freshPhone({ deviceCanOwn })
+    const key = await vta.createClaimKey(agent)
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    mockVta.refuseNext.set(SWAP, { code: 'permissionDenied', message: 'forbidden: super admin role required' })
+    await vta.finishClaimedLink(agent, VTA, key, FARM)
+    await until(() => vta.getState().link.kind === 'notLinked')
+    const restarted = new VtaAgentController()
+    alive.push(restarted)
+    restarted.configure({ linkStore: () => links, identityStore: () => identities as never, deviceCanOwn })
+    await restarted.startManualLink(agent, VTA, 'farm.example')
+    await restarted.checkManualGrant(agent)
+    expect(restarted.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link?.farmLogin).toEqual({ farmDid: FARM, did: TEMPORARY })
+  })
+
   it("the Farm sign-in key stays on the link through the link's later writes", async () => {
     const farmLogin = { farmDid: FARM, did: TEMPORARY }
     const p = phone({
