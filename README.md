@@ -181,23 +181,9 @@ First Person Project stack:
   operations carried in those envelopes, such as proposing a relationship or
   asking a witness.
 
-```mermaid
-flowchart LR
-  subgraph Phone
-    K[Keyring]
-  end
-  M[(Mediator)]
-  VTA[Your agent<br/>VTA]
-  VTC[Community<br/>VTC + rooms]
-  W[Witness]
-  P[Contact's<br/>Keyring]
-
-  K <-- "TSP or DIDComm v2" --> M
-  M <--> VTA
-  VTA <-- "Trust Tasks" --> VTC
-  K <-- "DIDComm, via mediators" --> P
-  K <-- "Trust Tasks" --> W
-```
+<p align="center">
+  <img src="docs/images/keyring-ecosystem.svg" alt="Keyring on your phone talks to a mediator over TSP or DIDComm v2; the mediator relays to your agent (VTA), which speaks Trust Tasks with communities (VTC and rooms); Keyring talks to a contact's Keyring over DIDComm via mediators, and to a witness with Trust Tasks." width="760" />
+</p>
 
 **Shown in Prague.** In October 2026, Keyring was part of LF Decentralized Trust's
 [demonstration of the first open-source Verifiable Trust Community](https://www.linuxfoundation.org/blog/lf-decentralized-trust-demonstrates-the-first-open-source-verifiable-trust-community-in-prague)
