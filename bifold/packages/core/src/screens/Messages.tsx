@@ -28,7 +28,7 @@ import RoomMessageRow from '../modules/rooms/components/RoomMessageRow'
 import RoomOfferCard from '../modules/rooms/components/RoomOfferCard'
 import { roomTitle } from '../modules/rooms/components/RoomRow'
 import { useRoomRows } from '../modules/rooms/useRoomRows'
-import { communityLabelOf } from '../modules/trust-tasks/screens/communityName'
+import { communityLabelAloneOf } from '../modules/trust-tasks/screens/communityName'
 import { conversations, isConversationPartner, messageRows, type MessageRow } from '../modules/vrc/contacts/messageRows'
 import { useVrcNameCache } from '../modules/vrc/context/VrcNameCacheProvider'
 import { useConnectionRelationships } from '../modules/vrc/contacts/useContactFacts'
@@ -333,7 +333,7 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
                   { chip: { kind: 'people' } as MessagesChip, label: t('MessagesList.ChipPeople'), id: 'People' },
                   ...chips.map((c) => ({
                     chip: { kind: 'community', communityDid: c.communityDid } as MessagesChip,
-                    label: c.communityName ? String(c.communityName) : communityLabelOf(c.communityDid, t),
+                    label: c.communityName ? String(c.communityName) : communityLabelAloneOf(c.communityDid, t),
                     id: 'Community',
                   })),
                 ].map(({ chip: option, label, id }) => {

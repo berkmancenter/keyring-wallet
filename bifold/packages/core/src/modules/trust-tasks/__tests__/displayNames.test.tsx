@@ -11,7 +11,13 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { agentDisplayName, agentDisplayNameStart, agentNameInDid, withAgentName } from '../screens/agentName'
-import { communityLabelOf, communityLabelStartOf, partyLabelStartOf } from '../screens/communityName'
+import {
+  communityLabelAloneOf,
+  communityLabelOf,
+  communityLabelStartOf,
+  communityTitle,
+  partyLabelStartOf,
+} from '../screens/communityName'
 import { DidDetails } from '../screens/DidDetails'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -47,32 +53,39 @@ describe('a community, named in passing', () => {
     expect(communityLabelOf(webvh, t)).toBe('Keyring Lab Community')
   })
 
-  it('unnamed: said to be, with the end of its SCID — never its host, which merged communities on one host (IN-26)', () => {
+  it('unnamed, in a sentence: the end of its SCID, plain — never its host, which merged communities on one host (IN-26)', () => {
     const label = communityLabelOf(webvh, t)
-    expect(label).toBe('Community.UnnamedRef(ref=…munity)')
+    expect(label).toBe('…munity')
     expect(label).not.toContain('vtc.example.org')
   })
 
   it("unnamed with a path: the operator's handle tells it apart", () => {
-    expect(communityLabelOf('did:webvh:QmCommunity:vtc.example.org:keyring-test-vtc', t)).toBe(
-      'Community.UnnamedRef(ref=keyring-test-vtc)'
-    )
+    expect(communityLabelOf('did:webvh:QmCommunity:vtc.example.org:keyring-test-vtc', t)).toBe('keyring-test-vtc')
+  })
+
+  it('standing alone (a chip, a title), an unnamed community says it has published no name; in a sentence it does not', () => {
+    const did = 'did:webvh:QmCommunity:vtc.example.org:keyring-test-vtc'
+    expect(communityLabelAloneOf(did, t)).toBe('Community.UnnamedRef(ref=keyring-test-vtc)')
+    expect(communityTitle(communityLabelOf(did, t), did, t)).toBe('Community.UnnamedRef(ref=keyring-test-vtc)')
+    communityTarget.publishedName(did, 'Keyring Lab')
+    expect(communityLabelAloneOf(did, t)).toBe('Keyring Lab')
+    expect(communityTitle(communityLabelOf(did, t), did, t)).toBe('Keyring Lab')
   })
 
   it('unnamed and without a host: words, never the DID', () => {
     const label = communityLabelOf(peer, t)
-    expect(label).toBe('Community.UnnamedRef(ref=…uvwxyz)')
+    expect(label).toBe('…uvwxyz')
     expect(label).not.toMatch(/did:/)
   })
 
   it("at the start of a sentence: a name in capitals, an unnamed community's handle as written", () => {
     const start = communityLabelStartOf(webvh, ((key: string, values?: { ref?: string }) =>
       key === 'Community.UnnamedRef' ? `${values?.ref} (no name published yet)` : key) as unknown as TFunction)
-    expect(start).toBe('…munity (no name published yet)')
+    expect(start).toBe('…munity')
     const handle = 'did:webvh:QmCommunity:vtc.example.org:al-community2-vtc'
     const tUnnamed = ((key: string, values?: { ref?: string }) =>
       key === 'Community.UnnamedRef' ? `${values?.ref} (no name published yet)` : key) as unknown as TFunction
-    expect(communityLabelStartOf(handle, tUnnamed)).toBe('al-community2-vtc (no name published yet)')
+    expect(communityLabelStartOf(handle, tUnnamed)).toBe('al-community2-vtc')
     communityTarget.publishedName(handle, 'lab community')
     expect(communityLabelStartOf(handle, tUnnamed)).toBe('Lab community')
   })

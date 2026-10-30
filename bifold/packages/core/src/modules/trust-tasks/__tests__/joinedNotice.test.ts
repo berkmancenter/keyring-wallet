@@ -102,9 +102,9 @@ describe('the words', () => {
     expect(joinedWords(COMMUNITY, t)).toBe("You're now a member of Keyring Lab Community.")
   })
 
-  it('say the community is unnamed, with its handle, when no name is known', () => {
+  it('name an unnamed community by its handle, plain, when no name is known', () => {
     const words = joinedWords(COMMUNITY, t)
-    expect(words).toBe("You're now a member of keyring-test-vtc (no name published yet).")
+    expect(words).toBe("You're now a member of keyring-test-vtc.")
     expect(words).not.toMatch(/did:/)
   })
 

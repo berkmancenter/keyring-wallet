@@ -82,14 +82,28 @@ export function unnamedCommunityLabel(did: string, t: TFunction): string {
   return t('Community.UnnamedRef', { ref: unnamedRef(did), interpolation: { escapeValue: false } }) as string
 }
 
+/** The name a link claimed for a community it doesn't name itself, said in words to be a claim. */
+function claimedLabelOf(did: string, t: TFunction): string | undefined {
+  const claimed = [communityTarget.getViewing(), communityTarget.getChosen()].find(
+    (l) => l?.communityDid === did && l.name && !l.published
+  )?.name
+  return claimed
+    ? (t('Community.ClaimedName', { name: claimed, interpolation: { escapeValue: false } }) as string)
+    : undefined
+}
+
 /**
- * What to call a community in passing — in a list row, a prompt, a share
- * sheet — where there is no room to explain where the name came from.
+ * What to call a community in a sentence — a prompt, a notice, a line on a
+ * screen — where there is no room to explain where the name came from.
  *
  * In order: the community's own published name; else the name a link claimed
  * for it, said in words to be a claim ("… (not confirmed by the community)"),
- * because anyone can write any name into a link; else "an unnamed community
- * (<ref>)" (`unnamedRef`). Never the host and never the whole DID (#12): the
+ * because anyone can write any name into a link; else its handle
+ * (`unnamedRef`), plain. Inside a sentence "(no name published yet)" read as
+ * clutter ("Your card in al-vtc (no name published yet) now shows Ana",
+ * 2026-10-30), and the screens that name a community say elsewhere that it
+ * has published none; a label standing alone says it
+ * ({@link communityLabelAloneOf}). Never the host and never the whole DID (#12): the
  * host used to stand in that ref, which read as a name and made several
  * communities on one host look like one (IN-26); plain "a community" then
  * told nobody which one. The name a community published is kept across
@@ -101,13 +115,16 @@ export function unnamedCommunityLabel(did: string, t: TFunction): string {
  * all of them.
  */
 export function communityLabelOf(did: string, t: TFunction): string {
-  const published = communityTarget.publishedNameOf(did)
-  if (published) return published
-  const claimed = [communityTarget.getViewing(), communityTarget.getChosen()].find(
-    (l) => l?.communityDid === did && l.name && !l.published
-  )?.name
-  if (claimed) return t('Community.ClaimedName', { name: claimed, interpolation: { escapeValue: false } }) as string
-  return unnamedCommunityLabel(did, t)
+  return communityTarget.publishedNameOf(did) ?? claimedLabelOf(did, t) ?? unnamedRef(did)
+}
+
+/**
+ * The same where the label stands alone — a filter chip, a card's title, a
+ * Wallet card's issuer — with nothing around it to say the community has not
+ * named itself: an unnamed one is "<ref> (no name published yet)".
+ */
+export function communityLabelAloneOf(did: string, t: TFunction): string {
+  return communityTarget.publishedNameOf(did) ?? claimedLabelOf(did, t) ?? unnamedCommunityLabel(did, t)
 }
 
 /**
@@ -170,9 +187,10 @@ export function didDomainPath(did: string): string | undefined {
  * "Your agent", one per community — so that two unnamed ones never both read
  * "a community" (2026-09-26, a vetter holding two).
  *
- * As `communityLabelOf`: without a name it is "an unnamed community (<ref>)",
- * whose ref already tells two apart. It used to be the bare path segment, which
- * as a card's title read as the community's name — what #12 and IN-26 took
+ * As `communityLabelOf`: without a name it is its handle (`unnamedRef`),
+ * which already tells two apart, and {@link communityTitle} adds "(no name
+ * published yet)" where it stands alone as a card's title. The bare path
+ * segment as a title read as the community's name — what #12 and IN-26 took
  * away. `claim: 'plain'` drops the "(not confirmed …)" qualifier, for a line
  * about a membership the community itself issued, where the qualifier read as
  * if the membership were unconfirmed.
@@ -186,19 +204,23 @@ export function asTitle(label: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+const isUnnamedLabel = (label: string, did: string, t: TFunction) =>
+  label === unnamedRef(did) || label === unnamedCommunityLabel(did, t)
+
 /**
- * A community's label where it stands alone or starts a sentence: a name in
- * capitals, but an unnamed one exactly as written, since it begins with the
- * operator's handle ("al-community2-vtc (no name published yet)"), which is
- * not ours to capitalise.
+ * A community's label standing alone, as a title: a name in capitals; an
+ * unnamed one as "<ref> (no name published yet)", the handle exactly as
+ * written, since it is the operator's ("al-community2-vtc"), not ours to
+ * capitalise.
  */
 export function communityTitle(label: string, did: string, t: TFunction): string {
-  return label === unnamedCommunityLabel(did, t) ? label : asTitle(label)
+  return isUnnamedLabel(label, did, t) ? unnamedCommunityLabel(did, t) : asTitle(label)
 }
 
-/** The same, for where it starts a sentence or stands alone. */
+/** A community's label where it starts a sentence: a name in capitals, an unnamed one's handle as written. */
 export function communityLabelStartOf(did: string, t: TFunction): string {
-  return communityTitle(communityLabelOf(did, t), did, t)
+  const label = communityLabelOf(did, t)
+  return isUnnamedLabel(label, did, t) ? label : asTitle(label)
 }
 
 /**

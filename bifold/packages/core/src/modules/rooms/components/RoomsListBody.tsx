@@ -19,7 +19,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { localDate } from '../../trust-tasks/screens/localTime'
 import { testIdWithKey } from '../../../utils/testable'
-import { offerCommunity, offerRoom } from '../offerCommunity'
+import { offerCommunityAlone, offerRoom } from '../offerCommunity'
 import type { RoomOffer, RoomSummary } from '../types'
 import type { MyRooms } from '../useMyRooms'
 
@@ -35,7 +35,7 @@ const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean; onPress?: (
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const line = [
-    withCommunity ? offerCommunity(offer, t) : undefined,
+    withCommunity ? offerCommunityAlone(offer, t) : undefined,
     offer.validUntil ? (t('Rooms.Until', { date: localDate(offer.validUntil) }) as string) : undefined,
   ]
     .filter(Boolean)

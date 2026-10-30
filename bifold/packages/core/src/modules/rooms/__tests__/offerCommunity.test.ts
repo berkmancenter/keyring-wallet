@@ -6,7 +6,7 @@
 import i18n from 'i18next'
 
 import en from '../../../localization/en/en.json'
-import { offerCommunity, offerRoom } from '../offerCommunity'
+import { offerCommunity, offerCommunityAlone, offerRoom } from '../offerCommunity'
 import { offeredWords } from '../roomNotices'
 import type { RoomOffer } from '../types'
 
@@ -29,18 +29,21 @@ beforeAll(async () => {
 })
 
 describe('offerCommunity', () => {
-  test('a community that published no name is its handle, said to have no name yet: whole, never cut', () => {
-    expect(offerCommunity(offer(), t as never)).toBe('community-a-vtc (no name published yet)')
+  test('a community that published no name is its handle in a sentence: whole, never cut', () => {
+    expect(offerCommunity(offer(), t as never)).toBe('community-a-vtc')
+  })
+
+  test('standing alone (the offers row, the biometric prompt) it says the community has published no name', () => {
+    expect(offerCommunityAlone(offer(), t as never)).toBe('community-a-vtc (no name published yet)')
+    expect(offerCommunityAlone(offer('Keyring Lab'), t as never)).toBe('Keyring Lab')
   })
 
   test('the name the offer came with, when it has one (control)', () => {
     expect(offerCommunity(offer('Keyring Lab'), t as never)).toBe('Keyring Lab')
   })
 
-  test('the notice names it the same way: "You\'ve been offered a room in community-a-vtc (no name published yet)."', () => {
-    expect(offeredWords([offer()], t as never).text1).toBe(
-      "You've been offered a room in community-a-vtc (no name published yet)."
-    )
+  test('the notice names it the same way: "You\'ve been offered a room in community-a-vtc."', () => {
+    expect(offeredWords([offer()], t as never).text1).toBe("You've been offered a room in community-a-vtc.")
   })
 })
 

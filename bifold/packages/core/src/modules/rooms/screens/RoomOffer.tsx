@@ -30,7 +30,7 @@ import { roomsStatusText } from '../components/roomsStatusText'
 import { accessText, identityText, tierHint } from '../components/roomWords'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import TierBadge from '../components/TierBadge'
-import { offerCommunity, offerRoom } from '../offerCommunity'
+import { offerCommunity, offerCommunityAlone, offerRoom } from '../offerCommunity'
 import { type AcceptRefusal, useRoomOffer } from '../useRoomOffer'
 import { useRoomsService } from '../useRoomsService'
 
@@ -98,7 +98,8 @@ const RoomOffer: React.FC = () => {
 
   const onAccept = async () => {
     if (!preview) return
-    const community = offerCommunity(preview.offer, t)
+    // Standing alone in the prompt the person confirms with biometrics: an unnamed community says so.
+    const community = offerCommunityAlone(preview.offer, t)
     if (agent) {
       const confirmed = await requestBiometricConfirmationWithUI(agent, community, 'room-offer', {
         title: t('Rooms.OfferConfirmTitle'),
