@@ -96,8 +96,10 @@ export const RULES = [
  */
 export const FLAGS = [
   // Storage deletes only: a Map's or Set's .delete() is not one. deleteById on any receiver (Credo's APIs), .delete or
-  // .remove on a receiver named for storage, and the record-removing helpers.
-  { flag: 'deletes stored records', policy: 'store', added: /\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
+  // .remove on a receiver named for storage, the record-removing helpers, and the four device-store deletes whose method
+  // names the receiver rule can't see (AsyncStorage.removeItem / .multiRemove / .clear, SecureStore.deleteItemAsync;
+  // a stopgap, 10-30: names, not behaviour).
+  { flag: 'deletes stored records', policy: 'store', added: /\bAsyncStorage\.(?:removeItem|multiRemove|clear)\s*\(|\bSecureStore\.deleteItemAsync\s*\(|\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
   { flag: 'sign-in / key handling', policy: 'strict', path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
   // Case-insensitive: the protocol line's files are named both ways (vtiAgent.ts, VtiMediatorTransport.ts, TspCarriage.ts),
   // and without /i the capitalised ones read plain ota (found 10-29).

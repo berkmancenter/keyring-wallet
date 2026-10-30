@@ -308,7 +308,9 @@ jobs:
           sha=$(git rev-list -n 1 "$tag")
           run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow staging.yaml --commit "$sha" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
           dir="$RUNNER_TEMP/recorded-$PLATFORM"
-          if [ -n "$run" ] && gh run download "$run" -R "$GITHUB_REPOSITORY" -n "ota-fingerprint-$PLATFORM" -D "$dir" 2>/dev/null; then
+          # With backoff, and an egress refusal named (scripts/ci/download-artifact.mjs); a missing record fails at once.
+          # It runs on the Node that setup-node put in place earlier in this job.
+          if [ -n "$run" ] && node scripts/ci/download-artifact.mjs --run "$run" --name "ota-fingerprint-$PLATFORM" --dir "$dir" --where "ota-publish $PLATFORM fingerprint"; then
             echo "recorded=$dir/fingerprint.json" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::build $BUILD's source list is not available (run ${run:-unknown}); a mismatch will be reported by hash only"
@@ -388,6 +390,21 @@ jobs:
           name: ota-bundle-${{ matrix.platform }}
           path: ${{ runner.temp }}/ota-bundle.jsonl
           if-no-files-found: warn
+
+      # The same record as a notice on this job (post-release reads it from the check run's annotations), so the ids
+      # still reach the brake when the artifact store and the job log both refuse the read (276.10, 10-30). It must run
+      # at the repository root: the import is relative to the working directory, and continue-on-error would hide a miss.
+      - name: Name the published bundle
+        if: ${{ success() && !inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
+        continue-on-error: true
+        env:
+          RECORD: ${{ runner.temp }}/ota-bundle.jsonl
+        run: |
+          node --input-type=module -e "
+            import { readFileSync } from 'node:fs'
+            import { bundleNotice, bundlesFromRecord } from './scripts/ota/post-release.mjs'
+            for (const b of bundlesFromRecord(readFileSync(process.env.RECORD, 'utf8'))) console.log(bundleNotice(b))
+          "
 
       # A publish to ring1 or ring2 (the default: the owner's rule, 10-29, is that updates reach testers at once) widens
       # this platform's bundle in the same run, right after it reached ring 0, on the run's one approval. The bundle id

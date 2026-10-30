@@ -4,7 +4,7 @@ import { writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
 
-import { baseOf, bundlesFromLog, bundlesFromRecord, pickDispatched, postRelease, publishedJobs, screensOf, smokeVerdict } from './post-release.mjs'
+import { baseOf, bundleNotice, bundlesFromAnnotations, bundlesFromLog, bundlesFromRecord, ghError, NOTICE_TITLE, pickDispatched, postRelease, publishedJobs, screensOf, smokeVerdict } from './post-release.mjs'
 
 const SHA = 'cb36b83a1e0b6a67fb0e8fd32b6b95dd88d9ac3f'
 const PREV = 'a'.repeat(40)
@@ -211,6 +211,9 @@ test('a dispatched run that never finishes is given up on with an error, not wai
   await assert.rejects(postRelease(opts(stuck, { pollMs: 60000, maxWaitMs: 5 * 60000 })), /test-builds\.yml run 501 still waiting after 5 min: giving up/)
 })
 
+/** A failed gh call as execFileSync throws it: the message names the command, stderr carries gh's own line. */
+const ghFailure = (stderr) => Object.assign(new Error('Command failed: gh api repos/owner/repo/…'), { stderr: `${stderr}\n` })
+
 test("a job log that isn't readable yet is retried, then read", async () => {
   const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
   let failures = 2
@@ -225,7 +228,7 @@ test("a job log that isn't readable yet is retried, then read", async () => {
 test('a job log still unreadable after the retries: the smoke runs, with that platform\'s bundle unknown', async () => {
   const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
   const never = (...args) => {
-    if (/actions\/jobs\/11\/logs$/.test(args[1] ?? '')) throw new Error('HTTP 404: Not Found')
+    if (/actions\/jobs\/11\/logs$/.test(args[1] ?? '')) throw ghFailure('gh: Not Found (HTTP 404)')
     return gh(...args)
   }
   const lines = []
@@ -233,7 +236,10 @@ test('a job log still unreadable after the retries: the smoke runs, with that pl
   assert.deepEqual([r.verdict, r.bundles.map((b) => b.id)], ['green', [ANDROID]])
   // What was published is still known, so the brake can say a withdraw would be partial.
   assert.deepEqual(r.platforms, ['ios', 'android'])
-  assert.ok(lines.some((l) => /log of job 11 is still unreadable after 6 tries: bundle ids unknown/.test(l)))
+  // The HTTP status is in the line (403 permission, 404 not visible, 410 expired), not only "unreadable".
+  assert.ok(lines.some((l) => l.includes('log of job 11 is still unreadable after 6 tries (gh: Not Found (HTTP 404)): bundle ids unknown')))
+  assert.deepEqual(r.sources, { ios: 'none', android: 'log' })
+  assert.ok(lines.includes('bundle id sources: ios none, android log'))
 })
 
 const record = (platform, id) => JSON.stringify({ platform, id, channel: 'production', release: '276.3', wallet: SHA })
@@ -262,6 +268,7 @@ test('the bundle ids come from the publish run\'s records; its logs are not read
   const r = await postRelease(opts(withRecords(gh, ['ios', 'android'])))
   assert.deepEqual(r.bundles.map((b) => [b.platform, b.id]), [['ios', IOS], ['android', ANDROID]])
   assert.equal(calls.some((c) => /\/logs$/.test(c[1] ?? '')), false)
+  assert.deepEqual(r.sources, { ios: 'record', android: 'record' })
 })
 
 test('a platform with no record falls back to its log, and only that platform', async () => {
@@ -270,6 +277,7 @@ test('a platform with no record falls back to its log, and only that platform', 
   assert.deepEqual(r.bundles.map((b) => b.platform).sort(), ['android', 'ios'])
   const logsRead = calls.filter((c) => /\/logs$/.test(c[1] ?? '')).map((c) => c[1])
   assert.deepEqual(logsRead, [`repos/${R}/actions/jobs/11/logs`])
+  assert.deepEqual(r.sources, { ios: 'log', android: 'record' })
 })
 
 test('the record path never writes: download is the one non-api call besides the two dispatches', async () => {
@@ -296,4 +304,217 @@ test("a one-platform release isn't called red for the other platform's smoke", a
   const red = [GREEN[0], { ...GREEN[1], conclusion: 'failure' }]
   const r = await postRelease(opts(fakeGh({ publishJobs: [publishJob('ios'), publishJob('android', false)], smokeJobs: red }).gh))
   assert.deepEqual([r.platforms, r.verdict], [['ios'], 'green'])
+})
+
+test("a failed gh call is reported by gh's own line, which names the HTTP status", () => {
+  assert.equal(ghError(ghFailure('gh: Resource not accessible by integration (HTTP 403)')), 'gh: Resource not accessible by integration (HTTP 403)')
+  // No stderr (a thrown Error from elsewhere): the first line of the message.
+  assert.equal(ghError(new Error('range unreadable\nmore')), 'range unreadable')
+  assert.equal(ghError(Object.assign(new Error('Command failed'), { stderr: '\n  \n' })), 'Command failed')
+})
+
+test('an unreadable artifact list is reported with its status, and the logs are read instead', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const refused = (...args) => {
+    if (args[1] === `repos/${R}/actions/runs/900/artifacts?per_page=100`) throw ghFailure('gh: Resource not accessible by integration (HTTP 403)')
+    return gh(...args)
+  }
+  const lines = []
+  const r = await postRelease({ ...opts(refused), log: (l) => lines.push(l) })
+  assert.ok(lines.includes("the publish run's artifacts are unreadable: gh: Resource not accessible by integration (HTTP 403)"))
+  assert.deepEqual(r.sources, { ios: 'log', android: 'log' })
+})
+
+/** The fake gh, plus earlier green Test builds runs of the released commit with the given artifacts. */
+const withEarlierBuilds = (base, runs) => (...args) => {
+  if ((args[1] ?? '').startsWith(`repos/${R}/actions/workflows/test-builds.yml/runs?head_sha=${SHA}&status=success`))
+    return JSON.stringify({ workflow_runs: runs.map(({ id, head_sha = SHA, conclusion = 'success' }) => ({ id, head_sha, conclusion, status: 'completed' })) })
+  const arts = /actions\/runs\/(\d+)\/artifacts\?per_page=100$/.exec(args[1] ?? '')
+  const earlier = arts && runs.find((r) => String(r.id) === arts[1])
+  if (earlier) return JSON.stringify({ artifacts: earlier.artifacts })
+  return base(...args)
+}
+const pushOff = (expired = false) => [
+  { name: `keyring-ios-sim-${SHA.slice(0, 8)}-bf2b97dcc9`, expired },
+  { name: `keyring-android-${SHA.slice(0, 8)}-bf2b97dcc9`, expired },
+]
+
+test("the release chain's green Test builds of the published commit are reused: no rebuild, the smoke runs on them", async () => {
+  const { gh, calls } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const lines = []
+  const r = await postRelease({ ...opts(withEarlierBuilds(gh, [{ id: 450, artifacts: pushOff() }])), log: (l) => lines.push(l) })
+  assert.deepEqual([r.verdict, r.testBuilds, r.reusedBuilds, r.gateSmoke], ['green', 450, true, 601])
+  const runs = calls.filter((c) => c[0] === 'workflow')
+  assert.deepEqual(runs.map((c) => c[2]), ['gate-smoke.yml'])
+  assert.ok(runs[0].includes('run-id=450'), 'the smoke runs on the reused build')
+  assert.ok(lines.includes(`reusing Test builds 450: green, built from ${SHA.slice(0, 8)}, the commit that was published`))
+})
+
+test('Test builds are rebuilt when no earlier run is reusable: expired, push-on only, one platform, or another commit', async () => {
+  const sha8 = SHA.slice(0, 8)
+  for (const earlier of [
+    [{ id: 450, artifacts: pushOff(true) }],
+    [{ id: 450, artifacts: [{ name: `keyring-ios-sim-${sha8}-bf2b97dcc9-push-on`, expired: false }, { name: `keyring-android-${sha8}-bf2b97dcc9-push-on`, expired: false }] }],
+    [{ id: 450, artifacts: pushOff().slice(0, 1) }],
+    [{ id: 450, head_sha: PREV, artifacts: pushOff() }],
+    [{ id: 450, conclusion: 'failure', artifacts: pushOff() }],
+    [],
+  ]) {
+    const { gh, calls } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+    const r = await postRelease(opts(withEarlierBuilds(gh, earlier)))
+    assert.deepEqual([r.testBuilds, r.reusedBuilds], [501, false], JSON.stringify(earlier))
+    assert.deepEqual(calls.filter((c) => c[0] === 'workflow').map((c) => c[2]), ['test-builds.yml', 'gate-smoke.yml'])
+  }
+})
+
+test('earlier Test builds that cannot be read mean a fresh build, never no smoke', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const refused = (...args) => {
+    if ((args[1] ?? '').includes('test-builds.yml/runs?head_sha=')) throw ghFailure('gh: Server Error (HTTP 502)')
+    return gh(...args)
+  }
+  const lines = []
+  const r = await postRelease({ ...opts(refused), log: (l) => lines.push(l) })
+  assert.deepEqual([r.verdict, r.testBuilds, r.reusedBuilds], ['green', 501, false])
+  assert.ok(lines.includes(`earlier Test builds of ${SHA.slice(0, 8)} are unreadable (gh: Server Error (HTTP 502)): building afresh`))
+})
+
+test("ghError keeps a thrown non-Error's own text", () => {
+  assert.equal(ghError('a bare string'), 'a bare string')
+})
+
+/** A check-run annotation as GitHub makes it from a step's "::notice title=<t>::<message>" line. */
+const annotation = (line) => {
+  const [, title, message] = /^::notice title=([^:]+)::(.*)$/.exec(line)
+  return { annotation_level: 'notice', title, message }
+}
+const notice = (platform, id) => annotation(bundleNotice({ platform, id, channel: 'production' }))
+
+test('a bundle notice reads back as the bundle it names; other notices and malformed ones are skipped', () => {
+  assert.deepEqual(bundlesFromAnnotations([
+    notice('ios', IOS),
+    { annotation_level: 'notice', title: 'something else', message: `ios bundle ${IOS} (channel production)` },
+    { annotation_level: 'notice', title: NOTICE_TITLE, message: 'web bundle x (channel production)' },
+  ]), [{ platform: 'ios', id: IOS, channel: 'production' }])
+  assert.deepEqual(bundlesFromAnnotations(undefined), [])
+})
+
+/** The fake gh, plus each publish job's check-run annotations. */
+const withNotices = (base, byJob) => (...args) => {
+  const m = /^repos\/owner\/repo\/check-runs\/(\d+)\/annotations/.exec(args[1] ?? '')
+  if (m) return JSON.stringify(byJob[m[1]] ?? [])
+  return base(...args)
+}
+const EGRESS = 'error downloading ota-bundle-ios: HTTP 503: 503 Egress is over the account limit.'
+
+test('records that will not download: the ids come from the publish jobs\' notices, and no log is read', async () => {
+  const { gh, calls } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const listed = withRecords(gh, ['ios', 'android'])
+  const egress = (...args) => {
+    if (args[0] === 'run' && args[1] === 'download') throw ghFailure(EGRESS)
+    return listed(...args)
+  }
+  const lines = []
+  const r = await postRelease({ ...opts(withNotices(egress, { 11: [notice('ios', IOS)], 12: [notice('android', ANDROID)] })), log: (l) => lines.push(l) })
+  assert.deepEqual(r.bundles.map((b) => [b.platform, b.id]), [['ios', IOS], ['android', ANDROID]])
+  assert.deepEqual(r.sources, { ios: 'notice', android: 'notice' })
+  assert.equal(calls.some((c) => /\/logs$/.test(c[1] ?? '')), false)
+  assert.ok(lines.includes(`the ota-bundle-ios record is unreadable: ${EGRESS}`))
+})
+
+test("a job's notice names only its own platform: another platform's notice there is not taken", async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const r = await postRelease(opts(withNotices(gh, { 11: [notice('android', ANDROID)], 12: [notice('android', ANDROID)] })))
+  assert.deepEqual(r.sources, { ios: 'log', android: 'notice' })
+  assert.deepEqual(r.bundles.map((b) => [b.platform, b.id]).sort(), [['android', ANDROID], ['ios', IOS]])
+})
+
+const ESCAPES = 'the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway'
+
+test('a log gh refuses for its escape sequences is read again at once with the flag gh names', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const calls = []
+  const coloured = (...args) => {
+    calls.push(args)
+    if (/actions\/jobs\/11\/logs$/.test(args[1] ?? '') && !args.includes('--allow-escape-sequences')) throw ghFailure(ESCAPES)
+    return gh(...args)
+  }
+  let slept = 0
+  const r = await postRelease(opts(coloured, { sleep: async () => { slept++ } }))
+  assert.deepEqual(r.sources, { ios: 'log', android: 'log' })
+  assert.deepEqual(r.bundles.map((b) => b.id), [IOS, ANDROID])
+  const iosReads = calls.filter((c) => c[1] === `repos/${R}/actions/jobs/11/logs`).map((c) => c.slice(2))
+  assert.deepEqual(iosReads, [[], ['--allow-escape-sequences']])
+  // No wait before the second read: the refusal is not a log that isn't ready yet. (The other sleeps are the dispatch polls.)
+  const { gh: plain } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  let plainSlept = 0
+  await postRelease(opts(plain, { sleep: async () => { plainSlept++ } }))
+  assert.equal(slept, plainSlept)
+})
+
+test('control: any other log failure is retried as before and never given the escape flag', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const calls = []
+  const down = (...args) => {
+    calls.push(args)
+    if (/actions\/jobs\/11\/logs$/.test(args[1] ?? '')) throw ghFailure('gh: HTTP 503')
+    return gh(...args)
+  }
+  const r = await postRelease(opts(down))
+  assert.deepEqual(r.sources, { ios: 'none', android: 'log' })
+  const iosReads = calls.filter((c) => c[1] === `repos/${R}/actions/jobs/11/logs`)
+  assert.equal(iosReads.length, 6)
+  assert.equal(iosReads.some((c) => c.includes('--allow-escape-sequences')), false)
+})
+
+test('the brake is left without a platform\'s id only when record, notice and log all gave none', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const nothing = (...args) => {
+    if (/actions\/jobs\/1[12]\/logs$/.test(args[1] ?? '')) throw ghFailure('gh: HTTP 503')
+    return gh(...args)
+  }
+  // ios: no record, a notice, no log. android: nothing anywhere.
+  const r = await postRelease(opts(withNotices(nothing, { 11: [notice('ios', IOS)] })))
+  assert.deepEqual(r.sources, { ios: 'notice', android: 'none' })
+  assert.deepEqual(r.bundles.map((b) => b.id), [IOS])
+})
+
+test("a log line with colours in it still gives its bundle; the escapes are taken out before the match", () => {
+  const coloured = `2026-10-30T20:23:08Z \x1b[36;1mota-deploy:\x1b[0m ios bundle \x1b[1m${IOS}\x1b[22m is on ring0 (channel \x1b[32mproduction\x1b[39m)\n`
+  assert.deepEqual(bundlesFromLog(coloured), [{ platform: 'ios', id: IOS, channel: 'production' }])
+  // Truecolour written with colons (ECMA-48 parameter bytes), not semicolons.
+  assert.deepEqual(bundlesFromLog(`ota-deploy: android bundle \x1b[38:2:255:0:0m${ANDROID}\x1b[39m is on ring0 (channel production)`), [
+    { platform: 'android', id: ANDROID, channel: 'production' },
+  ])
+  // Control: the same line without colours reads the same.
+  assert.deepEqual(bundlesFromLog(LOG('ios', IOS)), [{ platform: 'ios', id: IOS, channel: 'production' }])
+})
+
+test('a record download refused for egress is named, waited out with backoff, and read from the record after all', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const listed = withRecords(gh, ['ios', 'android'])
+  let refusals = 1
+  const once = (...args) => {
+    if (args[0] === 'run' && args[1] === 'download' && args.includes('ota-bundle-ios') && refusals-- > 0) throw ghFailure(EGRESS)
+    return listed(...args)
+  }
+  const lines = []
+  const slept = []
+  const r = await postRelease({ ...opts(once, { sleep: async (ms) => { slept.push(ms) } }), log: (l) => lines.push(l) })
+  assert.deepEqual(r.sources, { ios: 'record', android: 'record' })
+  assert.ok(lines.includes('::warning title=github-egress-503::2001-09-09T01:46:40.000Z post-release record: artifact ota-bundle-ios of run 900'))
+  assert.equal(slept[0], 30000)
+})
+
+test('a log read refused for egress is named as a github-egress-503 warning', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  let refusals = 1
+  const once = (...args) => {
+    if (/actions\/jobs\/12\/logs$/.test(args[1] ?? '') && refusals-- > 0) throw ghFailure(EGRESS)
+    return gh(...args)
+  }
+  const lines = []
+  const r = await postRelease({ ...opts(once), log: (l) => lines.push(l) })
+  assert.deepEqual(r.sources, { ios: 'log', android: 'log' })
+  assert.ok(lines.includes('::warning title=github-egress-503::2001-09-09T01:46:40.000Z post-release log: log of job 12'))
 })
