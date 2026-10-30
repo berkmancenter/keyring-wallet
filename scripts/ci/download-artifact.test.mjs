@@ -7,7 +7,7 @@ import path from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { BACKOFF_MS, downloadArtifact, EGRESS_TITLE, egressWarning, isTransient, withBackoff } from './download-artifact.mjs'
+import { BACKOFF_MS, downloadArtifact, EGRESS_TITLE, egressWarning, isTransient, unsafeDir, withBackoff } from './download-artifact.mjs'
 
 /** A failed gh call as execFileSync throws it: the message names the command, stderr carries gh's own line. */
 const ghFailure = (stderr) => Object.assign(new Error('Command failed: gh run download 41113292153 …'), { stderr: `${stderr}\n` })
@@ -62,6 +62,8 @@ test('what can pass and what cannot', () => {
   assert.equal(isTransient(ghFailure(EGRESS)), true)
   assert.equal(isTransient(ghFailure('gh: HTTP 500')), true)
   assert.equal(isTransient(new Error('read ECONNRESET')), true)
+  assert.equal(isTransient(new Error('getaddrinfo EAI_AGAIN api.github.com')), true)
+  assert.equal(isTransient(ghFailure('gh: API rate limit exceeded (HTTP 429)')), false)
   assert.equal(isTransient(ghFailure('gh: Not Found (HTTP 404)')), false)
   assert.equal(isTransient(new Error('ENOSPC: no space left on device')), false)
 })
@@ -85,7 +87,7 @@ test('each try starts from an empty directory, so a half-written download never 
     }
     writeFileSync(path.join(d, 'app.zip'), 'whole')
   }
-  await downloadArtifact({ repo: 'owner/repo', run: 41102899638, name: 'keyring-ios-sim', dir, where: 'gate-smoke ios', gh, sleep: async () => {}, warn: () => {}, log: () => {} })
+  await downloadArtifact({ repo: 'owner/repo', run: 41102899638, name: 'keyring-ios-sim', dir, where: 'gate-smoke ios', gh, env: {}, sleep: async () => {}, warn: () => {}, log: () => {} })
   assert.deepEqual(seen, [[], []])
   assert.deepEqual(readdirSync(dir), ['app.zip'])
 })
@@ -103,4 +105,25 @@ test('the command line refuses a call without a run, name or directory, and exit
   assert.equal(status, 1)
   assert.match(stderr, /usage: download-artifact\.mjs/)
   assert.equal(existsSync('x'), false)
+})
+
+test('a directory outside the runner\'s temp and workspace, relative, or a root itself is refused, and nothing is deleted', async () => {
+  const runnerTemp = mkdtempSync(path.join(tmpdir(), 'runner-temp-'))
+  const elsewhere = mkdtempSync(path.join(tmpdir(), 'elsewhere-'))
+  writeFileSync(path.join(elsewhere, 'keep.txt'), 'mine')
+  const env = { RUNNER_TEMP: runnerTemp }
+  // "$RUNNER_TEMP/build" with RUNNER_TEMP unset.
+  assert.match(unsafeDir('/build', env), /not inside/)
+  assert.match(unsafeDir('build', env), /absolute/)
+  assert.match(unsafeDir('', env), /absolute/)
+  assert.match(unsafeDir(runnerTemp, env), /not inside/)
+  assert.match(unsafeDir(path.join(runnerTemp, '..', 'x'), env), /not inside/)
+  assert.equal(unsafeDir(path.join(runnerTemp, 'build'), env), undefined)
+  assert.equal(unsafeDir(path.join(runnerTemp, 'build'), { GITHUB_WORKSPACE: elsewhere, RUNNER_TEMP: runnerTemp }), undefined)
+  let calls = 0
+  await assert.rejects(
+    downloadArtifact({ repo: 'owner/repo', run: 1, name: 'x', dir: elsewhere, where: 'test', env, gh: () => { calls++ }, sleep: async () => {}, warn: () => {}, log: () => {} }),
+    /refusing to empty it/
+  )
+  assert.deepEqual([calls, readdirSync(elsewhere)], [0, ['keep.txt']])
 })

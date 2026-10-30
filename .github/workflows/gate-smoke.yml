@@ -227,7 +227,8 @@ jobs:
 
       # A failed download is tried again with backoff, and an egress refusal is named as a github-egress-503 warning
       # (10-30: GitHub's "Egress is over the account limit" 503; scripts/ci/download-artifact.mjs). Still failing
-      # after the waits, the job fails here as it did before.
+      # after the waits, the job fails here as it did before. It runs on the Node that setup-node put in place above:
+      # keep this step after it.
       - name: Download the build again, with backoff
         if: ${{ steps.download.outcome == 'failure' }}
         env:
@@ -366,7 +367,8 @@ jobs:
 
       # A failed download is tried again with backoff, and an egress refusal is named as a github-egress-503 warning
       # (10-30: GitHub's "Egress is over the account limit" 503; scripts/ci/download-artifact.mjs). Still failing
-      # after the waits, the job fails here as it did before.
+      # after the waits, the job fails here as it did before. It runs on the Node that setup-node put in place above:
+      # keep this step after it.
       - name: Download the build again, with backoff
         if: ${{ steps.download.outcome == 'failure' }}
         env:

@@ -309,6 +309,7 @@ jobs:
           run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow staging.yaml --commit "$sha" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
           dir="$RUNNER_TEMP/recorded-$PLATFORM"
           # With backoff, and an egress refusal named (scripts/ci/download-artifact.mjs); a missing record fails at once.
+          # It runs on the Node that setup-node put in place earlier in this job.
           if [ -n "$run" ] && node scripts/ci/download-artifact.mjs --run "$run" --name "ota-fingerprint-$PLATFORM" --dir "$dir" --where "ota-publish $PLATFORM fingerprint"; then
             echo "recorded=$dir/fingerprint.json" >> "$GITHUB_OUTPUT"
           else
