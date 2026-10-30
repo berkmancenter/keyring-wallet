@@ -55,7 +55,7 @@ import {
   type VtiManagerIdentity,
   type VtiPersona,
 } from './VtiIdentityStore'
-import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
+import { GenericRecordsVtaLinkStore, type VtaLink, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
 import {
   AGENT_DEVICE_TASK,
@@ -2481,10 +2481,13 @@ export class VtaAgentController {
   /**
    * Every agent this phone is linked to, the current one first, each by the
    * name this phone shows for it (the person's nickname, the agent's own name,
-   * or its host's). Waits for the stored link to be read, as a sign-in at
-   * start-up may ask before then.
+   * or its host's), and the Farm sign-in key of one claimed from a Farm.
+   * Waits for the stored link to be read, as a sign-in at start-up may ask
+   * before then.
    */
-  async linkedAgents(agent: Agent): Promise<{ vtaDid: string; name: string; current: boolean }[]> {
+  async linkedAgents(
+    agent: Agent
+  ): Promise<{ vtaDid: string; name: string; current: boolean; farmLogin?: VtaLink['farmLogin'] }[]> {
     await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
     const store = this.linkStore(agent)
     let links = await Promise.resolve(store.list?.()).catch(() => undefined)
@@ -2498,6 +2501,7 @@ export class VtaAgentController {
         vtaDid: l.vtaDid,
         name: l.nickname?.trim() || this.state.agentNames?.[l.vtaDid]?.label || l.agentName?.label || l.label,
         current: l.vtaDid === current,
+        ...(l.farmLogin ? { farmLogin: { ...l.farmLogin } } : {}),
       }))
       .sort((x, y) => Number(y.current) - Number(x.current))
   }

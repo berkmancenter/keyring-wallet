@@ -2630,6 +2630,9 @@
       "agentRefused": "Seu agente recusou entrar por você, então nada foi conectado.",
       "agentUnreachable": "Não foi possível contatar seu agente, então nada foi conectado. Tente mais tarde.",
       "agentNeedsUpdate": "Seu agente precisa ser atualizado antes de poder conectar você a sites.",
+      "farmNotLinked": "Este serviço não reconhece esse agente como um que você obteve dele. Atualize a página de login, escaneie o novo código e escolha o agente que você obteve deste serviço. Se não tiver nenhum, obtenha um novo agente deste serviço ou faça login de outra forma.",
+      "farmKeyMissing": "Este telefone não tem mais a chave com que obteve esse agente, então não pode fazer login com ele. Obtenha um novo agente deste serviço ou faça login de outra forma.",
+      "contextMismatch": "O serviço não aceitou a aprovação deste login. Atualize a página de login e tente novamente.",
       "unknown": "Algo deu errado, então nada foi conectado. Atualize a página de login e tente novamente."
     }
   },

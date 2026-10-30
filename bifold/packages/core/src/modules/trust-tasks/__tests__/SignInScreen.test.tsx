@@ -16,7 +16,11 @@ import ptBr from '../../../localization/pt-br/pt-br.json'
 import { hasOtaApplyBlockers, otaApplyBlockerReasons, resetOtaApplyBlockers } from '../../../utils/otaApply'
 import { testIdWithKey } from '../../../utils/testable'
 import { SIGN_IN_FAILURE_MESSAGES, SignInError, type ClaimedSignIn } from '../module/oobSignIn'
-import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
+import {
+  GRANT_LIFETIME_SECONDS,
+  type ProvedSignIn as AgentProvedSignIn,
+  type SignInRequester,
+} from '../module/oobSignInAgent'
 import { type ProvedSignIn, type SignInIdentity, type SignInSteps } from '../module/signInSteps'
 import SignIn, { SignInFlow } from '../screens/SignIn'
 import { SignInIds } from '../screens/SignIn.ids'
@@ -40,11 +44,18 @@ const claimed = {
   answer: {},
 } as unknown as ClaimedSignIn
 
-const proved: ProvedSignIn = {
+// A sign-in through the member's agent; a Farm's (farmSignIn) has its own shape.
+const proved: AgentProvedSignIn = {
   claimed,
   step2: {},
-  sessionKey: {},
-  requester: { browser: 'Firefox 131', os: 'macOS', location: 'Boston, US', sameNetwork: true },
+  sessionKey: 'did:key:z6MkBrowserSessionKey',
+  requester: {
+    browser: 'Firefox 131',
+    os: 'macOS',
+    location: 'Boston, US',
+    sameNetwork: true,
+    createdAt: '2026-10-11T07:30:00Z',
+  },
   identifiedAs: 'Alberto',
   persona: { did: 'did:webvh:QmP:host:persona', entryId: 'entry-1' },
   version: '0.2',
@@ -355,7 +366,7 @@ describe('5. the request, as the community reports it', () => {
   })
 
   test('what the community did not report is said to be not reported', async () => {
-    const bare = { ...proved, requester: {} }
+    const bare = { ...proved, requester: {} as SignInRequester }
     const tree = await toReview(fakeSteps({ identifyAndProve: jest.fn(async () => bare) }))
     expect(tree.getByTestId(id(SignInIds.browser))).toHaveTextContent('SignIn.NotReported')
     expect(tree.getByTestId(id(SignInIds.sameNetwork))).toHaveTextContent('SignIn.NotReported')

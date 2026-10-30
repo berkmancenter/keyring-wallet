@@ -2728,6 +2728,9 @@
       "agentRefused": "Votre agent a refusé de vous connecter, aucune connexion n'a eu lieu.",
       "agentUnreachable": "Votre agent est injoignable, aucune connexion n'a eu lieu. Réessayez plus tard.",
       "agentNeedsUpdate": "Votre agent doit être mis à jour avant de pouvoir vous connecter à des sites web.",
+      "farmNotLinked": "Ce service ne reconnaît pas cet agent comme l'un de ceux que vous avez obtenus auprès de lui. Actualisez la page de connexion, scannez le nouveau code et choisissez l'agent obtenu auprès de ce service. Si vous n'en avez pas, obtenez un nouvel agent auprès de ce service, ou connectez-vous autrement.",
+      "farmKeyMissing": "Ce téléphone ne détient plus la clé avec laquelle il a obtenu cet agent, il ne peut donc pas se connecter avec lui. Obtenez un nouvel agent auprès de ce service, ou connectez-vous autrement.",
+      "contextMismatch": "Le service n'a pas accepté l'approbation de cette connexion. Actualisez la page de connexion et réessayez.",
       "unknown": "Un problème est survenu, rien n'a été connecté. Actualisez la page de connexion et réessayez."
     }
   },

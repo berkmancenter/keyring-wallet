@@ -2780,6 +2780,9 @@
       "agentRefused": "Your agent refused this sign-in.",
       "agentUnreachable": "Your agent couldn't be reached.",
       "agentNeedsUpdate": "Your agent needs an update before it can sign you in to websites.",
+      "farmNotLinked": "This service doesn't know that agent as one you got from it. Refresh the sign-in page, scan the new code and pick the agent you got from this service. If you have none, get a new agent from this service, or sign in another way.",
+      "farmKeyMissing": "This phone no longer holds the key it got that agent with, so it can't sign in with it. Get a new agent from this service, or sign in another way.",
+      "contextMismatch": "The service didn't accept the approval for this sign-in. Refresh the sign-in page and try again.",
       "unknown": "Something went wrong, so nothing was signed in. Refresh the sign-in page and try again."
     }
   },

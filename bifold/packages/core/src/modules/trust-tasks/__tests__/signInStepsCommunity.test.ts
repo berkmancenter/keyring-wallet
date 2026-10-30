@@ -19,7 +19,9 @@ jest.mock('../module/vtiAgent', () => ({
   readPublicProfileName: (...args: unknown[]) => mockReadPublicProfileName(...(args as [])),
 }))
 // The linked agents and what each one's vault lists (an identity there makes the person a member too, IN-296).
-const mockAgents: { vtaDid: string; name: string; current: boolean }[] = []
+const mockAgents: { vtaDid: string; name: string; current: boolean; farmLogin?: { farmDid: string; did: string } }[] =
+  []
+let mockVaultAsked = 0
 const mockVault: Record<string, unknown[]> = {}
 // Held until a test lets it go, to see what waits on the agents.
 let mockAgentsReady: Promise<void> = Promise.resolve()
@@ -30,7 +32,12 @@ jest.mock('../module/vtaAgent', () => ({
       return mockAgents
     },
     withAgentSession: async (_a: unknown, vtaDid: string, use: (c: unknown) => Promise<unknown>) =>
-      use({ vaultList: async () => mockVault[vtaDid] ?? [] }),
+      use({
+        vaultList: async () => {
+          mockVaultAsked++
+          return mockVault[vtaDid] ?? []
+        },
+      }),
   },
 }))
 jest.mock('../module/VtiIdentityStore', () => ({
@@ -79,6 +86,7 @@ beforeEach(() => {
   mockPublished.clear()
   mockMemberships.push({ communityDid: VTC })
   mockAgentsReady = Promise.resolve()
+  mockVaultAsked = 0
 })
 
 describe("a sign-in's community, by name", () => {
@@ -205,5 +213,45 @@ describe('the name does not wait on the linked agents unless they decide it', ()
     release()
     expect((await pending).name).toBe('Old name')
     expect(agent.dids.resolveDidDocument).not.toHaveBeenCalled()
+  })
+})
+
+// IN-388: a sign-in code from a VTA Farm. The Farm knows the person by the key their agent was claimed with.
+describe('a sign-in code from a Farm this phone claimed an agent from', () => {
+  const FARM = 'did:webvh:QmFarm:vtafarm.example.com'
+  const CLAIM_KEY = 'did:key:z6MkClaimKeyOfHomeAgent'
+
+  it("is a member's: the agents claimed from it are who signs in, and no community or agent's vault is asked", async () => {
+    mockMemberships.splice(0)
+    mockAgents.push(
+      { vtaDid: AGENT, name: 'Home agent', current: true, farmLogin: { farmDid: FARM, did: CLAIM_KEY } },
+      { vtaDid: 'did:webvh:QmB:dids.example:agent-b', name: 'Other', current: false }
+    )
+    const found = await agentSignInSteps(agent as never).community(FARM)
+    expect(found).toEqual({
+      member: true,
+      farm: true,
+      identities: [{ source: 'farm', vtaDid: AGENT, agentName: 'Home agent', current: true, did: CLAIM_KEY }],
+    })
+    expect(agent.dids.resolveDidDocument).not.toHaveBeenCalled()
+    expect(mockReadPublicProfileName).not.toHaveBeenCalled()
+    expect(mockVaultAsked).toBe(0)
+  })
+
+  it('an agent claimed before its key was kept: not a member, said so, and nothing is resolved', async () => {
+    mockMemberships.splice(0)
+    mockAgents.push({ vtaDid: AGENT, name: 'Home agent', current: true })
+    const found = await agentSignInSteps(agent as never).community(FARM)
+    expect(found).toMatchObject({ member: false, olderAgents: true })
+    expect(found.farm).toBeUndefined()
+    expect(agent.dids.resolveDidDocument).not.toHaveBeenCalled()
+  })
+
+  it('a phone whose agents all kept their Farm key says nothing of older agents', async () => {
+    mockMemberships.splice(0)
+    mockAgents.push({ vtaDid: AGENT, name: 'Home agent', current: true, farmLogin: { farmDid: FARM, did: CLAIM_KEY } })
+    const found = await agentSignInSteps(agent as never).community('did:webvh:QmElse:else.example')
+    expect(found).toMatchObject({ member: false })
+    expect(found.olderAgents).toBeUndefined()
   })
 })

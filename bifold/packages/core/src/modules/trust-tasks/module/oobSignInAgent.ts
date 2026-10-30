@@ -239,7 +239,10 @@ export function signInFailureFromAgent(error: unknown, options: { responded?: bo
   return new SignInError('agentUnreachable', error instanceof Error ? error.message : String(error), options)
 }
 
-async function resolveOrUnreachable(deps: Pick<SignInDeps, 'resolveDid'>, did: string): Promise<SignInDidDocument> {
+export async function resolveOrUnreachable(
+  deps: Pick<SignInDeps, 'resolveDid'>,
+  did: string
+): Promise<SignInDidDocument> {
   let document: SignInDidDocument
   try {
     document = await deps.resolveDid(did)
@@ -251,7 +254,7 @@ async function resolveOrUnreachable(deps: Pick<SignInDeps, 'resolveDid'>, did: s
 }
 
 /** Verify `document`'s proof against an already-resolved DID document: no second resolution. */
-function proofVerifies(
+export function proofVerifies(
   document: Record<string, unknown>,
   controller: string,
   controllerDocument: SignInDidDocument,
@@ -316,7 +319,7 @@ async function signedByAgent(
  * members must come back unchanged — plus the browser's key, the requester
  * and who was identified.
  */
-async function step2Problem(
+export async function step2Problem(
   step2: Record<string, unknown>,
   expected: { claimed: ClaimedSignIn; vtcDocument: SignInDidDocument; proveId: string; persona: string; now: number }
 ): Promise<string | undefined> {
