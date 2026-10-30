@@ -216,12 +216,27 @@ jobs:
           echo "WDA cache hit: ${{ steps.wda.outputs.cache-hit || 'no' }}"
           echo "WDA cache hit: ${{ steps.wda.outputs.cache-hit || 'no' }}" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/download-artifact@v4
+      - id: download
+        uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: ${{ needs.builds.outputs.ios_artifact }}
           run-id: ${{ needs.builds.outputs.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/build
+
+      # A failed download is tried again with backoff, and an egress refusal is named as a github-egress-503 warning
+      # (10-30: GitHub's "Egress is over the account limit" 503; scripts/ci/download-artifact.mjs). Still failing
+      # after the waits, the job fails here as it did before.
+      - name: Download the build again, with backoff
+        if: ${{ steps.download.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ needs.builds.outputs.run_id }}
+          ARTIFACT: ${{ needs.builds.outputs.ios_artifact }}
+        run: |
+          echo "::warning title=artifact-download-retry::the first download of $ARTIFACT failed; trying again with backoff"
+          node scripts/ci/download-artifact.mjs --run "$RUN_ID" --name "$ARTIFACT" --dir "$RUNNER_TEMP/build" --where "gate-smoke ios"
 
       - name: Unzip the app
         working-directory: ${{ runner.temp }}/build
@@ -340,12 +355,27 @@ jobs:
       - name: Mark the download
         run: e2e/gate/ci/mark.sh download-build
 
-      - uses: actions/download-artifact@v4
+      - id: download
+        uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: ${{ needs.builds.outputs.android_artifact }}
           run-id: ${{ needs.builds.outputs.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/build
+
+      # A failed download is tried again with backoff, and an egress refusal is named as a github-egress-503 warning
+      # (10-30: GitHub's "Egress is over the account limit" 503; scripts/ci/download-artifact.mjs). Still failing
+      # after the waits, the job fails here as it did before.
+      - name: Download the build again, with backoff
+        if: ${{ steps.download.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ needs.builds.outputs.run_id }}
+          ARTIFACT: ${{ needs.builds.outputs.android_artifact }}
+        run: |
+          echo "::warning title=artifact-download-retry::the first download of $ARTIFACT failed; trying again with backoff"
+          node scripts/ci/download-artifact.mjs --run "$RUN_ID" --name "$ARTIFACT" --dir "$RUNNER_TEMP/build" --where "gate-smoke android"
 
       - name: The build
         working-directory: ${{ runner.temp }}/build

@@ -489,3 +489,32 @@ test("a log line with colours in it still gives its bundle; the escapes are take
   // Control: the same line without colours reads the same.
   assert.deepEqual(bundlesFromLog(LOG('ios', IOS)), [{ platform: 'ios', id: IOS, channel: 'production' }])
 })
+
+test('a record download refused for egress is named, waited out with backoff, and read from the record after all', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  const listed = withRecords(gh, ['ios', 'android'])
+  let refusals = 1
+  const once = (...args) => {
+    if (args[0] === 'run' && args[1] === 'download' && args.includes('ota-bundle-ios') && refusals-- > 0) throw ghFailure(EGRESS)
+    return listed(...args)
+  }
+  const lines = []
+  const slept = []
+  const r = await postRelease({ ...opts(once, { sleep: async (ms) => { slept.push(ms) } }), log: (l) => lines.push(l) })
+  assert.deepEqual(r.sources, { ios: 'record', android: 'record' })
+  assert.ok(lines.includes('::warning title=github-egress-503::2001-09-09T01:46:40.000Z post-release record: artifact ota-bundle-ios of run 900'))
+  assert.equal(slept[0], 30000)
+})
+
+test('a log read refused for egress is named as a github-egress-503 warning', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  let refusals = 1
+  const once = (...args) => {
+    if (/actions\/jobs\/12\/logs$/.test(args[1] ?? '') && refusals-- > 0) throw ghFailure(EGRESS)
+    return gh(...args)
+  }
+  const lines = []
+  const r = await postRelease({ ...opts(once), log: (l) => lines.push(l) })
+  assert.deepEqual(r.sources, { ios: 'log', android: 'log' })
+  assert.ok(lines.includes('::warning title=github-egress-503::2001-09-09T01:46:40.000Z post-release log: log of job 12'))
+})
