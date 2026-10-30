@@ -199,6 +199,16 @@ flowchart LR
   K <-- "Trust Tasks" --> W
 ```
 
+**Shown in Prague.** In October 2026, Keyring was part of LF Decentralized Trust's
+[demonstration of the first open-source Verifiable Trust Community](https://www.linuxfoundation.org/blog/lf-decentralized-trust-demonstrates-the-first-open-source-verifiable-trust-community-in-prague)
+at the Linux Plumbers Conference and Open Source Summit Europe in Prague. The demo
+showed a community for an open-source project built on a decentralized trust graph:
+verifiable relationship, membership and delegation credentials, governance written
+as policy, and checks on pull requests. It is offered as an alternative to the
+PGP/GPG web of trust that projects such as the Linux kernel use to vouch for their
+maintainers: a relationship credential exchanged between two phones can stand in for
+a key-signing. Keyring showed the phone side of it, working with OpenVTC.
+
 The design work behind this lives in
 [`docs/plans/openvtc-integration-plan.md`](docs/plans/openvtc-integration-plan.md).
 
