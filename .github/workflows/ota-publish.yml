@@ -389,6 +389,21 @@ jobs:
           path: ${{ runner.temp }}/ota-bundle.jsonl
           if-no-files-found: warn
 
+      # The same record as a notice on this job (post-release reads it from the check run's annotations), so the ids
+      # still reach the brake when the artifact store and the job log both refuse the read (276.10, 10-30). It must run
+      # at the repository root: the import is relative to the working directory, and continue-on-error would hide a miss.
+      - name: Name the published bundle
+        if: ${{ success() && !inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
+        continue-on-error: true
+        env:
+          RECORD: ${{ runner.temp }}/ota-bundle.jsonl
+        run: |
+          node --input-type=module -e "
+            import { readFileSync } from 'node:fs'
+            import { bundleNotice, bundlesFromRecord } from './scripts/ota/post-release.mjs'
+            for (const b of bundlesFromRecord(readFileSync(process.env.RECORD, 'utf8'))) console.log(bundleNotice(b))
+          "
+
       # A publish to ring1 or ring2 (the default: the owner's rule, 10-29, is that updates reach testers at once) widens
       # this platform's bundle in the same run, right after it reached ring 0, on the run's one approval. The bundle id
       # is the record ota-deploy just wrote. If the widen fails, the bundle stays on ring 0 and the run fails, naming

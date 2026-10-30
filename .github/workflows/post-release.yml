@@ -24,6 +24,8 @@ permissions:
   contents: read
   # Dispatching Test builds and gate-smoke, and reading runs, jobs and their logs.
   actions: write
+  # The publish jobs' ota-bundle notices (check-run annotations), the bundle ids' second source.
+  checks: read
 
 concurrency:
   group: post-release-${{ github.event.workflow_run.head_sha }}
