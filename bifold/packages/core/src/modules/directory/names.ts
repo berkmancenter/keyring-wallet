@@ -16,6 +16,8 @@
  */
 import type { Agent } from '@credo-ts/core'
 
+import { createKeyLock } from '../../utils/keyLock'
+
 const NAMES_TYPE = 'directory-names'
 const recordId = (communityDid: string) => `${NAMES_TYPE}:${communityDid}`
 
@@ -25,16 +27,7 @@ export const NAME_TTL_MS = 7 * 24 * 60 * 60 * 1000
 type Kept = Record<string, { name: string; at: number }>
 
 // One community's reads and writes in turn: two keeps at once would each write the record without the other's name.
-const queues = new Map<string, Promise<unknown>>()
-function inTurn<T>(key: string, task: () => Promise<T>): Promise<T> {
-  const next = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(task)
-  queues.set(key, next)
-  const done = () => {
-    if (queues.get(key) === next) queues.delete(key)
-  }
-  next.then(done, done)
-  return next
-}
+const inTurn = createKeyLock()
 
 const fresh = (kept: Kept, now: number): Kept => {
   const out: Kept = {}

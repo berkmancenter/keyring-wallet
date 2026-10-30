@@ -11,6 +11,8 @@
 
 import type { Agent } from '@credo-ts/core'
 
+import { createKeyLock } from '../../utils/keyLock'
+
 const PETNAME_TYPE = 'rooms-petname'
 const petnameId = (communityDid: string, memberDid: string): string => `${PETNAME_TYPE}:${communityDid}|${memberDid}`
 
@@ -27,16 +29,7 @@ export const tidyPetname = (name: string | undefined): string | undefined => {
 }
 
 // One member's reads and writes in turn: two saves at once would both find no record and both create one.
-const queues = new Map<string, Promise<unknown>>()
-function inTurn<T>(key: string, task: () => Promise<T>): Promise<T> {
-  const next = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(task)
-  queues.set(key, next)
-  const done = () => {
-    if (queues.get(key) === next) queues.delete(key)
-  }
-  next.then(done, done)
-  return next
-}
+const inTurn = createKeyLock()
 
 // Screens showing a community's names, told when one changes so a name given on the sheet shows in the chat at once.
 const listeners = new Map<string, Set<() => void>>()
