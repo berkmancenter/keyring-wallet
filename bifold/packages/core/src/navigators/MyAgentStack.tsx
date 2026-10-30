@@ -29,6 +29,7 @@ import RoomsHome from '../modules/rooms/screens/RoomsHome'
 import Room from '../modules/rooms/screens/Room'
 import RoomOffer from '../modules/rooms/screens/RoomOffer'
 import CommunityCard from '../modules/directory/screens/CommunityCard'
+import CommunityMemberCard from '../modules/directory/screens/CommunityMemberCard'
 import CommunityMembers from '../modules/directory/screens/CommunityMembers'
 import { MyAgentStackParams, Screens } from '../types/navigators'
 
@@ -86,6 +87,11 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.CommunityMembers}
         component={CommunityMembers}
         options={{ title: t('Screens.CommunityMembers'), ...ScreenOptionsDictionary[Screens.CommunityMembers] }}
+      />
+      <Stack.Screen
+        name={Screens.CommunityMemberCard}
+        component={CommunityMemberCard}
+        options={{ title: t('Screens.CommunityMemberCard'), ...ScreenOptionsDictionary[Screens.CommunityMemberCard] }}
       />
       <Stack.Screen
         name={Screens.CommunityCard}

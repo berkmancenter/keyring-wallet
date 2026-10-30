@@ -1121,6 +1121,7 @@
     "Zoom": "Zoom"
   },
   "Screens": {
+    "CommunityMemberCard": "Member card",
     "CommunityMembers": "Members",
     "CommunityCard": "Your card",
     "Splash": "Splash",
@@ -2395,6 +2396,15 @@
     "AddWhatTheyAsked": "Add what they asked for"
   },
   "Directory": {
+    "ViewCard": "View card",
+    "NoCardToShow": "There's no card to show for {{member}} in {{community}}.",
+    "ThisMember": "this member",
+    "MemberCardTitle": "Member card",
+    "TheirOwnCard": "Their own card in {{community}}",
+    "CheckedAgainstCard": "Checked against a card they hold",
+    "NothingElseShown": "They show nothing else here.",
+    "Yes": "Yes",
+    "No": "No",
     "SectionTitle": "Directory",
     "MembersRow": "Members",
     "MembersRowLine": "Who is in this community, by the names they show",

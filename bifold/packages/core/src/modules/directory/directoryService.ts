@@ -15,10 +15,21 @@ import {
   type CardField,
   type DirectoryOperation,
   type DirectoryService,
+  type MemberCard,
   type MemberPage,
   type MyCard,
 } from './types'
-import { DIRECTORY_TASK, MEMBERS_PAGE, parseCard, parseEntries, parseFields, parseQueryName } from './wire'
+import {
+  DIRECTORY_TASK,
+  MEMBERS_PAGE,
+  entryFields,
+  parseCard,
+  parseEntries,
+  parseFields,
+  parseMemberCard,
+  parseQueryName,
+  queryFields,
+} from './wire'
 
 export interface DirectoryBackend {
   /** Send a Trust Task to a community as this phone's persona for it; resolves with the response payload. */
@@ -82,6 +93,35 @@ export class AgentDirectoryService implements DirectoryService {
       if (e instanceof DirectoryRefused && e.code === 'notFound') return undefined
       throw e
     }
+  }
+
+  public async showMember(communityDid: string, entryId: string): Promise<MemberCard | undefined> {
+    return this.memberCard(communityDid, DIRECTORY_TASK.entriesShow, { entryId }, (p) => entryFields(p, entryId))
+  }
+
+  public async memberCardByDid(communityDid: string, memberDid: string): Promise<MemberCard | undefined> {
+    // No `fields` hint: the whole card, as the community projects it for this member.
+    return this.memberCard(communityDid, DIRECTORY_TASK.query, { subject: memberDid }, (p) => queryFields(p, memberDid))
+  }
+
+  /** A card read one way or the other, labelled by the community's fields; `notFound` is no card to show. */
+  private async memberCard(
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    fieldsOf: (answer: unknown) => Record<string, unknown> | undefined
+  ): Promise<MemberCard | undefined> {
+    let fields: Record<string, unknown> | undefined
+    try {
+      fields = fieldsOf(await this.ask('showMember', communityDid, type, payload))
+    } catch (e) {
+      // "No such member" and "not shown to you" are one answer by design.
+      if (e instanceof DirectoryRefused && e.code === 'notFound') return undefined
+      throw e
+    }
+    if (!fields) return undefined
+    const definitions = parseFields(await this.ask('showMember', communityDid, DIRECTORY_TASK.fieldsList, {}))
+    return parseMemberCard(fields, definitions)
   }
 
   /** A request to the community; its refusal reported by the task's own code. */

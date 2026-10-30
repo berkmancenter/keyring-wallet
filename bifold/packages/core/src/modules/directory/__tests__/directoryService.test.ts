@@ -241,3 +241,181 @@ describe('a room author’s own name', () => {
     await expect(service.lookupName(COMMUNITY, ANA)).rejects.toMatchObject({ code: 'rateLimited' })
   })
 })
+
+describe('another member’s card', () => {
+  const DEFS = {
+    fields: [
+      {
+        key: 'displayName',
+        label: 'Name',
+        type: 'text',
+        source: 'member',
+        base: true,
+        ceiling: 'public',
+        defaultVisibility: 'members',
+        required: false,
+        searchable: true,
+        facet: false,
+        order: 1,
+        state: 'active',
+      },
+      {
+        key: 'pronouns',
+        label: 'Pronouns',
+        type: 'text',
+        source: 'member',
+        base: true,
+        ceiling: 'public',
+        defaultVisibility: 'admins',
+        required: false,
+        searchable: false,
+        facet: false,
+        order: 3,
+        state: 'active',
+      },
+      {
+        key: 'links',
+        label: 'Links',
+        type: 'url',
+        source: 'member',
+        base: true,
+        ceiling: 'public',
+        defaultVisibility: 'admins',
+        required: false,
+        searchable: false,
+        facet: false,
+        order: 4,
+        state: 'active',
+      },
+      {
+        key: 'joinedAt',
+        label: 'Joined',
+        type: 'date',
+        source: 'derived',
+        base: true,
+        ceiling: 'members',
+        defaultVisibility: 'admins',
+        required: false,
+        searchable: false,
+        facet: false,
+        order: 2,
+        state: 'active',
+      },
+      {
+        key: 'org.lab.licensed',
+        label: 'Licensed',
+        type: 'claim',
+        source: 'credential',
+        base: false,
+        ceiling: 'members',
+        defaultVisibility: 'members',
+        required: false,
+        searchable: false,
+        facet: false,
+        order: 5,
+        state: 'active',
+      },
+      {
+        key: 'org.lab.mentor',
+        label: 'Mentor',
+        type: 'text',
+        source: 'member',
+        base: false,
+        ceiling: 'members',
+        defaultVisibility: 'members',
+        required: false,
+        searchable: false,
+        facet: false,
+        order: 6,
+        state: 'active',
+      },
+      {
+        key: 'avatar',
+        label: 'Picture',
+        type: 'image',
+        source: 'member',
+        base: true,
+        ceiling: 'public',
+        defaultVisibility: 'admins',
+        required: false,
+        searchable: false,
+        facet: false,
+        order: 7,
+        state: 'active',
+      },
+      {
+        key: 'did',
+        label: 'Identifier',
+        type: 'did',
+        source: 'derived',
+        base: true,
+        ceiling: 'members',
+        defaultVisibility: 'admins',
+        required: false,
+        searchable: false,
+        facet: false,
+        order: 8,
+        state: 'active',
+      },
+    ],
+    listingDefaults: { defaultListing: 'listed' },
+  }
+  const FIELDS = {
+    displayName: 'Ana Lopez',
+    role: 'member',
+    pronouns: 'she/her',
+    links: ['https://example.org', 'https://example.net'],
+    joinedAt: '2026-09-01T10:00:00Z',
+    'org.lab.licensed': { value: 'Pharmacist', issuer: 'did:web:board', verifiedAt: '2026-10-01T00:00:00Z' },
+    'org.lab.mentor': true,
+    avatar: { sha256: 'a'.repeat(64), mediaType: 'image/png' },
+    did: 'did:key:ana',
+    'org.unknown.field': 'no label for this',
+  }
+
+  it('reads it by entry, labelled and ordered by the community’s fields, leaving out the head, the ID and pictures', async () => {
+    const entryId = ENTRY(7)
+    const { service, communityTask } = setup((type) =>
+      type === DIRECTORY_TASK.entriesShow ? { entry: { entryId, fields: FIELDS } } : DEFS
+    )
+    const card = await service.showMember(COMMUNITY, entryId)
+    expect(communityTask.mock.calls.map((c) => [c[1], c[2]])).toEqual([
+      [DIRECTORY_TASK.entriesShow, { entryId }],
+      [DIRECTORY_TASK.fieldsList, {}],
+    ])
+    expect(card?.name).toBe('Ana Lopez')
+    expect(card?.role).toBe('member')
+    expect(card?.entries.map((e) => [e.key, e.value])).toEqual([
+      ['joinedAt', { kind: 'text', text: '2026-09-01' }],
+      ['pronouns', { kind: 'text', text: 'she/her' }],
+      ['links', { kind: 'list', items: ['https://example.org', 'https://example.net'] }],
+      ['org.lab.licensed', { kind: 'verified', text: 'Pharmacist' }],
+      ['org.lab.mentor', { kind: 'yesNo', yes: true }],
+    ])
+  })
+
+  it('reads a room author’s card by DID, the whole card and not just the name', async () => {
+    const { service, communityTask } = setup((type) =>
+      type === DIRECTORY_TASK.query ? { subject: 'did:key:ana', fields: FIELDS } : DEFS
+    )
+    expect((await service.memberCardByDid(COMMUNITY, 'did:key:ana'))?.name).toBe('Ana Lopez')
+    expect(communityTask.mock.calls[0][2]).toEqual({ subject: 'did:key:ana' })
+  })
+
+  it('has no card for a member the community does not show, nor from an answer about someone else', async () => {
+    const hidden = setup(() => {
+      throw new FakeRefusal('taskFailed', { code: 'vtc/directory/entries/show:notFound' })
+    })
+    expect(await hidden.service.showMember(COMMUNITY, ENTRY(7))).toBeUndefined()
+    const other = setup(() => ({ entry: { entryId: ENTRY(8), fields: FIELDS } }))
+    expect(await other.service.showMember(COMMUNITY, ENTRY(7))).toBeUndefined()
+    expect(other.communityTask).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes a failed read on, so it is never shown as no card', async () => {
+    const { service } = setup(() => {
+      throw new Error('the community did not answer within 30 s')
+    })
+    await expect(service.memberCardByDid(COMMUNITY, 'did:key:ana')).rejects.toThrow('did not answer')
+  })
+})

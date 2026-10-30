@@ -22,6 +22,7 @@ import type {
   CardProposal,
   DirectoryAudience,
   DirectoryService,
+  MemberCard,
   MemberRow,
   MyCard,
   OperationStatus,
@@ -281,4 +282,61 @@ export function useMyCommunityCard(service: DirectoryService | undefined, commun
     save,
     reload,
   }
+}
+
+export interface MemberCardView {
+  card?: MemberCard
+  /** The community has no card to show for them: no such member, or nothing shown to you. */
+  none: boolean
+  /** Why it could not be read (no answer, no directory): not the same as no card. */
+  status?: OperationStatus
+  loading: boolean
+  reload(): void
+}
+
+/**
+ * Another member's card, by the entry the members list gave or by a room author's DID. Held in this screen's state
+ * only. A card the community does not show is `none`; a read that failed is a `status`, so a lost answer never
+ * reads as "no card".
+ */
+export function useMemberCard(
+  service: DirectoryService | undefined,
+  communityDid: string,
+  by: { entryId?: string; memberDid?: string }
+): MemberCardView {
+  const [card, setCard] = useState<MemberCard>()
+  const [none, setNone] = useState(false)
+  const [status, setStatus] = useState<OperationStatus>()
+  const [loading, setLoading] = useState(false)
+  const [generation, setGeneration] = useState(0)
+  const { entryId, memberDid } = by
+
+  useEffect(() => {
+    if (!service || (!entryId && !memberDid)) return
+    let live = true
+    setLoading(true)
+    setStatus(undefined)
+    setNone(false)
+    const read = entryId
+      ? service.showMember(communityDid, entryId)
+      : service.memberCardByDid(communityDid, memberDid as string)
+    read
+      .then((shown) => {
+        if (!live) return
+        setCard(shown)
+        setNone(!shown)
+      })
+      .catch((e: unknown) => {
+        if (live) setStatus(directoryStatusOf(e))
+      })
+      .finally(() => {
+        if (live) setLoading(false)
+      })
+    return () => {
+      live = false
+    }
+  }, [service, communityDid, entryId, memberDid, generation])
+
+  const reload = useCallback(() => setGeneration((g) => g + 1), [])
+  return { card, none, status, loading, reload }
 }

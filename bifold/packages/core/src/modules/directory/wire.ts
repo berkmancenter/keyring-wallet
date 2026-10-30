@@ -12,8 +12,11 @@ import {
   DIRECTORY_AUDIENCES,
   NAME_FIELD,
   ROLE_FIELD,
+  type CardEntry,
   type CardField,
+  type CardValue,
   type DirectoryAudience,
+  type MemberCard,
   type MemberPage,
   type MemberRow,
   type MyCard,
@@ -27,6 +30,7 @@ export const DIRECTORY_TASK = {
   cardUpdate: `${SPEC}vtc/directory/card/update/0.1`,
   fieldsList: `${SPEC}vtc/directory/fields/list/0.1`,
   query: `${SPEC}vtc/directory/query/0.1`,
+  entriesShow: `${SPEC}vtc/directory/entries/show/0.1`,
 } as const
 
 /** A page as the community serves it by default; at most 100 (`entries/list/0.1`). */
@@ -122,8 +126,64 @@ export function parseFields(payload: unknown, card?: Pick<MyCard, 'visibility'>)
       ceiling,
       writable: f.source === 'member',
       required: f.required === true,
+      type: str(f.type),
       order: int(f.order) ?? Number.MAX_SAFE_INTEGER,
     })
   }
   return out.sort((a, b) => a.order - b.order).map(({ order: _order, ...field }) => field)
+}
+
+// Shown in the card's head (name, role), or not shown as a value at all: the identifier, and pictures (none at 0.12).
+const NOT_A_CARD_LINE = new Set([NAME_FIELD, ROLE_FIELD, 'did'])
+
+/** One value as a card line shows it, by its field's type; undefined for a value of no shape the card schema defines. */
+function cardValue(raw: unknown, type: string | undefined): CardValue | undefined {
+  if (type === 'image') return undefined
+  if (typeof raw === 'boolean') return { kind: 'yesNo', yes: raw }
+  if (typeof raw === 'string') {
+    const shown = type === 'date' ? raw.slice(0, 10) : raw
+    const t = text(shown, 2000)
+    return t ? { kind: 'text', text: t } : undefined
+  }
+  if (Array.isArray(raw)) {
+    const items = raw.slice(0, 32).flatMap((item) => {
+      const t = text(item, 500)
+      return t ? [t] : []
+    })
+    return items.length ? { kind: 'list', items } : undefined
+  }
+  const v = obj(raw)
+  // A `VerifiedValue`: what a credential the member presented says, with who issued it and when it was checked.
+  if (v && str(v.issuer) && str(v.verifiedAt) && v.value !== undefined) {
+    const t = text(typeof v.value === 'string' ? v.value : String(v.value), 2000)
+    return t ? { kind: 'verified', text: t } : undefined
+  }
+  return undefined
+}
+
+/**
+ * Another member's card from the fields the community projected for this member, labelled and ordered by the
+ * community's field definitions. A field the definitions do not name is left out: its label could only be its key.
+ */
+export function parseMemberCard(fields: unknown, definitions: readonly CardField[]): MemberCard {
+  const values = obj(fields) ?? {}
+  const entries: CardEntry[] = []
+  for (const def of definitions) {
+    if (NOT_A_CARD_LINE.has(def.key) || !(def.key in values)) continue
+    const value = cardValue(values[def.key], def.type)
+    if (value) entries.push({ key: def.key, label: def.label, value })
+  }
+  return { name: text(values[NAME_FIELD], 64), role: text(values[ROLE_FIELD], 64), entries }
+}
+
+/** The fields of an `entries/show/0.1` answer about `entryId`. */
+export function entryFields(payload: unknown, entryId: string): Record<string, unknown> | undefined {
+  const entry = obj(obj(payload)?.entry)
+  return entry && str(entry.entryId) === entryId ? obj(entry.fields) : undefined
+}
+
+/** The fields of a `query/0.1` answer about `memberDid`. */
+export function queryFields(payload: unknown, memberDid: string): Record<string, unknown> | undefined {
+  const p = obj(payload)
+  return p && str(p.subject) === memberDid ? obj(p.fields) : undefined
 }

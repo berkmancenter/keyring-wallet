@@ -12,6 +12,7 @@ import {
   type CardField,
   type DirectoryAudience,
   type DirectoryService,
+  type MemberCard,
   type MemberRow,
   type MyCard,
 } from '../types'
@@ -24,9 +25,11 @@ export interface FakeDirectoryOptions {
   /** The name already on your card. */
   cardName?: string
   /** Make a call fail as the community would refuse it, by the task's code (e.g. `unsupportedType`, `rateLimited`). */
-  refuse?: Partial<Record<'listMembers' | 'showMyCard' | 'setMyName' | 'lookupName', string>>
+  refuse?: Partial<Record<'listMembers' | 'showMyCard' | 'setMyName' | 'lookupName' | 'showMember', string>>
   /** The names members show by DID, as `lookupName` finds them; anyone else has none. */
   shown?: Record<string, string>
+  /** Cards by entry id or member DID, as `showMember` and `memberCardByDid` find them; anyone else has none. */
+  cards?: Record<string, MemberCard>
 }
 
 const field = (
@@ -61,7 +64,7 @@ export function createFakeDirectoryService(options: FakeDirectoryOptions = {}): 
     updatedAt: '2026-10-30T00:00:00Z',
   }
   const calls: string[] = []
-  const refuse = (operation: 'listMembers' | 'showMyCard' | 'setMyName' | 'lookupName') => {
+  const refuse = (operation: 'listMembers' | 'showMyCard' | 'setMyName' | 'lookupName' | 'showMember') => {
     const code = options.refuse?.[operation]
     if (code)
       throw new DirectoryRefused(
@@ -106,6 +109,16 @@ export function createFakeDirectoryService(options: FakeDirectoryOptions = {}): 
       calls.push(`lookupName ${memberDid}`)
       refuse('lookupName')
       return options.shown?.[memberDid]
+    },
+    async showMember(_communityDid, entryId) {
+      calls.push(`showMember ${entryId}`)
+      refuse('showMember')
+      return options.cards?.[entryId]
+    },
+    async memberCardByDid(_communityDid, memberDid) {
+      calls.push(`memberCardByDid ${memberDid}`)
+      refuse('showMember')
+      return options.cards?.[memberDid]
     },
     changeElsewhere(name) {
       card = { ...card, name: toInertText(name), revision: card.revision + 1 }

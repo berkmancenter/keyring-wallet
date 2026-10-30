@@ -1055,6 +1055,7 @@
     "Zoom": "Agrandir"
   },
   "Screens": {
+    "CommunityMemberCard": "Carte de membre",
     "CommunityMembers": "Membres",
     "CommunityCard": "Votre carte",
     "VtaCreateAgent": "Configurer un nouvel agent",
@@ -2346,6 +2347,15 @@
     "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé"
   },
   "Directory": {
+    "ViewCard": "Voir la carte",
+    "NoCardToShow": "Aucune carte à afficher pour {{member}} dans {{community}}.",
+    "ThisMember": "ce membre",
+    "MemberCardTitle": "Carte de membre",
+    "TheirOwnCard": "Sa propre carte dans {{community}}",
+    "CheckedAgainstCard": "Vérifié avec une carte qu’il ou elle détient",
+    "NothingElseShown": "Rien d’autre n’est montré ici.",
+    "Yes": "Oui",
+    "No": "Non",
     "SectionTitle": "Annuaire",
     "MembersRow": "Membres",
     "MembersRowLine": "Qui fait partie de cette communauté, par les noms qu’ils montrent",

@@ -45,6 +45,11 @@ export interface RoomIdentitySheetProps {
   onClose: () => void
   /** Opens the member's profile to see or edit it, or to add a name when it has none. */
   onOpenProfile: (profileId?: string) => void
+  /**
+   * Opens another member's card in the community's directory, for one who shows their identity to members; `standIn`
+   * is what the room calls them. Without it, the sheet offers no card.
+   */
+  onViewCard?: (did: string, standIn: string) => void
 }
 
 export const RoomIdentitySheet: React.FC<RoomIdentitySheetProps> = ({
@@ -54,6 +59,7 @@ export const RoomIdentitySheet: React.FC<RoomIdentitySheetProps> = ({
   me,
   onClose,
   onOpenProfile,
+  onViewCard,
 }) => (
   <SafeAreaModal visible={!!identity} transparent animationType="slide" onRequestClose={onClose}>
     {identity ? (
@@ -64,6 +70,7 @@ export const RoomIdentitySheet: React.FC<RoomIdentitySheetProps> = ({
         me={me}
         onClose={onClose}
         onOpenProfile={onOpenProfile}
+        onViewCard={onViewCard}
       />
     ) : null}
   </SafeAreaModal>
@@ -76,6 +83,7 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
   me,
   onClose,
   onOpenProfile,
+  onViewCard,
 }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
@@ -187,6 +195,16 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
             <ThemedText style={styles.muted} testID={testIdWithKey('RoomIdentitySource')}>
               {source}
             </ThemedText>
+            {/* Their card is reachable only where they show their identity to members; most members don't. */}
+            {!mine && communityDid && !theirOwn ? (
+              <ThemedText variant="caption" style={styles.muted} testID={testIdWithKey('RoomIdentityNoCard')}>
+                {t('Directory.NoCardToShow', {
+                  member: title,
+                  community: communityLabelOf(communityDid, t),
+                  interpolation: { escapeValue: false },
+                })}
+              </ThemedText>
+            ) : null}
           </View>
         </View>
         <View style={styles.idBox}>
@@ -216,6 +234,14 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
             </ThemedText>
           ) : null}
         </View>
+        {!mine && theirOwn && onViewCard ? (
+          <Button
+            title={t('Directory.ViewCard')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => onViewCard(identity.did, memberText(t, identity))}
+            testID={testIdWithKey('RoomIdentityViewCard')}
+          />
+        ) : null}
         {naming && petname.loaded ? (
           draft === undefined ? (
             <Button

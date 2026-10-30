@@ -981,6 +981,7 @@
     "Zoom": "Zoom"
   },
   "Screens": {
+    "CommunityMemberCard": "Cartão de membro",
     "CommunityMembers": "Membros",
     "CommunityCard": "Seu cartão",
     "VtaCreateAgent": "Configurar um novo agente",
@@ -2245,6 +2246,15 @@
     "AddWhatTheyAsked": "Adicionar o que pediram"
   },
   "Directory": {
+    "ViewCard": "Ver cartão",
+    "NoCardToShow": "Não há cartão para mostrar de {{member}} em {{community}}.",
+    "ThisMember": "este membro",
+    "MemberCardTitle": "Cartão de membro",
+    "TheirOwnCard": "O próprio cartão em {{community}}",
+    "CheckedAgainstCard": "Conferido com um cartão que a pessoa tem",
+    "NothingElseShown": "Nada mais é mostrado aqui.",
+    "Yes": "Sim",
+    "No": "Não",
     "SectionTitle": "Diretório",
     "MembersRow": "Membros",
     "MembersRowLine": "Quem está nesta comunidade, pelos nomes que mostram",

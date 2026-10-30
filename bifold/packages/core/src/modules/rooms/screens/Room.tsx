@@ -472,6 +472,18 @@ const Room: React.FC = () => {
           me={me}
           onClose={() => setSheetFor(undefined)}
           onOpenProfile={(profileId) => navigation.navigate(Screens.EditRCard, profileId ? { profileId } : {})}
+          onViewCard={
+            room.communityDid
+              ? (memberDid, standIn) => {
+                  setSheetFor(undefined)
+                  navigation.navigate(Screens.CommunityMemberCard, {
+                    communityDid: room.communityDid,
+                    memberDid,
+                    standIn,
+                  })
+                }
+              : undefined
+          }
         />
         <RoomNoteEditor
           service={service}

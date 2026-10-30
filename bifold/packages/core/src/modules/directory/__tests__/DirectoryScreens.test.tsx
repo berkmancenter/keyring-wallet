@@ -13,6 +13,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { CommunityDirectorySection } from '../components/CommunityDirectorySection'
 import CommunityCard from '../screens/CommunityCard'
+import CommunityMemberCard from '../screens/CommunityMemberCard'
 import CommunityMembers from '../screens/CommunityMembers'
 import { createFakeDirectoryService, type FakeDirectoryService } from '../testing/fakeDirectoryService'
 
@@ -21,6 +22,7 @@ const id = (key: string) => testIdWithKey(key)
 
 let mockService: FakeDirectoryService
 let mockMe: { name?: string; profileId?: string } = {}
+let mockParams: Record<string, string> = {}
 jest.mock('../useDirectory', () => ({
   ...jest.requireActual('../useDirectory'),
   useDirectoryService: () => mockService,
@@ -28,7 +30,7 @@ jest.mock('../useDirectory', () => ({
 jest.mock('../../rooms/useMyName', () => ({ useMyName: () => mockMe }))
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
-  useRoute: () => ({ params: { communityDid: COMMUNITY } }),
+  useRoute: () => ({ params: { communityDid: COMMUNITY, ...mockParams } }),
 }))
 
 const show = (screen: React.ReactElement) => render(<BasicAppContext>{screen}</BasicAppContext>)
@@ -41,6 +43,7 @@ const press = async (tree: Tree, key: string) => {
 
 beforeEach(() => {
   mockMe = { name: 'Ana Lopez', profileId: 'profile-work' }
+  mockParams = {}
 })
 
 describe('Members', () => {
@@ -147,5 +150,60 @@ describe('the community screen’s directory rows', () => {
     expect(useNavigation().navigate).toHaveBeenCalledWith(Screens.CommunityCard, { communityDid: COMMUNITY })
     // Nothing is read until a screen is opened.
     expect(mockService.calls).toEqual([])
+  })
+})
+
+describe('another member’s card', () => {
+  const ANA = {
+    name: 'Ana Lopez',
+    role: 'member',
+    entries: [
+      { key: 'pronouns', label: 'Pronouns', value: { kind: 'text', text: 'she/her' } },
+      { key: 'org.lab.licensed', label: 'Licensed', value: { kind: 'verified', text: 'Pharmacist' } },
+    ],
+  } as never
+
+  it('opens from a member’s row, by their entry', async () => {
+    mockService = createFakeDirectoryService({ members: 3 })
+    const tree = show(<CommunityMembers />)
+    await waitFor(() => tree.getByTestId(id('DirectoryMember_dir_member000000000001')))
+    await press(tree, 'DirectoryMember_dir_member000000000001')
+    expect(useNavigation().navigate).toHaveBeenCalledWith(Screens.CommunityMemberCard, {
+      communityDid: COMMUNITY,
+      entryId: 'dir_member000000000001',
+    })
+  })
+
+  it('shows their name, role, whose card it is, and each field they show, a checked one marked', async () => {
+    mockParams = { entryId: 'dir_ana' }
+    mockService = createFakeDirectoryService({ cards: { dir_ana: ANA } })
+    const tree = show(<CommunityMemberCard />)
+    await waitFor(() => tree.getByTestId(id('MemberCardName')))
+    expect(tree.getByTestId(id('MemberCardName'))).toHaveTextContent('Ana Lopez')
+    expect(tree.getByTestId(id('MemberCardRole'))).toHaveTextContent('Community.RoleMember')
+    expect(tree.getByTestId(id('MemberCardWhose'))).toHaveTextContent('Directory.TheirOwnCard')
+    expect(tree.getByTestId(id('MemberCardField_pronouns'))).toHaveTextContent(/she\/her/)
+    expect(tree.getByTestId(id('MemberCardField_org.lab.licensed'))).toHaveTextContent(/Directory\.CheckedAgainstCard/)
+    expect(
+      within(tree.getByTestId(id('MemberCardField_pronouns'))).queryByText('Directory.CheckedAgainstCard')
+    ).toBeNull()
+  })
+
+  it('says there is no card to show when the community shows none', async () => {
+    mockParams = { memberDid: 'did:key:bo', standIn: 'Member …bo' }
+    mockService = createFakeDirectoryService({ cards: {} })
+    const tree = show(<CommunityMemberCard />)
+    await waitFor(() => tree.getByTestId(id('MemberCardNone')))
+    expect(tree.getByTestId(id('MemberCardNone'))).toHaveTextContent('Directory.NoCardToShow')
+  })
+
+  it('a read that failed says so with Try again, never "no card"', async () => {
+    mockParams = { memberDid: 'did:key:bo' }
+    mockService = createFakeDirectoryService({ refuse: { showMember: 'rateLimited' } })
+    const tree = show(<CommunityMemberCard />)
+    await waitFor(() => tree.getByTestId(id('MemberCardStatus')))
+    expect(tree.getByTestId(id('MemberCardStatus'))).toHaveTextContent('Directory.StatusUnreachable')
+    expect(tree.getByTestId(id('MemberCardReload'))).toBeTruthy()
+    expect(tree.queryByTestId(id('MemberCardNone'))).toBeNull()
   })
 })

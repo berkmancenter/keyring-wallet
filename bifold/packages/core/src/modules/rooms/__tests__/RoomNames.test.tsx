@@ -234,6 +234,33 @@ describe('names in a room, step 1', () => {
     expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.NameTheirOwn')
   })
 
+  test('an author who shows their card: "View card" opens it by their DID, with what the room calls them', async () => {
+    mockDirectoryNames = new Map([[THEM.did, 'Saddle Q']])
+    const tree = await show()
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).queryByTestId(id('RoomIdentityNoCard'))).toBeNull()
+    await press(tree, 'RoomIdentityViewCard')
+    expect(useNavigation().navigate).toHaveBeenCalledWith(Screens.CommunityMemberCard, {
+      communityDid: 'did:webvh:lab',
+      memberDid: THEM.did,
+      standIn: 'Rooms.MemberTail',
+    })
+  })
+
+  test('an author who does not: one plain line that there is no card to show, no button', async () => {
+    const tree = await show()
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).getByTestId(id('RoomIdentityNoCard'))).toHaveTextContent('Directory.NoCardToShow')
+    expect(sheet(tree).queryByTestId(id('RoomIdentityViewCard'))).toBeNull()
+  })
+
+  test('your own sheet has neither', async () => {
+    const tree = await show()
+    await press(tree, 'RoomComposerPostingAsButton')
+    expect(sheet(tree).queryByTestId(id('RoomIdentityNoCard'))).toBeNull()
+    expect(sheet(tree).queryByTestId(id('RoomIdentityViewCard'))).toBeNull()
+  })
+
   test('a name you gave comes before their own name', async () => {
     mockNames = new Map([[THEM.did, 'River']])
     mockDirectoryNames = new Map([[THEM.did, 'Saddle Q']])

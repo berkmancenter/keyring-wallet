@@ -55,6 +55,31 @@ export interface CardField {
   /** Whether the member writes it (rather than an administrator, a credential or the community). */
   writable: boolean
   required: boolean
+  /** The field's type (`text`, `url`, `date`, `claim`, …), for showing its value. */
+  type?: string
+}
+
+/** One value on another member's card, as it is shown: text, a list, yes or no, or a value checked against a credential. */
+export type CardValue =
+  | { kind: 'text'; text: InertText }
+  | { kind: 'list'; items: InertText[] }
+  | { kind: 'yesNo'; yes: boolean }
+  | { kind: 'verified'; text: InertText }
+
+export interface CardEntry {
+  key: string
+  label: InertText
+  value: CardValue
+}
+
+/**
+ * Another member's card, as the community shows it to this member: their name and role, then every other field they
+ * show, in the community's order. Each value is what they wrote, or what a credential they presented says.
+ */
+export interface MemberCard {
+  name?: InertText
+  role?: InertText
+  entries: CardEntry[]
 }
 
 /** The member's own card in a community. */
@@ -79,7 +104,7 @@ export interface CardProposal {
 }
 
 /** The directory operations, each with a status a screen shows instead of guessing. */
-export type DirectoryOperation = 'listMembers' | 'showMyCard' | 'updateMyCard' | 'lookupName'
+export type DirectoryOperation = 'listMembers' | 'showMyCard' | 'updateMyCard' | 'lookupName' | 'showMember'
 
 /** The card changed since it was read (`superseded`): nothing was written. Read it again, then decide. */
 export class DirectoryConflict extends Error {
@@ -120,6 +145,13 @@ export interface DirectoryService {
    * member who shows their identity to members; anyone else, and anyone who shows no name, is undefined.
    */
   lookupName(communityDid: string, memberDid: string): Promise<string | undefined>
+  /** Another member's card, by the entry the members list gave (`entries/show/0.1`); undefined when not shown to you. */
+  showMember(communityDid: string, entryId: string): Promise<MemberCard | undefined>
+  /**
+   * A room author's card, by their DID (`query/0.1`): the community answers only for a member who shows their identity
+   * to members. Undefined otherwise.
+   */
+  memberCardByDid(communityDid: string, memberDid: string): Promise<MemberCard | undefined>
 }
 
 /** A status from a failure, for a screen: what it shows instead of the list or the card. */

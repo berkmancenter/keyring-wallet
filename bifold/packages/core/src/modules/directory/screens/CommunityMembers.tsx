@@ -9,15 +9,16 @@
  *
  * @module directory/screens/CommunityMembers
  */
-import { useRoute } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { Screens } from '../../../types/navigators'
 import { initialsOf } from '../../../utils/initials'
 import { testIdWithKey } from '../../../utils/testable'
 import { communityLabelOf } from '../../trust-tasks/screens/communityName'
@@ -29,6 +30,7 @@ const CommunityMembers: React.FC = () => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const communityDid = (useRoute()?.params as { communityDid?: string } | undefined)?.communityDid ?? ''
+  const go = useNavigation() as unknown as { navigate: (name: string, params: object) => void }
   const community = communityLabelOf(communityDid, t)
   const service = useDirectoryService()
   const members = useCommunityMembers(service, communityDid)
@@ -70,10 +72,11 @@ const CommunityMembers: React.FC = () => {
     const role = memberRoleText(t, item.role)
     const name = String(item.name)
     return (
-      <View
+      <Pressable
         style={styles.row}
-        accessible
+        accessibilityRole="button"
         accessibilityLabel={[name, role].filter(Boolean).join(', ')}
+        onPress={() => go.navigate(Screens.CommunityMemberCard, { communityDid, entryId: item.entryId })}
         testID={testIdWithKey(`DirectoryMember_${item.entryId}`)}
       >
         <View style={styles.disc}>
@@ -89,7 +92,7 @@ const CommunityMembers: React.FC = () => {
             </ThemedText>
           ) : null}
         </View>
-      </View>
+      </Pressable>
     )
   }
 
