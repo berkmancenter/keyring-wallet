@@ -75,6 +75,12 @@ takes a bundle when its ring is in the bundle's target cohorts. Ring names
 aren't numeric cohorts, so the percentage rollout never applies to them; it
 stays 0.
 
+**One click (the owner's rule, 10-29: updates reach testers at once).** A publish takes `to_ring`, `ring2` by default:
+after its one ota-approval click, each platform's bundle reaches ring 0 and is widened to every install in the same
+run ("OTA 276.4 · publish to everyone"). `to_ring: ring0` is a deliberate staged release that stops at ring 0, to be
+widened later with `promote`. If the widen fails, the bundle stays on ring 0 and the run fails, naming it. Post-release
+still smokes it, since it runs after a failed run too.
+
 **Widening** is ota-publish.yml's `promote` action, with `bundle_id`, the
 bundle's own `platform` and `to_ring`, after one ota-approval click per
 promotion (`scripts/ota/promote.mjs`). It refuses unless the server's record

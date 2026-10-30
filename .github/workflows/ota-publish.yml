@@ -6,7 +6,7 @@ name: OTA release
 # "Post-release · OTA <n> ..." run started. If none did, workflow_run matched the run's title instead: drop run-name.
 run-name: >-
   OTA ${{ inputs.release || inputs.channel }} ·
-  ${{ inputs.action == 'publish' && 'publish to ring 0'
+  ${{ inputs.action == 'publish' && (inputs.to_ring == 'ring2' && 'publish to everyone' || format('publish to {0}', inputs.to_ring == 'ring1' && 'ring 1' || 'ring 0'))
   || inputs.action == 'promote' && (inputs.to_ring == 'ring2' && 'widen to everyone' || 'widen to ring 1')
   || inputs.action == 'disable' && format('withdraw {0}', inputs.platform == 'both' && 'ios + android' || inputs.platform)
   || inputs.action }}${{ inputs.dry_run && ' (dry run)' || '' }}
@@ -68,9 +68,9 @@ on:
         type: string
         default: ''
       to_ring:
-        description: 'promote only: the widest ring the bundle reaches (ring1, or ring2 for every install)'
+        description: 'publish and promote: the widest ring the bundle reaches (ring2 = every install; ring1; or ring0, publish only, for a deliberate staged release). A publish to ring1 or ring2 widens in the same run, on its one approval'
         type: choice
-        options: [ring2, ring1]
+        options: [ring2, ring1, ring0]
         default: ring2
       expect_fingerprint:
         description: "device-test publishes: the test app's native fingerprint for the platform (its build copy's app/fingerprint.json)"
@@ -107,7 +107,7 @@ jobs:
     runs-on: ubuntu-22.04
     environment: ota-approval
     steps:
-      - run: echo "Approved - ${{ inputs.action }} on channel ${{ inputs.channel }} from ${{ github.sha }} (release '${{ inputs.release }}', base '${{ inputs.base }}', bundle '${{ inputs.bundle_id }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ${{ inputs.action == 'promote' && format('widening to {0}', inputs.to_ring) || 'ring 0' }}."
+      - run: echo "Approved - ${{ inputs.action }} to ${{ inputs.to_ring }} on channel ${{ inputs.channel }} from ${{ github.sha }} (release '${{ inputs.release }}', base '${{ inputs.base }}', bundle '${{ inputs.bundle_id }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ${{ inputs.action == 'promote' && format('widening to {0}', inputs.to_ring) || 'ring 0' }}."
 
   publish:
     needs: [approve]
@@ -156,6 +156,7 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
           ACTION: ${{ inputs.action }}
           RELEASE: ${{ inputs.release }}
+          TO_RING: ${{ inputs.to_ring }}
           BASE: ${{ inputs.base }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
           EXPECT_FINGERPRINT: ${{ inputs.expect_fingerprint }}
@@ -177,6 +178,7 @@ jobs:
                 # (scripts/ota/promote.mjs), the one way anything does.
                 disable | promote)
                   [ -n "$BUNDLE_ID" ] || err "$ACTION needs bundle_id"
+                  [ "$ACTION" != promote ] || [ "$TO_RING" != ring0 ] || err "promote widens past ring 0: to_ring ring0 is for a publish that stops there"
                   if [ "$PLATFORM" = both ]; then
                     # Each platform keeps its own bundle id: ios:<id>,android:<id>.
                     [ "$ACTION" = promote ] || err "disable takes one bundle: its own platform (ios or android), not both"
@@ -389,6 +391,26 @@ jobs:
           name: ota-bundle-${{ matrix.platform }}
           path: ${{ runner.temp }}/ota-bundle.jsonl
           if-no-files-found: warn
+
+      # A publish to ring1 or ring2 (the default: the owner's rule, 10-29, is that updates reach testers at once) widens
+      # this platform's bundle in the same run, right after it reached ring 0, on the run's one approval. The bundle id
+      # is the record ota-deploy just wrote. If the widen fails, the bundle stays on ring 0 and the run fails, naming
+      # it; post-release.yml still smokes it (it runs after a failed run too, and reads what the run published).
+      - name: Widen the published bundle
+        if: ${{ success() && !inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' && inputs.to_ring != 'ring0' }}
+        env:
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          CHANNEL: ${{ inputs.channel }}
+          PLATFORM: ${{ matrix.platform }}
+          TO_RING: ${{ inputs.to_ring }}
+          RECORD: ${{ runner.temp }}/ota-bundle.jsonl
+          SOAK_HOURS: ${{ vars.OTA_PROMOTE_SOAK_HOURS }}
+        run: |
+          id=$(node -e 'const [f, p] = process.argv.slice(1); const rows = require("fs").readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((r) => r.platform === p); if (rows.length !== 1) process.exit(1); console.log(rows[0].id)' "$RECORD" "$PLATFORM") \
+            || { echo "::error::$PLATFORM was published to ring 0 but not widened: its bundle record is missing or ambiguous"; exit 1; }
+          echo "widening $PLATFORM bundle $id to $TO_RING"
+          node scripts/ota/promote.mjs --channel "$CHANNEL" --platform "$PLATFORM" --bundle-id "$id" --to "$TO_RING" --soak-hours "$SOAK_HOURS"
 
       # production/preview: widen one bundle past ring 0. A dry run only checks.
       - name: Promote (${{ inputs.channel }})
