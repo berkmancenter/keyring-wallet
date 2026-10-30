@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 /**
- * Proves the strict condition for one commit, so an "ota-strict" change
- * (scripts/release/tier.mjs, exit 5) may be published to ring 0. The owner's
- * pipeline (10-29): a change's tests run as its pull request's required
- * related-tests check before it merges, and a release follows the merge at
- * once. A strict bundle needs one thing more, on the exact commit it is built
- * from:
+ * ADVISORY since 10-29: nothing calls this before a publish any more. The owner
+ * decided a strict change (scripts/release/tier.mjs, exit 5) ships like any OTA,
+ * protected by its PR tests, the post-release smoke and brake, and the nightly
+ * full gate. Kept as a check anyone can run by hand: is there a green launch
+ * smoke of this exact commit?
  *
  *   launch smoke    a green gate-smoke.yml run, with its iOS and its Android
  *                   smoke job both green, of a green Test builds run built

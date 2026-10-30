@@ -1,11 +1,11 @@
 // node --test scripts/ota/
 // The publisher's tier gate, end to end: copies of ota-deploy.mjs and the scripts it runs, in a throwaway repository
-// whose one commit after the base is a strict, a plain ota or a store change, and a fake `gh` on PATH answering the
-// proof's reads. A change that gets through the gate stops at the next check (no signing key), so nothing is built
-// or published here.
+// whose one commit after the base is a strict, a plain ota or a store change, and a fake `gh` on PATH. A change that
+// gets through the gate stops at the next check (no signing key), so nothing is built or published here. Since 10-29 a
+// strict change is a label, not a gate: it publishes like ota, and the publisher reads nothing from GitHub for it.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { after, test } from 'node:test'
@@ -28,6 +28,7 @@ const route = process.argv[process.argv.length - 1] || ''
 const slurp = process.argv.includes('--slurp')
 const sha = process.env.FAKE_SHA
 const met = process.env.FAKE_GH === 'met'
+if (process.env.FAKE_GH === 'fail') { console.error('gh: refusing every call'); process.exit(1) }
 const out = route.includes('test-builds.yml/runs')
     ? { workflow_runs: met ? [{ id: 101, head_sha: sha, event: 'workflow_dispatch', conclusion: 'success' }] : [] }
     : route.includes('gate-smoke.yml/runs')
@@ -76,7 +77,7 @@ const repoWith = (file, { tier } = {}) => {
   chmodSync(path.join(bin, 'gh'), 0o755)
   // The fake gh lives in the repository, so it is untracked there: the publisher's clean-tree check must not see it.
   writeFileSync(path.join(dir, '.git', 'info', 'exclude'), '.bin/\n')
-  return (gh, { githubSha = head } = {}) =>
+  return (gh, { githubSha = head, env = {} } = {}) =>
     spawnSync('node', [path.join(dir, 'app/scripts/ota-deploy.mjs'), '--base', base, '--channel', 'production'], {
       encoding: 'utf8',
       env: {
@@ -88,26 +89,26 @@ const repoWith = (file, { tier } = {}) => {
         GITHUB_REPOSITORY: 'owner/repo',
         OTA_CHANNEL: '',
         OTA_SIGNING_KEY: path.join(dir, 'no-such-key.pem'),
+        ...env,
       },
     })
 }
 
 const PASSED_THE_GATE = /no signing key at/
 
-test('a strict change with no launch smoke is refused, naming it', () => {
-  const r = repoWith('app/src/screens/SignIn.tsx')('none')
-  assert.equal(r.status, 1)
-  assert.match(r.stdout, /tier ota-strict \(sign-in \/ key handling\)/)
-  assert.match(r.stdout, /MISSING launch smoke/)
-  assert.doesNotMatch(r.stdout, /targeted tests|sim check/)
-  assert.match(r.stderr, /its launch smoke is not proven: nothing is published/)
-  assert.doesNotMatch(r.stderr, PASSED_THE_GATE)
+test('a strict change publishes like ota, its flags said in the log and the run summary', () => {
+  const summary = path.join(mkdtempSync(path.join(tmpdir(), 'summary-')), 'summary.md')
+  writeFileSync(summary, '')
+  const r = repoWith('app/src/screens/SignIn.tsx')('none', { env: { GITHUB_STEP_SUMMARY: summary } })
+  assert.match(r.stdout, /tier ota-strict, published like ota; this release touches: sign-in \/ key handling/)
+  assert.match(r.stderr, PASSED_THE_GATE)
+  assert.match(readFileSync(summary, 'utf8'), /### This release touches: sign-in \/ key handling/)
 })
 
-test('a strict change with its launch smoke proven passes the tier gate', () => {
-  const r = repoWith('app/src/screens/SignIn.tsx')('met')
-  assert.match(r.stdout, /met {5}launch smoke: iOS in gate-smoke run 201, Android in gate-smoke run 201/)
+test('a strict change needs nothing from GitHub: it publishes with every gh call failing', () => {
+  const r = repoWith('app/src/screens/SignIn.tsx')('fail', { githubSha: '' })
   assert.match(r.stderr, PASSED_THE_GATE)
+  assert.doesNotMatch(r.stderr, /gh: refusing every call/)
 })
 
 test('a plain ota change passes without any proof, as before', () => {
@@ -121,15 +122,7 @@ test('a store change is refused whatever is proven', () => {
   assert.match(r.stderr, /tier is "store" \(exit 2\): this change ships as a store build/)
 })
 
-test('a strict change proven for its commit is refused when the run checked out another commit', () => {
-  const r = repoWith('app/src/screens/SignIn.tsx')('met', { githubSha: '2'.repeat(40) })
-  assert.match(r.stderr, /a strict bundle is published only by ota-publish\.yml, from the commit it proves/)
-  assert.doesNotMatch(r.stderr, PASSED_THE_GATE)
-  const unset = repoWith('app/src/screens/SignIn.tsx')('met', { githubSha: '' })
-  assert.match(unset.stderr, /GITHUB_SHA unset/)
-})
-
-test('only exit 5 with the verdict ota-strict takes the proof path; a tier error or a mismatch is refused', () => {
+test('only exit 0 with ota, or exit 5 with ota-strict, publishes; a tier error or a mismatch is refused', () => {
   // tier.mjs reports its own error as store, exit 3; nothing proven can turn that into a publish.
   const error = repoWith('app/src/screens/SignIn.tsx', { tier: { exit: 3, verdict: { tier: 'store', error: 'boom' } } })('met')
   assert.match(error.stderr, /tier is "store" \(exit 3\)/)
