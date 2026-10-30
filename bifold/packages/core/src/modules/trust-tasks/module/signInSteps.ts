@@ -326,9 +326,36 @@ export function agentSignInSteps(agent: Agent): SignInSteps {
     return identities.get(vtcDid) as Promise<PersonaSignInIdentity[]>
   }
   // This phone's links, read once: which Farm each agent was claimed from, and the key it signs in by (IN-388).
-  let linked: ReturnType<typeof vtaAgent.linkedAgents> | undefined
-  const linkedAgents = () => (linked ??= vtaAgent.linkedAgents(agent).catch(() => []))
-  const farmFor = async (farmDid: string) => farmIdentitiesFrom(farmDid, await linkedAgents())
+  // Undefined when they could not be read: not known, which is not the same as none.
+  type Linked = Awaited<ReturnType<typeof vtaAgent.linkedAgents>>
+  let linked: Promise<Linked | undefined> | undefined
+  const linkedAgents = () =>
+    (linked ??= vtaAgent.linkedAgents(agent).catch((e) => {
+      releaseWarn(`[SignIn] linked agents not read: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`)
+      return undefined
+    }))
+  const farmFor = async (farmDid: string) => farmIdentitiesFrom(farmDid, (await linkedAgents()) ?? [])
+  /**
+   * For a sender this phone has not joined: may it hold an agent that kept no Farm sign-in key? From the links when
+   * they name one; when they name none or could not be read, from the agent's own state, unless that says the link was
+   * read and no agent is linked. IN-388 step D on 276.10 got no line on a phone whose only agent was linked by owner
+   * code. The line's words are conditional ("If this code is from the service that hosts one of your agents"), so
+   * saying it when unsure costs little, where leaving it out leaves the person no way forward.
+   */
+  const mayHoldOlderAgent = async (vtcDid: string): Promise<boolean> => {
+    const agents = await linkedAgents()
+    const state = vtaAgent.getState()
+    const phoneLinked = !(state.linkRestored && state.link.kind !== 'linked')
+    // What decided it, for the next report: counts only, no DIDs.
+    releaseWarn(
+      `[SignIn] not joined: ${agents ? `${agents.length} linked agent(s) read` : 'links not read'}, ` +
+        `${agents?.filter((a) => a.farmLogin).length ?? 0} with a Farm key, ` +
+        `${agents?.filter((a) => a.farmLogin?.farmDid === vtcDid).length ?? 0} for this sender; ` +
+        `link ${state.link.kind}${state.linkRestored ? '' : ' (not read yet)'}`
+    )
+    if (agents?.some((a) => !a.farmLogin)) return true
+    return !agents?.length && phoneLinked
+  }
   const community = async (vtcDid: string) => {
     // A Farm this phone claimed an agent from: its agents are who can sign in, and no community is looked up. Asked
     // after this phone's own memberships, which never wait on the agents (a Farm is never one of them).
@@ -342,7 +369,7 @@ export function agentSignInSteps(agent: Agent): SignInSteps {
     const recorded = await recordedCommunity(agent, vtcDid, async () => (await identities).length > 0)
     const found = await identities
     const member = recorded.member || found.length > 0
-    const olderAgents = !member && (await linkedAgents()).some((a) => !a.farmLogin)
+    const olderAgents = !member && (await mayHoldOlderAgent(vtcDid))
     return { ...recorded, member, identities: found, ...(olderAgents ? { olderAgents } : {}) }
   }
   const claimDeps: SignInDeps = {

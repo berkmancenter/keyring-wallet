@@ -31,6 +31,7 @@ import {
   type SignInSteps,
 } from '../module/signInSteps'
 import SignIn, { SignInFlow } from '../screens/SignIn'
+import { didDomainPath } from '../screens/communityName'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { SignInIds } from '../screens/SignIn.ids'
 
@@ -152,9 +153,15 @@ describe('1. confirm, before anything is sent', () => {
     expect(tree.getByTestId(id(SignInIds.community))).not.toHaveTextContent(VTC)
   })
 
-  test('a community this phone has not joined, with no name: its handle, the DID behind Details', async () => {
+  // A sender this phone has not joined and has no name for: nothing is looked up (VTI-LNK-050), so whether it has
+  // published a name, or is a community at all (a Farm's code reads the same), is not known. Its address says only
+  // what is so, as the confirm step did (IN-388 step D, 276.10: "vtafarm-auth (no name published yet)").
+  test('a sender this phone has not joined, with no name: its address, no name claimed, the DID behind Details', async () => {
     const tree = await show(fakeSteps({ community: jest.fn(async () => ({ member: false })) }))
     expect(tree.getByTestId(id(SignInIds.notMember))).toBeTruthy()
+    expect(tree.getByTestId(id(SignInIds.community))).toHaveTextContent(didDomainPath(VTC) as string)
+    expect(tree.getByText('SignIn.HostLabel')).toBeTruthy()
+    expect(tree.queryByText(/Community\.UnnamedRef/)).toBeNull()
     expect(tree.getByTestId(id(SignInIds.community))).not.toHaveTextContent(VTC)
     expect(tree.queryByTestId(id(`${SignInIds.communityDid}Did`))).toBeNull()
     await press(tree, `${SignInIds.communityDid}Toggle`)

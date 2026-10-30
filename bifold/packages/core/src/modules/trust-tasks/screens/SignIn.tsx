@@ -85,7 +85,8 @@ type Step =
    */
   | { kind: 'confirm'; vtcDid: string; host?: string; name?: string; identities?: SignInIdentity[] }
   /** `olderAgents`: the phone holds an agent that kept no sign-in key for its host, which cannot sign in there yet. */
-  | { kind: 'notMember'; name: string; vtcDid: string; olderAgents?: boolean }
+  /** `name`: only a name on record. A sender with none is shown by its address: nothing was looked up (VTI-LNK-050). */
+  | { kind: 'notMember'; name?: string; vtcDid: string; olderAgents?: boolean }
   | { kind: 'choose'; identities: SignInIdentity[] }
   | { kind: 'claiming' }
   | { kind: 'number'; claimed: ClaimedSignIn }
@@ -217,7 +218,12 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             ? current
             : member
               ? { ...current, name: label, identities }
-              : { kind: 'notMember', name: label, vtcDid, ...(olderAgents ? { olderAgents } : {}) }
+              : {
+                  kind: 'notMember',
+                  ...(name?.trim() ? { name: name.trim() } : {}),
+                  vtcDid,
+                  ...(olderAgents ? { olderAgents } : {}),
+                }
         )
       })
       .catch((e) => {
@@ -435,7 +441,12 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             {step.olderAgents ? (
               <ThemedText testID={id(SignInIds.olderAgents)}>{t('SignIn.OlderAgents')}</ThemedText>
             ) : null}
-            {row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)}
+            {/* A name on record, else the sender's address: whether it published a name, or is a community at all (a
+                Farm's code reads the same), is not known before anything is looked up (IN-388 step D). One row either
+                way, naming the sender (the wallet e2e reads it). */}
+            {step.name
+              ? row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)
+              : row(t('SignIn.HostLabel'), didDomainPath(step.vtcDid) ?? t('SignIn.NoDomain'), SignInIds.community)}
             <DidDetails did={step.vtcDid} testIdStem={SignInIds.communityDid} />
             {/* A community's join page shows this same code (IN-406). Nothing is resolved until the tap
                 (VTI-LNK-050), and nothing is sent to the community: Join asks it first. */}

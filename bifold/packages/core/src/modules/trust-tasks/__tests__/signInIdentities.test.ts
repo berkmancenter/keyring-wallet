@@ -155,6 +155,7 @@ const mockSessions: string[] = []
 jest.mock('../module/vtaAgent', () => ({
   vtaAgent: {
     linkedAgents: jest.fn(async () => AGENTS),
+    getState: () => ({ linkRestored: true, link: { kind: 'linked' } }),
     withAgentSession: jest.fn(async (_agent: unknown, vtaDid: string, use: (c: unknown) => Promise<unknown>) => {
       mockSessions.push(vtaDid)
       const listed = mockVault[vtaDid]

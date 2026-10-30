@@ -25,12 +25,26 @@ let mockVaultAsked = 0
 const mockVault: Record<string, unknown[]> = {}
 // Held until a test lets it go, to see what waits on the agents.
 let mockAgentsReady: Promise<void> = Promise.resolve()
+// The links not read: on a cold start, before the app hands the agent over, linkedAgents waits and then throws.
+let mockAgentsUnread: Error | undefined
+// What the agent's state says of this phone's link: read, and no agent linked, unless a test says otherwise.
+let mockAgentState: { linkRestored?: boolean; link: { kind: string } } = {
+  linkRestored: true,
+  link: { kind: 'none' },
+}
+const mockWarn = jest.fn()
+jest.mock('../module/releaseLog', () => ({
+  ...jest.requireActual('../module/releaseLog'),
+  releaseWarn: (message: string) => mockWarn(message),
+}))
 jest.mock('../module/vtaAgent', () => ({
   vtaAgent: {
     linkedAgents: async () => {
       await mockAgentsReady
+      if (mockAgentsUnread) throw mockAgentsUnread
       return mockAgents
     },
+    getState: () => mockAgentState,
     withAgentSession: async (_a: unknown, vtaDid: string, use: (c: unknown) => Promise<unknown>) =>
       use({
         vaultList: async () => {
@@ -93,6 +107,9 @@ beforeEach(() => {
   mockPublished.clear()
   mockMemberships.push({ communityDid: VTC })
   mockAgentsReady = Promise.resolve()
+  mockAgentsUnread = undefined
+  mockAgentState = { linkRestored: true, link: { kind: 'none' } }
+  mockWarn.mockClear()
   mockVaultAsked = 0
 })
 
@@ -252,6 +269,49 @@ describe('a sign-in code from a Farm this phone claimed an agent from', () => {
     expect(found).toMatchObject({ member: false, olderAgents: true })
     expect(found.farm).toBeUndefined()
     expect(agent.dids.resolveDidDocument).not.toHaveBeenCalled()
+  })
+
+  // IN-388 step D on 276.10 (cold start, the code opened by a deep link): "not joined", and no older-agents line,
+  // although the phone's only agent was linked by its owner code. A links read that failed was taken as no agents.
+  it('links not read: a phone that may hold an agent still says the older-agents line, and the failure is logged', async () => {
+    mockMemberships.splice(0)
+    mockAgentsUnread = new Error("the link with this phone's agent was not read within 20 s")
+    mockAgentState = { linkRestored: false, link: { kind: 'none' } }
+    const found = await agentSignInSteps(agent as never).community(FARM)
+    expect(found).toMatchObject({ member: false, olderAgents: true })
+    expect(found.farm).toBeUndefined()
+    expect(mockWarn).toHaveBeenCalledWith(expect.stringMatching(/^\[SignIn\] linked agents not read: /))
+  })
+
+  it("links read as none while the agent's own state says one is linked: the line is said", async () => {
+    // linkedAgents gives [] when its store reads fail, the same as for a phone with no agent.
+    mockMemberships.splice(0)
+    mockAgentState = { linkRestored: true, link: { kind: 'linked' } }
+    expect(await agentSignInSteps(agent as never).community(FARM)).toMatchObject({ member: false, olderAgents: true })
+    expect(mockWarn).toHaveBeenCalledWith(
+      '[SignIn] not joined: 0 linked agent(s) read, 0 with a Farm key, 0 for this sender; link linked'
+    )
+  })
+
+  it('links not read on a phone whose link was read and holds no agent: no older-agents line', async () => {
+    mockMemberships.splice(0)
+    mockAgentsUnread = new Error('the store failed')
+    mockAgentState = { linkRestored: true, link: { kind: 'none' } }
+    expect((await agentSignInSteps(agent as never).community(FARM)).olderAgents).toBeUndefined()
+  })
+
+  it('a code opened while the links are still being read waits for them, then says the line', async () => {
+    mockMemberships.splice(0)
+    let release: () => void = () => undefined
+    mockAgentsReady = new Promise((resolve) => (release = resolve))
+    const asked = agentSignInSteps(agent as never).community(FARM)
+    let settled = false
+    void asked.then(() => (settled = true))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toBe(false)
+    mockAgents.push({ vtaDid: AGENT, name: 'mini1', current: true })
+    release()
+    expect(await asked).toMatchObject({ member: false, olderAgents: true })
   })
 
   it('a phone whose agents all kept their Farm key says nothing of older agents', async () => {
