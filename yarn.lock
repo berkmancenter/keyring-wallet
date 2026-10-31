@@ -2154,6 +2154,7 @@ __metadata:
     "@bifold/trust-tasks": "workspace:*"
     "@digitalcredentials/data-integrity": "npm:^2.6.0"
     "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "npm:^1.3.0"
+    "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
     "@openvtc/trust-tasks": "npm:^0.27.8"
