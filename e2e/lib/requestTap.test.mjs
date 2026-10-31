@@ -29,3 +29,8 @@ test("with a card already there, only a moved status counts", () => {
   assert.equal(requestTookEffect(before, { card: true, status: "Refused", ended: true }), false);
   assert.equal(requestTookEffect(before, { card: true, status: "Request sent", ended: true }), true);
 });
+
+test("with a card already there, a status that could not be read is no evidence", () => {
+  const before = { cardBefore: true, statusBefore: "Refused", endedBefore: true };
+  assert.equal(requestTookEffect(before, { card: true, status: null, ended: true }), false);
+});

@@ -718,7 +718,7 @@ export const applicant = {
             { cardBefore, statusBefore, endedBefore },
             {
               card: await byTestId(d, "VettingRequestCard").isExisting().catch(() => false),
-              status: await textOf(d, "VettingRequestStatus").catch(() => ""),
+              status: await textOf(d, "VettingRequestStatus").catch(() => null),
               ended: await byTestId(d, "VettingSessionEnded").isExisting().catch(() => false),
             }
           ),
