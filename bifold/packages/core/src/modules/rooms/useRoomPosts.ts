@@ -236,13 +236,16 @@ export function useRoomPosts(
           if (current) notePoll(false)
           const now = listingNow.current
           if (current && now && prunedPast(now, newer)) {
-            // Pruned past what is held: one full listing replaces it, new posts in this poll included.
+            // Pruned past what is held: one full listing replaces it, new posts in this poll included. Its failure is
+            // the poll's, on the session it was sent on, so only a session opened since asks again at once.
+            const fullOn = openedAt.current
             counted(listingsInFlight, () => service.listNotes(roomId)).then(
               (full) => {
                 if (current) setListing(listingOf(full))
               },
               () => {
                 skips.current = POLL_SKIPS_AFTER_FAILURE
+                pollFailedOn.current = fullOn
                 if (current) notePoll(true)
               }
             )
@@ -291,7 +294,8 @@ export function useRoomPosts(
       const drawn = postsOf(page)
       setPosts(drawn)
       // A page short of the posts it is counted in, with records left, reads on by the shortfall. Only once a page
-      // is read: on a private room a note's title is sealed with its body, so the listing cannot tell one.
+      // is read: on a private room a note's title is sealed with its body, so the listing cannot tell one. On an open
+      // room the notes it can tell were never read, so a shortfall round reads only what may be a chat post.
       const counted = countsNow.current ? drawn.filter(countsNow.current).length : drawn.length
       if (counted < wanted.current && listing.notes.length > page.length) {
         setShown(page.length + wanted.current - counted)
@@ -300,7 +304,12 @@ export function useRoomPosts(
       setRefreshing(false)
       setLoadingOlder(false)
     }
-    const ready = (summary: NoteSummary) => summary.status === 'retracted' || read.has(readKey(summary))
+    // A record its listing already shows is not counted is not read for this page: an open room lists a note's title
+    // in cleartext, and the chat leaves notes out (the Notes part reads them for itself). Where a listing carries no
+    // title (attributed and private rooms seal it with the body), each record is read to tell, as before.
+    const leftOut = (summary: NoteSummary) => !!countsNow.current && !countsNow.current(postOf(summary, actingAs))
+    const ready = (summary: NoteSummary) =>
+      summary.status === 'retracted' || read.has(readKey(summary)) || leftOut(summary)
     // The posts that can be drawn now: newest first, up to the first one still being read.
     const readSoFar = () => {
       const waiting = page.findIndex((summary) => !ready(summary))

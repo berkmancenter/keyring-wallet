@@ -584,13 +584,39 @@ describe('a page counted in chat posts', () => {
   }
   const chat = (posts?: RoomPost[]) => (posts ?? []).filter(isChatPost)
 
-  test('notes among the newest records are read too, and the page holds ten chat posts', async () => {
+  /** The records read, by key. */
+  const readKeys = (service: { readNote: jest.Mock }) => service.readNote.mock.calls.map(([, key]) => key).sort()
+
+  test("an open room's notes, titled in its listing, are not read for the chat; the page holds ten chat posts", async () => {
+    // The open tier's title is cleartext in the listing (vti-rooms metadata()), so the listing already says these are
+    // notes: the chat leaves them out, and the Notes part reads them for itself.
     const { service } = roomOf(14, ['n13', 'n11'])
     const { result } = await openCounting(service)
     expect(chat(result.current.posts)).toHaveLength(10)
     expect(result.current.posts).toHaveLength(12)
-    expect(service.readNote).toHaveBeenCalledTimes(12)
+    expect(service.readNote).toHaveBeenCalledTimes(10)
+    expect(readKeys(service)).not.toEqual(expect.arrayContaining(['n13']))
+    expect(readKeys(service)).not.toEqual(expect.arrayContaining(['n11']))
     expect(result.current.hasOlder).toBe(true)
+  })
+
+  test('a room full of notes reads only its chat posts (4WGH-FCK5: 53 reads for a page)', async () => {
+    // Ten chat posts among 40 notes: before, every record down to the tenth chat post was read.
+    const notes = Array.from({ length: 50 }, (_, i) => `n${i + 1}`).filter((key) => Number(key.slice(1)) % 5 !== 0)
+    const { service } = roomOf(50, notes)
+    const { result } = await openCounting(service)
+    // About a dozen shortfall rounds (each reads on by what the last one lacked) before ten chat posts are in.
+    for (let i = 0; i < 40; i++) await flush()
+    expect(chat(result.current.posts)).toHaveLength(10)
+    expect(service.readNote).toHaveBeenCalledTimes(10)
+    expect(readKeys(service)).toEqual(['n10', 'n15', 'n20', 'n25', 'n30', 'n35', 'n40', 'n45', 'n5', 'n50'])
+  })
+
+  test('without a count (the Notes part) every record is read, titled or not', async () => {
+    const { service } = roomOf(5, ['n4', 'n2'])
+    renderHook(() => useRoomPosts(service, ROOM, ME, true, false))
+    for (let i = 0; i < 6; i++) await flush()
+    expect(readKeys(service)).toEqual(['n1', 'n2', 'n3', 'n4', 'n5'])
   })
 
   test("a private room's note, known as one only once read, does not count either", async () => {
@@ -614,14 +640,15 @@ describe('a page counted in chat posts', () => {
     for (let i = 0; i < 6; i++) await flush()
     expect(chat(result.current.posts)).toHaveLength(20)
     expect(result.current.posts).toHaveLength(23)
+    expect(service.readNote).toHaveBeenCalledTimes(20)
     expect(result.current.loadingOlder).toBe(false)
   })
 
-  test('a room with fewer chat posts than a page reads every record once and stops', async () => {
+  test('a room with fewer chat posts than a page reads each chat post once and stops', async () => {
     const { service } = roomOf(5, ['n4', 'n2'])
     const { result } = await openCounting(service)
     expect(chat(result.current.posts)).toHaveLength(3)
-    expect(service.readNote).toHaveBeenCalledTimes(5)
+    expect(readKeys(service)).toEqual(['n1', 'n3', 'n5'])
     expect(result.current.hasOlder).toBe(false)
   })
 })
