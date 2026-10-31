@@ -66,7 +66,8 @@ test('the three defaults: the ways this phone can use, and one line for the rest
   expect(tree.queryByTestId(id('JoinWaySuggested'))).toBeNull()
   expect(tree.getByTestId(id('JoinWay_invited'))).toHaveTextContent(/Join\.Ways\.NeedsInvitation/)
   expect(tree.getByTestId(id('JoinWayFollows_invited'))).toHaveTextContent('Join.Ways.FollowsAutomatic')
-  expect(tree.getByTestId(id('JoinWay_review'))).toHaveTextContent(/Join\.Ways\.NeedsNothing/)
+  // A way that asks nothing is named by what the person does (276.10, option B).
+  expect(tree.getByTestId(id('JoinWay_review'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
   expect(tree.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
   // The credential way: Keyring can't present one yet, so it is behind the line.
   expect(tree.queryByTestId(id('JoinWay_member-credential'))).toBeNull()
@@ -181,7 +182,12 @@ test('a vetting way the person can start says so on its own row, beside a review
     suggested: review,
     outcomeIfMet: 'reviewed',
   })
-  expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toHaveTextContent('Join.Ways.VettingToDo')
+  expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toHaveTextContent('Join.AsksNext')
+  // Named by its step; one vetter is what "You'll meet a vetter" says, so the statements line goes, the legal name stays.
+  const row = tree.getByTestId(id('JoinWay_vetted-member'))
+  expect(row).toHaveTextContent(/^Join\.Ways\.ButtonVetting/)
+  expect(row).not.toHaveTextContent(/AsksStatements/)
+  expect(row).toHaveTextContent(/Join\.AsksLegalName/)
   expect(tree.getByTestId(id('JoinWay_review'))).toBeTruthy()
   expect(tree.queryByTestId(id('JoinWayStart_review'))).toBeNull()
 })
@@ -206,5 +212,61 @@ describe('a way that runs private vetting', () => {
     expect(tree.getByTestId(id('JoinWayCannotUse_vetted-member'))).toHaveTextContent(
       'Join.Ways.CannotUsePrivateVetting'
     )
+  })
+})
+
+// 276.10, option B: each way a choice of its own, named by what the person does or what it needs first.
+describe('each way as a choice', () => {
+  it('an invitation way is named by the invitation; an automatic way that asks nothing by "Join"', () => {
+    const open = way({ id: 'open', requiresNothing: true })
+    const tree = show({
+      wire: '0.3',
+      accepting: true,
+      ways: [defaults.ways[0], open],
+      suggested: open,
+      outcomeIfMet: 'joined',
+    })
+    expect(tree.getByTestId(id('JoinWay_invited'))).toHaveTextContent(/^Join\.Ways\.NeedsInvitation/)
+    expect(tree.getByTestId(id('JoinWay_open'))).toHaveTextContent(/^Join\.Ways\.ButtonJoin/)
+  })
+
+  it('a vetting way with more than one vetter keeps the statements line, even when it can be started', () => {
+    const vetted = way({
+      id: 'vetted-member',
+      meets: 'no',
+      requires: { invitation: false, vetting: { statements: 3, claims: [], methods: [] } },
+    })
+    const tree = show({
+      wire: '0.3',
+      accepting: true,
+      ways: [vetted, review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
+    })
+    expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toBeTruthy()
+    expect(tree.getByTestId(id('JoinWay_vetted-member'))).toHaveTextContent(/Join\.AsksStatements/)
+  })
+
+  it('read only, under where the person stands: the statements line, and no "You\'ll meet a vetter"', () => {
+    const vetted = way({
+      id: 'vetted-member',
+      meets: 'no',
+      requires: { invitation: false, vetting: { statements: 1, claims: [], methods: [] } },
+    })
+    const card = joinCard({
+      wire: '0.3',
+      accepting: true,
+      ways: [vetted, review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
+    })
+    if (card.mode !== 'ways') throw new Error('expected ways')
+    const tree = render(
+      <BasicAppContext>
+        <JoinWaysCard card={card} community="Acme" readOnly />
+      </BasicAppContext>
+    )
+    expect(tree.queryByTestId(id('JoinWayStart_vetted-member'))).toBeNull()
+    expect(tree.getByTestId(id('JoinWay_vetted-member'))).toHaveTextContent(/Join\.AsksStatements/)
   })
 })
