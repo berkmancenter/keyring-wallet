@@ -59,6 +59,7 @@ import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type TspProbeStore } from './tspProbe'
 import { fetchWaitingIfBusy } from './vtcBusy'
+import { isAgentsOwnPersona } from './agentOwnIdentity'
 import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { releaseWarn } from './releaseLog'
@@ -955,6 +956,9 @@ class VtiAgentController {
       let identity = options.identity
       let tspSession: TspSessionIdentity | undefined
       if (options.persona) {
+        // Signed in as the agent, the phone takes its inbox from it (agentOwnIdentity).
+        if (isAgentsOwnPersona(options.persona))
+          throw new Error("vtiAgent: the persona is its agent's own DID; the phone never signs in as its agent")
         const kaKmsKeyId = options.persona.kmsKeyIds?.keyAgreement
         if (!kaKmsKeyId) throw new Error('vtiAgent: the persona has no borrowed key-agreement key')
         identity = await vtiClientIdentityFromPersona(agent, options.persona.did, kaKmsKeyId)

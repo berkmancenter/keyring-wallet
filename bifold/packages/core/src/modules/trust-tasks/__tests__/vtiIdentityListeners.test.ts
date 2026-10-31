@@ -96,6 +96,10 @@ describe('which identities get a listener', () => {
     expect(listenerTargets([a, noKey, other], {}, 'did:webvh:vta')).toEqual([a])
     expect(listenerTargets([a], {}, undefined)).toEqual([])
   })
+  it("never the agent's own DID, which would take the agent's inbox from it", () => {
+    const agentItself = persona('vta', { did: 'did:webvh:vta' })
+    expect(listenerTargets([a, agentItself], {}, 'did:webvh:vta')).toEqual([a])
+  })
 })
 
 describe('the listeners', () => {

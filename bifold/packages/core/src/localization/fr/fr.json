@@ -1689,6 +1689,7 @@
     "CommunitiesBack_other": "{{count}} communautés récupérées auprès de votre agent.",
     "CommunitiesNoneSeen": "Votre agent n'a montré à ce téléphone aucune identité en dehors de celles qu'il détient déjà.",
     "CommunitiesNoneSeenScoped": "Votre agent ne laisse ce téléphone voir que {{contexts}}. Une communauté rejointe depuis un autre contexte de l'agent ne peut pas revenir ici tant que l'administrateur de l'agent ne laisse pas ce téléphone voir ce contexte.",
+    "CommunitiesAgentItself": "Une carte de communauté est ici pour votre agent lui-même, pas pour une de vos identités : ce téléphone ne la reprend donc pas. Pour participer depuis ce téléphone, rejoignez la communauté depuis Keyring : cela crée une identité à vous, à laquelle la communauté peut ensuite donner le même rôle.",
     "CommunitiesNoCards": "Votre agent ne détient aucune carte de communauté pour ses autres identités. Si vous avez rejoint une communauté avec pnm ou openvtc, ouvrez une fois openvtc 0.5 ou plus récent pour qu'il garde votre adhésion dans votre agent, puis réessayez.",
     "CommunitiesUnreadable_one": "1 identité de communauté n'a pas pu être lue depuis votre agent ; elle n'a donc pas été ramenée.",
     "CommunitiesUnreadable_other": "{{count}} identités de communauté n'ont pas pu être lues depuis votre agent ; elles n'ont donc pas été ramenées.",

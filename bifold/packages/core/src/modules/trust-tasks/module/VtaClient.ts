@@ -102,6 +102,7 @@ import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type Ts
 import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
+import { didOfKeyId, isAgentsOwnDid, isAgentsOwnPersona } from './agentOwnIdentity'
 import { besideQueue, inReadLane, VTA_HEARTBEAT_BESIDE, VTA_READ_LANE_SIZE } from './vtaReadLane'
 import {
   DECLARATIVE_POLICY_ID,
@@ -2522,7 +2523,7 @@ export class VtaClient {
    * a persona to `holdPersonaKeys` only when both its copies are recorded, which never comes here.
    */
   private async borrowAdoptedKeys(persona: VtiPersona): Promise<boolean> {
-    if (persona.vtaDid !== this.vtaDid) return false
+    if (persona.vtaDid !== this.vtaDid || isAgentsOwnPersona(persona)) return false
     const inFlightKey = `${this.vtaDid}|${persona.communityDid}`
     for (;;) {
       const running = personasInFlight.get(inFlightKey)
@@ -2554,10 +2555,15 @@ export class VtaClient {
     }
   }
 
-  /** Borrow one of the VTA's keys into the wallet's KMS; returns the KMS key id. */
+  /**
+   * Borrow one of the VTA's keys into the wallet's KMS; returns the KMS key id. Never a key of the agent's own DID:
+   * an identity's keys only (agentOwnIdentity).
+   */
   async borrowKey(
     vtaKeyId: string
   ): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519'; publicKeyMultibase: string }> {
+    if (isAgentsOwnDid(didOfKeyId(vtaKeyId), this.vtaDid))
+      throw new Error(`${LOG_PREFIX} not borrowed: the key is the agent's own, not an identity's`)
     const exported = await this.task<VtaExportedKey>(VTA_TASK.keysExportSecret, { keyId: vtaKeyId })
     // Held in memory only (#10, plan part C), under an id that is the same every
     // session, so a persona's record keeps naming it across restarts.

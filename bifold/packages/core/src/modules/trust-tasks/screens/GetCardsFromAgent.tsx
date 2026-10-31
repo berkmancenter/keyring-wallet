@@ -59,9 +59,10 @@ export interface CardsBack {
   taken?: VtiPersona[]
   /**
    * Why no community came back, when none did and the agent answered: it showed this phone no identity it does
-   * not hold already (`noOtherIdentities`), or it holds no community card for those it showed (`noCards`).
+   * not hold already (`noOtherIdentities`), or it holds no community card for those it showed (`noCards`), or its
+   * only community cards are for the agent itself (`agentItself`), which is never one of this phone's identities.
    */
-  noneBecause?: 'noOtherIdentities' | 'noCards'
+  noneBecause?: 'noOtherIdentities' | 'noCards' | 'agentItself'
   /** The agent contexts this phone's grant lets it see, when it is not unrestricted. */
   visibleContexts?: string[]
   /** Identities with a community card whose DID document could not be read: not taken on. */
@@ -181,11 +182,14 @@ export async function bringBackFromAgent(
   const noneBecause =
     !found || fresh.length > 0 || found.unreadable.length > 0
       ? undefined
-      : found.otherIdentities === 0
-        ? 'noOtherIdentities'
-        : found.cardsForOthers === 0
-          ? 'noCards'
-          : undefined
+      : // A card for the agent itself is not taken on (agentOwnIdentity): said so, not "no other identities".
+        (found.cardsForAgent ?? 0) > 0 && found.cardsForOthers === 0
+        ? 'agentItself'
+        : found.otherIdentities === 0
+          ? 'noOtherIdentities'
+          : found.cardsForOthers === 0
+            ? 'noCards'
+            : undefined
   return {
     ...got,
     adopted: fresh.length,
@@ -392,12 +396,14 @@ export const GetCardsFromAgent: React.FC<{
             <ThemedText style={styles.muted} testID={testIdWithKey('AgentGetCardsNoCommunities')}>
               {result.noneBecause === 'noCards'
                 ? t('VtaLink.CommunitiesNoCards')
-                : result.visibleContexts
-                  ? t('VtaLink.CommunitiesNoneSeenScoped', {
-                      contexts: result.visibleContexts.join(', '),
-                      interpolation: { escapeValue: false },
-                    })
-                  : t('VtaLink.CommunitiesNoneSeen')}
+                : result.noneBecause === 'agentItself'
+                  ? t('VtaLink.CommunitiesAgentItself')
+                  : result.visibleContexts
+                    ? t('VtaLink.CommunitiesNoneSeenScoped', {
+                        contexts: result.visibleContexts.join(', '),
+                        interpolation: { escapeValue: false },
+                      })
+                    : t('VtaLink.CommunitiesNoneSeen')}
             </ThemedText>
           ) : null}
           {result.unreadableIdentities ? (

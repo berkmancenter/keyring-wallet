@@ -52,6 +52,7 @@ import {
   type ProvedSignIn as AgentProvedSignIn,
   type SignInAgentDeps,
 } from './oobSignInAgent'
+import { isAgentsOwnDid } from './agentOwnIdentity'
 import { classifyDid } from './classifyDid'
 import { communityNameIsStale, refreshPublishedName } from './communityNameRefresh'
 import { releaseWarn } from './releaseLog'
@@ -232,7 +233,8 @@ export function signInIdentitiesFrom(
     let dropped = 0
     for (const e of forCommunity) {
       if (found.some((f) => f.vtaDid === a.vtaDid && f.did === e.principalDid)) continue
-      if (keyringMade(e)) {
+      // Another phone's persona is dropped; the agent itself, whose entry this phone made, never is (agentOwnIdentity).
+      if (keyringMade(e) && !isAgentsOwnDid(e.principalDid as string, a.vtaDid)) {
         dropped++
         continue
       }

@@ -1744,6 +1744,7 @@
     "CommunitiesBack_other": "Brought back {{count}} communities from your agent.",
     "CommunitiesNoneSeen": "Your agent showed this phone no identities other than the ones it already holds.",
     "CommunitiesNoneSeenScoped": "Your agent lets this phone see only {{contexts}}. A community joined from another of the agent's contexts can't come back here until the agent's administrator lets this phone see that context.",
+    "CommunitiesAgentItself": "A community card here is for your agent itself, not for an identity of yours, so this phone does not take it on. To take part from this phone, join the community from Keyring: that makes an identity of your own, which the community can then give the same role.",
     "CommunitiesNoCards": "Your agent holds no community cards for its other identities. If you joined a community with pnm or openvtc, open openvtc 0.5 or later once so it keeps your membership in your agent, then try again.",
     "CommunitiesUnreadable_one": "1 community identity couldn't be read from your agent, so it wasn't brought back.",
     "CommunitiesUnreadable_other": "{{count}} community identities couldn't be read from your agent, so they weren't brought back.",

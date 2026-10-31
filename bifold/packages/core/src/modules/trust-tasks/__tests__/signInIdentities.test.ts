@@ -144,6 +144,32 @@ describe('which identities a sign-in can use', () => {
     expect(found).toMatchObject({ source: 'agent', label: undefined })
   })
 
+  // 276.10: an admin console invited the agent's own DID; an earlier sign-in made its Keyring entry. The phone no
+  // longer holds the agent as an identity, so the entry is the only way to it, and the agent signs as itself.
+  it("the agent's own DID, in an entry Keyring made: offered, where another persona's Keyring entry is not", () => {
+    const keyringLabel = `Keyring sign-in · ${VTC}`
+    const counts = {}
+    const found = signInIdentitiesFrom(
+      VTC,
+      AGENTS,
+      [],
+      {
+        [A]: [
+          entry({ id: 'agent', principalDid: A, contextId: 'ctx-a', label: keyringLabel }),
+          entry({
+            id: 'stale',
+            principalDid: 'did:webvh:QmS:host:gone-member',
+            contextId: 'ctx-s',
+            label: keyringLabel,
+          }),
+        ],
+      },
+      counts
+    )
+    expect(found).toEqual([expect.objectContaining({ did: A, entryId: 'agent', source: 'agent', vtaDid: A })])
+    expect(counts).toMatchObject({ [A]: { listed: 2, matched: 2, keyringMadeDropped: 1 } })
+  })
+
   it('0.1 spells the kind did-self-issued: taken too', () => {
     expect(signInIdentitiesFrom(VTC, AGENTS, [], { [A]: [entry({ secretKind: 'did-self-issued' })] })).toHaveLength(1)
   })
