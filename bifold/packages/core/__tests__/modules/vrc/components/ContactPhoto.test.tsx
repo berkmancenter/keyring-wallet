@@ -16,7 +16,10 @@ const id = testIdWithKey
 const NOT_READ: Known<string | undefined> = { known: false }
 const NONE: Known<string | undefined> = { known: true, value: undefined }
 const PHOTO: Known<string | undefined> = { known: true, value: 'data:image/jpeg;base64,AAAA' }
-const show = (photo: Known<string | undefined>, extra: { name?: string; fallbackUrl?: string } = {}) =>
+const show = (
+  photo: Known<string | undefined>,
+  extra: { name?: string; fallbackUrl?: string; initials?: 1 | 2; muted?: boolean } = {}
+) =>
   render(
     <BasicAppContext>
       <ContactPhoto photo={photo} size={50} {...extra} />
@@ -54,5 +57,42 @@ describe('a contact’s photo', () => {
     expect(tree.queryByTestId(id('ContactPhotoImage'))).toBeNull()
     expect(tree.queryByTestId(id('ContactPhotoLogo'))).toBeNull()
     expect(tree.queryByTestId(id('ContactPhotoInitial'))).toBeNull()
+  })
+})
+
+// The Messages list (L2): initials on a muted tone of their own, white, instead of one letter on the plain circle.
+describe('initials on a muted tone', () => {
+  const circleOf = (tree: ReturnType<typeof show>) =>
+    Object.assign({}, ...[tree.getByTestId(id('ContactPhoto')).props.style].flat(Infinity).filter(Boolean))
+
+  test('two words: their first and last initials; one word: its first letter', () => {
+    expect(show(NONE, { name: 'Sam Okafor', initials: 2 }).getByTestId(id('ContactPhotoInitial'))).toHaveTextContent(
+      'SO'
+    )
+    expect(
+      show(NONE, { name: 'Ana Maria Ribeiro', initials: 2 }).getByTestId(id('ContactPhotoInitial'))
+    ).toHaveTextContent('AR')
+    expect(show(NONE, { name: 'Lena', initials: 2 }).getByTestId(id('ContactPhotoInitial'))).toHaveTextContent('L')
+  })
+
+  test('muted: a tone of their own behind white letters, the same tone every time', () => {
+    const first = circleOf(show(NONE, { name: 'Sam Okafor', initials: 2, muted: true }))
+    const again = circleOf(show(NONE, { name: 'Sam Okafor', initials: 2, muted: true }))
+    expect(first.backgroundColor).toMatch(/^#[0-9A-F]{6}$/i)
+    expect(again.backgroundColor).toBe(first.backgroundColor)
+  })
+
+  test('as before unless asked: one letter, no tone (Contacts keeps its look)', () => {
+    const tree = show(NONE, { name: 'Sam Okafor' })
+    expect(tree.getByTestId(id('ContactPhotoInitial'))).toHaveTextContent('S')
+    expect(circleOf(tree).backgroundColor).toBeUndefined()
+  })
+
+  test('never over a photo or a logo', () => {
+    expect(circleOf(show(PHOTO, { name: 'Sam Okafor', initials: 2, muted: true })).backgroundColor).toBeUndefined()
+    expect(
+      circleOf(show(NONE, { name: 'Sam Okafor', fallbackUrl: 'https://example.org/l.png', initials: 2, muted: true }))
+        .backgroundColor
+    ).toBeUndefined()
   })
 })

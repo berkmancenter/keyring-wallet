@@ -13,6 +13,21 @@ import type { Identity, RoomSummary } from '../types'
 export const identityText = (identity: Identity): string =>
   identity.identityWords ?? `${identity.did.slice(0, 8)}…${identity.did.slice(-6)}`
 
+/**
+ * Another member as a person reads them: the member's own name for them when they gave one ("River (named by you)",
+ * always marked as theirs), else the name the member wrote on their own directory card ("River (their own name)",
+ * marked as theirs, since a self-chosen name can claim anything), else the community's words when given, else
+ * "Member …saddle", the DID's last letters so two members without a name can be told apart. The DID itself is kept
+ * for the member's sheet.
+ */
+export const memberText = (t: TFunction, identity: Identity, petname?: string, directoryName?: string): string =>
+  petname
+    ? (t('Rooms.PetnameLabel', { name: petname, interpolation: { escapeValue: false } }) as string)
+    : directoryName
+      ? (t('Rooms.DirectoryNameLabel', { name: directoryName, interpolation: { escapeValue: false } }) as string)
+      : (identity.identityWords ??
+        (t('Rooms.MemberTail', { tail: identity.did.slice(-6), interpolation: { escapeValue: false } }) as string))
+
 /** What this member can do in the room, in one line. */
 export const accessText = (t: TFunction, room: Pick<RoomSummary, 'verbs' | 'source'>): string => {
   if (room.source === 'custody' || room.verbs === undefined) return t('Rooms.DetailsNotLoaded') as string

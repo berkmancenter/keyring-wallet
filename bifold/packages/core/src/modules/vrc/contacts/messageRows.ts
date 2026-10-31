@@ -12,7 +12,7 @@
  *
  * @module vrc/contacts/messageRows
  */
-import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
+import { DidCommConnectionType, DidCommDidExchangeState, type DidCommConnectionRecord } from '@credo-ts/didcomm'
 
 import { type ContactLinks, contactIdOf } from './contactLinks'
 
@@ -64,4 +64,59 @@ export function messageRows(
     connection: connectionToOpen(members, lastActivity, unread),
     connectionIds: members.map((m) => m.id),
   }))
+}
+
+/**
+ * Whether a connection is someone to talk to: a completed connection that is not infrastructure. Never the mediator,
+ * never a witness service, never one the app hides by name, in developer mode as well. One rule for the Messages
+ * list and its New message picker (the user's own agent is reached over TSP, not a DIDComm connection, so it is
+ * never one of these).
+ */
+export function isConversationPartner(record: DidCommConnectionRecord, hideList?: readonly string[]): boolean {
+  if (record.state !== DidCommDidExchangeState.Completed) return false
+  if (record.connectionTypes.includes(DidCommConnectionType.Mediator)) return false
+  if (record.metadata?.get('witnessConnection') != null) return false
+  return !hideList?.includes((record.theirLabel || record.alias) ?? '')
+}
+
+/**
+ * The conversations among `rows` (the Messages list redesign, L3): a contact appears once a message has been
+ * exchanged on any of its connections, newest first. `lastMessageAt` gives a connection's newest message in ms, or
+ * -Infinity when it has none; so a chat cleared on this phone leaves the list until either side writes again.
+ * Equal times keep their order.
+ */
+export function conversations(
+  rows: readonly MessageRow[],
+  lastMessageAt: (connectionId: string) => number
+): MessageRow[] {
+  return rows
+    .map((row, index) => ({ row, index, at: Math.max(...row.connectionIds.map(lastMessageAt)) }))
+    .filter(({ at }) => at > -Infinity)
+    .sort((a, b) => b.at - a.at || a.index - b.index)
+    .map(({ row }) => row)
+}
+
+/** For matching names: lower case, accents taken off ("Zoé" and "zoe" match), spaces kept. */
+export function foldName(text: string): string {
+  let folded = text.toLowerCase()
+  try {
+    folded = folded.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  } catch {
+    // An engine without normalize: case is still ignored.
+  }
+  return folded.trim()
+}
+
+/**
+ * The rows whose contact's name matches `query` (the Messages list redesign, L5): names only, as approved, never
+ * the words of any message. Every word of the query must appear in the name ("ana rib" finds "Ana Ribeiro"),
+ * ignoring case and accents; an empty query keeps every row, in order.
+ */
+export function searchRows<T>(rows: readonly T[], nameOf: (row: T) => string, query: string): T[] {
+  const words = foldName(query).split(/\s+/).filter(Boolean)
+  if (words.length === 0) return [...rows]
+  return rows.filter((row) => {
+    const name = foldName(nameOf(row))
+    return words.every((word) => name.includes(word))
+  })
 }

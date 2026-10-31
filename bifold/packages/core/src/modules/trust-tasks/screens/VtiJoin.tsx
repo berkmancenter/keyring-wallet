@@ -37,7 +37,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 import { joinKnown, readFailed, useCommunityJourney, type CommunityJourneyReaders } from '../module/communityJourney'
 import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
-import { joinSeed } from '../module/vtiJoinSeed'
+import { joinSeed, keepJoinedProfile } from '../module/vtiJoinSeed'
 
 import { CardStatusNotice } from './cardStatusNotice'
 import { communityName, identityWord, unnamedCommunityLabel } from './communityName'
@@ -346,7 +346,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         // send the request. What the community answers shows as where the
         // person stands — admitted, or waiting for an administrator.
         communityTarget.choose(communityDid)
-        if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
+        if (joinAs.selected) {
+          joinSeed.set(communityDid, joinAs.selected.seed)
+          await keepJoinedProfile(agent, communityDid, joinAs.selected.id)
+        }
         await joinCommunity(
           {
             agent,
@@ -372,7 +375,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       // Making the identity is what makes this the phone's community.
       communityTarget.choose(communityDid)
       // Seed by copy: the chosen profile fills the identity's name in once.
-      if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
+      if (joinAs.selected) {
+        joinSeed.set(communityDid, joinAs.selected.seed)
+        await keepJoinedProfile(agent, communityDid, joinAs.selected.id)
+      }
       // Private or named, the same vetting screen: the module decides from
       // the way in which it is (Alberto, 2026-10-15).
       const stack = navigation as unknown as { navigate: (name: string) => void }
@@ -882,7 +888,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                 {t('Join.Ways.NoVetting', named)}
               </ThemedText>
             ) : null}
-            {ways.button === 'start' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
+            {/* "You'll meet a vetter" is said under the vetting way itself (JoinWaysCard). */}
             {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
             {/* With the list, not under the buttons, so the fixed area stays short. */}
             {different}

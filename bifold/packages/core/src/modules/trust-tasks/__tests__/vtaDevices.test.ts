@@ -8,6 +8,7 @@ import {
   clearThisDeviceWake,
   defaultDeviceName,
   listAgentDevices,
+  listRegisteredDevices,
   liveSiblings,
   registerThisDevice,
   removeAgentDevice,
@@ -373,5 +374,34 @@ describe('the access-list tasks, asked in the version agents serve', () => {
     // 0.3 and 0.2 were refused as unsupported on the way down; 0.1's refusal is the answer, never retried.
     const acl = sent.map((s) => s.type).filter((t) => t.includes('/acl/list/'))
     expect(acl).toEqual([AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList])
+  })
+})
+
+describe('the registered devices alone (what the presence loop reads)', () => {
+  it('lists the bindings from device/list and never asks the access list', async () => {
+    const { port, sent } = fakeAgent({
+      [AGENT_DEVICE_TASK.list]: () => ({
+        devices: [
+          ...bindings,
+          { deviceId: 'dev-gone', consumerDid: PLUGIN, displayName: 'browser', disabledAt: '2026-09-01T00:00:00Z' },
+          { deviceId: 'no-did' },
+        ],
+      }),
+    })
+    const devices = await listRegisteredDevices(port)
+
+    expect(sent.map((s) => s.type).filter((t) => t.includes('/acl/'))).toEqual([])
+    expect(devices.map((d) => d.did)).toEqual([ME, OLD_PHONE, PLUGIN]) // a row with no DID is dropped
+    expect(devices[0]).toMatchObject({ source: 'registered', isThisPhone: true, kind: 'keyring', accessRevoked: false })
+    expect(devices[1]).toMatchObject({ isThisPhone: false, platform: 'android', lastSeenAt: '2026-09-28T09:50:00Z' })
+    expect(devices[2]).toMatchObject({ accessRevoked: true, wipePending: false })
+    // The role is the access list's: unknown here, never guessed.
+    for (const d of devices) expect(d.limitedAccess).toBeUndefined()
+  })
+
+  it('and the full listing still joins the access list (the control: it does ask acl/list)', async () => {
+    const { port, sent } = fakeAgent()
+    await listAgentDevices(port)
+    expect(sent.map((s) => s.type)).toContain(AGENT_DEVICE_TASK.aclList)
   })
 })

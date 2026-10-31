@@ -57,7 +57,7 @@ describe('Agent settings', () => {
     })
   })
   afterEach(() => {
-    controller.set({ agents: undefined, agentNames: undefined })
+    controller.set({ agents: undefined, agentNames: undefined, unlinkingOthers: undefined })
     jest.restoreAllMocks()
     jest.useRealTimers()
   })
@@ -293,6 +293,27 @@ describe('Agent settings', () => {
       expect(unlinkAgent).not.toHaveBeenCalled()
       fireEvent.press(tree.getByTestId(testIdWithKey('AgentSwitcherUnlink_1')))
       fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkOtherConfirm')))
+      expect(unlinkAgent).toHaveBeenCalledWith(expect.anything(), WORK)
+    })
+
+    // IN-379: the row stayed as it was, with nothing on it, for the 5–10 s the unlink took.
+    it('an agent being unlinked says so on its row, with no Unlink to tap again', async () => {
+      controller.set({ unlinkingOthers: { [WORK]: 'unlinking' } })
+      const tree = await show()
+      expect(tree.getByTestId(testIdWithKey('AgentOtherRow_1'))).toHaveTextContent(/VtaLink\.UnlinkingOther/)
+      expect(tree.queryByTestId(testIdWithKey('AgentSwitcherUnlink_1'))).toBeNull()
+      act(() => controller.set({ unlinkingOthers: {}, agents: [{ vtaDid: HOME, label: 'Home' }] }))
+      expect(tree.queryByTestId(testIdWithKey('AgentOtherRow_1'))).toBeNull()
+    })
+
+    it('an agent still listed after an unlink says it was not unlinked, and Try again unlinks it at once', async () => {
+      const unlinkAgent = jest.spyOn(vtaAgent, 'unlinkAgent').mockResolvedValue(undefined)
+      controller.set({ unlinkingOthers: { [WORK]: 'failed' } })
+      const tree = await show()
+      expect(tree.getByTestId(testIdWithKey('AgentOtherRow_1'))).toHaveTextContent(/VtaLink\.UnlinkOtherFailed/)
+      expect(tree.getByTestId(testIdWithKey('AgentSwitcherUnlink_1'))).toHaveTextContent('VtaLink.TryAgain')
+      fireEvent.press(tree.getByTestId(testIdWithKey('AgentSwitcherUnlink_1')))
+      expect(tree.queryByTestId(testIdWithKey('AgentUnlinkOtherCard'))).toBeNull()
       expect(unlinkAgent).toHaveBeenCalledWith(expect.anything(), WORK)
     })
   })

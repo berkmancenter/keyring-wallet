@@ -1,7 +1,7 @@
 /**
- * A room's notes (data rooms mock, Notes): titled records and the markers of removed ones, on their own tab and out
- * of the chat; pinned first, then newest; each shown exactly as written, an AI agent's labelled as the agent's; a
- * removed note keeps its place with no text. Where notes can't be listed, or the host wouldn't give them, the tab
+ * A room's notes (data rooms mock, Notes): titled records and the markers of removed ones, on their own screen since
+ * R2 (RoomPart, from the room's details) and out of the chat; pinned first, then newest; each shown exactly as written, an AI agent's labelled as the agent's; a
+ * removed note keeps its place with no text. Where notes can't be listed, or the host wouldn't give them, the screen
  * says so.
  */
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
@@ -26,26 +26,24 @@ jest.mock('@react-navigation/native', () => ({
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const Room = require('../screens/Room').default
+const RoomPart = require('../screens/RoomPart').default
 
 const PLANNING = 'did:webvh:sample:planning'
 const CUSTODY = 'did:webvh:sample:3f9a7c21e0'
 const id = (key: string) => testIdWithKey(key)
 
 const show = (roomId = PLANNING) => {
-  mockParams = { roomId }
+  mockParams = { roomId, part: 'notes' }
   return render(
     <BasicAppContext>
-      <Room />
+      <RoomPart />
     </BasicAppContext>
   )
 }
 
 const openNotes = async (tree: ReturnType<typeof show>) => {
-  await waitFor(() => tree.getByTestId(id('RoomTabNotes')))
-  await act(async () => {
-    fireEvent.press(tree.getByTestId(id('RoomTabNotes')))
-  })
+  await waitFor(() => tree.getByTestId(id('RoomPart')))
+  await act(async () => undefined)
 }
 
 const post = (over: Partial<RoomPost>): RoomPost => ({
@@ -125,10 +123,47 @@ describe("a room's Notes tab", () => {
     }))
     const tree = show()
     await openNotes(tree)
-    // The m2 chat post carries it too, hidden with the chat: press the one on the note.
     const note = await waitFor(() => tree.getByTestId(id(`RoomNote_${roomHandle('n2')}`)))
     fireEvent.press(within(note).getByTestId(id('RoomFileChip_f1')))
     expect(tree.getByTestId(id('RoomFileSheet'))).toBeTruthy()
+  })
+
+  test('more notes than a page: scrolling down to the last one reads the next page, with no button', async () => {
+    const sample = createSampleRoomsService()
+    const PAGE = jest.requireActual('../useRoomPosts').POSTS_PAGE as number
+    const keys = Array.from({ length: PAGE + 1 }, (_, i) => `t${i}`)
+    const at = (i: number) => new Date(Date.UTC(2026, 9, 26, 9, 0, 0) - i * 60_000).toISOString()
+    mockService = {
+      ...sample,
+      listNotes: async () => ({
+        notes: keys.map((key, i) => ({ key, version: 1, status: 'active' as const, pinned: false, updatedAt: at(i) })),
+        complete: true,
+        check: { verdict: 'consistent' as const, detail: '' },
+      }),
+      readNote: async (_roomId: string, key: string) => {
+        const i = keys.indexOf(key)
+        const body = toInertText(`note ${i}`)
+        return {
+          key,
+          version: 1,
+          status: 'active' as const,
+          pinned: false,
+          updatedAt: at(i),
+          title: toInertText(`Title ${i}`),
+          body,
+          flags: { containsLink: false, looksLikeInstruction: false },
+          check: { verdict: 'consistent' as const, detail: '' },
+        }
+      },
+    } as RoomsService
+    const tree = show()
+    await openNotes(tree)
+    await waitFor(() => expect(tree.getAllByTestId(/RoomNote_/)).toHaveLength(PAGE))
+    expect(tree.queryByText('Rooms.LoadOlder')).toBeNull()
+    await act(async () => tree.getByTestId(id('RoomNotes')).props.onEndReached({ distanceFromEnd: 0 }))
+    // The list holds the next page; it draws rows as they scroll into view, so its data is what to count.
+    await waitFor(() => expect(tree.getByTestId(id('RoomNotes')).props.data).toHaveLength(PAGE + 1))
+    expect(tree.getByTestId(id('RoomNotes')).props.onEndReached).toBeUndefined()
   })
 
   test('a room with no notes says so (control: Planning above)', async () => {

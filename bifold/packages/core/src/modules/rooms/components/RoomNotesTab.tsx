@@ -5,20 +5,24 @@
  *
  * Where notes can't be listed, the tab says why in the rooms screens' usual words, never an empty list.
  *
+ * Where the member may write, "New note" opens the note editor, and each of their own notes offers Edit. Where
+ * writing isn't open to them yet, the tab says so instead of offering a button that would fail.
+ *
  * @module rooms/components/RoomNotesTab
  */
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import type { RoomPost } from '../roomPosts'
-import type { RoomFile } from '../types'
+import type { OperationStatus, RoomFile } from '../types'
 import type { RoomPosts } from '../useRoomPosts'
 
+import { isComingSoon, RoomFeatureCard } from './RoomFeatureCard'
 import { RoomNoteCard } from './RoomNoteCard'
 
 export interface RoomNotesTabProps {
@@ -28,6 +32,14 @@ export interface RoomNotesTabProps {
   /** Why notes can't be listed here, in words; none where they can. */
   unavailable?: string
   onOpenFile?: (file: RoomFile) => void
+  /** Opens the editor for a new note; none where the member can't write one. */
+  onNewNote?: () => void
+  /** Opens the editor on one of the member's own notes. */
+  onEditNote?: (note: RoomPost) => void
+  /** Why notes can't be written here, in words; none where they can or the room doesn't say. */
+  cannotWrite?: string
+  /** The room's write status: where writing is on its way, a card says so in place of `cannotWrite`. */
+  writeStatus?: OperationStatus
 }
 
 /** Pinned first, keeping the order given (newest first) within each. */
@@ -36,7 +48,16 @@ export const pinnedFirst = (notes: RoomPost[]): RoomPost[] => [
   ...notes.filter((n) => !n.pinned || n.retracted),
 ]
 
-export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({ notes, feed, unavailable, onOpenFile }) => {
+export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({
+  notes,
+  feed,
+  unavailable,
+  onOpenFile,
+  onNewNote,
+  onEditNote,
+  cannotWrite,
+  writeStatus,
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const sorted = useMemo(() => (notes ? pinnedFirst(notes) : []), [notes])
@@ -45,6 +66,7 @@ export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({ notes, feed, unavail
     muted: { color: ColorPalette.grayscale.mediumGrey },
     centered: { paddingVertical: 16 },
     footer: { gap: 12, paddingTop: 4 },
+    header: { gap: 10 },
   })
 
   const empty = unavailable ? (
@@ -60,9 +82,12 @@ export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({ notes, feed, unavail
       {t('Rooms.NotesNone')}
     </ThemedText>
   ) : (
-    <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomNotesReading')}>
-      {t('Rooms.Reading')}
-    </ThemedText>
+    <ActivityIndicator
+      style={styles.centered}
+      color={ColorPalette.brand.primary}
+      accessibilityLabel={t('Rooms.Reading')}
+      testID={testIdWithKey('RoomNotesReading')}
+    />
   )
 
   return (
@@ -73,12 +98,28 @@ export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({ notes, feed, unavail
       contentContainerStyle={styles.list}
       ListHeaderComponent={
         unavailable ? null : (
-          <ThemedText variant="caption" style={styles.muted} testID={testIdWithKey('RoomNotesCaption')}>
-            {t('Rooms.NotesCaption')}
-          </ThemedText>
+          <View style={styles.header}>
+            {onNewNote ? (
+              <Button
+                title={t('Rooms.NoteNew')}
+                buttonType={ButtonType.Secondary}
+                onPress={onNewNote}
+                testID={testIdWithKey('RoomNoteNew')}
+              />
+            ) : isComingSoon(writeStatus) ? (
+              <RoomFeatureCard status={writeStatus} feature="noteWrite" />
+            ) : cannotWrite ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey('RoomNotesCannotWrite')}>
+                {cannotWrite}
+              </ThemedText>
+            ) : null}
+            <ThemedText variant="caption" style={styles.muted} testID={testIdWithKey('RoomNotesCaption')}>
+              {t('Rooms.NotesCaption')}
+            </ThemedText>
+          </View>
         )
       }
-      renderItem={({ item }) => <RoomNoteCard note={item} onOpenFile={onOpenFile} />}
+      renderItem={({ item }) => <RoomNoteCard note={item} onOpenFile={onOpenFile} onEdit={onEditNote} />}
       ListEmptyComponent={empty}
       refreshControl={
         unavailable ? undefined : (
@@ -89,17 +130,18 @@ export const RoomNotesTab: React.FC<RoomNotesTabProps> = ({ notes, feed, unavail
           />
         )
       }
+      // Older notes load as the member scrolls down to them; the app's spinner shows while they are read. No button.
+      onEndReached={feed.hasOlder && !feed.loadingOlder && !unavailable ? feed.loadOlder : undefined}
+      onEndReachedThreshold={0.25}
       ListFooterComponent={
         <View style={styles.footer}>
-          {feed.hasOlder && !unavailable ? (
-            <Button
-              title={t('Rooms.LoadOlder')}
-              buttonType={ButtonType.Secondary}
-              onPress={feed.loadOlder}
-              disabled={feed.loadingOlder}
-              testID={testIdWithKey('RoomNotesLoadOlder')}
+          {feed.loadingOlder && !unavailable ? (
+            <ActivityIndicator
+              color={ColorPalette.brand.primary}
+              accessibilityLabel={t('Rooms.Reading')}
+              testID={testIdWithKey('RoomNotesLoadingOlder')}
             />
-          ) : feed.incomplete && !unavailable ? (
+          ) : feed.incomplete && !feed.hasOlder && !unavailable ? (
             <ThemedText style={styles.muted} testID={testIdWithKey('RoomNotesIncomplete')}>
               {t('Rooms.NotesIncomplete')}
             </ThemedText>

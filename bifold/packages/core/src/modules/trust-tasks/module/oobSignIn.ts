@@ -141,6 +141,11 @@ const LOGIN = 'login'
  *  - `grantReplayed`: the agent already signed this approval;
  *  - `assertionMethodMissing`: the persona's DID document cannot approve sign-ins;
  *  - `agentRefused` / `agentUnreachable`: the member's own agent said no, or did not answer.
+ *
+ * Signing in to a VTA Farm (farmSignIn):
+ *  - `farmNotLinked`: the Farm does not know the agent chosen as one got from it; the request is over;
+ *  - `farmKeyMissing`: this phone no longer holds the key it got the agent with, so it cannot sign;
+ *  - `contextMismatch`: the Farm says the approval does not match its request; the request is over.
  */
 export type SignInFailure =
   | 'expired'
@@ -167,6 +172,9 @@ export type SignInFailure =
   | 'agentRefused'
   | 'agentNeedsUpdate'
   | 'agentUnreachable'
+  | 'farmNotLinked'
+  | 'farmKeyMissing'
+  | 'contextMismatch'
 
 /** The words for each, in the person's terms. */
 export const SIGN_IN_FAILURE_MESSAGES: Record<SignInFailure, string> = {
@@ -195,6 +203,11 @@ export const SIGN_IN_FAILURE_MESSAGES: Record<SignInFailure, string> = {
   agentRefused: 'Your agent refused this sign-in.',
   agentNeedsUpdate: 'Your agent needs an update before it can sign you in to websites.',
   agentUnreachable: "Your agent couldn't be reached.",
+  farmNotLinked:
+    "This service doesn't know that agent as one you got from it. Refresh the sign-in page, scan the new code and pick the agent you got from this service. If you have none, get a new agent from this service, or sign in another way.",
+  farmKeyMissing:
+    "This phone no longer holds the key it got that agent with, so it can't sign in with it. Get a new agent from this service, or sign in another way.",
+  contextMismatch: "The service didn't accept the approval for this sign-in. Refresh the sign-in page and try again.",
 }
 
 export class SignInError extends Error {
@@ -209,12 +222,44 @@ export class SignInError extends Error {
     this.responded = options.responded ?? false
   }
 
+  /** The sign-in versions asked before this ended: prove's, then the grant's. For the Release log. */
+  tried?: { prove?: OobVersion[]; grant?: OobVersion[] }
+
   /**
    * Whether the grant may already have reached the community (`respond` was
    * sent, answered or not). Then the sign-in must NOT be cancelled: the VTC
    * cancels a request it already approved (findings G2).
    */
   readonly responded: boolean
+}
+
+/**
+ * A detail as the Release log may keep it: no link, no key, no document, a DID to its prefix (releaseLog's rule),
+ * and short. A detail is a check's name or an error's words, which can quote any of these.
+ */
+function forTheLog(detail: string): string {
+  const kept = detail
+    .replace(/https?:\/\/\S+/g, '<link>')
+    .replace(/\{[^]*\}/g, '{…}')
+    .replace(/did:key:z[1-9A-HJ-NP-Za-km-z]+/g, 'did:key:…')
+    .replace(/(did:[a-z0-9]+:)([^\s:"',)]{8})[^\s"',)]*/g, '$1$2…')
+    .replace(/\bz[1-9A-HJ-NP-Za-km-z]{20,}/g, '…')
+  return kept.length > 200 ? `${kept.slice(0, 199)}…` : kept
+}
+
+/**
+ * The one Release line a sign-in that ended leaves (IN-390: nothing said which check ended one): its reason, the
+ * detail, and the versions asked. An error that is not a sign-in error is named by its kind only.
+ */
+export function signInEndLine(error: unknown): string {
+  if (!(error instanceof SignInError)) {
+    const kind = error instanceof Error ? error.name : typeof error
+    return `[SignIn] not signed in: unknown (${kind})`
+  }
+  const parts = [`[SignIn] not signed in: ${error.reason}${error.detail ? ` (${forTheLog(error.detail)})` : ''}`]
+  if (error.tried?.prove?.length) parts.push(`prove ${error.tried.prove.join('>')}`)
+  if (error.tried?.grant?.length) parts.push(`grant ${error.tried.grant.join('>')}`)
+  return parts.join('; ')
 }
 
 /**
@@ -359,11 +404,20 @@ export type SignInDeps = {
   post: (url: string, document: Record<string, unknown>) => Promise<unknown>
   /** Whether Keyring's own records hold a current membership of this community. */
   isKnownCommunity: (vtcDid: string) => boolean | Promise<boolean>
+  /**
+   * How the claim is sent: `make` signs a claim, again when a retry needs a new document. The answer, and the
+   * document that drew it. Default: once ({@link sendToCommunity}); a Farm's sign-in passes its retry rules
+   * (farmSignIn.sendToFarm).
+   */
+  send?: (base: string, make: () => Record<string, unknown>) => Promise<SentDocument>
   /** A fresh K_a; a test passes its own. */
   newKey?: () => ThrowawayKey
   /** Now, in seconds. */
   now?: () => number
 }
+
+/** A document sent, and the answer it drew. */
+export type SentDocument = { answer: Record<string, unknown>; document: Record<string, unknown> }
 
 /** A claimed sign-in: what the next steps (identify, prove, grant) need. */
 export type ClaimedSignIn = {
@@ -381,7 +435,7 @@ export type ClaimedSignIn = {
 
 const nowSeconds = (deps: { now?: () => number }) => deps.now?.() ?? Math.floor(Date.now() / 1000)
 
-const tasksUrl = (base: string) => `${base.replace(/\/+$/, '')}/trust-tasks`
+export const tasksUrl = (base: string) => `${base.replace(/\/+$/, '')}/trust-tasks`
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
@@ -481,6 +535,8 @@ async function answerProblem(
  * carries on with identify. Throws a {@link SignInError} otherwise — before
  * any network call when the code cannot be used or the community is not one
  * this phone has joined.
+ *
+ * @versionLadder auth/oob/claim
  */
 export async function claimSignIn(link: string | TriggerAccept, deps: SignInDeps): Promise<ClaimedSignIn> {
   const trigger = signInTrigger(link, nowSeconds(deps))
@@ -509,23 +565,27 @@ export async function claimSignIn(link: string | TriggerAccept, deps: SignInDeps
   // K_a proves control of itself to the community: `authentication`.
   const claimAt = (type: string) =>
     keyA.sign(oobEnvelope(type, { requestId }, keyA.did, vtcDid, requestId), 'authentication')
+  const send = async (type: string): Promise<SentDocument> => {
+    if (deps.send) return deps.send(base, () => claimAt(type))
+    const document = claimAt(type)
+    return { answer: await sendToCommunity(deps, base, document), document }
+  }
   // 0.2 first. A community that does not serve it refuses the type at dispatch, before the request is touched,
   // so the request is claimed again at 0.1.
-  let claim = claimAt(OOB_TASKS.claim02)
-  let answer: Record<string, unknown>
+  let sent: SentDocument
   try {
-    answer = await sendToCommunity(deps, base, claim)
+    sent = await send(OOB_TASKS.claim02)
   } catch (error) {
     if (!(error instanceof SignInError) || error.reason !== 'refused' || !isUnsupportedTaskCode(error.detail)) {
       throw error
     }
-    claim = claimAt(OOB_TASKS.claim)
-    answer = await sendToCommunity(deps, base, claim)
+    sent = await send(OOB_TASKS.claim)
   }
+  const { answer } = sent
   const problem = await answerProblem(answer, {
     vtcDid,
     vtcDocument,
-    claimId: claim.id as string,
+    claimId: sent.document.id as string,
     keyA: keyA.did,
     requestId,
     portalOrigin,

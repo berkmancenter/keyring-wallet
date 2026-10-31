@@ -227,25 +227,50 @@ const VtaAgentSettings: React.FC = () => {
                 {t('VtaLink.OtherAgents')}
               </ThemedText>
               <ThemedText style={styles.muted}>{t('VtaLink.SwitcherOnlyCurrent')}</ThemedText>
-              {otherAgents.map((a) => (
-                <View key={a.vtaDid} style={styles.row} testID={testIdWithKey(`AgentOtherRow_${a.i}`)}>
-                  <ThemedText variant="bold" style={{ flex: 1 }}>
-                    {nameOf(a.vtaDid)}
-                  </ThemedText>
-                  <Pressable
-                    onPress={() => setUnlinkTarget(a.vtaDid)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('VtaLink.UnlinkTitle', {
-                      agent: nameOf(a.vtaDid),
-                      interpolation: { escapeValue: false },
-                    })}
-                    hitSlop={8}
-                    testID={testIdWithKey(`AgentSwitcherUnlink_${a.i}`)}
-                  >
-                    <ThemedText style={styles.link}>{t('VtaLink.UnlinkConfirm')}</ThemedText>
-                  </Pressable>
-                </View>
-              ))}
+              {otherAgents.map((a) => {
+                // Unlinking another agent tells it first, which takes up to ten seconds: the row says so from the
+                // tap (IN-379), and an agent still listed after it offers the unlink again.
+                const mark = state.unlinkingOthers?.[a.vtaDid]
+                return (
+                  <View key={a.vtaDid} testID={testIdWithKey(`AgentOtherRow_${a.i}`)}>
+                    <View style={styles.row}>
+                      <ThemedText variant="bold" style={{ flex: 1, opacity: mark === 'unlinking' ? 0.5 : 1 }}>
+                        {nameOf(a.vtaDid)}
+                      </ThemedText>
+                      {mark === 'unlinking' ? (
+                        <View style={[styles.row, { gap: 8 }]} accessibilityLiveRegion="polite">
+                          <ActivityIndicator color={ColorPalette.brand.primary} />
+                          <ThemedText style={styles.muted}>{t('VtaLink.UnlinkingOther')}</ThemedText>
+                        </View>
+                      ) : (
+                        <Pressable
+                          onPress={() => {
+                            // Already confirmed once: a retry goes straight to the unlink.
+                            if (mark !== 'failed') setUnlinkTarget(a.vtaDid)
+                            else if (agent) void vtaAgent.unlinkAgent(agent, a.vtaDid)
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('VtaLink.UnlinkTitle', {
+                            agent: nameOf(a.vtaDid),
+                            interpolation: { escapeValue: false },
+                          })}
+                          hitSlop={8}
+                          testID={testIdWithKey(`AgentSwitcherUnlink_${a.i}`)}
+                        >
+                          <ThemedText style={styles.link}>
+                            {mark === 'failed' ? t('VtaLink.TryAgain') : t('VtaLink.UnlinkConfirm')}
+                          </ThemedText>
+                        </Pressable>
+                      )}
+                    </View>
+                    {mark === 'failed' ? (
+                      <ThemedText style={styles.muted} accessibilityLiveRegion="polite">
+                        {t('VtaLink.UnlinkOtherFailed')}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                )
+              })}
               {unlinkTarget ? (
                 <View style={{ gap: 8 }} testID={testIdWithKey(VtaAgentSettingsIds.unlinkOtherCard)}>
                   <ThemedText variant="labelTitle" accessibilityRole="header">

@@ -30,6 +30,8 @@ import {
 // eslint-disable-next-line import/order
 import minted from './fixtures/dtg-v1-minted.json'
 // eslint-disable-next-line import/order
+import { pinClock, unpinClock } from './fixtures/pinClock'
+// eslint-disable-next-line import/order
 import signed from './fixtures/vti-upstream-signed.json'
 // eslint-disable-next-line import/order
 import type { VtiHeldCredential } from '../module/VtiCommunityStore'
@@ -37,6 +39,8 @@ import type { VtiHeldCredential } from '../module/VtiCommunityStore'
 import { checkVettingRequirements } from '../module/vettingShape'
 // eslint-disable-next-line import/order
 import { CREDENTIAL_EXCHANGE_ISSUE, classifyCredential, receiveIssue } from '../module/vtiInbox'
+// eslint-disable-next-line import/order
+import { grantState } from '../module/vtiGrantState'
 // eslint-disable-next-line import/order
 import { VtiApplicant, cardDigestMultibase, type VettingApplication, type VtiVettingStore } from '../module/vtiVetting'
 
@@ -185,8 +189,13 @@ describe('the shape check', () => {
 })
 
 describe('a vetted/1 statement through the applicant’s full check', () => {
-  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-02T00:00:00Z')))
-  afterEach(() => jest.restoreAllMocks())
+  beforeEach(() => pinClock(Date.parse('2026-10-02T00:00:00Z')))
+  afterEach(unpinClock)
+
+  it('reads the pinned day through new Date() as well as Date.now()', () => {
+    expect(new Date().toISOString()).toBe('2026-10-02T00:00:00.000Z')
+    expect(Date.now()).toBe(Date.parse('2026-10-02T00:00:00Z'))
+  })
 
   it('is kept and counted, as an endorsement-shape one is', async () => {
     const w = world(minted.parties.vetter)
@@ -265,8 +274,8 @@ describe('a community’s requirements naming the vetted/1 predicate', () => {
 })
 
 describe('an endorsement-shape statement, which may cite no task digest', () => {
-  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z')))
-  afterEach(() => jest.restoreAllMocks())
+  beforeEach(() => pinClock(Date.parse('2026-09-25T00:05:00Z')))
+  afterEach(unpinClock)
 
   it('is read on its taskContext alone, as before, even when the session document was kept', async () => {
     expect(oldStatement.taskDigestMultibase).toBeUndefined()
@@ -277,10 +286,10 @@ describe('an endorsement-shape statement, which may cite no task digest', () => 
 })
 
 describe('after LEGACY_DTG_SHAPE_UNTIL', () => {
-  afterEach(() => jest.restoreAllMocks())
+  afterEach(unpinClock)
 
   it('an endorsement-shape statement is refused with its own reason, legacyShape', async () => {
-    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(`${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z`) + 3600 * 1000)
+    pinClock(Date.parse(`${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z`) + 3600 * 1000)
     const w = world(signed.vetterDid)
     await w.deliver(oldStatement)
     expect(w.held).toHaveLength(0)
@@ -288,9 +297,22 @@ describe('after LEGACY_DTG_SHAPE_UNTIL', () => {
   })
 
   it('the same statement the day before is still read', async () => {
-    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z'))
+    pinClock(Date.parse('2026-09-25T00:05:00Z'))
     const w = world(signed.vetterDid)
     await w.deliver(oldStatement)
     expect(w.request()).toMatchObject({ status: 'attested' })
+  })
+})
+
+describe('a held card’s window', () => {
+  const held = { credential: newStatement, communityDid: signed.community } as unknown as VtiHeldCredential
+
+  it('is judged at the now it is given, not on the wall clock', async () => {
+    await expect(
+      grantState(agent as never, held, { now: new Date('2026-10-02T00:00:00Z'), local: true })
+    ).resolves.toMatchObject({ state: 'active' })
+    await expect(
+      grantState(agent as never, held, { now: new Date('2026-11-01T00:00:00Z'), local: true })
+    ).resolves.toMatchObject({ state: 'expired', validUntil: newStatement.validUntil })
   })
 })

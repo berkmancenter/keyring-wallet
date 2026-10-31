@@ -43,12 +43,14 @@ export type RoomsOperation =
  * - `adminOnly`: only a community's administrators may do it.
  * - `noAgentLinked`: the phone has no agent to ask.
  * - `agentUnknown`: the agent could not be asked what it serves; try again later.
- * - `communityDoesNotServe`: the community's service is too old for it (reserved: community
- *   operations are not yet discovered in advance, so today a call to an old community fails instead).
+ * - `communityDoesNotServe`: the community's service is too old for it. Community operations are not discovered in
+ *   advance, so this comes from a call the community refused as a task it doesn't have.
  * - `detailsNotLoaded`: a room known only from the agent's key custody, without the community's
  *   record of it (rights, host). The operation needs those ("Details not loaded").
  * - `noRight`: this member's rights in the room do not include it ("You can't post here").
  * - `communityUnreachable`: none of the member's communities answered for their rooms; try again later.
+ * - `tierNotYet`: served, but Keyring does not yet do it in a room of this tier, e.g. writing in an `attributed`
+ *   room, whose records are sealed ("not available yet in this kind of room").
  */
 export type RoomsReason =
   | 'ok'
@@ -63,6 +65,9 @@ export type RoomsReason =
   | 'detailsNotLoaded'
   | 'noRight'
   | 'communityUnreachable'
+  | 'tierNotYet'
+  // Never in this kind of room: files exist on attributed and private rooms only (upstream refuses them on open ones).
+  | 'notOnThisTier'
 
 export type RoomsStatus = 'available' | 'comingSoon' | 'unavailable'
 
@@ -171,11 +176,23 @@ export interface HostCheck {
   detail: string
 }
 
+/**
+ * A room's last prune (`rooms/_shared/0.2` RecordPrune), as `rooms/keys/browse` 0.3 passes it on: the room version
+ * the prune took it to, when, and how many records it removed outright, tombstones included.
+ */
+export interface RecordPrune {
+  version: number
+  prunedAt: string
+  removed: number
+}
+
 export interface NoteList {
   notes: NoteSummary[]
   /** False when the host's listing stopped early. */
   complete: boolean
   check: HostCheck
+  /** The room's last prune, when the agent passes one on (browse 0.3). */
+  lastPrune?: RecordPrune
 }
 
 export interface InertFlags {
@@ -198,6 +215,11 @@ export interface RoomsAttachment {
   mimeType?: string
   size: number
 }
+
+/** The longest note title, in characters: the room schema's cleartext title (`RecordMetadata.title`). */
+export const NOTE_TITLE_MAX = 512
+/** The longest note body, in characters: the member sprint's 16 KiB cap on a record. */
+export const NOTE_BODY_MAX = 16384
 
 export interface WriteDraft {
   title: string
@@ -242,11 +264,14 @@ export interface RoomOffer {
   /** Names the offer to `previewOffer` and `hideOffer`: a route parameter, opaque to screens. */
   offerId: string
   roomId: string
+  /** The community's name for the room, else what tells it apart (`roomRef`): then `roomNameFrom` is `roomId`. */
   roomName: InertText
+  roomNameFrom?: 'roomId'
   /** What the room is for, as the community's administrators wrote it. Absent when the room has none. */
   description?: InertText
   communityDid: string
-  communityName: InertText
+  /** Absent when the community published no name: a screen says `offerCommunity`, never a cut of the DID. */
+  communityName?: InertText
   tier: RoomTier
   verbs: RoomVerb[]
   validUntil?: string
@@ -387,6 +412,8 @@ export interface RoomsService {
   readonly isSample: boolean
   /** For logs and support. The sample service puts its build marker here, where it is read at runtime. */
   readonly label: string
+  /** The app's agent a real service is built on (`RoomsBackend.runsOn`); none for the sample. */
+  readonly runsOn?: object
   /** One status per operation. Cached per agent; `refresh` asks again. */
   capabilities(options?: { refresh?: boolean }): Promise<RoomsCapabilities>
 
@@ -394,7 +421,12 @@ export interface RoomsService {
   getRoom(roomId: string): Promise<Room>
   /** One status per room operation: the service-wide status, narrowed by the room's source and rights. */
   roomCapabilities(roomId: string): Promise<RoomCapabilities>
-  listNotes(roomId: string): Promise<NoteList>
+  /**
+   * The room's records, metadata only. With `sinceVersion`, only those written or curated after it (a version is
+   * the host's, monotonic per room), so a refresh asks only for what is new; such a listing is never complete
+   * against the room's record count.
+   */
+  listNotes(roomId: string, options?: { sinceVersion?: number }): Promise<NoteList>
   readNote(roomId: string, key: string): Promise<Note>
   prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview>
   /** Sends what the preview showed; with an attachment, `options` reports the upload and can cancel it (nothing is written). */
@@ -402,6 +434,11 @@ export interface RoomsService {
   curate(roomId: string, key: string, action: 'pin' | 'unpin' | 'retract'): Promise<void>
 
   listOffers(communityDid?: string): Promise<RoomOffer[]>
+  /**
+   * Called when a community a listing had to skip for now (another identity's step kept the community session) can
+   * be read again; returns the unsubscribe. Absent where nothing is skipped that way (the sample).
+   */
+  onReadable?(listener: () => void): () => void
   previewOffer(offerId: string): Promise<OfferPreview>
   acceptOffer(token: string): Promise<{ roomId: string }>
   /** Hides an offer on this phone only. Upstream has no decline: the community is not told. */

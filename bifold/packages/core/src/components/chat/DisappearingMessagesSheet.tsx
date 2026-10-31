@@ -3,7 +3,7 @@ import { useAgent } from '@bifold/react-hooks'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Modal, ScrollView, StyleSheet, View } from 'react-native'
-import { TouchableOpacity } from 'react-native-gesture-handler'
+import { GestureHandlerRootView, TouchableOpacity } from 'react-native-gesture-handler'
 import Toast from 'react-native-toast-message'
 
 import { counterpartySpeaksChat } from '../../modules/chat/capability'
@@ -35,8 +35,14 @@ export interface DisappearingMessagesSheetProps {
  */
 const DisappearingMessagesSheet: React.FC<DisappearingMessagesSheetProps> = ({ visible, onClose, ...rest }) => (
   <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-    {/* Mounted afresh at each opening, so what it holds starts from the current setting. */}
-    {visible && <SheetBody onClose={onClose} {...rest} />}
+    {/*
+     * On Android a Modal is its own window, outside every gesture root above it: without this one, the
+     * gesture-handler touchables here (the choices, Cancel and Save) never get a tap.
+     */}
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* Mounted afresh at each opening, so what it holds starts from the current setting. */}
+      {visible && <SheetBody onClose={onClose} {...rest} />}
+    </GestureHandlerRootView>
   </Modal>
 )
 

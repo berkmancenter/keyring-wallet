@@ -19,6 +19,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { localDate } from '../../trust-tasks/screens/localTime'
 import { testIdWithKey } from '../../../utils/testable'
+import { offerCommunityAlone, offerRoom } from '../offerCommunity'
 import type { RoomOffer, RoomSummary } from '../types'
 import type { MyRooms } from '../useMyRooms'
 
@@ -34,12 +35,12 @@ const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean; onPress?: (
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const line = [
-    withCommunity ? offer.communityName : undefined,
+    withCommunity ? offerCommunityAlone(offer, t) : undefined,
     offer.validUntil ? (t('Rooms.Until', { date: localDate(offer.validUntil) }) as string) : undefined,
   ]
     .filter(Boolean)
     .join(' · ')
-  const label = `${t('Rooms.OfferOf', { room: offer.roomName, interpolation: { escapeValue: false } })}${
+  const label = `${t('Rooms.OfferOf', { room: offerRoom(offer, t), interpolation: { escapeValue: false } })}${
     line ? `, ${line}` : ''
   }`
   const style = { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 } as const
@@ -49,7 +50,7 @@ const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean; onPress?: (
       <Icon name="email-outline" size={22} color={ColorPalette.brand.primary} />
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <ThemedText variant="bold">{offer.roomName}</ThemedText>
+          <ThemedText variant="bold">{offerRoom(offer, t)}</ThemedText>
           <TierBadge tier={offer.tier} />
         </View>
         {line ? (
@@ -98,6 +99,8 @@ export interface RoomsListBodyProps {
   acrossCommunities: boolean
   onOpenRoom?: (room: RoomSummary) => void
   onOpenOffer?: (offer: RoomOffer) => void
+  /** What shows while the rooms are read; the app's spinner unless a screen draws its own (a community's rows). */
+  whileReading?: React.ReactNode
 }
 
 export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
@@ -105,6 +108,7 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
   acrossCommunities,
   onOpenRoom,
   onOpenOffer,
+  whileReading,
 }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
@@ -118,16 +122,21 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
     return (
       <View style={styles.section}>
         <ThemedText testID={testIdWithKey('RoomsReadFailed')}>{roomsReadFailedText(t, myRooms.failure)}</ThemedText>
-        <Button
-          title={t('Rooms.TryAgain')}
-          buttonType={ButtonType.Secondary}
-          onPress={myRooms.reload}
-          testID={testIdWithKey('RoomsTryAgain')}
-        />
+        {/* Trying again doesn't update a community. */}
+        {myRooms.failure?.reason === 'communityDoesNotServe' ? null : (
+          <Button
+            title={t('Rooms.TryAgain')}
+            buttonType={ButtonType.Secondary}
+            onPress={myRooms.reload}
+            testID={testIdWithKey('RoomsTryAgain')}
+          />
+        )}
       </View>
     )
-  if (!capabilities)
-    return <ActivityIndicator color={ColorPalette.brand.primary} testID={testIdWithKey('RoomsReading')} />
+  const reading = whileReading ?? (
+    <ActivityIndicator color={ColorPalette.brand.primary} testID={testIdWithKey('RoomsReading')} />
+  )
+  if (!capabilities) return <>{reading}</>
 
   const unavailable = roomsStatusText(t, capabilities.listMyRooms, 'listMyRooms')
   if (unavailable)
@@ -136,7 +145,7 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
         {unavailable}
       </ThemedText>
     )
-  if (!rooms) return <ActivityIndicator color={ColorPalette.brand.primary} testID={testIdWithKey('RoomsReading')} />
+  if (!rooms) return <>{reading}</>
 
   const waiting = offers ?? []
   const groups = acrossCommunities ? groupRooms(rooms) : [{ key: 'one', title: undefined, rooms }]

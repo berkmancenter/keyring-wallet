@@ -39,7 +39,8 @@ import { communityNameIsStale, refreshPublishedNameThrottled } from '../module/c
 import { communityTarget } from '../module/vtiCommunityLink'
 import { RoomsCard } from '../../rooms/components/RoomsCard'
 import { useMyRooms } from '../../rooms/useMyRooms'
-import { useRoomOffersCount } from '../../rooms/useRoomOffersCount'
+import { useRereadOnReturn } from '../../rooms/useRereadOnReturn'
+import { useRoomOffersBadge } from '../../rooms/useRoomOffersCount'
 import { useRoomsService } from '../../rooms/useRoomsService'
 
 import { DevicesCard } from './DevicesCard'
@@ -313,11 +314,14 @@ const VtaAgentHome: React.FC = () => {
   // card shows it. Each card told it after painting, one render late.
   const held = holdings ? communitiesHeld(holdings) : []
   const journeys = useCommunityJourneysOf(held)
-  // Rooms, while the rooms flag is on: one card, its rooms read once here, its offers badge polled while an agent
-  // is linked and the app is in the foreground (nothing pushes an offer).
+  // Rooms, while the rooms flag is on: one card, its rooms read here, its offers badge read from the poll the tab
+  // navigator runs while an agent is linked and the app is in the foreground (nothing pushes an offer).
   const roomsService = useRoomsService()
   const myRooms = useMyRooms(roomsService)
-  const roomOffers = useRoomOffersCount(roomsService, link.kind === 'linked')
+  // Read again on coming back here, and on returning to the app after a read that failed: the first read alone
+  // kept a failure until the screen was left (a tester's run, 10-29).
+  useRereadOnReturn(myRooms)
+  const roomOffers = useRoomOffersBadge()
 
   // Only what still waits: a decided or expired request is not listed. The
   // same rule as the badge on the My Agent tab (waitingRequests.ts).

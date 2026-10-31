@@ -18,6 +18,13 @@
  *     or Decline (`cancel`; never `approve`).
  *  6. How it ended.
  *
+ * A code from the service that hosts agents this phone got there (IN-388)
+ * runs the same steps in the service's words: the choice is between those
+ * agents, and the review names the service as its own signed answer does, the
+ * verified website and the agent, never the key the service knows it by. A
+ * code from a sender that is neither says, when the phone holds an agent that
+ * kept no key for its host, that such an agent cannot sign in there yet.
+ *
  * The community gives the request a decision deadline: the time left shows
  * from the claim on, and when it runs out before Approve the request is over.
  * Leaving the screen after a claim and before Approve gives the request up.
@@ -29,6 +36,7 @@
  */
 import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
+import type { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native'
@@ -39,18 +47,20 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { registerOtaApplyBlocker } from '../../../utils/otaApply'
+import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import type { ClaimedSignIn } from '../module/oobSignIn'
 import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
 import {
   agentSignInSteps,
   signInCommunityOf,
-  signInReasonOf,
+  signInEndedBy,
   type ProvedSignIn,
   type SignInEndReason,
   type SignInIdentity,
   type SignInSteps,
 } from '../module/signInSteps'
+import { communityTarget } from '../module/vtiCommunityLink'
 
 import { didDomainPath, unnamedCommunityLabel } from './communityName'
 import { DidDetails } from './DidDetails'
@@ -74,7 +84,9 @@ type Step =
    * identities it could sign in as are unknown (undefined) until the records are read, and Continue waits for them.
    */
   | { kind: 'confirm'; vtcDid: string; host?: string; name?: string; identities?: SignInIdentity[] }
-  | { kind: 'notMember'; name: string; vtcDid: string }
+  /** `olderAgents`: the phone holds an agent that kept no sign-in key for its host, which cannot sign in there yet. */
+  /** `name`: only a name on record. A sender with none is shown by its address: nothing was looked up (VTI-LNK-050). */
+  | { kind: 'notMember'; name?: string; vtcDid: string; olderAgents?: boolean }
   | { kind: 'choose'; identities: SignInIdentity[] }
   | { kind: 'claiming' }
   | { kind: 'number'; claimed: ClaimedSignIn }
@@ -117,6 +129,8 @@ export interface SignInFlowProps {
   now?: () => number
   /** Leave the screen. */
   onClose: () => void
+  /** Go to Join for this community, in place of this screen (IN-406). Without it, an unjoined code offers no join. */
+  onJoin?: (vtcDid: string) => void
 }
 
 const nowSeconds = () => Math.floor(Date.now() / 1000)
@@ -135,7 +149,7 @@ function firstStep(link: string | undefined, at: number): Step {
   return { kind: 'confirm', vtcDid: read.vtcDid, host: didDomainPath(read.vtcDid) }
 }
 
-export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSeconds, onClose }) => {
+export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSeconds, onClose, onJoin }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const headerHeight = useSafeHeaderHeight()
@@ -147,7 +161,13 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   const [clock, setClock] = useState(now)
   // Kept from the confirm step for the review; from the claim, its deadline.
   const [communityName, setCommunityName] = useState('')
+  // The code is from the service that hosts agents this phone got there (IN-388): its words, not a community's.
+  const [service, setService] = useState(false)
+  const word = (key: string) => (service ? `SignIn.Service.${key}` : `SignIn.${key}`)
   const [deadline, setDeadline] = useState<number | undefined>()
+  // "Check and join" on a code from a community this phone has not joined (IN-406): idle, checking, not one, or
+  // not checked (no answer in time: the offer stays, to try again).
+  const [joinCheck, setJoinCheck] = useState<'idle' | 'checking' | 'notJoinable' | 'unchecked'>('idle')
 
   // What the unmount and the deadline need without re-running effects.
   const claimedRef = useRef<ClaimedSignIn | undefined>(undefined)
@@ -171,7 +191,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   const fail = useCallback(
     (error: unknown) => {
       if (endedRef.current) return
-      end({ kind: 'failed', reason: signInReasonOf(error) })
+      end({ kind: 'failed', reason: signInEndedBy(error) })
     },
     [end]
   )
@@ -184,18 +204,26 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     let live = true
     stepsRef.current
       .community(vtcDid)
-      .then(({ member, name, identities = [] }) => {
+      .then(({ member, name, identities = [], farm, olderAgents }) => {
         if (!live) return
         // Never the raw DID as its name: what the community calls itself,
-        // else its handle, with the DID behind Details (IN-249).
-        const label = name?.trim() || unnamedCommunityLabel(vtcDid, t)
+        // else its handle, with the DID behind Details (IN-249). A service
+        // names itself only in its signed answer to the claim, so until then
+        // it is its address.
+        const label = (farm ? didDomainPath(vtcDid) : name?.trim()) || unnamedCommunityLabel(vtcDid, t)
+        setService(Boolean(farm))
         setCommunityName(label)
         setStep((current) =>
           current.kind !== 'confirm'
             ? current
             : member
               ? { ...current, name: label, identities }
-              : { kind: 'notMember', name: label, vtcDid }
+              : {
+                  kind: 'notMember',
+                  ...(name?.trim() ? { name: name.trim() } : {}),
+                  vtcDid,
+                  ...(olderAgents ? { olderAgents } : {}),
+                }
         )
       })
       .catch((e) => {
@@ -278,7 +306,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
       end({ kind: 'approved' })
     } catch (e) {
       // Approve began, so the deadline no longer decides: its answer does.
-      end({ kind: 'failed', reason: signInReasonOf(e) })
+      end({ kind: 'failed', reason: signInEndedBy(e) })
     }
   }
 
@@ -360,7 +388,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
                 ? t('SignIn.ConfirmTitleUnread')
                 : t('SignIn.ConfirmTitle', { name: step.name, interpolation: { escapeValue: false } })}
             </ThemedText>
-            <ThemedText>{t('SignIn.ConfirmBody')}</ThemedText>
+            <ThemedText>{t(word('ConfirmBody'))}</ThemedText>
             <View style={styles.card}>
               {step.name === undefined ? (
                 <View style={styles.row}>
@@ -371,15 +399,17 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
                     accessibilityLabel={t('SignIn.ReadingCommunity')}
                   />
                 </View>
+              ) : service ? (
+                row(t('SignIn.Service.Label'), step.name, SignInIds.service)
               ) : (
                 row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)
               )}
               {/* Who the code says the community is, domain and path, from
                   the code alone: nothing is resolved before Continue, so it
                   is marked unverified (VTI-LNK-050). */}
-              {row(t('SignIn.HostLabel'), step.host ?? t('SignIn.NoDomain'), SignInIds.host)}
+              {row(t(word('HostLabel')), step.host ?? t('SignIn.NoDomain'), SignInIds.host)}
               <ThemedText style={styles.muted} testID={id(SignInIds.unverified)}>
-                {t('SignIn.Unverified')}
+                {t(word('Unverified'))}
               </ThemedText>
             </View>
             <View style={styles.actions}>
@@ -408,8 +438,50 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
               {t('SignIn.NotSignedIn')}
             </ThemedText>
             <ThemedText testID={id(SignInIds.resultMessage)}>{t('SignIn.Failure.notAMember')}</ThemedText>
-            {row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)}
+            {step.olderAgents ? (
+              <ThemedText testID={id(SignInIds.olderAgents)}>{t('SignIn.OlderAgents')}</ThemedText>
+            ) : null}
+            {/* A name on record, else the sender's address: whether it published a name, or is a community at all (a
+                Farm's code reads the same), is not known before anything is looked up (IN-388 step D). One row either
+                way, naming the sender (the wallet e2e reads it). */}
+            {step.name
+              ? row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)
+              : row(t('SignIn.HostLabel'), didDomainPath(step.vtcDid) ?? t('SignIn.NoDomain'), SignInIds.community)}
             <DidDetails did={step.vtcDid} testIdStem={SignInIds.communityDid} />
+            {/* A community's join page shows this same code (IN-406). Nothing is resolved until the tap
+                (VTI-LNK-050), and nothing is sent to the community: Join asks it first. */}
+            {onJoin && steps.joinable ? (
+              joinCheck === 'notJoinable' ? (
+                <ThemedText testID={id(SignInIds.notJoinable)}>{t('SignIn.NotJoinable')}</ThemedText>
+              ) : (
+                <>
+                  {joinCheck === 'unchecked' ? (
+                    <ThemedText testID={id(SignInIds.joinUnchecked)}>{t('SignIn.JoinUnchecked')}</ThemedText>
+                  ) : (
+                    <ThemedText>{t('SignIn.JoinHint')}</ThemedText>
+                  )}
+                  <Button
+                    title={t('SignIn.CheckAndJoin')}
+                    buttonType={ButtonType.Secondary}
+                    disabled={joinCheck === 'checking'}
+                    onPress={() => {
+                      const vtcDid = step.vtcDid
+                      setJoinCheck('checking')
+                      stepsRef.current
+                        .joinable?.(vtcDid)
+                        .catch(() => undefined)
+                        .then((yes) => {
+                          if (yes) onJoin(vtcDid)
+                          else setJoinCheck(yes === false ? 'notJoinable' : 'unchecked')
+                        })
+                    }}
+                    testID={id(SignInIds.checkAndJoin)}
+                  >
+                    {joinCheck === 'checking' ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
+                  </Button>
+                </>
+              )
+            ) : null}
             <Button
               title={t('SignIn.Done')}
               buttonType={ButtonType.Primary}
@@ -422,9 +494,9 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
         return (
           <View style={{ gap: 16 }} testID={id(SignInIds.choose)}>
             <ThemedText variant="headingThree" accessibilityRole="header">
-              {t('SignIn.ChooseTitle')}
+              {t(word('ChooseTitle'))}
             </ThemedText>
-            <ThemedText>{t('SignIn.ChooseBody')}</ThemedText>
+            <ThemedText>{t(word('ChooseBody'))}</ThemedText>
             {step.identities.map((identity, n) => (
               <Pressable
                 key={`${identity.vtaDid} ${identity.did}`}
@@ -436,16 +508,30 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
                 }}
                 testID={id(`${SignInIds.identityOption}-${n}`)}
               >
-                <ThemedText variant="bold">{identity.label?.trim() || shortPersonaDid(identity.did)}</ThemedText>
-                <ThemedText testID={id(`${SignInIds.identityAgent}-${n}`)}>
-                  {t(identity.current ? 'SignIn.ChooseOnAgentCurrent' : 'SignIn.ChooseOnAgent', {
-                    agent: identity.agentName,
-                    interpolation: { escapeValue: false },
-                  })}
-                </ThemedText>
-                <ThemedText style={styles.muted}>
-                  {t(identity.source === 'thisPhone' ? 'SignIn.ChooseFromPhone' : 'SignIn.ChooseFromAgent')}
-                </ThemedText>
+                {identity.source === 'farm' ? (
+                  // An agent got from the service: the agent is the choice, its key is never shown.
+                  <>
+                    <ThemedText variant="bold" testID={id(`${SignInIds.identityAgent}-${n}`)}>
+                      {identity.agentName}
+                    </ThemedText>
+                    {identity.current ? (
+                      <ThemedText style={styles.muted}>{t('SignIn.Service.ChooseCurrent')}</ThemedText>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <ThemedText variant="bold">{identity.label?.trim() || shortPersonaDid(identity.did)}</ThemedText>
+                    <ThemedText testID={id(`${SignInIds.identityAgent}-${n}`)}>
+                      {t(identity.current ? 'SignIn.ChooseOnAgentCurrent' : 'SignIn.ChooseOnAgent', {
+                        agent: identity.agentName,
+                        interpolation: { escapeValue: false },
+                      })}
+                    </ThemedText>
+                    <ThemedText style={styles.muted}>
+                      {t(identity.source === 'thisPhone' ? 'SignIn.ChooseFromPhone' : 'SignIn.ChooseFromAgent')}
+                    </ThemedText>
+                  </>
+                )}
               </Pressable>
             ))}
             <Button
@@ -457,7 +543,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
           </View>
         )
       case 'claiming':
-        return busyNote(t('SignIn.Claiming'), SignInIds.claiming)
+        return busyNote(t(word('Claiming')), SignInIds.claiming)
       case 'number': {
         const { claimed } = step
         return (
@@ -518,14 +604,24 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             <ThemedText variant="headingThree" accessibilityRole="header">
               {t('SignIn.ReviewTitle')}
             </ThemedText>
-            <View style={styles.card}>
-              {row(t('SignIn.CommunityLabel'), communityName, SignInIds.community)}
-              {row(t('SignIn.Website'), proved.claimed.portalOrigin, SignInIds.website)}
-              {proved.identifiedAs ? row(t('SignIn.SigningInAs'), proved.identifiedAs, SignInIds.identifiedAs) : null}
-            </View>
+            {'farm' in proved ? (
+              // The service as its own signed answer names itself, the verified website, and the agent chosen:
+              // the key the service knows it by is never shown.
+              <View style={styles.card}>
+                {row(t('SignIn.Service.Label'), proved.farm.serviceName ?? communityName, SignInIds.service)}
+                {row(t('SignIn.Website'), proved.claimed.portalOrigin, SignInIds.website)}
+                {row(t('SignIn.Service.Agent'), proved.farm.agentName, SignInIds.agent)}
+              </View>
+            ) : (
+              <View style={styles.card}>
+                {row(t('SignIn.CommunityLabel'), communityName, SignInIds.community)}
+                {row(t('SignIn.Website'), proved.claimed.portalOrigin, SignInIds.website)}
+                {proved.identifiedAs ? row(t('SignIn.SigningInAs'), proved.identifiedAs, SignInIds.identifiedAs) : null}
+              </View>
+            )}
             <View style={styles.card}>
               <ThemedText style={styles.muted} testID={id(SignInIds.reportedBy)}>
-                {t('SignIn.ReportedBy')}
+                {t(word('ReportedBy'))}
               </ThemedText>
               {row(t('SignIn.Browser'), reported(requester.browser), SignInIds.browser)}
               {row(t('SignIn.System'), reported(requester.os), SignInIds.system)}
@@ -622,11 +718,16 @@ const SignIn: React.FC<{ steps?: SignInSteps; link?: string; route?: { params?: 
   route,
 }) => {
   const { agent } = useAgent()
-  const navigation = useNavigation()
+  const navigation = useNavigation<StackNavigationProp<MyAgentStackParams>>()
   const [code] = useState(() => link ?? route?.params?.link)
   const agentSteps = useMemo(() => steps ?? (agent ? agentSignInSteps(agent) : undefined), [steps, agent])
   if (!agentSteps) return null
-  return <SignInFlow link={code} steps={agentSteps} onClose={() => navigation.goBack()} />
+  // Join in place of this screen, as a scanned community DID opens it (vtiLinks routeBareDid).
+  const onJoin = (communityDid: string) => {
+    communityTarget.set({ communityDid })
+    navigation.replace(Screens.VtiJoin)
+  }
+  return <SignInFlow link={code} steps={agentSteps} onClose={() => navigation.goBack()} onJoin={onJoin} />
 }
 
 export default SignIn

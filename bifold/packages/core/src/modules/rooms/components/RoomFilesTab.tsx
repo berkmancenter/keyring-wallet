@@ -9,7 +9,7 @@
  */
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -18,6 +18,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import type { OperationStatus, RoomFile } from '../types'
 
 import { FileRow } from './RoomListRows'
+import { isComingSoon, RoomFeatureCard } from './RoomFeatureCard'
 import { roomsStatusText } from './roomsStatusText'
 
 export interface RoomFilesTabProps {
@@ -63,7 +64,9 @@ export const RoomFilesTab: React.FC<RoomFilesTabProps> = ({
     footer: { gap: 12, paddingTop: 12 },
   })
 
-  const empty = unavailable ? (
+  const empty = isComingSoon(status) ? (
+    <RoomFeatureCard status={status} feature="files" />
+  ) : unavailable ? (
     <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomFilesUnavailable')}>
       {unavailable}
     </ThemedText>
@@ -76,9 +79,12 @@ export const RoomFilesTab: React.FC<RoomFilesTabProps> = ({
       {t('Rooms.FilesNone')}
     </ThemedText>
   ) : (
-    <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomFilesReading')}>
-      {t('Rooms.Reading')}
-    </ThemedText>
+    <ActivityIndicator
+      style={styles.centered}
+      color={ColorPalette.brand.primary}
+      accessibilityLabel={t('Rooms.Reading')}
+      testID={testIdWithKey('RoomFilesReading')}
+    />
   )
 
   return (

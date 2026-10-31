@@ -10,7 +10,7 @@ import React from 'react'
 import { SectionList } from 'react-native'
 
 import { useNavigation as mockedNavigation } from '../../__mocks__/@react-navigation/native'
-import { StoreContext } from '../../src'
+import { StoreContext } from '../../src/contexts/store'
 import Settings from '../../src/screens/Settings'
 import { testIdWithKey } from '../../src/utils/testable'
 import { testDefaultState } from '../contexts/store'

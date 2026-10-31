@@ -72,7 +72,8 @@ const EXT_DEVICE_NAME = 'org.openvtc.device-name'
 /** What these calls need from the agent client: its task call and this phone's own DID. */
 export interface AgentDevicePort {
   managerDid?: string
-  task<T = unknown>(type: string, payload: Record<string, unknown>): Promise<T>
+  /** `timeoutMs` bounds the wait for the answer; the client's own default when absent. */
+  task<T = unknown>(type: string, payload: Record<string, unknown>, timeoutMs?: number): Promise<T>
 }
 
 export interface AgentDevice {
@@ -107,28 +108,58 @@ type Json = Record<string, unknown>
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined)
 
 /**
+ * The agent's device bindings (`device/list`), wiped and disabled ones included.
+ *
+ * @versionLadder device/list
+ */
+async function deviceBindings(port: AgentDevicePort): Promise<Json[]> {
+  // Wiped and disabled bindings are left out unless asked for, and a removed
+  // device must stay listed as removed rather than fall back to a bare ACL row.
+  const { answer } = await versionsFor(port.managerDid ?? port).ask(
+    'deviceList',
+    [AGENT_DEVICE_TASK.list03, AGENT_DEVICE_TASK.list],
+    (uri) => port.task<{ devices?: unknown }>(uri, { includeWiped: true, includeDisabled: true })
+  )
+  return (Array.isArray(answer?.devices) ? answer.devices : []) as Json[]
+}
+
+/** What a device binding says about its device; the access-list half is the caller's. */
+function bindingFields(b: Json): Partial<AgentDevice> & Pick<AgentDevice, 'accessRevoked' | 'wipePending'> {
+  const platform = str(b.platform)
+  const disabledAt = str(b.disabledAt)
+  const wipedAt = str(b.wipedAt)
+  return {
+    deviceId: str(b.deviceId),
+    displayName: str(b.displayName),
+    platform,
+    registeredAt: str(b.registeredAt),
+    lastSeenAt: str(b.lastSeenAt),
+    disabledAt,
+    wipedAt,
+    accessRevoked: Boolean(disabledAt || wipedAt),
+    wipePending: Boolean(wipedAt),
+    ...(platform === 'ios' || platform === 'android' ? { kind: 'keyring' as const } : {}),
+  }
+}
+
+/**
  * Every key the agent's access list holds, each with its device binding when it
  * has one. Not only admins (IN-200b): a computer or a browser plugin often
  * holds a narrower role, and My devices said it lists them; those are marked
  * `limitedAccess`.
+ *
+ * @versionLadder acl/list
  */
 export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
-  const [aclAnswer, listAnswer] = await Promise.all([
+  const [aclAnswer, rows] = await Promise.all([
     versionsFor(port.managerDid ?? port)
       .ask('aclList', [AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList], (uri) =>
         port.task<{ entries?: unknown }>(uri, {})
       )
       .then(({ answer }) => answer),
-    // Wiped and disabled bindings are left out unless asked for, and a removed
-    // device must stay listed as removed rather than fall back to a bare ACL row.
-    versionsFor(port.managerDid ?? port)
-      .ask('deviceList', [AGENT_DEVICE_TASK.list03, AGENT_DEVICE_TASK.list], (uri) =>
-        port.task<{ devices?: unknown }>(uri, { includeWiped: true, includeDisabled: true })
-      )
-      .then(({ answer }) => answer),
+    deviceBindings(port),
   ])
   const entries = (Array.isArray(aclAnswer?.entries) ? aclAnswer.entries : []) as Json[]
-  const rows = (Array.isArray(listAnswer?.devices) ? listAnswer.devices : []) as Json[]
   const bindingOf = new Map<string, Json>()
   for (const row of rows) {
     const did = str(row.consumerDid)
@@ -139,9 +170,6 @@ export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevi
     const did = str(entry.subject)
     if (!did) continue
     const b = bindingOf.get(did)
-    const platform = str(b?.platform)
-    const disabledAt = str(b?.disabledAt)
-    const wipedAt = str(b?.wipedAt)
     devices.push({
       did,
       source: b ? 'registered' : 'aclOnly',
@@ -149,24 +177,24 @@ export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevi
       label: str(entry.label),
       createdAt: str(entry.createdAt),
       expiresAt: str(entry.expiresAt),
-      ...(b
-        ? {
-            deviceId: str(b.deviceId),
-            displayName: str(b.displayName),
-            platform,
-            registeredAt: str(b.registeredAt),
-            lastSeenAt: str(b.lastSeenAt),
-            disabledAt,
-            wipedAt,
-          }
-        : {}),
-      accessRevoked: Boolean(disabledAt || wipedAt),
-      wipePending: Boolean(wipedAt),
-      ...(platform === 'ios' || platform === 'android' ? { kind: 'keyring' as const } : {}),
+      ...(b ? bindingFields(b) : { accessRevoked: false, wipePending: false }),
       limitedAccess: entry.role !== 'admin',
     })
   }
   return devices
+}
+
+/**
+ * The registered devices alone, from `device/list`: what the presence loop needs (who was seen, who is
+ * disabled or wiped), without the access list. The agent client sends one task at a time, so an `acl/list`
+ * the agent never answers held every other ask behind it for its whole timeout, a rooms read among them
+ * (a tester's run, 10-29). The role is the access list's, so `limitedAccess` is left unknown here.
+ */
+export async function listRegisteredDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
+  return (await deviceBindings(port)).flatMap((b): AgentDevice[] => {
+    const did = str(b.consumerDid)
+    return did ? [{ did, source: 'registered', isThisPhone: did === port.managerDid, ...bindingFields(b) }] : []
+  })
 }
 
 /**
@@ -185,6 +213,8 @@ export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevi
  *
  * A wipe the agent refuses does not stop the revoke: access is what matters.
  * `mode` is `wiped` when both happened, `revoked` when only the revoke did.
+ *
+ * @versionLadder acl/revoke
  */
 export async function removeAgentDevice(
   port: AgentDevicePort,
@@ -238,17 +268,28 @@ export async function registerThisDevice(
   }
 }
 
-/** Tell the agent this phone is still here. */
-export async function heartbeat(port: AgentDevicePort): Promise<void> {
-  await sendHeartbeat(port, {})
+/**
+ * Tell the agent this phone is still here, with `ext` when the beat carries one (the sign-in's UV key,
+ * oobSignInAgent enrolUvKey).
+ */
+export async function heartbeat(
+  port: AgentDevicePort,
+  ext?: Record<string, unknown>,
+  timeoutMs?: number
+): Promise<void> {
+  await sendHeartbeat(port, ext ? { ext } : {}, timeoutMs)
 }
 
-/** A heartbeat in the newest version the agent serves (0.3, else 0.2). */
-const sendHeartbeat = (port: AgentDevicePort, payload: Record<string, unknown>) =>
+/**
+ * A heartbeat in the newest version the agent serves (0.3, else 0.2).
+ *
+ * @versionLadder device/heartbeat
+ */
+const sendHeartbeat = (port: AgentDevicePort, payload: Record<string, unknown>, timeoutMs?: number) =>
   versionsFor(port.managerDid ?? port).ask(
     'deviceHeartbeat',
     [AGENT_DEVICE_TASK.heartbeat03, AGENT_DEVICE_TASK.heartbeat],
-    (uri) => port.task(uri, payload)
+    (uri) => (timeoutMs === undefined ? port.task(uri, payload) : port.task(uri, payload, timeoutMs))
   )
 
 /** Rename this phone: a heartbeat carrying the corrected name, the only way a binding's name changes. */
@@ -320,7 +361,11 @@ export function defaultDeviceName(platform: string, addedAt: Date, _locale?: str
   return `${what} · added ${addedAt.getDate()} ${MONTHS[addedAt.getMonth()]}`
 }
 
-/** Other devices acting as this agent right now: seen within the liveness window, still allowed in. */
+/**
+ * Other devices acting as this agent right now: seen within the liveness window, still allowed in. The
+ * limited-access filter holds only for rows that carry the access list's role (`listAgentDevices`); on
+ * `listRegisteredDevices` rows the role is unknown, so a narrower key that beats passes it.
+ */
 export function liveSiblings(
   devices: AgentDevice[],
   now: Date = new Date(),

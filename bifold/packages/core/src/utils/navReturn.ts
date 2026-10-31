@@ -25,7 +25,9 @@ type AnyState = NavigationState | PartialState<NavigationState>
 /**
  * Screens that are safe to open again with the same params. Every stack and tab is a container and allowed.
  * Neither agent screen is here: the My Agent tab comes back with no screen of its own, so its stack lands
- * on agentHomeScreen() for the link state at unlock, never on the old panel for a linked person (225 gate).
+ * on the agent home for the link state at unlock, never on the old panel for a linked person (225 gate).
+ * The one exception is the home under a room or a community opened from it (see restorableState). A room
+ * offer is not here: it is an action, so it lands on the screen below.
  */
 const RESTORABLE: ReadonlySet<string> = new Set<string>([
   ...Object.values(Stacks),
@@ -53,6 +55,11 @@ const RESTORABLE: ReadonlySet<string> = new Set<string>([
   Screens.ProofRequests,
   Screens.ProofDetails,
   Screens.JSONDetails,
+  Screens.RoomsHome,
+  Screens.Room,
+  Screens.RoomInfo,
+  Screens.RoomPart,
+  Screens.VtiCommunity,
 ])
 
 /** What this needs of the container's ref. */
@@ -95,20 +102,28 @@ export const dropReturnState = (): void => {
  * (not including) the first that isn't, with the focus moved onto the last one
  * kept; in the tab navigator every tab, each cut the same way. Undefined when
  * nothing is left.
+ *
+ * A stack whose first screen is the agent home (`landsOn`: agentHomeScreen()
+ * for the link state at unlock, read by the caller) keeps it under a room or
+ * a community opened from it, so the person comes back to that room with the
+ * home below it. With nothing kept above it the tab comes back with no screen,
+ * as before, and a home that is no longer the home for the link state cuts the
+ * stack there.
  */
-export const restorableState = (state: AnyState | undefined): AnyState | undefined => {
+export const restorableState = (state: AnyState | undefined, landsOn: string): AnyState | undefined => {
   if (!state?.routes?.length) return undefined
   const routes = []
+  const landing = state.type !== 'tab' && state.routes[0].name === landsOn
   for (const route of state.routes) {
-    if (!RESTORABLE.has(route.name)) break
-    const nested = route.state ? restorableState(route.state as AnyState) : undefined
+    if (!RESTORABLE.has(route.name) && !(landing && route === state.routes[0])) break
+    const nested = route.state ? restorableState(route.state as AnyState, landsOn) : undefined
     // A tab whose stack can't come back keeps its place with its first screen, so
     // the other tabs and the focus stay right. A pushed stack in a stack does not:
     // its first screen may be the very flow being cut off (Connect Stack opens on Scan).
     if (route.state && !nested && state.type !== 'tab') break
     routes.push(nested ? { ...route, state: nested } : { ...route, state: undefined })
   }
-  if (routes.length === 0) return undefined
+  if (routes.length === (landing ? 1 : 0)) return undefined
   const index = Math.min(state.index ?? routes.length - 1, routes.length - 1)
   return { ...state, index, routes } as AnyState
 }
@@ -116,9 +131,13 @@ export const restorableState = (state: AnyState | undefined): AnyState | undefin
 /**
  * Called once as MainStack mounts after the PIN: puts the kept state back and
  * forgets it. False when there was nothing to put back.
+ *
+ * `landsOn` is the agent home for the link state now, agentHomeScreen(), read
+ * by MainStack at unlock. It is passed in rather than read here so this file
+ * stays a leaf: auth.tsx imports it, and the agent home reads the VTA agent.
  */
-export const restoreReturnState = (): boolean => {
-  const state = restorableState(kept)
+export const restoreReturnState = (landsOn: string): boolean => {
+  const state = restorableState(kept, landsOn)
   kept = undefined
   if (!state || !navigationRef?.isReady()) return false
   navigationRef.resetRoot(state as PartialState<NavigationState>)

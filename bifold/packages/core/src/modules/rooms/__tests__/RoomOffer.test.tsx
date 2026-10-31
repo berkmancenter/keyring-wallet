@@ -12,6 +12,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
+import { stopAllAdmissionResends } from '../admissionResend'
 import { createSampleRoomsService } from '../sample/sampleRooms'
 import { PREVIEW_TOKEN_TTL_MS, RoomsUnavailable, type RoomsService } from '../types'
 
@@ -54,6 +55,8 @@ beforeEach(() => {
   navigation.replace.mockClear()
   navigation.goBack.mockClear()
 })
+// An accept answered "admission pending" starts tries in the background (admissionResend): none outlives its test.
+afterEach(() => stopAllAdmissionResends())
 
 describe('RoomOffer', () => {
   test('from an offerRef alone: who offers which room, what the member could do, and who they join as', async () => {
@@ -84,6 +87,30 @@ describe('RoomOffer', () => {
     expect(acceptOffer).toHaveBeenCalledTimes(1)
     expect(navigation.replace).toHaveBeenCalledWith(Screens.Room, { roomId: 'did:webvh:sample:kernel-notes' })
     expect(await mockService.listOffers()).toEqual([])
+  })
+
+  test.each([
+    [
+      'a community that published no name is the app\'s label for it, never "undefined" (276.9)',
+      undefined,
+      'Community.UnnamedRef',
+    ],
+    ['a named community is its name (control)', 'Keyring Lab', 'Keyring Lab'],
+  ])('Join confirms with the community: %s', async (_, communityName, said) => {
+    mockService = sample()
+    const service = mockService
+    const original = service.previewOffer.bind(service)
+    jest.spyOn(service, 'previewOffer').mockImplementation(async (ref) => {
+      const preview = await original(ref)
+      const { communityName: _named, ...offer } = preview.offer
+      return { ...preview, offer: communityName ? { ...offer, communityName: communityName as never } : offer }
+    })
+    const tree = show()
+    await waitFor(() => expect(tree.getByTestId(testIdWithKey('RoomOfferAccept'))).toBeTruthy())
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('RoomOfferAccept')))
+    })
+    expect(confirm.mock.calls[0][1]).toBe(said)
   })
 
   test('declining the confirmation sends nothing (control: the test above accepts)', async () => {

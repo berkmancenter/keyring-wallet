@@ -44,6 +44,13 @@ export const VTI_JOIN_STATUS_LATE_EVENT = 'vti:join-status-late'
  */
 export const VTI_PERSONA_KEYS_HELD_EVENT = 'vti:persona-keys-held'
 
+/**
+ * A listener left a message on the mediator that only the shared session can take (`{ did, communityDid, type }`):
+ * a vetting request, a vetter's answer, an answer to an ask. A screen that serves that identity signs the shared
+ * session in as it, and the mediator delivers it there (vtiIdentityListeners.keepFromListener).
+ */
+export const VTI_PERSONA_MESSAGE_WAITING_EVENT = 'vti:persona-message-waiting'
+
 export type CommunityChange =
   | 'membership'
   | 'submission'

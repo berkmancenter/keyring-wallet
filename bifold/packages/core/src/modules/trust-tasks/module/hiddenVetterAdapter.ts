@@ -104,6 +104,7 @@ const seam: HiddenVetterSeam = {
     const contextId = await contextOf(client)
     const vetter = await client.showPcsVetter({ contextId, community: communityDid })
     const record = await loadRecord(agent, communityDid)
+    const persona = await new GenericRecordsIdentityStore(agent).getPersona(communityDid)
 
     const period = parameters?.vetterLabels?.[0]
     const tokenLabel = parameters?.tokenLabels?.[0]
@@ -112,7 +113,7 @@ const seam: HiddenVetterSeam = {
     // or not this phone has drawn before.
     const nextDrawAt = parameters ? nextTickOpensAt(parameters, nowMs()) : undefined
     const lapsesAt = nextDrawAt
-    const stuck = boundElsewhere(vetter)
+    const stuck = boundElsewhere(vetter, persona)
 
     return {
       // An engine bound to another DID holds labels it can never draw from:

@@ -27,9 +27,7 @@
 2	__tests__/services/rCardCredential.test.ts	TS2339
 1	src/modules/trust-tasks/__tests__/BleDeviceLocalityProvider.test.ts	TS2345
 1	src/modules/trust-tasks/__tests__/MyAgentScreen.test.tsx	TS2353
-2	src/modules/trust-tasks/__tests__/SignInScreen.test.tsx	TS2322
 1	src/modules/trust-tasks/__tests__/SignInScreen.test.tsx	TS2352
-1	src/modules/trust-tasks/__tests__/SignInScreen.test.tsx	TS2741
 2	src/modules/trust-tasks/__tests__/VtaAgentHomeScreen.test.tsx	TS2339
 2	src/modules/trust-tasks/__tests__/VtaAgentHomeScreen.test.tsx	TS2550
 1	src/modules/trust-tasks/__tests__/VtaAskMeScreen.test.tsx	TS2339

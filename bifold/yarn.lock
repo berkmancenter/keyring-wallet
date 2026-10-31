@@ -2111,6 +2111,7 @@ __metadata:
     "@hyperledger/anoncreds-react-native": "npm:0.4.0"
     "@hyperledger/indy-vdr-react-native": "npm:0.3.0"
     "@hyperledger/indy-vdr-shared": "npm:0.3.0"
+    "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
     "@openvtc/trust-tasks": "npm:^0.27.8"

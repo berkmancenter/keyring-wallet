@@ -23,7 +23,7 @@ import type { RoomFile, RoomsService } from '../types'
 import { useRoomFile } from '../useRoomFile'
 
 import { fileSizeText, fileTypeText } from './fileWords'
-import { identityText } from './roomWords'
+import { useMemberWords } from './memberWords'
 
 export interface RoomFileSheetProps {
   service: RoomsService | undefined
@@ -47,6 +47,7 @@ const SheetBody: React.FC<
   }
 > = ({ service, roomId, file, onClose }) => {
   const { t, i18n } = useTranslation()
+  const memberWords = useMemberWords()
   const { ColorPalette } = useTheme()
   const { state, download, cancel } = useRoomFile(service, roomId, file)
   // Unknown until asked; asked once per sheet.
@@ -77,7 +78,7 @@ const SheetBody: React.FC<
   })
   const type = fileTypeText(file)
   const shared = [
-    file.sharedBy ? identityText(file.sharedBy) : undefined,
+    file.sharedBy ? memberWords(file.sharedBy) : undefined,
     file.sharedAt ? localDate(file.sharedAt) : undefined,
   ]
     .filter(Boolean)

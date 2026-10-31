@@ -7,11 +7,25 @@
  * app restarted) is not an error the person caused: the preview is read again and the screen asks them to look
  * once more, since what they agreed to may have changed. Nothing is sent in that case.
  *
+ * An accept the community answers is an admission, said in a notice ({@link ROOM_ADMITTED_EVENT}) as the screen
+ * moves into the room. One it answers "admission pending" is asked again in the background for a few minutes
+ * (admissionResend), and the same notice says when it is through, wherever the member is then.
+ *
  * @module rooms/useRoomOffer
  */
 import { useCallback, useEffect, useState } from 'react'
+import { DeviceEventEmitter } from 'react-native'
 
+import { resendAdmission, stopAdmissionResend } from './admissionResend'
 import type { OfferPreview, OperationStatus, RoomsReason, RoomsService } from './types'
+
+/** The member was admitted to a room: an accept the community answered. */
+export const ROOM_ADMITTED_EVENT = 'rooms:admitted'
+
+export interface RoomAdmitted {
+  roomId: string
+  roomName: string
+}
 
 export type OfferStep = 'reading' | 'ready' | 'accepting' | 'hiding'
 
@@ -101,9 +115,13 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
     setRefusal(undefined)
     setRefreshed(false)
     setStep('accepting')
+    // The member asking again themselves: the background tries step aside.
+    stopAdmissionResend(preview.offer.offerId)
     try {
       const { roomId } = await service.acceptOffer(preview.token)
       setStep('ready')
+      const admitted: RoomAdmitted = { roomId, roomName: String(preview.offer.roomName) }
+      DeviceEventEmitter.emit(ROOM_ADMITTED_EVENT, admitted)
       return roomId
     } catch (e) {
       if (isExpired(e)) {
@@ -115,7 +133,9 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
         }
       } else {
         setActFailed('accept')
-        setRefusal(refusalOf(e))
+        const refusal = refusalOf(e)
+        setRefusal(refusal)
+        if (refusal && 'code' in refusal && refusal.code === 'admissionPending') resendAdmission(service, preview)
       }
       setStep('ready')
       return undefined

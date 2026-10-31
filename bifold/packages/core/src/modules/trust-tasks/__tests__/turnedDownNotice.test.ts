@@ -149,7 +149,7 @@ describe('the words', () => {
   it('never by its DID or host when no name is known', () => {
     const words = turnedDownWords(COMMUNITY, undefined, t)
     expect(words).not.toMatch(/did:|vtc\.example/)
-    expect(words).toBe('Your request was turned down by keyring-test-vtc (no name published yet).')
+    expect(words).toBe('Your request was turned down by keyring-test-vtc.')
   })
 
   it('exist in every language', () => {

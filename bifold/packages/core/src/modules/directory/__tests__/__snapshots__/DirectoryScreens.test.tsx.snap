@@ -1,0 +1,340 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`the community screen’s directory rows (276.10, option A) Your card names the member by the profile they joined with, and says who sees name and role 1`] = `
+<View
+  style={
+    Object {
+      "gap": 6,
+    }
+  }
+  testID="com.ariesbifold:id/CommunityDirectory"
+>
+  <Text
+    accessibilityRole="header"
+    maxFontSizeMultiplier={2}
+    style={
+      Array [
+        Object {
+          "color": "#FFFFFF",
+          "fontSize": 14,
+          "fontWeight": "bold",
+        },
+        Object {
+          "color": "#606060",
+          "letterSpacing": 0.8,
+          "textTransform": "uppercase",
+        },
+      ]
+    }
+  >
+    Directory.SectionTitle
+  </Text>
+  <View
+    style={
+      Array [
+        Object {
+          "backgroundColor": "#FFFFFF",
+          "borderColor": "#D3D3D3",
+          "borderRadius": 12,
+          "borderWidth": 0.5,
+          "overflow": "hidden",
+        },
+        undefined,
+      ]
+    }
+  >
+    <View
+      accessibilityLabel="Directory.MembersRow, Directory.MembersRowLine"
+      accessibilityRole="button"
+      accessibilityState={
+        Object {
+          "busy": undefined,
+          "checked": undefined,
+          "disabled": undefined,
+          "expanded": undefined,
+          "selected": undefined,
+        }
+      }
+      accessibilityValue={
+        Object {
+          "max": undefined,
+          "min": undefined,
+          "now": undefined,
+          "text": undefined,
+        }
+      }
+      accessible={true}
+      collapsable={false}
+      focusable={true}
+      onBlur={[Function]}
+      onClick={[Function]}
+      onFocus={[Function]}
+      onResponderGrant={[Function]}
+      onResponderMove={[Function]}
+      onResponderRelease={[Function]}
+      onResponderTerminate={[Function]}
+      onResponderTerminationRequest={[Function]}
+      onStartShouldSetResponder={[Function]}
+      style={
+        Object {
+          "alignItems": "center",
+          "flexDirection": "row",
+          "gap": 12,
+          "minHeight": 60,
+          "paddingHorizontal": 14,
+          "paddingVertical": 8,
+        }
+      }
+      testID="com.ariesbifold:id/CommunityDirectoryMembers"
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "width": 32,
+          }
+        }
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            Array [
+              Object {
+                "color": "#42803E",
+                "fontSize": 24,
+              },
+              undefined,
+              Object {
+                "fontFamily": "Material Design Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              Object {},
+            ]
+          }
+        >
+          󰭘
+        </Text>
+      </View>
+      <View
+        style={
+          Object {
+            "flex": 1,
+            "gap": 2,
+          }
+        }
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              undefined,
+            ]
+          }
+        >
+          Directory.MembersRow
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 14,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+              },
+            ]
+          }
+        >
+          Directory.MembersRowLine
+        </Text>
+      </View>
+      <Text
+        allowFontScaling={false}
+        selectable={false}
+        style={
+          Array [
+            Object {
+              "color": "#606060",
+              "fontSize": 24,
+            },
+            undefined,
+            Object {
+              "fontFamily": "Material Design Icons",
+              "fontStyle": "normal",
+              "fontWeight": "normal",
+            },
+            Object {},
+          ]
+        }
+      >
+        󰅂
+      </Text>
+    </View>
+    <View
+      style={
+        Object {
+          "backgroundColor": "#D3D3D3",
+          "height": 0.5,
+        }
+      }
+    />
+    <View
+      accessibilityLabel="Directory.CardRowNamed, Directory.CardRowSeen"
+      accessibilityRole="button"
+      accessibilityState={
+        Object {
+          "busy": undefined,
+          "checked": undefined,
+          "disabled": undefined,
+          "expanded": undefined,
+          "selected": undefined,
+        }
+      }
+      accessibilityValue={
+        Object {
+          "max": undefined,
+          "min": undefined,
+          "now": undefined,
+          "text": undefined,
+        }
+      }
+      accessible={true}
+      collapsable={false}
+      focusable={true}
+      onBlur={[Function]}
+      onClick={[Function]}
+      onFocus={[Function]}
+      onResponderGrant={[Function]}
+      onResponderMove={[Function]}
+      onResponderRelease={[Function]}
+      onResponderTerminate={[Function]}
+      onResponderTerminationRequest={[Function]}
+      onStartShouldSetResponder={[Function]}
+      style={
+        Object {
+          "alignItems": "center",
+          "flexDirection": "row",
+          "gap": 12,
+          "minHeight": 60,
+          "paddingHorizontal": 14,
+          "paddingVertical": 8,
+        }
+      }
+      testID="com.ariesbifold:id/CommunityDirectoryCard"
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "width": 32,
+          }
+        }
+      >
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "backgroundColor": "#42803E",
+              "borderRadius": 16,
+              "height": 32,
+              "justifyContent": "center",
+              "width": 32,
+            }
+          }
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "bold",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 13,
+                },
+              ]
+            }
+          >
+            AL
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "flex": 1,
+            "gap": 2,
+          }
+        }
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              undefined,
+            ]
+          }
+        >
+          Directory.CardRowNamed
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 14,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+              },
+            ]
+          }
+        >
+          Directory.CardRowSeen
+        </Text>
+      </View>
+      <Text
+        allowFontScaling={false}
+        selectable={false}
+        style={
+          Array [
+            Object {
+              "color": "#606060",
+              "fontSize": 24,
+            },
+            undefined,
+            Object {
+              "fontFamily": "Material Design Icons",
+              "fontStyle": "normal",
+              "fontWeight": "normal",
+            },
+            Object {},
+          ]
+        }
+      >
+        󰅂
+      </Text>
+    </View>
+  </View>
+</View>
+`;

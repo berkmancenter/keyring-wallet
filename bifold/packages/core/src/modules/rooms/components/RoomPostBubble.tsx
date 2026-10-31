@@ -16,11 +16,11 @@ import { useTheme } from '../../../contexts/theme'
 import { timeLabel, useDateWords, useUses24HourClock } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import type { RoomPost } from '../roomPosts'
-import type { RoomFile } from '../types'
+import type { Identity, RoomFile } from '../types'
 
 import { RoomFileChip } from './RoomFileChip'
 import { roomHandle } from './RoomRow'
-import { identityText } from './roomWords'
+import { useMemberWords } from './memberWords'
 
 export const RoomPostBubble: React.FC<{
   post: RoomPost
@@ -28,8 +28,11 @@ export const RoomPostBubble: React.FC<{
   /** Stops a post's upload while it is sending. */
   onCancel?: () => void
   onOpenFile?: (file: RoomFile) => void
-}> = ({ post, onRetry, onCancel, onOpenFile }) => {
+  /** Opens another member's sheet from their name. */
+  onOpenAuthor?: (author: Identity) => void
+}> = ({ post, onRetry, onCancel, onOpenFile, onOpenAuthor }) => {
   const { t } = useTranslation()
+  const memberWords = useMemberWords()
   const { ColorPalette } = useTheme()
   const words = useDateWords()
   const use24h = useUses24HourClock()
@@ -52,25 +55,45 @@ export const RoomPostBubble: React.FC<{
       borderColor: mine ? ColorPalette.brand.primary : ColorPalette.grayscale.lightGrey,
     },
     meta: { color: muted, fontSize: 12 },
+    // Another member's name in the brand's colour, as mocked (header B); the member's own "You" stays quiet.
+    author: mine
+      ? { color: ColorPalette.grayscale.white, fontSize: 13, opacity: 0.85 }
+      : { color: ColorPalette.brand.primary, fontSize: 13, fontWeight: '600' },
     agent: { fontWeight: '700' },
     text: { color: ink },
     quiet: { color: muted, fontStyle: 'italic' },
   })
-  const author = mine ? (t('Rooms.You') as string) : post.author ? identityText(post.author) : undefined
+  const by = post.author
+  const author = mine ? (t('Rooms.You') as string) : by ? memberWords(by) : undefined
+  const openAuthor = !mine && by && onOpenAuthor ? () => onOpenAuthor(by) : undefined
   const time = post.at ? timeLabel(post.at, words, use24h) : undefined
+  const meta = (
+    <ThemedText style={styles.author}>
+      {author}
+      {post.byAgent ? (
+        <ThemedText style={[styles.meta, styles.agent]} testID={testIdWithKey('RoomPostAgent')}>
+          {author ? ' · ' : ''}
+          {t('Rooms.AgentBadge')}
+        </ThemedText>
+      ) : null}
+    </ThemedText>
+  )
   const bubble = (
     <View style={styles.row} testID={testIdWithKey(`RoomPost_${roomHandle(post.key)}`)}>
       <View style={styles.bubble}>
         {author || post.byAgent ? (
-          <ThemedText style={styles.meta}>
-            {author}
-            {post.byAgent ? (
-              <ThemedText style={[styles.meta, styles.agent]} testID={testIdWithKey('RoomPostAgent')}>
-                {author ? ' · ' : ''}
-                {t('Rooms.AgentBadge')}
-              </ThemedText>
-            ) : null}
-          </ThemedText>
+          openAuthor ? (
+            <Pressable
+              onPress={openAuthor}
+              hitSlop={12}
+              accessibilityRole="button"
+              testID={testIdWithKey('RoomPostAuthor')}
+            >
+              {meta}
+            </Pressable>
+          ) : (
+            meta
+          )
         ) : null}
         {post.retracted ? (
           <ThemedText style={styles.quiet} testID={testIdWithKey('RoomPostRemoved')}>

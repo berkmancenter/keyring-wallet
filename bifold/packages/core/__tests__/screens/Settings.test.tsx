@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { render, act, fireEvent } from '@testing-library/react-native'
 import React from 'react'
-import { StoreContext } from '../../src'
+import { StoreContext } from '../../src/contexts/store'
 import Settings from '../../src/screens/Settings'
 import { testIdWithKey } from '../../src/utils/testable'
 import { testDefaultState } from '../contexts/store'

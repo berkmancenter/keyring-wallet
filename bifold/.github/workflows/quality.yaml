@@ -119,12 +119,42 @@ jobs:
           # that changes either must regenerate it (`yarn emoji` in packages/core).
           node packages/core/scripts/emoji/generate-emoji-data.mjs --check
 
-  test:
+      - name: test selector tests
+        run: |
+          node --test scripts/ci/select-tests.test.mjs
+
+      - name: every other node test
+        run: |
+          # A *.test.mjs that no step names still runs here: an explicit list silently leaves a new one out
+          # (eslint-rules/require-testid.test.mjs never ran before this step).
+          named=$(grep -ohE 'node --test [^ ]+\.test\.mjs' .github/workflows/*.yaml | awk '{print $3}' | sort -u)
+          files=$(git ls-files '*.test.mjs' | grep -vxF "$named" || true)
+          echo "Not named by any step:"
+          echo "${files:-  (none)}"
+          if [ -n "$files" ]; then node --test $files; fi
+
+  # On a PR, Testing runs only the suites the change can reach, plus every guard (scripts/ci/select-tests.mjs says
+  # which and why). The full suite with coverage runs on every push to main, nightly, and on dispatch:
+  # the "Full test suite" workflow. The selection runs in four parts at once, each on its own runner
+  # (core's suites split by jest's --shard); the job named Testing, which the ruleset requires, passes only when
+  # every part passes.
+  test-part:
     runs-on: ubuntu-22.04
-    name: Testing
+    name: Testing part ${{ matrix.part }}/4
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4]
+    # Every part reports the same scope: the whole selection, not its share.
+    outputs:
+      scope: ${{ steps.run.outputs.scope || steps.plan.outputs.scope }}
     steps:
       - name: Checkout aries-mobile-agent-react-native
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # The selector diffs the PR against its merge base.
+          fetch-depth: 0
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -133,22 +163,111 @@ jobs:
       - name: Setup NodeJS
         uses: ./.github/actions/setup-node
 
+      - name: Select tests
+        id: plan
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          node scripts/ci/select-tests.mjs plan --base "origin/${BASE_REF}" --out "$RUNNER_TEMP/test-plan.json"
+
+      # node_modules and yarn's cache, keyed on everything the install reads. The install still runs: on a hit it only
+      # checks and relinks.
+      - name: Restore dependencies
+        if: steps.plan.outputs.work == 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            samples/*/node_modules
+            .yarn/cache
+            .yarn/install-state.gz
+          key: deps-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', '.yarnrc.yml', '.yarn/patches/**', 'package.json', 'packages/*/package.json', 'samples/*/package.json', '.github/actions/setup-node/action.yaml') }}
+
       - name: Install dependencies
+        if: steps.plan.outputs.work == 'true'
         run: |
           yarn install --immutable
 
-      - name: Build Workspace
+      # Only the packages the selected tests load (a rooms-only PR: core's dependencies, about 20 s), not the whole
+      # workspace. Not cached: that would save about 20 s, and only for a PR's own re-runs.
+      - name: Build what the tests load
+        if: steps.plan.outputs.work == 'true' && steps.plan.outputs.build != ''
+        env:
+          BUILD: ${{ steps.plan.outputs.build }}
         run: |
-          yarn build
+          if [ "$BUILD" = all ]; then
+            yarn build
+          else
+            set -- $BUILD
+            args=()
+            for name in "$@"; do args+=(--include "$name"); done
+            yarn workspaces foreach --all --topological-dev -p "${args[@]}" run build
+          fi
 
-      - name: Automated testing
-        run: |
-          yarn coverage
-
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      # Jest's transform cache (babel output per file, keyed by jest on content and config), so a run re-transforms
+      # only what changed. Restored from the newest run with the same dependencies and config.
+      #
+      # One entry per pull request and part, not per push: a key is never saved twice, so a PR's entry is written on
+      # its first push and its later pushes restore it and write nothing (four entries per PR instead of four per push,
+      # in a store at its size limit). Files a later push changes re-transform on each run, so a long-lived PR gets
+      # less from it over time; that is the trade. A push to main keeps its sha, or main's entry would freeze at its
+      # first save. A PR that changes yarn.lock or core's babel or jest config gets a new key each push, as it must.
+      # The `-part<N>-` fallback matches every ref's entries; a run reads only its own ref's caches and its base
+      # branch's (GitHub's cache scoping), which is what keeps one PR from restoring another's. That holds only while
+      # this never runs on a ref PRs share.
+      - name: Restore jest's cache
+        if: steps.plan.outputs.work == 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-        if: always()
+          path: packages/core/.jest/cache
+          key: jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-${{ github.event_name == 'push' && format('{0}-{1}', github.ref, github.sha) || github.ref }}
+          restore-keys: |
+            jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-refs/heads/main-
+            jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-
+
+      # Jest's default workers: on the runner's 4 vCPUs that leaves one free for jest itself and the tests' timers.
+      # Four workers measured 0.3 min faster (within one run's noise) and left 1 s waits short of CPU.
+      - name: Automated testing
+        id: run
+        if: steps.plan.outputs.work == 'true'
+        env:
+          PART: ${{ matrix.part }}/4
+        run: |
+          node scripts/ci/select-tests.mjs run --plan "$RUNNER_TEMP/test-plan.json" --part "$PART"
+
+  test:
+    runs-on: ubuntu-22.04
+    name: Testing
+    needs: test-part
+    if: always() && github.event_name == 'pull_request'
+    outputs:
+      scope: ${{ needs.test-part.outputs.scope }}
+    steps:
+      - name: Every part passed
+        env:
+          RESULT: ${{ needs.test-part.result }}
+          SCOPE: ${{ needs.test-part.outputs.scope }}
+        run: |
+          echo "Testing ran: ${SCOPE:-unknown}; parts: $RESULT"
+          test "$RESULT" = success
+
+  # Not required. Its name carries what Testing ran ("@bifold/core subset 63 of 704", "full suite"), where a merge
+  # waiter can read it through the API (a job's name; a check run's summary is not readable there). Not run-name:
+  # that is fixed before the selection runs, and it replaces the run's `name`, which waiters match on.
+  scope:
+    name: Testing scope · ${{ needs.test.outputs.scope || 'unknown' }}
+    needs: test
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Scope
+        env:
+          SCOPE: ${{ needs.test.outputs.scope }}
+          RESULT: ${{ needs.test.result }}
+        run: |
+          echo "Testing ran: ${SCOPE:-unknown} (result: $RESULT)"
 
   typecheck:
     runs-on: ubuntu-22.04

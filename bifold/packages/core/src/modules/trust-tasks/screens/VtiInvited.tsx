@@ -39,7 +39,7 @@ import { openJoinRequestOf, vtiAgent } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
 import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
-import { joinSeed } from '../module/vtiJoinSeed'
+import { joinSeed, keepJoinedProfile } from '../module/vtiJoinSeed'
 import { joinAsks } from '../module/joinManifest'
 import { communityLinkReturn } from '../module/vtiLinks'
 
@@ -240,7 +240,10 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       // Making the identity is what makes this the phone's community.
       communityTarget.choose(communityDid)
       // Seed by copy: the chosen profile fills the identity's name in once.
-      if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
+      if (joinAs.selected) {
+        joinSeed.set(communityDid, joinAs.selected.seed)
+        await keepJoinedProfile(agent, communityDid, joinAs.selected.id)
+      }
       await load()
       setStep('share')
     } catch (e) {

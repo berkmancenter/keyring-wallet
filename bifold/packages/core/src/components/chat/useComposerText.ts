@@ -31,6 +31,11 @@ export function insertAtSelection(
  * `onTextChange` hears every change, typed or inserted, so the chat can keep
  * its draft (chat/useChatDraft.ts); `restore` puts a kept draft back, through
  * the same hand-over, into a composer that is still empty.
+ *
+ * `sent` empties the composer after a send. gifted-chat's own reset sets its
+ * text to the `text` prop when one is given, so a Send landing while a
+ * hand-over is still on (a kept draft or an insert just put back) left the sent
+ * words in the field, with Send still showing. Handing over '' wins either way.
  */
 export function useComposerText(options: { onTextChange?: (text: string) => void } = {}) {
   const onTextChangeRef = useRef(options.onTextChange)
@@ -75,6 +80,14 @@ export function useComposerText(options: { onTextChange?: (text: string) => void
     setText(value)
   }, [])
 
+  /** After a send: an empty composer, whatever gifted-chat's reset found in the `text` prop. */
+  const sent = useCallback(() => {
+    textRef.current = ''
+    selectionRef.current = { start: 0, end: 0 }
+    setHasDraft(false)
+    setText('')
+  }, [])
+
   /** Focus the field with its caret where the last insert left it. */
   const focusAtCaret = useCallback(() => {
     const input = inputRef.current
@@ -89,5 +102,5 @@ export function useComposerText(options: { onTextChange?: (text: string) => void
     if (text !== undefined) setText(undefined)
   }, [text])
 
-  return { text, textInputProps, inputRef, insert, restore, focusAtCaret, hasDraft }
+  return { text, textInputProps, inputRef, insert, restore, sent, focusAtCaret, hasDraft }
 }

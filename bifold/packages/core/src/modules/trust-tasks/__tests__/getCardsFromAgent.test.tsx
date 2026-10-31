@@ -494,6 +494,13 @@ describe('the Manage row', () => {
       )
     })
 
+    // 276.10: an admin console made the agent itself a member; its card is never taken on (agentOwnIdentity).
+    it('only a card for the agent itself: said so, with the way on, not that the agent showed nothing', async () => {
+      expect(
+        why(await tapWith(found([], { otherIdentities: 0, cardsForOthers: 0, cardsForAgent: 1 })))
+      ).toHaveTextContent('VtaLink.CommunitiesAgentItself')
+    })
+
     it('an identity whose document could not be read is counted, not passed over in silence', async () => {
       const tree = await tapWith(found([], { otherIdentities: 1, cardsForOthers: 1, unreadable: ['did:webvh:QmU:x'] }))
       expect(tree.getByTestId(testIdWithKey('AgentGetCardsUnreadableIdentities'))).toHaveTextContent(

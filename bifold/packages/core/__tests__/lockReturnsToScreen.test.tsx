@@ -54,14 +54,14 @@ describe('the screen after a lock', () => {
 
   it('an inactivity lock comes back to the open chat', () => {
     lockWith(LockoutReason.Timeout)
-    expect(restoreReturnState()).toBe(true)
+    expect(restoreReturnState(Screens.MyAgent)).toBe(true)
     const state = ref.resetRoot.mock.calls[0][0]
     expect(state.routes[state.index]).toMatchObject({ name: Screens.Chat, params: { connectionId: 'conn-1' } })
   })
 
   it('a log out does not', () => {
     lockWith(LockoutReason.Logout)
-    expect(restoreReturnState()).toBe(false)
+    expect(restoreReturnState(Screens.MyAgent)).toBe(false)
     expect(ref.resetRoot).not.toHaveBeenCalled()
   })
 })

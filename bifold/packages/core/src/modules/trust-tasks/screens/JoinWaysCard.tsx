@@ -4,6 +4,12 @@
  * needs, what follows meeting it, and what the person can do about it now:
  * use it as the phone stands, or go and get vetted for it.
  *
+ * Each way is a choice of its own: named by what the person does ("Meet a
+ * vetter", "Ask to join") or, for a way that needs something first, by that
+ * need. Private vetting carries its mark here and nothing more: what private
+ * means is said on Get vetted, with the vetter in front of the person, and the
+ * way's own sentence said it twice.
+ *
  * @module trust-tasks/screens/JoinWaysCard
  */
 import React, { useState } from 'react'
@@ -31,8 +37,11 @@ type WaysCard = Extract<JoinCard, { mode: 'ways' }>
 const typeWords = (types: string[], t: TFunction) =>
   types.map((type) => (type === 'MembershipCredential' ? (t('Join.Ways.TypeMembership') as string) : type)).join(', ')
 
+/** A need with words of its own: a way that asks nothing is named by its button. */
+type SaidNeed = Exclude<JoinNeed, { kind: 'nothing' }>
+
 /** One need as its lines: vetting says the statements, then each claim checked. */
-function needLines(need: JoinNeed, community: string, t: TFunction): string[] {
+function needLines(need: SaidNeed, community: string, t: TFunction): string[] {
   const named = { community, interpolation: { escapeValue: false } }
   switch (need.kind) {
     case 'invitation':
@@ -54,9 +63,48 @@ function needLines(need: JoinNeed, community: string, t: TFunction): string[] {
         t('Join.AsksStatements', { count: need.statements }) as string,
         ...need.claims.map((c) => (c === 'name.legal' ? (t('Join.AsksLegalName') as string) : claimWords(c, t))),
       ]
-    default:
-      return [t('Join.Ways.NeedsNothing') as string]
   }
+}
+
+/**
+ * A way as a choice: its title, then the lines under it. A vetting way is
+ * named by its step ("Meet a vetter"); a way that asks nothing by its button
+ * ("Ask to join", "Join"); any other by the first thing it needs. Under a
+ * vetting way the person can start now, "You'll meet a vetter" says what one
+ * statement means, so the statements line is kept only for more than one.
+ */
+export function wayWords(
+  row: JoinWayRow,
+  community: string,
+  t: TFunction,
+  startsVetting: boolean
+): { title: string; lines: string[] } {
+  const vetting = row.needs.find((need): need is Extract<JoinNeed, { kind: 'vetting' }> => need.kind === 'vetting')
+  const others = row.needs.filter(
+    (need): need is Exclude<SaidNeed, { kind: 'vetting' }> => need.kind !== 'vetting' && need.kind !== 'nothing'
+  )
+  if (vetting) {
+    const [statements, ...claims] = needLines(vetting, community, t)
+    return {
+      title: t('Join.Ways.ButtonVetting') as string,
+      lines: [
+        ...others.flatMap((need) => needLines(need, community, t)),
+        ...(startsVetting && vetting.statements === 1 ? [] : [statements]),
+        ...claims,
+      ],
+    }
+  }
+  if (!others.length) {
+    return {
+      title:
+        row.follows === 'automatic'
+          ? (t('Join.Ways.ButtonJoin', { community, interpolation: { escapeValue: false } }) as string)
+          : (t('Join.Ways.ButtonAsk') as string),
+      lines: [],
+    }
+  }
+  const [title, ...lines] = others.flatMap((need) => needLines(need, community, t))
+  return { title, lines }
 }
 
 const CANNOT_USE_KEY: Record<JoinCannotUse, string> = {
@@ -118,8 +166,16 @@ export const JoinWaysCard: React.FC<{
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const styles = StyleSheet.create({
-    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 12 },
-    way: { gap: 4 },
+    card: { gap: 12 },
+    way: {
+      backgroundColor: ColorPalette.grayscale.white,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      padding: 16,
+      gap: 6,
+    },
+    title: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
     action: { marginTop: 8 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
@@ -133,41 +189,32 @@ export const JoinWaysCard: React.FC<{
   const notYet = (row: JoinWayRow) => row.cannotUse || row.credentialNotYet
   const usable = card.rows.filter((row) => !notYet(row))
   const others = card.rows.filter(notYet)
-  const wayView = (row: JoinWayRow, withAction: boolean) => (
-    <View key={row.id} style={styles.way} testID={testIdWithKey(`JoinWay_${row.id}`)}>
-      {/* The one mark for private vetting, with what it means said once, here. */}
-      {row.privateVetting ? (
-        <PrivateVettingBadge community={community} explain testIdStem={`JoinWayPrivate_${row.id}`} />
-      ) : null}
-      {(row.privateVetting
-        ? [
-            t('Join.Ways.PrivateVettingWay', {
-              community,
-              count:
-                (row.needs.find((n) => n.kind === 'vetting') as { statements?: number } | undefined)?.statements ?? 1,
-              interpolation: { escapeValue: false },
-            }) as string,
-          ]
-        : row.needs.flatMap((need) => needLines(need, community, t))
-      ).map((line) => (
-        <ThemedText key={line} variant={row.suggested || row.canStartVetting ? 'bold' : undefined}>
-          {'• '}
-          {line}
-        </ThemedText>
-      ))}
-      {row.follows ? (
-        <ThemedText style={styles.muted} testID={testIdWithKey(`JoinWayFollows_${row.id}`)}>
-          {t(row.follows === 'automatic' ? 'Join.Ways.FollowsAutomatic' : 'Join.Ways.FollowsReview')}
-        </ThemedText>
-      ) : null}
-      {row.cannotUse ? <CannotUse row={row} community={community} muted={styles.muted} /> : null}
-      {row.credentialNotYet ? <ThemedText style={styles.muted}>{t('Join.Ways.CredentialNotYet')}</ThemedText> : null}
-      {row.canStartVetting && !readOnly ? (
-        <ThemedText testID={testIdWithKey(`JoinWayStart_${row.id}`)}>{t('Join.Ways.VettingToDo')}</ThemedText>
-      ) : null}
-      {withAction && rowAction?.(row) ? <View style={styles.action}>{rowAction(row)}</View> : null}
-    </View>
-  )
+  const wayView = (row: JoinWayRow, withAction: boolean) => {
+    const { title, lines } = wayWords(row, community, t, row.canStartVetting && !readOnly)
+    return (
+      <View key={row.id} style={styles.way} testID={testIdWithKey(`JoinWay_${row.id}`)}>
+        <View style={styles.title}>
+          <ThemedText variant="bold">{title}</ThemedText>
+          {/* The one mark for private vetting; what it means is said on Get vetted. */}
+          {row.privateVetting ? <PrivateVettingBadge testIdStem={`JoinWayPrivate_${row.id}`} /> : null}
+        </View>
+        {lines.map((line) => (
+          <ThemedText key={line}>{line}</ThemedText>
+        ))}
+        {row.canStartVetting && !readOnly ? (
+          <ThemedText testID={testIdWithKey(`JoinWayStart_${row.id}`)}>{t('Join.AsksNext')}</ThemedText>
+        ) : null}
+        {row.follows ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey(`JoinWayFollows_${row.id}`)}>
+            {t(row.follows === 'automatic' ? 'Join.Ways.FollowsAutomatic' : 'Join.Ways.FollowsReview')}
+          </ThemedText>
+        ) : null}
+        {row.cannotUse ? <CannotUse row={row} community={community} muted={styles.muted} /> : null}
+        {row.credentialNotYet ? <ThemedText style={styles.muted}>{t('Join.Ways.CredentialNotYet')}</ThemedText> : null}
+        {withAction && rowAction?.(row) ? <View style={styles.action}>{rowAction(row)}</View> : null}
+      </View>
+    )
+  }
   return (
     <View style={styles.card} testID={testIdWithKey('JoinWays')}>
       {usable.map((row) => wayView(row, true))}

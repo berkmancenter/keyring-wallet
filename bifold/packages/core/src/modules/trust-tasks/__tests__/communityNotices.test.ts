@@ -233,7 +233,7 @@ describe('the words a removed person reads', () => {
 
   it('says only that, when the community gave no reason', () => {
     expect(removedWords(COMMUNITY, undefined, t)).toBe(
-      'You were removed by keyring-test-vtc (no name published yet). You can ask to join again.'
+      'You were removed by keyring-test-vtc. You can ask to join again.'
     )
   })
 })

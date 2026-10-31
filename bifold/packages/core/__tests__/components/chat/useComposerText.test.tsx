@@ -117,3 +117,47 @@ describe('focusAtCaret', () => {
     expect(input0.setSelection).toHaveBeenCalledWith(7, 7)
   })
 })
+
+// A Send that lands while a hand-over is still on: gifted-chat's reset sets its text to the `text` prop, here the
+// words being sent. `handOver` stands for that render (a kept draft just restored), dropped as the send is handled.
+const SendingHost: React.FC<{ clearsOnSend: boolean }> = ({ clearsOnSend }) => {
+  const composer = useComposerText()
+  const [handOver, setHandOver] = React.useState<string | undefined>('half a thought')
+  return (
+    <GiftedChat
+      messages={[]}
+      user={{ _id: 1 }}
+      onSend={() => {
+        setHandOver(undefined)
+        if (clearsOnSend) composer.sent()
+      }}
+      text={handOver ?? composer.text}
+      textInputProps={{ ...composer.textInputProps, placeholder: 'Type here' }}
+      textInputRef={composer.inputRef}
+    />
+  )
+}
+
+describe('sent', () => {
+  const sendDuringHandOver = (clearsOnSend: boolean) => {
+    const tree = render(<SendingHost clearsOnSend={clearsOnSend} />)
+    fireEvent(tree.getByTestId('GC_WRAPPER'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 800 } },
+    })
+    const input = () => tree.getByPlaceholderText('Type here')
+    expect(input().props.value).toBe('half a thought')
+    act(() => {
+      fireEvent.press(tree.getByTestId('GC_SEND_TOUCHABLE'))
+    })
+    return input().props.value
+  }
+
+  it('empties the composer after a send that lands while a hand-over is still on', () => {
+    expect(sendDuringHandOver(true)).toBe('')
+  })
+
+  // The control: without it, gifted-chat's reset puts the sent words back in the field.
+  it('without it, the sent words stay in the field', () => {
+    expect(sendDuringHandOver(false)).toBe('half a thought')
+  })
+})

@@ -5,6 +5,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { AppState } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -13,7 +14,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { sampleCapabilities } from '../../rooms/capabilities'
 import { toInertText } from '../../rooms/inertText'
-import type { RoomsService } from '../../rooms/types'
+import { RoomsUnavailable, type RoomsService } from '../../rooms/types'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityCardKey } from '../screens/CommunityCard'
 import VtaAgentHome, { forgetAgentHoldings } from '../screens/VtaAgentHome'
@@ -128,5 +129,38 @@ describe('rooms on the agent home', () => {
     // The community card is there, so an absent Rooms card is not an empty home.
     await waitFor(() => expect(tree.getByTestId(testIdWithKey('AgentMembershipRow'))).toBeTruthy())
     expect(tree.queryByTestId(testIdWithKey('RoomsCard'))).toBeNull()
+  })
+
+  // A tester's run (10-29): a first read that failed kept its failure on the card until the screen was left.
+  it('a read that failed is read again when the app comes back to the foreground', async () => {
+    const listeners: ((state: string) => void)[] = []
+    const appState = jest.spyOn(AppState, 'addEventListener').mockImplementation(((
+      _type: string,
+      listener: (s: string) => void
+    ) => {
+      listeners.push(listener)
+      return { remove: jest.fn() }
+    }) as never)
+    const listMyRooms = jest
+      .fn()
+      .mockRejectedValueOnce(new RoomsUnavailable('listMyRooms', 'communityUnreachable', 'no community answered'))
+      .mockImplementation(service.listMyRooms)
+    mockRoomsService = { ...service, listMyRooms } as unknown as RoomsService
+    const tree = await renderHome()
+    await waitFor(() =>
+      expect(tree.getByTestId(testIdWithKey('RoomsCardDetail'))).toHaveTextContent('Rooms.CommunityUnreachable')
+    )
+    expect(listMyRooms).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      for (const listener of listeners) listener('background')
+      for (const listener of listeners) listener('active')
+    })
+
+    await waitFor(() =>
+      expect(tree.getByTestId(testIdWithKey('RoomsCardDetail'))).not.toHaveTextContent('Rooms.CommunityUnreachable')
+    )
+    expect(listMyRooms).toHaveBeenCalledTimes(2)
+    appState.mockRestore()
   })
 })

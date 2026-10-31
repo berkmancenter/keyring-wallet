@@ -49,6 +49,8 @@ import { useVtiVetterGrantedNotice } from '../modules/trust-tasks/screens/vetter
 import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { useVtiTurnedDownNotice } from '../modules/trust-tasks/screens/turnedDownNotice'
+import { useRoomNotices } from '../modules/rooms/roomNotices'
+import { useRoomsUnreadCount } from '../modules/rooms/useRoomRows'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
 
@@ -133,6 +135,9 @@ const TabStack: React.FC = () => {
   useVtiVetterGrantedNotice()
   // …and a community turning a request down, once, when the app first learns it.
   useVtiTurnedDownNotice()
+  // …and the member's rooms: a new offer, an admission, a post that didn't send. Runs the offers poll, so a new
+  // offer is said from the start, not only once My Agent has been opened.
+  useRoomNotices()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
@@ -141,7 +146,10 @@ const TabStack: React.FC = () => {
   // label's last letter was clipped with no ellipsis ("Contact" for "Contacts" at font scale 1.15).
   const labelGap = { paddingHorizontal: 2 }
   const [showQRCodeBottomSheet, setShowQRCodeBottomSheet] = React.useState(false)
-  const { totalUnread } = useUnreadMessages()
+  const { totalUnread: peopleUnread } = useUnreadMessages()
+  // Rooms shown in Messages add their posts by others the member hasn't seen; the badge and its spoken label say one
+  // number (rooms in Messages, R1).
+  const totalUnread = peopleUnread + useRoomsUnreadCount()
   // Requests waiting for this phone's decision: said on the tab, wherever the person is.
   const myAgentBadge = myAgentTabBadge(useWaitingRequestsCount(), t)
   const styles = StyleSheet.create({
@@ -329,7 +337,7 @@ const TabStack: React.FC = () => {
     >
       {GradientBg && <GradientBg style={StyleSheet.absoluteFillObject} />}
       <VtaOfflineBanner />
-      {/* "Also open as you": the presence loop above emits it (#10, part F). */}
+      {/* "Also open as you": the presence loop above emits it (#10, part F); each header shows the strip. */}
       <SiblingNoticeHost />
       {/* The agent asks to be sure it is the person before a task (a step-up, #200). */}
       <StepUpAskHost />

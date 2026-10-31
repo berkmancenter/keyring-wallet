@@ -1,13 +1,14 @@
 /**
  * One of a room's notes (data rooms mock, Notes): its title, who wrote it (an AI agent's labelled as the agent's)
  * and when, and its whole text, shown exactly as written: links, markup and instruction-like text are displayed,
- * never followed. A pinned note says so. A note a curator removed keeps its place as a marker, with no text.
+ * never followed. A pinned note says so. A note a curator removed keeps its place as a marker, with no text. The
+ * member's own notes offer Edit, which saves a new version.
  *
  * @module rooms/components/RoomNoteCard
  */
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -19,13 +20,16 @@ import type { RoomFile } from '../types'
 
 import { RoomFileChip } from './RoomFileChip'
 import { roomHandle } from './RoomRow'
-import { identityText } from './roomWords'
+import { useMemberWords } from './memberWords'
 
-export const RoomNoteCard: React.FC<{ note: RoomPost; onOpenFile?: (file: RoomFile) => void }> = ({
-  note,
-  onOpenFile,
-}) => {
+export const RoomNoteCard: React.FC<{
+  note: RoomPost
+  onOpenFile?: (file: RoomFile) => void
+  /** Opens the editor on this note; offered only on the member's own notes that were read. */
+  onEdit?: (note: RoomPost) => void
+}> = ({ note, onOpenFile, onEdit }) => {
   const { t } = useTranslation()
+  const memberWords = useMemberWords()
   const { ColorPalette } = useTheme()
   const muted = ColorPalette.grayscale.mediumGrey
   const styles = StyleSheet.create({
@@ -42,11 +46,13 @@ export const RoomNoteCard: React.FC<{ note: RoomPost; onOpenFile?: (file: RoomFi
     muted: { color: muted },
     quiet: { color: muted, fontStyle: 'italic' },
   })
-  const who = note.author
+  const author = note.author ? (note.mine ? (t('Rooms.You') as string) : memberWords(note.author)) : undefined
+  const who = author
     ? note.byAgent
-      ? (t('Rooms.NoteByAgentFor', { who: identityText(note.author), interpolation: { escapeValue: false } }) as string)
-      : identityText(note.author)
+      ? (t('Rooms.NoteByAgentFor', { who: author, interpolation: { escapeValue: false } }) as string)
+      : author
     : undefined
+  const editable = !!onEdit && note.mine && !note.retracted && !note.unread && !note.delivery
   const line = [who, note.at ? localDate(note.at.toISOString()) : undefined].filter(Boolean).join(' · ')
   const title = note.retracted
     ? (t('Rooms.NoteRetracted') as string)
@@ -70,6 +76,19 @@ export const RoomNoteCard: React.FC<{ note: RoomPost; onOpenFile?: (file: RoomFi
         >
           {title}
         </ThemedText>
+        {editable ? (
+          <Pressable
+            onPress={() => onEdit?.(note)}
+            accessibilityRole="button"
+            accessibilityLabel={t('Rooms.NoteEdit')}
+            hitSlop={8}
+            testID={testIdWithKey('RoomNoteEdit')}
+          >
+            <ThemedText variant="bold" style={{ color: ColorPalette.brand.primary }}>
+              {t('Rooms.NoteEdit')}
+            </ThemedText>
+          </Pressable>
+        ) : null}
       </View>
       {line ? (
         <ThemedText variant="caption" style={styles.muted}>

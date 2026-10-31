@@ -81,7 +81,7 @@ exports[`ConfirmPINModal Component Renders correctly for PIN change 1`] = `
         focusable={true}
         hitSlop={
           Object {
-            "bottom": 44,
+            "bottom": 12,
             "left": 44,
             "right": 44,
             "top": 44,
@@ -862,7 +862,7 @@ exports[`ConfirmPINModal Component Renders correctly for PIN create 1`] = `
         focusable={true}
         hitSlop={
           Object {
-            "bottom": 44,
+            "bottom": 12,
             "left": 44,
             "right": 44,
             "top": 44,

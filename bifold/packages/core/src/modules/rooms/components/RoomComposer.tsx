@@ -9,6 +9,9 @@
  * "+" on the left picks one file to post (up to 25 MiB), shown above the field until it is sent or taken off; a
  * file too large is refused there and then, before anything is prepared.
  *
+ * The text is kept as a draft by the screen (useRoomDraft): `onTextChange` hears every change, a send's emptied field
+ * included, and `draft` is the kept text handed back, put in the field as it arrives.
+ *
  * Where the member may not post, the composer is replaced by the reason, in the rooms screens' usual words
  * ("You can't post here", "Coming soon"), never by a field that would fail on Send.
  *
@@ -34,6 +37,7 @@ import type { RoomsAttachment } from '../types'
 import { MAX_POST_LENGTH } from '../useRoomSend'
 
 import { fileSizeText } from './fileWords'
+import { initialsOf } from './RoomIdentitySheet'
 
 export interface RoomComposerProps {
   /** Sends the text and the picked file, either or both; false when nothing was sent (the composer then keeps them). */
@@ -42,22 +46,41 @@ export interface RoomComposerProps {
   canAttach?: boolean
   /** Why the member can't post here; the composer shows this instead of a field. */
   unavailable?: string
-  /** Who the member posts as, in words ("…negative-weird"). */
+  /** Who the member posts as, as the whole line ("Posting as Alberto L"). */
   postingAs?: string
+  /** The name in that line, when there is one: drawn bold, beside its initial (header B). */
+  postingAsName?: string
+  /** Opens the member's own sheet: their name, where it comes from, and the identity the room sees. */
+  onPressPostingAs?: () => void
   /** Opens the file picker each time it changes to a new number above 0 (the Files tab's "Add a file"). */
   attachRequest?: number
+  /** The kept draft, once read: put in the field when it arrives. */
+  draft?: string
+  /** Told of every change to the field's text, including the empty field a send leaves. */
+  onTextChange?: (text: string) => void
 }
 
 export const RoomComposer: React.FC<RoomComposerProps> = ({
   onSend,
   unavailable,
   postingAs,
+  postingAsName,
+  onPressPostingAs,
   canAttach,
   attachRequest = 0,
+  draft,
+  onTextChange,
 }) => {
   const { t, i18n } = useTranslation()
   const { ColorPalette } = useTheme()
-  const [text, setText] = useState('')
+  const [text, setText] = useState(draft ?? '')
+  const change = (next: string) => {
+    setText(next)
+    onTextChange?.(next)
+  }
+  useEffect(() => {
+    if (draft !== undefined) setText(draft)
+  }, [draft])
   const [file, setFile] = useState<RoomsAttachment>()
   const [refused, setRefused] = useState<'tooLarge' | 'unreadable'>()
   const canSend = text.trim().length > 0 || !!file
@@ -113,13 +136,26 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
       backgroundColor: ColorPalette.brand.primaryBackground,
     },
     refused: { paddingHorizontal: 22, paddingTop: 6, fontSize: 12, color: ColorPalette.semantic.error },
-    postingAs: {
+    postingAsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      minHeight: 44,
       paddingHorizontal: 22,
       paddingTop: 6,
-      fontSize: 12,
-      color: ColorPalette.grayscale.mediumGrey,
       backgroundColor: ColorPalette.brand.secondaryBackground,
     },
+    postingAsMark: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: ColorPalette.brand.primary,
+    },
+    postingAsInitial: { fontSize: 12, fontWeight: '700', color: ColorPalette.grayscale.white },
+    postingAsText: { flexShrink: 1, fontSize: 14, color: ColorPalette.grayscale.mediumGrey },
+    postingAsName: { fontWeight: '700', color: ColorPalette.brand.primary },
   })
 
   const attach = async () => {
@@ -149,18 +185,47 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
       </View>
     )
 
+  // Where the name sits in the line, in any language's word order; not found, the line is drawn as it is.
+  const nameAt = postingAs && postingAsName ? postingAs.indexOf(postingAsName) : -1
+
   const send = () => {
     if (!onSend(text, file)) return
-    setText('')
+    change('')
     setFile(undefined)
   }
 
   return (
     <>
       {postingAs ? (
-        <ThemedText style={styles.postingAs} numberOfLines={1} testID={testIdWithKey('RoomComposerPostingAs')}>
-          {t('Rooms.PostingAs', { who: postingAs, interpolation: { escapeValue: false } })}
-        </ThemedText>
+        <Pressable
+          style={styles.postingAsRow}
+          onPress={onPressPostingAs}
+          disabled={!onPressPostingAs}
+          accessibilityRole={onPressPostingAs ? 'button' : undefined}
+          testID={testIdWithKey('RoomComposerPostingAsButton')}
+        >
+          {postingAsName ? (
+            <View
+              style={styles.postingAsMark}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <ThemedText style={styles.postingAsInitial}>{initialsOf(postingAsName).slice(0, 1)}</ThemedText>
+            </View>
+          ) : null}
+          <ThemedText style={styles.postingAsText} numberOfLines={1} testID={testIdWithKey('RoomComposerPostingAs')}>
+            {nameAt >= 0 && postingAsName ? (
+              <>
+                {postingAs.slice(0, nameAt)}
+                <ThemedText style={[styles.postingAsText, styles.postingAsName]}>{postingAsName}</ThemedText>
+                {postingAs.slice(nameAt + postingAsName.length)}
+              </>
+            ) : (
+              postingAs
+            )}
+          </ThemedText>
+          {onPressPostingAs ? <Icon name="chevron-right" size={16} color={ColorPalette.brand.primary} /> : null}
+        </Pressable>
       ) : null}
       {file ? (
         <View style={styles.attached} testID={testIdWithKey('RoomComposerFile')}>
@@ -204,7 +269,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
           <TextInput
             style={styles.input}
             value={text}
-            onChangeText={setText}
+            onChangeText={change}
             multiline
             maxLength={MAX_POST_LENGTH}
             maxFontSizeMultiplier={1.5}

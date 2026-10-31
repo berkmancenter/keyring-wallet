@@ -1,0 +1,108 @@
+name: Full test suite
+# Every package's whole jest suite, with coverage: core in four shards, the other packages in a fifth job. A PR's
+# Testing job (quality.yaml) runs only the suites its change can reach; this is what catches anything that selection
+# misses, within one merge. Gate on the job named exactly "Full suite", in a run of this workflow on main
+# (branch=main&event=push): it fails when any part fails. To run it on a PR's branch, dispatch it on that branch; a
+# dispatched run is a check for that branch only and never counts for the gate, even on main. To clear a red on main,
+# re-run that push run's failed jobs (the event stays push); don't dispatch a new run.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Nightly, on main's head.
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    runs-on: ubuntu-22.04
+    # Not "Full suite (...)": a gate matching the roll-up by prefix would read one part as the whole suite.
+    name: Jest part (${{ matrix.part }})
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [core 1/4, core 2/4, core 3/4, core 4/4, other packages]
+    steps:
+      - name: Checkout aries-mobile-agent-react-native
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+
+      - name: Setup NodeJS
+        uses: ./.github/actions/setup-node
+
+      # The same key as quality.yaml's Testing job, so a run on main seeds the cache PRs restore.
+      - name: Restore dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            samples/*/node_modules
+            .yarn/cache
+            .yarn/install-state.gz
+          key: deps-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', '.yarnrc.yml', '.yarn/patches/**', 'package.json', 'packages/*/package.json', 'samples/*/package.json', '.github/actions/setup-node/action.yaml') }}
+
+      - name: Install dependencies
+        run: |
+          yarn install --immutable
+
+      - name: Build Workspace
+        run: |
+          yarn build
+
+      # Jest's transform cache (babel output per file, keyed by jest on content and config), as quality.yaml's Testing
+      # parts keep it, so a run re-transforms only what changed. Without it every run compiled all of core cold, and a
+      # file's time measured its share of that compile: whichever file first loaded a large graph took 25-70 s.
+      # Its own prefix: coverage instruments every file, so these entries are not the Testing parts' ones. One entry per
+      # part per UTC day, not per commit: a key is never saved twice, so later runs that day restore it and write
+      # nothing. About 47 MiB a part: per commit, a 60-merge day would write more than the repo's whole 10 GiB store.
+      - name: Date jest's cache
+        id: jest-cache
+        if: startsWith(matrix.part, 'core ')
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore jest's cache
+        if: startsWith(matrix.part, 'core ')
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: packages/core/.jest/cache
+          key: jest-cov-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ matrix.part }}-${{ steps.jest-cache.outputs.day }}
+          restore-keys: |
+            jest-cov-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ matrix.part }}-
+
+      # A shard can hold no test of a small package, hence --passWithNoTests; core's never empties. The other
+      # packages run unsharded, so their coverage thresholds (remote-logs) still see the whole suite.
+      - name: Automated testing with coverage
+        env:
+          PART: ${{ matrix.part }}
+        run: |
+          case "$PART" in
+            core\ *) yarn workspace @bifold/core run coverage --ci --shard="${PART#core }" ;;
+            # The root workspace is excluded too: its own coverage script runs every workspace again, core included.
+            *) yarn workspaces foreach --all --topological-dev --exclude keyring-bifold --exclude @bifold/core run coverage --ci ;;
+          esac
+
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+        if: always()
+
+  full:
+    name: Full suite
+    needs: shard
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.shard.result }}
+        run: |
+          echo "shards: $RESULT"
+          test "$RESULT" = success

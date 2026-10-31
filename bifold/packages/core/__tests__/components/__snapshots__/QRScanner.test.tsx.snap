@@ -57,12 +57,21 @@ exports[`QRScanner Component Focus animation does not render before tapping 1`] 
         device={
           Object {
             "id": "mock-camera",
+            "physicalDevices": Array [
+              "wide-angle-camera",
+            ],
             "position": "back",
             "supportsFocus": true,
           }
         }
         format={Object {}}
         isActive={true}
+        onError={[Function]}
+        onInitialized={[Function]}
+        onPreviewStarted={[Function]}
+        onPreviewStopped={[Function]}
+        onStarted={[Function]}
+        onStopped={[Function]}
         ref={
           Object {
             "current": null,
@@ -120,6 +129,43 @@ exports[`QRScanner Component Focus animation does not render before tapping 1`] 
         }
         testID="com.ariesbifold:id/ScanCameraTapArea"
       />
+      <View
+        pointerEvents="none"
+        style={
+          Object {
+            "alignItems": "center",
+            "backgroundColor": "#000000",
+            "bottom": 0,
+            "justifyContent": "center",
+            "left": 0,
+            "paddingHorizontal": 48,
+            "position": "absolute",
+            "right": 0,
+            "top": 0,
+          }
+        }
+        testID="com.ariesbifold:id/ScanCameraWaiting"
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#FFFFFF",
+                "textAlign": "center",
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/ScanCameraNotStarting"
+        >
+          Scan.CameraNotStarting
+        </Text>
+      </View>
     </View>
     <View
       pointerEvents="none"
@@ -1606,12 +1652,21 @@ exports[`QRScanner Component Scanner with no tabs renders correctly 1`] = `
         device={
           Object {
             "id": "mock-camera",
+            "physicalDevices": Array [
+              "wide-angle-camera",
+            ],
             "position": "back",
             "supportsFocus": true,
           }
         }
         format={Object {}}
         isActive={true}
+        onError={[Function]}
+        onInitialized={[Function]}
+        onPreviewStarted={[Function]}
+        onPreviewStopped={[Function]}
+        onStarted={[Function]}
+        onStopped={[Function]}
         ref={
           Object {
             "current": null,
@@ -1669,6 +1724,43 @@ exports[`QRScanner Component Scanner with no tabs renders correctly 1`] = `
         }
         testID="com.ariesbifold:id/ScanCameraTapArea"
       />
+      <View
+        pointerEvents="none"
+        style={
+          Object {
+            "alignItems": "center",
+            "backgroundColor": "#000000",
+            "bottom": 0,
+            "justifyContent": "center",
+            "left": 0,
+            "paddingHorizontal": 48,
+            "position": "absolute",
+            "right": 0,
+            "top": 0,
+          }
+        }
+        testID="com.ariesbifold:id/ScanCameraWaiting"
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#FFFFFF",
+                "textAlign": "center",
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/ScanCameraNotStarting"
+        >
+          Scan.CameraNotStarting
+        </Text>
+      </View>
     </View>
     <View
       pointerEvents="none"

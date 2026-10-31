@@ -13,7 +13,7 @@
 import type { TFunction } from 'i18next'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -21,10 +21,13 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { localDate } from '../../trust-tasks/screens/localTime'
-import type { CommunityRoomMember, OperationStatus, Room, RoomsService, RoomVerb } from '../types'
+import type { CommunityRoomMember, Identity, OperationStatus, Room, RoomsService, RoomVerb } from '../types'
+import type { MyName } from '../useMyName'
 
 import { roomHandle } from './RoomRow'
+import { isComingSoon, RoomFeatureCard } from './RoomFeatureCard'
 import { roomsStatusText } from './roomsStatusText'
+import { useMemberWords } from './memberWords'
 import { accessText, identityText } from './roomWords'
 
 /** A member's role in words, from the most a member's rights allow. */
@@ -44,10 +47,22 @@ export interface RoomMembersTabProps {
   status: OperationStatus
   /** Opens the community's screen, where leaving it is done; none where the room's community is not known. */
   onLeave?: () => void
+  /** The member's own name, from their profile: shown for them on this phone only. */
+  me?: MyName
+  /** Opens a member's sheet: their name, where it comes from, and the identity the room sees. */
+  onOpenIdentity?: (identity: Identity) => void
 }
 
-export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, status, onLeave }) => {
+export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({
+  service,
+  room,
+  status,
+  onLeave,
+  me,
+  onOpenIdentity,
+}) => {
   const { t } = useTranslation()
+  const memberWords = useMemberWords()
   const { ColorPalette } = useTheme()
   const statusWords = roomsStatusText(t, status, 'listCommunityMembers')
   const [listing, setListing] = useState<Listing>({ kind: 'reading' })
@@ -84,11 +99,25 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
       backgroundColor: ColorPalette.brand.secondaryBackground,
     },
     fact: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
-    label: { width: 84, color: ColorPalette.grayscale.mediumGrey },
-    value: { flex: 1, minWidth: 140 },
+    // A least width, not a width: a label longer than its column ("Vous pouvez" at large text) widens it and the value
+    // wraps below, rather than the label breaking mid-word.
+    label: { minWidth: 84, flexShrink: 0, color: ColorPalette.grayscale.mediumGrey },
+    // Narrower than this, a value of a few words stacks one to a line beside its label: it wraps below instead.
+    value: { flex: 1, minWidth: 160 },
+    unbroken: { minWidth: 220 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
     idWords: { flex: 1 },
+    unavailable: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+    },
   })
 
   const until = room.validUntil
@@ -96,10 +125,12 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
     : room.source === 'custody'
       ? (t('Rooms.DetailsNotLoaded') as string)
       : (t('Rooms.MembersNoEnd') as string)
-  const fact = (label: string, value: string, testID: string) => (
+  // An identity's short form ("did:webv…expose") has no space to break at, so it splits at its ellipsis: it needs room
+  // for one line beside its label, or goes below.
+  const fact = (label: string, value: string, testID: string, unbroken = false) => (
     <View style={styles.fact}>
       <ThemedText style={styles.label}>{label}</ThemedText>
-      <ThemedText style={styles.value} testID={testIdWithKey(testID)}>
+      <ThemedText style={[styles.value, unbroken ? styles.unbroken : undefined]} testID={testIdWithKey(testID)}>
         {value}
       </ThemedText>
     </View>
@@ -107,17 +138,24 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
 
   const list = (() => {
     const unavailable = statusWords ?? (room.communityDid ? refusedWords : (t('Rooms.DetailsNotLoaded') as string))
+    if (isComingSoon(status)) return <RoomFeatureCard status={status} feature="members" />
+    // Calm, as the "Coming soon" cards are, but without their badge: this is not on its way.
     if (unavailable)
       return (
-        <ThemedText style={styles.muted} testID={testIdWithKey('RoomMembersUnavailable')}>
-          {unavailable}
-        </ThemedText>
+        <View style={styles.unavailable}>
+          <Icon name="account-lock-outline" size={20} color={ColorPalette.grayscale.mediumGrey} />
+          <ThemedText style={[styles.muted, { flex: 1 }]} testID={testIdWithKey('RoomMembersUnavailable')}>
+            {unavailable}
+          </ThemedText>
+        </View>
       )
     if (listing.kind === 'reading')
       return (
-        <ThemedText style={styles.muted} testID={testIdWithKey('RoomMembersReading')}>
-          {t('Rooms.Reading')}
-        </ThemedText>
+        <ActivityIndicator
+          color={ColorPalette.brand.primary}
+          accessibilityLabel={t('Rooms.Reading')}
+          testID={testIdWithKey('RoomMembersReading')}
+        />
       )
     if (listing.kind === 'failed')
       return (
@@ -142,23 +180,26 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
         </ThemedText>
         {listing.members.map((member) => {
           const you = member.identity.did === room.actingAs.did
+          const words = you ? (me?.name ?? (t('Rooms.You') as string)) : memberWords(member.identity)
           return (
-            <View
+            <Pressable
               key={member.identity.did}
               style={styles.row}
-              accessible
-              accessibilityLabel={`${identityText(member.identity)}, ${roleText(t, member.verbs)}`}
+              onPress={onOpenIdentity ? () => onOpenIdentity(member.identity) : undefined}
+              disabled={!onOpenIdentity}
+              accessibilityRole={onOpenIdentity ? 'button' : undefined}
+              accessibilityLabel={`${words}${you && me?.name ? `, ${t('Rooms.You')}` : ''}, ${roleText(t, member.verbs)}`}
               testID={testIdWithKey(`RoomMember_${roomHandle(member.identity.did)}`)}
             >
               <Icon name="account-outline" size={22} color={ColorPalette.brand.primary} />
               <ThemedText style={styles.idWords}>
-                {identityText(member.identity)}
-                {you ? <ThemedText style={styles.muted}>{` · ${t('Rooms.You')}`}</ThemedText> : null}
+                {words}
+                {you && me?.name ? <ThemedText style={styles.muted}>{` · ${t('Rooms.You')}`}</ThemedText> : null}
               </ThemedText>
               <ThemedText variant="caption" style={styles.muted}>
                 {roleText(t, member.verbs)}
               </ThemedText>
-            </View>
+            </Pressable>
           )
         })}
       </View>
@@ -173,7 +214,7 @@ export const RoomMembersTab: React.FC<RoomMembersTabProps> = ({ service, room, s
         </ThemedText>
         {fact(t('Rooms.MembersYouCan'), accessText(t, room), 'RoomMembersYouCan')}
         {fact(t('Rooms.MembersUntil'), until, 'RoomMembersUntil')}
-        {fact(t('Rooms.MembersAs'), identityText(room.actingAs), 'RoomMembersAs')}
+        {fact(t('Rooms.MembersAs'), me?.name ?? identityText(room.actingAs), 'RoomMembersAs', true)}
       </View>
       <View style={{ gap: 6 }}>
         {list}

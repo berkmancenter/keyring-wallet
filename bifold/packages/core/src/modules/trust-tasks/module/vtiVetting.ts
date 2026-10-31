@@ -70,6 +70,7 @@ import {
 import { HIDDEN_VETTING_SUITE, pcsErrorCode, type HiddenAttestation } from './pcsVtaPayloads'
 import { PRIVATE_ATTEST_RELATIONSHIPS } from './pcsVetterTasks'
 import {
+  asVetter,
   connectedVetterClient,
   currentHiddenCriterion,
   drawVetterTokens,
@@ -1151,11 +1152,21 @@ export class VtiVetterDesk {
         standing.statusChecked ? 'checked' : `not checked${standing.reason ? ` (${standing.reason})` : ''}`
       }`
     )
-    if (!(await isEnrolled(this.agent, community, criterion))) {
-      await enrolVetter(this.agent, community, criterion)
-      logger?.info?.(`[hidden-vetting] vetter round (${trigger}): enrolled for the current period`)
-    }
-    const { drawn } = await drawVetterTokens(this.agent, community, criterion)
+    // One hold for the whole round, as the desk's own persona (the one its
+    // grant is for): enrolment and the draw are signed as it, and the session
+    // cannot change hands between them.
+    const { drawn } = await asVetter(
+      this.agent,
+      community,
+      async () => {
+        if (!(await isEnrolled(this.agent, community, criterion))) {
+          await enrolVetter(this.agent, community, criterion)
+          logger?.info?.(`[hidden-vetting] vetter round (${trigger}): enrolled for the current period`)
+        }
+        return drawVetterTokens(this.agent, community, criterion)
+      },
+      this.persona
+    )
     this.hiddenRoundFailure = undefined
     logger?.info?.(
       `[hidden-vetting] vetter round (${trigger}): ${drawn ? `drew ${drawn} token(s)` : 'no draw due this tick'}`

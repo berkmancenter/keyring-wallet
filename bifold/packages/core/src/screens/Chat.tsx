@@ -325,6 +325,8 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const timerOn = useMemo(() => (chatEvents ? (timerOf(chatEvents)?.expiresIn ?? 0) > 0 : false), [chatEvents])
   const onSend = useCallback(
     async (messages: IMessage[]) => {
+      // gifted-chat has just reset the field, to a hand-over's text if one was still on: empty it either way.
+      composer.sent()
       if (!agent) return
       const message = messages[0]
       const inReplyTo = message.replyMessage?._id

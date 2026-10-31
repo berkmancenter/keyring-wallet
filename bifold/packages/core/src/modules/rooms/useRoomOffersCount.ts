@@ -14,13 +14,17 @@
  *
  * There is one timer at a time: every trigger goes through the same `refresh`, which replaces the pending timer.
  *
+ * It runs from the tab navigator (useRoomNotices), from the start, so a new offer is said in a notice wherever the
+ * member is, not only once My Agent has been opened. My Agent's badge reads its count ({@link useRoomOffersBadge}),
+ * and its coming into focus asks again, as before.
+ *
  * @module rooms/useRoomOffersCount
  */
 import { useFocusEffect } from '@react-navigation/native'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
 
-import type { RoomsService } from './types'
+import type { RoomOffer, RoomsService } from './types'
 
 /** One minute while offers wait: each poll is one signed request per community. */
 export const OFFERS_POLL_MS = 60_000
@@ -32,8 +36,8 @@ export const OFFERS_IDLE_POLL_MS = 120_000
 export const OFFERS_ERROR_POLL_MS = 300_000
 
 /**
- * The shortest gap between two asks, however many triggers arrive. Per hook instance: a second screen showing the
- * badge would bring its own floor and timer, and so twice the asks. Today My Agent (VtaAgentHome) is the only one.
+ * The shortest gap between two asks, however many triggers arrive. Per hook instance: a second instance would bring
+ * its own floor and timer, and so twice the asks. Today the tab navigator's (useRoomNotices) is the only one.
  */
 export const OFFERS_REFRESH_FLOOR_MS = 10_000
 
@@ -45,8 +49,57 @@ const NEXT: Record<Outcome, number> = {
   failed: OFFERS_ERROR_POLL_MS,
 }
 
-/** Undefined until the first answer. A failed poll keeps the last count. */
-export function useRoomOffersCount(service: RoomsService | undefined, linked: boolean): number | undefined {
+// What the running poll last read, and how to ask it again, for the badge on My Agent and the offers card in
+// Messages. In memory only; not named `*Store`, which tier.mjs reads, with a `.delete(`, as deleting stored records.
+const badge: {
+  count?: number
+  offers?: readonly RoomOffer[]
+  refresh?: () => void
+  listeners: Set<() => void>
+} = { listeners: new Set() }
+
+function publish(offers: readonly RoomOffer[]) {
+  badge.count = offers.length
+  badge.offers = offers
+  badge.listeners.forEach((listener) => listener())
+}
+
+const subscribeBadge = (listener: () => void) => {
+  badge.listeners.add(listener)
+  return () => void badge.listeners.delete(listener)
+}
+
+const NO_OFFERS: readonly RoomOffer[] = []
+
+/** The offers the poll last read, for Messages' "Waiting for you" card: all, or one community's. */
+export function useRoomOffersWaiting(communityDid?: string): readonly RoomOffer[] {
+  const offers = useSyncExternalStore(subscribeBadge, () => badge.offers ?? NO_OFFERS)
+  return useMemo(
+    () => (communityDid ? offers.filter((o) => o.communityDid === communityDid) : offers),
+    [offers, communityDid]
+  )
+}
+
+/** My Agent's badge: the count the poll last read; coming into focus asks again (within the floor). */
+export function useRoomOffersBadge(): number | undefined {
+  const count = useSyncExternalStore(subscribeBadge, () => badge.count)
+  useFocusEffect(
+    useCallback(() => {
+      badge.refresh?.()
+    }, [])
+  )
+  return count
+}
+
+/**
+ * Undefined until the first answer. A failed poll keeps the last count. `onOffers` hears every list read, for the
+ * notice of a new one.
+ */
+export function useRoomOffersCount(
+  service: RoomsService | undefined,
+  linked: boolean,
+  onOffers?: (offers: RoomOffer[]) => void
+): number | undefined {
   const [count, setCount] = useState<number>()
   // Only the background stops it: 'inactive' (a passing system sheet) and iOS's 'unknown' at launch are still in use.
   const [active, setActive] = useState(AppState.currentState !== 'background')
@@ -54,6 +107,8 @@ export function useRoomOffersCount(service: RoomsService | undefined, linked: bo
   const lastAsk = useRef(0)
   const asking = useRef(false)
   const refreshRef = useRef<(() => void) | undefined>(undefined)
+  const onOffersRef = useRef(onOffers)
+  onOffersRef.current = onOffers
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => setActive(state !== 'background'))
@@ -73,7 +128,11 @@ export function useRoomOffersCount(service: RoomsService | undefined, linked: bo
         const capabilities = await service.capabilities()
         if (capabilities.listOffers.status !== 'available') return 'none'
         const offers = await service.listOffers()
-        if (live) setCount(offers.length)
+        if (live) {
+          setCount(offers.length)
+          publish(offers)
+          onOffersRef.current?.(offers)
+        }
         return offers.length > 0 ? 'waiting' : 'none'
       } catch {
         // The badge keeps what it last knew; the card says when the agent can't be reached.
@@ -100,11 +159,13 @@ export function useRoomOffersCount(service: RoomsService | undefined, linked: bo
       else if (!timer) schedule(OFFERS_REFRESH_FLOOR_MS - since)
     }
     refreshRef.current = refresh
+    badge.refresh = refresh
     // The badge appearing, an agent linked, the app back in the foreground: each starts here.
     refresh()
     return () => {
       live = false
       refreshRef.current = undefined
+      if (badge.refresh === refresh) badge.refresh = undefined
       if (timer) clearTimeout(timer)
     }
   }, [service, linked, active])

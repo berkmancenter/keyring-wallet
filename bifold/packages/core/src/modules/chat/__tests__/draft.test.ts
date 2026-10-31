@@ -1,4 +1,14 @@
-import { afterChatDrafts, clearChatDraft, flushChatDrafts, loadChatDraft, saveChatDraft } from '../draft'
+import {
+  afterChatDrafts,
+  clearChatDraft,
+  clearDraft,
+  flushChatDrafts,
+  loadChatDraft,
+  loadDraft,
+  saveChatDraft,
+  saveDraft,
+} from '../draft'
+import { createKeyLock } from '../../../utils/keyLock'
 
 type Kept = { id: string; content: Record<string, unknown>; tags?: Record<string, unknown> }
 
@@ -74,6 +84,31 @@ describe('a chat’s kept draft', () => {
 })
 
 // Locking unmounts the chat, whose last save starts then, in the same moment it shuts the agent down.
+// A room's composer keeps its unsent post in the same store (rooms/useRoomDraft.ts).
+describe('a room’s kept draft', () => {
+  it('is kept per room, apart from a chat whose id is the same', async () => {
+    const { agent, kept } = makeAgent()
+    await saveDraft(agent, 'room', 'r1', 'see you thursday')
+    await saveChatDraft(agent, 'r1', 'chat words')
+
+    await expect(loadDraft(agent, 'room', 'r1')).resolves.toBe('see you thursday')
+    await expect(loadChatDraft(agent, 'r1')).resolves.toBe('chat words')
+    expect(kept.get('room-draft:r1')?.tags).toEqual({ type: 'room-draft', roomId: 'r1' })
+  })
+
+  it('is cleared by a blank composer, or by clearing it, and the chat’s is left alone', async () => {
+    const { agent, kept } = makeAgent()
+    await saveDraft(agent, 'room', 'r1', 'see you')
+    await saveChatDraft(agent, 'r1', 'chat words')
+    await saveDraft(agent, 'room', 'r1', ' ')
+    expect(kept.has('room-draft:r1')).toBe(false)
+    await saveDraft(agent, 'room', 'r1', 'again')
+    await clearDraft(agent, 'room', 'r1')
+    await expect(loadDraft(agent, 'room', 'r1')).resolves.toBeUndefined()
+    await expect(loadChatDraft(agent, 'r1')).resolves.toBe('chat words')
+  })
+})
+
 describe('locking waits for a draft still being written', () => {
   // An agent whose next save waits until `land()`.
   const heldSave = () => {
@@ -99,6 +134,35 @@ describe('locking waits for a draft still being written', () => {
 
   it('waits for nothing when nothing is being written', async () => {
     await expect(settled(flushChatDrafts())).resolves.toBe(true)
+  })
+
+  // Drafts' own writes only: a petname or a directory name, written from a sheet on its own lock, has no race with the
+  // shutdown, so locking doesn't wait for it. Hoisting the drafts' in-flight set onto the shared lock would widen this.
+  it('does not wait for work on another lock', async () => {
+    const other = createKeyLock()
+    let release: () => void = () => undefined
+    const held = other('k', () => new Promise<void>((resolve) => (release = resolve)))
+    const shutdown = jest.fn()
+
+    expect(await settled(afterChatDrafts(shutdown))).toBe(true)
+    expect(shutdown).toHaveBeenCalledTimes(1)
+    release()
+    await held
+  })
+
+  it('waits for a room’s draft too', async () => {
+    const { agent, kept, land } = heldSave()
+    void saveDraft(agent, 'room', 'r1', 'last words')
+    const shutdown = jest.fn()
+
+    const locking = afterChatDrafts(shutdown)
+    expect(await settled(locking)).toBe(false)
+    expect(shutdown).not.toHaveBeenCalled()
+
+    land()
+    await locking
+    expect(shutdown).toHaveBeenCalledTimes(1)
+    expect(kept.get('room-draft:r1')?.content.text).toBe('last words')
   })
 
   it('shuts down only once the last save has landed, and the draft is there', async () => {
