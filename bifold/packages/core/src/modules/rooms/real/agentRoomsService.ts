@@ -506,6 +506,7 @@ export class AgentRoomsService implements RoomsService {
     return read
   }
 
+  /** @versionLadder rooms/keys/list */
   private async readHeldRooms(): Promise<HeldRoom[]> {
     const served = this.served?.types ?? []
     if (served.includes(ROOMS_TASK.keysList02))
@@ -855,6 +856,8 @@ export class AgentRoomsService implements RoomsService {
    * Stores each renewal's credentials in the agent's vault in place of the ones they renew, never beside them: a
    * key holder holding two authorities from one room cannot choose between them (`vtc/rooms/offers/list` 0.3/0.4).
    * Storing one already stored is success, so whichever surface collects it first wins.
+   *
+   * @versionLadder vault/credentials/get
    */
   private async takeRenewals(community: RoomsCommunity, renewals: RenewalRecord[]): Promise<void> {
     const pending = renewals.filter((r) => !this.renewed.has(`${r.roomId}|${r.issuedAt}`))
@@ -1053,6 +1056,8 @@ export class AgentRoomsService implements RoomsService {
   /**
    * The newest `rooms/keys/browse` the agent serves. 0.3 asks the same and answers the same, plus the room's
    * `lastPrune`, which `listNotes` passes on; an agent that lists neither is asked 0.1, as before 0.3.
+   *
+   * @versionLadder rooms/keys/browse
    */
   private browseType(): string {
     const served = this.served?.types ?? []
@@ -1071,6 +1076,8 @@ export class AgentRoomsService implements RoomsService {
    * only 0.1 and 0.2. So the version the host last took is sent first (else 0.3), and the other when the host does not
    * serve it; 0.3 is 0.1 with optional members this client does not send. Before act 0.8 the agent completes only
    * 0.1. A refused document did nothing, and the one sent again is new (`actAndSend`).
+   *
+   * @versionLadder rooms/records/put
    */
   private async put(community: RoomsCommunity, host: string, payload: Record<string, unknown>): Promise<unknown> {
     const act = this.actType()

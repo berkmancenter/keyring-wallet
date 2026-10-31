@@ -294,6 +294,8 @@ DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, forgetCardReads)
  * run's time (#401 re-time: 88 cards, ~40 s), and a count that sat at 0 for
  * all of it read as stuck. A card on the phone already (`onPhone`, by id) or
  * read earlier this session is not fetched again.
+ *
+ * @versionLadder vault/credentials/get
  */
 export async function fetchAgentCards(
   task: VaultTask,

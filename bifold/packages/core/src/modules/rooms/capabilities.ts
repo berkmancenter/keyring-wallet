@@ -35,6 +35,11 @@ type Requirement =
   | { from: 'nowhere'; why: string }
   | { from: 'adminOnly'; why: string }
 
+/**
+ * What each operation needs. An `anyOf` holds every version this client's ladder for that task may send.
+ *
+ * @versionCoverage rooms/keys/list rooms/keys/browse
+ */
 export const ROOMS_REQUIREMENTS: Record<RoomsOperation, Requirement> = {
   listMyRooms: { from: 'agent', anyOf: [`${SPEC}rooms/keys/list/0.2`, `${SPEC}rooms/keys/list/0.1`] },
   getRoom: { from: 'agent', anyOf: [`${SPEC}rooms/keys/list/0.2`, `${SPEC}rooms/keys/list/0.1`] },

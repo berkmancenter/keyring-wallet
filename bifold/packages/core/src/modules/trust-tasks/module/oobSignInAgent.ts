@@ -504,6 +504,7 @@ export async function approveSignIn(proved: ProvedSignIn, deps: SignInAgentDeps)
       decision = await signWithSigner(
         {
           id: `urn:uuid:${utils.uuid()}`,
+          // version-pinned: the VTA verifies a UV approval only as decision 0.2 (UV_DECISION_TASK)
           type: UV_DECISION_TASK,
           issuer: uvDid,
           recipient: deps.vta.did,
