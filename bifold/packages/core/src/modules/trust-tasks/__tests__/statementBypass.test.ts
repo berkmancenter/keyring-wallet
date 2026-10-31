@@ -20,6 +20,8 @@ jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // eslint-disable-next-line import/order
 import signed from './fixtures/vti-upstream-signed.json'
 // eslint-disable-next-line import/order
+import { pinClock, unpinClock } from './fixtures/pinClock'
+// eslint-disable-next-line import/order
 import type { VtiHeldCredential } from '../module/VtiCommunityStore'
 // eslint-disable-next-line import/order
 import { CREDENTIAL_EXCHANGE_ISSUE, receiveIssue } from '../module/vtiInbox'
@@ -87,9 +89,9 @@ function world() {
 describe('a statement arriving through an inbox', () => {
   beforeEach(() => {
     // Inside the statement's window (the test setup pins Date.now() to 2024).
-    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z'))
+    pinClock(Date.parse('2026-09-25T00:05:00Z'))
   })
-  afterEach(() => jest.restoreAllMocks())
+  afterEach(unpinClock)
 
   it('is not stored by receiveIssue on its own', async () => {
     const w = world()
@@ -123,8 +125,8 @@ describe('a statement arriving through an inbox', () => {
 })
 
 describe('the checklist', () => {
-  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z')))
-  afterEach(() => jest.restoreAllMocks())
+  beforeEach(() => pinClock(Date.parse('2026-09-25T00:05:00Z')))
+  afterEach(unpinClock)
 
   it('does not count a statement that was stored without being checked', async () => {
     // What an inbox before PR D left in the store: held, never accepted.

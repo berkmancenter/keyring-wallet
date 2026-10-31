@@ -30,6 +30,8 @@ import {
 // eslint-disable-next-line import/order
 import minted from './fixtures/dtg-v1-minted.json'
 // eslint-disable-next-line import/order
+import { pinClock, unpinClock } from './fixtures/pinClock'
+// eslint-disable-next-line import/order
 import signed from './fixtures/vti-upstream-signed.json'
 // eslint-disable-next-line import/order
 import type { VtiHeldCredential } from '../module/VtiCommunityStore'
@@ -47,35 +49,6 @@ type Json = Record<string, unknown>
 const oldStatement = signed.statement as Json
 const newStatement = minted.boundVettingStatement as Json
 const card = signed.card as Json
-
-/**
- * Pins the clock the code reads, `new Date()` as well as `Date.now()`: a
- * `jest.spyOn(Date, 'now')` leaves the Date constructor on the wall clock,
- * which vtiGrantState reads, so boundVettingStatement's validUntil
- * (2026-10-31) expired under these tests at midnight. Only Date is faked; the
- * suites' timers stay real.
- */
-function pinClock(at: number) {
-  jest.useFakeTimers({
-    now: at,
-    doNotFake: [
-      'setTimeout',
-      'clearTimeout',
-      'setInterval',
-      'clearInterval',
-      'setImmediate',
-      'clearImmediate',
-      'nextTick',
-      'queueMicrotask',
-      'hrtime',
-      'performance',
-    ],
-  })
-}
-function unpinClock() {
-  jest.useRealTimers()
-  jest.restoreAllMocks()
-}
 
 const agent = {
   config: { logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() } },
