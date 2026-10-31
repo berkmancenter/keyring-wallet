@@ -17,6 +17,7 @@
 
 import { awaitSeatStep as seatStep } from "./seatStep.js";
 import { requestTookEffect } from "./requestTap.js";
+import { vetterDoors } from "./vetterDoor.js";
 import { appendFileSync, copyFileSync, mkdirSync, readdirSync, statSync, openSync, closeSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
@@ -486,13 +487,16 @@ export async function tapCardVettingDoor(d) {
 }
 
 /** From anywhere after unlock, into Vetting. */
-async function openVetting(d) {
+async function openVetting(d, community) {
   await (await waitForTestId(d, "MyAgent", 30000)).click();
   const homeBy = Date.now() + 60000;
   while (Date.now() < homeBy) {
     // 236 (#316): the desk's door is AgentOpenDesk, or AgentOpenDesk_<community> for a vetter of several.
-    const desks = (await d.getPageSource().catch(() => "")).match(/AgentOpenDesk_[A-Za-z0-9_-]+/g) || [];
-    for (const door of ["AgentOpenDesk", ...new Set(desks), "AgentVetOthers", "AgentContinueVetting"]) {
+    // The vetter's card is at the top, and Android's page source stops at the fold: back up after a sweep for a door.
+    if (community) await scrollToTestId(d, "AgentSwitcher", 4, { direction: "up", both: false }).catch(() => undefined);
+    const page = await d.getPageSource().catch(() => "");
+    const desks = page.match(/AgentOpenDesk_[A-Za-z0-9_-]+/g) || [];
+    for (const door of vetterDoors(desks, community, page)) {
       const el = await scrollToTestId(d, door, 4).catch(() => undefined);
       if (el) {
         await el.click();
@@ -500,14 +504,16 @@ async function openVetting(d) {
         return door;
       }
     }
-    const card = await tapCardVettingDoor(d);
+    // The card's door has no community on it: with one named, keep waiting for its own door.
+    const card = community ? undefined : await tapCardVettingDoor(d);
     if (card) {
       await sleep(1500);
       return card;
     }
-    if ((await existsTestId(d, "AgentOpenCommunities", 1000)) || (await existsTestId(d, "MyAgentCard", 1000))) break;
+    if (!community && ((await existsTestId(d, "AgentOpenCommunities", 1000)) || (await existsTestId(d, "MyAgentCard", 1000)))) break;
     await sleep(2000);
   }
+  if (community) throw new Error(`no desk door for ${community.did} within 60 s`);
   await openMyAgentPanel(d);
   await sleep(1500);
   if (await byTestId(d, "ConnectMyAgentButton").isExisting().catch(() => false)) await byTestId(d, "ConnectMyAgentButton").click();
@@ -967,7 +973,8 @@ export const vetter = {
    */
   openDesk(d, opts = {}) {
     return runStep(d, "vetter", "openDesk", opts, async () => {
-      await openVetting(d);
+      const door = await openVetting(d, opts.community);
+      console.log(`[e2e] ${deviceTag(d)}: vetter desk door ${door}`);
       // The desk's reads first: a session an earlier run left open shows its own step only once they finish, and the
       // probes below would miss it and leave it open. (Until the desk draws a placeholder while it reads, its unread
       // state already reads "ticket", so this returns at once there.)

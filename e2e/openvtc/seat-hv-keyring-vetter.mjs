@@ -32,6 +32,7 @@ const { values: a } = parseArgs({
     'wda-port': { type: 'string' },
     'mjpeg-port': { type: 'string' },
     'community-did': { type: 'string' },
+    'community-name': { type: 'string' },
     'vtc-base': { type: 'string' },
     'admin-credential': { type: 'string' },
     criterion: { type: 'string', default: 'hv-vetted' },
@@ -59,7 +60,7 @@ const d = await openDevice({ platform: a.platform, udid: a.udid, deviceName: a['
 const stop = keepAlive(d);
 /** The phone's desk opens; the community's count of hidden vetters under the live label grows by one. */
 async function awaitEnrolled(memberDid) {
-  await vetterRole.openDesk(d);
+  await vetterRole.openDesk(d, { community: { did: a['community-did'], names: a['community-name'] ? [a['community-name']] : [] } });
   await screenshot(d, `${p}-desk`).catch(() => undefined);
   if (!hidden) {
     row(`${p}-desk`, 'PASS', 'the vetter desk opened once, so the app takes the grant (no hidden vetting on this community)');

@@ -143,7 +143,7 @@ try {
     vet = await openDevice({ platform: vetDev.platform, udid: vetDev.udid, deviceName: a['vetter-device-name'], wdaPort: a['vetter-wda-port'], mjpegPort: a['vetter-mjpeg-port'] });
     stopKeep.push(keepAlive(vet));
     await unlockToHome(vet);
-    await vetterRole.openDesk(vet);
+    await vetterRole.openDesk(vet, { community: { did: a['community-did'] } });
     ticketUri = (await vetterRole.issueTicket(vet)).value;
   } else {
     const tuiRoles = await import('./tuiRoles.js');
