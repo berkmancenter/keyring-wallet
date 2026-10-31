@@ -34,7 +34,7 @@ import { useEffect } from 'react'
 import { AppState, DeviceEventEmitter } from 'react-native'
 
 import { isAgentsOwnPersona } from './agentOwnIdentity'
-import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
+import { VTI_PERSONA_KEYS_HELD_EVENT, VTI_PERSONA_MESSAGE_WAITING_EVENT } from './communityChanged'
 import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
@@ -47,7 +47,7 @@ import {
   VtiMediatorSession,
   vtiClientIdentityFromPersona,
 } from './VtiMediatorTransport'
-import { keepForPersona } from './vtiPersonaInbox'
+import { keepForPersona, ownedByInbox } from './vtiPersonaInbox'
 import { frameForm, tspSessionForPersona, unpackTrustTaskFromPeer } from './vtiTsp'
 
 /** One listener's session, as the manager needs it. */
@@ -56,6 +56,18 @@ export interface ListenerSession {
   stop(): Promise<void>
   /** Back in the foreground: ask the mediator for something, and reopen if nothing comes back. */
   checkAlive(): void
+}
+
+/** Messages already said to be left on the mediator, by identity and message id; kept small. */
+const leftNoted = new Set<string>()
+const LEFT_NOTED_MAX = 500
+
+/** A message a listener leaves on the mediator for the shared session (keepFromListener). */
+export class LeftForSharedSession extends Error {
+  constructor(readonly type: string) {
+    super(`${type} is for the shared session; left on the mediator`)
+    this.name = 'LeftForSharedSession'
+  }
 }
 
 /** Opens a listen-only session for one identity. */
@@ -348,6 +360,13 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
  * notice reached a listener and matched nothing — its type was the envelope's —
  * so it was neither applied nor reported (233 candidate, Prague lane row).
  * What arrived and what failed are said in the Release log.
+ *
+ * Only what the inbox keeps is taken here. Anything else — a vetting request, a vetter's answer, an answer to an ask
+ * the shared session sent — is for the shared session's handlers (the vetter's desk, an applicant waiting, the ask
+ * itself), which a listener does not run. Taken here, it was acknowledged and lost: on 276.10 a vetter's phone heard
+ * an applicant's vetting request on its listener while another community held the shared session, and the request
+ * never reached the desk. So it is left on the mediator, and a screen serving that identity is told, to sign the
+ * shared session in as it; the mediator delivers it there.
  */
 export async function keepFromListener(
   agent: Agent,
@@ -358,7 +377,26 @@ export async function keepFromListener(
   const who = didPrefix(persona.did)
   const message = unwrapBindingEnvelope(received)
   const kind = String(message.type ?? 'a message')
-  releaseWarn(`[VTI] listener for ${who}: received ${kind} (${via})`)
+  const owned = ownedByInbox(message)
+  // A message left on the mediator comes back at every drain until the shared session takes it: said once.
+  const noteKey = `${persona.did}|${String(message.id ?? kind)}`
+  const sayIt = owned || !leftNoted.has(noteKey)
+  if (sayIt) releaseWarn(`[VTI] listener for ${who}: received ${kind} (${via})`)
+  if (!owned) {
+    if (sayIt) {
+      if (leftNoted.size >= LEFT_NOTED_MAX) leftNoted.clear()
+      leftNoted.add(noteKey)
+      releaseWarn(`[VTI] listener for ${who}: ${kind} left on the mediator for the shared session`)
+    }
+    // Named every time: a screen that signed in as the identity may have lost the session again since.
+    DeviceEventEmitter.emit(VTI_PERSONA_MESSAGE_WAITING_EVENT, {
+      did: persona.did,
+      communityDid: persona.communityDid,
+      type: kind,
+    })
+    // Thrown: the acknowledgement is withheld (VtiMediatorSession), so the message stays queued.
+    throw new LeftForSharedSession(kind)
+  }
   try {
     await keepForPersona(agent, persona, message)
   } catch (error) {

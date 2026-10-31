@@ -8,8 +8,9 @@
  * come back, and two desks hear every request. (PR C made taking a request
  * idempotent; this removes the second listener itself.)
  */
-import { render, waitFor } from '@testing-library/react-native'
+import { act, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { DeviceEventEmitter } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -111,6 +112,23 @@ describe('the Vetting screen and its desk', () => {
     expect(inbox()).toBeGreaterThan(baseline)
     tree.unmount()
     expect(inbox()).toBe(baseline)
+  })
+
+  // 276.10: a vetting request reached the vetter's listener while another community held the shared session. The
+  // listener now leaves it on the mediator and names the identity; the screen signs the session in as it again.
+  it('a message waiting for its persona signs the session in as it again; one for another identity does not', async () => {
+    const connect = jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined)
+    const tree = await mount()
+    await waitFor(() => expect(connect).toHaveBeenCalled())
+    const before = connect.mock.calls.length
+    DeviceEventEmitter.emit('vti:persona-message-waiting', { did: 'did:webvh:example:someone-else' })
+    await act(async () => undefined)
+    expect(connect).toHaveBeenCalledTimes(before)
+    DeviceEventEmitter.emit('vti:persona-message-waiting', { did: personaDid })
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(before + 1))
+    expect(connect.mock.calls[before][2]).toMatchObject({ persona: expect.objectContaining({ did: personaDid }) })
+    tree.unmount()
+    connect.mockRestore()
   })
 
   it('leaving and coming back: one desk hears a request, not two', async () => {

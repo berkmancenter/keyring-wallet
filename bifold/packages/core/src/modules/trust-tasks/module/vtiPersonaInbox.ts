@@ -67,7 +67,7 @@ async function personaFor(agent: Agent, communityDid?: string): Promise<VtiPerso
 }
 
 /** The messages this inbox takes: a community's notices, a delivered credential, an invitation offer. */
-function ownedByInbox(message: { type?: unknown; body?: unknown }): boolean {
+export function ownedByInbox(message: { type?: unknown; body?: unknown }): boolean {
   const type = String(message.type ?? '')
   return (
     type === REMOVAL_NOTICE ||

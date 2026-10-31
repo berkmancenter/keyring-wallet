@@ -21,6 +21,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
+  DeviceEventEmitter,
   Platform,
   Pressable,
   ScrollView,
@@ -40,7 +41,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { VETTER_HEADER } from '../../../components/views/VetterHeaderBackground'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiHeldCredential } from '../module/VtiCommunityStore'
-import { useCommunityChanged } from '../module/communityChanged'
+import { useCommunityChanged, VTI_PERSONA_MESSAGE_WAITING_EVENT } from '../module/communityChanged'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { HIDDEN_VETTING_SUITE, hiddenVettingSuite } from '../module/joinManifest'
 import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
@@ -526,6 +527,18 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       cancelled = true
     }
   }, [agent, stores, communityDid, mediatorDid, tick])
+
+  // A message for this persona waits on the mediator, left by its listener because only the shared session's
+  // handlers (this screen's desk, the applicant's wait) can take it: sign in as the persona again, and it is
+  // delivered here. On 276.10 a vetting request reached a vetter's listener while another community held the
+  // session, and was lost (vtiIdentityListeners.keepFromListener).
+  useEffect(() => {
+    if (!personaDid) return
+    const sub = DeviceEventEmitter.addListener(VTI_PERSONA_MESSAGE_WAITING_EVENT, (e: { did?: string }) => {
+      if (e?.did === personaDid && vtiAgent.did !== personaDid) bump()
+    })
+    return () => sub.remove()
+  }, [personaDid, bump])
 
   // The seat's read, for a change announced by the stores (below).
   const seatRefresh = useRef<(() => Promise<void>) | undefined>(undefined)
