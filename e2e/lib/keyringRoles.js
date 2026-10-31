@@ -715,7 +715,8 @@ export const applicant = {
       await scrollToTestId(d, "VettingRequestButton", 4);
       // After a refusal the card under the field pushes the button down, behind the tab bar: a tap there lands on the tab
       // (iOS applicant, 1031: four taps opened Wallet and its Add credentials sheet, and the request never went).
-      await liftAboveTabBar(d, "VettingRequestButton", 6).catch(() => undefined);
+      const clear = await liftAboveTabBar(d, "VettingRequestButton", 6).catch(() => false);
+      if (!clear) console.log('[e2e] "Use this link" did not rise above the tab bar; tapping it where it is');
       const cardBefore = await byTestId(d, "VettingRequestCard").isExisting().catch(() => false);
       const statusBefore = await textOf(d, "VettingRequestStatus").catch(() => "");
       const endedBefore = await byTestId(d, "VettingSessionEnded").isExisting().catch(() => false);
