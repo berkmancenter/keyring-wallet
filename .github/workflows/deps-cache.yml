@@ -63,7 +63,7 @@ jobs:
         run: yarn install --immutable
 
       - name: Save the yarn cache
-        if: steps.lookup.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+        if: steps.lookup.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: .yarn/cache

@@ -215,7 +215,8 @@ jobs:
           yarn run ios:setup
 
       - name: Save pod dependencies (main only)
-        if: github.event_name != 'pull_request' && steps.pods.outputs.cache-hit != 'true'
+        # By ref, not event: most runs here are branch dispatches, and a save there lands on that branch alone.
+        if: github.ref == 'refs/heads/main' && steps.pods.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
