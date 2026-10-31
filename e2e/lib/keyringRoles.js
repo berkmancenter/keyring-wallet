@@ -17,6 +17,7 @@
 
 import { awaitSeatStep as seatStep } from "./seatStep.js";
 import { requestTookEffect } from "./requestTap.js";
+import { vetterDoors } from "./vetterDoor.js";
 import { appendFileSync, copyFileSync, mkdirSync, readdirSync, statSync, openSync, closeSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
@@ -492,7 +493,7 @@ async function openVetting(d) {
   while (Date.now() < homeBy) {
     // 236 (#316): the desk's door is AgentOpenDesk, or AgentOpenDesk_<community> for a vetter of several.
     const desks = (await d.getPageSource().catch(() => "")).match(/AgentOpenDesk_[A-Za-z0-9_-]+/g) || [];
-    for (const door of ["AgentOpenDesk", ...new Set(desks), "AgentVetOthers", "AgentContinueVetting"]) {
+    for (const door of vetterDoors(desks, process.env.E2E_VETTER_COMMUNITY_DID)) {
       const el = await scrollToTestId(d, door, 4).catch(() => undefined);
       if (el) {
         await el.click();

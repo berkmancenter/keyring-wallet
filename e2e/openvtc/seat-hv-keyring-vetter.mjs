@@ -41,6 +41,7 @@ const { values: a } = parseArgs({
     'resume-member': { type: 'string' },
   },
 });
+process.env.E2E_VETTER_COMMUNITY_DID = a['community-did'];
 for (const k of ['udid', 'community-did', 'vtc-base', 'admin-credential']) if (!a[k]) throw new Error(`--${k} is required`);
 const row = (name, status, detail) => {
   console.log(`ROW ${name} ${status} — ${String(detail).replace(/\s+/g, ' ').slice(0, 300)}`);
