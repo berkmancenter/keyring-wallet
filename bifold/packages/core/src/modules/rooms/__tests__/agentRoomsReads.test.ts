@@ -234,3 +234,118 @@ describe('opening a room asks the agent less', () => {
     expect(reads().slice(before)).toEqual(['p1'])
   })
 })
+
+describe('a post read by two surfaces at once', () => {
+  // Opening a room reads its newest posts for the chat and for its Notes tab at the same moment: ten of an open's
+  // first twenty reads were the same records twice (276.10, 10-30).
+  /** Reads answer only when `open` is called, in the order asked; `failNext` makes the next read fail instead. */
+  function heldReads(records: HostRecord[]) {
+    const h = backend(records)
+    const agentTask = h.b.agentTask as jest.Mock
+    const answer = agentTask.getMockImplementation()!
+    const gates: (() => void)[] = []
+    let fail = false
+    agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type !== ROOMS_TASK.keysRead) return answer(type, payload)
+      await new Promise<void>((resolve) => gates.push(resolve))
+      if (fail) {
+        fail = false
+        throw new Error('the VTA did not answer')
+      }
+      return answer(type, payload)
+    })
+    const tick = () => new Promise((resolve) => setImmediate(resolve))
+    return { ...h, open: (n: number) => gates[n](), failNext: () => (fail = true), tick }
+  }
+
+  it('is asked of the agent once, and each caller gets the post', async () => {
+    const { b, reads, open, tick } = heldReads([record('p1', 1)])
+    const service = new AgentRoomsService(b)
+    await service.listNotes(ROOM)
+    const chat = service.readNote(ROOM, 'p1')
+    const notesTab = service.readNote(ROOM, 'p1')
+    await tick()
+    open(0)
+    const [a, c] = await Promise.all([chat, notesTab])
+    expect(reads()).toEqual(['p1'])
+    expect(String(a.body)).toBe('words of p1')
+    expect(c).toEqual(a)
+  })
+
+  it('two different posts at once are two reads (control)', async () => {
+    const { b, reads, open, tick } = heldReads([record('p1', 1), record('p2', 1)])
+    const service = new AgentRoomsService(b)
+    await service.listNotes(ROOM)
+    const both = Promise.all([service.readNote(ROOM, 'p1'), service.readNote(ROOM, 'p2')])
+    await tick()
+    open(0)
+    open(1)
+    await both
+    expect(reads()).toEqual(['p1', 'p2'])
+  })
+
+  it('a read that failed fails both callers, and the next read asks again', async () => {
+    const { b, reads, open, failNext, tick } = heldReads([record('p1', 1)])
+    const service = new AgentRoomsService(b)
+    await service.listNotes(ROOM)
+    failNext()
+    const both = Promise.allSettled([service.readNote(ROOM, 'p1'), service.readNote(ROOM, 'p1')])
+    await tick()
+    open(0)
+    expect((await both).map((r) => r.status)).toEqual(['rejected', 'rejected'])
+    const again = service.readNote(ROOM, 'p1')
+    await tick()
+    open(1)
+    expect(String((await again).body)).toBe('words of p1')
+    expect(reads()).toEqual(['p1', 'p1'])
+  })
+
+  it('a read out when the wallet locks is not joined after the lock', async () => {
+    const { b, reads, open, tick } = heldReads([record('p1', 1)])
+    const service = new AgentRoomsService(b)
+    await service.listNotes(ROOM)
+    const before = service.readNote(ROOM, 'p1')
+    await tick()
+    DeviceEventEmitter.emit(WALLET_LOCKED_EVENT, 'timeout')
+    await service.listNotes(ROOM)
+    const after = service.readNote(ROOM, 'p1')
+    await tick()
+    expect(reads()).toEqual(['p1', 'p1'])
+    open(0)
+    open(1)
+    await Promise.all([before, after])
+  })
+
+  it('a read out when the member leaves the community answers its caller, and is not kept', async () => {
+    const { b, open, tick } = heldReads([record('p1', 1)])
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    await service.listNotes(ROOM)
+    const before = service.readNote(ROOM, 'p1')
+    await tick()
+    await service.leaveViaCommunity(COMMUNITY.did)
+    open(0)
+    expect(String((await before).body)).toBe('words of p1')
+    // Nothing of the room just left is kept.
+    const opened = (service as unknown as { opened: Map<string, unknown> }).opened
+    expect([...opened.keys()].filter((k) => k.startsWith(`${ROOM}\n`))).toEqual([])
+  })
+
+  it('a read that answers after the lock answers its caller, and is not kept', async () => {
+    const { b, reads, open, tick } = heldReads([record('p1', 1)])
+    const service = new AgentRoomsService(b)
+    await service.listNotes(ROOM)
+    const before = service.readNote(ROOM, 'p1')
+    await tick()
+    DeviceEventEmitter.emit(WALLET_LOCKED_EVENT, 'timeout')
+    open(0)
+    expect(String((await before).body)).toBe('words of p1')
+    // After the unlock the room is listed and its post read again: nothing read before the lock was kept.
+    await service.listNotes(ROOM)
+    const again = service.readNote(ROOM, 'p1')
+    await tick()
+    open(1)
+    await again
+    expect(reads()).toEqual(['p1', 'p1'])
+  })
+})
