@@ -95,8 +95,11 @@ export const SiblingNoticeStrip: React.FC = () => {
       onToggle={() => setNotice({ ...notice, open: !notice.open })}
       onOpen={() => {
         setNotice(NONE)
+        // `initial: false`: every tab unmounts on blur, so from another tab this would be the stack's only screen, with
+        // no Back (myAgentLinkParams).
         ;(navigation as unknown as { navigate: (n: string, p?: object) => void }).navigate(TabStacks.MyAgentStack, {
           screen: Screens.VtaDevices,
+          initial: false,
         })
       }}
       onDismiss={() => setNotice(NONE)}

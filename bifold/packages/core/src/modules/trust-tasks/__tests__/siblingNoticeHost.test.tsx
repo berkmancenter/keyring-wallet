@@ -127,14 +127,17 @@ describe('also open as you, from the presence loop', () => {
     expect(again.queryByTestId(id('SiblingNotice'))).toBeNull()
   })
 
-  test('My devices opens the list, and the strip goes', async () => {
+  test('My devices opens the list over the My Agent stack, so it has a Back, and the strip goes', async () => {
     const navigation = useNavigation() as unknown as { navigate: jest.Mock }
     navigation.navigate.mockClear()
     const tree = host()
     await seen(A)
     fireEvent.press(tree.getByTestId(id('SiblingNotice')))
     fireEvent.press(tree.getByTestId(id('SiblingNoticeOpen')))
-    expect(navigation.navigate).toHaveBeenCalledWith(TabStacks.MyAgentStack, { screen: Screens.VtaDevices })
+    expect(navigation.navigate).toHaveBeenCalledWith(TabStacks.MyAgentStack, {
+      screen: Screens.VtaDevices,
+      initial: false,
+    })
     expect(tree.queryByTestId(id('SiblingNotice'))).toBeNull()
   })
 
