@@ -16,6 +16,7 @@
 //           observed: { stepId, ... }, value?, error?, screenshot?, source? }
 
 import { awaitSeatStep as seatStep } from "./seatStep.js";
+import { requestTookEffect } from "./requestTap.js";
 import { appendFileSync, copyFileSync, mkdirSync, readdirSync, statSync, openSync, closeSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
@@ -708,15 +709,20 @@ export const applicant = {
       await scrollToTestId(d, "VettingRequestButton", 4);
       const cardBefore = await byTestId(d, "VettingRequestCard").isExisting().catch(() => false);
       const statusBefore = await textOf(d, "VettingRequestStatus").catch(() => "");
+      const endedBefore = await byTestId(d, "VettingSessionEnded").isExisting().catch(() => false);
       await tapTestIdReliable(
         d,
         "VettingRequestButton",
-        async () => {
-          const card = await byTestId(d, "VettingRequestCard").isExisting().catch(() => false);
-          if (!cardBefore) return card;
-          return (await textOf(d, "VettingRequestStatus").catch(() => "")) !== statusBefore;
-        },
-        { attempts: 4, settleMs: 3000 }
+        async () =>
+          requestTookEffect(
+            { cardBefore, statusBefore, endedBefore },
+            {
+              card: await byTestId(d, "VettingRequestCard").isExisting().catch(() => false),
+              status: await textOf(d, "VettingRequestStatus").catch(() => ""),
+              ended: await byTestId(d, "VettingSessionEnded").isExisting().catch(() => false),
+            }
+          ),
+        { attempts: 4, settleMs: 6000 }
       );
       const status = await textOf(d, "VettingRequestStatus").catch(() => "");
       return { observed: { requestStatus: status, via } };
