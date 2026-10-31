@@ -19,6 +19,7 @@ import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiCommunity from '../screens/VtiCommunity'
+import { unnamedRef } from '../screens/communityName'
 import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVetterSeam'
 
 import { readDirectoryDisclosure } from '../module/directoryDisclosure'
@@ -125,10 +126,18 @@ describe('the community screen', () => {
     expect(tree.getByTestId(testIdWithKey('CommunityError'))).not.toHaveTextContent(/vtiAgent|503/)
   })
 
-  it('says a community published no name rather than showing its host as one', () => {
+  it('says a community published no name rather than showing its host as one: its handle, and a pill saying so', () => {
     const tree = show()
-    expect(tree.getByTestId(testIdWithKey('CommunityName'))).toHaveTextContent('Join.Unnamed')
+    expect(tree.getByTestId(testIdWithKey('CommunityName'))).toHaveTextContent(unnamedRef(communityDid))
+    expect(tree.getByText('Community.PassNoName')).toBeTruthy()
     expect(tree.queryByTestId(testIdWithKey('CommunityNameClaimed'))).toBeNull()
+  })
+
+  it('a published name has no pill (control)', () => {
+    communityTarget.set({ communityDid, name: 'Keyring Lab', published: true })
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('CommunityName'))).toHaveTextContent('Keyring Lab')
+    expect(tree.queryByText('Community.PassNoName')).toBeNull()
   })
 
   it('a name only a link claimed says where it came from', () => {
@@ -299,11 +308,106 @@ describe('the community screen, for a member', () => {
     mockJourney = { join: { kind: 'member', membership }, vetterGrant: { state: 'none' } }
     const tree = show()
     await act(async () => undefined)
-    expect(tree.getByTestId(testIdWithKey('CommunityMember'))).toHaveTextContent(/Join\.StandingMember/)
+    // One line under the name: "✓ Member since …"; a screen reader hears that they are a member, and since when.
+    expect(tree.getByTestId(testIdWithKey('CommunityMember'))).toHaveTextContent(/MyAgent\.MemberSince/)
+    expect(tree.getByTestId(testIdWithKey('CommunityMember')).props.accessibilityLabel).toMatch(
+      /^Join\.StandingMember MyAgent\.MemberSince$/
+    )
     expect(tree.getByTestId(testIdWithKey('CommunityMemberSince'))).toBeTruthy()
     expect(tree.queryByTestId(testIdWithKey('CommunityCriteria'))).toBeNull()
     expect(tree.queryByTestId(testIdWithKey('ApplyToCommunityButton'))).toBeNull()
     expect(tree.queryByTestId(testIdWithKey('CommunityOpenDesk'))).toBeNull()
+  })
+
+  // 276.10, option A: who the community is first, then Rooms and Directory, and About last with Leave out of the way.
+  it('reads top to bottom: the name, Rooms, Directory, then About with Details and Leave', async () => {
+    mockJourney = { join: { kind: 'member', membership }, vetterGrant: { state: 'none' } }
+    mockPersona = { did: 'did:webvh:QmPersona:p', communityDid }
+    mockRoomsService = {
+      isSample: false,
+      capabilities: async () => jest.requireActual('../../rooms/capabilities').sampleCapabilities(),
+      listMyRooms: async () => [],
+      listOffers: async () => [],
+    }
+    try {
+      // With an agent, as the leave tests: the phone holds an identity here, so Leave is offered.
+      ;(useRoute as jest.Mock).mockReturnValue({ params: { communityDid } })
+      ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
+      const tree = render(
+        <BasicAppContext>
+          <VtiCommunity />
+        </BasicAppContext>
+      )
+      await act(async () => undefined)
+      const order = tree.UNSAFE_root.findAll((n) => typeof n.props.testID === 'string' && typeof n.type === 'string')
+        .map((n) => n.props.testID as string)
+        .filter((testID, i, all) => all.indexOf(testID) === i)
+      const at = (key: string) => order.indexOf(testIdWithKey(key))
+      const keys = [
+        'CommunityName',
+        'CommunityRooms',
+        'CommunityDirectory',
+        'CommunityDetailsToggle',
+        'LeaveCommunityButton',
+      ]
+      keys.forEach((key) => expect(at(key)).toBeGreaterThanOrEqual(0))
+      expect(keys.map(at)).toEqual([...keys.map(at)].sort((a, b) => a - b))
+      // Leave is plain words in About, not a bordered button, with the way back said under it.
+      const leave = StyleSheet.flatten(tree.getByTestId(testIdWithKey('LeaveCommunityButton')).props.style)
+      expect(leave.borderWidth ?? 0).toBe(0)
+      expect(tree.getByText('Join.StandingAgain')).toBeTruthy()
+      expect(tree.getByText('Community.AboutSection')).toBeTruthy()
+    } finally {
+      mockRoomsService = undefined
+      mockPersona = undefined
+    }
+  })
+
+  it('Details, under About, shows the community ID on a tap', async () => {
+    mockJourney = { join: { kind: 'member', membership }, vetterGrant: { state: 'none' } }
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.queryByTestId(testIdWithKey('CommunityDid'))).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('CommunityDetailsToggle')))
+    expect(tree.getByTestId(testIdWithKey('CommunityDid'))).toHaveTextContent(communityDid)
+  })
+
+  it('Rooms: rows in the shape of rooms while they are read, then counted in the label', async () => {
+    mockJourney = { join: { kind: 'member', membership }, vetterGrant: { state: 'none' } }
+    let answer: (rooms: unknown[]) => void = () => undefined
+    mockRoomsService = {
+      isSample: false,
+      capabilities: async () => jest.requireActual('../../rooms/capabilities').sampleCapabilities(),
+      listMyRooms: () => new Promise((resolve) => (answer = resolve)),
+      listOffers: async () => [],
+    }
+    try {
+      const tree = show()
+      await act(async () => undefined)
+      const reading = tree.getByTestId(testIdWithKey('RoomsReading'))
+      expect(reading.props.accessibilityLabel).toBe('Rooms.Reading')
+      expect(tree.UNSAFE_queryAllByType(jest.requireActual('react-native').ActivityIndicator)).toHaveLength(0)
+      expect(tree.getByText('Rooms.Rooms')).toBeTruthy()
+
+      await act(async () =>
+        answer([
+          {
+            roomId: 'did:webvh:r:here',
+            name: 'Planning',
+            nameFrom: 'community',
+            source: 'community',
+            communityDid,
+            tier: 'open',
+            verbs: ['read'],
+            standing: 'member',
+          },
+        ])
+      )
+      expect(tree.queryByTestId(testIdWithKey('RoomsReading'))).toBeNull()
+      expect(tree.getByText('Rooms.Rooms · 1')).toBeTruthy()
+    } finally {
+      mockRoomsService = undefined
+    }
   })
 
   it("rooms flag on: this community's offers and rooms, each opening its screen; off, no section (on is the control)", async () => {

@@ -153,6 +153,27 @@ describe('the community screen’s directory rows', () => {
   })
 })
 
+describe('the community screen’s directory rows (276.10, option A)', () => {
+  it('Your card names the member by the profile they joined with, and says who sees name and role', () => {
+    mockService = createFakeDirectoryService()
+    const tree = show(<CommunityDirectorySection communityDid={COMMUNITY} />)
+    expect(tree.getByText('Directory.CardRowNamed')).toBeTruthy()
+    expect(tree.getByText('AL')).toBeTruthy()
+    expect(tree.getByText('Directory.CardRowSeen')).toBeTruthy()
+    // Read from this phone only: the card itself is never asked for here (card/show creates one at VTC 0.12).
+    expect(mockService.calls).toEqual([])
+    expect(tree.toJSON()).toMatchSnapshot()
+  })
+
+  it('without a profile name it is plain "Your card" (control)', () => {
+    mockMe = {}
+    mockService = createFakeDirectoryService()
+    const tree = show(<CommunityDirectorySection communityDid={COMMUNITY} />)
+    expect(tree.getByText('Directory.CardRow')).toBeTruthy()
+    expect(tree.queryByText('Directory.CardRowNamed')).toBeNull()
+  })
+})
+
 describe('another member’s card', () => {
   const ANA = {
     name: 'Ana Lopez',
