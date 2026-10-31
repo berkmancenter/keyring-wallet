@@ -2,7 +2,9 @@
 // Moves roadmap cards forward when a release carries them (docs/plans/public-roadmap-plan.md §8, "PRs and
 // releases"). The release flows call it with the PRs a build contains; each PR's `Refs` cards move to Testing,
 // and "Shipped in" gets the release number the first time. A card is never moved back, and a card already
-// at or past the target is left alone, so running it twice changes nothing.
+// past the target is left alone. A card already at the target keeps its status but still gets a missing "Shipped
+// in": it may have been moved by hand, or the text write may have failed on an earlier run. Running it twice
+// changes nothing.
 //
 //   ROADMAP_TOKEN=$(gh auth token) ROADMAP_PROJECT_ID=PVT_... node scripts/roadmap/set-status.mjs \
 //     --status Testing --shipped-in 276.2 (--names names.txt | --no-names) [--dry-run] keyring-wallet#791 keyring-bifold#723 ...
@@ -55,7 +57,10 @@ const SET_TEXT = `mutation($p:ID!,$i:ID!,$f:ID!,$t:String!){updateProjectV2ItemF
 export async function run({ refs, status, shippedIn, names, projectId, token, dryRun = false, gql = graphql, log = console.log }) {
   if (!TARGETS.includes(status)) throw new Error(`--status must be one of ${TARGETS.join(', ')}`);
   const fields = (await gql(token, FIELDS, { p: projectId })).node;
-  const target = fields.status.options.find((o) => o.name === status);
+  const target = fields?.status?.options.find((o) => o.name === status);
+  if (!target || (shippedIn && !fields.shippedIn)) {
+    throw new Error(`the board has no "${status}" status${shippedIn ? ' or no "Shipped in" field' : ''}; check ROADMAP_PROJECT_ID`);
+  }
   let skipped = 0;
   // Every card the refs stand for, once each, in the order given.
   const cards = new Map();
@@ -74,8 +79,9 @@ export async function run({ refs, status, shippedIn, names, projectId, token, dr
     if (!item) { log(`${name}: not on the roadmap; left alone`); continue; }
     const now = item.status?.name ?? null;
     const plan = planMove(now, status);
-    if (plan !== 'move') { log(`${name}: ${plan}`); continue; }
     const writeShippedIn = shippedIn && !item.shippedIn?.text;
+    // Past the target is left alone: a Shipped card named again by a later release shipped earlier than this one.
+    if (plan !== 'move' && !(now === status && writeShippedIn)) { log(`${name}: ${plan}`); continue; }
     const scan = scanItem({ title: issue.title, ...(writeShippedIn ? { body: shippedIn } : {}) }, { names });
     if (scan.verdict !== 'clean') {
       log(`${name}: the scan says ${scan.verdict} (${scan.findings.map((f) => `${f.rule} in ${f.field}`).join(', ')}); left alone`);
@@ -83,10 +89,10 @@ export async function run({ refs, status, shippedIn, names, projectId, token, dr
       continue;
     }
     if (!dryRun) {
-      await gql(token, SET_STATUS, { p: projectId, i: item.id, f: fields.status.id, o: target.id });
+      if (plan === 'move') await gql(token, SET_STATUS, { p: projectId, i: item.id, f: fields.status.id, o: target.id });
       if (writeShippedIn) await gql(token, SET_TEXT, { p: projectId, i: item.id, f: fields.shippedIn.id, t: shippedIn });
     }
-    log(`${name}: ${now} -> ${status}${writeShippedIn ? `, Shipped in ${shippedIn}` : ''}${dryRun ? ' (dry run)' : ''}`);
+    log(`${name}: ${plan === 'move' ? `${now} -> ${status}` : `already ${now}`}${writeShippedIn ? `, Shipped in ${shippedIn}` : ''}${dryRun ? ' (dry run)' : ''}`);
   }
   return { skipped };
 }

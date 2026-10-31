@@ -76,6 +76,42 @@ test('a card moving without a Shipped in yet gets one; one that has it keeps it'
   assert.deepEqual(gh.writes, [{ item: 'item:acme/app#1', field: 'fStatus', value: 'o4' }]);
 });
 
+test('a card already at Testing with no Shipped in gets one, without a status write', async () => {
+  const gh = github({ cards: { 'acme/app#1': { title: 'Chat', status: 'Testing' } } });
+  const r = await go(gh, ['acme/app#1'], { shippedIn: '276.2' });
+  assert.deepEqual(gh.writes, [{ item: 'item:acme/app#1', field: 'fShipped', value: '276.2' }]);
+  assert.deepEqual(r.lines, ['acme/app#1: already Testing, Shipped in 276.2']);
+});
+
+test('a dry run of that backfill writes nothing, and a run with no release number leaves the card alone', async () => {
+  const gh = github({ cards: { 'acme/app#1': { title: 'Chat', status: 'Testing' } } });
+  const dry = await go(gh, ['acme/app#1'], { shippedIn: '276.2', dryRun: true });
+  assert.deepEqual(dry.lines, ['acme/app#1: already Testing, Shipped in 276.2 (dry run)']);
+  const none = await go(gh, ['acme/app#1']);
+  assert.deepEqual(none.lines, ['acme/app#1: already Testing; left alone']);
+  assert.deepEqual(gh.writes, []);
+});
+
+test('a Shipped or Not planned card with no Shipped in is left alone', async () => {
+  const gh = github({ cards: { 'acme/app#1': { title: 'Chat', status: 'Shipped' }, 'acme/app#2': { title: 'Photos', status: 'Not planned' } } });
+  await go(gh, ['acme/app#1', 'acme/app#2'], { shippedIn: '276.2' });
+  assert.deepEqual(gh.writes, []);
+});
+
+test('the backfill goes through the scan too', async () => {
+  const gh = github({ cards: { 'acme/app#1': { title: 'Chat', status: 'Testing' } } });
+  const r = await go(gh, ['acme/app#1'], { shippedIn: 'IN-90001' });
+  assert.deepEqual(gh.writes, []);
+  assert.equal(r.skipped, 1);
+});
+
+test('a board without the status or the Shipped in field stops with a sentence, not a TypeError', async () => {
+  const board = (node) => ({ gql: async () => ({ node }) });
+  await assert.rejects(go(board(null), ['acme/app#1']), /check ROADMAP_PROJECT_ID/);
+  await assert.rejects(go(board({ status: { id: 'f', options: [] } }), ['acme/app#1']), /no "Testing" status/);
+  await assert.rejects(go(board({ status: { id: 'f', options: OPTIONS }, shippedIn: null }), ['acme/app#1'], { shippedIn: '276.2' }), /no "Shipped in" field/);
+});
+
 test('a card that fails the scan is left alone and the run reports it', async () => {
   const gh = github({ cards: { 'acme/app#1': { title: 'From Quentin Marsh', status: 'Planned' }, 'acme/app#2': { title: 'Photos in chat', status: 'Planned' } } });
   const r = await go(gh, ['acme/app#1', 'acme/app#2'], { shippedIn: '276.2' });
