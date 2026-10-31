@@ -38,6 +38,8 @@ import { checkVettingRequirements } from '../module/vettingShape'
 // eslint-disable-next-line import/order
 import { CREDENTIAL_EXCHANGE_ISSUE, classifyCredential, receiveIssue } from '../module/vtiInbox'
 // eslint-disable-next-line import/order
+import { grantState } from '../module/vtiGrantState'
+// eslint-disable-next-line import/order
 import { VtiApplicant, cardDigestMultibase, type VettingApplication, type VtiVettingStore } from '../module/vtiVetting'
 
 type Json = Record<string, unknown>
@@ -45,6 +47,35 @@ type Json = Record<string, unknown>
 const oldStatement = signed.statement as Json
 const newStatement = minted.boundVettingStatement as Json
 const card = signed.card as Json
+
+/**
+ * Pins the clock the code reads, `new Date()` as well as `Date.now()`: a
+ * `jest.spyOn(Date, 'now')` leaves the Date constructor on the wall clock,
+ * which vtiGrantState reads, so boundVettingStatement's validUntil
+ * (2026-10-31) expired under these tests at midnight. Only Date is faked; the
+ * suites' timers stay real.
+ */
+function pinClock(at: number) {
+  jest.useFakeTimers({
+    now: at,
+    doNotFake: [
+      'setTimeout',
+      'clearTimeout',
+      'setInterval',
+      'clearInterval',
+      'setImmediate',
+      'clearImmediate',
+      'nextTick',
+      'queueMicrotask',
+      'hrtime',
+      'performance',
+    ],
+  })
+}
+function unpinClock() {
+  jest.useRealTimers()
+  jest.restoreAllMocks()
+}
 
 const agent = {
   config: { logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() } },
@@ -185,8 +216,13 @@ describe('the shape check', () => {
 })
 
 describe('a vetted/1 statement through the applicant’s full check', () => {
-  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-02T00:00:00Z')))
-  afterEach(() => jest.restoreAllMocks())
+  beforeEach(() => pinClock(Date.parse('2026-10-02T00:00:00Z')))
+  afterEach(unpinClock)
+
+  it('reads the pinned day through new Date() as well as Date.now()', () => {
+    expect(new Date().toISOString()).toBe('2026-10-02T00:00:00.000Z')
+    expect(Date.now()).toBe(Date.parse('2026-10-02T00:00:00Z'))
+  })
 
   it('is kept and counted, as an endorsement-shape one is', async () => {
     const w = world(minted.parties.vetter)
@@ -265,8 +301,8 @@ describe('a community’s requirements naming the vetted/1 predicate', () => {
 })
 
 describe('an endorsement-shape statement, which may cite no task digest', () => {
-  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z')))
-  afterEach(() => jest.restoreAllMocks())
+  beforeEach(() => pinClock(Date.parse('2026-09-25T00:05:00Z')))
+  afterEach(unpinClock)
 
   it('is read on its taskContext alone, as before, even when the session document was kept', async () => {
     expect(oldStatement.taskDigestMultibase).toBeUndefined()
@@ -277,10 +313,10 @@ describe('an endorsement-shape statement, which may cite no task digest', () => 
 })
 
 describe('after LEGACY_DTG_SHAPE_UNTIL', () => {
-  afterEach(() => jest.restoreAllMocks())
+  afterEach(unpinClock)
 
   it('an endorsement-shape statement is refused with its own reason, legacyShape', async () => {
-    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(`${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z`) + 3600 * 1000)
+    pinClock(Date.parse(`${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z`) + 3600 * 1000)
     const w = world(signed.vetterDid)
     await w.deliver(oldStatement)
     expect(w.held).toHaveLength(0)
@@ -288,9 +324,22 @@ describe('after LEGACY_DTG_SHAPE_UNTIL', () => {
   })
 
   it('the same statement the day before is still read', async () => {
-    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z'))
+    pinClock(Date.parse('2026-09-25T00:05:00Z'))
     const w = world(signed.vetterDid)
     await w.deliver(oldStatement)
     expect(w.request()).toMatchObject({ status: 'attested' })
+  })
+})
+
+describe('a held card’s window', () => {
+  const held = { credential: newStatement, communityDid: signed.community } as unknown as VtiHeldCredential
+
+  it('is judged at the now it is given, not on the wall clock', async () => {
+    await expect(
+      grantState(agent as never, held, { now: new Date('2026-10-02T00:00:00Z'), local: true })
+    ).resolves.toMatchObject({ state: 'active' })
+    await expect(
+      grantState(agent as never, held, { now: new Date('2026-11-01T00:00:00Z'), local: true })
+    ).resolves.toMatchObject({ state: 'expired', validUntil: newStatement.validUntil })
   })
 })
