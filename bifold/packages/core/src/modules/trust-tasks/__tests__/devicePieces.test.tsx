@@ -105,10 +105,20 @@ describe('a device row', () => {
 })
 
 describe('also open as you', () => {
-  const notice = (names: string[], onOpen = jest.fn(), onDismiss = jest.fn()) =>
+  const notice = (
+    names: string[],
+    open = false,
+    handlers: Partial<Record<'onToggle' | 'onOpen' | 'onDismiss', jest.Mock>> = {}
+  ) =>
     render(
       <BasicAppContext>
-        <SiblingNotice names={names} onOpen={onOpen} onDismiss={onDismiss} />
+        <SiblingNotice
+          names={names}
+          open={open}
+          onToggle={handlers.onToggle ?? jest.fn()}
+          onOpen={handlers.onOpen ?? jest.fn()}
+          onDismiss={handlers.onDismiss ?? jest.fn()}
+        />
       </BasicAppContext>
     )
 
@@ -116,11 +126,20 @@ describe('also open as you', () => {
     expect(notice([]).queryByTestId(id('SiblingNotice'))).toBeNull()
   })
 
-  test('one other device, by name, with a way to My devices and OK', () => {
+  test('one other device: one line by name, which the person opens', () => {
+    const onToggle = jest.fn()
+    const tree = notice(['iPhone · added 2 Aug'], false, { onToggle })
+    expect(tree.getByTestId(id('SiblingNotice'))).toHaveTextContent(/Devices\.SiblingStripOne/)
+    expect(tree.queryByTestId(id('SiblingNoticeOpen'))).toBeNull()
+    fireEvent.press(tree.getByTestId(id('SiblingNotice')))
+    expect(onToggle).toHaveBeenCalledTimes(1)
+  })
+
+  test('open, it says why, with a way to My devices and OK', () => {
     const onOpen = jest.fn()
     const onDismiss = jest.fn()
-    const tree = notice(['iPhone · added 2 Aug'], onOpen, onDismiss)
-    expect(tree.getByTestId(id('SiblingNotice'))).toHaveTextContent(/Devices\.SiblingOne/)
+    const tree = notice(['iPhone · added 2 Aug'], true, { onOpen, onDismiss })
+    expect(tree.getByText('Devices.SiblingStripWhy')).toBeTruthy()
     fireEvent.press(tree.getByTestId(id('SiblingNoticeOpen')))
     fireEvent.press(tree.getByTestId(id('SiblingNoticeDismiss')))
     expect(onOpen).toHaveBeenCalledTimes(1)
@@ -128,7 +147,9 @@ describe('also open as you', () => {
   })
 
   test('several are counted', () => {
-    expect(notice(['A', 'B']).getByTestId(id('SiblingNotice'))).toHaveTextContent(/Devices\.SiblingMany/)
+    const tree = notice(['A', 'B'])
+    expect(tree.getByTestId(id('SiblingNotice'))).toHaveTextContent(/Devices\.SiblingStripMany/)
+    expect(tree.getByTestId(id('SiblingNotice'))).toHaveProp('accessibilityLabel', 'Devices.SiblingMany')
   })
 })
 

@@ -337,7 +337,7 @@ const TabStack: React.FC = () => {
     >
       {GradientBg && <GradientBg style={StyleSheet.absoluteFillObject} />}
       <VtaOfflineBanner />
-      {/* "Also open as you": the presence loop above emits it (#10, part F). */}
+      {/* "Also open as you": the presence loop above emits it (#10, part F); each header shows the strip. */}
       <SiblingNoticeHost />
       {/* The agent asks to be sure it is the person before a task (a step-up, #200). */}
       <StepUpAskHost />
