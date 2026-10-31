@@ -41,6 +41,18 @@ jest.mock('../module/vtiAgent', () => ({
     did: 'did:webvh:QmPersonaScid:vta.example:prsn-wq42',
     ask: (...a: unknown[]) => mockAsk(...a),
     fetchManifest: (...a: unknown[]) => mockFetchManifest(...a),
+    // The rounds sign the session in as the persona and run inside the hold.
+    holding: (_agent: unknown, _mediator: unknown, persona: { did: string }, fn: (did: string) => unknown) =>
+      fn(persona.did),
+  },
+}))
+// This phone's persona for the community: the DID the session above is signed in as.
+jest.mock('../module/VtiIdentityStore', () => ({
+  GenericRecordsIdentityStore: class {
+    getPersona = async (communityDid: string) => ({
+      did: 'did:webvh:QmPersonaScid:vta.example:prsn-wq42',
+      communityDid,
+    })
   },
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -336,9 +348,9 @@ describe('the member DID the agent binds is the DID that signs to the community'
   })
 
   it('the standing a screen reads says stuck, from the same comparison', () => {
-    expect(boundElsewhere({ memberDid: MANAGER })).toBe(true)
-    expect(boundElsewhere({ memberDid: SIGNER })).toBe(false)
-    expect(boundElsewhere(undefined)).toBe(false)
+    expect(boundElsewhere({ memberDid: MANAGER }, { did: SIGNER })).toBe(true)
+    expect(boundElsewhere({ memberDid: SIGNER }, { did: SIGNER })).toBe(false)
+    expect(boundElsewhere(undefined, { did: SIGNER })).toBe(false)
   })
 })
 
