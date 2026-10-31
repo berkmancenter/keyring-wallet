@@ -30,7 +30,7 @@ name: Test builds
 
 on:
   push:
-    # TEMPORARY for validating this workflow; removed before merge.
+    # Keep this: gate-smoke.yml, gate-ci.yml and gate.sh watch --main all take "the newest green push build of main".
     branches: [main]
     paths-ignore:
       - "docs/**"
@@ -38,6 +38,7 @@ on:
       - "e2e/**"
       - "tsp-reference/**"
       - "scripts/openvtc/**"
+      - "scripts/roadmap/**"
   # A pull request that changes what the native compilers see gets both builds
   # before it merges. No required check compiles Objective-C, Swift or Kotlin,
   # and #562 reached main with an AppDelegate.mm that didn't compile (#568).
@@ -215,7 +216,7 @@ jobs:
           yarn run ios:setup
 
       - name: Save pod dependencies (main only)
-        # By ref, not event: most runs here are branch dispatches, and a save there lands on that branch alone.
+        # By ref, not event: many runs here are branch dispatches, and a save there lands on that branch alone.
         if: github.ref == 'refs/heads/main' && steps.pods.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
