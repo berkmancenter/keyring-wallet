@@ -67,8 +67,8 @@ export async function loadPetnames(agent: Agent, communityDid: string): Promise<
 }
 
 /**
- * Keep `name` as your name for this member, in place of any you gave before. A blank name changes nothing: removing
- * a name you gave is not offered yet (it comes with a store build), so the screens never let one be saved blank.
+ * Keep `name` as your name for this member, in place of any you gave before. A blank name changes nothing, so a name
+ * is only ever removed by asking to remove it (removePetname), never by an empty field.
  */
 export async function savePetname(agent: Agent, communityDid: string, memberDid: string, name: string): Promise<void> {
   const id = petnameId(communityDid, memberDid)
@@ -86,6 +86,16 @@ export async function savePetname(agent: Agent, communityDid: string, memberDid:
       content: { name: tidy },
       tags: { type: PETNAME_TYPE, communityDid, memberDid },
     })
+  })
+  listeners.get(communityDid)?.forEach((onChange) => onChange())
+}
+
+/** Remove your name for this member; none to remove is not a failure. */
+export async function removePetname(agent: Agent, communityDid: string, memberDid: string): Promise<void> {
+  const id = petnameId(communityDid, memberDid)
+  await inTurn(id, async () => {
+    const existing = await agent.genericRecords.findById(id)
+    if (existing) await agent.genericRecords.delete(existing)
   })
   listeners.get(communityDid)?.forEach((onChange) => onChange())
 }
