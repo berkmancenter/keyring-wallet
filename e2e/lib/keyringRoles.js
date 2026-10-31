@@ -936,6 +936,9 @@ export async function ticketIssued(d, before = "") {
 export async function readTicketLink(d) {
   // The toggle sits under the QR, below the fold. Bring it up by where it is, not by isDisplayed: on the
   // 236 rerun iOS kept the toggle "not displayed" through four swipes and the tap was never made.
+  // On Android the page source stops at the fold, so the toggle under the QR reads as absent until it is scrolled to, and a
+  // ticket the desk had cut looked like a build with no toggle (1031, Android vetter: code on screen, link "not found").
+  await scrollToTestId(d, "VettingTicketLinkDetailsToggle", 6, { both: false }).catch(() => undefined);
   if (await byTestId(d, "VettingTicketLinkDetailsToggle").isExisting().catch(() => false)) {
     const clear = await liftAboveTabBar(d, "VettingTicketLinkDetailsToggle", 6, { log: true });
     if (!clear) console.log("[e2e] the ticket's Details toggle did not rise above the tab bar; tapping it where it is");
@@ -958,6 +961,8 @@ export async function readTicketLink(d) {
       console.log(`[e2e] ticket Details tap ${i + 1}: label "${(await textOf(d, "VettingTicketLinkDetailsToggle").catch(() => "?")).trim()}"`);
       await screenshot(d, `ticket-details-tap-${i + 1}`).catch(() => undefined);
     }
+  } else {
+    console.log("[e2e] no Details toggle after the sweep: treating this as a build that shows the link directly");
   }
   // The link opens under the toggle: look down first, and only then back up.
   await scrollToTestId(d, "VettingTicketLink", 4, { both: false }).catch(() => scrollToTestId(d, "VettingTicketLink", 4, { direction: "up", both: false })).catch(() => undefined);
