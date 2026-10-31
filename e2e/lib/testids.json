@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "07419c4a458c41c54e2d2de2e017434d27ea6c0c",
+  "generatedFrom": "4887d6386fb582e720262e27b4ddbc2a74b3f4ff",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -1142,7 +1142,9 @@
       "src/modules/history/ui/HistorySettings.tsx",
       "src/screens/RenameContact.tsx"
     ],
+    "ScanCameraNotStarting": ["src/components/misc/ScanCamera.tsx"],
     "ScanCameraTapArea": ["src/components/misc/ScanCamera.tsx"],
+    "ScanCameraWaiting": ["src/components/misc/ScanCamera.tsx"],
     "ScanHelp": ["src/components/misc/QRScanner.tsx"],
     "ScanMyQR": ["src/screens/Settings.tsx"],
     "ScanNow": ["src/components/misc/QRScanner.tsx"],
@@ -1186,6 +1188,7 @@
     "SignInBrowser": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInBusy": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInCancel": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInCheckAndJoin": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInChecking": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInChoose": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInClaiming": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
@@ -1199,7 +1202,9 @@
     "SignInIdentifiedAs": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInIdentity": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInIdentityAgent": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInJoinUnchecked": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInLocation": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInNotJoinable": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInNotMember": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInNumber": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInNumberContinue": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
@@ -1495,6 +1500,7 @@
     "AgentSwitcherUnlink_": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
     "ApproveConsentButton_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "AskMeSwitch_": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
+    "AskMeTurnOnAgain_": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AutoLockTime": ["src/screens/Settings.tsx"],
     "DeleteProfile-": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "DenyConsentButton_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
