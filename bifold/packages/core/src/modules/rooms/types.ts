@@ -434,6 +434,11 @@ export interface RoomsService {
   curate(roomId: string, key: string, action: 'pin' | 'unpin' | 'retract'): Promise<void>
 
   listOffers(communityDid?: string): Promise<RoomOffer[]>
+  /**
+   * Called when a community a listing had to skip for now (another identity's step kept the community session) can
+   * be read again; returns the unsubscribe. Absent where nothing is skipped that way (the sample).
+   */
+  onReadable?(listener: () => void): () => void
   previewOffer(offerId: string): Promise<OfferPreview>
   acceptOffer(token: string): Promise<{ roomId: string }>
   /** Hides an offer on this phone only. Upstream has no decline: the community is not told. */

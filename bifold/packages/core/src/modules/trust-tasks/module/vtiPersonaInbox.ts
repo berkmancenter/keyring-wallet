@@ -163,6 +163,13 @@ export async function keepForPersona(
 export const PERSONA_INBOX_STUCK_MS = 60_000
 
 /** Start collecting; returns the function that stops it. */
+/**
+ * vtiAgent's `VtiSessionHeld`: a look's background sign-in refused because a step keeps the session as another
+ * identity. Read by name, so a suite that mocks vtiAgent need not carry the class; the literal must match the one its
+ * constructor sets (pinned in sharedSessionHolds.test.ts), which a minified build keeps.
+ */
+const isSessionKept = (e: unknown): boolean => e instanceof Error && e.name === 'VtiSessionHeld'
+
 export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): () => void {
   // Before the first look signs in: a persona's key copy is borrowed into
   // memory and gone after an install or restart, and only the fetcher can get
@@ -284,11 +291,13 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
         return said('waiting for a sign-in already running')
       }
       said('signing in as the persona')
+      // A look is a poll: it never takes the session from a step holding it as another identity (VtiSessionHeld).
       const signIn = (who: VtiPersona) =>
-        vtiAgent.connect(agent, options.mediatorDid, { persona: who, peerRevisionStore })
+        vtiAgent.connect(agent, options.mediatorDid, { persona: who, peerRevisionStore, background: true })
       try {
         await signIn(persona)
       } catch (e) {
+        if (isSessionKept(e)) return said('listening only: another identity keeps the session')
         if (!isMissingKeyCopy(e)) throw e
         // The persona's borrowed key is not in memory (an install, a restart,
         // a lock). Borrow it again through its agent and sign in once more; if
@@ -304,6 +313,8 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
       setAgentState(persona, undefined)
       said('signed in')
     } catch (e) {
+      // Kept by a step after the key was borrowed again: not a failure.
+      if (isSessionKept(e)) return said('listening only: another identity keeps the session')
       if (e instanceof PersonaAgentUnreachable && persona) setAgentState(persona, e)
       said(`sign-in failed: ${e instanceof Error ? e.message : String(e)}`)
       options.onError?.(e)

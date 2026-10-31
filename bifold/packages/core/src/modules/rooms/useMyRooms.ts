@@ -41,6 +41,10 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
   // the last read's asks its services afresh: the service keeps one agent's answer (A, then B, then A read B's).
   const agentKey = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.agentAddress())
   const lastAgent = useRef(agentKey)
+  // A community skipped because a step kept the community session is read again once it is free: not a refresh (no
+  // pull spinner, the services not asked again), just the same read (onReadable).
+  const [readable, setReadable] = useState(0)
+  useEffect(() => service?.onReadable?.(() => setReadable((n) => n + 1)), [service])
 
   useEffect(() => {
     if (!service) return
@@ -74,7 +78,7 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
     return () => {
       live = false
     }
-  }, [service, communityDid, generation, agentKey])
+  }, [service, communityDid, generation, agentKey, readable])
 
   return { ...state, reload }
 }

@@ -484,3 +484,40 @@ describe("the member's rooms, listed by several surfaces at once", () => {
     expect(listAsks(communityTask)).toHaveLength(2)
   })
 })
+
+// 10-31: a step kept the community session as an identity of none of the listed communities (a join under way). That
+// is not every community failing: the rooms show from custody for now, and are read again when the session is free.
+describe('every community kept from for now', () => {
+  const kept = () => Object.assign(new Error('vtiAgent: the session is kept'), { name: 'VtiSessionHeld' })
+
+  it('lists the rooms custody holds instead of failing, and is told when to read again', async () => {
+    let free!: () => void
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw kept()
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>((resolve) => (free = resolve))),
+    })
+    const service = new AgentRoomsService(b, undefined, { sleep: async () => undefined })
+    const readable = jest.fn()
+    service.onReadable(readable)
+    expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    free()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(readable).toHaveBeenCalledTimes(1)
+  })
+
+  it('still fails when a community that could not be reached is among them', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string) => {
+        throw did === other.did ? new Error('community unreachable') : kept()
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
+  })
+})

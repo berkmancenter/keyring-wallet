@@ -99,3 +99,40 @@ describe('rooms read again when the agent changes', () => {
     expect(rooms.capabilities).toHaveBeenCalledTimes(1)
   })
 })
+
+// 10-31: a community skipped because a step kept the community session is read again once it is free — the same read,
+// not a refresh: no pull spinner, and the agent's services are not asked again.
+describe('rooms read again when a skipped community can be read', () => {
+  const readableService = () => {
+    const s = service()
+    const listeners = new Set<() => void>()
+    const onReadable = jest.fn((listener: () => void) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    })
+    Object.assign(s, { onReadable })
+    return { s, listeners, readable: () => act(() => listeners.forEach((listener) => listener())) }
+  }
+
+  test('reads again, without a refresh', async () => {
+    const { s, readable } = readableService()
+    const { result } = renderHook(() => useMyRooms(s, 'did:webvh:community:b'))
+    await waitFor(() => expect(s.listOffers).toHaveBeenCalledTimes(1))
+    await readable()
+    await waitFor(() => expect(s.listOffers).toHaveBeenCalledTimes(2))
+    expect(s.listOffers).toHaveBeenLastCalledWith('did:webvh:community:b')
+    expect(s.capabilities.mock.calls.map(([options]) => options?.refresh)).toEqual([false, false])
+    expect(result.current.refreshing).toBe(false)
+    expect(result.current.failed).toBe(false)
+  })
+
+  test('stops listening when the screen goes', async () => {
+    const { s, listeners } = readableService()
+    const { unmount } = renderHook(() => useMyRooms(s))
+    await waitFor(() => expect(listeners.size).toBe(1))
+    unmount()
+    expect(listeners.size).toBe(0)
+  })
+})

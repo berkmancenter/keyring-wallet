@@ -125,6 +125,13 @@ export interface RoomsBackend {
   hideOffer(offerId: string): Promise<void>
   /** A step that went wrong without failing the operation, for the log. */
   warn(message: string): void
+  /**
+   * True for a community task refused because a step keeps this phone's community session as another identity
+   * (vtiAgent `VtiSessionHeld`): not now, rather than unreachable. Absent: no refusal is.
+   */
+  sessionKept?(error: unknown): boolean
+  /** Resolves once a task to `communityDid` would no longer be refused that way (vtiAgent `whenFree`). */
+  sessionFree?(communityDid: string): Promise<void>
 }
 
 /** What the service needs besides the backend. Tests replace the clock and the wait between retries. */
@@ -174,6 +181,12 @@ const MAX_MEMBERSHIP_PAGES = 10
  * one lost while the session reopened after an unlock left a room on "Couldn't reach your agent" (#772, 10-30).
  */
 export const SERVED_UNKNOWN_RETRY_MS = 10_000
+
+/**
+ * The least time between two "readable again" calls (`onReadable`): a vetting step's asks come in bursts, and a read
+ * refused again the moment the session was free waits this long before the next.
+ */
+export const KEPT_RETRY_FLOOR_MS = 10_000
 
 /**
  * How often an accept the community answers `admissionPending` is sent again, identically, before the refusal
@@ -302,6 +315,11 @@ export class AgentRoomsService implements RoomsService {
   private nextToken = 1
   private readonly now: () => number
   private readonly sleep: (ms: number) => Promise<void>
+  /** Told when a community skipped because a step kept the session can be read again (`onReadable`). */
+  private readonly readable = new Set<() => void>()
+  /** The communities skipped that way and waited on, one wait each; and when the last "readable again" was said. */
+  private readonly keptWaits = new Set<string>()
+  private readableAt = -Infinity
 
   public constructor(
     private readonly backend: RoomsBackend,
@@ -352,6 +370,45 @@ export class AgentRoomsService implements RoomsService {
    * community is sent its membership list again for each, as a read (six answers at once in a tester's run, 10-30).
    * A listing that starts after one settles asks again, and so does one after an accept or a leave.
    */
+  /**
+   * `listener` is called when a community a listing skipped — because a step kept this phone's community session as
+   * another identity — can be read again, so a screen can read again without being asked. Returns the unsubscribe.
+   */
+  public onReadable(listener: () => void): () => void {
+    this.readable.add(listener)
+    return () => {
+      this.readable.delete(listener)
+    }
+  }
+
+  /**
+   * Whether `error` is a step keeping the session (not now, not unreachable). When it is, the community is waited on
+   * — once, however many listings skipped it — and `onReadable` is told when it is free, no sooner than
+   * `KEPT_RETRY_FLOOR_MS` after it was last told.
+   */
+  private sessionKept(community: RoomsCommunity, error: unknown): boolean {
+    if (!this.backend.sessionKept?.(error)) return false
+    const free = this.backend.sessionFree
+    if (free && !this.keptWaits.has(community.did)) {
+      this.keptWaits.add(community.did)
+      void (async () => {
+        try {
+          await free(community.did)
+          const wait = this.readableAt + KEPT_RETRY_FLOOR_MS - this.now()
+          if (wait > 0) await this.sleep(wait)
+        } catch {
+          // Nothing to say: the next listing asks afresh.
+          this.keptWaits.delete(community.did)
+          return
+        }
+        this.keptWaits.delete(community.did)
+        this.readableAt = this.now()
+        for (const listener of [...this.readable]) listener()
+      })()
+    }
+    return true
+  }
+
   public listMyRooms(): Promise<RoomSummary[]> {
     if (this.roomsInFlight) return this.roomsInFlight
     const listing = this.readMyRooms().finally(() => {
@@ -372,20 +429,25 @@ export class AgentRoomsService implements RoomsService {
     const communities = await this.backend.communities()
     // A community that cannot answer loses only its own details: its rooms still show from custody,
     // as `detailsNotLoaded`, and the other communities' rooms are unaffected. Why it did not answer is logged.
+    // One skipped because a step keeps the session as another identity is not unreachable: it is read again when the
+    // session is free (`onReadable`), and meanwhile its rooms show from custody too.
     const unreachable: string[] = []
+    let kept = 0
     const memberships = await Promise.all(
       communities.map(async (community) => ({
         community,
         records: await this.membershipsOf(community).catch((e: unknown): RoomMembershipRecord[] => {
           this.backend.warn(`rooms: ${community.did} did not list this member's rooms: ${message(e)}`)
-          unreachable.push(community.did)
+          if (this.sessionKept(community, e)) kept++
+          else unreachable.push(community.did)
           return []
         }),
       }))
     )
     // When none answered, custody alone is not the member's rooms: an open room holds no keys and would be
-    // missing, and every other room would show by its id. The read fails instead, and the screen says why.
-    if (communities.length > 0 && unreachable.length === communities.length)
+    // missing, and every other room would show by its id. The read fails instead, and the screen says why — unless
+    // only a kept session stopped them: that is not a failure, and the read again follows.
+    if (communities.length > 0 && unreachable.length > 0 && unreachable.length + kept === communities.length)
       throw new RoomsUnavailable(
         'listMyRooms',
         'communityUnreachable',
@@ -730,7 +792,8 @@ export class AgentRoomsService implements RoomsService {
       try {
         listing = await this.offersOf(community)
       } catch (e) {
-        if (communityDid) throw e
+        // A kept session is not the community failing, even the one asked for: its offers come with the read again.
+        if (!this.sessionKept(community, e) && communityDid) throw e
         this.backend.warn(`rooms: ${community.did} did not list its offers: ${message(e)}`)
         continue
       }

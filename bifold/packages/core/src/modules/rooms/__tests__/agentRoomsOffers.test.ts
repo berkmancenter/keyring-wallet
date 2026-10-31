@@ -1,4 +1,10 @@
-import { AgentRoomsService, offerIdOf, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
+import {
+  AgentRoomsService,
+  KEPT_RETRY_FLOOR_MS,
+  offerIdOf,
+  type RoomsBackend,
+  type RoomsCommunity,
+} from '../real/agentRoomsService'
 import { OFFERS_LIST_TYPES, ROOMS_TASK } from '../real/wire'
 import { PREVIEW_TOKEN_TTL_MS, RoomsPreviewExpired, RoomsRefused, RoomsUnavailable } from '../types'
 
@@ -697,5 +703,79 @@ describe('the shared key-list read across an accept', () => {
     release()
     expect(await accepting).toEqual({ roomId: SEALED_ROOM })
     await listing
+  })
+})
+
+// 10-31, a phone in two communities: a vetting step keeps the community session as the other community's persona,
+// and a rooms listing is refused for now (vtiAgent VtiSessionHeld). The community screen asked for its own community's
+// offers, and the refusal failed the whole section ("Couldn't read your rooms"), with nothing to read it again.
+describe('a community the session is kept from for now', () => {
+  const kept = () =>
+    Object.assign(new Error("vtiAgent: the session is kept for another of this phone's identities"), {
+      name: 'VtiSessionHeld',
+    })
+  const keptSetup = () => {
+    const s = setup()
+    let free!: () => void
+    const sessionFree = jest.fn(() => new Promise<void>((resolve) => (free = resolve)))
+    s.b.sessionKept = (e) => e instanceof Error && e.name === 'VtiSessionHeld'
+    s.b.sessionFree = sessionFree
+    s.communityTask.mockImplementation(async () => {
+      throw kept()
+    })
+    const readable = jest.fn()
+    s.service.onReadable(readable)
+    return { ...s, sessionFree, readable, free: () => free() }
+  }
+  const settle = () => new Promise((r) => setTimeout(r, 0))
+
+  it("lists the asked community's offers as none for now, and says once when it can be read again", async () => {
+    const s = keptSetup()
+    await expect(s.service.listOffers(COMMUNITY.did)).resolves.toEqual([])
+    // A second listing skipped meanwhile waits on the same wait.
+    await expect(s.service.listOffers(COMMUNITY.did)).resolves.toEqual([])
+    expect(s.sessionFree).toHaveBeenCalledTimes(1)
+    expect(s.sessionFree).toHaveBeenCalledWith(COMMUNITY.did)
+    expect(s.readable).not.toHaveBeenCalled()
+    s.free()
+    await settle()
+    expect(s.readable).toHaveBeenCalledTimes(1)
+  })
+
+  it('still fails the asked community on any other refusal', async () => {
+    const s = keptSetup()
+    s.communityTask.mockImplementation(async () => {
+      throw new Error('community unreachable')
+    })
+    await expect(s.service.listOffers(COMMUNITY.did)).rejects.toThrow('community unreachable')
+    expect(s.sessionFree).not.toHaveBeenCalled()
+  })
+
+  // A step's asks come in bursts: the read again, refused at once, does not come straight back.
+  it('says "readable again" no sooner than the floor after it last said so', async () => {
+    const s = keptSetup()
+    await s.service.listOffers(COMMUNITY.did)
+    s.free()
+    await settle()
+    expect(s.readable).toHaveBeenCalledTimes(1)
+    expect(s.sleeps).toEqual([])
+    await s.service.listOffers(COMMUNITY.did)
+    s.advance(3_000)
+    s.free()
+    await settle()
+    expect(s.sleeps).toEqual([KEPT_RETRY_FLOOR_MS - 3_000])
+    expect(s.readable).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops telling a listener that unsubscribed', async () => {
+    const s = keptSetup()
+    const later = jest.fn()
+    const stop = s.service.onReadable(later)
+    stop()
+    await s.service.listOffers(COMMUNITY.did)
+    s.free()
+    await settle()
+    expect(s.readable).toHaveBeenCalledTimes(1)
+    expect(later).not.toHaveBeenCalled()
   })
 })
