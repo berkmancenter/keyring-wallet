@@ -1359,6 +1359,7 @@ export class VtiVetterDesk {
       this.agent,
       this.persona,
       to,
+      // version-pinned: 0.5 is all trust-tasks-rs models (TASK_ERROR_TYPE); Keyring reads 0.6 but does not send it
       TASK_ERROR_TYPE,
       {
         code,
@@ -1372,6 +1373,7 @@ export class VtiVetterDesk {
       },
       String(body.threadId ?? body.id ?? '')
     )
+    // version-pinned: 0.5 is all trust-tasks-rs models (TASK_ERROR_TYPE); Keyring reads 0.6 but does not send it
     await vtiAgent.send(to, TASK_ERROR_TYPE, error, { thid: String(m.id ?? '') })
   }
 
