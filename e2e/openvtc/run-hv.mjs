@@ -67,7 +67,6 @@ const { values: a } = parseArgs({
 });
 for (const k of ['udid', 'community-did', 'vtc-base', 'admin-credential']) if (!a[k]) throw new Error(`--${k} is required`);
 if (!['tui', 'keyring'].includes(a.vetter)) throw new Error(`--vetter is tui or keyring, not ${a.vetter}`);
-process.env.E2E_VETTER_COMMUNITY_DID = a['community-did'];
 if (a.vetter === 'keyring') for (const k of ['vetter-udid', 'vetter-did']) if (!a[k]) throw new Error(`--${k} is required with --vetter keyring`);
 
 const row = (name, status, detail) => console.log(`ROW ${name} ${status} — ${String(detail).replace(/\s+/g, ' ').slice(0, 300)}`);
@@ -144,7 +143,7 @@ try {
     vet = await openDevice({ platform: vetDev.platform, udid: vetDev.udid, deviceName: a['vetter-device-name'], wdaPort: a['vetter-wda-port'], mjpegPort: a['vetter-mjpeg-port'] });
     stopKeep.push(keepAlive(vet));
     await unlockToHome(vet);
-    await vetterRole.openDesk(vet);
+    await vetterRole.openDesk(vet, { community: { did: a['community-did'] } });
     ticketUri = (await vetterRole.issueTicket(vet)).value;
   } else {
     const tuiRoles = await import('./tuiRoles.js');
