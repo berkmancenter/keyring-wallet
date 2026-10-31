@@ -430,8 +430,10 @@ export class AgentRoomsService implements RoomsService {
     // A community that cannot answer loses only its own details: its rooms still show from custody,
     // as `detailsNotLoaded`, and the other communities' rooms are unaffected. Why it did not answer is logged.
     // One skipped because a step keeps the session as another identity is not unreachable: it is read again when the
-    // session is free (`onReadable`), and meanwhile its rooms show from custody too.
+    // session is free (`onReadable`), and meanwhile its rooms show from custody too. One that answers it has no such
+    // task was reached, and is too old for rooms; `unsupportedVersion` is not read so, as Keyring may be the one behind.
     const unreachable: string[] = []
+    const tooOld: string[] = []
     let kept = 0
     const memberships = await Promise.all(
       communities.map(async (community) => ({
@@ -439,6 +441,7 @@ export class AgentRoomsService implements RoomsService {
         records: await this.membershipsOf(community).catch((e: unknown): RoomMembershipRecord[] => {
           this.backend.warn(`rooms: ${community.did} did not list this member's rooms: ${message(e)}`)
           if (this.sessionKept(community, e)) kept++
+          else if (refusalCode(e) === 'unsupportedType') tooOld.push(community.did)
           else unreachable.push(community.did)
           return []
         }),
@@ -447,11 +450,17 @@ export class AgentRoomsService implements RoomsService {
     // When none answered, custody alone is not the member's rooms: an open room holds no keys and would be
     // missing, and every other room would show by its id. The read fails instead, and the screen says why — unless
     // only a kept session stopped them: that is not a failure, and the read again follows.
-    if (communities.length > 0 && unreachable.length > 0 && unreachable.length + kept === communities.length)
+    if (unreachable.length > 0 && unreachable.length + tooOld.length + kept === communities.length)
       throw new RoomsUnavailable(
         'listMyRooms',
         'communityUnreachable',
         `no community answered for this member's rooms (${unreachable.join(', ')})`
+      )
+    if (tooOld.length > 0 && tooOld.length === communities.length)
+      throw new RoomsUnavailable(
+        'listMyRooms',
+        'communityDoesNotServe',
+        `no community serves this member's rooms (${tooOld.join(', ')})`
       )
     const held = await heldAsked
 

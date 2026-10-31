@@ -122,12 +122,15 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
     return (
       <View style={styles.section}>
         <ThemedText testID={testIdWithKey('RoomsReadFailed')}>{roomsReadFailedText(t, myRooms.failure)}</ThemedText>
-        <Button
-          title={t('Rooms.TryAgain')}
-          buttonType={ButtonType.Secondary}
-          onPress={myRooms.reload}
-          testID={testIdWithKey('RoomsTryAgain')}
-        />
+        {/* Trying again doesn't update a community. */}
+        {myRooms.failure?.reason === 'communityDoesNotServe' ? null : (
+          <Button
+            title={t('Rooms.TryAgain')}
+            buttonType={ButtonType.Secondary}
+            onPress={myRooms.reload}
+            testID={testIdWithKey('RoomsTryAgain')}
+          />
+        )}
       </View>
     )
   const reading = whileReading ?? (

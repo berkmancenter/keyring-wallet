@@ -15,6 +15,9 @@ const HOST = 'did:webvh:community:a'
 
 const b64url = (s: string) => Buffer.from(s, 'utf8').toString('base64url')
 
+/** A refusal as both legs throw it (`VtiRefusal`). */
+const refused = (code: string) => Object.assign(new Error(`refused: ${code}`), { name: 'VtiRefusal', code })
+
 function backend(overrides: Partial<RoomsBackend> = {}) {
   const agentTask = jest.fn(async (type: string, payload: Record<string, unknown>): Promise<unknown> => {
     switch (type) {
@@ -171,6 +174,53 @@ describe('AgentRoomsService', () => {
     expect(b.warn).toHaveBeenCalledWith(
       `rooms: ${COMMUNITY.did} did not list this member's rooms: vtiAgent: the persona has no borrowed key-agreement key`
     )
+  })
+
+  // An older community answers, and the answer is that it has no such task (277, on a VTC before rooms): "Couldn't
+  // reach your community" was not what happened.
+  it('says the community is too old for rooms, not unreached, when it answers that it has no such task', async () => {
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw refused('unsupportedType')
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({
+      name: 'RoomsUnavailable',
+      operation: 'listMyRooms',
+      reason: 'communityDoesNotServe',
+    })
+  })
+
+  it('says a community was not reached when one that may come back is among those too old', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string) => {
+        throw did === other.did ? new Error('community unreachable') : refused('unsupportedType')
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
+  })
+
+  it('keeps the other rooms when one community is too old for them', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b, communityTask } = backend({ communities: async () => [COMMUNITY, other] })
+    const answer = communityTask.getMockImplementation()
+    communityTask.mockImplementation(async (did, type, payload) => {
+      if (did === other.did) throw refused('unsupportedType')
+      return answer?.(did, type, payload)
+    })
+    expect((await new AgentRoomsService(b).listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+  })
+
+  // A version the community no longer serves may be Keyring that is behind, so it is not said to be the community's.
+  it('does not call a community too old for a version it refuses', async () => {
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw refused('unsupportedVersion')
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
   })
 
   it('a phone in no community still lists the rooms its agent holds keys for', async () => {
@@ -519,5 +569,18 @@ describe('every community kept from for now', () => {
       sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
     })
     await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
+  })
+
+  it('does not fail on a community too old for rooms while another is only kept: the read again decides', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string) => {
+        throw did === other.did ? refused('unsupportedType') : kept()
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+    })
+    expect((await new AgentRoomsService(b).listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
   })
 })

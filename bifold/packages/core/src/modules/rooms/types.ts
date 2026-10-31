@@ -43,8 +43,8 @@ export type RoomsOperation =
  * - `adminOnly`: only a community's administrators may do it.
  * - `noAgentLinked`: the phone has no agent to ask.
  * - `agentUnknown`: the agent could not be asked what it serves; try again later.
- * - `communityDoesNotServe`: the community's service is too old for it (reserved: community
- *   operations are not yet discovered in advance, so today a call to an old community fails instead).
+ * - `communityDoesNotServe`: the community's service is too old for it. Community operations are not discovered in
+ *   advance, so this comes from a call the community refused as a task it doesn't have.
  * - `detailsNotLoaded`: a room known only from the agent's key custody, without the community's
  *   record of it (rights, host). The operation needs those ("Details not loaded").
  * - `noRight`: this member's rights in the room do not include it ("You can't post here").
