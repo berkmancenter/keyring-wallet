@@ -23,6 +23,8 @@
 
 import type { Agent } from '@credo-ts/core'
 
+import { createKeyLock } from '../../utils/keyLock'
+
 /** Whose draft it is: a chat's, by its connection, or a room's, by its id. */
 export type DraftKind = 'chat' | 'room'
 
@@ -30,17 +32,16 @@ const DRAFT_TYPE: Record<DraftKind, string> = { chat: 'chat-draft', room: 'room-
 const draftId = (kind: DraftKind, id: string): string => `${DRAFT_TYPE[kind]}:${id}`
 
 // One draft's reads and writes in turn: two saves at once would both find no record and both create one.
-const queues = new Map<string, Promise<unknown>>()
-// Every read and write not yet done, so locking can wait for them (flushChatDrafts).
+const lock = createKeyLock()
+// Every draft read and write not yet done, so locking can wait for them (flushChatDrafts). Drafts' own, not the lock's:
+// locking unmounts the composer and shuts the agent down in the same moment, so a composer's last save races the
+// shutdown. Other modules' writes on their own locks (a petname, a directory name) are made from a sheet, with no such
+// race, and locking doesn't wait for them.
 const inFlight = new Set<Promise<unknown>>()
 function inTurn<T>(key: string, task: () => Promise<T>): Promise<T> {
-  const next = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(task)
-  queues.set(key, next)
+  const next = lock(key, task)
   inFlight.add(next)
-  const done = () => {
-    inFlight.delete(next)
-    if (queues.get(key) === next) queues.delete(key)
-  }
+  const done = () => inFlight.delete(next)
   next.then(done, done)
   return next
 }
@@ -49,9 +50,10 @@ function inTurn<T>(key: string, task: () => Promise<T>): Promise<T> {
 export const DRAFT_FLUSH_TIMEOUT_MS = 1000
 
 /**
- * Wait for drafts still being written, chats' and rooms', for at most `timeoutMs`, so that shutting the agent down cannot cut the last
- * one off. Locking unmounts the chat (whose last save starts then) in the same moment it shuts the agent down. Nothing
- * in flight, which is the usual case since a draft is saved as the app leaves the foreground, waits for nothing.
+ * Wait for drafts still being written, chats' and rooms', for at most `timeoutMs`, so that shutting the agent down
+ * cannot cut the last one off. Locking unmounts the chat (whose last save starts then) in the same moment it shuts the
+ * agent down. Nothing in flight, which is the usual case since a draft is saved as the app leaves the foreground, waits
+ * for nothing.
  */
 export async function flushChatDrafts(timeoutMs: number = DRAFT_FLUSH_TIMEOUT_MS): Promise<void> {
   if (inFlight.size === 0) return

@@ -8,6 +8,7 @@ import {
   saveChatDraft,
   saveDraft,
 } from '../draft'
+import { createKeyLock } from '../../../utils/keyLock'
 
 type Kept = { id: string; content: Record<string, unknown>; tags?: Record<string, unknown> }
 
@@ -133,6 +134,20 @@ describe('locking waits for a draft still being written', () => {
 
   it('waits for nothing when nothing is being written', async () => {
     await expect(settled(flushChatDrafts())).resolves.toBe(true)
+  })
+
+  // Drafts' own writes only: a petname or a directory name, written from a sheet on its own lock, has no race with the
+  // shutdown, so locking doesn't wait for it. Hoisting the drafts' in-flight set onto the shared lock would widen this.
+  it('does not wait for work on another lock', async () => {
+    const other = createKeyLock()
+    let release: () => void = () => undefined
+    const held = other('k', () => new Promise<void>((resolve) => (release = resolve)))
+    const shutdown = jest.fn()
+
+    expect(await settled(afterChatDrafts(shutdown))).toBe(true)
+    expect(shutdown).toHaveBeenCalledTimes(1)
+    release()
+    await held
   })
 
   it('waits for a room’s draft too', async () => {
