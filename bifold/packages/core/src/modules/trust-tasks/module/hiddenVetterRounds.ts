@@ -142,20 +142,28 @@ const DEFAULT_TICK_MS = 3 * 86400 * 1000
 export const MAX_DRAWS_PER_ROUND = 12
 
 /**
- * The monthly token label covering `now` and when its tick 0 began, or
- * undefined when no published label covers `now` (the manifest is from last
- * month: the community stopped issuing under it, and asking would only be
- * refused). openvtc's `current_month_label`.
+ * The monthly token label to draw under at `now`, and when its tick 0 began:
+ * the one covering `now`, else the newest published one that has begun, marked
+ * `stale`. A community's labels never advance on their own, and it goes on
+ * serving a live label past its month (vtc-service `drip`, `current_tick`), so
+ * a month nobody rolled to is still drawn. Undefined when no published label
+ * has begun: a month still to come is never asked for, and none is made up.
+ * openvtc's `current_month_label` stops at the month's end; this does not.
  */
-export function monthLabelAt(tokenLabels: string[], now: number): { label: string; start: number } | undefined {
+export function monthLabelAt(
+  tokenLabels: string[],
+  now: number
+): { label: string; start: number; stale?: true } | undefined {
+  let newest: { label: string; start: number; stale: true } | undefined
   for (const label of tokenLabels) {
     const m = /^token\/(\d{4})-(\d{2})$/.exec(label)
     if (!m) continue
     const start = Date.UTC(Number(m[1]), Number(m[2]) - 1, 1)
     const end = Date.UTC(Number(m[1]), Number(m[2]), 1)
     if (start <= now && now < end) return { label, start }
+    if (start <= now && (!newest || start > newest.start)) newest = { label, start, stale: true }
   }
-  return undefined
+  return newest
 }
 
 /**
@@ -408,8 +416,15 @@ export async function drawVetterTokens(
   const parameters = publishedOf(criterion)
   if (!parameters)
     throw Object.assign(new Error('not a hidden criterion'), { code: 'keyring/hidden-vetter:noParameters' })
-  const month = monthLabelAt(parameters.tokenLabels ?? [], nowMs())
-  if (!month) return { drawn: 0 }
+  const now = nowMs()
+  const month = monthLabelAt(parameters.tokenLabels ?? [], now)
+  if (!month || month.stale) {
+    const missing = `token/${new Date(now).toISOString().slice(0, 7)}`
+    agent.config?.logger?.warn?.(
+      `[hidden-vetting] ${missing} is not published: ${month ? `drawing under ${month.label}` : 'no label to draw under'}`
+    )
+  }
+  if (!month) throw Object.assign(new Error('no token label has begun'), { code: PCS_VETTER_ERROR.tokensLabelNotLive })
   const tickMs = tickMillis(parameters.tickLength) ?? DEFAULT_TICK_MS
   const record = await loadVetterRecord(agent, communityDid)
   const lastTicks = { ...(record?.lastTicks ?? {}) }
