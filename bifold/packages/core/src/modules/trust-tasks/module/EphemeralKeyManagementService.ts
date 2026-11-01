@@ -36,12 +36,20 @@
  * it, such an operation failed with "Key with key id 'vta-copy:…' not found in
  * backend 'ephemeral'" (TestFlight 239, an identity of another linked agent).
  *
+ * An in-memory database lasts only while a connection to it is open, and the
+ * connection pool under Askar closes one left idle: every session then failed
+ * "no such table: profiles" until the app locked or relaunched (SFSP-52TJ). So
+ * one session stays open for the store's life, which the pool cannot close. If
+ * the database goes all the same, a new store is made and the copies are
+ * fetched again, as after a relaunch.
+ *
  * @module trust-tasks/module/EphemeralKeyManagementService
  */
 import { AskarKeyManagementService } from '@credo-ts/askar'
 import { Kms, type Agent, type AgentContext } from '@credo-ts/core'
 import { KdfMethod, Store, StoreKeyMethod, type Key, type Session } from '@openwallet-foundation/askar-shared'
 
+import { releaseWarn } from './releaseLog'
 import { EPHEMERAL_KMS_BACKEND, isInMemoryKeyId } from './vtaKeys'
 
 export { EPHEMERAL_KMS_BACKEND }
@@ -58,6 +66,9 @@ type AskarKmsInternals = {
   fetchAskarKey: (agentContext: AgentContext, keyId: string) => Promise<{ key: Key } | null>
 }
 
+/** A store, and the session that keeps its database alive, when one could be opened. */
+type HeldStore = { store: Store; keeper?: Session }
+
 export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   public static readonly backend = EPHEMERAL_KMS_BACKEND
   public readonly backend = EPHEMERAL_KMS_BACKEND
@@ -65,7 +76,7 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   private readonly askar = new AskarKeyManagementService()
   /** The wallet's store, read for keys this backend does not hold. */
   private readonly wallet = new AskarKeyManagementService()
-  private store?: Promise<Store>
+  private store?: Promise<HeldStore>
   /** Fetches an in-memory copy this backend does not hold, set by the agent controller. */
   private fetchMissing?: (keyId: string) => Promise<void>
   /** Fetches under way, one per key, so concurrent uses wait on one fetch. */
@@ -251,18 +262,52 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
 
   /** Forget every key held. The next import starts a fresh store. */
   public async clear(): Promise<void> {
-    const store = this.store
+    const held = this.store
     this.store = undefined
-    if (store) await (await store).close(true).catch(() => undefined)
+    await held
+      ?.then(async ({ store, keeper }) => {
+        await keeper?.close().catch(() => undefined)
+        await store.close(true)
+      })
+      .catch(() => undefined)
   }
 
-  private async withSession<T>(callback: (session: Session) => Promise<T>): Promise<T> {
-    this.store ??= Store.provision({
+  private async provision(): Promise<HeldStore> {
+    const store = await Store.provision({
       uri: 'sqlite://:memory:',
       keyMethod: new StoreKeyMethod(KdfMethod.None),
       recreate: true,
     })
-    const session = await (await this.store).session().open()
+    // Without it the store works as it always did, and a lost database is made again below.
+    return {
+      store,
+      keeper: await store
+        .session()
+        .open()
+        .catch(() => undefined),
+    }
+  }
+
+  private async openSession(): Promise<Session> {
+    const current = (this.store ??= this.provision())
+    try {
+      return await (await current).store.session().open()
+    } catch (error) {
+      if (!databaseGone(error)) throw error
+      // One new store, however many uses found this one gone.
+      if (this.store === current) {
+        releaseWarn('[VTA] the in-memory key store lost its database; making a new one, and fetching keys again')
+        await this.clear()
+        // Why an earlier fetch failed says nothing about this store, and the pause would hold back its first.
+        this.failedAt.clear()
+        this.failureReason.clear()
+      }
+      return (await (this.store ??= this.provision())).store.session().open()
+    }
+  }
+
+  private async withSession<T>(callback: (session: Session) => Promise<T>): Promise<T> {
+    const session = await this.openSession()
     try {
       return await callback(session)
     } finally {
@@ -270,6 +315,10 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
     }
   }
 }
+
+/** The store's database is no longer there: Askar's words when a session starts on an empty one. */
+const databaseGone = (error: unknown): boolean =>
+  /no such table/.test(error instanceof Error ? error.message : String(error))
 
 /**
  * An in-memory key copy an operation needs is not held, and fetching it
