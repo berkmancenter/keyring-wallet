@@ -3,9 +3,13 @@
  * people icon where it has none. The tile stays empty until that is settled, so the icon never shows first and the logo
  * a moment later.
  *
+ * On the first open the phone has heard nothing of the community's look. It hears just after the screen's read ends
+ * (the look is kept in the background, and waits for the public profile when the manifest gives no logo), so the tile
+ * waits for that. A read that fails or says nothing never gets there, so the wait is bounded.
+ *
  * @module trust-tasks/screens/CommunityMark
  */
-import React, { useRef } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Image, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -15,9 +19,12 @@ import { useCommunityBrand, useCommunityBrandHeard } from '../module/useCommunit
 
 import { VtiCommunityIds } from './VtiCommunity.ids'
 
+/** How long after the read the look may still land: past the public profile's answer, its wait when busy and a retry. */
+export const LOOK_WAIT_MS = 5000
+
 export interface CommunityMarkProps {
   communityDid: string
-  /** The screen's read of this community is under way: its answer may be the first the phone hears of the look. */
+  /** The screen's read of this community is under way. */
   reading: boolean
 }
 
@@ -25,29 +32,32 @@ export const CommunityMark: React.FC<CommunityMarkProps> = ({ communityDid, read
   const { ColorPalette } = useTheme()
   const brand = useCommunityBrand(communityDid)
   const heard = useCommunityBrandHeard(communityDid)
-  // A logo stays once drawn. One only the public profile gives is cleared by every manifest read until the profile
-  // answers, and this screen reads the manifest each time it opens.
-  const drawn = useRef<string | undefined>(undefined)
-  if (brand.known && brand.value.logo) drawn.current = brand.value.logo
-  const unsettled = !brand.known || (!heard && reading)
+  const [gaveUp, setGaveUp] = useState(false)
+  useEffect(() => {
+    if (reading || heard) return
+    const timer = setTimeout(() => setGaveUp(true), LOOK_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [reading, heard])
+  const logo = brand.known ? brand.value.logo : undefined
+  const settled = brand.known && (heard || gaveUp)
   return (
     <View style={[styles.tile, { backgroundColor: ColorPalette.brand.primaryLight }]}>
-      {drawn.current ? (
+      {logo ? (
         <Image
-          source={{ uri: drawn.current }}
+          source={{ uri: logo }}
           style={styles.logo}
           resizeMode="contain"
           accessibilityIgnoresInvertColors
           testID={testIdWithKey(VtiCommunityIds.logo)}
         />
-      ) : unsettled ? null : (
+      ) : settled ? (
         <Icon
           name="account-group-outline"
           size={36}
           color={ColorPalette.brand.primary}
           testID={testIdWithKey(VtiCommunityIds.markIcon)}
         />
-      )}
+      ) : null}
     </View>
   )
 }

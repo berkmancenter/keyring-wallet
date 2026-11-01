@@ -278,8 +278,7 @@ const VtiCommunity: React.FC = () => {
             and that it has published no name; then where this agent stands. Its DID, the one checkable thing, is
             under About. */}
         <View style={styles.identity}>
-          {/* Keyed: a logo held for one community is never drawn for the next this screen is opened on. */}
-          <CommunityMark key={communityDid} communityDid={communityDid} reading={busy} />
+          <CommunityMark communityDid={communityDid} reading={busy} />
           <Text style={styles.title} accessibilityRole="header" testID={testIdWithKey(VtiCommunityIds.name)}>
             {called.name ?? unnamedRef(communityDid)}
           </Text>

@@ -72,7 +72,8 @@ function subscribe(listener: () => void) {
 
 /**
  * Whether the phone has heard from `communityDid` about its look, even that it has none (`saveCommunityBrand` keeps
- * that too). A card takes never heard as final; a screen reading the community can wait for what it answers.
+ * that too). A card takes never heard as final; a screen reading the community can wait for what it answers. Only
+ * {@link useCommunityBrand} reads the kept looks, so use this beside it: alone it stays false.
  */
 export function useCommunityBrandHeard(communityDid: string): boolean {
   return useSyncExternalStore(subscribe, () => !!kept?.has(communityDid))

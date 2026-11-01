@@ -8,7 +8,7 @@
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React, { Profiler } from 'react'
-import { StyleSheet } from 'react-native'
+import { DeviceEventEmitter, StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -16,6 +16,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
+import { COMMUNITY_BRAND_EVENT } from '../module/communityChanged'
 import { resetCommunityBrands } from '../module/useCommunityBrand'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -811,6 +812,17 @@ describe("the community's mark at the top of its screen", () => {
     await flush()
     expect(icon(tree)).toBeTruthy()
     expect(logo(tree)).toBeNull()
+  })
+
+  it('first open: the read ends before the look is kept, and the icon never shows ahead of the logo', async () => {
+    const tree = showOn(communityDid)
+    await flush()
+    expect(icon(tree)).toBeNull()
+    mockBrands = [logoOf(communityDid)]
+    await act(async () => void DeviceEventEmitter.emit(COMMUNITY_BRAND_EVENT, { communityDid }))
+    await flush()
+    expect(logo(tree)).toBeTruthy()
+    expect(icon(tree)).toBeNull()
   })
 
   it("opened on another community, never shows the last one's logo", async () => {

@@ -11,7 +11,7 @@ import { memoryGenericRecords } from '../../../../__tests__/modules/vrc/fixtures
 import { testIdWithKey } from '../../../utils/testable'
 import { resetCommunityBrands } from '../module/useCommunityBrand'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
-import { CommunityMark } from '../screens/CommunityMark'
+import { CommunityMark, LOOK_WAIT_MS } from '../screens/CommunityMark'
 
 jest.mock('@bifold/react-hooks')
 const mockLogo = jest.fn<Promise<string | undefined>, [string, string | undefined]>()
@@ -92,25 +92,66 @@ describe("a community's mark", () => {
     expect(icon(tree)).toBeNull()
   })
 
-  it('first time on the phone, and the read ends with nothing kept: the icon, not an empty tile', async () => {
+  it('first time on the phone, and the read ends before the look lands: still nothing, then the logo', async () => {
     const tree = render(mark(true))
     await flush()
-    expect(icon(tree)).toBeNull()
     tree.rerender(mark(false))
     await flush()
+    expect(icon(tree)).toBeNull()
+    await keep({ logoUrl: LOGO_URL })
+    expect(logo(tree)).toBeTruthy()
+    expect(icon(tree)).toBeNull()
+  })
+
+  it('first time on the phone, and it says it has none: the icon as soon as it says so, with no wait', async () => {
+    const tree = render(mark(true))
+    await flush()
+    tree.rerender(mark(false))
+    await flush()
+    expect(icon(tree)).toBeNull()
+    await keep({})
     expect(icon(tree)).toBeTruthy()
   })
 
-  it('a read that clears the logo until the public profile gives it back: the logo stays', async () => {
+  it('first time on the phone, and the look never lands: the icon after the wait, not an empty tile', async () => {
+    const tree = render(mark(true))
+    await flush()
+    jest.useFakeTimers()
+    try {
+      tree.rerender(mark(false))
+      act(() => jest.advanceTimersByTime(LOOK_WAIT_MS - 1))
+      expect(icon(tree)).toBeNull()
+      act(() => jest.advanceTimersByTime(1))
+      expect(icon(tree)).toBeTruthy()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('a read that takes longer than the wait: still nothing, since the wait starts when the read ends', async () => {
+    jest.useFakeTimers()
+    try {
+      const tree = render(mark(true))
+      await act(async () => void jest.advanceTimersByTime(2 * LOOK_WAIT_MS))
+      await act(async () => undefined)
+      expect(icon(tree)).toBeNull()
+      // Positive control: the look was read by now, so the wait is what kept the icon back.
+      tree.rerender(mark(false))
+      await act(async () => void jest.advanceTimersByTime(LOOK_WAIT_MS))
+      expect(icon(tree)).toBeTruthy()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('a community that takes its logo away: the icon', async () => {
     await keep({ logoUrl: LOGO_URL })
     const tree = render(mark(true))
     await flush()
     expect(logo(tree)).toBeTruthy()
     await keep({})
-    expect(logo(tree)).toBeTruthy()
-    expect(icon(tree)).toBeNull()
-    await keep({ logoUrl: LOGO_URL })
-    expect(logo(tree)).toBeTruthy()
+    expect(logo(tree)).toBeNull()
+    expect(icon(tree)).toBeTruthy()
   })
 
   it('a logo that changes: the new one', async () => {
