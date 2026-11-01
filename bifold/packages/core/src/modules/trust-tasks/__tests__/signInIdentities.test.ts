@@ -6,7 +6,13 @@
  * and the sign-in goes through whichever agent holds the persona chosen.
  */
 import type { VtaVaultEntry } from '../module/VtaClient'
-import { agentSignInSteps, signInIdentitiesFrom, type SignInIdentity } from '../module/signInSteps'
+import {
+  agentSignInSteps,
+  identitiesWithStanding,
+  signInIdentitiesFrom,
+  type PersonaSignInIdentity,
+  type SignInIdentity,
+} from '../module/signInSteps'
 
 const VTC = 'did:webvh:QmNvAiYMwoZMWGfY62gqNJuedQgH224FMpHenzJTK1wJrG:webvh.storm.ws:test-vtc'
 const OTHER_VTC = 'did:webvh:QmOther:webvh.storm.ws:other-vtc'
@@ -288,5 +294,60 @@ describe('signing in through the agent that holds the persona', () => {
     const found = await steps.community(VTC)
     expect(found).toMatchObject({ member: false, identities: [] })
     await expect(steps.identifyAndProve(claimed, '42')).rejects.toMatchObject({ reason: 'notAMember' })
+  })
+})
+
+describe('what the phone records of each identity', () => {
+  const DID = 'did:webvh:QmP:host:persona'
+  const found: PersonaSignInIdentity = {
+    vtaDid: A,
+    agentName: 'Home agent',
+    current: true,
+    did: DID,
+    contextId: 'ctx',
+    source: 'thisPhone',
+  }
+  const membership = { communityDid: VTC, personaDid: DID, role: 'member', grantedAt: '2026-11-01T12:00:00Z' }
+  const removal = {
+    code: 'adminRemoved' as const,
+    decidedBy: VTC,
+    decidedAt: '2026-11-02T12:00:00Z',
+    disposition: 'historical' as const,
+    noticeId: 'n',
+  }
+  type Read = Parameters<typeof identitiesWithStanding>
+  const standing = (memberships: Read[2], options?: Read[3]) =>
+    identitiesWithStanding([found], VTC, memberships, options)[0]
+
+  it('its role and when it joined, from its own membership', () => {
+    expect(standing([membership])).toMatchObject({ role: 'member', memberSince: membership.grantedAt })
+  })
+
+  it("never another identity's or another community's", () => {
+    const theirs = [
+      { ...membership, personaDid: 'did:webvh:QmP:host:someone-else' },
+      { ...membership, communityDid: OTHER_VTC },
+    ]
+    expect(standing(theirs)).toEqual(found)
+  })
+
+  it('a standing vetter reads as one, whatever the membership says', () => {
+    expect(standing([membership], { vetters: new Set([DID]) })).toMatchObject({ role: 'vetter' })
+  })
+
+  it('removed: when, and no role or date to read as a member', () => {
+    const read = standing([{ ...membership, removal }])
+    expect(read).toMatchObject({ endedAt: removal.decidedAt })
+    expect(read).not.toHaveProperty('role')
+    expect(read).not.toHaveProperty('memberSince')
+  })
+
+  it('no membership on this phone: nothing is said for it', () => {
+    expect(standing([])).toEqual(found)
+  })
+
+  it('an agent that did not answer is named, and only that agent', () => {
+    expect(standing([], { silentAgents: new Set([A]) })).toMatchObject({ agentSilent: true })
+    expect(standing([], { silentAgents: new Set([B]) })).not.toHaveProperty('agentSilent')
   })
 })

@@ -12,10 +12,11 @@
  *  3. The number — the two digits the website shows, typed once. A wrong
  *     number ends the request.
  *  4. Checking — `identifyAndProve`.
- *  5. Review — what the community reports of the browser asking, said to be
- *     its report, the website, and that only that browser's session is
- *     signed in. Approve (`approve`, which asks for Face ID / the screen lock)
- *     or Decline (`cancel`; never `approve`).
+ *  5. Review — who is asking, as which identity, and whether this is the
+ *     person's browser: what the community reports of it, said to be its
+ *     report, and that only that browser's session is signed in. Approve
+ *     (`approve`, which asks for Face ID / the screen lock) or Decline
+ *     (`cancel`; never `approve`), always on screen.
  *  6. How it ended.
  *
  * A code from the service that hosts agents this phone got there (IN-388)
@@ -42,6 +43,7 @@ import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -55,6 +57,7 @@ import {
   agentSignInSteps,
   signInCommunityOf,
   signInEndedBy,
+  type PersonaSignInIdentity,
   type ProvedSignIn,
   type SignInEndReason,
   type SignInIdentity,
@@ -66,6 +69,7 @@ import { didDomainPath, unnamedCommunityLabel } from './communityName'
 import { DidDetails } from './DidDetails'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { SignInIds } from './SignIn.ids'
+import { identityLabel, identityLine, SignInIdentityBlock } from './SignInIdentity'
 import { useSafeHeaderHeight } from './VtaLink'
 
 const id = (key: string) => testIdWithKey(key)
@@ -105,13 +109,17 @@ const WATCHED: Step['kind'][] = ['number', 'checking', 'review']
  */
 const IN_REQUEST: Step['kind'][] = ['claiming', 'number', 'checking', 'review', 'approving', 'declining']
 
-/** What a browser may sign as the person, in words, by the task family a community offers (`signingScope`). */
+/**
+ * What a browser may sign as the person, in words, by the task family a community offers (`signingScope`): the short
+ * line the review keeps on screen, and the full sentence behind its Details. Two families can share a short word.
+ */
 const SCOPE_WORDS = new Map([
-  ['vtc/directory', 'SignIn.ScopeDirectory'],
-  ['vtc/groups', 'SignIn.ScopeGroups'],
-  ['git-ns/view', 'SignIn.ScopeRepositories'],
-  ['git-ns/account/link-status', 'SignIn.ScopeAccountLink'],
+  ['vtc/directory', { full: 'SignIn.ScopeDirectory', short: 'SignIn.ScopeShortDirectory' }],
+  ['vtc/groups', { full: 'SignIn.ScopeGroups', short: 'SignIn.ScopeShortGroups' }],
+  ['git-ns/view', { full: 'SignIn.ScopeRepositories', short: 'SignIn.ScopeShortRepositories' }],
+  ['git-ns/account/link-status', { full: 'SignIn.ScopeAccountLink', short: 'SignIn.ScopeShortRepositories' }],
 ])
+const OTHER_SCOPE = { full: 'SignIn.ScopeOther', short: 'SignIn.ScopeShortOther' }
 
 /** The words for an ending, as a localization key. */
 export function signInEndKey(end: SignInEnd): string {
@@ -143,12 +151,6 @@ export interface SignInFlowProps {
 
 const nowSeconds = () => Math.floor(Date.now() / 1000)
 
-/** A persona with no name, by its DID's last part (a did:webvh path names it), never the whole DID on a picker row. */
-export const shortPersonaDid = (did: string): string => {
-  const last = did.split(':').pop() || did
-  return last.length > 24 ? `${last.slice(0, 20)}…` : last
-}
-
 /** The first step, from the code alone: read offline, so the first frame is Confirm (or why the code can't be used). */
 function firstStep(link: string | undefined, at: number): Step {
   if (!link) return { kind: 'ended', end: { kind: 'noCode' } }
@@ -176,11 +178,16 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   // "Check and join" on a code from a community this phone has not joined (IN-406): idle, checking, not one, or
   // not checked (no answer in time: the offer stays, to try again).
   const [joinCheck, setJoinCheck] = useState<'idle' | 'checking' | 'notJoinable' | 'unchecked'>('idle')
+  // The review's two Details: who is signing in, and all the browser may do.
+  const [identityOpen, setIdentityOpen] = useState(false)
+  const [scopeOpen, setScopeOpen] = useState(false)
 
   // What the unmount and the deadline need without re-running effects.
   const claimedRef = useRef<ClaimedSignIn | undefined>(undefined)
   // The identity the person chose, when there was a choice; else the steps take the one found.
   const chosenRef = useRef<SignInIdentity | undefined>(undefined)
+  // Everyone the phone could sign in as, kept for the review to name who the community identified.
+  const identitiesRef = useRef<SignInIdentity[]>([])
   const approveStarted = useRef(false)
   const endedRef = useRef(first.kind === 'ended')
   const stepsRef = useRef(steps)
@@ -221,6 +228,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
         const label = (farm ? didDomainPath(vtcDid) : name?.trim()) || unnamedCommunityLabel(vtcDid, t)
         setService(Boolean(farm))
         setCommunityName(label)
+        identitiesRef.current = identities
         setStep((current) =>
           current.kind !== 'confirm'
             ? current
@@ -334,7 +342,37 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
       StyleSheet.create({
         container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
         content: { padding: 20, gap: 16, flexGrow: 1 },
-        card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 12 },
+        // White with an edge: secondaryBackground is the screen's own colour, which leaves a card with no shape.
+        card: {
+          backgroundColor: ColorPalette.grayscale.white,
+          borderColor: ColorPalette.grayscale.lightGrey,
+          borderWidth: 1,
+          borderRadius: 12,
+          padding: 14,
+          gap: 10,
+        },
+        choice: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 104 },
+        promise: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+        grow: { flex: 1 },
+        rule: { height: 1, backgroundColor: ColorPalette.grayscale.lightGrey },
+        signingAs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+        link: { minHeight: 44, justifyContent: 'center' },
+        linkWords: { color: ColorPalette.brand.primary },
+        facts: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 8 },
+        fact: { width: '50%', paddingRight: 8 },
+        warned: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+        mono: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
+        // Approve and Decline stay on screen, above the tab bar, however long the review runs.
+        decision: {
+          backgroundColor: ColorPalette.grayscale.white,
+          borderTopColor: ColorPalette.grayscale.lightGrey,
+          borderTopWidth: 1,
+          paddingHorizontal: 20,
+          paddingVertical: 8,
+          gap: 6,
+        },
+        decide: { flexDirection: 'row', gap: 12 },
+        centred: { alignItems: 'center' },
         row: { gap: 2 },
         muted: { color: ColorPalette.grayscale.mediumGrey },
         error: { color: ColorPalette.semantic.error },
@@ -366,6 +404,41 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
       </ThemedText>
     </View>
   )
+
+  /** A fact in the review's grid: a label over its value. */
+  const fact = (label: string, value: string, testID: string, warns = false) => (
+    <View style={styles.fact} key={testID}>
+      <ThemedText style={styles.muted}>{label}</ThemedText>
+      <View style={styles.warned}>
+        {warns ? <Icon name="alert-outline" size={18} color={ColorPalette.notification.warnIcon} /> : null}
+        <ThemedText variant="bold" testID={id(testID)}>
+          {value}
+        </ThemedText>
+      </View>
+    </View>
+  )
+
+  const details = (open: boolean, onPress: () => void, testID: string) => (
+    <Pressable
+      style={styles.link}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      onPress={onPress}
+      testID={id(testID)}
+    >
+      <ThemedText variant="bold" style={styles.linkWords}>
+        {t(open ? 'SignIn.HideDetails' : 'VtaLink.Details')}
+      </ThemedText>
+    </Pressable>
+  )
+
+  /** The identity the community identified, as the person knows it; none when the phone can't tell which. */
+  const signingAs = (proved: ProvedSignIn): PersonaSignInIdentity | undefined =>
+    'farm' in proved
+      ? undefined
+      : identitiesRef.current.find(
+          (i): i is PersonaSignInIdentity => i.source !== 'farm' && i.did === proved.persona.did
+        )
 
   const busyNote = (words: string, testID: string) => (
     <View style={styles.busy} testID={id(testID)}>
@@ -500,7 +573,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
         )
       case 'choose':
         return (
-          <View style={{ gap: 16 }} testID={id(SignInIds.choose)}>
+          <View style={{ gap: 14 }} testID={id(SignInIds.choose)}>
             <ThemedText variant="headingThree" accessibilityRole="header">
               {t(word('ChooseTitle'))}
             </ThemedText>
@@ -508,8 +581,9 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             {step.identities.map((identity, n) => (
               <Pressable
                 key={`${identity.vtaDid} ${identity.did}`}
-                style={styles.card}
+                style={[styles.card, styles.choice]}
                 accessibilityRole="button"
+                accessibilityLabel={identity.source === 'farm' ? undefined : identityLabel(identity, t)}
                 onPress={() => {
                   chosenRef.current = identity
                   void onContinue()
@@ -518,30 +592,26 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
               >
                 {identity.source === 'farm' ? (
                   // An agent got from the service: the agent is the choice, its key is never shown.
-                  <>
+                  <View style={styles.grow}>
                     <ThemedText variant="bold" testID={id(`${SignInIds.identityAgent}-${n}`)}>
                       {identity.agentName}
                     </ThemedText>
                     {identity.current ? (
                       <ThemedText style={styles.muted}>{t('SignIn.Service.ChooseCurrent')}</ThemedText>
                     ) : null}
-                  </>
+                  </View>
                 ) : (
-                  <>
-                    <ThemedText variant="bold">{identity.label?.trim() || shortPersonaDid(identity.did)}</ThemedText>
-                    <ThemedText testID={id(`${SignInIds.identityAgent}-${n}`)}>
-                      {t(identity.current ? 'SignIn.ChooseOnAgentCurrent' : 'SignIn.ChooseOnAgent', {
-                        agent: identity.agentName,
-                        interpolation: { escapeValue: false },
-                      })}
-                    </ThemedText>
-                    <ThemedText style={styles.muted}>
-                      {t(identity.source === 'thisPhone' ? 'SignIn.ChooseFromPhone' : 'SignIn.ChooseFromAgent')}
-                    </ThemedText>
-                  </>
+                  <SignInIdentityBlock identity={identity} agentTestID={id(`${SignInIds.identityAgent}-${n}`)} />
                 )}
+                <Icon name="chevron-right" size={24} color={ColorPalette.brand.primary} />
               </Pressable>
             ))}
+            <View style={styles.promise}>
+              <Icon name="shield-outline" size={18} color={ColorPalette.grayscale.darkGrey} />
+              <ThemedText style={styles.grow} testID={id(SignInIds.approveLater)}>
+                {t('SignIn.ChooseApproveLater')}
+              </ThemedText>
+            </View>
             <Button
               title={t('SignIn.Cancel')}
               buttonType={ButtonType.Secondary}
@@ -602,13 +672,20 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
       case 'approving': {
         const { proved } = step
         const { requester } = proved
-        const busy = step.kind === 'approving'
         const sameNetwork =
           requester.sameNetwork === undefined
             ? t('SignIn.NotReported')
             : t(requester.sameNetwork ? 'SignIn.Yes' : 'SignIn.No')
+        const who = signingAs(proved)
+        const scopeWords = (proved.signingScope ?? []).map((family) => SCOPE_WORDS.get(family) ?? OTHER_SCOPE)
+        const fullAreas = [...new Set(scopeWords.map((words) => words.full))].map((key) => t(key)).join(', ')
+        const shortAreas = [...new Set(scopeWords.map((words) => words.short))].map((key) => t(key))
+        const shortList =
+          shortAreas.length > 1
+            ? `${shortAreas.slice(0, -1).join(', ')} ${t('Claims.And')} ${shortAreas[shortAreas.length - 1]}`
+            : shortAreas[0]
         return (
-          <View style={{ gap: 16 }} testID={id(SignInIds.review)}>
+          <View style={{ gap: 12 }} testID={id(SignInIds.review)}>
             <ThemedText variant="headingThree" accessibilityRole="header">
               {t('SignIn.ReviewTitle')}
             </ThemedText>
@@ -622,57 +699,74 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
               </View>
             ) : (
               <View style={styles.card}>
-                {row(t('SignIn.CommunityLabel'), communityName, SignInIds.community)}
-                {row(t('SignIn.Website'), proved.claimed.portalOrigin, SignInIds.website)}
-                {proved.identifiedAs ? row(t('SignIn.SigningInAs'), proved.identifiedAs, SignInIds.identifiedAs) : null}
+                <View style={styles.row}>
+                  <ThemedText variant="bold" testID={id(SignInIds.community)}>
+                    {communityName}
+                  </ThemedText>
+                  <ThemedText style={styles.muted} testID={id(SignInIds.website)}>
+                    {proved.claimed.portalOrigin}
+                  </ThemedText>
+                </View>
+                <View style={styles.rule} />
+                {who ? (
+                  <View style={styles.row} testID={id(SignInIds.signingAs)}>
+                    <ThemedText style={styles.muted}>{t('SignIn.SigningInAs')}</ThemedText>
+                    <View style={styles.signingAs}>
+                      <SignInIdentityBlock identity={who} short />
+                      {details(identityOpen, () => setIdentityOpen(!identityOpen), SignInIds.identityDetails)}
+                    </View>
+                    {identityOpen ? (
+                      <>
+                        <ThemedText testID={id(SignInIds.identityHeldBy)}>
+                          {t(who.current ? 'SignIn.ChooseOnAgentCurrent' : 'SignIn.ChooseOnAgent', {
+                            agent: who.agentName,
+                            interpolation: { escapeValue: false },
+                          })}
+                        </ThemedText>
+                        <ThemedText testID={id(SignInIds.identitySince)}>{identityLine(who, t).words}</ThemedText>
+                        <ThemedText style={styles.mono} selectable testID={id(SignInIds.identifiedAs)}>
+                          {proved.identifiedAs}
+                        </ThemedText>
+                      </>
+                    ) : null}
+                  </View>
+                ) : proved.identifiedAs ? (
+                  row(t('SignIn.SigningInAs'), proved.identifiedAs, SignInIds.identifiedAs)
+                ) : null}
               </View>
             )}
             <View style={styles.card}>
+              <ThemedText variant="bold">{t('SignIn.IsThisYourBrowser')}</ThemedText>
+              <View style={styles.facts}>
+                {fact(t('SignIn.Browser'), reported(requester.browser), SignInIds.browser)}
+                {fact(t('SignIn.System'), reported(requester.os), SignInIds.system)}
+                {fact(t('SignIn.Location'), reported(requester.location), SignInIds.location)}
+                {fact(t('SignIn.SameNetwork'), sameNetwork, SignInIds.sameNetwork, requester.sameNetwork === false)}
+              </View>
               <ThemedText style={styles.muted} testID={id(SignInIds.reportedBy)}>
                 {t(word('ReportedBy'))}
               </ThemedText>
-              {row(t('SignIn.Browser'), reported(requester.browser), SignInIds.browser)}
-              {row(t('SignIn.System'), reported(requester.os), SignInIds.system)}
-              {row(t('SignIn.Location'), reported(requester.location), SignInIds.location)}
-              {row(t('SignIn.SameNetwork'), sameNetwork, SignInIds.sameNetwork)}
             </View>
             <ThemedText variant="bold" testID={id(SignInIds.sessionOnly)}>
               {t('SignIn.SessionOnly', { hours: GRANT_LIFETIME_SECONDS / 3600 })}
             </ThemedText>
             {/* 0.2 (IN-280): the browser's key may also sign these documents as the person, for this session,
-                without asking the phone each time. Said in words; families Keyring has no words for are said once,
-                as that, and never by their task names. The words are our own, so they are not escaped. */}
-            {proved.signingScope?.length ? (
-              <ThemedText testID={id(SignInIds.signingScope)}>
-                {t('SignIn.SigningScope', {
-                  areas: [
-                    ...new Set(proved.signingScope.map((family) => SCOPE_WORDS.get(family) ?? 'SignIn.ScopeOther')),
-                  ]
-                    .map((key) => t(key))
-                    .join(', '),
-                  interpolation: { escapeValue: false },
-                })}
-              </ThemedText>
-            ) : null}
-            {busy ? null : timeLeft()}
-            {busy ? (
-              busyNote(t('SignIn.Approving'), SignInIds.busy)
-            ) : (
-              <View style={styles.actions}>
-                <Button
-                  title={t('SignIn.Approve')}
-                  buttonType={ButtonType.Primary}
-                  onPress={() => void onApprove(proved)}
-                  testID={id(SignInIds.approve)}
-                />
-                <Button
-                  title={t('SignIn.Decline')}
-                  buttonType={ButtonType.Secondary}
-                  onPress={() => void onDecline(proved.claimed)}
-                  testID={id(SignInIds.decline)}
-                />
+                without asking the phone each time. The grant binds what the person was shown, so this stays on
+                screen, short; Details has it in full. Families Keyring has no words for are said once, as that, and
+                never by their task names. The words are our own, so they are not escaped. */}
+            {scopeWords.length ? (
+              <View style={styles.row}>
+                <ThemedText testID={id(SignInIds.scopeShort)}>
+                  {t('SignIn.ScopeShort', { areas: shortList, interpolation: { escapeValue: false } })}
+                </ThemedText>
+                {details(scopeOpen, () => setScopeOpen(!scopeOpen), SignInIds.scopeDetails)}
+                {scopeOpen ? (
+                  <ThemedText testID={id(SignInIds.signingScope)}>
+                    {t('SignIn.SigningScope', { areas: fullAreas, interpolation: { escapeValue: false } })}
+                  </ThemedText>
+                ) : null}
               </View>
-            )}
+            ) : null}
           </View>
         )
       }
@@ -698,6 +792,41 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     }
   }
 
+  /** The review's Approve and Decline, outside the scroll. */
+  const decision = () => {
+    if (step.kind !== 'review' && step.kind !== 'approving') return null
+    const { proved } = step
+    return (
+      <View style={styles.decision}>
+        {step.kind === 'approving' ? (
+          busyNote(t('SignIn.Approving'), SignInIds.busy)
+        ) : (
+          <>
+            <View style={styles.centred}>{timeLeft()}</View>
+            <View style={styles.decide}>
+              <View style={styles.grow}>
+                <Button
+                  title={t('SignIn.Decline')}
+                  buttonType={ButtonType.Secondary}
+                  onPress={() => void onDecline(proved.claimed)}
+                  testID={id(SignInIds.decline)}
+                />
+              </View>
+              <View style={styles.grow}>
+                <Button
+                  title={t('SignIn.Approve')}
+                  buttonType={ButtonType.Primary}
+                  onPress={() => void onApprove(proved)}
+                  testID={id(SignInIds.approve)}
+                />
+              </View>
+            </View>
+          </>
+        )}
+      </View>
+    )
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView
@@ -714,6 +843,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
         >
           {body()}
         </ScrollView>
+        {decision()}
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
