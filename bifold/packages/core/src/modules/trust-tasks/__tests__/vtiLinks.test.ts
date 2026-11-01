@@ -24,7 +24,7 @@ import {
 // invitation on My Agent.
 
 const mockSaveInvitation = jest.fn(async () => undefined)
-const mockMemberships: { communityDid: string; personaDid: string; removal?: unknown }[] = []
+const mockMemberships: { communityDid: string; personaDid?: string; removal?: unknown }[] = []
 jest.mock('../module/VtiCommunityStore', () => ({
   ...jest.requireActual('../module/VtiCommunityStore'),
   GenericRecordsCommunityStore: jest.fn(() => ({
@@ -290,6 +290,15 @@ describe("a vetter's ticket", () => {
     it('is taken when the phone is already a member of the chosen community', async () => {
       communityTarget.choose(mockPersona.communityDid)
       mockMemberships.push({ communityDid: mockPersona.communityDid, personaDid: mockPersona.did })
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(ticket, {} as never, navigate)
+      expect(navigate).toHaveBeenCalledWith('VtiVetting')
+      expect(pendingVettingTicket.take()).toBe(ticket)
+    })
+
+    it('is taken when the membership names no identity, as one kept from before does', async () => {
+      communityTarget.choose(mockPersona.communityDid)
+      mockMemberships.push({ communityDid: mockPersona.communityDid, personaDid: undefined })
       const navigate = jest.fn()
       await routeKeyringAgentLink(ticket, {} as never, navigate)
       expect(navigate).toHaveBeenCalledWith('VtiVetting')

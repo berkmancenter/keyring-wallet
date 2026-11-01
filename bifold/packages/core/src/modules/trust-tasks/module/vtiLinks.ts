@@ -235,7 +235,10 @@ async function joinUnderWay(agent: Agent, communityDid: string): Promise<boolean
     if (!persona) return false
     const memberships = await new GenericRecordsCommunityStore(agent).listMemberships()
     return !memberships.some(
-      (m) => m.communityDid === communityDid && sameIdentity(m.personaDid, persona.did) && isCurrentMembership(m)
+      (m) =>
+        m.communityDid === communityDid &&
+        (!m.personaDid || sameIdentity(m.personaDid, persona.did)) &&
+        isCurrentMembership(m)
     )
   } catch {
     return true
