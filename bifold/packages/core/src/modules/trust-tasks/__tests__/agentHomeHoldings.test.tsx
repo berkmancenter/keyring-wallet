@@ -19,7 +19,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityCardKey } from '../screens/CommunityCard'
 import { communityHeadingOf, didPathName } from '../screens/communityName'
-import VtaAgentHome, { forgetAgentHoldings } from '../screens/VtaAgentHome'
+import VtaAgentHome, { forgetAgentHoldings, ownHoldings } from '../screens/VtaAgentHome'
 import { localDate } from '../screens/localTime'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -97,6 +97,28 @@ function fakeAgent(records: Rec[]) {
 }
 
 const linkedAt = '2026-09-22T12:00:00Z'
+
+describe("what is and is not this agent's", () => {
+  const AGENT = 'did:webvh:example:vta'
+  const OTHER = 'did:webvh:example:vta-other'
+  const mine = { did: 'did:webvh:example:mine', vtaDid: AGENT } as never
+  const theirs = { did: 'did:webvh:example:theirs', vtaDid: OTHER } as never
+  const held = (personaDid: string) => ({ personaDid }) as never
+
+  it("leaves out a membership nothing ties to this agent, and one known to be another agent's", () => {
+    const { memberships } = ownHoldings(
+      [mine, theirs],
+      [held('did:webvh:example:theirs'), held('did:webvh:example:nobody')],
+      AGENT
+    )
+    expect(memberships).toEqual([])
+  })
+
+  it("keeps this agent's own: through its persona, and held as the agent itself", () => {
+    const own = [held('did:webvh:example:mine'), held(AGENT)]
+    expect(ownHoldings([mine, theirs], own, AGENT).memberships).toEqual(own)
+  })
+})
 
 describe('what your agent holds, card by card', () => {
   beforeEach(() => {
