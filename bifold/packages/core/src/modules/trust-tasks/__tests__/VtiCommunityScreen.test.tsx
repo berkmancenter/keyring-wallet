@@ -21,6 +21,7 @@ import { resetCommunityBrands } from '../module/useCommunityBrand'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiCommunity from '../screens/VtiCommunity'
+import { LOOK_WAIT_MS } from '../screens/CommunityMark'
 import { unnamedRef } from '../screens/communityName'
 import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVetterSeam'
 
@@ -823,6 +824,36 @@ describe("the community's mark at the top of its screen", () => {
     await flush()
     expect(logo(tree)).toBeTruthy()
     expect(icon(tree)).toBeNull()
+  })
+
+  it("opened on another community, the wait is that community's, from the end of its own read", async () => {
+    const fetchManifest = (jest.requireMock('../module/vtiAgent') as { vtiAgent: { fetchManifest: jest.Mock } })
+      .vtiAgent.fetchManifest
+    let answer: (manifest: unknown) => void = () => undefined
+    jest.useFakeTimers()
+    try {
+      // Nothing is ever kept for the first: it gives up waiting, and shows the icon.
+      const tree = showOn(communityDid)
+      await act(async () => undefined)
+      await act(async () => void jest.advanceTimersByTime(LOOK_WAIT_MS))
+      expect(icon(tree)).toBeTruthy()
+      fetchManifest.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+      ;(useRoute as jest.Mock).mockReturnValue({ params: { communityDid: otherDid } })
+      tree.rerender(screen())
+      await act(async () => undefined)
+      expect(icon(tree)).toBeNull()
+      // Its read is slower than the wait, which has not started.
+      await act(async () => void jest.advanceTimersByTime(2 * LOOK_WAIT_MS))
+      expect(icon(tree)).toBeNull()
+      mockBrands = [logoOf(otherDid)]
+      await act(async () => answer({ criteria: [] }))
+      await act(async () => void DeviceEventEmitter.emit(COMMUNITY_BRAND_EVENT, { communityDid: otherDid }))
+      await act(async () => undefined)
+      expect(logo(tree)).toBeTruthy()
+      expect(icon(tree)).toBeNull()
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it("opened on another community, never shows the last one's logo", async () => {

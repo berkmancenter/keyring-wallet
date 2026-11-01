@@ -234,6 +234,7 @@ const VtiCommunity: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false
+    setBusy(true)
     const load = async () => {
       try {
         // With this screen's agent: a phone with no session yet has none to lend.
@@ -278,7 +279,8 @@ const VtiCommunity: React.FC = () => {
             and that it has published no name; then where this agent stands. Its DID, the one checkable thing, is
             under About. */}
         <View style={styles.identity}>
-          <CommunityMark communityDid={communityDid} reading={busy} />
+          {/* Keyed: what the tile has waited for is one community's. */}
+          <CommunityMark key={communityDid} communityDid={communityDid} reading={busy} />
           <Text style={styles.title} accessibilityRole="header" testID={testIdWithKey(VtiCommunityIds.name)}>
             {called.name ?? unnamedRef(communityDid)}
           </Text>
