@@ -677,7 +677,10 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             ? t('SignIn.NotReported')
             : t(requester.sameNetwork ? 'SignIn.Yes' : 'SignIn.No')
         const who = signingAs(proved)
-        const scopeWords = (proved.signingScope ?? []).map((family) => SCOPE_WORDS.get(family) ?? OTHER_SCOPE)
+        // The catch-all reads as the end of the list, wherever the community named a family it covers.
+        const scopeWords = (proved.signingScope ?? [])
+          .map((family) => SCOPE_WORDS.get(family) ?? OTHER_SCOPE)
+          .sort((a, b) => Number(a === OTHER_SCOPE) - Number(b === OTHER_SCOPE))
         const fullAreas = [...new Set(scopeWords.map((words) => words.full))].map((key) => t(key)).join(', ')
         const shortAreas = [...new Set(scopeWords.map((words) => words.short))].map((key) => t(key))
         const shortList =

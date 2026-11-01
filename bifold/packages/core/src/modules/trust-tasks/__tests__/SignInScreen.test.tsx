@@ -592,6 +592,15 @@ describe('5. the request, as the community reports it', () => {
       expect(lastShort).toBe('It can also act as you in the member directory and other parts of the community.')
     })
 
+    test('the catch-all comes last, wherever the community listed what it covers', async () => {
+      const line = await reviewIn('en', en, ['tasks/new-thing', 'vtc/directory', 'vtc/groups'])
+      const { ScopeDirectory, ScopeGroups, ScopeOther } = en.SignIn
+      expect(line).toBe(
+        `For that time it also lets that browser act as you in: ${ScopeDirectory}, ${ScopeGroups}, ${ScopeOther}.`
+      )
+      expect(lastShort).toBe('It can also act as you in the member directory, groups and other parts of the community.')
+    })
+
     test('the short line stays on screen, naming each area once, with nothing escaped', async () => {
       await reviewIn('en', en, PORTAL_SCOPE)
       expect(lastShort).toBe('It can also act as you in the member directory, groups and code repositories.')
