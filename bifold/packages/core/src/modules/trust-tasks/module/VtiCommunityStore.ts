@@ -22,6 +22,8 @@ import type { Agent } from '@credo-ts/core'
 
 import { type CommunityBrandRecord, httpsLogoUrl, normalisedAccent } from './communityBrand'
 import { changeOfHeldCredential, emitCommunityBrandSaved, emitCommunityChanged } from './communityChanged'
+import { currentAgentDid } from './currentAgent'
+import { heldByAgent } from './heldByAgent'
 import { listKeyed, putKeyed } from './keyedRecords'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 
@@ -167,7 +169,7 @@ export interface VtiCommunityStore {
   /**
    * The membership one identity holds in a community. `personaDid` names the
    * identity; without it, the current agent's identity there (or, with none,
-   * the one membership the phone has for that community).
+   * the one membership the phone has for that community that can be its own).
    */
   getMembership(communityDid: string, personaDid?: string): Promise<VtiMembership | undefined>
   /** Every identity's memberships, across agents. */
@@ -235,6 +237,22 @@ function onePerIdentity<T extends { communityDid: string; personaDid?: string }>
   return [...byIdentity.values()]
 }
 
+/**
+ * Of `records`, those the current agent can hold (heldByAgent). All of them with
+ * no agent known, or when the identities cannot be read: a read that fails says
+ * nothing about whose they are.
+ */
+export async function ofCurrentAgent<T>(
+  agent: Agent,
+  records: T[],
+  identityOf: (record: T) => string | undefined
+): Promise<T[]> {
+  const agentDid = currentAgentDid()
+  if (!agentDid) return records
+  const personas = await new GenericRecordsIdentityStore(agent).listPersonas().catch(() => undefined)
+  return personas ? records.filter((r) => heldByAgent(identityOf(r), personas, agentDid)) : records
+}
+
 /** Credo generic records, one per invitation or membership, tagged for lookup. */
 export class GenericRecordsCommunityStore implements VtiCommunityStore {
   constructor(private readonly agent: Agent) {}
@@ -288,8 +306,9 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     if (personaDid) return here.find((r) => r.personaDid === personaDid)
     const mine = await new GenericRecordsIdentityStore(this.agent).getPersona(communityDid).catch(() => undefined)
     if (mine) return here.find((r) => r.personaDid === mine.did) ?? here.find((r) => !r.personaDid)
-    // No identity of the current agent's here: what the phone has, as before.
-    return here.length === 1 ? here[0] : undefined
+    // No identity of the current agent's here: what the phone has, if it can be this agent's.
+    const held = await ofCurrentAgent(this.agent, here, (r) => r.personaDid)
+    return held.length === 1 ? held[0] : undefined
   }
 
   private async putForIdentity(kind: string, record: { communityDid: string; personaDid?: string }) {

@@ -24,7 +24,7 @@ import {
 // invitation on My Agent.
 
 const mockSaveInvitation = jest.fn(async () => undefined)
-const mockMemberships: { communityDid: string; removal?: unknown }[] = []
+const mockMemberships: { communityDid: string; personaDid: string; removal?: unknown }[] = []
 jest.mock('../module/VtiCommunityStore', () => ({
   ...jest.requireActual('../module/VtiCommunityStore'),
   GenericRecordsCommunityStore: jest.fn(() => ({
@@ -289,11 +289,19 @@ describe("a vetter's ticket", () => {
 
     it('is taken when the phone is already a member of the chosen community', async () => {
       communityTarget.choose(mockPersona.communityDid)
-      mockMemberships.push({ communityDid: mockPersona.communityDid })
+      mockMemberships.push({ communityDid: mockPersona.communityDid, personaDid: mockPersona.did })
       const navigate = jest.fn()
       await routeKeyringAgentLink(ticket, {} as never, navigate)
       expect(navigate).toHaveBeenCalledWith('VtiVetting')
       expect(pendingVettingTicket.take()).toBe(ticket)
+    })
+
+    it('is refused while that join is under way, whatever another identity holds there', async () => {
+      communityTarget.choose(mockPersona.communityDid)
+      mockMemberships.push({ communityDid: mockPersona.communityDid, personaDid: 'did:webvh:QmOther:host:other' })
+      const navigate = jest.fn()
+      await expect(routeKeyringAgentLink(ticket, {} as never, navigate)).rejects.toBeInstanceOf(KeyringLinkError)
+      expect(navigate).not.toHaveBeenCalled()
     })
 
     it('is taken when it is for the chosen community', async () => {
