@@ -2211,6 +2211,7 @@
     "Meets": "atende aos requisitos publicados",
     "Member": "Você é membro de {{community}}.",
     "GoToMyAgent": "Ir para Meu agente",
+    "MemberTicketNotNeeded": "Você escaneou o tíquete de um verificador, mas não precisa dele aqui. Não há mais nada a fazer.",
     "MemberAs": "Você é membro de {{community}}, como {{role}}.",
     "Status": {
       "sent": "Pedido enviado",

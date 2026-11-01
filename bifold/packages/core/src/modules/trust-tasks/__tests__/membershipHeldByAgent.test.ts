@@ -199,6 +199,33 @@ describe('leaving, whose identity is forgotten as it goes', () => {
       await readJoinState(agent, C, { communityStore: communities, identityStore: identities, local: true })
     ).toMatchObject({ kind: 'left' })
   })
+
+  // Report RCZZ-V2XZ: two agents on the phone, each with an identity here. Leaving as one left the other's
+  // membership as the only record, and 277 read it as "You're a member".
+  it("reads as left, not as the phone's other agent's membership, which stays", async () => {
+    const { agent } = fakeAgent()
+    const { communities, identities } = stores(agent)
+    const leaving = 'did:webvh:QmLeaving:store:persona-new'
+    await identities.setPersona(persona(PERSONA_OF_OLD, OLD_AGENT))
+    await communities.saveMembership(membership(PERSONA_OF_OLD))
+    await identities.setPersona(persona(leaving, NEW_AGENT))
+    await communities.saveMembership(membership(leaving))
+    setCurrentAgentDid(NEW_AGENT)
+
+    await communities.forgetCommunity(C, leaving)
+    await identities.forgetPersona(C)
+    await communities.saveDeparture({
+      communityDid: C,
+      personaDid: leaving,
+      disposition: 'purge',
+      at: '2026-10-30T00:00:00Z',
+    })
+
+    expect(
+      await readJoinState(agent, C, { communityStore: communities, identityStore: identities, local: true })
+    ).toMatchObject({ kind: 'left' })
+    expect((await communities.listMemberships()).map((m) => m.personaDid)).toEqual([PERSONA_OF_OLD])
+  })
 })
 
 describe('a real membership keeps showing', () => {
