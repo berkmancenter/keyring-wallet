@@ -234,6 +234,28 @@ describe("a community's card look, kept from its manifest and profile", () => {
     expect(kept[0]).toMatchObject({ communityDid, accentColor: '#1a4d80', logoUrl: undefined })
   })
 
+  // A name and no logo is the ordinary branded community. Its profile is never read, so nothing later would keep this.
+  it('a community with a name and no logo: its look is kept, with no profile read', async () => {
+    serve({ displayName: 'Harbor' }, { communityDid, name: '', logo_url: 'https://vtc.example.org/profile-logo.png' })
+    const kept = await keptAfterRead()
+    expect(kept).toHaveLength(1)
+    expect(kept[0]).toMatchObject({ communityDid, accentColor: undefined, logoUrl: undefined })
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('public-profile'), expect.anything())
+  })
+
+  it('still keeps the look when the community lists no address for its profile', async () => {
+    serve({ accentColor: '#1A4D80' }, {})
+    const agent = newAgent()
+    // The manifest is answered, and the document read for the profile has no REST service.
+    const answers = global.fetch
+    global.fetch = jest.fn(async (...args: Parameters<typeof fetch>) => {
+      ;(agent.dids.resolveDidDocument as jest.Mock).mockResolvedValue({ id: communityDid, service: [] })
+      return answers(...args)
+    }) as unknown as typeof fetch
+    const kept = await keptAfterRead(agent)
+    expect(kept[0]).toMatchObject({ communityDid, accentColor: '#1a4d80', logoUrl: undefined })
+  })
+
   it('never keeps an http logo or an unusable colour', async () => {
     serve(
       { accentColor: 'red', logoUrl: 'http://vtc.example.org/logo.png' },
