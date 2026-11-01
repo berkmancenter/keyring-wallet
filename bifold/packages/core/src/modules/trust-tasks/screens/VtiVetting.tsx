@@ -43,6 +43,7 @@ import { VETTER_HEADER } from '../../../components/views/VetterHeaderBackground'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { useCommunityChanged, VTI_PERSONA_MESSAGE_WAITING_EVENT } from '../module/communityChanged'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { sameIdentity } from '../module/didScid'
 import { HIDDEN_VETTING_SUITE, hiddenVettingSuite } from '../module/joinManifest'
 import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
@@ -251,6 +252,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const offeredName = offeredProfileName(seed, profileOptions, profileDefault)
   const [usedOffered, setUsedOffered] = useState(false)
   const [ticketLink, setTicketLink] = useState('')
+  // When a ticket last reached this screen: a member from before then has no use for it.
+  const [ticketTakenAt, setTicketTakenAt] = useState<number>()
   const navigation = useNavigation()
   const { width } = useWindowDimensions()
   // A QR sized for a phone held at arm's length, not for the whole width of an
@@ -277,7 +280,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   useEffect(() => {
     const takePending = () => {
       const ticket = pendingVettingTicket.take()
-      if (ticket) setTicketLink(ticket)
+      if (!ticket) return
+      setTicketLink(ticket)
+      setTicketTakenAt(Date.now())
     }
     takePending()
     return pendingVettingTicket.subscribe(takePending)
@@ -320,8 +325,18 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const { journey } = useCommunityJourney(agent, communityDid)
   // A join whose read failed is unknown, not "not a member" (joinKnown).
   const knownJoin = joinKnown(journey)
-  const memberRole =
-    membershipRole ?? (knownJoin?.kind === 'member' ? (knownJoin.membership.role ?? 'member') : undefined)
+  // This identity's, or one that names none. Making an identity announces nothing, so the reading can be from before
+  // it: a record the phone held for someone else said "You're a member" to a person who had just left (RCZZ-V2XZ).
+  const ownMembership =
+    knownJoin?.kind === 'member' &&
+    persona &&
+    (!knownJoin.membership.personaDid || sameIdentity(knownJoin.membership.personaDid, persona.did))
+      ? knownJoin.membership
+      : undefined
+  const memberRole = membershipRole ?? (ownMembership ? (ownMembership.role ?? 'member') : undefined)
+  // Scanned by someone who was a member by then. A person admitted through this ticket was not, and hears nothing.
+  const ticketNotNeeded =
+    ownMembership !== undefined && ticketTakenAt !== undefined && Date.parse(ownMembership.grantedAt) < ticketTakenAt
 
   const stores = useMemo(
     () =>
@@ -1658,6 +1673,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     : tp('Vetting.Member', { community: communityLabelOf(communityDid ?? '', t) })}
                 </Text>
               </View>
+              {ticketNotNeeded ? <Text style={styles.value}>{t('Vetting.MemberTicketNotNeeded')}</Text> : null}
               <Pressable
                 style={look(VtiVettingIds.goToMyAgent, applicantPrimaryId).button}
                 testID={testIdWithKey(VtiVettingIds.goToMyAgent)}

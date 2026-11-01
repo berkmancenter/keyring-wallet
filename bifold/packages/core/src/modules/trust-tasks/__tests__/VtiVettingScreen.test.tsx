@@ -352,9 +352,11 @@ describe('Vetting — a membership of another identity', () => {
     expect(await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))).toHaveTextContent(/Vetting\.Member\b/)
   })
 
-  test('a membership kept from before identities were named is a member', async () => {
+  test('a membership kept from before identities were named is a member, and a ticket is not needed', async () => {
     const tree = await open([persona, heldBy(undefined)])
     expect(await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))).toHaveTextContent(/Vetting\.Member\b/)
+    await scan()
+    expect(await tree.findByText('Vetting.MemberTicketNotNeeded')).toBeTruthy()
   })
 
   test("a member who scans a ticket is told it isn't needed", async () => {
