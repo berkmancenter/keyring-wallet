@@ -122,7 +122,7 @@ describe('a new agent, and a membership nothing ties to it', () => {
     ).toEqual({ kind: 'none' })
   })
 
-  it('does not read the request or the leaving of an identity nothing ties to it', async () => {
+  it('does not read the request of an identity nothing ties to it', async () => {
     const { agent } = fakeAgent()
     const { communities, identities } = stores(agent)
     await communities.saveSubmission({
@@ -132,11 +132,9 @@ describe('a new agent, and a membership nothing ties to it', () => {
       withInvitation: false,
       via: 'join',
     })
-    await communities.saveDeparture({ communityDid: C, personaDid: OLD_AGENT, disposition: 'purge', at: 't' })
     setCurrentAgentDid(NEW_AGENT)
 
     expect(await communities.getSubmission(C)).toBeUndefined()
-    expect(await communities.getDeparture(C)).toBeUndefined()
     expect(
       await readJoinState(agent, C, { communityStore: communities, identityStore: identities, local: true })
     ).toEqual({ kind: 'none' })
@@ -174,7 +172,47 @@ describe('a new agent, and a membership nothing ties to it', () => {
   })
 })
 
+describe('leaving, whose identity is forgotten as it goes', () => {
+  it('still reads as left, for the agent that left', async () => {
+    const { agent } = fakeAgent()
+    const { communities, identities } = stores(agent)
+    await identities.setPersona(persona(PERSONA_OF_OLD, OLD_AGENT))
+    setCurrentAgentDid(OLD_AGENT)
+    await communities.saveSubmission({
+      communityDid: C,
+      personaDid: PERSONA_OF_OLD,
+      sentAt: '2026-10-29T00:00:00Z',
+      withInvitation: false,
+      via: 'join',
+    })
+    // As leaveCommunity does: the identity goes, then the leaving is kept under it.
+    await communities.forgetCommunity(C, PERSONA_OF_OLD)
+    await identities.forgetPersona(C)
+    await communities.saveDeparture({
+      communityDid: C,
+      personaDid: PERSONA_OF_OLD,
+      disposition: 'purge',
+      at: '2026-10-30T00:00:00Z',
+    })
+
+    expect(
+      await readJoinState(agent, C, { communityStore: communities, identityStore: identities, local: true })
+    ).toMatchObject({ kind: 'left' })
+  })
+})
+
 describe('a real membership keeps showing', () => {
+  it('and a leaving reads as before, under any agent: it offers joining again', async () => {
+    const { agent } = fakeAgent()
+    const { communities, identities } = stores(agent)
+    await communities.saveDeparture({ communityDid: C, personaDid: OLD_AGENT, disposition: 'purge', at: 't' })
+    setCurrentAgentDid(NEW_AGENT)
+
+    expect(
+      await readJoinState(agent, C, { communityStore: communities, identityStore: identities, local: true })
+    ).toMatchObject({ kind: 'left' })
+  })
+
   it('held as the agent itself, under that agent', async () => {
     const { agent } = fakeAgent()
     const { communities, identities } = stores(agent)

@@ -299,7 +299,8 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
   private async ofIdentity<T extends { communityDid: string; personaDid?: string }>(
     kind: string,
     communityDid: string,
-    personaDid?: string
+    personaDid?: string,
+    ownOnly = true
   ): Promise<T | undefined> {
     const here = onePerIdentity((await this.list<T>(kind)).filter((r) => r.communityDid === communityDid))
     if (here.length === 0) return undefined
@@ -307,7 +308,7 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     const mine = await new GenericRecordsIdentityStore(this.agent).getPersona(communityDid).catch(() => undefined)
     if (mine) return here.find((r) => r.personaDid === mine.did) ?? here.find((r) => !r.personaDid)
     // No identity of the current agent's here: what the phone has, if it can be this agent's.
-    const held = await ofCurrentAgent(this.agent, here, (r) => r.personaDid)
+    const held = ownOnly ? await ofCurrentAgent(this.agent, here, (r) => r.personaDid) : here
     return held.length === 1 ? held[0] : undefined
   }
 
@@ -400,7 +401,9 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
   }
 
   async getDeparture(communityDid: string, personaDid?: string) {
-    return this.ofIdentity<VtiDeparture>('departure', communityDid, personaDid)
+    // Leaving forgets the identity, so nothing can tie a departure to its agent. It reads as before: it says
+    // "You left", which offers joining again, and never stops anyone applying.
+    return this.ofIdentity<VtiDeparture>('departure', communityDid, personaDid, false)
   }
 
   async saveDeparture(departure: VtiDeparture) {
