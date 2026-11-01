@@ -500,8 +500,10 @@ describe('5. the request, as the community reports it', () => {
     })
 
     test('a family Keyring has no words for is never shown raw, and is said once', async () => {
-      // `constructor` is a valid family slug and an Object.prototype key: it must not reach t() as a function.
-      const line = await reviewIn('en', en, ['vtc/directory', 'tasks/new-thing', 'other-family', 'constructor'])
+      // Object.prototype keys must not reach t(): `constructor` is a valid family slug, and `__proto__` would answer
+      // an object lookup with an object. signingScopeProblem refuses the second first; this holds the screen itself.
+      const offered = ['vtc/directory', 'tasks/new-thing', 'other-family', 'constructor', '__proto__']
+      const line = await reviewIn('en', en, offered)
       expect(line).toBe(
         `For that time it also lets that browser act as you in: ${en.SignIn.ScopeDirectory}, ${en.SignIn.ScopeOther}.`
       )
