@@ -36,6 +36,7 @@ import { joinKnown, readFailed, useCommunityJourney, vetterGrantKnown } from '..
 import { CommunityRoomsSection } from '../../rooms/components/CommunityRoomsSection'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf, unnamedRef } from './communityName'
+import { CommunityMark } from './CommunityMark'
 import { CommunityGroup, CommunityGroupDivider, CommunitySectionLabel } from './CommunitySection'
 import { HeldByAnotherAgent } from './HeldByAnotherAgent'
 import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
@@ -214,14 +215,6 @@ const VtiCommunity: React.FC = () => {
     buttonText: { ...TextTheme.bold, color: '#FFFFFF' },
     error: { ...TextTheme.normal, color: ColorPalette.semantic.error },
     identity: { alignItems: 'center', gap: 8 },
-    tile: {
-      width: 72,
-      height: 72,
-      borderRadius: 18,
-      backgroundColor: ColorPalette.brand.primaryLight,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
     title: { ...TextTheme.headingFour, color: TextTheme.normal.color, textAlign: 'center' },
     pill: {
       ...TextTheme.label,
@@ -285,9 +278,8 @@ const VtiCommunity: React.FC = () => {
             and that it has published no name; then where this agent stands. Its DID, the one checkable thing, is
             under About. */}
         <View style={styles.identity}>
-          <View style={styles.tile}>
-            <Icon name="account-group-outline" size={36} color={ColorPalette.brand.primary} />
-          </View>
+          {/* Keyed: a logo held for one community is never drawn for the next this screen is opened on. */}
+          <CommunityMark key={communityDid} communityDid={communityDid} reading={busy} />
           <Text style={styles.title} accessibilityRole="header" testID={testIdWithKey(VtiCommunityIds.name)}>
             {called.name ?? unnamedRef(communityDid)}
           </Text>

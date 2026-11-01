@@ -82,7 +82,7 @@ export function emitCommunityChanged(communityDid: string | undefined, what: Com
 
 /**
  * A community's card look was kept (VtiCommunityStore `saveCommunityBrand`). Its own event, not a community change:
- * every manifest read keeps it, and community screens have nothing to redo for it; only the Wallet's cards listen.
+ * every manifest read keeps it, and community screens have nothing to redo for it; only what draws a look listens.
  */
 export const COMMUNITY_BRAND_EVENT = 'vti:community-brand'
 

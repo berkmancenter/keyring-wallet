@@ -1,5 +1,5 @@
 /**
- * A community's card look, for the Wallet: unknown until the phone has read what it keeps (and, for a community with a
+ * A community's look, for the Wallet's cards and the community's screen: unknown until the phone has read what it keeps (and, for a community with a
  * logo, whether that logo is here), then known for good. A card shows a neutral face while it is unknown, never the
  * default look first and the community's own a moment later; known without a colour or logo is the DID's colour and
  * the monogram, and that is final too.
@@ -68,6 +68,14 @@ function subscribe(listener: () => void) {
   return () => {
     listeners.delete(listener)
   }
+}
+
+/**
+ * Whether the phone has heard from `communityDid` about its look, even that it has none (`saveCommunityBrand` keeps
+ * that too). A card takes never heard as final; a screen reading the community can wait for what it answers.
+ */
+export function useCommunityBrandHeard(communityDid: string): boolean {
+  return useSyncExternalStore(subscribe, () => !!kept?.has(communityDid))
 }
 
 /** The look of `communityDid`'s cards; `name` is what it calls itself, when known (for the monogram). */

@@ -1,6 +1,10 @@
 /** The testIDs of the VtiCommunity screen: the contract the e2e drivers and the tests hold against. Values never change meaning; add, never rename. */
 export const VtiCommunityIds = {
   scroll: 'CommunityScroll',
+  /** The community's logo at the top of its screen, where it has one. */
+  logo: 'CommunityLogo',
+  /** The people icon there, where it has none. */
+  markIcon: 'CommunityMarkIcon',
   name: 'CommunityName',
   nameClaimed: 'CommunityNameClaimed',
   detailsToggle: 'CommunityDetailsToggle',

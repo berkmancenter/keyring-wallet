@@ -16,6 +16,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
+import { resetCommunityBrands } from '../module/useCommunityBrand'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiCommunity from '../screens/VtiCommunity'
@@ -34,6 +35,9 @@ jest.mock('../module/vtiAgent', () => ({
 const mockLeave = jest.fn()
 jest.mock('../module/vtiJoin', () => ({ leaveCommunity: (...a: unknown[]) => mockLeave(...a) }))
 jest.mock('../module/vtiVetting', () => ({ GenericRecordsVettingStore: class {} }))
+jest.mock('../module/communityLogo', () => ({
+  cachedCommunityLogo: async (did: string) => `file:///community-logos/${did}`,
+}))
 const mockToast = jest.fn()
 jest.mock('react-native-toast-message', () => ({
   __esModule: true,
@@ -48,10 +52,13 @@ let mockPersonasRead: Promise<void> | undefined
 let mockPersonasFailOnce = false
 const mockForgetCommunity = jest.fn(async () => undefined)
 const mockForgetPersona = jest.fn(async () => undefined)
+// What the phone keeps of how communities look, set by the tests of the community's mark.
+let mockBrands: unknown[] = []
 jest.mock('../module/VtiCommunityStore', () => ({
   GenericRecordsCommunityStore: class {
     getMembership = async () => undefined
     listHeldCredentials = async () => []
+    listCommunityBrands = async () => mockBrands
     forgetCommunity = (...a: unknown[]) => mockForgetCommunity(...(a as []))
   },
 }))
@@ -759,5 +766,62 @@ describe('the community screen, before it knows whether this phone is a member',
     expect(tree.getByTestId(testIdWithKey('CommunityReadFailed'))).toHaveTextContent(/Join\.StandingUnread/)
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('CommunityReadAgain'))))
     expect(mockRefresh).toHaveBeenCalledTimes(1)
+  })
+})
+
+// A community's Wallet card showed its logo, and this screen the generic people icon.
+describe("the community's mark at the top of its screen", () => {
+  const otherDid = 'did:webvh:QmOther:keyring-vti-vtc.ngrok.app'
+  const logoOf = (did: string) => ({ communityDid: did, logoUrl: 'https://vtc.example.org/logo.png' })
+  const flush = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
+  const screen = () => (
+    <BasicAppContext>
+      <VtiCommunity />
+    </BasicAppContext>
+  )
+  const showOn = (did: string) => {
+    ;(useRoute as jest.Mock).mockReturnValue({ params: { communityDid: did } })
+    ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
+    return render(screen())
+  }
+  const logo = (tree: ReturnType<typeof render>) => tree.queryByTestId(testIdWithKey('CommunityLogo'))
+  const icon = (tree: ReturnType<typeof render>) => tree.queryByTestId(testIdWithKey('CommunityMarkIcon'))
+
+  beforeEach(() => {
+    communityTarget.clear()
+    resetCommunityBrands()
+    mockJourney = notMember
+  })
+  afterEach(() => {
+    mockBrands = []
+    mockJourney = undefined
+  })
+
+  it('shows the logo the Wallet card shows, not the people icon', async () => {
+    mockBrands = [logoOf(communityDid)]
+    const tree = showOn(communityDid)
+    await flush()
+    expect(logo(tree)?.props.source).toEqual({ uri: `file:///community-logos/${communityDid}` })
+    expect(icon(tree)).toBeNull()
+  })
+
+  it('keeps the people icon for a community that has no logo (control)', async () => {
+    mockBrands = [{ communityDid }]
+    const tree = showOn(communityDid)
+    await flush()
+    expect(icon(tree)).toBeTruthy()
+    expect(logo(tree)).toBeNull()
+  })
+
+  it("opened on another community, never shows the last one's logo", async () => {
+    mockBrands = [logoOf(communityDid), { communityDid: otherDid }]
+    const tree = showOn(communityDid)
+    await flush()
+    expect(logo(tree)).toBeTruthy()
+    ;(useRoute as jest.Mock).mockReturnValue({ params: { communityDid: otherDid } })
+    tree.rerender(screen())
+    await flush()
+    expect(logo(tree)).toBeNull()
+    expect(icon(tree)).toBeTruthy()
   })
 })
