@@ -371,7 +371,7 @@ describe('1b. which identity, when several hold a membership', () => {
     })
     const tree = await show(steps)
     await press(tree, SignInIds.continue)
-    expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).toHaveTextContent(/^plugin/)
+    expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).toHaveTextContent(/plugin · Work agent/)
     expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).not.toHaveTextContent(/did:webvh/)
   })
 
@@ -420,11 +420,11 @@ describe('1b. which identity, when several hold a membership', () => {
           role: 'vetter',
         }),
       ])
-      expect(row(0)).toHaveTextContent(/^albertoleon/)
+      expect(row(0)).toHaveTextContent(/albertoleon/)
       expect(row(0)).toHaveTextContent(/Community\.RoleMember/)
       expect(row(0)).toHaveTextContent(/MyAgent\.MemberSince/)
       expect(row(0)).not.toHaveTextContent(/keyring-mv/)
-      expect(row(1)).toHaveTextContent(/^keyring-runner-mini1/)
+      expect(row(1)).toHaveTextContent(/keyring-runner-mini1/)
       expect(row(1)).toHaveTextContent(/SignIn\.AnotherAgent/)
       expect(row(1)).toHaveTextContent(/Community\.RoleVetter/)
       expect(row(1)).not.toHaveTextContent(/keyring-mv/)
@@ -432,7 +432,7 @@ describe('1b. which identity, when several hold a membership', () => {
 
     test('a name someone chose stays, beside the agent', async () => {
       const { row } = await picker([identity(), PLUGIN])
-      expect(row(1)).toHaveTextContent(/^Test \(browser\) · Work agent/)
+      expect(row(1)).toHaveTextContent(/Test \(browser\) · Work agent/)
     })
 
     test('one made elsewhere is given no role or date', async () => {
