@@ -135,7 +135,7 @@ export function bytesDigestMultibase(bytes: Uint8Array): string {
 }
 
 /** `DigestMultibase` of a sha-256 already computed. */
-function hashDigestMultibase(hash: Uint8Array): string {
+export function hashDigestMultibase(hash: Uint8Array): string {
   const multihash = new Uint8Array(2 + hash.length)
   multihash.set([0x12, 0x20], 0)
   multihash.set(hash, 2)

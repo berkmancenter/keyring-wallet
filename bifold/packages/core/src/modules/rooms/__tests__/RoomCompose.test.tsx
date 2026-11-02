@@ -263,8 +263,9 @@ describe('posting to a room', () => {
     expect(tree.queryByTestId(id('RoomComposerInput'))).toBeNull()
   })
 
-  // Posting a file seals it with the cipher that opens one: a room whose files are only listed offers no "+".
-  test('no "+" where the room can\'t take a file; the sample room, where it can, has it', async () => {
+  // Opening a room's files says nothing about posting one: the "+" follows `uploadFile`, so a build that opens files
+  // and cannot yet post them offers no "+", which every post would refuse.
+  test('no "+" where the room can\'t take a file, wherever its files open; the sample room, where it can, has it', async () => {
     const sample = show(PLANNING)
     await waitFor(() => expect(sample.getByTestId(id('RoomComposerAttach'))).toBeTruthy())
     sample.unmount()
