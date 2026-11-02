@@ -87,7 +87,8 @@ import {
   type RenewalRecord,
   type RoomMembershipRecord,
 } from './wire'
-import { SLOW_HOST_FILE_BYTES, UPLOAD_TASK, uploadFile, uploadLimitFor, type DoorAnswer } from './files/upload'
+import type { DoorAnswer, RoomDoors } from './files/door'
+import { SLOW_HOST_FILE_BYTES, UPLOAD_TASK, uploadFile, uploadLimitFor, uploadSegmentFor } from './files/upload'
 
 /** A community this phone belongs to, and the persona it belongs as. */
 export interface RoomsCommunity {
@@ -140,13 +141,9 @@ export interface RoomsBackend {
 }
 
 /** The picked file, and the room host's HTTPS Trust Task door, which an upload's single-use key sends to. */
-export interface RoomsUploadBackend {
+export interface RoomsUploadBackend extends RoomDoors {
   /** `length` bytes of a picked file from `position`. */
   readFile(uri: string, position: number, length: number): Promise<Uint8Array>
-  /** The host's Trust Task base (its DID document's `TrustTaskHTTPS`) and its version (`/health`), if it says. */
-  hostDoor(hostDid: string): Promise<{ base: string; version?: string }>
-  /** POST one document to `<base>/trust-tasks`. */
-  postToDoor(base: string, document: Record<string, unknown>, signal?: AbortSignal): Promise<DoorAnswer>
 }
 
 /** What the service needs besides the backend. Tests replace the clock and the wait between retries. */
@@ -273,19 +270,6 @@ DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, () => {
   for (const service of holdingOpened) service.dropOpenedRecords()
   holdingOpened.clear()
 })
-
-/** A record's file as a screen lists it: the name is untrusted text, shown inert. */
-const roomFileOf = (file: FileManifest, record: Pick<OpenedRecord, 'author' | 'updatedAt'>): RoomFile => ({
-  fileId: file.fileId,
-  name: toInertText(file.name),
-  ...(file.mediaType ? { mediaType: file.mediaType } : {}),
-  size: file.size,
-  ...(record.author ? { sharedBy: { did: record.author } } : {}),
-  ...(record.updatedAt ? { sharedAt: record.updatedAt } : {}),
-})
-
-/** Where an opened record is kept: a record's version never changes once written, so key and version name it. */
-const openedKey = (roomId: string, key: string, version: number) => `${roomId}\n${key}@${version}`
 
 /** A record's file as a screen lists it: the name is untrusted text, shown inert. */
 const roomFileOf = (file: FileManifest, record: Pick<OpenedRecord, 'author' | 'updatedAt'>): RoomFile => ({
@@ -649,6 +633,14 @@ export class AgentRoomsService implements RoomsService {
     if (!this.backend.uploads)
       return { status: 'comingSoon', reason: 'clientNotBuilt', detail: 'uploading is not built on this phone' }
     if (statuses.write.status !== 'available') return statuses.write
+    // A file's record is put at 0.3, the one version a host still serves that carries `blobs`, and an agent completes
+    // that only from act 0.8. Refused here, before anything is sealed or sent, not after the upload.
+    if (!this.putsFileRecords())
+      return {
+        status: 'unavailable',
+        reason: 'agentDoesNotServe',
+        detail: 'posting a file needs an agent serving rooms/keys/act 0.8',
+      }
     if (room.tier !== 'attributed')
       return {
         status: 'comingSoon',
@@ -1133,6 +1125,12 @@ export class AgentRoomsService implements RoomsService {
     return KEYS_ACT_TYPES.find((t) => served.includes(t))
   }
 
+  /** Whether this agent completes `rooms/records/put/0.3`, which it does from act 0.8. */
+  private putsFileRecords(): boolean {
+    const act = this.actType()
+    return act === ROOMS_TASK.keysAct09 || act === ROOMS_TASK.keysAct08
+  }
+
   /**
    * A record put to `host`, completed as the member by the agent. From act 0.8 the agent completes put 0.3 as well as
    * 0.1, and which one the host takes is the host's own: VTC 0.16 serves only 0.3, VTC 0.15 both, VTC 0.12 (the lab)
@@ -1143,9 +1141,11 @@ export class AgentRoomsService implements RoomsService {
    * @versionLadder rooms/records/put
    */
   private async put(community: RoomsCommunity, host: string, payload: Record<string, unknown>): Promise<unknown> {
-    const act = this.actType()
-    const types: string[] =
-      act === ROOMS_TASK.keysAct09 || act === ROOMS_TASK.keysAct08
+    const newer = this.putsFileRecords()
+    // A record naming a blob goes at 0.3 alone: 0.1 has no `blobs`, so it would store the post without its file.
+    const types: string[] = payload.blobs
+      ? [ROOMS_TASK.recordsPut03]
+      : newer
         ? [ROOMS_TASK.recordsPut03, ROOMS_TASK.recordsPut]
         : [ROOMS_TASK.recordsPut]
     const took = this.putTypeOf.get(host)
@@ -1414,7 +1414,7 @@ export class AgentRoomsService implements RoomsService {
    * Refuses a file this room cannot take: posting files must be available here, and the file within what the room's
    * host takes. A host before VTC 0.15 holds the upload's chunks to its anonymous limit, so it takes small files only.
    */
-  private async requireUpload(room: KnownRoom, size: number): Promise<{ base: string }> {
+  private async requireUpload(room: KnownRoom, size: number): Promise<{ base: string; version?: string }> {
     const status = (await this.capabilitiesIn(room)).uploadFile
     if (status.status !== 'available') throw new RoomsUnavailable('uploadFile', status.reason, status.detail)
     const door = await this.hostDoor(room)
@@ -1458,7 +1458,7 @@ export class AgentRoomsService implements RoomsService {
   ): Promise<{ file: FileManifest; blobRef: string }> {
     const uploads = this.backend.uploads
     if (!uploads) throw new RoomsUnavailable('uploadFile', 'clientNotBuilt', 'uploading is not built on this phone')
-    const { base } = await this.requireUpload(room, attachment.size)
+    const { base, version } = await this.requireUpload(room, attachment.size)
     try {
       return await uploadFile(
         {
@@ -1471,7 +1471,14 @@ export class AgentRoomsService implements RoomsService {
           now: () => this.now(),
           sleep: (ms) => this.sleep(ms),
         },
-        { roomId: room.roomId, host, name: attachment.name, mediaType: attachment.mimeType, size: attachment.size },
+        {
+          roomId: room.roomId,
+          host,
+          name: attachment.name,
+          mediaType: attachment.mimeType,
+          size: attachment.size,
+          segmentSize: uploadSegmentFor(version),
+        },
         options
       )
     } catch (e) {

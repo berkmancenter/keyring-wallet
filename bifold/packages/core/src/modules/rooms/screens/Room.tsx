@@ -332,7 +332,11 @@ const Room: React.FC = () => {
               ) : (
                 <RoomPostBubble
                   post={item.post}
-                  onRetry={item.post.delivery === 'failed' ? () => outbox.retry(item.post.key) : undefined}
+                  onRetry={
+                    item.post.delivery === 'failed'
+                      ? () => (item.post.files.length > 0 ? outbox.cancel : outbox.retry)(item.post.key)
+                      : undefined
+                  }
                   onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
                   onOpenFile={canOpenFiles ? setOpenedFile : undefined}
                   onOpenAuthor={setSheetFor}

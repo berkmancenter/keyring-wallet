@@ -1,11 +1,11 @@
 /**
  * Posting a file through the service: where it is offered, what it refuses before anything is sent, and the order
  * of the legs for a post that goes (the file key, begin through act, the chunks and commit at the host's door, then
- * the sealed record naming the blob, put at 0.2).
+ * the sealed record naming the blob, put at 0.3).
  */
 import { AgentRoomsService, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
-import { SLOW_HOST_FILE_BYTES, UPLOAD_TASK } from '../real/files/upload'
-import { blobRefOf } from '../real/files/stream'
+import { FILE_BYTES, SLOW_HOST_FILE_BYTES, UPLOAD_TASK } from '../real/files/upload'
+import { MAX_SEGMENT_SIZE, blobRefOf } from '../real/files/stream'
 import { ROOMS_TASK } from '../real/wire'
 import { RoomsRefused, RoomsUnavailable } from '../types'
 
@@ -22,12 +22,12 @@ const SERVED = [
   ROOMS_TASK.keysList02,
   ROOMS_TASK.keysBrowse,
   ROOMS_TASK.keysRead,
-  ROOMS_TASK.keysAct06,
+  ROOMS_TASK.keysAct08,
   ROOMS_TASK.keysSeal02,
   UPLOAD_TASK.fileKey,
 ]
 
-function setup(o: { served?: string[]; version?: string; uploads?: boolean } = {}) {
+function setup(o: { served?: string[]; version?: string; uploads?: boolean; putRefused?: string } = {}) {
   const calls: string[] = []
   let manifest: unknown
   const agentTask = jest.fn(async (type: string, payload: Record<string, unknown>): Promise<unknown> => {
@@ -42,7 +42,8 @@ function setup(o: { served?: string[]; version?: string; uploads?: boolean } = {
       case ROOMS_TASK.keysSeal02:
         calls.push('seal')
         return { sealed: { ciphertext: `sealed:${String(payload.plaintext)}`, nonce: 'nonce', epoch: 2 } }
-      case ROOMS_TASK.keysAct06: {
+      case ROOMS_TASK.keysAct06:
+      case ROOMS_TASK.keysAct08: {
         const document = payload.document as Record<string, unknown>
         calls.push(`act ${String(document.type).replace('https://trusttasks.org/spec/', '')}`)
         return { principal: COMMUNITY.personaDid, document: { ...document, proof: { type: 'DataIntegrityProof' } } }
@@ -64,6 +65,7 @@ function setup(o: { served?: string[]; version?: string; uploads?: boolean } = {
       manifest = payload.manifest
       return { uploadId: 'up-1', mode: 'proxied', missing: [0], expiresAt: '2030-01-01T00:00:00Z' }
     }
+    if (o.putRefused) throw Object.assign(new Error('refused'), { name: 'VtiRefusal', code: o.putRefused })
     return { key: payload.key, version: 1, epoch: 2 }
   })
   const postToDoor = jest.fn(async (base: string, document: Record<string, unknown>) => {
@@ -130,7 +132,19 @@ describe('posting a file to a room', () => {
     expect((await none.service.roomCapabilities(SEALED_ROOM)).uploadFile).toMatchObject({ reason: 'clientNotBuilt' })
   })
 
-  it('uploads the file, then writes a sealed record naming it at put 0.2', async () => {
+  it('is not offered where the agent cannot complete a record with a file, and nothing is sent', async () => {
+    const old = setup({ served: SERVED.map((t) => (t === ROOMS_TASK.keysAct08 ? ROOMS_TASK.keysAct06 : t)) })
+    expect((await old.service.roomCapabilities(SEALED_ROOM)).uploadFile).toMatchObject({
+      status: 'unavailable',
+      reason: 'agentDoesNotServe',
+    })
+    await expect(
+      old.service.prepareWrite(SEALED_ROOM, { title: '', body: '', attachment: attachment() })
+    ).rejects.toBeInstanceOf(RoomsUnavailable)
+    expect(old.calls).toEqual([])
+  })
+
+  it('uploads the file, then writes a sealed record naming it at put 0.3', async () => {
     const { service, agentTask, sendCompleted, calls } = setup()
     const preview = await service.prepareWrite(SEALED_ROOM, { title: '', body: '', attachment: attachment() })
     const progress: number[] = []
@@ -142,18 +156,45 @@ describe('posting a file to a room', () => {
       'door rooms/blobs/upload/chunk/0.2',
       'door rooms/blobs/upload/commit/0.2',
       'seal',
-      'act rooms/records/put/0.2',
+      'act rooms/records/put/0.3',
     ])
     const body = sealedBody(agentTask)
     expect(body).toMatchObject({ roomId: SEALED_ROOM, author: COMMUNITY.personaDid, version: 1 })
     expect(body).not.toHaveProperty('body')
     expect(body.file).toMatchObject({ name: 'minutes.txt', mediaType: 'text/plain', size: CONTENT.length, epoch: 2 })
 
-    const put = sendCompleted.mock.calls.find((c) => c[2].type === ROOMS_TASK.recordsPut02)![2]
+    const put = sendCompleted.mock.calls.find((c) => c[2].type === ROOMS_TASK.recordsPut03)![2]
     const blobRef = (body.file as { blobRef: string }).blobRef
     expect((put.payload as Record<string, unknown>).blobs).toEqual([blobRef])
     expect(written).toEqual({ key: expect.stringMatching(/^note\//), version: 1 })
     expect(progress.length).toBeGreaterThan(0)
+  })
+
+  it('a host refusing put 0.3 is that refusal: 0.1 has no blobs, so the post is never stored without its file', async () => {
+    const { service, sendCompleted } = setup({ putRefused: 'unsupportedVersion' })
+    const preview = await service.prepareWrite(SEALED_ROOM, { title: '', body: '', attachment: attachment() })
+    await expect(service.confirmWrite(preview.token)).rejects.toBeTruthy()
+    expect(sendCompleted.mock.calls.map((c) => c[2].type)).not.toContain(ROOMS_TASK.recordsPut)
+  })
+
+  it('seals in the large segment for a host from VTC 0.15, and the small one before it', async () => {
+    const sealedFor = async (version: string) => {
+      const { service, agentTask } = setup({ version })
+      const preview = await service.prepareWrite(SEALED_ROOM, { title: '', body: '', attachment: attachment() })
+      await service.confirmWrite(preview.token)
+      return (sealedBody(agentTask).file as { segmentSize: number }).segmentSize
+    }
+    expect(await sealedFor('0.17.0')).toBe(MAX_SEGMENT_SIZE)
+    expect(await sealedFor('0.12.0')).toBeLessThan(MAX_SEGMENT_SIZE)
+  })
+
+  it('refuses a file over the limit on a current host too, before anything is sent', async () => {
+    const { service, calls } = setup({ version: '0.17.0' })
+    const err = await service
+      .prepareWrite(SEALED_ROOM, { title: '', body: '', attachment: attachment(FILE_BYTES + 1) })
+      .catch((e) => e)
+    expect(err).toMatchObject({ code: 'fileTooLarge' })
+    expect(calls).toEqual([])
   })
 
   it('refuses a file larger than a host before VTC 0.15 takes, before anything is sent', async () => {

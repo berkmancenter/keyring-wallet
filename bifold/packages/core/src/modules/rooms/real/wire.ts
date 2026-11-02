@@ -432,67 +432,6 @@ export function parseFileManifest(v: unknown): FileManifest | undefined {
   }
 }
 
-/**
- * A sealed record's file: what its author signed about it, sealed with the record (`FileManifest`,
- * `rooms/_shared/0.1/blobs.schema.json`; vti-rooms `files.rs` @ vta-service-v0.67.0). No host task carries it: only a
- * member who opened the record has it. `name` is untrusted text.
- */
-export interface FileManifest {
-  /** 32 random bytes, base64url without padding. */
-  fileId: string
-  name: string
-  mediaType?: string
-  /** Plaintext bytes, before padding. */
-  size: number
-  /** Digest of the plaintext. */
-  digest: string
-  epoch: number
-  segmentSize: number
-  padding?: 'none' | 'padme'
-  blobRef: string
-}
-
-const FILE_MANIFEST_FIELDS = new Set([
-  'fileId',
-  'name',
-  'mediaType',
-  'size',
-  'digest',
-  'epoch',
-  'segmentSize',
-  'padding',
-  'blobRef',
-])
-const FILE_ID = /^[A-Za-z0-9_-]{43}$/
-
-/** A body's `file`, or undefined when it is missing or not a manifest: as upstream, an unknown member is refused. */
-export function parseFileManifest(v: unknown): FileManifest | undefined {
-  const m = obj(v)
-  if (!m || Object.keys(m).some((k) => !FILE_MANIFEST_FIELDS.has(k))) return undefined
-  const fileId = str(m.fileId)
-  const name = typeof m.name === 'string' ? m.name : undefined
-  const size = int(m.size)
-  const digest = str(m.digest)
-  const epoch = int(m.epoch)
-  const segmentSize = int(m.segmentSize)
-  const blobRef = str(m.blobRef)
-  if (!fileId || !FILE_ID.test(fileId) || name === undefined || size === undefined || size < 0) return undefined
-  if (!digest || epoch === undefined || segmentSize === undefined || segmentSize <= 0 || !blobRef) return undefined
-  if (m.mediaType !== undefined && typeof m.mediaType !== 'string') return undefined
-  if (m.padding !== undefined && m.padding !== 'none' && m.padding !== 'padme') return undefined
-  return {
-    fileId,
-    name,
-    ...(typeof m.mediaType === 'string' ? { mediaType: m.mediaType } : {}),
-    size,
-    digest,
-    epoch,
-    segmentSize,
-    ...(m.padding !== undefined ? { padding: m.padding as 'none' | 'padme' } : {}),
-    blobRef,
-  }
-}
-
 /** One opened record (`rooms/keys/read`). The body is decoded text, or the open room's cleartext as JSON text. */
 export interface OpenedRecord extends RecordMeta {
   body: string

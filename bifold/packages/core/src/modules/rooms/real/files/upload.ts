@@ -13,7 +13,7 @@
  * 6. `rooms/blobs/upload/commit/0.2`, signed by the upload key; on any failure, `abort` instead.
  *
  * Steps 5 and 6 go to the host's HTTPS Trust Task door (`<TrustTaskHTTPS base>/trust-tasks`), never over the
- * phone's session: a VTC refuses a messaging document signed by anyone but its sender (vtc-service-v0.12.0
+ * phone's session: a VTC refuses a messaging document signed by anyone but its sender (vtc-service-v0.17.0
  * `trust_tasks/mod.rs` step 3a), and the upload key is not the sender. On that door a host before VTC 0.15 holds
  * room documents to its anonymous limit (a burst of 10, then one every 5 s), so a `429` waits as long as the host
  * says and sends the chunk again in a new document.
@@ -21,6 +21,7 @@
 import { digestBytesEqual, wireTimestamp } from '@bifold/trust-tasks'
 import { TypedArrayEncoder } from '@credo-ts/core'
 
+import type { DoorAnswer } from './door'
 import type { FileManifest } from '../wire'
 import type { RoomsTransferOptions } from '../../types'
 import type { ThrowawayKey } from '../../../trust-tasks/module/oobSignIn'
@@ -38,34 +39,41 @@ export const UPLOAD_TASK = {
 } as const
 
 /**
- * The segment Keyring seals with. Its chunk document (base64url data and the envelope) stays under the 64 KiB a
- * host's HTTPS door takes from an unauthenticated caller, which the upload key is (vtc-service `UNAUTH_BODY_SIZE`).
+ * The segment Keyring seals with for a host before VTC 0.15. Its chunk document (base64url data and the envelope)
+ * stays under the 64 KiB a host's HTTPS door takes from an unauthenticated caller, which the upload key is
+ * (vtc-service `UNAUTH_BODY_SIZE`). From 0.15 an open upload is standing enough for the larger document upstream sends.
  */
 export const UPLOAD_SEGMENT_SIZE = 32_752
 
 /** The most a file may be on a host whose door holds room documents to its anonymous limit (before VTC 0.15). */
 export const SLOW_HOST_FILE_BYTES = 2_000_000
-/** The most a file may be elsewhere: the picker's limit. */
-export const FILE_BYTES = 25_000_000
+/**
+ * The most a file may be elsewhere: the picker's limit. Sealed chunks are held in memory until the host has them, and
+ * how much a phone can hold has not been measured, so this stays low until it has.
+ */
+export const FILE_BYTES = 5_000_000
 
 /** How long to wait on a `429` that names no time: the anonymous limit's interval. */
 const DEFAULT_RETRY_AFTER_MS = 5_000
 /** How many times one chunk is sent before the upload gives up. */
 const CHUNK_ATTEMPTS = 8
 
-/** The most a file may be on a host of this version (its `/health` `version`); an unknown host gets the lower one. */
-export function uploadLimitFor(hostVersion: string | undefined): number {
+/** Whether a host of this version (its `/health` `version`) gives room documents their own budget; unknown is no. */
+function hasRoomBudgets(hostVersion: string | undefined): boolean {
   const match = /^(\d+)\.(\d+)\./.exec(hostVersion ?? '')
-  if (!match) return SLOW_HOST_FILE_BYTES
+  if (!match) return false
   const [major, minor] = [Number(match[1]), Number(match[2])]
-  return major > 0 || minor >= 15 ? FILE_BYTES : SLOW_HOST_FILE_BYTES
+  return major > 0 || minor >= 15
 }
 
-/** A host's HTTPS answer: its status, how long it asked to be left alone, and its JSON. */
-export interface DoorAnswer {
-  status: number
-  retryAfterSeconds?: number
-  body: unknown
+/** The most a file may be on a host of this version. */
+export function uploadLimitFor(hostVersion: string | undefined): number {
+  return hasRoomBudgets(hostVersion) ? FILE_BYTES : SLOW_HOST_FILE_BYTES
+}
+
+/** The segment to seal with for a host of this version. A file's manifest names it, so any reader follows. */
+export function uploadSegmentFor(hostVersion: string | undefined): number {
+  return hasRoomBudgets(hostVersion) ? MAX_SEGMENT_SIZE : UPLOAD_SEGMENT_SIZE
 }
 
 export interface UploadDeps {
@@ -167,15 +175,18 @@ export async function uploadFile(
     request.size
   )
   const chunks: Uint8Array[] = []
-  for (let i = 0, at = 0; i < sealer.segments; i++) {
-    checkAbort()
-    const length = sealer.segmentLength(i)
-    const plain = await deps.read(at, length)
-    if (plain.length !== length) throw new Error('the file changed while it was being read')
-    chunks.push(sealer.sealNext(plain))
-    at += length
+  try {
+    for (let i = 0, at = 0; i < sealer.segments; i++) {
+      checkAbort()
+      const length = sealer.segmentLength(i)
+      const plain = await deps.read(at, length)
+      if (plain.length !== length) throw new Error('the file changed while it was being read')
+      chunks.push(sealer.sealNext(plain))
+      at += length
+    }
+  } finally {
+    key.fill(0)
   }
-  key.fill(0)
   const { blob, file } = sealer.finish(request.name, request.mediaType)
   checkAbort()
 

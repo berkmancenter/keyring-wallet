@@ -6,15 +6,24 @@ import { TypedArrayEncoder } from '@credo-ts/core'
 
 import { newThrowawayKey } from '../../trust-tasks/module/oobSignIn'
 import { refusalCode } from '../real/wire'
-import { FileBinding, MIN_SEGMENT_SIZE, blobRefOf, decodeFileId, openSegment } from '../real/files/stream'
 import {
-  DoorAnswer,
+  FileBinding,
+  MAX_SEGMENT_SIZE,
+  MIN_SEGMENT_SIZE,
+  blobRefOf,
+  decodeFileId,
+  openSegment,
+} from '../real/files/stream'
+import type { DoorAnswer } from '../real/files/door'
+import {
   FILE_BYTES,
   SLOW_HOST_FILE_BYTES,
+  UPLOAD_SEGMENT_SIZE,
   UPLOAD_TASK,
   UploadDeps,
   uploadFile,
   uploadLimitFor,
+  uploadSegmentFor,
 } from '../real/files/upload'
 
 const ROOM = 'did:webvh:QmRoom:rooms.example'
@@ -191,6 +200,24 @@ describe('room file upload', () => {
 
     expect(refusalCode(failed)).toBe('directNotBuilt')
     expect(h.posted.map((d) => d.type)).toEqual([UPLOAD_TASK.abort])
+  })
+
+  it('wipes the file key when sealing stops part-way, not only when it finishes', async () => {
+    const h = harness()
+    const key = new Uint8Array(32).fill(7)
+    const decode = jest.spyOn(TypedArrayEncoder, 'fromBase64Url').mockReturnValueOnce(key)
+    h.deps.read = async () => {
+      throw new Error('the file went away')
+    }
+    await expect(uploadFile(h.deps, { ...request, segmentSize: SEGMENT })).rejects.toThrow('the file went away')
+    decode.mockRestore()
+    expect(key.every((byte) => byte === 0)).toBe(true)
+  })
+
+  it('seals in the largest segment from VTC 0.15, the small one before it or when unknown', () => {
+    expect(uploadSegmentFor('0.17.0')).toBe(MAX_SEGMENT_SIZE)
+    expect(uploadSegmentFor('0.14.9')).toBe(UPLOAD_SEGMENT_SIZE)
+    expect(uploadSegmentFor(undefined)).toBe(UPLOAD_SEGMENT_SIZE)
   })
 
   it('keeps files small on a host before VTC 0.15, and on one whose version is unknown', () => {
