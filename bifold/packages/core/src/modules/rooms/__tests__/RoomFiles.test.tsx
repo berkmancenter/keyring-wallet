@@ -6,10 +6,12 @@
  */
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { DeviceEventEmitter } from 'react-native'
 import * as Sharing from 'expo-sharing'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
+import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
 import { deriveRoomCapabilities, sampleCapabilities } from '../capabilities'
 import { createSampleRoomsService } from '../sample/sampleRooms'
 import type { RoomsService } from '../types'
@@ -17,6 +19,11 @@ import type { RoomsService } from '../types'
 let mockService: RoomsService | undefined
 let mockParams: Record<string, string> | undefined
 jest.mock('../useRoomsService', () => ({ useRoomsService: () => mockService }))
+// Locking the wallet clears the room file copies.
+jest.mock('react-native-fs', () => ({
+  __esModule: true,
+  default: { CachesDirectoryPath: '/caches', unlink: jest.fn(async () => undefined) },
+}))
 jest.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 100 }))
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
@@ -144,6 +151,52 @@ describe("a post's files", () => {
     await press(tree, 'RoomFileDownload')
     await waitFor(() => expect(tree.getByTestId(id('RoomFileShareUnavailable'))).toBeTruthy())
     expect(tree.queryByTestId(id('RoomFileShare'))).toBeNull()
+  })
+
+  test('beside Share, the sheet says the copy leaves Keyring', async () => {
+    const tree = show()
+    await openSheet(tree)
+    expect(tree.queryByText('Rooms.FileShareLeavesKeyring')).toBeNull()
+    await press(tree, 'RoomFileDownload')
+    await waitFor(() => expect(tree.getByTestId(id('RoomFileShare'))).toBeTruthy())
+    expect(tree.getByText('Rooms.FileShareLeavesKeyring')).toBeTruthy()
+  })
+
+  test('an opened image is drawn in the sheet; a file that is not one is not (control)', async () => {
+    const service = mockService as RoomsService
+    const openFile = jest
+      .spyOn(service, 'openFile')
+      .mockResolvedValueOnce({ localUri: 'file:///copy/a.png', size: 5, image: true })
+    const tree = show()
+    await openSheet(tree)
+    await press(tree, 'RoomFileDownload')
+    const image = await waitFor(() => tree.getByLabelText('Agenda, Oct 30.pdf'))
+    expect(image.props.source).toEqual({ uri: 'file:///copy/a.png' })
+
+    await act(async () => {
+      fireEvent.press(tree.getByLabelText('Global.Close'))
+    })
+    openFile.mockResolvedValueOnce({ localUri: 'file:///copy/a.pdf', size: 5 })
+    await openSheet(tree)
+    await press(tree, 'RoomFileDownload')
+    await waitFor(() => expect(tree.getByTestId(id('RoomFileShare'))).toBeTruthy())
+    expect(tree.queryByLabelText('Agenda, Oct 30.pdf')).toBeNull()
+  })
+
+  test('the wallet locking closes the sheet and releases the copy', async () => {
+    const service = mockService as RoomsService
+    const releaseFile = jest.spyOn(service, 'releaseFile')
+    const tree = show()
+    await openSheet(tree)
+    await press(tree, 'RoomFileDownload')
+    await waitFor(() => expect(tree.getByTestId(id('RoomFileShare'))).toBeTruthy())
+
+    await act(async () => {
+      DeviceEventEmitter.emit(WALLET_LOCKED_EVENT)
+    })
+
+    expect(tree.queryByTestId(id('RoomFileSheet'))).toBeNull()
+    expect(releaseFile).toHaveBeenCalledWith('sample://f1')
   })
 
   test('where files cannot be opened, the chip names the file but is not a button (control: the tests above)', async () => {

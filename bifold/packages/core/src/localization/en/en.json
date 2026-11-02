@@ -3181,6 +3181,7 @@
     "FileFailed": "Couldn't download the file.",
     "FileShare": "Share or save",
     "FileShareUnavailable": "Downloaded, but this device can't share files from Keyring.",
+    "FileShareLeavesKeyring": "Sharing gives a copy to the app you pick. That copy leaves Keyring and isn't removed when you close this.",
     "SizeKB": "{{n}} KB",
     "SizeMB": "{{n}} MB",
     "FileAttach": "Attach a file",

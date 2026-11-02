@@ -16,6 +16,7 @@ import { vtiAgent } from '../../trust-tasks/module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vtiTsp'
 
 import type { RoomsBackend, RoomsCommunity } from './agentRoomsService'
+import { createOpenedCopy, releaseOpenedCopy } from './files/openedCopy'
 
 /** A rooms listing (`vtc/rooms/memberships/list`, `vtc/rooms/offers/list`, any version): what the rooms screens poll. */
 export const isRoomsListing = (type: string): boolean => /\/vtc\/rooms\/[a-z-]+\/list\/[\d.]+$/.test(type)
@@ -78,6 +79,8 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
       asPersona(communityDid, false, () => vtiAgent.sendCompleted(recipientDid, document)),
 
     newId: () => utils.uuid(),
+
+    fileCopies: { create: createOpenedCopy, release: releaseOpenedCopy },
 
     leaveCommunity: async (communityDid) => {
       await leaveCommunity(

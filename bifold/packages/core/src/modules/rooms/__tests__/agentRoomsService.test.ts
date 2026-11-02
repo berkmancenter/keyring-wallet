@@ -378,10 +378,10 @@ describe('AgentRoomsService', () => {
 
   it('reports later phases as not built, without sending anything', async () => {
     const { b, agentTask } = backend({
-      agentServedTypes: async () => [ROOMS_TASK.keysList02, `${SPEC}rooms/keys/act/0.6`],
+      agentServedTypes: async () => [ROOMS_TASK.keysList02, `${SPEC}rooms/keys/present/0.2`],
     })
     const service = new AgentRoomsService(b)
-    const err = await service.openFile().catch((e) => e)
+    const err = await service.listAgentAccess().catch((e) => e)
     expect(err).toBeInstanceOf(RoomsUnavailable)
     expect(err).toMatchObject({ reason: 'clientNotBuilt' })
     expect(agentTask).not.toHaveBeenCalled()

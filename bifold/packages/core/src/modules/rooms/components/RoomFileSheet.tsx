@@ -3,21 +3,26 @@
  * shared it and when, then Download, with progress and Cancel, then Share. The type is only what the post claims;
  * the sheet says so, and that Keyring can't check what a file holds.
  *
- * The downloaded copy is the service's protected local copy, released when the sheet closes. Share hands it to the
- * system share sheet (expo-sharing, which the app already carries for problem reports), on iOS and Android alike;
- * on a device that can't share files, the sheet says so instead of offering a button that would fail.
+ * The downloaded copy is the service's protected local copy, released when the sheet closes. An image is drawn here,
+ * and only when its bytes say it is one. Share hands the copy to the system share sheet (expo-sharing, which the app
+ * already carries for problem reports), on iOS and Android alike; the sheet says that copy leaves Keyring, since
+ * nothing here can take it back. On a device that can't share files, it says so instead of offering a button that
+ * would fail.
+ *
+ * A Modal stays above the lock screen, so the sheet closes when the wallet locks.
  *
  * @module rooms/components/RoomFileSheet
  */
 import * as Sharing from 'expo-sharing'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Modal, Pressable, StyleSheet, View } from 'react-native'
+import { DeviceEventEmitter, Image, Modal, Pressable, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
+import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
 import { localDate } from '../../trust-tasks/screens/localTime'
 import type { RoomFile, RoomsService } from '../types'
 import { useRoomFile } from '../useRoomFile'
@@ -53,6 +58,10 @@ const SheetBody: React.FC<
   // Unknown until asked; asked once per sheet.
   const [canShare, setCanShare] = useState<boolean>()
   useEffect(() => {
+    const locked = DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, onClose)
+    return () => locked.remove()
+  }, [onClose])
+  useEffect(() => {
     let live = true
     Sharing.isAvailableAsync()
       .then((available) => live && setCanShare(available))
@@ -75,6 +84,7 @@ const SheetBody: React.FC<
     muted: { color: ColorPalette.grayscale.mediumGrey },
     track: { height: 6, borderRadius: 3, backgroundColor: ColorPalette.grayscale.lightGrey, overflow: 'hidden' },
     error: { color: ColorPalette.semantic.error },
+    image: { width: '100%', height: 240 },
   })
   const type = fileTypeText(file)
   const shared = [
@@ -149,18 +159,34 @@ const SheetBody: React.FC<
             />
           </View>
         ) : state.step === 'ready' ? (
-          canShare ? (
-            <Button
-              title={t('Rooms.FileShare')}
-              buttonType={ButtonType.Primary}
-              onPress={share}
-              testID={testIdWithKey('RoomFileShare')}
-            />
-          ) : (
-            <ThemedText style={styles.muted} testID={testIdWithKey('RoomFileShareUnavailable')}>
-              {t('Rooms.FileShareUnavailable')}
-            </ThemedText>
-          )
+          <>
+            {state.opened.image ? (
+              <Image
+                source={{ uri: state.opened.localUri }}
+                style={styles.image}
+                resizeMode="contain"
+                accessibilityRole="image"
+                accessibilityLabel={String(file.name)}
+              />
+            ) : null}
+            {canShare ? (
+              <>
+                <Button
+                  title={t('Rooms.FileShare')}
+                  buttonType={ButtonType.Primary}
+                  onPress={share}
+                  testID={testIdWithKey('RoomFileShare')}
+                />
+                <ThemedText variant="caption" style={styles.muted}>
+                  {t('Rooms.FileShareLeavesKeyring')}
+                </ThemedText>
+              </>
+            ) : (
+              <ThemedText style={styles.muted} testID={testIdWithKey('RoomFileShareUnavailable')}>
+                {t('Rooms.FileShareUnavailable')}
+              </ThemedText>
+            )}
+          </>
         ) : (
           <>
             {state.step === 'failed' ? (

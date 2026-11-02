@@ -3118,6 +3118,7 @@
     "FileFailed": "Impossible de télécharger le fichier.",
     "FileShare": "Partager ou enregistrer",
     "FileShareUnavailable": "Téléchargé, mais cet appareil ne peut pas partager de fichiers depuis Keyring.",
+    "FileShareLeavesKeyring": "Partager donne une copie à l'app que vous choisissez. Cette copie quitte Keyring et n'est pas supprimée quand vous fermez ceci.",
     "SizeKB": "{{n}} Ko",
     "SizeMB": "{{n}} Mo",
     "FileAttach": "Joindre un fichier",
