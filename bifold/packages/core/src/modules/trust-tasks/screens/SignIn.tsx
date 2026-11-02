@@ -40,7 +40,7 @@ import { useNavigation } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native'
+import { ActivityIndicator, PixelRatio, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -120,6 +120,12 @@ const SCOPE_WORDS = new Map([
   ['git-ns/account/link-status', { full: 'SignIn.ScopeAccountLink', short: 'SignIn.ScopeShortRepositories' }],
 ])
 const OTHER_SCOPE = { full: 'SignIn.ScopeOther', short: 'SignIn.ScopeShortOther' }
+
+/**
+ * Text size above which the decision no longer fits a fixed bar. Past it, the bar's lines and buttons run at the end
+ * of the scroll, so Approve is still reached only past what it approves.
+ */
+const DECISION_BAR_MAX_FONT_SCALE = 1.2
 
 /** The words for an ending, as a localization key. */
 export function signInEndKey(end: SignInEnd): string {
@@ -358,7 +364,11 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
         signingAs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
         link: { minHeight: 44, justifyContent: 'center' },
         linkWords: { color: ColorPalette.brand.primary },
-        facts: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 8 },
+        small: { fontSize: 14, lineHeight: 18 },
+        factValue: { fontSize: 16, lineHeight: 21 },
+        consent: { fontSize: 15, lineHeight: 20 },
+        scopeLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+        facts: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 6 },
         fact: { width: '50%', paddingRight: 8 },
         warned: { flexDirection: 'row', alignItems: 'center', gap: 4 },
         mono: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
@@ -371,7 +381,8 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
           paddingVertical: 8,
           gap: 6,
         },
-        decide: { flexDirection: 'row', gap: 12 },
+        decisionInline: { gap: 8 },
+        decide: { flexDirection: 'row', alignItems: 'center', gap: 12 },
         centred: { alignItems: 'center' },
         row: { gap: 2 },
         muted: { color: ColorPalette.grayscale.mediumGrey },
@@ -408,10 +419,10 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   /** A fact in the review's grid: a label over its value. */
   const fact = (label: string, value: string, testID: string, warns = false) => (
     <View style={styles.fact} key={testID}>
-      <ThemedText style={styles.muted}>{label}</ThemedText>
+      <ThemedText style={[styles.muted, styles.small]}>{label}</ThemedText>
       <View style={styles.warned}>
         {warns ? <Icon name="alert-outline" size={18} color={ColorPalette.notification.warnIcon} /> : null}
-        <ThemedText variant="bold" testID={id(testID)}>
+        <ThemedText variant="bold" style={styles.factValue} testID={id(testID)}>
           {value}
         </ThemedText>
       </View>
@@ -677,18 +688,8 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             ? t('SignIn.NotReported')
             : t(requester.sameNetwork ? 'SignIn.Yes' : 'SignIn.No')
         const who = signingAs(proved)
-        // The catch-all reads as the end of the list, wherever the community named a family it covers.
-        const scopeWords = (proved.signingScope ?? [])
-          .map((family) => SCOPE_WORDS.get(family) ?? OTHER_SCOPE)
-          .sort((a, b) => Number(a === OTHER_SCOPE) - Number(b === OTHER_SCOPE))
-        const fullAreas = [...new Set(scopeWords.map((words) => words.full))].map((key) => t(key)).join(', ')
-        const shortAreas = [...new Set(scopeWords.map((words) => words.short))].map((key) => t(key))
-        const shortList =
-          shortAreas.length > 1
-            ? `${shortAreas.slice(0, -1).join(', ')} ${t('Claims.And')} ${shortAreas[shortAreas.length - 1]}`
-            : shortAreas[0]
         return (
-          <View style={{ gap: 12 }} testID={id(SignInIds.review)}>
+          <View style={{ gap: 10 }} testID={id(SignInIds.review)}>
             <ThemedText variant="headingThree" accessibilityRole="header">
               {t('SignIn.ReviewTitle')}
             </ThemedText>
@@ -706,14 +707,14 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
                   <ThemedText variant="bold" testID={id(SignInIds.community)}>
                     {communityName}
                   </ThemedText>
-                  <ThemedText style={styles.muted} testID={id(SignInIds.website)}>
+                  <ThemedText style={[styles.muted, styles.small]} testID={id(SignInIds.website)}>
                     {proved.claimed.portalOrigin}
                   </ThemedText>
                 </View>
                 <View style={styles.rule} />
                 {who ? (
                   <View style={styles.row} testID={id(SignInIds.signingAs)}>
-                    <ThemedText style={styles.muted}>{t('SignIn.SigningInAs')}</ThemedText>
+                    <ThemedText style={[styles.muted, styles.small]}>{t('SignIn.SigningInAs')}</ThemedText>
                     <View style={styles.signingAs}>
                       <SignInIdentityBlock identity={who} short />
                       {details(identityOpen, () => setIdentityOpen(!identityOpen), SignInIds.identityDetails)}
@@ -746,30 +747,10 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
                 {fact(t('SignIn.Location'), reported(requester.location), SignInIds.location)}
                 {fact(t('SignIn.SameNetwork'), sameNetwork, SignInIds.sameNetwork, requester.sameNetwork === false)}
               </View>
-              <ThemedText style={styles.muted} testID={id(SignInIds.reportedBy)}>
+              <ThemedText style={[styles.muted, styles.small]} testID={id(SignInIds.reportedBy)}>
                 {t(word('ReportedBy'))}
               </ThemedText>
             </View>
-            <ThemedText variant="bold" testID={id(SignInIds.sessionOnly)}>
-              {t('SignIn.SessionOnly', { hours: GRANT_LIFETIME_SECONDS / 3600 })}
-            </ThemedText>
-            {/* 0.2 (IN-280): the browser's key may also sign these documents as the person, for this session,
-                without asking the phone each time. The grant binds what the person was shown, so this stays on
-                screen, short; Details has it in full. Families Keyring has no words for are said once, as that, and
-                never by their task names. The words are our own, so they are not escaped. */}
-            {scopeWords.length ? (
-              <View style={styles.row}>
-                <ThemedText testID={id(SignInIds.scopeShort)}>
-                  {t('SignIn.ScopeShort', { areas: shortList, interpolation: { escapeValue: false } })}
-                </ThemedText>
-                {details(scopeOpen, () => setScopeOpen(!scopeOpen), SignInIds.scopeDetails)}
-                {scopeOpen ? (
-                  <ThemedText testID={id(SignInIds.signingScope)}>
-                    {t('SignIn.SigningScope', { areas: fullAreas, interpolation: { escapeValue: false } })}
-                  </ThemedText>
-                ) : null}
-              </View>
-            ) : null}
           </View>
         )
       }
@@ -795,12 +776,50 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     }
   }
 
-  /** The review's Approve and Decline, outside the scroll. */
+  const reviewing = step.kind === 'review' || step.kind === 'approving'
+  const decisionInScroll = PixelRatio.getFontScale() > DECISION_BAR_MAX_FONT_SCALE
+
+  /**
+   * What Approve agrees to, then Approve and Decline: kept together, so the buttons are never on screen without the
+   * words. The bold line comes first because the scope line's "It" is the browser it names.
+   */
   const decision = () => {
     if (step.kind !== 'review' && step.kind !== 'approving') return null
     const { proved } = step
+    const scopeWords = (proved.signingScope ?? [])
+      .map((family) => SCOPE_WORDS.get(family) ?? OTHER_SCOPE)
+      // The catch-all reads as the end of the list, wherever the community named a family it covers.
+      .sort((a, b) => Number(a === OTHER_SCOPE) - Number(b === OTHER_SCOPE))
+    const fullAreas = [...new Set(scopeWords.map((words) => words.full))].map((key) => t(key)).join(', ')
+    const shortAreas = [...new Set(scopeWords.map((words) => words.short))].map((key) => t(key))
+    const shortList =
+      shortAreas.length > 1
+        ? `${shortAreas.slice(0, -1).join(', ')} ${t('Claims.And')} ${shortAreas[shortAreas.length - 1]}`
+        : shortAreas[0]
     return (
-      <View style={styles.decision}>
+      <>
+        <ThemedText variant="bold" style={styles.consent} testID={id(SignInIds.sessionOnly)}>
+          {t('SignIn.SessionOnly', { hours: GRANT_LIFETIME_SECONDS / 3600 })}
+        </ThemedText>
+        {/* 0.2 (IN-280): the browser's key may also sign these documents as the person, for this session, without
+            asking the phone each time. The grant binds what the person was shown, so this stays with the buttons,
+            short; Details has it in full. Families Keyring has no words for are said once, as that, and never by
+            their task names. The words are our own, so they are not escaped. */}
+        {scopeWords.length ? (
+          <>
+            <View style={styles.scopeLine}>
+              <ThemedText style={[styles.consent, styles.grow]} testID={id(SignInIds.scopeShort)}>
+                {t('SignIn.ScopeShort', { areas: shortList, interpolation: { escapeValue: false } })}
+              </ThemedText>
+              {details(scopeOpen, () => setScopeOpen(!scopeOpen), SignInIds.scopeDetails)}
+            </View>
+            {scopeOpen ? (
+              <ThemedText style={styles.consent} testID={id(SignInIds.signingScope)}>
+                {t('SignIn.SigningScope', { areas: fullAreas, interpolation: { escapeValue: false } })}
+              </ThemedText>
+            ) : null}
+          </>
+        ) : null}
         {step.kind === 'approving' ? (
           busyNote(t('SignIn.Approving'), SignInIds.busy)
         ) : (
@@ -826,12 +845,12 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             </View>
           </>
         )}
-      </View>
+      </>
     )
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <KeyboardAvoidingView
         ref={keyboard.ref}
         onLayout={keyboard.onLayout}
@@ -845,8 +864,17 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
           testID={id(SignInIds.screen)}
         >
           {body()}
+          {reviewing && decisionInScroll ? (
+            <View style={styles.decisionInline} testID={id(SignInIds.decision)}>
+              {decision()}
+            </View>
+          ) : null}
         </ScrollView>
-        {decision()}
+        {reviewing && !decisionInScroll ? (
+          <View style={styles.decision} testID={id(SignInIds.decision)}>
+            {decision()}
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   )

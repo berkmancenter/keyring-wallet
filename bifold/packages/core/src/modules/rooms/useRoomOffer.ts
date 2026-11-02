@@ -37,6 +37,8 @@ export interface RoomOfferState {
   step: OfferStep
   /** The offer could not be read. */
   readFailed: boolean
+  /** With `readFailed`: the community no longer lists it, so reading it again can't help. */
+  gone: boolean
   /** The last accept or hide failed; nothing changed. */
   actFailed?: 'accept' | 'hide'
   /** Why the last accept was refused, when the service said; undefined for a failure with no reason (try again). */
@@ -69,12 +71,25 @@ const refusalOf = (e: unknown): AcceptRefusal | undefined => {
   return undefined
 }
 
+/**
+ * Why the offer could not be read, as one value so a failure can't be raised without saying which. `gone` is a read the
+ * community answered: this offer isn't there (accepted elsewhere, withdrawn or expired), and reading it again can't
+ * help. Anything else can be tried again.
+ */
+type ReadFailure = 'failed' | 'gone'
+
+const readFailureOf = (e: unknown): ReadFailure => {
+  const refusal = refusalOf(e)
+  const gone = !!refusal && 'code' in refusal && (refusal.code === 'notFound' || refusal.code === 'offerExpired')
+  return gone ? 'gone' : 'failed'
+}
+
 export function useRoomOffer(service: RoomsService | undefined, offerRef: string): RoomOfferState {
   const [acceptStatus, setAcceptStatus] = useState<OperationStatus>()
   const [hideStatus, setHideStatus] = useState<OperationStatus>()
   const [preview, setPreview] = useState<OfferPreview>()
   const [step, setStep] = useState<OfferStep>('reading')
-  const [readFailed, setReadFailed] = useState(false)
+  const [readFailure, setReadFailure] = useState<ReadFailure>()
   const [actFailed, setActFailed] = useState<'accept' | 'hide'>()
   const [refusal, setRefusal] = useState<AcceptRefusal>()
   const [refreshed, setRefreshed] = useState(false)
@@ -85,7 +100,7 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
     if (!service) return
     let live = true
     setStep('reading')
-    setReadFailed(false)
+    setReadFailure(undefined)
     void (async () => {
       try {
         const capabilities = await service.capabilities({ refresh: generation > 0 })
@@ -97,9 +112,9 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
         if (!live) return
         setPreview(read)
         setStep('ready')
-      } catch {
+      } catch (e) {
         if (live) {
-          setReadFailed(true)
+          setReadFailure(readFailureOf(e))
           setStep('ready')
         }
       }
@@ -128,8 +143,8 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
         try {
           setPreview(await service.previewOffer(offerRef))
           setRefreshed(true)
-        } catch {
-          setReadFailed(true)
+        } catch (again) {
+          setReadFailure(readFailureOf(again))
         }
       } else {
         setActFailed('accept')
@@ -157,5 +172,18 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
     }
   }, [service, offerRef])
 
-  return { acceptStatus, hideStatus, preview, step, readFailed, actFailed, refusal, refreshed, reload, accept, hide }
+  return {
+    acceptStatus,
+    hideStatus,
+    preview,
+    step,
+    readFailed: readFailure !== undefined,
+    gone: readFailure === 'gone',
+    actFailed,
+    refusal,
+    refreshed,
+    reload,
+    accept,
+    hide,
+  }
 }

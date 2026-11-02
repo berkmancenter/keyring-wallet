@@ -2606,6 +2606,7 @@
     "ChooseOnAgentCurrent": "Mantida por {{agent}} (o agente deste telefone)",
     "ChooseFromPhone": "Entrou por este telefone",
     "ChooseFromAgent": "Encontrada no seu agente: criada em outro lugar, como na extensão do navegador",
+    "ChooseAgentSilent": "Seu agente não respondeu.",
     "ReportedBy": "Informado pela comunidade. O Keyring não pode verificar isso.",
     "Browser": "Navegador",
     "System": "Sistema",

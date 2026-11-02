@@ -2756,6 +2756,7 @@
     "ChooseOnAgentCurrent": "Held by {{agent}} (this phone's agent)",
     "ChooseFromPhone": "Joined on this phone",
     "ChooseFromAgent": "Found on your agent: made elsewhere, such as in the browser plugin",
+    "ChooseAgentSilent": "Your agent couldn't be reached.",
     "ReportedBy": "Reported by the community. Keyring can't check these.",
     "Browser": "Browser",
     "System": "System",

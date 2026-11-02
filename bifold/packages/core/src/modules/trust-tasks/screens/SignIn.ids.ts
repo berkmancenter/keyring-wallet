@@ -51,6 +51,8 @@ export const SignInIds = {
   signingScope: 'SignInSigningScope',
   scopeShort: 'SignInScopeShort',
   scopeDetails: 'SignInScopeDetails',
+  // What Approve agrees to, and the buttons: together, in the bar or at the end of the scroll.
+  decision: 'SignInDecision',
   approve: 'SignInApprove',
   decline: 'SignInDecline',
   busy: 'SignInBusy',
