@@ -88,7 +88,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   }, [draft])
   const [file, setFile] = useState<RoomsAttachment>()
   // The picked file's copy is the composer's until it is sent, so it goes when the file does, or the composer.
-  const held = useRef<RoomsAttachment>()
+  const held = useRef<RoomsAttachment | undefined>(undefined)
   const holdFile = (next?: RoomsAttachment) => {
     void removeRoomFileCopy(held.current?.uri)
     held.current = next
