@@ -33,7 +33,7 @@ import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutc
 import type { StepUpRequest } from './stepUp'
 import { releaseWarn } from './releaseLog'
 import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
-import { VtiRefusal } from './vtiAgent'
+import { VtiRefusal, vtiAgent } from './vtiAgent'
 import {
   ManagerKeyUnresolved,
   SwapDoneSignInFailed,
@@ -1372,6 +1372,7 @@ export class VtaAgentController {
     this.note('unlinked')
     // Another linked agent is now current (the store's oldest): it comes up.
     await this.takeUpCurrent(agent, { not: vtaDid })
+    if (this.state.link.kind === 'notLinked') vtiAgent.clearFailure()
   }
 
   /**

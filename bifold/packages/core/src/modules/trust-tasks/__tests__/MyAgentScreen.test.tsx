@@ -18,6 +18,7 @@ import enCopy from '../../../localization/en/en.json'
 import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
 import MyAgent, { GET_AGENT_LINKS } from '../screens/MyAgent'
+import { MyAgentIds } from '../screens/MyAgent.ids'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { DisclosureNotShown } from '../module/directoryDisclosure'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -226,6 +227,45 @@ describe('My Agent — the connected gate', () => {
     })
     expect(tree.queryByTestId(testIdWithKey('MyAgentCard'))).toBeNull()
     expect(tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toBeTruthy()
+  })
+
+  describe("a community session's failure", () => {
+    const failed = 'Error importing key'
+
+    test('no agent linked: no leftover error, and the way to link is all there is', async () => {
+      mockUseAgent.mockReturnValue(fakeAgent([]))
+      setVta({ status: 'disconnected', link: { kind: 'notLinked' } })
+      setVti({ status: 'failed', error: failed })
+      const tree = render(
+        <BasicAppContext>
+          <MyAgent config={{}} />
+        </BasicAppContext>
+      )
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      expect(tree.queryByTestId(testIdWithKey(MyAgentIds.error))).toBeNull()
+      expect(tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toBeTruthy()
+    })
+
+    test('an agent to connect to: its own failure still shows, with Try again', async () => {
+      mockUseAgent.mockReturnValue(fakeAgent([manager]))
+      setVta({ link: { kind: 'notLinked' } })
+      const tree = render(
+        <BasicAppContext>
+          <MyAgent config={config} />
+        </BasicAppContext>
+      )
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      // After the screen's own connect has settled: that clears the error.
+      await act(async () => {
+        setVta({ status: 'failed', error: failed })
+      })
+      expect(tree.getByTestId(testIdWithKey(MyAgentIds.error))).toBeTruthy()
+      expect(tree.getByText('MyAgent.TryAgain')).toBeTruthy()
+    })
   })
 
   /**
