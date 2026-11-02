@@ -2,11 +2,13 @@
  * The rooms Trust Tasks the real service sends, and parsers for what comes back. Every shape is read from
  * the Trust Task specs (dtgwg-trust-tasks-tf, as `@openvtc/trust-tasks` 0.27 ships them:
  * `rooms/keys/{list,browse,read,key-package,welcome,backfill,act,seal}`, `vtc/rooms/{memberships,offers}/*`,
- * `vault/credentials/{receive,query,get}`, `rooms/records/{put,curate}`).
+ * `vault/credentials/{receive,query,get}`, `rooms/records/{put,curate}`, `rooms/blobs/{get,chunk}`).
  * The parsers accept only what the specs define and drop anything else, so a malformed or hostile
  * answer can at worst lose a row, never inject one.
  */
 import type { HostCheck, RecordPrune, RoomTier, RoomVerb } from '../types'
+
+import type { BlobManifest } from './files/stream'
 
 const SPEC = 'https://trusttasks.org/spec/'
 
@@ -47,6 +49,9 @@ export const ROOMS_TASK = {
   // `rooms/keys/act` from 0.8 (0.7's table added it); hosts from VTA 0.68 serve only 0.3, the lab's pin 0.1 and 0.3.
   recordsPut03: `${SPEC}rooms/records/put/0.3`,
   recordsCurate: `${SPEC}rooms/records/curate/0.1`,
+  blobsGet: `${SPEC}rooms/blobs/get/0.2`,
+  blobsChunk: `${SPEC}rooms/blobs/chunk/0.1`,
+  keysFileKey: `${SPEC}rooms/keys/file-key/0.2`,
 } as const
 
 /**
@@ -430,6 +435,53 @@ export function parseFileManifest(v: unknown): FileManifest | undefined {
     ...(m.padding !== undefined ? { padding: m.padding as 'none' | 'padme' } : {}),
     blobRef,
   }
+}
+
+const BLOB_MANIFEST_FIELDS = new Set(['size', 'chunks', 'digest'])
+const CHUNK_MANIFEST_FIELDS = new Set(['chunkSize', 'chunkCount', 'chunkDigests'])
+
+/** A host's `BlobManifest`, or undefined when it does not read; as upstream, an unknown member is refused. */
+export function parseBlobManifest(v: unknown): BlobManifest | undefined {
+  const m = obj(v)
+  const chunks = obj(m?.chunks)
+  if (!m || !chunks) return undefined
+  if (Object.keys(m).some((k) => !BLOB_MANIFEST_FIELDS.has(k))) return undefined
+  if (Object.keys(chunks).some((k) => !CHUNK_MANIFEST_FIELDS.has(k))) return undefined
+  const size = int(m.size)
+  const digest = str(m.digest)
+  const chunkSize = int(chunks.chunkSize)
+  const chunkCount = int(chunks.chunkCount)
+  const chunkDigests = Array.isArray(chunks.chunkDigests) ? chunks.chunkDigests : undefined
+  if (size === undefined || !digest || chunkSize === undefined || chunkCount === undefined || !chunkDigests)
+    return undefined
+  if (chunkDigests.some((d) => !str(d))) return undefined
+  return { size, chunks: { chunkSize, chunkCount, chunkDigests: chunkDigests as string[] }, digest }
+}
+
+/**
+ * `rooms/blobs/get`'s answer, when it is the proxied download this client asks for. A storage URL is not used even if
+ * a host offers one: fetching it would show that storage the phone.
+ */
+export function parseBlobDownload(v: unknown): { blob: BlobManifest; downloadId: string } | undefined {
+  const m = obj(v)
+  const blob = parseBlobManifest(m?.manifest)
+  const downloadId = str(m?.downloadId)
+  return blob && downloadId && m?.mode === 'proxied' ? { blob, downloadId } : undefined
+}
+
+/**
+ * `rooms/blobs/chunk`'s base64url `data` for chunk `index`. Its `digestMultibase` only restates the manifest, so it is not
+ * read: the bytes are checked against the manifest the sealed record names (`files/open.ts`).
+ */
+export function parseBlobChunk(v: unknown, index: number): string | undefined {
+  const m = obj(v)
+  return m?.index === index && typeof m.data === 'string' ? m.data : undefined
+}
+
+/** `rooms/keys/file-key`'s base64url key, for the epoch asked. */
+export function parseFileKey(v: unknown, epoch: number): string | undefined {
+  const m = obj(v)
+  return m?.epoch === epoch ? str(m.key) : undefined
 }
 
 /** One opened record (`rooms/keys/read`). The body is decoded text, or the open room's cleartext as JSON text. */

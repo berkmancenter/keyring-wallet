@@ -22,11 +22,14 @@
  *
  * Files and agent access are later phases and report `clientNotBuilt`.
  */
+import { TypedArrayEncoder } from '@credo-ts/core'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { DeviceEventEmitter } from 'react-native'
 
 import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
+import { sizeFailure } from '../../chat/media/checkAttachment'
+import { readImageHeader } from '../../chat/media/imageHeader'
 import { deriveCapabilities, deriveRoomCapabilities } from '../capabilities'
 import { inertFlags, toInertText } from '../inertText'
 import { chatMessageText } from '../roomPosts'
@@ -46,6 +49,7 @@ import type {
   RoomsCapabilities,
   RoomsOperation,
   RoomsService,
+  RoomsTransferOptions,
   RoomSummary,
   WriteDraft,
   WritePreview,
@@ -60,13 +64,18 @@ import {
   RoomsUnavailable,
 } from '../types'
 
+import { OPEN_FILE_BYTES, openRoomFile, type OpenFileCopy } from './files/open'
+import { holdRoomFileTransfer, sweepRoomFileCopiesOnce } from './files/tempCopies'
 import {
   KEYS_ACT_TYPES,
   OFFERS_LIST_TYPES,
   parseAccept,
   parseActed,
+  parseBlobChunk,
+  parseBlobDownload,
   parseBrowse,
   parseCurate,
+  parseFileKey,
   parseKeyPackage,
   parseKeysList,
   parseMemberships,
@@ -132,6 +141,16 @@ export interface RoomsBackend {
   sessionKept?(error: unknown): boolean
   /** Resolves once a task to `communityDid` would no longer be refused that way (vtiAgent `whenFree`). */
   sessionFree?(communityDid: string): Promise<void>
+  /** Where an opened file's copy lives while it is shown. */
+  fileCopies?: RoomFileCopies
+}
+
+/** The local copies of opened files. */
+export interface RoomFileCopies {
+  /** A new, empty copy for a file of this untrusted `name`. */
+  create(name: string): Promise<OpenFileCopy>
+  /** Deletes a finished copy. Never rejects. */
+  release(localUri: string): Promise<void>
 }
 
 /** What the service needs besides the backend. Tests replace the clock and the wait between retries. */
@@ -158,6 +177,7 @@ export const BUILT: ReadonlySet<RoomsOperation> = new Set<RoomsOperation>([
   'write',
   'curate',
   'listFiles',
+  'openFile',
 ])
 
 /**
@@ -173,6 +193,18 @@ export function postKey(idempotencyKey: string): string {
  * CLI does (`pnm rooms put`, VTA 0.67).
  */
 const SEALED_WRITE_ATTEMPTS = 4
+
+/** How many times a file's chunk is asked for when no answer comes. A long file meets a dropped answer sooner or later. */
+const FILE_CHUNK_ATTEMPTS = 3
+
+/**
+ * Whether a file can be drawn in its sheet: its first bytes, not what the post claims, say it is an image, in the
+ * bounds chat holds a received image to, before any native decoder sees it.
+ */
+const isShowableImage = (head: Uint8Array): boolean => {
+  const image = readImageHeader(head)
+  return !!image && !sizeFailure(image.width, image.height, image.frames)
+}
 
 /** How many pages of a community's membership record, or of its offers, to read before stopping. */
 const MAX_MEMBERSHIP_PAGES = 10
@@ -328,6 +360,9 @@ export class AgentRoomsService implements RoomsService {
   ) {
     this.now = options.now ?? (() => Date.now())
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
+    // Before any room can open: a killed app's copy of a file does not wait for the next file to be opened. Once per
+    // launch: no transfer exists before the first service, and that latch is what keeps a later service from sweeping one.
+    void sweepRoomFileCopiesOnce().catch(() => undefined)
   }
 
   public async capabilities(options: { refresh?: boolean } = {}): Promise<RoomsCapabilities> {
@@ -1418,8 +1453,12 @@ export class AgentRoomsService implements RoomsService {
    */
   public async listFiles(roomId: string): Promise<RoomFile[]> {
     const room = await this.requireInRoom(roomId, 'listFiles')
+    return (await this.readFiles(room, roomId)).map(({ file, record }) => roomFileOf(file, record))
+  }
+
+  private async readFiles(room: KnownRoom, roomId: string): Promise<{ file: FileManifest; record: OpenedRecord }[]> {
     const listing = parseBrowse(await this.backend.agentTask(this.browseType(), { roomId, host: room.host }))
-    const files: RoomFile[] = []
+    const files: { file: FileManifest; record: OpenedRecord }[] = []
     let opened = 0
     let failure: unknown
     for (const record of listing.records) {
@@ -1439,16 +1478,99 @@ export class AgentRoomsService implements RoomsService {
         this.keepOpened(roomId, read)
       }
       opened++
-      if (read.file) files.push(roomFileOf(read.file, read))
+      if (read.file) files.push({ file: read.file, record: read })
     }
     if (opened === 0 && failure !== undefined) throw failure
     return files
   }
-  public openFile(): Promise<OpenedFile> {
-    return this.notYet('openFile')
+
+  /**
+   * Fetches a file through the host, opens it here and leaves a local copy, for as long as the sheet shows it. The
+   * record is read again first, so a retracted file is not opened, and its sealed manifest is what everything the
+   * host sends is checked against (`files/open.ts`). The download is always proxied. The key comes from the person's
+   * agent and opens this one file; it is not kept (upstream: it never expires).
+   */
+  public async openFile(roomId: string, fileId: string, options: RoomsTransferOptions = {}): Promise<OpenedFile> {
+    const room = await this.requireInRoom(roomId, 'openFile')
+    const { community, host } = this.hostOf(room, 'openFile')
+    const copies = this.backend.fileCopies
+    if (!copies) throw new RoomsUnavailable('openFile', 'clientNotBuilt', 'this build keeps no local copies')
+    const file = (await this.readFiles(room, roomId)).find((f) => f.file.fileId === fileId)?.file
+    if (!file) throw new RoomsRefused('openFile', 'notFound', false, 'the room has no such file')
+    if (file.size > OPEN_FILE_BYTES) throw new RoomsRefused('openFile', 'tooLarge', false, 'too large to open here')
+    const opening = new AbortController()
+    const cancelled = () => opening.abort()
+    options.signal?.addEventListener('abort', cancelled, { once: true })
+    if (options.signal?.aborted) opening.abort()
+    const letGo = holdRoomFileTransfer(opening)
+    try {
+      const { localUri, head } = await openRoomFile(
+        {
+          getBlob: async (blobRef) => {
+            const download = parseBlobDownload(
+              await this.actAndSend('openFile', community, host, ROOMS_TASK.blobsGet, { roomId, blobRef })
+            )
+            if (!download) throw new Error('the host did not open a proxied download')
+            return download
+          },
+          getChunk: (downloadId, index) => this.fileChunk(community, host, downloadId, index),
+          fileKey: async ({ fileId: id, epoch }) => {
+            const key = parseFileKey(
+              await this.agentStep('openFile', "release the file's key", ROOMS_TASK.keysFileKey, {
+                roomId,
+                fileId: id,
+                purpose: 'open',
+                epoch,
+              }),
+              epoch
+            )
+            if (!key) throw new Error("the agent's answer gave no key for this file")
+            return TypedArrayEncoder.fromBase64Url(key)
+          },
+          newCopy: ({ name }) => copies.create(name),
+        },
+        roomId,
+        file,
+        { signal: opening.signal, onProgress: options.onProgress }
+      )
+      return {
+        localUri,
+        ...(file.mediaType ? { mediaType: file.mediaType } : {}),
+        size: file.size,
+        ...(isShowableImage(head) ? { image: true } : {}),
+      }
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError') this.backend.warn(`opening a room file failed: ${message(e)}`)
+      throw e
+    } finally {
+      letGo()
+      options.signal?.removeEventListener('abort', cancelled)
+    }
   }
-  public releaseFile(): Promise<void> {
-    return Promise.resolve()
+
+  /** One chunk's bytes, asked again when no answer came: a chunk may be fetched any number of times. A refusal stands. */
+  private async fileChunk(
+    community: RoomsCommunity,
+    host: string,
+    downloadId: string,
+    index: number
+  ): Promise<Uint8Array> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const data = parseBlobChunk(
+          await this.actAndSend('openFile', community, host, ROOMS_TASK.blobsChunk, { downloadId, index }),
+          index
+        )
+        if (data === undefined) throw new Error(`the host's answer for chunk ${index} did not read`)
+        return TypedArrayEncoder.fromBase64Url(data)
+      } catch (e) {
+        if (attempt >= FILE_CHUNK_ATTEMPTS || refusalCode(e)) throw e
+      }
+    }
+  }
+
+  public async releaseFile(localUri: string): Promise<void> {
+    await this.backend.fileCopies?.release(localUri)
   }
   public listCommunityMembers(): Promise<CommunityRoomMember[]> {
     return this.notYet('listCommunityMembers')

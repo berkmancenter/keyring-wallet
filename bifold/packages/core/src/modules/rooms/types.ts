@@ -316,6 +316,8 @@ export interface OpenedFile {
   localUri: string
   mediaType?: string
   size: number
+  /** Its bytes are an image the sheet can draw. Set from the bytes, never from `mediaType`, which is only claimed. */
+  image?: boolean
 }
 
 export interface CommunityRoomMember {
@@ -449,8 +451,8 @@ export interface RoomsService {
   listFiles(roomId: string): Promise<RoomFile[]>
   openFile(roomId: string, fileId: string, options?: RoomsTransferOptions): Promise<OpenedFile>
   /**
-   * Deletes the protected local copy a completed `openFile` made (a cancelled one keeps none). Call it when the viewer closes. The service also
-   * deletes any copies left from earlier sessions on its first `openFile` after the app starts.
+   * Deletes the protected local copy a completed `openFile` made (a cancelled one keeps none). Call it when the viewer closes. The wallet
+   * locking deletes every copy, and the app's start deletes any a killed app left.
    */
   releaseFile(localUri: string): Promise<void>
 
