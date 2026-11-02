@@ -161,7 +161,7 @@ The app does what it can on one phone:
 
 - It records the poll on the phone, across agents, before asking for a ticket, and refuses a second
   ticket once a vote is recorded or a linked agent holds one.
-- If the phone holds two live memberships, the poll screen asks once which identity votes. Only that
+- If the phone holds two live memberships, the app asks once per community which identity votes. Only that
   identity reads polls and takes a ticket, so the community isn't shown a link between the two.
 - It uses one voter context per agent.
 - It says "one vote per membership", never "one person, one vote". A `binding` poll adds "This
@@ -176,6 +176,18 @@ Reads and the ticket request go over Keyring's existing community session, signe
 identity. No election task is limited by transport, and the VTC's HTTPS address would hand the
 community the phone's IP address beside the ticket. The vote itself still goes over HTTPS to the
 ballot box only. P0 proves this; so far it's read from the code.
+
+## Where polls appear
+
+The Community screen is the home for polls. Messages shows a card only when a poll needs the member,
+in the same Waiting for you stack as room offers: soonest deadline first, at most two cards, then a
+count of the rest. The card names the community and the closing date, and never the question or the
+member's identity. It goes once they've voted, or when the poll closes. "Not now" hides it, and it
+returns once, at a random time before the close, so it doesn't prompt a vote at a time that could be
+paired with the ticket.
+
+Designs: [Community Polls mock](https://claude.ai/artifact/2D539CbjAzLb5gWg5JwbLR), which is private
+to the project lead's account for now.
 
 ## Open question
 
