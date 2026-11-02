@@ -32,3 +32,17 @@ export function useAgentSession(): AgentSession {
   const openedAt = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().sessionOpenedAt)
   return { reconnecting, openedAt }
 }
+
+/**
+ * Told each time a session to the agent opens, for what isn't a screen: {@link useAgentSession} would re-render its
+ * host on every change. The session open now doesn't count. Returns the unsubscribe.
+ */
+export function onSessionOpened(listener: () => void): () => void {
+  let openedAt = vtaAgent.getState().sessionOpenedAt
+  return vtaAgent.subscribe(() => {
+    const now = vtaAgent.getState().sessionOpenedAt
+    if (now === openedAt) return
+    openedAt = now
+    if (now !== undefined) listener()
+  })
+}
