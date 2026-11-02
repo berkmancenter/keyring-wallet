@@ -4,17 +4,13 @@
       "blobManifest": {
         "chunks": {
           "chunkCount": 1,
-          "chunkDigests": [
-            "zQmayscM3Z2DNoT1PnmjGB568seTb7WGudusqSdM4CVRZA2"
-          ],
+          "chunkDigests": ["zQmayscM3Z2DNoT1PnmjGB568seTb7WGudusqSdM4CVRZA2"],
           "chunkSize": 16384
         },
         "digest": "zQmayscM3Z2DNoT1PnmjGB568seTb7WGudusqSdM4CVRZA2",
         "size": 16
       },
-      "chunkSha256": [
-        "zQmayscM3Z2DNoT1PnmjGB568seTb7WGudusqSdM4CVRZA2"
-      ],
+      "chunkSha256": ["zQmayscM3Z2DNoT1PnmjGB568seTb7WGudusqSdM4CVRZA2"],
       "fileManifest": {
         "blobRef": "zQmcUR9L55PDz7k65dTaP3VjE7yTCK2RD1hpgHRKdGUdLcp",
         "digest": "zQmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
@@ -34,17 +30,13 @@
       "blobManifest": {
         "chunks": {
           "chunkCount": 1,
-          "chunkDigests": [
-            "zQmSpqAfj8dtZpby8x5YiYGkdxApBh5bh8pJBBXMo7gYpqr"
-          ],
+          "chunkDigests": ["zQmSpqAfj8dtZpby8x5YiYGkdxApBh5bh8pJBBXMo7gYpqr"],
           "chunkSize": 16384
         },
         "digest": "zQmSpqAfj8dtZpby8x5YiYGkdxApBh5bh8pJBBXMo7gYpqr",
         "size": 21
       },
-      "chunkSha256": [
-        "zQmSpqAfj8dtZpby8x5YiYGkdxApBh5bh8pJBBXMo7gYpqr"
-      ],
+      "chunkSha256": ["zQmSpqAfj8dtZpby8x5YiYGkdxApBh5bh8pJBBXMo7gYpqr"],
       "fileManifest": {
         "blobRef": "zQmdCERT97VVvLdY3PAdMnMJRfQtVfpjrsMTavNGdWAymmr",
         "digest": "zQmNvjgShoDRwACxTKU3m7bMajS1pGFPM3gJtakCwEFyMp8",
@@ -96,17 +88,13 @@
       "blobManifest": {
         "chunks": {
           "chunkCount": 1,
-          "chunkDigests": [
-            "zQmc2zKSSK8f4ycgT1KW8QCN2uUDRFBSny6i7eNzLEAngmQ"
-          ],
+          "chunkDigests": ["zQmc2zKSSK8f4ycgT1KW8QCN2uUDRFBSny6i7eNzLEAngmQ"],
           "chunkSize": 16384
         },
         "digest": "zQmc2zKSSK8f4ycgT1KW8QCN2uUDRFBSny6i7eNzLEAngmQ",
         "size": 120
       },
-      "chunkSha256": [
-        "zQmc2zKSSK8f4ycgT1KW8QCN2uUDRFBSny6i7eNzLEAngmQ"
-      ],
+      "chunkSha256": ["zQmc2zKSSK8f4ycgT1KW8QCN2uUDRFBSny6i7eNzLEAngmQ"],
       "fileManifest": {
         "blobRef": "zQmQCbRuZokGtJvQjk98iL8Nr6y6Bb9umSVGoCWSmXXdhJh",
         "digest": "zQmb3x564ZXBuDvFEjeLgdUMc3WyqEhmf9kQoTpnFdQWYRF",

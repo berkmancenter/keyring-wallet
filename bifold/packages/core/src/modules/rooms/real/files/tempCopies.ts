@@ -7,8 +7,9 @@
  * - iOS: the folder is excluded from backups and each file is `NSFileProtectionCompleteUnlessOpen`, as a chat photo is
  *   (`chat/media/store.ts`). Android: app-private storage, as there.
  * - `removeRoomFileCopy` runs in a `finally` on every way out: committed, cancelled, failed, discarded, released.
- * - Locking the wallet stops every transfer holding on here and removes every copy, so nothing is left to read
- *   behind the lock.
+ * - Locking the wallet stops every transfer holding on here and removes every copy at once, then again once those
+ *   transfers have let go, for a write that was already on its way. Importing this module listens for the lock, for
+ *   the life of the app.
  * - `sweepRoomFileCopiesOnce` empties the directory once per launch, before a room can open, for an app killed mid-way.
  *
  * Neither a path nor a name is ever logged.
@@ -48,21 +49,38 @@ export async function createRoomFileCopy(name = 'file'): Promise<string> {
   return path
 }
 
+/** Removes `path`, whatever is or is not there. Never throws. */
+async function remove(path: string): Promise<void> {
+  try {
+    await RNFS.unlink(path)
+  } catch {
+    // Already gone, or going at the next launch.
+  }
+}
+
+/** iOS names one directory both with and without `/private`: the comparison below must not depend on which. */
+const realPath = (path: string) => path.replace(/^\/private\/var\//, '/var/')
+
+/** Whether `path` is the picker's own copy in the app's caches, and so the app's to move or remove. */
+const inCaches = (path: string) => realPath(path).startsWith(`${realPath(RNFS.CachesDirectoryPath)}/`)
+
 /**
  * Takes the system picker's copy of a file in under this rule, and returns where it now is. The picker writes it to
- * the caches on its own, so a copy that cannot be taken in is removed rather than left there.
+ * the caches on its own, so a copy that cannot be taken in is removed rather than left there. A path anywhere else is
+ * not the picker's copy but the member's own file, which is only ever read: copied in, never moved, never removed.
  */
 export async function adoptRoomFileCopy(uri: string): Promise<string> {
-  const from = decodeURIComponent(uri.replace(/^file:\/\//, ''))
+  let from: string | undefined
   let path: string | undefined
   try {
+    from = decodeURIComponent(uri.replace(/^file:\/\//, ''))
     path = await roomFileCopyPath()
-    await (Platform.OS === 'ios'
-      ? RNFS.moveFile(from, path, { NSFileProtectionKey: COPY_PROTECTION })
-      : RNFS.moveFile(from, path))
+    const options = { NSFileProtectionKey: COPY_PROTECTION }
+    const take = inCaches(from) ? RNFS.moveFile : RNFS.copyFile
+    await (Platform.OS === 'ios' ? take(from, path, options) : take(from, path))
     return path
   } catch (e) {
-    await RNFS.unlink(from).catch(() => undefined)
+    if (from && inCaches(from)) await remove(from)
     await removeRoomFileCopy(path)
     throw e
   }
@@ -75,36 +93,50 @@ export async function adoptRoomFileCopy(uri: string): Promise<string> {
 export async function removeRoomFileCopy(path: string | undefined): Promise<void> {
   const inside = path?.startsWith(`${COPIES_DIR}/`) ? path.slice(COPIES_DIR.length + 1).split('/')[0] : undefined
   if (!inside || inside === '.' || inside === '..') return
-  await RNFS.unlink(`${COPIES_DIR}/${inside}`).catch(() => undefined)
+  await remove(`${COPIES_DIR}/${inside}`)
 }
 
 /** Empties the copies' directory. Not while a transfer is running: it reads from here. */
 export async function removeAllRoomFileCopies(): Promise<void> {
-  await RNFS.unlink(COPIES_DIR).catch(() => undefined)
+  await remove(COPIES_DIR)
 }
 
 let swept: Promise<void> | undefined
 /** `removeAllRoomFileCopies`, the first time this launch: at launch no transfer is running, and only then. */
 export function sweepRoomFileCopiesOnce(): Promise<void> {
+  // Set in the same turn as the read: an `await` between them would let two sweeps race a transfer already running.
   swept ??= removeAllRoomFileCopies()
   return swept
 }
 
-const transfers = new Set<AbortController>()
+// Each transfer, and what settles once it has stopped touching its copy.
+const transfers = new Map<AbortController, Promise<void>>()
 
-/** Stops `controller`'s transfer if the wallet locks, until the function this returns lets go. */
+/**
+ * Stops `controller`'s transfer if the wallet locks, until the function this returns lets go. Let go in a `finally`,
+ * once the transfer can no longer write: a lock waits for that to clear what it wrote last.
+ */
 export function holdRoomFileTransfer(controller: AbortController): () => void {
-  transfers.add(controller)
+  let stopped: () => void = () => undefined
+  transfers.set(controller, new Promise<void>((resolve) => (stopped = resolve)))
   return () => {
     transfers.delete(controller)
+    stopped()
   }
 }
 
-/** A locked wallet keeps no copy: every transfer stops first, or a sweep would pull its file out from under it. */
+/**
+ * A locked wallet keeps no copy. `abort` only asks, and a write already on its way can land after that, so the copies
+ * go at once and go again when every transfer has let go. Then only if none has started since, whose copy that would
+ * be; what is left then goes with that transfer or at the next launch.
+ */
 export async function leaveRoomFilesOnLock(): Promise<void> {
-  for (const controller of transfers) controller.abort()
-  transfers.clear()
+  const stopping = [...transfers.values()]
+  for (const controller of transfers.keys()) controller.abort()
   await removeAllRoomFileCopies()
+  if (stopping.length === 0) return
+  await Promise.all(stopping)
+  if (transfers.size === 0) await removeAllRoomFileCopies()
 }
 
 DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, () => {

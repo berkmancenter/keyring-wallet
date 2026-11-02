@@ -1,7 +1,7 @@
 /**
  * The STREAM port against upstream's own vectors.
  *
- * fixtures/room-file-vectors.json is a byte-for-byte copy of
+ * fixtures/room-file-vectors.json holds the data of
  * `vti-rooms/tests/fixtures/file-vectors.json` at vta-service-v0.67.0, which upstream's
  * `test_vectors_match_the_fixture` regenerates from `seal_file`. Only the unpadded cases
  * are sealed here: Keyring never pads what it uploads.
