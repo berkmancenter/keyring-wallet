@@ -52,7 +52,6 @@ import type {
   RoomsService,
   RoomsTransferOptions,
   RoomSummary,
-  RoomsTransferOptions,
   WriteDraft,
   WritePreview,
 } from '../types'
