@@ -7,6 +7,7 @@ const mockUnlink = jest.fn(async (_path: string) => undefined)
 const mockMkdir = jest.fn(async (_path: string, _options?: unknown) => undefined)
 const mockWriteFile = jest.fn(async (_path: string, _contents: string, _options?: unknown) => undefined)
 const mockMoveFile = jest.fn(async (_from: string, _to: string, _options?: unknown) => undefined)
+const mockCopyFile = jest.fn(async (_from: string, _to: string, _options?: unknown) => undefined)
 jest.mock('react-native-fs', () => ({
   __esModule: true,
   default: {
@@ -15,6 +16,7 @@ jest.mock('react-native-fs', () => ({
     mkdir: (path: string, options?: unknown) => mockMkdir(path, options),
     writeFile: (path: string, contents: string, options?: unknown) => mockWriteFile(path, contents, options),
     moveFile: (from: string, to: string, options?: unknown) => mockMoveFile(from, to, options),
+    copyFile: (from: string, to: string, options?: unknown) => mockCopyFile(from, to, options),
   },
 }))
 
@@ -111,6 +113,43 @@ describe('the picker’s copy', () => {
     await expect(adoptRoomFileCopy(picked)).rejects.toThrow('disk full')
     expect(mockUnlink).toHaveBeenCalledWith('/caches/1234-5678/My salary.pdf')
   })
+
+  it('a malformed name is a failed adoption with nothing left over, not a throw past the cleanup', async () => {
+    await expect(adoptRoomFileCopy('file:///caches/1234/bad%ZZname.pdf')).rejects.toThrow(URIError)
+    expect(mockMoveFile).not.toHaveBeenCalled()
+    expect(mockMkdir).not.toHaveBeenCalled()
+  })
+})
+
+describe('a path that is not the picker’s copy', () => {
+  const original = 'file:///documents/My%20salary.pdf'
+
+  it('is copied, never moved: it is the member’s own file', async () => {
+    const path = await adoptRoomFileCopy(original)
+    expect(mockCopyFile).toHaveBeenCalledWith('/documents/My salary.pdf', path, { NSFileProtectionKey: PROTECTION })
+    expect(mockMoveFile).not.toHaveBeenCalled()
+  })
+
+  it('is left alone when the copy fails: only what was made here is removed', async () => {
+    mockCopyFile.mockRejectedValueOnce(new Error('disk full'))
+    await expect(adoptRoomFileCopy(original)).rejects.toThrow('disk full')
+    expect(mockUnlink).not.toHaveBeenCalledWith('/documents/My salary.pdf')
+    expect(mockUnlink).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^${COPIES}/${ID}$`)))
+  })
+
+  it('a neighbour of the caches is not the caches', async () => {
+    await adoptRoomFileCopy('file:///caches-other/a.pdf')
+    expect(mockMoveFile).not.toHaveBeenCalled()
+  })
+
+  it('the caches named through /private are still the caches', async () => {
+    const realCaches = jest.requireMock('react-native-fs').default
+    realCaches.CachesDirectoryPath = '/var/mobile/Caches'
+    await adoptRoomFileCopy('file:///private/var/mobile/Caches/1234/a.pdf')
+    realCaches.CachesDirectoryPath = '/caches'
+    expect(mockMoveFile).toHaveBeenCalled()
+    expect(mockCopyFile).not.toHaveBeenCalled()
+  })
 })
 
 describe('removing a copy', () => {
@@ -167,10 +206,31 @@ describe('locking the wallet', () => {
       order.push('removed')
       return undefined
     })
-    holdRoomFileTransfer(controller)
+    const letGo = holdRoomFileTransfer(controller)
     await lock()
     expect(order).toEqual(['stopped', 'removed'])
     expect(mockUnlink.mock.calls).toEqual([[COPIES]])
+    letGo()
+    await flush()
+  })
+
+  it('a write that lands after the lock is cleared once its transfer has let go', async () => {
+    const letGo = holdRoomFileTransfer(new AbortController())
+    await lock()
+    expect(mockUnlink.mock.calls).toEqual([[COPIES]])
+    letGo()
+    await flush()
+    expect(mockUnlink.mock.calls).toEqual([[COPIES], [COPIES]])
+  })
+
+  it('never clears a transfer that started after the lock', async () => {
+    const stopping = holdRoomFileTransfer(new AbortController())
+    await lock()
+    const started = holdRoomFileTransfer(new AbortController())
+    stopping()
+    await flush()
+    expect(mockUnlink).toHaveBeenCalledTimes(1)
+    started()
   })
 
   it('is not held back by the once-per-launch guard: every lock clears', async () => {
