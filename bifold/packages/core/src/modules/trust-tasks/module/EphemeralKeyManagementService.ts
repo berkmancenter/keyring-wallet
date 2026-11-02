@@ -298,7 +298,8 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
       if (this.store === current) {
         releaseWarn('[VTA] the in-memory key store lost its database; making a new one, and fetching keys again')
         await this.clear()
-        // An earlier fetch's failure says nothing about this store, and its pause would hold back the first fetch.
+        // An earlier fetch's failure says nothing about this store, and its pause would hold back the first fetch. Every
+        // key's, on purpose: with no pause a fetch runs and replaces the reason, so no old reason is ever reported.
         this.failedAt.clear()
       }
       // Assigned synchronously, and on purpose: this line is what gives every use here one new store. An await between

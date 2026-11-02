@@ -35,7 +35,9 @@ jest.mock('@openwallet-foundation/askar-shared', () => {
                 const late = entry.failsLate
                 entry.failsLate = undefined
                 await late
-                throw new Error(entry.failOpen, entry.failCause ? { cause: new Error(entry.failCause) } : undefined)
+                throw Object.assign(new Error(entry.failOpen), {
+                  cause: entry.failCause ? new Error(entry.failCause) : undefined,
+                })
               }
               entry.open++
               return {
@@ -354,7 +356,7 @@ describe('the in-memory database stays, and comes back if it goes', () => {
     await kms.importKey(ctx, {
       privateJwk: { kid: 'vta-copy:other', kty: 'OKP', crv: 'Ed25519', x: 'x', d: 'd' },
     } as never)
-    const fetch = jest.fn(async () => {
+    const fetch = jest.fn<Promise<void>, []>(async () => {
       throw new Error('the agent is offline')
     })
     kms.setMissingKeyFetcher(fetch)
