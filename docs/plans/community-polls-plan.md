@@ -3,7 +3,7 @@
 **Status:** proposed. Implementation starts after the room files work
 ([keyring-bifold #877](https://github.com/berkmancenter/keyring-bifold/pull/877),
 [#879](https://github.com/berkmancenter/keyring-bifold/pull/879),
-[#780](https://github.com/berkmancenter/keyring-bifold/pull/780)). The open decisions are at the end.
+[#780](https://github.com/berkmancenter/keyring-bifold/pull/780)).
 
 Research behind this plan: [community-polls-plan/2026-11-02-al.md](community-polls-plan/2026-11-02-al.md).
 
@@ -130,21 +130,25 @@ Each update goes first to ring 0, the installs that opted in under Developer set
 checks it on their own phones, and it widens only on their word. Screen designs get the same
 approval first, as mocks.
 
-## Decisions needed
+## Decisions
 
-1. **Which secrecy level first.** Recommended: `open`, then the two encrypted levels straight after.
-2. **Binding elections.** Upstream calls the ballot cryptography unaudited: "fine for polls and
-   surveys; have it reviewed before a binding election". Recommended: show `binding` polls with a
-   plain warning.
-3. **The phone's IP address.** The ballot box sees it when a vote arrives. Recommended: accept it, say
-   so on the ballot screen, and use upstream's random pause.
-4. **When the ticket is taken.** Recommended: when the member opens the poll, with the ballot available
-   after that and the "can be paired" line during the first hour.
-5. **Where to test.** Recommended: First VTC, whose maintainer has offered it, or their voting service
-   for a test community.
+1. **First secrecy level:** `open`, then the two encrypted levels straight after.
+2. **Binding elections:** upstream calls the ballot cryptography unaudited: "fine for polls and
+   surveys; have it reviewed before a binding election". The app shows `binding` polls with a plain
+   warning and a separate check step before the vote is sent.
+3. **The phone's IP address:** accepted. The ballot screen says the ballot box sees it, and the app
+   uses upstream's random pause.
+4. **When the ticket is taken:** when the member taps Get my ticket, after seeing who runs the poll.
+   The disclosure has to come first (VTI-VOT-090). The ballot comes later, with the "can be paired"
+   line during the first hour.
+5. **Where to test:** First VTC, whose maintainer has offered it, or their voting service for a test
+   community.
 
 ## Open questions
 
+- Can someone with two identities in one community take two tickets and vote twice? Upstream allows
+  one ticket per party per election, and this must be settled before P1.
+- Who can read an open poll's board? The ballot wording depends on it.
 - Does First VTC's build have the `voting` feature, and which ballot box does it trust? Its console
   shows this; nobody has checked yet.
 - Can Keyring's existing community session carry the signed reads, or do they need the VTC's HTTPS
