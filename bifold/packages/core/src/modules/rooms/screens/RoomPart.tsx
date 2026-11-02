@@ -114,9 +114,9 @@ const RoomPart: React.FC = () => {
   // Notes are written wherever the room's write status allows; where it does not, the notes say why.
   const canWriteNotes = !unavailable && !cannotPost
   const canOpenFiles = roomCapabilities.openFile.status === 'available'
-  // As the composer's "+": where the room's files are listed and can be opened (see Room).
+  // As the composer's "+": where the room takes a file and its files can be listed (see Room).
   const canAttach =
-    roomCapabilities.listFiles.status === 'available' && roomCapabilities.openFile.status === 'available'
+    roomCapabilities.uploadFile.status === 'available' && roomCapabilities.listFiles.status === 'available'
 
   return (
     <PetnamesProvider names={petnames} directoryNames={directoryNames}>

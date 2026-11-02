@@ -1,5 +1,6 @@
-import { createStackNavigator } from '@react-navigation/stack'
-import React from 'react'
+import { ParamListBase, RouteProp } from '@react-navigation/native'
+import { createStackNavigator, StackNavigationProp } from '@react-navigation/stack'
+import React, { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useTheme } from '../contexts/theme'
@@ -15,12 +16,25 @@ import { MessageStackParams, Screens } from '../types/navigators'
 import { useDefaultStackOptions } from './defaultStackOptions'
 import { TOKENS, useServices } from '../container-api'
 
-const MessageStack: React.FC = () => {
+interface MessageStackProps {
+  route?: RouteProp<ParamListBase>
+  navigation?: StackNavigationProp<ParamListBase>
+}
+
+const MessageStack: React.FC<MessageStackProps> = ({ route, navigation }) => {
   const Stack = createStackNavigator<MessageStackParams>()
   const theme = useTheme()
   const { t } = useTranslation()
   const defaultStackOptions = useDefaultStackOptions(theme)
   const [ScreenOptionsDictionary] = useServices([TOKENS.OBJECT_SCREEN_CONFIG])
+  // A notice reaches this stack as the tab route's `{ screen: … }`. React Navigation keeps that param on the tab, and
+  // the tab unmounts on blur (`TabStack.tsx`), so each return rebuilt this stack and opened the notice's screen again:
+  // an offer long gone said it couldn't be read, on every return to Messages. The stack has acted on it by the time
+  // this effect runs, so it is dropped here, as in MyAgentStack.
+  const routedScreen = (route?.params as { screen?: string } | undefined)?.screen
+  useEffect(() => {
+    if (routedScreen) navigation?.setParams({ screen: undefined, params: undefined })
+  }, [routedScreen, navigation])
 
   return (
     <Stack.Navigator screenOptions={{ ...defaultStackOptions }}>

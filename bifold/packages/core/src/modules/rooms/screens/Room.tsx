@@ -251,11 +251,10 @@ const Room: React.FC = () => {
 
   const unavailable = roomsStatusText(t, roomCapabilities.listNotes, 'listNotes')
   const cannotPost = roomsStatusText(t, roomCapabilities.write, 'write')
-  // A file is posted from the composer, so "Add a file" is offered only where the composer can attach one: where the
-  // room's files are listed, and can be opened, since posting seals the file with the cipher that opens one (a room
-  // whose files are only listed offers no "+": the service would refuse the post).
+  // A file is posted from the composer, so "Add a file" is offered only where the room takes one (`uploadFile`) and
+  // its files can be listed, so a posted file is seen.
   const canAttach =
-    roomCapabilities.listFiles.status === 'available' && roomCapabilities.openFile.status === 'available'
+    roomCapabilities.uploadFile.status === 'available' && roomCapabilities.listFiles.status === 'available'
   // Titled records and removed ones are the room's notes, on their own screen; the chat shows the rest.
   const chatPosts = feed.posts?.filter(isChatPost)
   const items = chatPosts || pendingPosts.length ? withDayPills([...pendingPosts, ...(chatPosts ?? [])]) : []
