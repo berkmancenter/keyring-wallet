@@ -78,6 +78,8 @@ export const RoomPostBubble: React.FC<{
       ) : null}
     </ThemedText>
   )
+  // A failed post's file went with its upload, so that post is cleared and the file added again, not sent again.
+  const notSent = t(post.files.length > 0 ? 'Rooms.PostFileNotSent' : 'Rooms.PostNotSent')
   const bubble = (
     <View style={styles.row} testID={testIdWithKey(`RoomPost_${roomHandle(post.key)}`)}>
       <View style={styles.bubble}>
@@ -130,7 +132,7 @@ export const RoomPostBubble: React.FC<{
             testID={testIdWithKey(post.delivery === 'failed' ? 'RoomPostNotSent' : 'RoomPostSending')}
           >
             {post.delivery === 'failed'
-              ? t('Rooms.PostNotSent')
+              ? notSent
               : post.progress !== undefined
                 ? t('Rooms.PostSendingPercent', { percent: Math.round(post.progress * 100) })
                 : t('Rooms.PostSending')}
@@ -157,7 +159,7 @@ export const RoomPostBubble: React.FC<{
     <Pressable
       onPress={onRetry}
       accessibilityRole="button"
-      accessibilityHint={t('Rooms.PostNotSent')}
+      accessibilityHint={notSent}
       testID={testIdWithKey('RoomPostRetry')}
     >
       {bubble}

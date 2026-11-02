@@ -169,6 +169,20 @@ const Room: React.FC = () => {
     return () => clearTimeout(timer)
   }, [readFailed, inView, state.reading, reload])
   const canOpenFiles = roomCapabilities?.openFile.status === 'available'
+  // How large a file this room's host takes, asked once posting a file is possible here.
+  const uploadOn = roomCapabilities?.uploadFile.status === 'available'
+  const [fileLimit, setFileLimit] = useState<number>()
+  useEffect(() => {
+    if (!uploadOn || !service?.fileLimit) return
+    let live = true
+    service
+      .fileLimit(roomId)
+      .then((limit) => live && setFileLimit(limit))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [uploadOn, service, roomId])
   const { settle } = outbox
   // A sent post leaves the outbox once the room's own list shows it.
   useEffect(() => {
@@ -318,7 +332,11 @@ const Room: React.FC = () => {
               ) : (
                 <RoomPostBubble
                   post={item.post}
-                  onRetry={item.post.delivery === 'failed' ? () => outbox.retry(item.post.key) : undefined}
+                  onRetry={
+                    item.post.delivery === 'failed'
+                      ? () => (item.post.files.length > 0 ? outbox.cancel : outbox.retry)(item.post.key)
+                      : undefined
+                  }
                   onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
                   onOpenFile={canOpenFiles ? setOpenedFile : undefined}
                   onOpenAuthor={setSheetFor}
@@ -408,6 +426,7 @@ const Room: React.FC = () => {
               postingAsName={me.name}
               onPressPostingAs={() => setSheetFor(room.actingAs)}
               canAttach={canAttach}
+              maxFileBytes={fileLimit}
               attachRequest={params?.attach}
               draft={draft.saved}
               onTextChange={draft.onTextChange}

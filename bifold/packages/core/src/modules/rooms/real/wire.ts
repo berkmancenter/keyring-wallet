@@ -45,7 +45,7 @@ export const ROOMS_TASK = {
   // 0.2 signs the body as the member before sealing it (`signAsPrincipal`); 0.1 cannot write as the member.
   keysSeal02: `${SPEC}rooms/keys/seal/0.2`,
   recordsPut: `${SPEC}rooms/records/put/0.1`,
-  // 0.1 with optional members Keyring does not send (`blobs`, an open room's provenance). Completed only by
+  // 0.1 with optional members: `blobs`, on a file's record, and an open room's provenance, which Keyring does not send. Completed only by
   // `rooms/keys/act` from 0.8 (0.7's table added it); hosts from VTA 0.68 serve only 0.3, the lab's pin 0.1 and 0.3.
   recordsPut03: `${SPEC}rooms/records/put/0.3`,
   recordsCurate: `${SPEC}rooms/records/curate/0.1`,

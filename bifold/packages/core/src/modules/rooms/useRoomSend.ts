@@ -24,6 +24,7 @@ import { DeviceEventEmitter } from 'react-native'
 import { MAX_TEXT_LENGTH } from '../chat/chatEvent'
 import { newEventId } from '../chat/eventId'
 
+import { holdRoomFileTransfer, removeRoomFileCopy } from './real/files/tempCopies'
 import { chatMessageBody } from './roomPosts'
 import type { RoomsAttachment, RoomsService, RoomsTransferProgress } from './types'
 
@@ -39,6 +40,8 @@ export interface RoomPostFailed {
   localId: string
   /** The room's name as its screen last showed it, when it has been open. */
   roomName?: string
+  /** It carried a file, so it cannot be sent again from the notice. */
+  hasFile?: boolean
 }
 
 export interface PendingPost {
@@ -105,12 +108,13 @@ const update = (box: Outbox, localId: string, values: Partial<PendingPost>) =>
   change(box, (all) => all.map((p) => (p.localId === localId ? { ...p, ...values } : p)))
 
 const isExpired = (e: unknown): boolean => e instanceof Error && e.name === 'RoomsPreviewExpired'
-const isAbort = (e: unknown): boolean => e instanceof Error && e.name === 'AbortError'
 
 async function deliver(service: RoomsService, roomId: string, post: PendingPost) {
   const box = outboxOf(service, roomId)
   const abort = new AbortController()
   controllers.set(post.localId, abort)
+  // A locked wallet stops a file's upload, and the file's copy goes with the lock.
+  const letGo = post.file ? holdRoomFileTransfer(abort) : undefined
   const write = async () => {
     const preview = await service.prepareWrite(roomId, {
       title: '',
@@ -141,17 +145,27 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
     }
     update(box, post.localId, { state: 'sent', key: written.key, progress: undefined })
     box.onSent?.()
-  } catch (e) {
-    // A cancelled upload is gone already (`cancel` took it off); anything else stays, to send again.
-    if (!isAbort(e) && !abort.signal.aborted) {
+  } catch {
+    // A cancelled upload is gone already (`cancel` took it off); anything else stays, to send again, or for a file,
+    // to say it was not sent: a stop by the lock is not the member's cancelling.
+    if (box.posts.some((p) => p.localId === post.localId)) {
       update(box, post.localId, { state: 'failed', progress: undefined })
       if (!box.onScreen) {
-        const failed: RoomPostFailed = { service, roomId, localId: post.localId, roomName: box.name }
+        const failed: RoomPostFailed = {
+          service,
+          roomId,
+          localId: post.localId,
+          roomName: box.name,
+          hasFile: Boolean(post.file),
+        }
         DeviceEventEmitter.emit(ROOM_POST_FAILED_EVENT, failed)
       }
     }
   } finally {
     if (controllers.get(post.localId) === abort) controllers.delete(post.localId)
+    letGo?.()
+    // The file in the clear never outlasts its upload, however it ended.
+    if (post.file) await removeRoomFileCopy(post.file.uri)
   }
 }
 
@@ -159,7 +173,8 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
 export function retryRoomPost(service: RoomsService, roomId: string, localId: string): void {
   const box = outboxOf(service, roomId)
   const post = box.posts.find((p) => p.localId === localId)
-  if (!post || post.state !== 'failed') return
+  // A failed post's file is gone with its upload, so that post cannot be sent again: the member adds the file again.
+  if (!post || post.state !== 'failed' || post.file) return
   update(box, localId, { state: 'sending' })
   void deliver(service, roomId, post)
 }

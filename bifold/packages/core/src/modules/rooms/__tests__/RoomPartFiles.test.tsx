@@ -4,6 +4,16 @@
  * opens the attachment sheet; "Add a file" goes back to the chat, whose composer opens the picker. Where files can't
  * be listed, opened or posted, the screen says so or offers nothing that would fail. The chat lists no files itself.
  */
+jest.mock('react-native-fs', () => ({
+  __esModule: true,
+  default: {
+    CachesDirectoryPath: '/caches',
+    unlink: async () => undefined,
+    mkdir: async () => undefined,
+    moveFile: async () => undefined,
+  },
+}))
+
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { pick } from 'react-native-document-picker'

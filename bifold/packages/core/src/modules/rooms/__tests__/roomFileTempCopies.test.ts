@@ -8,10 +8,13 @@ const mockMkdir = jest.fn(async (_path: string, _options?: unknown) => undefined
 const mockWriteFile = jest.fn(async (_path: string, _contents: string, _options?: unknown) => undefined)
 const mockMoveFile = jest.fn(async (_from: string, _to: string, _options?: unknown) => undefined)
 const mockCopyFile = jest.fn(async (_from: string, _to: string, _options?: unknown) => undefined)
+const mockReadDir = jest.fn(async (_path: string): Promise<{ name: string; path: string }[]> => [])
 jest.mock('react-native-fs', () => ({
   __esModule: true,
   default: {
     CachesDirectoryPath: '/caches',
+    TemporaryDirectoryPath: '/tmp-app/',
+    readDir: (path: string) => mockReadDir(path),
     unlink: (path: string) => mockUnlink(path),
     mkdir: (path: string, options?: unknown) => mockMkdir(path, options),
     writeFile: (path: string, contents: string, options?: unknown) => mockWriteFile(path, contents, options),
@@ -27,6 +30,7 @@ import {
   createRoomFileCopy,
   holdRoomFileTransfer,
   removeRoomFileCopy,
+  removeSystemInboxCopy,
   roomFileCopyPath,
 } from '../real/files/tempCopies'
 import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
@@ -35,6 +39,10 @@ const COPIES = '/caches/keyring-room-files'
 const ID = '[0-9a-f]{32}'
 const PROTECTION = 'NSFileProtectionCompleteUnlessOpen'
 const flush = () => new Promise((resolve) => setImmediate(resolve))
+const lock = async () => {
+  DeviceEventEmitter.emit(WALLET_LOCKED_EVENT, 'test')
+  await flush()
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -148,6 +156,18 @@ describe('a path that is not the picker’s copy', () => {
     expect(mockUnlink).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^${COPIES}/${ID}$`)))
   })
 
+  it.each([
+    ['a climb', 'file:///caches/../documents/wallet.db', '/documents/wallet.db'],
+    ['a climb spelled in escapes', 'file:///caches/%2e%2e/documents/wallet.db', '/documents/wallet.db'],
+  ])('%s out of the caches is the member’s file, never moved or removed', async (_what, uri, plain) => {
+    mockCopyFile.mockRejectedValueOnce(new Error('disk full'))
+    await expect(adoptRoomFileCopy(uri)).rejects.toThrow('disk full')
+    expect(mockMoveFile).not.toHaveBeenCalled()
+    expect(mockCopyFile.mock.calls[0][0]).toContain(plain)
+    const removed = mockUnlink.mock.calls.map(([path]) => path)
+    expect(removed.every((path) => path.startsWith(`${COPIES}/`))).toBe(true)
+  })
+
   it('a neighbour of the caches is not the caches', async () => {
     await adoptRoomFileCopy('file:///caches-other/a.pdf')
     expect(mockMoveFile).not.toHaveBeenCalled()
@@ -160,6 +180,47 @@ describe('a path that is not the picker’s copy', () => {
     realCaches.CachesDirectoryPath = '/caches'
     expect(mockMoveFile).toHaveBeenCalled()
     expect(mockCopyFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('iOS’s own copy of a picked file', () => {
+  it('goes from the Inbox, whose copy carries the real name', async () => {
+    await removeSystemInboxCopy('file:///tmp-app/asml.bkc.harvard.wallet-Inbox/My%20salary.pdf')
+    expect(mockUnlink.mock.calls).toEqual([['/tmp-app/asml.bkc.harvard.wallet-Inbox/My salary.pdf']])
+  })
+
+  it.each([
+    ['the member’s own file', 'file:///documents/My%20salary.pdf'],
+    ['an Android content uri', 'content://provider/doc/1'],
+    ['something else in tmp', 'file:///tmp-app/other/a.pdf'],
+    ['an Inbox outside the app’s tmp', 'file:///elsewhere/x-Inbox/a.pdf'],
+    ['a folder inside the Inbox', 'file:///tmp-app/x-Inbox/sub/a.pdf'],
+    ['tmp itself, named through the Inbox', 'file:///tmp-app/x-Inbox/..'],
+    ['the Inbox itself, by a dot', 'file:///tmp-app/x-Inbox/.'],
+    ['a climb spelled in escapes', 'file:///tmp-app/x-Inbox/%2e%2e'],
+    ['a climb to a file that only looks Inboxed', 'file:///tmp-app/../documents/x-Inbox/a.pdf'],
+    ['an Inbox not directly in tmp', 'file:///tmp-app/deep/x-Inbox/a.pdf'],
+    ['nothing', undefined],
+    ['null', null],
+    ['a malformed name', 'file:///tmp-app/x-Inbox/bad%ZZ.pdf'],
+  ])('touches nothing for %s', async (_what, uri) => {
+    await expect(removeSystemInboxCopy(uri)).resolves.toBeUndefined()
+    expect(mockUnlink).not.toHaveBeenCalled()
+  })
+
+  it('every sweep clears the Inbox folders on iOS, and only those', async () => {
+    mockReadDir.mockResolvedValueOnce([
+      { name: 'asml.bkc.harvard.wallet-Inbox', path: '/tmp-app/asml.bkc.harvard.wallet-Inbox' },
+      { name: 'unrelated', path: '/tmp-app/unrelated' },
+    ])
+    await lock()
+    expect(mockUnlink.mock.calls).toEqual([[COPIES], ['/tmp-app/asml.bkc.harvard.wallet-Inbox']])
+  })
+
+  it('Android has no Inbox to clear', async () => {
+    Platform.OS = 'android'
+    await lock()
+    expect(mockReadDir).not.toHaveBeenCalled()
   })
 })
 
@@ -204,11 +265,6 @@ describe('the sweep', () => {
 })
 
 describe('locking the wallet', () => {
-  const lock = async () => {
-    DeviceEventEmitter.emit(WALLET_LOCKED_EVENT, 'test')
-    await flush()
-  }
-
   it('stops a running transfer, then removes every copy', async () => {
     const order: string[] = []
     const controller = new AbortController()

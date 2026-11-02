@@ -4,6 +4,7 @@
  * opened: these are the clients joining and leaving a community already use.
  */
 import { TypedArrayEncoder, utils, type Agent } from '@credo-ts/core'
+import RNFS from 'react-native-fs'
 
 import { dropDirectoryNames } from '../../directory/names'
 import { listKeyed, putKeyed } from '../../trust-tasks/module/keyedRecords'
@@ -15,7 +16,8 @@ import { GenericRecordsVettingStore } from '../../trust-tasks/module/vtiVetting'
 import { vtiAgent } from '../../trust-tasks/module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vtiTsp'
 
-import type { RoomsBackend, RoomsCommunity } from './agentRoomsService'
+import type { RoomsBackend, RoomsCommunity, RoomsUploadBackend } from './agentRoomsService'
+import { createRoomDoors } from './files/door'
 import { createOpenedCopy, releaseOpenedCopy } from './files/openedCopy'
 
 /** A rooms listing (`vtc/rooms/memberships/list`, `vtc/rooms/offers/list`, any version): what the rooms screens poll. */
@@ -29,6 +31,17 @@ const isSessionKept = (e: unknown): boolean => e instanceof Error && e.name === 
 
 /** This phone's own rooms records: today only the offers the person hid, which no community is told of. */
 const RECORD_TYPE = 'keyring/rooms'
+
+/** An upload's legs off the session: the picked file on disk, and the room host's HTTPS Trust Task door. */
+function createUploadBackend(agent: Agent): RoomsUploadBackend {
+  return {
+    // All at once: `RNFS.read` takes a position, but on iOS its NSInteger arguments cannot cross the bridge in this
+    // React Native ("Objective C type NSInteger is unsupported"). A file is within `FILE_BYTES`, and sealed in memory.
+    readFile: async (uri) =>
+      TypedArrayEncoder.fromBase64(await RNFS.readFile(decodeURIComponent(uri.replace(/^file:\/\//, '')), 'base64')),
+    ...createRoomDoors(agent),
+  }
+}
 
 export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: string } = {}): RoomsBackend {
   const identityStore = new GenericRecordsIdentityStore(agent)
@@ -108,6 +121,7 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
 
     warn: (message) => agent.config.logger.warn(message),
 
+    uploads: createUploadBackend(agent),
     sessionKept: isSessionKept,
     sessionFree: async (communityDid) => {
       const persona = await identityStore.getPersona(communityDid)

@@ -19,7 +19,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pressable, StyleSheet, TextInput, View } from 'react-native'
+import { DeviceEventEmitter, Pressable, StyleSheet, TextInput, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import {
@@ -32,7 +32,9 @@ import {
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
+import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
 import { pickRoomFile } from '../pickRoomFile'
+import { removeRoomFileCopy } from '../real/files/tempCopies'
 import type { RoomsAttachment } from '../types'
 import { MAX_POST_LENGTH } from '../useRoomSend'
 
@@ -44,6 +46,8 @@ export interface RoomComposerProps {
   onSend: (text: string, file?: RoomsAttachment) => boolean
   /** Offer "+" to post a file. */
   canAttach?: boolean
+  /** The largest file this room takes, where that is less than the picker's own limit. */
+  maxFileBytes?: number
   /** Why the member can't post here; the composer shows this instead of a field. */
   unavailable?: string
   /** Who the member posts as, as the whole line ("Posting as Alberto L"). */
@@ -67,6 +71,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   postingAsName,
   onPressPostingAs,
   canAttach,
+  maxFileBytes,
   attachRequest = 0,
   draft,
   onTextChange,
@@ -82,7 +87,25 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
     if (draft !== undefined) setText(draft)
   }, [draft])
   const [file, setFile] = useState<RoomsAttachment>()
-  const [refused, setRefused] = useState<'tooLarge' | 'unreadable'>()
+  // The picked file's copy is the composer's until it is sent, so it goes when the file does, or the composer.
+  const held = useRef<RoomsAttachment | undefined>(undefined)
+  const holdFile = (next?: RoomsAttachment) => {
+    void removeRoomFileCopy(held.current?.uri)
+    held.current = next
+    setFile(next)
+  }
+  useEffect(() => {
+    // The lock removes every copy itself; a chip left here would name a file that is gone.
+    const locked = DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, () => {
+      held.current = undefined
+      setFile(undefined)
+    })
+    return () => {
+      locked.remove()
+      void removeRoomFileCopy(held.current?.uri)
+    }
+  }, [])
+  const [refused, setRefused] = useState<'tooLarge' | 'tooLargeHere' | 'unreadable'>()
   const canSend = text.trim().length > 0 || !!file
   const styles = StyleSheet.create({
     bar: {
@@ -162,7 +185,10 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
     setRefused(undefined)
     const picked = await pickRoomFile()
     if (!picked) return
-    if (picked.ok) setFile(picked.file)
+    if (picked.ok && maxFileBytes !== undefined && picked.file.size > maxFileBytes) {
+      await removeRoomFileCopy(picked.file.uri)
+      setRefused('tooLargeHere')
+    } else if (picked.ok) holdFile(picked.file)
     else setRefused(picked.reason)
   }
 
@@ -191,6 +217,8 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   const send = () => {
     if (!onSend(text, file)) return
     change('')
+    // The outbox has the copy now, and removes it when the upload ends.
+    held.current = undefined
     setFile(undefined)
   }
 
@@ -234,7 +262,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
             {`${file.name} · ${fileSizeText(t, file.size, i18n.language)}`}
           </ThemedText>
           <Pressable
-            onPress={() => setFile(undefined)}
+            onPress={() => holdFile(undefined)}
             style={TAP_TARGET}
             accessibilityRole="button"
             accessibilityLabel={t('Rooms.FileRemove')}
@@ -250,7 +278,9 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
           accessibilityLiveRegion="polite"
           testID={testIdWithKey('RoomComposerFileRefused')}
         >
-          {t(refused === 'tooLarge' ? 'Rooms.FileTooLarge' : 'Rooms.FileUnreadable')}
+          {refused === 'tooLargeHere'
+            ? t('Rooms.FileTooLargeHere', { megabytes: Math.floor((maxFileBytes ?? 0) / 1_000_000) })
+            : t(refused === 'tooLarge' ? 'Rooms.FileTooLarge' : 'Rooms.FileUnreadable')}
         </ThemedText>
       ) : null}
       <View style={styles.bar} testID={testIdWithKey('RoomComposer')}>
