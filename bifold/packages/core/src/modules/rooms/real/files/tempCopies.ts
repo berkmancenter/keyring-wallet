@@ -25,11 +25,18 @@ const MAX_NAME_LENGTH = 120
 /** The protection class for a copy on iOS, passed by its string value as `chat/media/store.ts` does. */
 const COPY_PROTECTION = 'NSFileProtectionCompleteUnlessOpen'
 
-/** The last segment of `name`, safe as one path segment: a room's file name is whatever its sharer gave it. */
+/**
+ * The last segment of `name`, safe as one path segment and as text on the share sheet: a room's file name is whatever
+ * its sharer gave it. Direction marks go with the control characters, or `invoice<RLO>gnp.exe` reads as a picture.
+ * The length keeps the end, where the extension is, and never starts on half a character, which a path may refuse.
+ */
 function safeName(name: string): string {
   const last = name.split(/[/\\]/).pop() ?? ''
-  // eslint-disable-next-line no-control-regex
-  const plain = last.replace(/[\u0000-\u001f\u007f]/g, '').slice(-MAX_NAME_LENGTH)
+  const plain = last
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
+    .slice(-MAX_NAME_LENGTH)
+    .replace(/^[\udc00-\udfff]/, '')
   return plain === '' || plain === '.' || plain === '..' ? 'file' : plain
 }
 
