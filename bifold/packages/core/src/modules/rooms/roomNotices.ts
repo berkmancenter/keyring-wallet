@@ -233,13 +233,13 @@ export function useRoomNotices(): void {
       Toast.show({
         type: ToastType.Error,
         text1: postFailedWords(e.roomName, t),
-        text2: t('Rooms.NoticeTryAgain') as string,
+        text2: t(e.hasFile ? 'Rooms.PostFileNotSent' : 'Rooms.NoticeTryAgain') as string,
         visibilityTime: NOTICE_MS,
         position: 'bottom',
         bottomOffset,
         onPress: () => {
           Toast.hide()
-          retryRoomPost(e.service, e.roomId, e.localId)
+          if (!e.hasFile) retryRoomPost(e.service, e.roomId, e.localId)
         },
       })
     })

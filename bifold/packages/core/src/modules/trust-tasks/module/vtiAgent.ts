@@ -1791,9 +1791,11 @@ class VtiAgentController {
     const branded = manifest.branding?.displayName?.trim()
     // How its cards look. An answer that names this community is kept even when it gives nothing, so the Wallet
     // knows it has none (communityBrand.ts). One that names no community only adds a look: it never clears a kept
-    // one, since nothing shows it is this community's.
+    // one, since nothing shows it is this community's. Where the profile is about to be read and may give the logo,
+    // the look is kept once that answers: kept now, it would say "no logo" until then, on every read.
     const gives = !!(manifest.branding?.accentColor || manifest.branding?.logoUrl)
-    if (answeredFor || gives) {
+    const keepLook = !!answeredFor || gives
+    if (keepLook && (branded || httpsLogoUrl(manifest.branding?.logoUrl))) {
       rememberCommunityBrand(agent, communityDid, {
         accentColor: manifest.branding?.accentColor,
         logoUrl: manifest.branding?.logoUrl,
@@ -1803,7 +1805,7 @@ class VtiAgentController {
       communityTarget.publishedName(communityDid, branded)
       rememberCommunityName(agent, communityDid, branded)
     } else {
-      this.profileNameRead = this.learnProfileName(communityDid, agent, manifest.branding)
+      this.profileNameRead = this.learnProfileName(communityDid, agent, manifest.branding, keepLook)
     }
     return manifest
   }
@@ -1820,26 +1822,31 @@ class VtiAgentController {
   private async learnProfileName(
     communityDid: string,
     agent: Agent | undefined,
-    branding?: VtiManifest['branding']
+    branding?: VtiManifest['branding'],
+    keepLook = false
   ): Promise<void> {
     if (!agent) return
+    let profile: Awaited<ReturnType<typeof readPublicProfile>>
     try {
       const doc = await agent.dids.resolveDidDocument(communityDid)
       const service = doc.service?.find((s) => s.type === 'VTCRest')
       const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
-      if (!base) return
-      const profile = await readPublicProfile(base, communityDid)
-      // The profile's logo, when the manifest gave none.
-      if (profile?.logoUrl && !httpsLogoUrl(branding?.logoUrl)) {
-        rememberCommunityBrand(agent, communityDid, { accentColor: branding?.accentColor, logoUrl: profile.logoUrl })
-      }
-      const name = profile?.name
-      if (!name) return
-      communityTarget.publishedName(communityDid, name)
-      rememberCommunityName(agent, communityDid, name)
+      if (base) profile = await readPublicProfile(base, communityDid)
     } catch {
-      // Only the name is lost: the community is shown as unnamed.
+      // Only the name and the profile's logo are lost: the community is shown as unnamed.
     }
+    // The manifest's look, which waited for this read when it gave no logo: with the profile's logo, if it has one.
+    const manifestLogo = httpsLogoUrl(branding?.logoUrl)
+    if (!manifestLogo && (keepLook || profile?.logoUrl)) {
+      rememberCommunityBrand(agent, communityDid, {
+        accentColor: branding?.accentColor,
+        logoUrl: profile?.logoUrl,
+      })
+    }
+    const name = profile?.name
+    if (!name) return
+    communityTarget.publishedName(communityDid, name)
+    rememberCommunityName(agent, communityDid, name)
   }
 
   /**

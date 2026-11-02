@@ -3,7 +3,8 @@
  * others after the newest one the member has seen. A room met for the first time starts seen; the member's own posts
  * never count; what the room screen shows is seen, and stays seen after a relaunch. The rooms are read by one poll,
  * gently: each room asked only for what is new, its newest post read only when it changed, every two minutes only
- * while Messages is in view. Messages' badge adds the rows' unread.
+ * while Messages is in view, and at once when the agent is back or a skipped community can be read. Messages' badge
+ * adds the rows' unread.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
@@ -29,6 +30,19 @@ import {
   useRoomRowsPoll,
   useRoomsUnreadCount,
 } from '../useRoomRows'
+
+// The agent's session, without the agent: only what the poll is told.
+let mockSession: { sessionOpenedAt?: number } = {}
+const mockSessionListeners = new Set<() => void>()
+jest.mock('../../trust-tasks/module/vtaAgent', () => ({
+  vtaAgent: {
+    subscribe: (listener: () => void) => {
+      mockSessionListeners.add(listener)
+      return () => mockSessionListeners.delete(listener)
+    },
+    getState: () => mockSession,
+  },
+}))
 
 const ME = { did: 'did:key:z6MkMe' }
 const SAM = { did: 'did:key:z6MkSaddle', identityWords: 'Sam' }
@@ -92,6 +106,8 @@ beforeEach(async () => {
   await AsyncStorage.setItem(ROOMS_SEEN_KEY, '{}')
   await AsyncStorage.setItem(ROOMS_HIDDEN_KEY, '{}')
   focus = undefined
+  mockSession = {}
+  mockSessionListeners.clear()
   ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => (() => void) | void) => {
     focus = effect
   })
@@ -108,6 +124,12 @@ afterEach(() => {
 
 const flush = () => act(async () => undefined)
 const step = (ms: number) => act(async () => void (await jest.advanceTimersByTimeAsync(ms)))
+
+const sessionOpens = (at: number) =>
+  act(async () => {
+    mockSession = { sessionOpenedAt: at }
+    mockSessionListeners.forEach((listener) => listener())
+  })
 
 const mount = (service: RoomsService) => {
   const poll = renderHook(() => useRoomRowsPoll(service, true))
@@ -500,6 +522,125 @@ describe('a slow agent (X5JN-PEWP: the posts came 30 s after the listing)', () =
     await flush()
     await step(ROWS_RETRY_MS[0])
     expect(t.listMyRooms).toHaveBeenCalledTimes(2)
+  })
+
+  test('a community that can be read again shows its rooms at once in view; out of view, away or stopped, nothing', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    // The first listing skipped the community: a step kept its session.
+    s.listMyRooms.mockResolvedValueOnce([])
+    const stop = jest.fn()
+    let readable: (() => void) | undefined
+    Object.assign(s, {
+      onReadable: jest.fn((listener: () => void) => {
+        readable = listener
+        return stop
+      }),
+    })
+    const { poll, list } = mount(s)
+    await flush()
+    expect(list.result.current.rows.rows).toEqual([])
+
+    // Control: Messages not in view, so nothing is read, as the two-minute poll reads nothing then.
+    await act(async () => readable?.())
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+
+    act(() => void focus?.())
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+    await act(async () => readable?.())
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+    expect(list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['planning'])
+
+    Object.defineProperty(AppState, 'currentState', { value: 'background', writable: true, configurable: true })
+    await act(async () => readable?.())
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+
+    expect(stop).not.toHaveBeenCalled()
+    poll.unmount()
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
+
+  test('the agent back reads a failed read at once, not at its retry (control: rows all read ask nothing)', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    s.listMyRooms.mockRejectedValueOnce(new Error('agent not back yet'))
+    const { list } = mount(s)
+    await flush()
+    expect(list.result.current.rows.failed).toBe(true)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+
+    await sessionOpens(1_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+    expect(list.result.current.rows.failed).toBe(false)
+    expect(list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['planning'])
+
+    await sessionOpens(2_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+  })
+
+  test('the agent back reads a room left unread; away it reads nothing and the retry stays', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    s.listNotes.mockRejectedValueOnce(new Error('agent not back yet'))
+    s.listNotes.mockRejectedValueOnce(new Error('agent not back yet'))
+    const { list } = mount(s)
+    await flush()
+    expect(list.result.current.rows.rows[0]).toMatchObject({ reading: true })
+
+    Object.defineProperty(AppState, 'currentState', { value: 'background', writable: true, configurable: true })
+    await sessionOpens(1_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+
+    Object.defineProperty(AppState, 'currentState', { value: 'active', writable: true, configurable: true })
+    await sessionOpens(2_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+    expect(list.result.current.rows.rows[0]).toMatchObject({ reading: true })
+    await sessionOpens(3_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(3)
+    expect(list.result.current.rows.rows[0].reading).toBeUndefined()
+  })
+
+  test('the agent back while a read is out reads once more when it ends, once', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    const slow = held()
+    const real = s.listNotes.getMockImplementation()!
+    s.listNotes.mockImplementationOnce(async (roomId: string, options?: { sinceVersion?: number }) => {
+      await slow.gate
+      return real(roomId, options)
+    })
+    mount(s)
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+
+    await sessionOpens(1_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+
+    await act(async () => slow.release())
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+  })
+
+  test('the agent back while a read is out over rows already read reads once more; with none out, nothing', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    mount(s)
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+
+    const slow = held()
+    const real = s.listMyRooms.getMockImplementation()!
+    s.listMyRooms.mockImplementationOnce(async () => {
+      await slow.gate
+      return real()
+    })
+    await act(async () => refreshRoomRows())
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+
+    await sessionOpens(1_000)
+    await act(async () => slow.release())
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(3)
+
+    await sessionOpens(2_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(3)
   })
 
   test('a read that changes no row publishes no new rows: Messages and the badge do not re-render (control: a new post does)', async () => {

@@ -9,7 +9,9 @@
  * - at once when the app starts with an agent linked, and on coming back to the app (not within
  *   {@link ROWS_RETURN_FLOOR_MS} of the last read);
  * - when Messages comes into view (not within {@link ROWS_FOCUS_FLOOR_MS}), and every {@link ROWS_POLL_MS} only while
- *   it is in view;
+ *   it is in view; also while it is in view, when a community a listing skipped can be read again (`onReadable`);
+ * - the moment the agent is back, if a read is out or left rooms unread or failed: that read went to a session now
+ *   gone, so nothing waits for its next retry;
  * - one room after another, each asked only for what came after the newest post already read; the newest of
  *   that is read in full, and only when it is newer than the post the row already shows.
  *
@@ -42,6 +44,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
 
+import { onSessionOpened } from './agentSession'
 import type { InertText } from './inertText'
 import { isNote, newestFirst, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
@@ -386,6 +389,20 @@ const readOnReturn = () => {
   refreshRoomRows()
 }
 
+/** The two-minute read, and the same read when a skipped community can be read: only in view, with the app open. */
+const readInView = () => {
+  if (feed.inView > 0 && AppState.currentState === 'active') refreshRoomRows()
+}
+
+/**
+ * The agent is back: a read that failed or left a room unread reads now rather than at its retry, and one still out
+ * reads again when it ends, since it may have gone to the session just replaced. Rows all read ask nothing.
+ */
+const readOnAgentBack = () => {
+  if (AppState.currentState !== 'active') return
+  if (feed.asking || feed.failed || feed.all?.some((row) => row.reading)) refreshRoomRows()
+}
+
 /** Reads again, unless the last one is under `floor` old. With one out, again once it ends. */
 export function refreshRoomRows(floor = 0): void {
   const service = feed.service
@@ -481,7 +498,8 @@ const subscribe = (listener: () => void) => {
 
 /**
  * The one poll, from the tab navigator: starts reading when an agent is linked and the rooms flag is on (a service
- * exists), reads again on coming back to the app, and every {@link ROWS_POLL_MS} while Messages is in view.
+ * exists), reads again on coming back to the app, every {@link ROWS_POLL_MS} while Messages is in view, and when the
+ * agent is back or a skipped community can be read. Told, not watched in a render: the tab navigator stays as it is.
  */
 export function useRoomRowsPoll(
   service: RoomsService | undefined,
@@ -505,16 +523,18 @@ export function useRoomRowsPoll(
     if (next) refreshRoomRows()
   }, [service, linked])
 
+  useEffect(() => service?.onReadable?.(readInView), [service])
+
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') readOnReturn()
     })
-    const timer = setInterval(() => {
-      if (feed.inView > 0 && AppState.currentState === 'active') refreshRoomRows()
-    }, ROWS_POLL_MS)
+    const timer = setInterval(readInView, ROWS_POLL_MS)
+    const stopWatching = onSessionOpened(readOnAgentBack)
     return () => {
       sub?.remove()
       clearInterval(timer)
+      stopWatching()
       // Nothing scheduled outlives the poll: a retry due after it unmounts would read for no one.
       stopRetrying()
     }

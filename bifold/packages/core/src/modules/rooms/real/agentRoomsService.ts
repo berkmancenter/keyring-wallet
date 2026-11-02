@@ -22,14 +22,18 @@
  *
  * Files and agent access are later phases and report `clientNotBuilt`.
  */
+import { TypedArrayEncoder } from '@credo-ts/core'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { DeviceEventEmitter } from 'react-native'
 
 import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
+import { sizeFailure } from '../../chat/media/checkAttachment'
+import { readImageHeader } from '../../chat/media/imageHeader'
 import { deriveCapabilities, deriveRoomCapabilities } from '../capabilities'
 import { inertFlags, toInertText } from '../inertText'
 import { chatMessageText } from '../roomPosts'
+import { newThrowawayKey } from '../../trust-tasks/module/oobSignIn'
 import { roomRef } from '../roomRef'
 import type {
   AgentGrant,
@@ -46,6 +50,7 @@ import type {
   RoomsCapabilities,
   RoomsOperation,
   RoomsService,
+  RoomsTransferOptions,
   RoomSummary,
   WriteDraft,
   WritePreview,
@@ -60,13 +65,18 @@ import {
   RoomsUnavailable,
 } from '../types'
 
+import { OPEN_FILE_BYTES, openRoomFile, type OpenFileCopy } from './files/open'
+import { holdRoomFileTransfer, sweepRoomFileCopiesOnce } from './files/tempCopies'
 import {
   KEYS_ACT_TYPES,
   OFFERS_LIST_TYPES,
   parseAccept,
   parseActed,
+  parseBlobChunk,
+  parseBlobDownload,
   parseBrowse,
   parseCurate,
+  parseFileKey,
   parseKeyPackage,
   parseKeysList,
   parseMemberships,
@@ -85,6 +95,8 @@ import {
   type RenewalRecord,
   type RoomMembershipRecord,
 } from './wire'
+import type { DoorAnswer, RoomDoors } from './files/door'
+import { SLOW_HOST_FILE_BYTES, UPLOAD_TASK, uploadFile, uploadLimitFor, uploadSegmentFor } from './files/upload'
 
 /** A community this phone belongs to, and the persona it belongs as. */
 export interface RoomsCommunity {
@@ -132,6 +144,24 @@ export interface RoomsBackend {
   sessionKept?(error: unknown): boolean
   /** Resolves once a task to `communityDid` would no longer be refused that way (vtiAgent `whenFree`). */
   sessionFree?(communityDid: string): Promise<void>
+  /** What uploading a file needs besides the agent and the community session. Absent: uploads are not built here. */
+  uploads?: RoomsUploadBackend
+  /** Where an opened file's copy lives while it is shown. */
+  fileCopies?: RoomFileCopies
+}
+
+/** The picked file, and the room host's HTTPS Trust Task door, which an upload's single-use key sends to. */
+export interface RoomsUploadBackend extends RoomDoors {
+  /** A picked file's bytes, whole. */
+  readFile(uri: string): Promise<Uint8Array>
+}
+
+/** The local copies of opened files. */
+export interface RoomFileCopies {
+  /** A new, empty copy for a file of this untrusted `name`. */
+  create(name: string): Promise<OpenFileCopy>
+  /** Deletes a finished copy. Never rejects. */
+  release(localUri: string): Promise<void>
 }
 
 /** What the service needs besides the backend. Tests replace the clock and the wait between retries. */
@@ -158,6 +188,8 @@ export const BUILT: ReadonlySet<RoomsOperation> = new Set<RoomsOperation>([
   'write',
   'curate',
   'listFiles',
+  'openFile',
+  'uploadFile',
 ])
 
 /**
@@ -173,6 +205,18 @@ export function postKey(idempotencyKey: string): string {
  * CLI does (`pnm rooms put`, VTA 0.67).
  */
 const SEALED_WRITE_ATTEMPTS = 4
+
+/** How many times a file's chunk is asked for when no answer comes. A long file meets a dropped answer sooner or later. */
+const FILE_CHUNK_ATTEMPTS = 3
+
+/**
+ * Whether a file can be drawn in its sheet: its first bytes, not what the post claims, say it is an image, in the
+ * bounds chat holds a received image to, before any native decoder sees it.
+ */
+const isShowableImage = (head: Uint8Array): boolean => {
+  const image = readImageHeader(head)
+  return !!image && !sizeFailure(image.width, image.height, image.frames)
+}
 
 /** How many pages of a community's membership record, or of its offers, to read before stopping. */
 const MAX_MEMBERSHIP_PAGES = 10
@@ -328,6 +372,9 @@ export class AgentRoomsService implements RoomsService {
   ) {
     this.now = options.now ?? (() => Date.now())
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
+    // Before any room can open: a killed app's copy of a file does not wait for the next file to be opened. Once per
+    // launch: no transfer exists before the first service, and that latch is what keeps a later service from sweeping one.
+    void sweepRoomFileCopiesOnce().catch(() => undefined)
   }
 
   public async capabilities(options: { refresh?: boolean } = {}): Promise<RoomsCapabilities> {
@@ -579,10 +626,16 @@ export class AgentRoomsService implements RoomsService {
    * is on its way instead of every post failing.
    */
   private async capabilitiesIn(room: KnownRoom): Promise<RoomCapabilities> {
+    const statuses = await this.noteCapabilitiesIn(room)
+    statuses.uploadFile = this.uploadStatus(room, statuses)
+    return statuses
+  }
+
+  private async noteCapabilitiesIn(room: KnownRoom): Promise<RoomCapabilities> {
     const statuses = deriveRoomCapabilities(await this.capabilities(), room)
     // Files exist on attributed and private rooms only: upstream refuses them on an open room.
     if (room.tier === 'open')
-      for (const op of ['listFiles', 'openFile'] as const)
+      for (const op of ['listFiles', 'openFile', 'uploadFile'] as const)
         statuses[op] = {
           status: 'unavailable',
           reason: 'notOnThisTier',
@@ -602,6 +655,33 @@ export class AgentRoomsService implements RoomsService {
         detail: `the agent does not serve ${ROOMS_TASK.keysSeal02}`,
       }
     return statuses
+  }
+
+  /**
+   * Whether a file can be posted here. A file is a sealed record naming a blob, so it needs everything an
+   * attributed write needs, and the file key besides; private rooms wait for their writes.
+   */
+  private uploadStatus(room: KnownRoom, statuses: RoomCapabilities): RoomCapabilities['uploadFile'] {
+    const own = statuses.uploadFile
+    if (own.status !== 'available') return own
+    if (!this.backend.uploads)
+      return { status: 'comingSoon', reason: 'clientNotBuilt', detail: 'uploading is not built on this phone' }
+    if (statuses.write.status !== 'available') return statuses.write
+    // A file's record is put at 0.3, the one version a host still serves that carries `blobs`, and an agent completes
+    // that only from act 0.8. Refused here, before anything is sealed or sent, not after the upload.
+    if (!this.putsFileRecords())
+      return {
+        status: 'unavailable',
+        reason: 'agentDoesNotServe',
+        detail: 'posting a file needs an agent serving rooms/keys/act 0.8',
+      }
+    if (room.tier !== 'attributed')
+      return {
+        status: 'comingSoon',
+        reason: 'tierNotYet',
+        detail: `posting files to ${room.tier} rooms is not built yet`,
+      }
+    return own
   }
 
   private async requireInRoom(roomId: string, operation: keyof RoomCapabilities): Promise<KnownRoom> {
@@ -1079,6 +1159,12 @@ export class AgentRoomsService implements RoomsService {
     return KEYS_ACT_TYPES.find((t) => served.includes(t))
   }
 
+  /** Whether this agent completes `rooms/records/put/0.3`, which it does from act 0.8. */
+  private putsFileRecords(): boolean {
+    const act = this.actType()
+    return act === ROOMS_TASK.keysAct09 || act === ROOMS_TASK.keysAct08
+  }
+
   /**
    * A record put to `host`, completed as the member by the agent. From act 0.8 the agent completes put 0.3 as well as
    * 0.1, and which one the host takes is the host's own: VTC 0.16 serves only 0.3, VTC 0.15 both, VTC 0.12 (the lab)
@@ -1089,9 +1175,11 @@ export class AgentRoomsService implements RoomsService {
    * @versionLadder rooms/records/put
    */
   private async put(community: RoomsCommunity, host: string, payload: Record<string, unknown>): Promise<unknown> {
-    const act = this.actType()
-    const types: string[] =
-      act === ROOMS_TASK.keysAct09 || act === ROOMS_TASK.keysAct08
+    const newer = this.putsFileRecords()
+    // A record naming a blob goes at 0.3 alone: 0.1 has no `blobs`, so it would store the post without its file.
+    const types: string[] = payload.blobs
+      ? [ROOMS_TASK.recordsPut03]
+      : newer
         ? [ROOMS_TASK.recordsPut03, ROOMS_TASK.recordsPut]
         : [ROOMS_TASK.recordsPut]
     const took = this.putTypeOf.get(host)
@@ -1193,9 +1281,10 @@ export class AgentRoomsService implements RoomsService {
    */
   public async prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview> {
     const room = await this.requireInRoom(roomId, 'write')
-    // Files are not built: a post that carries one is refused, never sent without it.
-    if (draft.attachment) throw new RoomsUnavailable('write', 'clientNotBuilt', 'posting a file is not built yet')
-    if (draft.body.trim().length === 0) throw new RoomsRefused('write', 'empty', false, 'the note has no text')
+    // A post's file is refused here, never sent without it, where the room or its host cannot take it.
+    if (draft.attachment) await this.requireUpload(room, draft.attachment.size)
+    if (draft.body.trim().length === 0 && !draft.attachment)
+      throw new RoomsRefused('write', 'empty', false, 'the note has no text')
     // A post's limit is its words, not the keyring.chat/1 message around them, whose escaping (quotes, line breaks)
     // would refuse a post the composer allowed, on every retry.
     const words = chatMessageText(draft.body, this.now()) ?? draft.body
@@ -1230,7 +1319,7 @@ export class AgentRoomsService implements RoomsService {
    * one it stores what the agent sealed (`writeSealed`). A new note is create-only under a fresh random key; a
    * replacement must still be at the version the preview read.
    */
-  public async confirmWrite(token: string): Promise<{ key: string; version: number }> {
+  public async confirmWrite(token: string, options?: RoomsTransferOptions): Promise<{ key: string; version: number }> {
     const pending = this.writes.get(token)
     this.writes.delete(token)
     if (!pending || this.now() - pending.at > PREVIEW_TOKEN_TTL_MS) throw new RoomsPreviewExpired(token)
@@ -1239,6 +1328,19 @@ export class AgentRoomsService implements RoomsService {
     const { title, body, replaceKey, idempotencyKey } = pending.draft
     const key = replaceKey ?? (idempotencyKey ? postKey(idempotencyKey) : `note/${this.backend.newId()}`)
     const expectedVersion = pending.replacedVersion ?? 0
+    if (pending.draft.attachment) {
+      const uploaded = await this.upload(room, community, host, pending.draft.attachment, options)
+      return this.writeSealed(
+        room,
+        community,
+        host,
+        key,
+        expectedVersion,
+        { title, ...(body.trim() ? { body } : {}), file: uploaded.file },
+        !replaceKey && !!idempotencyKey,
+        { blobs: [uploaded.blobRef] }
+      )
+    }
     if (room.tier === 'attributed')
       return this.writeSealed(
         room,
@@ -1286,8 +1388,9 @@ export class AgentRoomsService implements RoomsService {
     host: string,
     key: string,
     expectedVersion: number,
-    note: { title: string; body: string },
-    ownKey: boolean
+    note: { title: string; body?: string; file?: FileManifest },
+    ownKey: boolean,
+    options: { blobs?: string[] } = {}
   ): Promise<{ key: string; version: number }> {
     let intended = (await this.headVersion(room)) + 1
     let expected = expectedVersion
@@ -1299,7 +1402,8 @@ export class AgentRoomsService implements RoomsService {
         version: intended,
         author: community.personaDid,
         ...(note.title.trim() ? { title: note.title } : {}),
-        body: note.body,
+        ...(note.body !== undefined ? { body: note.body } : {}),
+        ...(note.file ? { file: note.file } : {}),
       }
       const sealed = parseSealed(
         await this.agentStep('write', 'sign and seal the note as the member', ROOMS_TASK.keysSeal02, {
@@ -1318,6 +1422,7 @@ export class AgentRoomsService implements RoomsService {
           key,
           expectedVersion: expected,
           sealed,
+          ...(options.blobs ? { blobs: options.blobs } : {}),
         })
       } catch (e) {
         const refused = await this.hostRefusal('write', room, key, expected, e)
@@ -1337,6 +1442,91 @@ export class AgentRoomsService implements RoomsService {
       true,
       `${key} is stored at version ${landed} but sealed for another version, so it does not open: the room kept moving`
     )
+  }
+
+  /**
+   * Refuses a file this room cannot take: posting files must be available here, and the file within what the room's
+   * host takes. A host before VTC 0.15 holds the upload's chunks to its anonymous limit, so it takes small files only.
+   */
+  private async requireUpload(room: KnownRoom, size: number): Promise<{ base: string; version?: string }> {
+    const status = (await this.capabilitiesIn(room)).uploadFile
+    if (status.status !== 'available') throw new RoomsUnavailable('uploadFile', status.reason, status.detail)
+    const door = await this.hostDoor(room)
+    const limit = uploadLimitFor(door.version)
+    if (size > limit)
+      throw new RoomsRefused('write', 'fileTooLarge', false, `this community's host takes files up to ${limit} bytes`)
+    return door
+  }
+
+  /** What `requireUpload` will allow here, for the composer to say before a file is picked; the lower limit when unsure. */
+  public async fileLimit(roomId: string): Promise<number> {
+    try {
+      return uploadLimitFor((await this.hostDoor(await this.known(roomId))).version)
+    } catch {
+      return SLOW_HOST_FILE_BYTES
+    }
+  }
+
+  private async hostDoor(room: KnownRoom): Promise<{ base: string; version?: string }> {
+    const { host } = this.hostOf(room, 'uploadFile')
+    const uploads = this.backend.uploads
+    if (!uploads) throw new RoomsUnavailable('uploadFile', 'clientNotBuilt', 'uploading is not built on this phone')
+    try {
+      return await uploads.hostDoor(host)
+    } catch (e) {
+      throw new RoomsUnavailable(
+        'uploadFile',
+        'communityUnreachable',
+        `the room's host could not be reached: ${message(e)}`
+      )
+    }
+  }
+
+  /** Seals, uploads and commits a post's file (`files/upload.ts`); the record naming it is the caller's. */
+  private async upload(
+    room: KnownRoom,
+    community: RoomsCommunity,
+    host: string,
+    attachment: NonNullable<WriteDraft['attachment']>,
+    options: RoomsTransferOptions = {}
+  ): Promise<{ file: FileManifest; blobRef: string }> {
+    const uploads = this.backend.uploads
+    if (!uploads) throw new RoomsUnavailable('uploadFile', 'clientNotBuilt', 'uploading is not built on this phone')
+    const { base, version } = await this.requireUpload(room, attachment.size)
+    let bytes: Uint8Array | undefined
+    try {
+      bytes = await uploads.readFile(attachment.uri)
+      const plain = bytes
+      return await uploadFile(
+        {
+          fileKey: (payload) => this.agentStep('write', 'give a key for the file', UPLOAD_TASK.fileKey, payload),
+          begin: (payload) => this.actAndSend('write', community, host, UPLOAD_TASK.begin, payload),
+          read: async (position, length) => plain.subarray(position, position + length),
+          post: (document, signal): Promise<DoorAnswer> => uploads.postToDoor(base, document, signal),
+          newKey: () => newThrowawayKey(),
+          newId: () => this.backend.newId(),
+          now: () => this.now(),
+          sleep: (ms) => this.sleep(ms),
+        },
+        {
+          roomId: room.roomId,
+          host,
+          name: attachment.name,
+          mediaType: attachment.mimeType,
+          size: attachment.size,
+          segmentSize: uploadSegmentFor(version),
+        },
+        options
+      )
+    } catch (e) {
+      const code = refusalCode(e)
+      if (code && !(e instanceof RoomsRefused))
+        throw new RoomsRefused('write', code, code === 'rateLimited', message(e))
+      throw e
+    } finally {
+      // The file in the clear does not stay in memory either.
+      bytes?.fill(0)
+    }
   }
 
   /** The newest version among the room's records, as the agent lists them; 0 for an empty room. */
@@ -1418,8 +1608,12 @@ export class AgentRoomsService implements RoomsService {
    */
   public async listFiles(roomId: string): Promise<RoomFile[]> {
     const room = await this.requireInRoom(roomId, 'listFiles')
+    return (await this.readFiles(room, roomId)).map(({ file, record }) => roomFileOf(file, record))
+  }
+
+  private async readFiles(room: KnownRoom, roomId: string): Promise<{ file: FileManifest; record: OpenedRecord }[]> {
     const listing = parseBrowse(await this.backend.agentTask(this.browseType(), { roomId, host: room.host }))
-    const files: RoomFile[] = []
+    const files: { file: FileManifest; record: OpenedRecord }[] = []
     let opened = 0
     let failure: unknown
     for (const record of listing.records) {
@@ -1439,16 +1633,99 @@ export class AgentRoomsService implements RoomsService {
         this.keepOpened(roomId, read)
       }
       opened++
-      if (read.file) files.push(roomFileOf(read.file, read))
+      if (read.file) files.push({ file: read.file, record: read })
     }
     if (opened === 0 && failure !== undefined) throw failure
     return files
   }
-  public openFile(): Promise<OpenedFile> {
-    return this.notYet('openFile')
+
+  /**
+   * Fetches a file through the host, opens it here and leaves a local copy, for as long as the sheet shows it. The
+   * record is read again first, so a retracted file is not opened, and its sealed manifest is what everything the
+   * host sends is checked against (`files/open.ts`). The download is always proxied. The key comes from the person's
+   * agent and opens this one file; it is not kept (upstream: it never expires).
+   */
+  public async openFile(roomId: string, fileId: string, options: RoomsTransferOptions = {}): Promise<OpenedFile> {
+    const room = await this.requireInRoom(roomId, 'openFile')
+    const { community, host } = this.hostOf(room, 'openFile')
+    const copies = this.backend.fileCopies
+    if (!copies) throw new RoomsUnavailable('openFile', 'clientNotBuilt', 'this build keeps no local copies')
+    const file = (await this.readFiles(room, roomId)).find((f) => f.file.fileId === fileId)?.file
+    if (!file) throw new RoomsRefused('openFile', 'notFound', false, 'the room has no such file')
+    if (file.size > OPEN_FILE_BYTES) throw new RoomsRefused('openFile', 'tooLarge', false, 'too large to open here')
+    const opening = new AbortController()
+    const cancelled = () => opening.abort()
+    options.signal?.addEventListener('abort', cancelled, { once: true })
+    if (options.signal?.aborted) opening.abort()
+    const letGo = holdRoomFileTransfer(opening)
+    try {
+      const { localUri, head } = await openRoomFile(
+        {
+          getBlob: async (blobRef) => {
+            const download = parseBlobDownload(
+              await this.actAndSend('openFile', community, host, ROOMS_TASK.blobsGet, { roomId, blobRef })
+            )
+            if (!download) throw new Error('the host did not open a proxied download')
+            return download
+          },
+          getChunk: (downloadId, index) => this.fileChunk(community, host, downloadId, index),
+          fileKey: async ({ fileId: id, epoch }) => {
+            const key = parseFileKey(
+              await this.agentStep('openFile', "release the file's key", ROOMS_TASK.keysFileKey, {
+                roomId,
+                fileId: id,
+                purpose: 'open',
+                epoch,
+              }),
+              epoch
+            )
+            if (!key) throw new Error("the agent's answer gave no key for this file")
+            return TypedArrayEncoder.fromBase64Url(key)
+          },
+          newCopy: ({ name }) => copies.create(name),
+        },
+        roomId,
+        file,
+        { signal: opening.signal, onProgress: options.onProgress }
+      )
+      return {
+        localUri,
+        ...(file.mediaType ? { mediaType: file.mediaType } : {}),
+        size: file.size,
+        ...(isShowableImage(head) ? { image: true } : {}),
+      }
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError') this.backend.warn(`opening a room file failed: ${message(e)}`)
+      throw e
+    } finally {
+      letGo()
+      options.signal?.removeEventListener('abort', cancelled)
+    }
   }
-  public releaseFile(): Promise<void> {
-    return Promise.resolve()
+
+  /** One chunk's bytes, asked again when no answer came: a chunk may be fetched any number of times. A refusal stands. */
+  private async fileChunk(
+    community: RoomsCommunity,
+    host: string,
+    downloadId: string,
+    index: number
+  ): Promise<Uint8Array> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const data = parseBlobChunk(
+          await this.actAndSend('openFile', community, host, ROOMS_TASK.blobsChunk, { downloadId, index }),
+          index
+        )
+        if (data === undefined) throw new Error(`the host's answer for chunk ${index} did not read`)
+        return TypedArrayEncoder.fromBase64Url(data)
+      } catch (e) {
+        if (attempt >= FILE_CHUNK_ATTEMPTS || refusalCode(e)) throw e
+      }
+    }
+  }
+
+  public async releaseFile(localUri: string): Promise<void> {
+    await this.backend.fileCopies?.release(localUri)
   }
   public listCommunityMembers(): Promise<CommunityRoomMember[]> {
     return this.notYet('listCommunityMembers')

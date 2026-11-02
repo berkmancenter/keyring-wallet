@@ -21,7 +21,7 @@ import { DeviceEventEmitter } from 'react-native'
 
 import { COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { currentAgentDid } from './currentAgent'
-import { GenericRecordsCommunityStore } from './VtiCommunityStore'
+import { GenericRecordsCommunityStore, ofCurrentAgent } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import { pickOwnVetterGrant, type VetterGrantState } from './vtiGrantState'
 import { readJoinState, type CommunityJoinState } from './vtiJoin'
@@ -116,7 +116,8 @@ export const defaultJourneyReaders: CommunityJourneyReaders = {
     if (grants.length === 0) return { state: 'none' }
     const persona = await new GenericRecordsIdentityStore(agent).getPersona(communityDid)
     const mine = persona ? grants.filter((g) => g.subjectDid === persona.did) : []
-    return (await pickOwnVetterGrant(agent, mine.length > 0 ? mine : grants, { allowInsecureLocal: __DEV__ })).state
+    const held = mine.length > 0 ? mine : await ofCurrentAgent(agent, grants, (g) => g.subjectDid)
+    return (await pickOwnVetterGrant(agent, held, { allowInsecureLocal: __DEV__ })).state
   },
 }
 
