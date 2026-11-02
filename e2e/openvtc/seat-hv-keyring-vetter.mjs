@@ -60,7 +60,9 @@ const d = await openDevice({ platform: a.platform, udid: a.udid, deviceName: a['
 const stop = keepAlive(d);
 /** The phone's desk opens; the community's count of hidden vetters under the live label grows by one. */
 async function awaitEnrolled(memberDid) {
-  await vetterRole.openDesk(d, { community: { did: a['community-did'], names: a['community-name'] ? [a['community-name']] : [] } });
+  // A named community's heading carries its published name, not its DID's path (vetterDoor.plainDoorIsFor).
+  const name = a['community-name'] ?? await fetch(`${a['vtc-base']}/community/public-profile`).then((r) => r.json()).then((c) => c.name).catch(() => undefined);
+  await vetterRole.openDesk(d, { community: { did: a['community-did'], names: name ? [name] : [] } });
   await screenshot(d, `${p}-desk`).catch(() => undefined);
   if (!hidden) {
     row(`${p}-desk`, 'PASS', 'the vetter desk opened once, so the app takes the grant (no hidden vetting on this community)');
@@ -86,7 +88,9 @@ try {
   await join.openCommunity(d, { did: a['community-did'], name: '' });
   await join.ask(d, { tag: p });
   const sent = (await join.awaitSent(d, { required: false })).value;
-  row(`${p}-asked`, sent?.shown ? 'PASS' : 'FAIL', sent?.shown ? 'asked by the review way; the standing shows' : 'no standing after the ask');
+  // awaitSent with required: false reports its timeout in `shown`: "no standing in 240 s" is not a standing.
+  const standing = sent?.shown && !/^no standing/.test(sent.shown);
+  row(`${p}-asked`, standing ? 'PASS' : 'FAIL', standing ? 'asked by the review way; the standing shows' : `no standing after the ask (${sent?.shown ?? 'nothing shown'})`);
 
   // Only this phone's request, and only when it is the one request since the ask (hvAdmin soleRequestSince: read twice,
   // 5 s apart): the member DID this writes (--out) becomes the gate's HV_VETTER_DID / VETTER_DID, so another phone's

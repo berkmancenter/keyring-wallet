@@ -103,6 +103,9 @@ try {
   // The way's own start button is the screen's JoinStart ("Meet a vetter"); JoinWayStart_<id> is its caption.
   if (!(await scrollToTestId(app, 'JoinStart', 6, { from: 0.6 }).catch(() => undefined))) throw new Error('JoinStart (Meet a vetter) not reachable');
   await tapTestId(app, 'JoinStart', 10000);
+  // Below the fold on a community with a member directory: its preview sits above Continue (join.js ask).
+  await sleep(2000);
+  await scrollToTestId(app, 'JoinAsContinue', 8).catch(() => undefined);
   if (await existsTestId(app, 'JoinAsContinue', 15000)) await tapTestId(app, 'JoinAsContinue', 10000);
   const shown = await existsTestId(app, 'VettingPrivate', 90000);
   await screenshot(app, 'hv-vetting').catch(() => undefined);
@@ -143,7 +146,9 @@ try {
     vet = await openDevice({ platform: vetDev.platform, udid: vetDev.udid, deviceName: a['vetter-device-name'], wdaPort: a['vetter-wda-port'], mjpegPort: a['vetter-mjpeg-port'] });
     stopKeep.push(keepAlive(vet));
     await unlockToHome(vet);
-    await vetterRole.openDesk(vet, { community: { did: a['community-did'] } });
+    // A named community's heading carries its published name, not its DID's path (vetterDoor.plainDoorIsFor).
+    const published = await fetch(`${a['vtc-base']}/community/public-profile`).then((r) => r.json()).then((p) => p.name).catch(() => undefined);
+    await vetterRole.openDesk(vet, { community: { did: a['community-did'], names: published ? [published] : [] } });
     ticketUri = (await vetterRole.issueTicket(vet)).value;
   } else {
     const tuiRoles = await import('./tuiRoles.js');

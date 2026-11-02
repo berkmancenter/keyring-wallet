@@ -256,6 +256,13 @@ export async function sendTask(base, vtcDid, holder, typeUri, payload) {
   if (!body || typeof body !== "object" || !("payload" in body)) {
     throw new Error(`POST /trust-tasks (${short}) answered ${status} without a Trust Task document: ${JSON.stringify(body)?.slice(0, 160)}`);
   }
+    // A newer community serves a later version of the same task and says which (unsupportedVersion, VTC 0.17: members/list 0.2,
+  // join-requests/manifest 0.4): ask again at that one. A payload that changed shape still fails, and says so.
+  const served = body.payload?.code === "unsupportedVersion" ? body.payload?.details?.servedVersions : undefined;
+  if (Array.isArray(served) && served.length && !served.includes(typeUri)) {
+    console.log(`[ref-20] ${short}: this VTC serves ${served.at(-1).replace(SPEC, "")}, asking at that`);
+    return sendTask(base, vtcDid, holder, served.at(-1), payload);
+  }
   return { status, body: body.payload };
 }
 
