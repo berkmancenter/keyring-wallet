@@ -619,6 +619,30 @@ describe('a slow agent (X5JN-PEWP: the posts came 30 s after the listing)', () =
     expect(s.listMyRooms).toHaveBeenCalledTimes(2)
   })
 
+  test('the agent back while a read is out over rows already read reads once more; with none out, nothing', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    mount(s)
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+
+    const slow = held()
+    const real = s.listMyRooms.getMockImplementation()!
+    s.listMyRooms.mockImplementationOnce(async () => {
+      await slow.gate
+      return real()
+    })
+    await act(async () => refreshRoomRows())
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+
+    await sessionOpens(1_000)
+    await act(async () => slow.release())
+    await flush()
+    expect(s.listMyRooms).toHaveBeenCalledTimes(3)
+
+    await sessionOpens(2_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(3)
+  })
+
   test('a read that changes no row publishes no new rows: Messages and the badge do not re-render (control: a new post does)', async () => {
     const notes = { planning: [note('n1', 1)], board: [note('b1', 1)] }
     const s = serviceWith([room('planning'), room('board')], notes)
