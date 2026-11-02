@@ -129,13 +129,17 @@ const RoomOffer: React.FC = () => {
     if (state.readFailed)
       return (
         <View style={{ gap: 8 }}>
-          <ThemedText testID={testIdWithKey('RoomOfferReadFailed')}>{t('Rooms.OfferReadFailed')}</ThemedText>
-          <Button
-            title={t('Rooms.TryAgain')}
-            buttonType={ButtonType.Secondary}
-            onPress={state.reload}
-            testID={testIdWithKey('RoomOfferTryAgain')}
-          />
+          <ThemedText testID={testIdWithKey('RoomOfferReadFailed')}>
+            {t(state.gone ? 'Rooms.OfferGone' : 'Rooms.OfferReadFailed')}
+          </ThemedText>
+          {state.gone ? null : (
+            <Button
+              title={t('Rooms.TryAgain')}
+              buttonType={ButtonType.Secondary}
+              onPress={state.reload}
+              testID={testIdWithKey('RoomOfferTryAgain')}
+            />
+          )}
         </View>
       )
     if (!preview)

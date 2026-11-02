@@ -37,6 +37,8 @@ export interface RoomOfferState {
   step: OfferStep
   /** The offer could not be read. */
   readFailed: boolean
+  /** With `readFailed`: the community no longer lists it, so reading it again can't help. */
+  gone: boolean
   /** The last accept or hide failed; nothing changed. */
   actFailed?: 'accept' | 'hide'
   /** Why the last accept was refused, when the service said; undefined for a failure with no reason (try again). */
@@ -69,12 +71,19 @@ const refusalOf = (e: unknown): AcceptRefusal | undefined => {
   return undefined
 }
 
+/** A read the community answered: this offer isn't there. Accepted elsewhere, withdrawn or expired. */
+const isGone = (e: unknown): boolean => {
+  const refusal = refusalOf(e)
+  return !!refusal && 'code' in refusal && (refusal.code === 'notFound' || refusal.code === 'offerExpired')
+}
+
 export function useRoomOffer(service: RoomsService | undefined, offerRef: string): RoomOfferState {
   const [acceptStatus, setAcceptStatus] = useState<OperationStatus>()
   const [hideStatus, setHideStatus] = useState<OperationStatus>()
   const [preview, setPreview] = useState<OfferPreview>()
   const [step, setStep] = useState<OfferStep>('reading')
   const [readFailed, setReadFailed] = useState(false)
+  const [gone, setGone] = useState(false)
   const [actFailed, setActFailed] = useState<'accept' | 'hide'>()
   const [refusal, setRefusal] = useState<AcceptRefusal>()
   const [refreshed, setRefreshed] = useState(false)
@@ -97,9 +106,10 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
         if (!live) return
         setPreview(read)
         setStep('ready')
-      } catch {
+      } catch (e) {
         if (live) {
           setReadFailed(true)
+          setGone(isGone(e))
           setStep('ready')
         }
       }
@@ -128,8 +138,9 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
         try {
           setPreview(await service.previewOffer(offerRef))
           setRefreshed(true)
-        } catch {
+        } catch (again) {
           setReadFailed(true)
+          setGone(isGone(again))
         }
       } else {
         setActFailed('accept')
@@ -157,5 +168,18 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
     }
   }, [service, offerRef])
 
-  return { acceptStatus, hideStatus, preview, step, readFailed, actFailed, refusal, refreshed, reload, accept, hide }
+  return {
+    acceptStatus,
+    hideStatus,
+    preview,
+    step,
+    readFailed,
+    gone,
+    actFailed,
+    refusal,
+    refreshed,
+    reload,
+    accept,
+    hide,
+  }
 }
