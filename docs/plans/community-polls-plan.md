@@ -177,3 +177,7 @@ identity. No election task is limited by transport, and the VTC's HTTPS address 
 community the phone's IP address beside the ticket. The vote itself still goes over HTTPS to the
 ballot box only. P0 proves this; so far it's read from the code.
 
+## Open question
+
+Does First VTC's build have the `voting` feature, and which ballot box does it trust? Its console
+shows this; nobody has checked yet.
