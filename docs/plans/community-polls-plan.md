@@ -82,10 +82,11 @@ vta-browser-plugin at `bf92427` (2026-10-22), before #404 and #406. To check a q
   unaudited protocol code over audited group operations: fine for polls and surveys; have it
   reviewed before a binding election."
 
-**Upstream state, 2026-11-02.** The VTA Farm's operator said that voting is usable now, and that
-polls across several communities are coming. The app keeps the community a member reaches a poll
-through apart from the community its manifest names, so a poll run across communities needs no
-change to how the phone records it.
+**Upstream state.** Upstream's voting is in use today: the browser plugin shipped a voter in #404 and
+#406 on 2026-11-01. A poll's manifest names the community that runs it (`community`, required in
+`voting/election/register/0.2`'s `Manifest`), and that may not be the community a member reaches it
+through. The app records a poll by the manifest's community and the poll's id, and keeps the
+community it was reached through beside them, so nothing assumes the two are the same.
 
 ## Who sees what
 
@@ -407,8 +408,11 @@ The app does what it can on one phone:
 - It says "one vote per membership", never "one person, one vote". A `binding` poll adds "This
   community counts memberships, not people."
 
-**Where the poll record lives.** In the wallet's encrypted store on the phone. It holds the
-community, the poll, which identity votes, and the cast's state. It never holds the choice, except
+**Where the poll record lives.** In the wallet's encrypted store on the phone, one record per poll,
+keyed by the community its manifest names and the poll's id: a poll id is unique only within that
+community. It also holds the community the member reached the poll through, which identity votes
+and which agent holds the ticket, and the cast's state. The second-ticket refusal reads that key, so
+it holds however the poll was reached. It never holds the choice, except
 the built cast while it waits for its receipt. It is never logged, and it stays out of backups
 (P1's "Done when" covers both platforms).
 
