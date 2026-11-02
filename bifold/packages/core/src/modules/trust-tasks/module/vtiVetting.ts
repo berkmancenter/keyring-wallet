@@ -20,6 +20,7 @@
 import type { Agent } from '@credo-ts/core'
 import { TypedArrayEncoder, utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { extendsChain } from '@openvtc/trust-tasks/runtime'
 import {
   CROCKFORD,
   communityRoleCard,
@@ -122,6 +123,12 @@ export const TASK_ERROR_TYPE = `${TASK_ERROR}0.5`
  * other version Keyring does not emit.
  */
 export const LEGACY_ERROR_03_UNTIL = '2026-11-01'
+/**
+ * The trust-task-error versions that declare they extend an earlier one (SPEC §5.2), so a refusal in them is read
+ * as 0.5: 0.6 (`extends: "0.5"`), which @openvtc/trust-tasks 0.28 emits. Named here because the package's own
+ * table is empty in 0.28.1 and its 0.6 module only exports the declaration, so `extendsChain` alone finds nothing.
+ */
+const TASK_ERROR_EXTENDS: Readonly<Record<string, string>> = { [`${TASK_ERROR}0.6`]: '0.5' }
 const DTG_CONTEXT = ['https://www.w3.org/ns/credentials/v2', 'https://firstperson.network/credentials/dtg/v1']
 
 export type VettingMethod = 'inPerson' | 'video' | 'priorAcquaintance'
@@ -1352,6 +1359,7 @@ export class VtiVetterDesk {
       this.agent,
       this.persona,
       to,
+      // version-pinned: 0.5 is all trust-tasks-rs models (TASK_ERROR_TYPE); Keyring reads 0.6 but does not send it
       TASK_ERROR_TYPE,
       {
         code,
@@ -1365,6 +1373,7 @@ export class VtiVetterDesk {
       },
       String(body.threadId ?? body.id ?? '')
     )
+    // version-pinned: 0.5 is all trust-tasks-rs models (TASK_ERROR_TYPE); Keyring reads 0.6 but does not send it
     await vtiAgent.send(to, TASK_ERROR_TYPE, error, { thid: String(m.id ?? '') })
   }
 
@@ -2357,14 +2366,15 @@ export class VtiApplicant {
   private async refused(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
     const vetterDid = String(body.issuer ?? m.from ?? '')
-    // 0.5 is what Keyring and VTI emit. 0.3 is what Keyring vetters sent
-    // before PR E: read until LEGACY_ERROR_03_UNTIL, and said so.
+    // 0.5 is what Keyring and VTI emit, and 0.6 extends it (a peer on
+    // @openvtc/trust-tasks 0.28). 0.3 is what Keyring vetters sent before
+    // PR E: read until LEGACY_ERROR_03_UNTIL, and said so.
     const version = typeOf(m).slice(TASK_ERROR.length)
     if (version === '0.3' && this.now() < new Date(`${LEGACY_ERROR_03_UNTIL}T00:00:00Z`)) {
       this.agent.config?.logger?.info?.('[VTI] vetting refusal read in the legacy trust-task-error/0.3 form', {
         vetterDid,
       })
-    } else if (version !== '0.5') {
+    } else if (version !== '0.5' && !extendsChain(typeOf(m), TASK_ERROR_EXTENDS).includes('0.5')) {
       this.agent.config?.logger?.warn?.(`[VTI] vetting refusal in trust-task-error/${version} not read`, { vetterDid })
       return
     }
