@@ -26,6 +26,7 @@ export type RoomsOperation =
   | 'hideOffer'
   | 'listFiles'
   | 'openFile'
+  | 'uploadFile'
   | 'listCommunityMembers'
   | 'agentAccess'
   | 'leaveViaCommunity'
@@ -130,6 +131,7 @@ export type RoomOperation =
   | 'curate'
   | 'listFiles'
   | 'openFile'
+  | 'uploadFile'
   | 'agentAccess'
   | 'listCommunityMembers'
 
