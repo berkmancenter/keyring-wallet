@@ -221,16 +221,53 @@ export const join = {
    * The request on its way: the waiting screen (JoinStanding) within
    * `timeoutMs`. With `required` false a late answer is reported, not failed
    * (run-join-waiting carries on to read what shows). Value: { shown }.
+   *
+   * With `retryNoAnswer`, "Your agent didn't answer. Tap Continue to try
+   * again" gets Continue once, as the screen asks, and never a second time
+   * (277.3's Keyring Lab 0.17 signin-ios: an agent that answered on and off).
+   * The retry is said on a `RETRY join <time> — <the error>` line, which the
+   * leg forwards with its agent and counts (lib.sh take_rows, leg_end), and the
+   * value's `retry` ({ at, error }, else null) lets the row say it passed only
+   * after one. Value: { shown, retry }.
    */
-  awaitSent(d, { timeoutMs = 240000, required = true } = {}, opts = {}) {
+  awaitSent(d, { timeoutMs = 240000, required = true, retryNoAnswer = false, owner = noOwner } = {}, opts = {}) {
     return step(d, "awaitSent", opts, async () => {
       const clock = clockOf(opts);
-      try {
-        await awaitScreen(d, "JoinStanding", { page: PAGE, markers: JOIN_MARKERS, timeoutMs, clock, extra: async () => ({ error: await said(d, "JoinError") }) });
-        return { value: { shown: "standing" } };
-      } catch (err) {
-        if (required) throw err;
-        return { value: { shown: `no standing in ${Math.round(timeoutMs / 1000)} s` }, observed: err.observed };
+      const extra = async () => ({ error: await said(d, "JoinError") });
+      if (!retryNoAnswer) {
+        try {
+          await awaitScreen(d, "JoinStanding", { page: PAGE, markers: JOIN_MARKERS, timeoutMs, clock, extra });
+          return { value: { shown: "standing" } };
+        } catch (err) {
+          if (required) throw err;
+          return { value: { shown: `no standing in ${Math.round(timeoutMs / 1000)} s` }, observed: err.observed };
+        }
+      }
+      // The identity step stays on screen under the error (JoinMakeIdentity outranks JoinError), so the wait is cut
+      // into 10 s slices and the error's words read between them; `retry` alone keeps it to one Continue.
+      const t0 = clock.now();
+      const until = t0 + timeoutMs;
+      let retry = null;
+      for (;;) {
+        try {
+          await awaitScreen(d, "JoinStanding", { page: PAGE, markers: JOIN_MARKERS, timeoutMs: Math.min(10000, until - clock.now()), clock, extra });
+          return { value: { shown: "standing", retry } };
+        } catch (err) {
+          const error = err.observed?.error ?? "";
+          if (clock.now() < until && !retry && /didn.t answer/i.test(error) && (await existsTestId(d, "JoinAsContinue", 1500))) {
+            retry = { at: `${new Date(clock.now()).toISOString().slice(11, 19)}Z`, error };
+            console.log(`RETRY join ${retry.at} — ${error.slice(0, 160)}`);
+            await tapTestId(d, "JoinAsContinue", 10000);
+            await handleBiometricConfirmIfPresent(d).catch(() => undefined);
+            await owner("retry identity");
+            continue;
+          }
+          if (clock.now() < until) continue;
+          const waited = Math.round((clock.now() - t0) / 1000);
+          const after = retry ? `, after one retry at ${retry.at}` : "";
+          if (required) throw failWith(`no JoinStanding in ${waited} s (last on "${err.observed?.screen ?? "none"}"${after})`, { ...err.observed, retry });
+          return { value: { shown: `no standing in ${waited} s${after}`, retry }, observed: err.observed };
+        }
       }
     });
   },

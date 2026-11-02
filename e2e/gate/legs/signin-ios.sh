@@ -16,7 +16,7 @@ if [ -z "$SIGNIN_C_DID" ] || [ -z "$SIGNIN_C_REST" ] || [ -z "$SIGNIN_C_ADMIN_CR
   exit 0
 fi
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN IOS_VERSION
-T0=$(stamp); T0S=$(date +%s); U=$SIGNIN_SIM_UDID; NAME=${SIGNIN_SIM_NAME:-iPhone 17 Signin}; FW=
+T0=$(stamp); T0S=$(date +%s); U=$SIGNIN_SIM_UDID; NAME=${SIGNIN_SIM_NAME:-iPhone 17 Signin}; FW=; LEG_AGENT=$RUNNER_MAIN_SLUG
 fin() {
   [ -n "$FW" ] && kill "$FW" 2>/dev/null
   ios_log_save "$U" "$LEG_DIR/ios.log" "$T0S"
