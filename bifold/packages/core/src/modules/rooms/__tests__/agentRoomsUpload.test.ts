@@ -27,7 +27,9 @@ const SERVED = [
   UPLOAD_TASK.fileKey,
 ]
 
-function setup(o: { served?: string[]; version?: string; uploads?: boolean; putRefused?: string } = {}) {
+function setup(
+  o: { served?: string[]; version?: string; uploads?: boolean; putRefused?: string; plain?: Uint8Array } = {}
+) {
   const calls: string[] = []
   let manifest: unknown
   const agentTask = jest.fn(async (type: string, payload: Record<string, unknown>): Promise<unknown> => {
@@ -95,8 +97,7 @@ function setup(o: { served?: string[]; version?: string; uploads?: boolean; putR
       ? {}
       : {
           uploads: {
-            readFile: async (_uri: string, position: number, length: number) =>
-              Uint8Array.from(CONTENT.subarray(position, position + length)),
+            readFile: async () => (o.plain = Uint8Array.from(CONTENT)),
             hostDoor: async () => ({ base: BASE, version: o.version ?? '0.12.0' }),
             postToDoor,
           },
@@ -168,6 +169,15 @@ describe('posting a file to a room', () => {
     expect((put.payload as Record<string, unknown>).blobs).toEqual([blobRef])
     expect(written).toEqual({ key: expect.stringMatching(/^note\//), version: 1 })
     expect(progress.length).toBeGreaterThan(0)
+  })
+
+  it('does not keep the file in the clear in memory once it is sealed and sent', async () => {
+    const held: { plain?: Uint8Array } = {}
+    const { service } = setup(held)
+    const preview = await service.prepareWrite(SEALED_ROOM, { title: '', body: '', attachment: attachment() })
+    await service.confirmWrite(preview.token)
+    expect(held.plain?.length).toBe(CONTENT.length)
+    expect(held.plain?.every((byte) => byte === 0)).toBe(true)
   })
 
   it('a host refusing put 0.3 is that refusal: 0.1 has no blobs, so the post is never stored without its file', async () => {

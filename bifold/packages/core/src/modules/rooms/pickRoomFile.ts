@@ -9,7 +9,12 @@ import { pick, types } from 'react-native-document-picker'
 
 import { FILE_BYTES } from './real/files/upload'
 
-import { adoptRoomFileCopy, removeRoomFileCopy, sweepRoomFileCopiesOnce } from './real/files/tempCopies'
+import {
+  adoptRoomFileCopy,
+  removeRoomFileCopy,
+  removeSystemInboxCopy,
+  sweepRoomFileCopiesOnce,
+} from './real/files/tempCopies'
 import type { RoomsAttachment } from './types'
 
 /** The most a post's file may be, as the upload takes it (`files/upload.ts`), so the limit the member is told is exact. */
@@ -31,6 +36,8 @@ export async function pickRoomFile(): Promise<PickedFile | undefined> {
   }
   const chosen = picked[0]
   if (!chosen) return undefined
+  // The file goes on from the app's own copy, or not at all.
+  await removeSystemInboxCopy(chosen.uri)
   if (!chosen.fileCopyUri || chosen.copyError) return { ok: false, reason: 'unreadable' }
   let uri: string
   try {

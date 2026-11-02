@@ -11,6 +11,8 @@
  *   transfers have let go, for a write that was already on its way. Importing this module listens for the lock, for
  *   the life of the app.
  * - `sweepRoomFileCopiesOnce` empties the directory once per launch, before a room can open, for an app killed mid-way.
+ * - iOS also keeps its own copy of a picked file, under its real name, in the app's `tmp/<bundle>-Inbox`, and leaves it
+ *   for the app to delete. It goes as soon as the file is picked, and the Inbox goes with every sweep.
  *
  * Neither a path nor a name is ever logged.
  */
@@ -65,8 +67,13 @@ async function remove(path: string): Promise<void> {
   }
 }
 
-/** iOS names one directory both with and without `/private`: the comparison below must not depend on which. */
+/** iOS names one directory both with and without `/private`: the comparison here must not depend on which. */
 const realPath = (path: string) => path.replace(/^\/private\/var\//, '/var/')
+
+/** Whether `path` is in iOS's Inbox for this app (`tmp/<bundle>-Inbox/`). Nothing else is the system's leftover. */
+const inSystemInbox = (path: string) =>
+  realPath(path).startsWith(realPath(RNFS.TemporaryDirectoryPath).replace(/\/*$/, '/')) && /-Inbox\/[^/]+$/.test(path)
+
 
 /** Whether `path` is the picker's own copy in the app's caches, and so the app's to move or remove. */
 const inCaches = (path: string) => realPath(path).startsWith(`${realPath(RNFS.CachesDirectoryPath)}/`)
@@ -93,6 +100,16 @@ export async function adoptRoomFileCopy(uri: string): Promise<string> {
   }
 }
 
+/** Removes the picked file's copy from iOS's Inbox, if `uri` is that. Touches nothing else, and never throws. */
+export async function removeSystemInboxCopy(uri: string | null | undefined): Promise<void> {
+  try {
+    const path = decodeURIComponent((uri ?? '').replace(/^file:\/\//, ''))
+    if (inSystemInbox(path)) await remove(path)
+  } catch {
+    // A name that cannot be read goes with the Inbox at the next sweep.
+  }
+}
+
 /**
  * Removes one copy and its directory. Never throws, so it cannot hide what a `finally` is unwinding from; a copy it
  * could not remove goes at the next launch. Touches nothing outside the copies' directory, whatever it is given.
@@ -106,6 +123,13 @@ export async function removeRoomFileCopy(path: string | undefined): Promise<void
 /** Empties the copies' directory. Not while a transfer is running: it reads from here. */
 export async function removeAllRoomFileCopies(): Promise<void> {
   await remove(COPIES_DIR)
+  if (Platform.OS !== 'ios') return
+  try {
+    const inboxes = (await RNFS.readDir(RNFS.TemporaryDirectoryPath)).filter((item) => item.name.endsWith('-Inbox'))
+    for (const inbox of inboxes) await remove(inbox.path)
+  } catch {
+    // Nothing there to read.
+  }
 }
 
 let swept: Promise<void> | undefined

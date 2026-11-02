@@ -9,6 +9,8 @@ jest.mock('react-native-fs', () => ({
   __esModule: true,
   default: {
     CachesDirectoryPath: '/caches',
+    TemporaryDirectoryPath: '/tmp-app/',
+    readDir: async () => [],
     unlink: (path: string) => mockUnlink(path),
     mkdir: async () => undefined,
     writeFile: async () => undefined,
@@ -101,6 +103,12 @@ describe('pickRoomFile', () => {
     pickMock.mockResolvedValueOnce([picked({ size: MAX_FILE_BYTES + 1 })])
     await expect(pickRoomFile()).resolves.toEqual({ ok: false, reason: 'tooLarge' })
     expect(removedCopies()).toHaveLength(1)
+  })
+
+  test('iOS’s own named copy in the Inbox goes as soon as the file is picked', async () => {
+    pickMock.mockResolvedValueOnce([picked({ uri: 'file:///tmp-app/app-Inbox/Minutes.pdf' })])
+    await pickRoomFile()
+    expect(mockUnlink).toHaveBeenCalledWith('/tmp-app/app-Inbox/Minutes.pdf')
   })
 
   test('a copy that cannot be taken in is unreadable, and is not left in the caches', async () => {

@@ -34,10 +34,10 @@ const RECORD_TYPE = 'keyring/rooms'
 /** An upload's legs off the session: the picked file on disk, and the room host's HTTPS Trust Task door. */
 function createUploadBackend(agent: Agent): RoomsUploadBackend {
   return {
-    readFile: async (uri, position, length) => {
-      const path = decodeURIComponent(uri.replace(/^file:\/\//, ''))
-      return TypedArrayEncoder.fromBase64(await RNFS.read(path, length, position, 'base64'))
-    },
+    // All at once: `RNFS.read` takes a position, but on iOS its NSInteger arguments cannot cross the bridge in this
+    // React Native ("Objective C type NSInteger is unsupported"). A file is within `FILE_BYTES`, and sealed in memory.
+    readFile: async (uri) =>
+      TypedArrayEncoder.fromBase64(await RNFS.readFile(decodeURIComponent(uri.replace(/^file:\/\//, '')), 'base64')),
     ...createRoomDoors(agent),
   }
 }

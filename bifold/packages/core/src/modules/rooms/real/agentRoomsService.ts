@@ -142,8 +142,8 @@ export interface RoomsBackend {
 
 /** The picked file, and the room host's HTTPS Trust Task door, which an upload's single-use key sends to. */
 export interface RoomsUploadBackend extends RoomDoors {
-  /** `length` bytes of a picked file from `position`. */
-  readFile(uri: string, position: number, length: number): Promise<Uint8Array>
+  /** A picked file's bytes, whole. */
+  readFile(uri: string): Promise<Uint8Array>
 }
 
 /** What the service needs besides the backend. Tests replace the clock and the wait between retries. */
@@ -1459,12 +1459,15 @@ export class AgentRoomsService implements RoomsService {
     const uploads = this.backend.uploads
     if (!uploads) throw new RoomsUnavailable('uploadFile', 'clientNotBuilt', 'uploading is not built on this phone')
     const { base, version } = await this.requireUpload(room, attachment.size)
+    let bytes: Uint8Array | undefined
     try {
+      bytes = await uploads.readFile(attachment.uri)
+      const plain = bytes
       return await uploadFile(
         {
           fileKey: (payload) => this.agentStep('write', 'give a key for the file', UPLOAD_TASK.fileKey, payload),
           begin: (payload) => this.actAndSend('write', community, host, UPLOAD_TASK.begin, payload),
-          read: (position, length) => uploads.readFile(attachment.uri, position, length),
+          read: async (position, length) => plain.subarray(position, position + length),
           post: (document, signal): Promise<DoorAnswer> => uploads.postToDoor(base, document, signal),
           newKey: () => newThrowawayKey(),
           newId: () => this.backend.newId(),
@@ -1486,6 +1489,9 @@ export class AgentRoomsService implements RoomsService {
       if (code && !(e instanceof RoomsRefused))
         throw new RoomsRefused('write', code, code === 'rateLimited', message(e))
       throw e
+    } finally {
+      // The file in the clear does not stay in memory either.
+      bytes?.fill(0)
     }
   }
 
