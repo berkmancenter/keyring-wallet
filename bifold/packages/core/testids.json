@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "46abb98740ceb36aea796999f2b03f4d14095446",
+  "generatedFrom": "55851cd673ff1501886994e027dbe312fa13048c",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -314,6 +314,8 @@
     "CommunityError": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityHeldElsewhere": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityHeldElsewhereText": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
+    "CommunityLogo": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityMarkIcon": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityMember": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityMemberSince": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityName": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
@@ -1692,6 +1694,12 @@
     },
     {
       "src/modules/rooms/screens/RoomInfo.tsx": "PART_TEST_ID[part]"
+    },
+    {
+      "src/modules/trust-tasks/screens/CommunityMark.tsx": "VtiCommunityIds.logo"
+    },
+    {
+      "src/modules/trust-tasks/screens/CommunityMark.tsx": "VtiCommunityIds.markIcon"
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Copy`"
