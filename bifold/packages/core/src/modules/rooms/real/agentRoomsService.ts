@@ -360,7 +360,8 @@ export class AgentRoomsService implements RoomsService {
   ) {
     this.now = options.now ?? (() => Date.now())
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
-    // Before any room can open: a killed app's copy of a file does not wait for the next file to be opened.
+    // Before any room can open: a killed app's copy of a file does not wait for the next file to be opened. Once per
+    // launch: no transfer exists before the first service, and that latch is what keeps a later service from sweeping one.
     void sweepRoomFileCopiesOnce().catch(() => undefined)
   }
 

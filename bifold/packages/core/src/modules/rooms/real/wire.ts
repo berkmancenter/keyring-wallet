@@ -469,7 +469,10 @@ export function parseBlobDownload(v: unknown): { blob: BlobManifest; downloadId:
   return blob && downloadId && m?.mode === 'proxied' ? { blob, downloadId } : undefined
 }
 
-/** `rooms/blobs/chunk`'s base64url `data` for chunk `index`. Its `digestMultibase` is the host's word: not read. */
+/**
+ * `rooms/blobs/chunk`'s base64url `data` for chunk `index`. Its `digestMultibase` only restates the manifest, so it is not
+ * read: the bytes are checked against the manifest the sealed record names (`files/open.ts`).
+ */
 export function parseBlobChunk(v: unknown, index: number): string | undefined {
   const m = obj(v)
   return m?.index === index && typeof m.data === 'string' ? m.data : undefined
