@@ -12,6 +12,7 @@ import {
   keepManagerMessage,
 } from '../module/vtaAgent'
 import { currentAgentDid } from '../module/currentAgent'
+import { vtiAgent } from '../module/vtiAgent'
 import { EnrolmentError } from '../module/vtaEnrolment'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 
@@ -921,6 +922,50 @@ describe('unlinking this phone from its agent', () => {
     ])
     expect(stored()).toBeUndefined()
     expect(vta.getState().link).toEqual({ kind: 'notLinked' })
+  })
+
+  describe("the community session's failure", () => {
+    const failed = 'Error importing key'
+    const setVti = (next: Record<string, unknown>) => (vtiAgent as unknown as { set(n: unknown): void }).set(next)
+    const next = { vtaDid: 'did:webvh:next', label: 'Next', linkedAt: 't1', introSeenAt: 't1' }
+
+    afterEach(() => setVti({ status: 'disconnected', did: undefined, error: undefined }))
+
+    it('goes with the last agent', async () => {
+      const { vta } = unlinkable()
+      await vta.restore({} as never)
+      setVti({ status: 'failed', error: failed })
+      await vta.unlink({} as never)
+      expect(vta.getState().link).toEqual({ kind: 'notLinked' })
+      expect(vtiAgent.getState()).toMatchObject({ status: 'disconnected', error: undefined })
+    })
+
+    it('stays while another agent comes up', async () => {
+      let stored: unknown = linked
+      const vta = new VtaAgentController()
+      vta.configure({
+        now: () => 1_000,
+        linkStore: () => ({
+          get: async () => stored as never,
+          set: async (l) => void (stored = l),
+          clear: async () => void (stored = next),
+        }),
+        identityStore: () => ({ setManager: async () => undefined, forgetManager: async () => undefined }) as never,
+      })
+      await vta.restore({} as never)
+      setVti({ status: 'failed', error: failed })
+      await vta.unlink({} as never)
+      expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: next.vtaDid })
+      expect(vtiAgent.getState()).toMatchObject({ status: 'failed', error: failed })
+    })
+
+    it('a session still open stays open: only its error goes', async () => {
+      const { vta } = unlinkable()
+      await vta.restore({} as never)
+      setVti({ status: 'connected', did: 'did:webvh:persona', error: failed })
+      await vta.unlink({} as never)
+      expect(vtiAgent.getState()).toMatchObject({ status: 'connected', did: 'did:webvh:persona', error: undefined })
+    })
   })
 
   it('still unlinks when the agent refuses either step', async () => {

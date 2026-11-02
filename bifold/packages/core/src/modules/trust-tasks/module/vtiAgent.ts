@@ -1268,6 +1268,15 @@ class VtiAgentController {
   }
 
   /**
+   * The last agent went: a failed sign-in, or a session's error, is no longer
+   * anything to report. Nothing else moves, so a sign-in running or a session
+   * still open stays as it is.
+   */
+  clearFailure(): void {
+    this.set(this.state.status === 'failed' ? { status: 'disconnected', error: undefined } : { error: undefined })
+  }
+
+  /**
    * A TSP frame from the socket: open it as the persona, record the revision
    * the peer spoke, and deliver the Trust Task exactly as a DIDComm plaintext
    * would be. Throwing here withholds the acknowledgement, so a frame this

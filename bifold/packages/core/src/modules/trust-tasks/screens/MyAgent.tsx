@@ -713,9 +713,12 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   }
 
   // S1 — not connected (and the failed state, which says why and offers a retry).
-  // The connection's own error is its raw text too: said the same way.
-  const storeError = vtaDid ? vta.error : state.error
-  const failure: Said | undefined = connectError ?? (storeError ? sayFailure(storeError) : undefined)
+  // The connection's own error is its raw text too: said the same way. With no
+  // agent there is no connection to fail and no Try again: what a community's
+  // session or an earlier attempt left is not this phone's to report here.
+  const failure: Said | undefined = vtaDid
+    ? (connectError ?? (vta.error ? sayFailure(vta.error) : undefined))
+    : undefined
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
