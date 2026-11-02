@@ -535,6 +535,8 @@ async function answerProblem(
  * carries on with identify. Throws a {@link SignInError} otherwise — before
  * any network call when the code cannot be used or the community is not one
  * this phone has joined.
+ *
+ * @versionLadder auth/oob/claim
  */
 export async function claimSignIn(link: string | TriggerAccept, deps: SignInDeps): Promise<ClaimedSignIn> {
   const trigger = signInTrigger(link, nowSeconds(deps))

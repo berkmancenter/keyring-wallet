@@ -49,7 +49,11 @@ export const ROOMS_TASK = {
   recordsCurate: `${SPEC}rooms/records/curate/0.1`,
 } as const
 
-/** The `rooms/keys/act` versions this client speaks, newest first: the agent is asked at the newest it serves. */
+/**
+ * The `rooms/keys/act` versions this client speaks, newest first: the agent is asked at the newest it serves.
+ *
+ * @versionLadder rooms/keys/act
+ */
 export const KEYS_ACT_TYPES = [
   ROOMS_TASK.keysAct09,
   ROOMS_TASK.keysAct08,
@@ -168,7 +172,11 @@ const credentialsOf = <K extends string>(v: unknown, keys: readonly K[]): Record
   return out
 }
 
-/** The `vtc/rooms/offers/list` versions this client speaks, newest first. */
+/**
+ * The `vtc/rooms/offers/list` versions this client speaks, newest first.
+ *
+ * @versionLadder vtc/rooms/offers/list
+ */
 export const OFFERS_LIST_TYPES = [ROOMS_TASK.offersList04, ROOMS_TASK.offersList03, ROOMS_TASK.offersList02] as const
 
 export function parseOffers(payload: unknown): {

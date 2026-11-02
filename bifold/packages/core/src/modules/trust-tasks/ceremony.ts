@@ -1338,12 +1338,13 @@ async function deliverVrcViaTrustTaskForExchangeInner(
         sendDocument: sendTrustTaskDocument,
         retain: (doc, role) => service.retain(agent.context, doc, role, witnessConnectionId),
         // locality-plan.md §8.1/§10.3 item 10: offer per the user's own
-        // setting. `createDeviceLocalityProvider` resolves to the real
-        // Android BLE peripheral when the native module is linked (item 9,
-        // verified live end to end 2026-08-21) and falls back to
-        // `NullDeviceLocalityProvider` everywhere else (iOS, or Android
-        // without the module) — the ext protocol and cross-check still run
-        // for real in that case; they just never receive a transcript.
+        // setting. `createDeviceLocalityProvider` resolves to the real BLE
+        // peripheral on Android and iOS when the native module is linked
+        // (item 9, verified live end to end on Android 2026-08-21 and iOS
+        // 2026-09-13) and falls back to `NullDeviceLocalityProvider`
+        // everywhere else (another platform, or a build without the module)
+        // — the ext protocol and cross-check still run for real in that
+        // case; they just never receive a transcript.
         localityOffered: await isLocalityConfirmationPreferred(),
         deviceLocalityProvider: createDeviceLocalityProvider(agent),
       })

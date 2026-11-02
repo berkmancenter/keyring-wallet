@@ -57,6 +57,26 @@ jobs:
         run: |
           yarn build
 
+      # Jest's transform cache (babel output per file, keyed by jest on content and config), as quality.yaml's Testing
+      # parts keep it, so a run re-transforms only what changed. Without it every run compiled all of core cold, and a
+      # file's time measured its share of that compile: whichever file first loaded a large graph took 25-70 s.
+      # Its own prefix: coverage instruments every file, so these entries are not the Testing parts' ones. One entry per
+      # part per UTC day, not per commit: a key is never saved twice, so later runs that day restore it and write
+      # nothing. About 47 MiB a part: per commit, a 60-merge day would write more than the repo's whole 10 GiB store.
+      - name: Date jest's cache
+        id: jest-cache
+        if: startsWith(matrix.part, 'core ')
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore jest's cache
+        if: startsWith(matrix.part, 'core ')
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: packages/core/.jest/cache
+          key: jest-cov-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ matrix.part }}-${{ steps.jest-cache.outputs.day }}
+          restore-keys: |
+            jest-cov-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ matrix.part }}-
+
       # A shard can hold no test of a small package, hence --passWithNoTests; core's never empties. The other
       # packages run unsharded, so their coverage thresholds (remote-logs) still see the whole suite.
       - name: Automated testing with coverage

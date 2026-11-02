@@ -26,6 +26,7 @@ import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
+import { sameIdentity } from './didScid'
 import {
   readTrigger,
   TRIGGER_UI_MESSAGE_KEYS,
@@ -233,7 +234,12 @@ async function joinUnderWay(agent: Agent, communityDid: string): Promise<boolean
     const persona = await new GenericRecordsIdentityStore(agent).getPersona(communityDid)
     if (!persona) return false
     const memberships = await new GenericRecordsCommunityStore(agent).listMemberships()
-    return !memberships.some((m) => m.communityDid === communityDid && isCurrentMembership(m))
+    return !memberships.some(
+      (m) =>
+        m.communityDid === communityDid &&
+        (!m.personaDid || sameIdentity(m.personaDid, persona.did)) &&
+        isCurrentMembership(m)
+    )
   } catch {
     return true
   }

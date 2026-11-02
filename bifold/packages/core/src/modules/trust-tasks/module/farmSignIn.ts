@@ -271,6 +271,7 @@ export async function farmIdentifyAndProve(
     sent = await sendToFarm(
       deps,
       base,
+      // version-pinned: the Farm serves one version of each step, prove 0.3
       () => keyA.sign(oobEnvelope(OOB_TASKS.prove03, { identify }, keyA.did, farmDid, requestId), 'authentication'),
       { until: claimed.decisionDeadline }
     )
@@ -344,6 +345,7 @@ export async function farmApprove(
   const grant = await signedAsLogin(
     deps.login,
     loginDocument(
+      // version-pinned: the Farm serves one version of each step, grant 0.3
       OOB_TASKS.grant03,
       {
         requestId,
@@ -365,6 +367,7 @@ export async function farmApprove(
   const sent = await sendToFarm(
     deps,
     base,
+    // version-pinned: the Farm serves one version of each step, respond 0.3
     () => keyA.sign(oobEnvelope(OOB_TASKS.respond03, { grant }, keyA.did, farmDid, requestId), 'authentication'),
     { ...responded, until: claimed.decisionDeadline }
   )

@@ -47,6 +47,12 @@ export class AgentDirectoryService implements DirectoryService {
 
   public constructor(private readonly backend: DirectoryBackend) {}
 
+  /**
+   * A page of the members list, at the version this community last answered, else 0.2, stepping to the other on a
+   * refusal of the version.
+   *
+   * @versionLadder vtc/directory/entries/list
+   */
   public async listMembers(communityDid: string, cursor?: string): Promise<MemberPage> {
     const payload = { limit: MEMBERS_PAGE, ...(cursor ? { cursor } : {}) }
     const first = this.listVersion.get(communityDid) ?? DIRECTORY_TASK.entriesList02

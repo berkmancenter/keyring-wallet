@@ -105,6 +105,14 @@ const WATCHED: Step['kind'][] = ['number', 'checking', 'review']
  */
 const IN_REQUEST: Step['kind'][] = ['claiming', 'number', 'checking', 'review', 'approving', 'declining']
 
+/** What a browser may sign as the person, in words, by the task family a community offers (`signingScope`). */
+const SCOPE_WORDS = new Map([
+  ['vtc/directory', 'SignIn.ScopeDirectory'],
+  ['vtc/groups', 'SignIn.ScopeGroups'],
+  ['git-ns/view', 'SignIn.ScopeRepositories'],
+  ['git-ns/account/link-status', 'SignIn.ScopeAccountLink'],
+])
+
 /** The words for an ending, as a localization key. */
 export function signInEndKey(end: SignInEnd): string {
   switch (end.kind) {
@@ -632,13 +640,17 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
               {t('SignIn.SessionOnly', { hours: GRANT_LIFETIME_SECONDS / 3600 })}
             </ThemedText>
             {/* 0.2 (IN-280): the browser's key may also sign these documents as the person, for this session,
-                without asking the phone each time. Said in words; a family Keyring has no words for is named. */}
+                without asking the phone each time. Said in words; families Keyring has no words for are said once,
+                as that, and never by their task names. The words are our own, so they are not escaped. */}
             {proved.signingScope?.length ? (
               <ThemedText testID={id(SignInIds.signingScope)}>
                 {t('SignIn.SigningScope', {
-                  areas: proved.signingScope
-                    .map((family) => (family === 'vtc/directory' ? t('SignIn.ScopeDirectory') : family))
+                  areas: [
+                    ...new Set(proved.signingScope.map((family) => SCOPE_WORDS.get(family) ?? 'SignIn.ScopeOther')),
+                  ]
+                    .map((key) => t(key))
                     .join(', '),
+                  interpolation: { escapeValue: false },
                 })}
               </ThemedText>
             ) : null}

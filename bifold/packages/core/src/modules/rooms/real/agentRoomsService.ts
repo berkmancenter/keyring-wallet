@@ -430,8 +430,10 @@ export class AgentRoomsService implements RoomsService {
     // A community that cannot answer loses only its own details: its rooms still show from custody,
     // as `detailsNotLoaded`, and the other communities' rooms are unaffected. Why it did not answer is logged.
     // One skipped because a step keeps the session as another identity is not unreachable: it is read again when the
-    // session is free (`onReadable`), and meanwhile its rooms show from custody too.
+    // session is free (`onReadable`), and meanwhile its rooms show from custody too. One that answers it has no such
+    // task was reached, and is too old for rooms; `unsupportedVersion` is not read so, as Keyring may be the one behind.
     const unreachable: string[] = []
+    const tooOld: string[] = []
     let kept = 0
     const memberships = await Promise.all(
       communities.map(async (community) => ({
@@ -439,6 +441,7 @@ export class AgentRoomsService implements RoomsService {
         records: await this.membershipsOf(community).catch((e: unknown): RoomMembershipRecord[] => {
           this.backend.warn(`rooms: ${community.did} did not list this member's rooms: ${message(e)}`)
           if (this.sessionKept(community, e)) kept++
+          else if (refusalCode(e) === 'unsupportedType') tooOld.push(community.did)
           else unreachable.push(community.did)
           return []
         }),
@@ -447,11 +450,17 @@ export class AgentRoomsService implements RoomsService {
     // When none answered, custody alone is not the member's rooms: an open room holds no keys and would be
     // missing, and every other room would show by its id. The read fails instead, and the screen says why — unless
     // only a kept session stopped them: that is not a failure, and the read again follows.
-    if (communities.length > 0 && unreachable.length > 0 && unreachable.length + kept === communities.length)
+    if (unreachable.length > 0 && unreachable.length + tooOld.length + kept === communities.length)
       throw new RoomsUnavailable(
         'listMyRooms',
         'communityUnreachable',
         `no community answered for this member's rooms (${unreachable.join(', ')})`
+      )
+    if (tooOld.length > 0 && tooOld.length === communities.length)
+      throw new RoomsUnavailable(
+        'listMyRooms',
+        'communityDoesNotServe',
+        `no community serves this member's rooms (${tooOld.join(', ')})`
       )
     const held = await heldAsked
 
@@ -506,6 +515,7 @@ export class AgentRoomsService implements RoomsService {
     return read
   }
 
+  /** @versionLadder rooms/keys/list */
   private async readHeldRooms(): Promise<HeldRoom[]> {
     const served = this.served?.types ?? []
     if (served.includes(ROOMS_TASK.keysList02))
@@ -855,6 +865,8 @@ export class AgentRoomsService implements RoomsService {
    * Stores each renewal's credentials in the agent's vault in place of the ones they renew, never beside them: a
    * key holder holding two authorities from one room cannot choose between them (`vtc/rooms/offers/list` 0.3/0.4).
    * Storing one already stored is success, so whichever surface collects it first wins.
+   *
+   * @versionLadder vault/credentials/get
    */
   private async takeRenewals(community: RoomsCommunity, renewals: RenewalRecord[]): Promise<void> {
     const pending = renewals.filter((r) => !this.renewed.has(`${r.roomId}|${r.issuedAt}`))
@@ -1053,6 +1065,8 @@ export class AgentRoomsService implements RoomsService {
   /**
    * The newest `rooms/keys/browse` the agent serves. 0.3 asks the same and answers the same, plus the room's
    * `lastPrune`, which `listNotes` passes on; an agent that lists neither is asked 0.1, as before 0.3.
+   *
+   * @versionLadder rooms/keys/browse
    */
   private browseType(): string {
     const served = this.served?.types ?? []
@@ -1071,6 +1085,8 @@ export class AgentRoomsService implements RoomsService {
    * only 0.1 and 0.2. So the version the host last took is sent first (else 0.3), and the other when the host does not
    * serve it; 0.3 is 0.1 with optional members this client does not send. Before act 0.8 the agent completes only
    * 0.1. A refused document did nothing, and the one sent again is new (`actAndSend`).
+   *
+   * @versionLadder rooms/records/put
    */
   private async put(community: RoomsCommunity, host: string, payload: Record<string, unknown>): Promise<unknown> {
     const act = this.actType()

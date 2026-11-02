@@ -133,7 +133,12 @@ export const PHONE_SENDS: readonly string[] = [
   'policy/upsert/0.3',
 ].map((slug) => SPEC + slug)
 
-/** The tasks the test request sends: held by the phone's own rule, or let through when nothing is enforced. */
+/**
+ * The tasks the test request sends: held by the phone's own rule, or let through when nothing is enforced. Its delete
+ * goes at whichever version VTA_TASK_VERSIONS picks, so every one is here, newest first.
+ *
+ * @versionCoverage vta/contexts/delete
+ */
 export const TEST_REQUEST_TASKS = [
   `${SPEC}vta/contexts/create/1.0`,
   `${SPEC}vta/contexts/delete/1.1`,

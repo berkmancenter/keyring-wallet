@@ -204,6 +204,8 @@ export const VTA_TASK = {
 /**
  * Each family this client speaks in more than one version, in the order to
  * ask: newest first, except where agents in use serve only the older one.
+ *
+ * @versionLadder
  */
 export const VTA_TASK_VERSIONS = {
   // Newest first. The agents in use share no version: vta-service v0.60.0 to 0d3f268e serve acl/* only at 0.1,

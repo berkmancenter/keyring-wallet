@@ -107,7 +107,11 @@ export interface AgentDevice {
 type Json = Record<string, unknown>
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined)
 
-/** The agent's device bindings (`device/list`), wiped and disabled ones included. */
+/**
+ * The agent's device bindings (`device/list`), wiped and disabled ones included.
+ *
+ * @versionLadder device/list
+ */
 async function deviceBindings(port: AgentDevicePort): Promise<Json[]> {
   // Wiped and disabled bindings are left out unless asked for, and a removed
   // device must stay listed as removed rather than fall back to a bare ACL row.
@@ -143,6 +147,8 @@ function bindingFields(b: Json): Partial<AgentDevice> & Pick<AgentDevice, 'acces
  * has one. Not only admins (IN-200b): a computer or a browser plugin often
  * holds a narrower role, and My devices said it lists them; those are marked
  * `limitedAccess`.
+ *
+ * @versionLadder acl/list
  */
 export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
   const [aclAnswer, rows] = await Promise.all([
@@ -207,6 +213,8 @@ export async function listRegisteredDevices(port: AgentDevicePort): Promise<Agen
  *
  * A wipe the agent refuses does not stop the revoke: access is what matters.
  * `mode` is `wiped` when both happened, `revoked` when only the revoke did.
+ *
+ * @versionLadder acl/revoke
  */
 export async function removeAgentDevice(
   port: AgentDevicePort,
@@ -272,7 +280,11 @@ export async function heartbeat(
   await sendHeartbeat(port, ext ? { ext } : {}, timeoutMs)
 }
 
-/** A heartbeat in the newest version the agent serves (0.3, else 0.2). */
+/**
+ * A heartbeat in the newest version the agent serves (0.3, else 0.2).
+ *
+ * @versionLadder device/heartbeat
+ */
 const sendHeartbeat = (port: AgentDevicePort, payload: Record<string, unknown>, timeoutMs?: number) =>
   versionsFor(port.managerDid ?? port).ask(
     'deviceHeartbeat',

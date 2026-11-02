@@ -6,6 +6,7 @@
  */
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
+import i18n from 'i18next'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -463,6 +464,50 @@ describe('5. the request, as the community reports it', () => {
     expect(tree.getByTestId(id(SignInIds.signingScope))).toHaveTextContent(/SignIn\.SigningScope/)
     expect(en.SignIn.SigningScope).toBe('For that time it also lets that browser act as you in: {{areas}}.')
     expect(en.SignIn.ScopeDirectory).toBe('the member directory (reading it, and editing your own card)')
+  })
+
+  describe('the scope as the person reads it', () => {
+    const PORTAL_SCOPE = ['vtc/directory', 'vtc/groups', 'git-ns/view', 'git-ns/account/link-status']
+    // The module the screen imports: moduleNameMapper's, which jest.requireMock does not hand back.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const translated = require('react-i18next') as { useTranslation: () => unknown }
+    const mocked = translated.useTranslation
+    afterEach(() => {
+      translated.useTranslation = mocked
+    })
+
+    // The app's own i18next: no `interpolation` option, so values are escaped (localization/index.ts). Most word
+    // tests here init with escapeValue off, which hides exactly this.
+    const reviewIn = async (lng: string, resources: object, signingScope: string[]) => {
+      const i = i18n.createInstance()
+      await i.init({ lng, resources: { [lng]: { translation: resources } } })
+      translated.useTranslation = () => ({ t: i.t.bind(i), i18n: i })
+      const scoped = { ...proved, signingScope }
+      const tree = await toReview(fakeSteps({ identifyAndProve: jest.fn(async () => scoped) }))
+      return String(tree.getByTestId(id(SignInIds.signingScope)).props.children)
+    }
+
+    test.each([
+      ['en', en],
+      ['fr', fr],
+      ['pt-BR', ptBr],
+    ])('%s: the offered families read as words, with nothing escaped and no task name', async (lng, resources) => {
+      const line = await reviewIn(lng, resources, PORTAL_SCOPE)
+      const words = resources.SignIn
+      for (const key of ['ScopeDirectory', 'ScopeGroups', 'ScopeRepositories', 'ScopeAccountLink'] as const)
+        expect(line).toContain(words[key])
+      expect(line).not.toMatch(/&#|&amp;|\/|git-ns|vtc/)
+    })
+
+    test('a family Keyring has no words for is never shown raw, and is said once', async () => {
+      // Object.prototype keys must not reach t(): `constructor` is a valid family slug, and `__proto__` would answer
+      // an object lookup with an object. signingScopeProblem refuses the second first; this holds the screen itself.
+      const offered = ['vtc/directory', 'tasks/new-thing', 'other-family', 'constructor', '__proto__']
+      const line = await reviewIn('en', en, offered)
+      expect(line).toBe(
+        `For that time it also lets that browser act as you in: ${en.SignIn.ScopeDirectory}, ${en.SignIn.ScopeOther}.`
+      )
+    })
   })
 
   test('no scope offered (0.1, or none): nothing more is said', async () => {

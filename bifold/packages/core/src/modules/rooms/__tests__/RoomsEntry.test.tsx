@@ -125,6 +125,14 @@ describe('the rooms list', () => {
     expect(tree.getByTestId(id('RoomsTryAgain'))).toBeTruthy()
   })
 
+  test('a community too old for rooms: says so, with nothing to try again', () => {
+    const tree = inApp(
+      <RoomsListBody myRooms={myRooms({ failed: true, failure: no('communityDoesNotServe') })} acrossCommunities />
+    )
+    expect(tree.getByTestId(id('RoomsReadFailed'))).toHaveTextContent('Rooms.CommunityNeedsUpdate')
+    expect(tree.queryByTestId(id('RoomsTryAgain'))).toBeNull()
+  })
+
   test("listing rooms not available: the reason's words, not an empty list", () => {
     const tree = inApp(
       <RoomsListBody

@@ -178,7 +178,9 @@ describe('Join, at manifest 0.3', () => {
         const tree = await toAsks({ wire: '0.3', accepting: true, ways: [offered] })
         expect(check).not.toHaveBeenCalled()
         expect(tree.getByTestId(id('JoinWayPrivate_vetted-member'))).toHaveTextContent(/Vetting\.Private\.Badge/)
-        expect(tree.getByTestId(id('JoinWayPrivate_vetted-memberExplain'))).toBeTruthy()
+        // The mark only (276.10, option B): what private means is said on Get vetted, not here as well.
+        expect(tree.queryByTestId(id('JoinWayPrivate_vetted-memberExplain'))).toBeNull()
+        expect(tree.getByTestId(id('JoinWay_vetted-member'))).not.toHaveTextContent(/Private\.Explain/)
         expect(tree.queryByTestId(id('JoinWaysVettingNotSupported'))).toBeNull()
         expect(tree.queryByTestId(id('JoinPrivateVettingStart_vetted-member'))).toBeNull()
         await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
@@ -341,7 +343,9 @@ describe('Join, at manifest 0.3', () => {
       const tree = await toAsks(vettingCommunity)
       expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonVetting/)
       expect(tree.getByTestId(id('JoinAsk'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
-      expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toHaveTextContent(/Join\.Ways\.VettingToDo/)
+      // The vetting way says what comes next in its own row; the button under it already says "Meet a vetter".
+      expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toHaveTextContent('Join.AsksNext')
+      expect(tree.getAllByText('Join.AsksNext')).toHaveLength(1)
       // What follows each way is still said on its own row.
       expect(tree.getByTestId(id('JoinWayFollows_vetted-member'))).toHaveTextContent('Join.Ways.FollowsAutomatic')
       expect(tree.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')

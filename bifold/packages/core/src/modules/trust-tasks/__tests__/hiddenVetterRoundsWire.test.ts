@@ -64,8 +64,9 @@ import {
   isEnrolled,
   monthLabelAt,
   nextOwedTick,
+  nextTickOpensAt,
 } from '../module/hiddenVetterRounds'
-import { PCS_VETTER_TASK, VTC_VETTER_TASK } from '../module/pcsVetterTasks'
+import { PCS_VETTER_ERROR, PCS_VETTER_TASK, VTC_VETTER_TASK } from '../module/pcsVetterTasks'
 import { VtiRefusal } from '../module/vtiAgent'
 
 import { PCS_VETTER_SCHEMA_DIR, vendoredValidatorIn } from './fixtures/vtcJoinSchemas'
@@ -369,7 +370,6 @@ describe('the draw follows the community’s schedule, not the phone’s', () =>
     const start = Date.UTC(2026, 9, 1)
     const day = 86400 * 1000
     expect(monthLabelAt(['token/2026-09', 'token/2026-10'], start + day)).toEqual({ label: 'token/2026-10', start })
-    expect(monthLabelAt(['token/2026-09'], start + day)).toBeUndefined()
     expect(nextOwedTick(start, 3 * day, undefined, start + day)).toBe(0)
     expect(nextOwedTick(start, 3 * day, 0, start + day)).toBeUndefined()
     expect(nextOwedTick(start, 3 * day, 0, start + 3 * day)).toBe(1)
@@ -414,10 +414,80 @@ describe('the draw follows the community’s schedule, not the phone’s', () =>
     expect(ticksAsked()).toEqual([0, 1])
   })
 
-  it('draws nothing when no published label covers today (last month’s manifest)', async () => {
-    jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 10, 2, 12))
-    await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).resolves.toEqual({ drawn: 0 })
-    expect(mockTask).not.toHaveBeenCalled()
+  describe('a month the community has not rolled to', () => {
+    const sep = Date.UTC(2026, 8, 1)
+    const oct = Date.UTC(2026, 9, 1)
+    const nov = Date.UTC(2026, 10, 1)
+    const nov2 = Date.UTC(2026, 10, 2, 12)
+    const logging = () => {
+      const warn = jest.fn()
+      return { warn, a: { ...(agent() as object), config: { logger: { warn } } } as never }
+    }
+
+    it('draws under the newest published label that has begun, and warns naming the one missing', async () => {
+      // 2 November 12:00Z under P3D, on a manifest still at token/2026-10: ticks 0 to 10 have begun.
+      jest.spyOn(Date, 'now').mockReturnValue(nov2)
+      tokensServed()
+      const { a, warn } = logging()
+      await expect(drawVetterTokens(a, COMMUNITY, criterion)).resolves.toEqual({ drawn: 22 })
+      expect(ticksAsked()).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+      expect((sentToAgent(PCS_VETTER_TASK.tokensRequest) as { label: string }).label).toBe('token/2026-10')
+      expect(warn).toHaveBeenCalledWith('[hidden-vetting] token/2026-11 is not published: drawing under token/2026-10')
+    })
+
+    it('warns of nothing in a month a label covers', async () => {
+      jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 16, 12))
+      tokensServed()
+      const { a, warn } = logging()
+      await drawVetterTokens(a, COMMUNITY, criterion)
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('a roll published beside the old label: the month that covers today is drawn, from its own tick 0', async () => {
+      jest.spyOn(Date, 'now').mockReturnValue(nov2)
+      mockAsk.mockImplementation(async (_d: string, _t: string, payload: { tick: number }) =>
+        answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-11', tick: payload.tick, preCredentials: ['zCPre'] })
+      )
+      const rolled = JSON.parse(JSON.stringify(criterion))
+      rolled.vetting.ext['org.openvtc.hidden-vetting'].tokenLabels = ['token/2026-10', 'token/2026-11']
+      const { a, warn } = logging()
+      await expect(drawVetterTokens(a, COMMUNITY, rolled)).resolves.toEqual({ drawn: 1 })
+      expect((sentToAgent(PCS_VETTER_TASK.tokensRequest) as { label: string }).label).toBe('token/2026-11')
+      expect(ticksAsked()).toEqual([0])
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('picks by date: never by the order published, never a month still to come', () => {
+      const covering = { label: 'token/2026-11', start: nov }
+      expect(monthLabelAt(['token/2026-10', 'token/2026-11'], nov2)).toEqual(covering)
+      expect(monthLabelAt(['token/2026-11', 'token/2026-10'], nov2)).toEqual(covering)
+      // Published ahead of its month: not asked for until it begins.
+      const before = { label: 'token/2026-10', start: oct }
+      expect(monthLabelAt(['token/2026-10', 'token/2026-11'], nov - 1)).toEqual(before)
+      expect(monthLabelAt(['token/2026-11', 'token/2026-10'], nov - 1)).toEqual(before)
+      const stale = { label: 'token/2026-09', start: sep, stale: true }
+      expect(monthLabelAt(['token/2026-08', 'token/2026-09'], nov2)).toEqual(stale)
+      expect(monthLabelAt(['token/2026-09', 'token/2026-08'], nov2)).toEqual(stale)
+      expect(monthLabelAt(['token/2026-12'], nov2)).toBeUndefined()
+      expect(monthLabelAt(['token/event/summit'], nov2)).toBeUndefined()
+      expect(monthLabelAt([], nov2)).toBeUndefined()
+    })
+
+    it('the desk still says when more can be drawn', () => {
+      const parameters = { tokenLabels: ['token/2026-10'], tickLength: 'P3D' } as never
+      expect(nextTickOpensAt(parameters, nov2)).toBe(new Date(oct + 33 * 86400 * 1000).toISOString())
+    })
+
+    it('with no label that has begun it asks nothing, warns, and refuses in the code the desk words', async () => {
+      jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 30, 12))
+      const { a, warn } = logging()
+      await expect(drawVetterTokens(a, COMMUNITY, criterion)).rejects.toMatchObject({
+        code: PCS_VETTER_ERROR.tokensLabelNotLive,
+      })
+      expect(mockAsk).not.toHaveBeenCalled()
+      expect(sentToAgent(PCS_VETTER_TASK.tokensRequest)).toBeUndefined()
+      expect(warn).toHaveBeenCalledWith('[hidden-vetting] token/2026-09 is not published: no label to draw under')
+    })
   })
 })
 

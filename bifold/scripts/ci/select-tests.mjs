@@ -124,8 +124,10 @@ export const CORE_SETUP_FILES = [
   { file: 'packages/core/jestSetupAfterEnv.js', depth: 1 },
 ]
 
+// createProgram: a TypeScript program over src reads every source file (dateRerenderGuard, versionLadderGuard), through
+// ts.sys rather than fs, so neither name above appears.
 export const DISK_READ =
-  /\b(readFileSync|readdirSync|existsSync|globSync|execSync|execFileSync|spawnSync)\b|['"](fast-)?glob['"]/
+  /\b(readFileSync|readdirSync|existsSync|globSync|execSync|execFileSync|spawnSync|createProgram)\b|['"](fast-)?glob['"]/
 
 /** Core's jest maps these @bifold packages to their src, so jest relates a change in them to core's tests. */
 export function sourceMapped(jestConfigText) {
