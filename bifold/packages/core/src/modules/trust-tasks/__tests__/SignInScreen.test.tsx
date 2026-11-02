@@ -5,7 +5,7 @@
  * steps, so no protocol runs here.
  */
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render, within } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import i18n from 'i18next'
 import React from 'react'
 import { PixelRatio } from 'react-native'
