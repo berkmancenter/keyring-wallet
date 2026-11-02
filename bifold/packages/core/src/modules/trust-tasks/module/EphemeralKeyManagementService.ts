@@ -221,8 +221,8 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   /**
    * Make sure an in-memory copy is held before it is used: fetch it if not,
    * once at a time per key. A failed fetch is not retried for
-   * {@link FETCH_RETRY_MS}; the operation then fails as it would have.
-   * Never throws.
+   * {@link FETCH_RETRY_MS}; the operation then fails as it would have. A
+   * failed fetch never throws here; a store that cannot be read does.
    */
   private async ensureHeld(keyId: string | undefined): Promise<void> {
     if (!keyId || !isInMemoryKeyId(keyId) || !this.fetchMissing) return
@@ -294,14 +294,15 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
       return await (await current).store.session().open()
     } catch (error) {
       if (!databaseGone(error)) throw error
-      // One new store, however many uses found this one gone.
+      // Only for the store this use found gone: a use that hears late must not close the one made since.
       if (this.store === current) {
         releaseWarn('[VTA] the in-memory key store lost its database; making a new one, and fetching keys again')
         await this.clear()
-        // Why an earlier fetch failed says nothing about this store, and the pause would hold back its first.
+        // An earlier fetch's failure says nothing about this store, and its pause would hold back the first fetch.
         this.failedAt.clear()
-        this.failureReason.clear()
       }
+      // Assigned synchronously, and on purpose: this line is what gives every use here one new store. An await between
+      // the check and the assignment would make one per use.
       return (await (this.store ??= this.provision())).store.session().open()
     }
   }
@@ -317,8 +318,10 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
 }
 
 /** The store's database is no longer there: Askar's words when a session starts on an empty one. */
-const databaseGone = (error: unknown): boolean =>
-  /no such table/.test(error instanceof Error ? error.message : String(error))
+const databaseGone = (error: unknown): boolean => {
+  const { message, cause } = (error ?? {}) as { message?: unknown; cause?: { message?: unknown } }
+  return /no such table/.test(`${String(message ?? error)} ${String(cause?.message ?? '')}`)
+}
 
 /**
  * An in-memory key copy an operation needs is not held, and fetching it

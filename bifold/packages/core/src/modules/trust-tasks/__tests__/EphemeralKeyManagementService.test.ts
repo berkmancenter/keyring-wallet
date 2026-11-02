@@ -14,6 +14,8 @@ type Provisioned = {
   failOpen?: string
   /** Held open before failing: a use that started on this store and hears only later. */
   failsLate?: Promise<void>
+  /** Said by the failure's cause, not its message. */
+  failCause?: string
 }
 const provisioned: Provisioned[] = []
 
@@ -33,7 +35,7 @@ jest.mock('@openwallet-foundation/askar-shared', () => {
                 const late = entry.failsLate
                 entry.failsLate = undefined
                 await late
-                throw new Error(entry.failOpen)
+                throw new Error(entry.failOpen, entry.failCause ? { cause: new Error(entry.failCause) } : undefined)
               }
               entry.open++
               return {
@@ -261,6 +263,71 @@ describe('the in-memory database stays, and comes back if it goes', () => {
 
     await Promise.all([sign(kms), sign(kms), sign(kms), sign(kms)])
     expect(provisioned).toHaveLength(2)
+  })
+
+  it('all of them wait on one new store while it is still being made', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    const { Store } = jest.requireMock('@openwallet-foundation/askar-shared') as {
+      Store: { provision: jest.Mock }
+    }
+    const real = Store.provision.getMockImplementation()!
+    let release: () => void = () => undefined
+    const held = new Promise<void>((resolve) => (release = resolve))
+    Store.provision.mockImplementation(async (options: unknown) => {
+      await held
+      return real(options)
+    })
+    provisioned[0].failOpen = GONE
+
+    const uses = Promise.all([sign(kms), sign(kms), sign(kms), sign(kms)])
+    // Every use has found the store gone, and none has a new one yet.
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+    release()
+    await uses
+    Store.provision.mockImplementation(real)
+
+    expect(provisioned).toHaveLength(2)
+  })
+
+  it('a database found gone through the cause alone is made again too', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    provisioned[0].failOpen = 'Error pinging session'
+    provisioned[0].failCause = 'no such table: profiles'
+
+    await expect(sign(kms)).resolves.toBeTruthy()
+    expect(provisioned).toHaveLength(2)
+  })
+
+  it('a use already past its check fails once, plainly, and the next one goes on', async () => {
+    const kms = new EphemeralKeyManagementService()
+    const fetch = fetcherFor(kms)
+    await sign(kms)
+    // Gone in the moment between the check that the copy is held and the use of it.
+    jest.spyOn(kms, 'isHeld').mockImplementationOnce(async () => {
+      provisioned[0].failOpen = GONE
+      return true
+    })
+
+    await expect(sign(kms)).rejects.toThrow(/not found in backend/)
+    await expect(sign(kms)).resolves.toBeTruthy()
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(provisioned).toHaveLength(2)
+  })
+
+  it('a fetch under way when the database goes lands in the new store', async () => {
+    const kms = new EphemeralKeyManagementService()
+    await importKey(kms)
+    provisioned[0].failOpen = GONE
+    await kms.importKey(ctx, {
+      privateJwk: { kid: 'vta-copy:late', kty: 'OKP', crv: 'Ed25519', x: 'x', d: 'd' },
+    } as never)
+
+    expect(provisioned).toHaveLength(2)
+    expect(await kms.isHeld('vta-copy:late')).toBe(true)
   })
 
   it('a use that hears late about the old store leaves the new one alone', async () => {
