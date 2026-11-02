@@ -59,9 +59,11 @@ import { releaseWarn } from './releaseLog'
 import { readTrigger, triggerAction } from './triggerLink'
 import type { VtaVaultEntry } from './VtaClient'
 import { vtaAgent } from './vtaAgent'
-import { GenericRecordsCommunityStore, isCurrentMembership } from './VtiCommunityStore'
+import { GenericRecordsCommunityStore, isCurrentMembership, type VtiMembership } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { communityTarget } from './vtiCommunityLink'
+import { VETTER_ROLE } from './vtiEligibility'
+import { ownVetterGrantState } from './vtiGrantState'
 
 export type { SignInRequester } from './oobSignInAgent'
 export type { FarmProvedSignIn, FarmRequester, FarmSignInIdentity } from './farmSignIn'
@@ -91,6 +93,13 @@ export type PersonaSignInIdentity = {
   label?: string
   /** Joined on this phone, or found on the agent only (made elsewhere: the browser plugin, another phone). */
   source: 'thisPhone' | 'agent'
+  /** The identity's role, and when it joined, as this phone records them; none for one made elsewhere. */
+  role?: string
+  memberSince?: string
+  /** When the community removed it, by its signed notice. */
+  endedAt?: string
+  /** Its agent did not answer just now, so a sign-in through it may not reach it either. */
+  agentSilent?: boolean
 }
 
 /** Who a sign-in can be as: a persona, for a community; an agent claimed from it, for a Farm (`source: 'farm'`). */
@@ -257,6 +266,55 @@ export function signInIdentitiesFrom(
   return found
 }
 
+/**
+ * Each identity with what this phone records of it: its membership and whether a vetter's grant stands. Read here so
+ * the choice can say which is which, with nothing asked of anyone before Continue.
+ */
+export function identitiesWithStanding(
+  identities: PersonaSignInIdentity[],
+  vtcDid: string,
+  memberships: Pick<VtiMembership, 'communityDid' | 'personaDid' | 'role' | 'grantedAt' | 'removal'>[],
+  options: { vetters?: ReadonlySet<string>; silentAgents?: ReadonlySet<string> } = {}
+): PersonaSignInIdentity[] {
+  return identities.map((identity) => {
+    const membership = memberships.find((m) => m.communityDid === vtcDid && m.personaDid === identity.did)
+    const vetter = options.vetters?.has(identity.did)
+    return {
+      ...identity,
+      ...(membership?.removal ? { endedAt: membership.removal.decidedAt } : {}),
+      ...(membership && !membership.removal
+        ? { role: vetter ? VETTER_ROLE : membership.role, memberSince: membership.grantedAt }
+        : {}),
+      ...(options.silentAgents?.has(identity.vtaDid) ? { agentSilent: true } : {}),
+    }
+  })
+}
+
+/** The identities with their standing; a store that can't be read leaves them as they are, never stops a sign-in. */
+async function withStanding(
+  agent: Agent,
+  vtcDid: string,
+  found: PersonaSignInIdentity[],
+  silentAgents: ReadonlySet<string>
+): Promise<PersonaSignInIdentity[]> {
+  try {
+    const store = new GenericRecordsCommunityStore(agent)
+    const [memberships, grants] = await Promise.all([
+      store.listMemberships(),
+      store.listHeldCredentials('vetter-grant', vtcDid),
+    ])
+    const vetters = new Set<string>()
+    for (const { did } of found) {
+      const own = grants.filter((g) => g.subjectDid === did)
+      const grant = await ownVetterGrantState(agent, own, { allowInsecureLocal: __DEV__, local: true })
+      if (grant.state === 'active') vetters.add(did)
+    }
+    return identitiesWithStanding(found, vtcDid, memberships, { vetters, silentAgents })
+  } catch {
+    return identitiesWithStanding(found, vtcDid, [], { silentAgents })
+  }
+}
+
 /** How long one agent is given to list its vault before the sign-in goes on without it. */
 export const VAULT_LIST_WAIT_MS = 8000
 
@@ -285,7 +343,8 @@ async function findIdentities(agent: Agent, vtcDid: string): Promise<PersonaSign
       `[SignIn] ${vtaDid.slice(0, 32)}…: ${c.listed} vault entries, ${c.matched} for the community, ${c.keyringMadeDropped} Keyring-made for personas not on this phone (not offered)`
     )
   agent.config?.logger?.info?.(`[SignIn] ${found.length} identit${found.length === 1 ? 'y' : 'ies'} to sign in as`)
-  return found
+  const silentAgents = new Set(listed.filter(([, entries]) => !entries).map(([vtaDid]) => vtaDid))
+  return withStanding(agent, vtcDid, found, silentAgents)
 }
 
 /**

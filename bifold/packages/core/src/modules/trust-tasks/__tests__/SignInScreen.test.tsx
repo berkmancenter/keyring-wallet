@@ -5,7 +5,7 @@
  * steps, so no protocol runs here.
  */
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import i18n from 'i18next'
 import React from 'react'
 
@@ -325,9 +325,9 @@ describe('1b. which identity, when several hold a membership', () => {
     expect(tree.getByTestId(id(SignInIds.choose))).toBeTruthy()
     expect(steps.claim).not.toHaveBeenCalled()
     expect(tree.getByTestId(id(`${SignInIds.identityOption}-0`))).toHaveTextContent(/Me at Test/)
-    expect(tree.getByTestId(id(`${SignInIds.identityAgent}-0`))).toHaveTextContent('SignIn.ChooseOnAgentCurrent')
+    expect(tree.getByTestId(id(`${SignInIds.identityAgent}-0`))).toHaveTextContent('SignIn.ThisPhonesAgent')
     expect(tree.getByTestId(id(`${SignInIds.identityOption}-0`))).toHaveTextContent(/SignIn\.ChooseFromPhone/)
-    expect(tree.getByTestId(id(`${SignInIds.identityAgent}-1`))).toHaveTextContent('SignIn.ChooseOnAgent')
+    expect(tree.getByTestId(id(`${SignInIds.identityAgent}-1`))).toHaveTextContent('SignIn.AnotherAgent')
     expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).toHaveTextContent(/SignIn\.ChooseFromAgent/)
 
     await press(tree, `${SignInIds.identityOption}-1`)
@@ -371,7 +371,7 @@ describe('1b. which identity, when several hold a membership', () => {
     })
     const tree = await show(steps)
     await press(tree, SignInIds.continue)
-    expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).toHaveTextContent(/^plugin/)
+    expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).toHaveTextContent(/plugin · Work agent/)
     expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).not.toHaveTextContent(/did:webvh/)
   })
 
@@ -384,8 +384,83 @@ describe('1b. which identity, when several hold a membership', () => {
         'ChooseOnAgentCurrent',
         'ChooseFromPhone',
         'ChooseFromAgent',
+        'ThisPhonesAgent',
+        'AnotherAgent',
+        'ChooseApproveLater',
+        'IsThisYourBrowser',
+        'HideDetails',
+        'ScopeShort',
+        'ScopeShortDirectory',
+        'ScopeShortGroups',
+        'ScopeShortRepositories',
+        'ScopeShortOther',
       ])
         expect(lang.SignIn[key]).toBeTruthy()
+  })
+
+  describe('each row says which identity it is', () => {
+    const picker = async (identities: SignInIdentity[]) => {
+      const steps = fakeSteps({
+        community: jest.fn(async () => ({ member: true, name: 'Test Community', identities })),
+      })
+      const tree = await show(steps)
+      await press(tree, SignInIds.continue)
+      return { steps, tree, row: (n: number) => tree.getByTestId(id(`${SignInIds.identityOption}-${n}`)) }
+    }
+    const MEMBER = { role: 'member', memberSince: '2026-11-01T12:00:00Z' }
+
+    test('by its agent, with its role and when it joined; the name a phone generates is not shown', async () => {
+      const { row } = await picker([
+        identity({ agentName: 'albertoleon', label: 'keyring-mvyfgdzy', ...MEMBER }),
+        identity({
+          agentName: 'keyring-runner-mini1',
+          current: false,
+          label: 'keyring-mvvqel9i',
+          ...MEMBER,
+          role: 'vetter',
+        }),
+      ])
+      expect(row(0)).toHaveTextContent(/albertoleon/)
+      expect(row(0)).toHaveTextContent(/Community\.RoleMember/)
+      expect(row(0)).toHaveTextContent(/MyAgent\.MemberSince/)
+      expect(row(0)).not.toHaveTextContent(/keyring-mv/)
+      expect(row(1)).toHaveTextContent(/keyring-runner-mini1/)
+      expect(row(1)).toHaveTextContent(/SignIn\.AnotherAgent/)
+      expect(row(1)).toHaveTextContent(/Community\.RoleVetter/)
+      expect(row(1)).not.toHaveTextContent(/keyring-mv/)
+    })
+
+    test('a name someone chose stays, beside the agent', async () => {
+      const { row } = await picker([identity(), PLUGIN])
+      expect(row(1)).toHaveTextContent(/Test \(browser\) · Work agent/)
+    })
+
+    test('one made elsewhere is given no role or date', async () => {
+      const { row } = await picker([identity(), PLUGIN])
+      expect(row(1)).toHaveTextContent(/SignIn\.ChooseFromAgent/)
+      expect(row(1)).not.toHaveTextContent(/Community\.Role|MemberSince/)
+    })
+
+    test('a membership that ended, and an agent that did not answer, say so, and can still be tapped', async () => {
+      const { row, steps, tree } = await picker([
+        identity({ endedAt: '2026-10-12T12:00:00Z' }),
+        identity({ did: 'did:webvh:QmP:host:silent', ...MEMBER, agentSilent: true }),
+      ])
+      expect(row(0)).toHaveTextContent(/VtaLink\.CardMembershipEnded/)
+      expect(row(0)).not.toHaveTextContent(/MemberSince/)
+      expect(row(1)).toHaveTextContent(/SignIn\.Failure\.agentUnreachable/)
+      expect(tree.UNSAFE_queryAllByProps({ name: 'alert-outline' })).toHaveLength(2)
+      await press(tree, `${SignInIds.identityOption}-0`)
+      expect(steps.claim).toHaveBeenCalledWith(LINK)
+    })
+
+    test('the row reads as one thing to a screen reader, and says what comes next', async () => {
+      const { row, tree } = await picker([identity({ agentName: 'albertoleon', label: undefined, ...MEMBER }), PLUGIN])
+      expect(row(0).props.accessibilityLabel).toBe(
+        'albertoleon, SignIn.ThisPhonesAgent, Community.RoleMember, MyAgent.MemberSince'
+      )
+      expect(tree.getByTestId(id(SignInIds.approveLater))).toHaveTextContent('SignIn.ChooseApproveLater')
+    })
   })
 })
 
@@ -461,6 +536,9 @@ describe('5. the request, as the community reports it', () => {
   test('a scope the community offers is said in words: the browser may also act as the person there, this session', async () => {
     const scoped = { ...proved, signingScope: ['vtc/directory'] }
     const tree = await toReview(fakeSteps({ identifyAndProve: jest.fn(async () => scoped) }))
+    expect(tree.getByTestId(id(SignInIds.scopeShort))).toHaveTextContent(/SignIn\.ScopeShort/)
+    expect(tree.queryByTestId(id(SignInIds.signingScope))).toBeNull()
+    await press(tree, SignInIds.scopeDetails)
     expect(tree.getByTestId(id(SignInIds.signingScope))).toHaveTextContent(/SignIn\.SigningScope/)
     expect(en.SignIn.SigningScope).toBe('For that time it also lets that browser act as you in: {{areas}}.')
     expect(en.SignIn.ScopeDirectory).toBe('the member directory (reading it, and editing your own card)')
@@ -476,6 +554,8 @@ describe('5. the request, as the community reports it', () => {
       translated.useTranslation = mocked
     })
 
+    let lastShort = ''
+
     // The app's own i18next: no `interpolation` option, so values are escaped (localization/index.ts). Most word
     // tests here init with escapeValue off, which hides exactly this.
     const reviewIn = async (lng: string, resources: object, signingScope: string[]) => {
@@ -484,6 +564,8 @@ describe('5. the request, as the community reports it', () => {
       translated.useTranslation = () => ({ t: i.t.bind(i), i18n: i })
       const scoped = { ...proved, signingScope }
       const tree = await toReview(fakeSteps({ identifyAndProve: jest.fn(async () => scoped) }))
+      lastShort = String(tree.getByTestId(id(SignInIds.scopeShort)).props.children)
+      await press(tree, SignInIds.scopeDetails)
       return String(tree.getByTestId(id(SignInIds.signingScope)).props.children)
     }
 
@@ -507,6 +589,23 @@ describe('5. the request, as the community reports it', () => {
       expect(line).toBe(
         `For that time it also lets that browser act as you in: ${en.SignIn.ScopeDirectory}, ${en.SignIn.ScopeOther}.`
       )
+      expect(lastShort).toBe('It can also act as you in the member directory and other parts of the community.')
+    })
+
+    test('the catch-all comes last, wherever the community listed what it covers', async () => {
+      const line = await reviewIn('en', en, ['tasks/new-thing', 'vtc/directory', 'vtc/groups'])
+      const { ScopeDirectory, ScopeGroups, ScopeOther } = en.SignIn
+      expect(line).toBe(
+        `For that time it also lets that browser act as you in: ${ScopeDirectory}, ${ScopeGroups}, ${ScopeOther}.`
+      )
+      expect(lastShort).toBe('It can also act as you in the member directory, groups and other parts of the community.')
+    })
+
+    test('the short line stays on screen, naming each area once, with nothing escaped', async () => {
+      await reviewIn('en', en, PORTAL_SCOPE)
+      expect(lastShort).toBe('It can also act as you in the member directory, groups and code repositories.')
+      await reviewIn('fr', fr, ['vtc/directory'])
+      expect(lastShort).toBe("Il peut aussi agir en votre nom dans : l'annuaire des membres.")
     })
   })
 
@@ -548,6 +647,67 @@ describe('5. the request, as the community reports it', () => {
     await press(tree, SignInIds.decline)
     expect(message(tree)).toHaveTextContent('SignIn.Declined')
     expect(steps.approve).not.toHaveBeenCalled()
+  })
+})
+
+describe('5b. who is signing in, and the decision', () => {
+  const HOME = identity({
+    agentName: 'albertoleon',
+    label: 'keyring-mvyfgdzy',
+    did: proved.persona.did,
+    role: 'member',
+    memberSince: '2026-11-01T12:00:00Z',
+  })
+  const withIdentities = (identities: SignInIdentity[]) =>
+    fakeSteps({ community: jest.fn(async () => ({ member: true, name: 'Test Community', identities })) })
+
+  test('the identity reads as it did on the choice, with the DID behind Details', async () => {
+    const tree = await toReview(withIdentities([HOME]))
+    const signingAs = tree.getByTestId(id(SignInIds.signingAs))
+    expect(signingAs).toHaveTextContent(/albertoleon/)
+    expect(signingAs).toHaveTextContent(/SignIn\.ThisPhonesAgent/)
+    expect(signingAs).toHaveTextContent(/Community\.RoleMember/)
+    expect(signingAs).not.toHaveTextContent(/keyring-mv/)
+    expect(tree.queryByTestId(id(SignInIds.identifiedAs))).toBeNull()
+
+    await press(tree, SignInIds.identityDetails)
+    expect(tree.getByTestId(id(SignInIds.identityHeldBy))).toHaveTextContent('SignIn.ChooseOnAgentCurrent')
+    expect(tree.getByTestId(id(SignInIds.identitySince))).toHaveTextContent('MyAgent.MemberSince')
+    expect(tree.getByTestId(id(SignInIds.identifiedAs))).toHaveTextContent('Alberto')
+  })
+
+  test('after a choice, the one chosen; the other is not named', async () => {
+    const OTHER = identity({ agentName: 'Other agent', current: false, did: 'did:webvh:QmP:host:other' })
+    const steps = withIdentities([OTHER, HOME])
+    const tree = await show(steps)
+    await press(tree, SignInIds.continue)
+    await press(tree, `${SignInIds.identityOption}-1`)
+    await typeNumber(tree, '42')
+    await press(tree, SignInIds.numberContinue)
+    expect(tree.getByTestId(id(SignInIds.signingAs))).toHaveTextContent(/albertoleon/)
+    expect(tree.getByTestId(id(SignInIds.signingAs))).not.toHaveTextContent(/Other agent/)
+  })
+
+  test("Approve and Decline stay on screen: outside the review's scroll", async () => {
+    const tree = await toReview(withIdentities([HOME]))
+    const scroll = within(tree.getByTestId(id(SignInIds.screen)))
+    expect(scroll.getByTestId(id(SignInIds.review))).toBeTruthy()
+    expect(scroll.queryByTestId(id(SignInIds.approve))).toBeNull()
+    expect(scroll.queryByTestId(id(SignInIds.decline))).toBeNull()
+    expect(scroll.queryByTestId(id(SignInIds.timeLeft))).toBeNull()
+    expect(tree.getByTestId(id(SignInIds.approve))).toBeTruthy()
+    expect(tree.getByTestId(id(SignInIds.decline))).toBeTruthy()
+    expect(tree.getByTestId(id(SignInIds.timeLeft))).toBeTruthy()
+  })
+
+  test('another network is the one reported fact that warns, and no fact is marked as checked', async () => {
+    const away = { ...proved, requester: { ...proved.requester, sameNetwork: false } }
+    const warned = await toReview(fakeSteps({ identifyAndProve: jest.fn(async () => away) }))
+    expect(warned.getByTestId(id(SignInIds.sameNetwork))).toHaveTextContent('SignIn.No')
+    expect(warned.UNSAFE_queryAllByProps({ name: 'alert-outline' })).toHaveLength(1)
+    expect(warned.UNSAFE_queryAllByProps({ name: 'check' })).toHaveLength(0)
+    const same = await toReview(fakeSteps())
+    expect(same.UNSAFE_queryAllByProps({ name: 'alert-outline' })).toHaveLength(0)
   })
 })
 
