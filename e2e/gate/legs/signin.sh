@@ -20,7 +20,7 @@ if [ -z "$SIGNIN_C_DID" ] || [ -z "$SIGNIN_C_REST" ] || [ -z "$SIGNIN_C_ADMIN_CR
   exit 0
 fi
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN
-T0=$(stamp); E=emulator-5574
+T0=$(stamp); E=emulator-5574; LEG_AGENT=$RUNNER_MAIN_SLUG
 BW=
 fin() {
   [ -n "$BW" ] && kill "$BW" 2>/dev/null

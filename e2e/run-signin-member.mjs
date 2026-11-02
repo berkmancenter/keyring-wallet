@@ -108,7 +108,9 @@ try {
   await rows.row("signin-member-joined", async () => {
     await join.openCommunity(d, { did: C_DID, name: "" });
     await join.ask(d, { tag: "signin" });
-    await join.awaitSent(d, { required: true });
+    // One Continue when the screen says the agent didn't answer; the row then says it passed only after that retry.
+    const { retry } = (await join.awaitSent(d, { required: true, retryNoAnswer: true })).value;
+    const retried = (ok) => (retry ? `${ok ? "passed" : "failed"} after retry (Continue at ${retry.at}, after "${retry.error.slice(0, 60)}"); ` : "");
     // The community is shared with legs beside this one (hv on keyring-hv-lab1 on the MacBook): approve only when this
     // phone's request is the one new request on two reads, and remember only the member it made, so the cleanup never
     // removes someone else's (as run-agent-refused.mjs, #549).
@@ -122,7 +124,7 @@ try {
     // The phone learns it from its own inbox: the join screen ends on JoinDone.
     const done = await waitForTestId(d, "JoinDone", 240000).then(() => true, () => false);
     if (done) await join.done(d).catch(() => undefined);
-    return { ok: Boolean(member && done), detail: `request ${req.id} approved (${decided.status}); member ${member?.did ?? "not listed"} (its applicant); the phone reached JoinDone ${done}` };
+    return { ok: Boolean(member && done), detail: `${retried(Boolean(member && done))}request ${req.id} approved (${decided.status}); member ${member?.did ?? "not listed"} (its applicant); the phone reached JoinDone ${done}` };
   });
   if (!memberDid) throw new Error("not a member: nothing to sign in as");
 
