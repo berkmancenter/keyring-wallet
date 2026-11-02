@@ -15,6 +15,12 @@ import {
 } from '../real/agentRoomsService'
 import { ROOMS_TASK } from '../real/wire'
 
+// Locking the wallet clears the room file copies.
+jest.mock('react-native-fs', () => ({
+  __esModule: true,
+  default: { CachesDirectoryPath: '/caches', unlink: jest.fn(async () => undefined) },
+}))
+
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
 const ROOM = 'did:webvh:room:0123456789abcdef'
 const HOST = 'did:webvh:community:a'

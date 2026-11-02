@@ -3043,6 +3043,7 @@
     "FileFailed": "Não foi possível baixar o arquivo.",
     "FileShare": "Compartilhar ou salvar",
     "FileShareUnavailable": "Baixado, mas este aparelho não consegue compartilhar arquivos pelo Keyring.",
+    "FileShareLeavesKeyring": "Compartilhar dá uma cópia ao app que você escolher. Essa cópia sai do Keyring e não é removida quando você fecha isto.",
     "SizeKB": "{{n}} KB",
     "SizeMB": "{{n}} MB",
     "FileAttach": "Anexar um arquivo",
