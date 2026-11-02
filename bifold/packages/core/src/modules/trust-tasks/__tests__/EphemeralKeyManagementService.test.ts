@@ -12,6 +12,8 @@ type Provisioned = {
   log: string[]
   /** The next session opens fail with this, as Askar's do. */
   failOpen?: string
+  /** Held open before failing: a use that started on this store and hears only later. */
+  failsLate?: Promise<void>
 }
 const provisioned: Provisioned[] = []
 
@@ -27,7 +29,12 @@ jest.mock('@openwallet-foundation/askar-shared', () => {
         return {
           session: () => ({
             open: async () => {
-              if (entry.failOpen) throw new Error(entry.failOpen)
+              if (entry.failOpen) {
+                const late = entry.failsLate
+                entry.failsLate = undefined
+                await late
+                throw new Error(entry.failOpen)
+              }
               entry.open++
               return {
                 fetchKey: async ({ name }: { name: string }) => (keys.has(name) ? { key: keys.get(name) } : null),
@@ -256,8 +263,30 @@ describe('the in-memory database stays, and comes back if it goes', () => {
     expect(provisioned).toHaveLength(2)
   })
 
+  it('a use that hears late about the old store leaves the new one alone', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    let release: () => void = () => undefined
+    provisioned[0].failsLate = new Promise((resolve) => (release = resolve))
+    provisioned[0].failOpen = GONE
+    const late = sign(kms)
+    await Promise.resolve()
+
+    await sign(kms)
+    expect(provisioned).toHaveLength(2)
+    release()
+    await late
+
+    expect(provisioned).toHaveLength(2)
+    expect(provisioned[1].closed).toBe(false)
+  })
+
   it('a key that failed to fetch a moment ago is asked for again once the database is back', async () => {
     const kms = new EphemeralKeyManagementService()
+    await kms.importKey(ctx, {
+      privateJwk: { kid: 'vta-copy:other', kty: 'OKP', crv: 'Ed25519', x: 'x', d: 'd' },
+    } as never)
     const fetch = jest.fn(async () => {
       throw new Error('the agent is offline')
     })
