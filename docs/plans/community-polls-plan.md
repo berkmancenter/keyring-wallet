@@ -61,7 +61,7 @@ statements of them.
 
 These sources are ahead of the pins `scripts/openvtc/PINS.json` records: verifiable-trust-infrastructure
 is pinned at `49f5f1be` (2026-10-07), where none of the files quoted in this section exist yet, and
-vta-browser-plugin at `bf92427` (2026-10-22), before #404 and #406. To check a quote, fetch the commit named here into the clone in
+vta-browser-plugin at `bf92427` (2026-10-22), before vta-browser-plugin #404 and #406. To check a quote, fetch the commit named here into the clone in
 `external/` and read it there with `git show <commit>:<path>`; the pins are not moved for this plan.
 
 - **VTI-VOT-004, the cast door.** The `ballot-box` DID template's description
@@ -82,8 +82,8 @@ vta-browser-plugin at `bf92427` (2026-10-22), before #404 and #406. To check a q
   unaudited protocol code over audited group operations: fine for polls and surveys; have it
   reviewed before a binding election."
 
-**Upstream state.** Upstream's voting is in use today: the browser plugin shipped a voter in #404 and
-#406 on 2026-11-01. A poll's manifest names the community that runs it (`community`, required in
+**Upstream state.** Upstream's voting is in use today: the browser plugin shipped a voter in
+vta-browser-plugin #404 and #406 on 2026-11-01. A poll's manifest names the community that runs it (`community`, required in
 `voting/election/register/0.2`'s `Manifest`), and that may not be the community a member reaches it
 through. The app records a poll by the manifest's community and the poll's id, and keeps the
 community it was reached through beside them, so nothing assumes the two are the same.
