@@ -50,7 +50,7 @@ import {
   type SignInFailure,
 } from './oobSignIn'
 import type { VtaClient, VtaSealedSecret, VtaVaultEntry } from './VtaClient'
-import { AGENT_DEVICE_TASK, defaultDeviceName, registerThisDevice } from './vtaDevices'
+import { defaultDeviceName, heartbeat as beatAgent, registerThisDevice } from './vtaDevices'
 import { VtiRefusal } from './vtiAgent'
 import { didKeyVerificationMethod, getUvDid, resetUvKey, uvSign, UvKeyError } from './uvKey'
 
@@ -156,6 +156,8 @@ export type ProvedSignIn = {
   persona: SignInPersona
   /** The `prove` / `grant` / `respond` version the community took: 0.2, or 0.1 from a community before it. */
   version: OobVersion
+  /** The prove versions asked, newest first, ending with `version`. For the Release log. */
+  provesTried?: OobVersion[]
   /**
    * 0.2: the task families the community offers to let the browser's key sign as the member, for the session
    * (step 2's `signingScope`, checked). The grant copies it unchanged; the approval screen says it in words.
@@ -239,7 +241,16 @@ export function signInFailureFromAgent(error: unknown, options: { responded?: bo
   return new SignInError('agentUnreachable', error instanceof Error ? error.message : String(error), options)
 }
 
-async function resolveOrUnreachable(deps: Pick<SignInDeps, 'resolveDid'>, did: string): Promise<SignInDidDocument> {
+/** `error`, with the sign-in versions asked noted on it when it is a sign-in error. */
+function withTried(error: unknown, tried: NonNullable<SignInError['tried']>): unknown {
+  if (error instanceof SignInError) error.tried = { ...error.tried, ...tried }
+  return error
+}
+
+export async function resolveOrUnreachable(
+  deps: Pick<SignInDeps, 'resolveDid'>,
+  did: string
+): Promise<SignInDidDocument> {
   let document: SignInDidDocument
   try {
     document = await deps.resolveDid(did)
@@ -251,7 +262,7 @@ async function resolveOrUnreachable(deps: Pick<SignInDeps, 'resolveDid'>, did: s
 }
 
 /** Verify `document`'s proof against an already-resolved DID document: no second resolution. */
-function proofVerifies(
+export function proofVerifies(
   document: Record<string, unknown>,
   controller: string,
   controllerDocument: SignInDidDocument,
@@ -316,7 +327,7 @@ async function signedByAgent(
  * members must come back unchanged — plus the browser's key, the requester
  * and who was identified.
  */
-async function step2Problem(
+export async function step2Problem(
   step2: Record<string, unknown>,
   expected: { claimed: ClaimedSignIn; vtcDocument: SignInDidDocument; proveId: string; persona: string; now: number }
 ): Promise<string | undefined> {
@@ -388,6 +399,7 @@ export async function identifyAndProve(
   const ladder: OobVersion[] = ['0.3', '0.2', '0.1']
   let version: OobVersion = ladder[0]
   let prove = proveAt(version)
+  const provesTried: OobVersion[] = [version]
   let step2: Record<string, unknown> | undefined
   for (let i = 0; !step2; ) {
     try {
@@ -395,9 +407,10 @@ export async function identifyAndProve(
     } catch (error) {
       const unsupported =
         error instanceof SignInError && error.reason === 'refused' && isUnsupportedTaskCode(error.detail)
-      if (!unsupported || ++i >= ladder.length) throw error
+      if (!unsupported || ++i >= ladder.length) throw withTried(error, { prove: provesTried })
       version = ladder[i]
       prove = proveAt(version)
+      provesTried.push(version)
     }
   }
   const vtcDocument = await resolveOrUnreachable(deps, vtcDid)
@@ -408,7 +421,7 @@ export async function identifyAndProve(
     persona: persona.did,
     now: nowSeconds(deps),
   })
-  if (problem) throw new SignInError('badAnswer', problem)
+  if (problem) throw withTried(new SignInError('badAnswer', problem), { prove: provesTried })
 
   const payload = step2.payload as Record<string, unknown>
   const requester = payload.requester as Record<string, unknown>
@@ -426,6 +439,7 @@ export async function identifyAndProve(
     identifiedAs: payload.identifiedAs as string,
     persona,
     version,
+    provesTried,
     // Only a 0.2 or 0.3 grant can carry it; checked by step2Problem.
     ...(version !== '0.1' && Array.isArray(payload.signingScope)
       ? { signingScope: [...(payload.signingScope as string[])] }
@@ -490,6 +504,7 @@ export async function approveSignIn(proved: ProvedSignIn, deps: SignInAgentDeps)
       decision = await signWithSigner(
         {
           id: `urn:uuid:${utils.uuid()}`,
+          // version-pinned: the VTA verifies a UV approval only as decision 0.2 (UV_DECISION_TASK)
           type: UV_DECISION_TASK,
           issuer: uvDid,
           recipient: deps.vta.did,
@@ -511,16 +526,23 @@ export async function approveSignIn(proved: ProvedSignIn, deps: SignInAgentDeps)
   }
 
   let version = proved.version
+  const tried = { prove: proved.provesTried ?? [proved.version], grant: [version] }
   let grant: Record<string, unknown>
   try {
-    grant = await grantAt(version)
+    try {
+      grant = await grantAt(version)
+    } catch (error) {
+      // The member's VTA is older than auth/oob/grant/0.2 (VTI #2190) while the community is not: grant at 0.1
+      // under the same step 2. The community holds the scopes equal only for a 0.2 respond, so this signs in with
+      // nothing delegated. The Face ID approval names one grant's digest, so the 0.1 grant asks once more.
+      if (version !== '0.2' || !(error instanceof SignInError) || error.detail !== 'oobUnsupportedType') throw error
+      version = '0.1'
+      tried.grant.push(version)
+      grant = await grantAt(version)
+    }
   } catch (error) {
-    // The member's VTA is older than auth/oob/grant/0.2 (VTI #2190) while the community is not: grant at 0.1
-    // under the same step 2. The community holds the scopes equal only for a 0.2 respond, so this signs in with
-    // nothing delegated. The Face ID approval names one grant's digest, so the 0.1 grant asks once more.
-    if (version !== '0.2' || !(error instanceof SignInError) || error.detail !== 'oobUnsupportedType') throw error
-    version = '0.1'
-    grant = await grantAt(version)
+    // Which grant versions were asked goes with the error to the Release line (IN-390).
+    throw withTried(error, tried)
   }
 
   const respond = keyA.sign(oobEnvelope(RESPOND_AT[version], { grant }, keyA.did, vtcDid, requestId), 'authentication')
@@ -676,9 +698,18 @@ export function vtaSignInPort(client: VtaClient, device: { platform: string; now
     vaultList: (filters) => client.vaultList(filters),
     vaultUpsert: (payload) => client.vaultUpsert(payload),
     sealVaultSecret: (secret) => client.sealVaultSecret(secret),
-    heartbeat: async (ext) => {
-      await client.task(AGENT_DEVICE_TASK.heartbeat, { ext })
-    },
+    // In the newest version the agent serves (0.3, else 0.2): from vta-service 0.67 (#2309) it serves only 0.3, and
+    // a beat at 0.2 alone ended every sign-in "Your agent needs an update" (IN-390). Newest first, so a current agent
+    // pays nothing and an older one one refused beat, remembered per agent for the session (taskVersions); it steps
+    // down only on a version the agent says it does not serve, never on another refusal.
+    heartbeat: (ext) =>
+      beatAgent(
+        {
+          managerDid: client.managerDid,
+          task: <T>(type: string, payload: Record<string, unknown>) => client.task<T>(type, payload),
+        },
+        ext
+      ),
     register: (ext) =>
       registerThisDevice(
         {

@@ -6,7 +6,7 @@ import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 import { Alert } from 'react-native'
 
-import { StoreContext } from '../../src'
+import { StoreContext } from '../../src/contexts/store'
 import { AuthContext } from '../../src/contexts/auth'
 import { DispatchAction } from '../../src/contexts/reducers/store'
 import Settings from '../../src/screens/Settings'

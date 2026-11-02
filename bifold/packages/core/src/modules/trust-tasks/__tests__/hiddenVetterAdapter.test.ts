@@ -67,6 +67,9 @@ jest.mock('../module/vtiAgent', () => ({
     did: 'did:webvh:QmP:example:persona',
     ask: (...a: unknown[]) => mockAsk(...(a as [string, string])),
     fetchManifest: (...a: unknown[]) => mockFetchManifest(...(a as [])),
+    // The rounds sign the session in as the persona and run inside the hold.
+    holding: (_agent: unknown, _mediator: unknown, persona: { did: string }, fn: (did: string) => unknown) =>
+      fn(persona.did),
   },
 }))
 
@@ -103,7 +106,7 @@ jest.mock('../module/vtiVetting', () => ({
 }))
 jest.mock('../module/VtiIdentityStore', () => ({
   GenericRecordsIdentityStore: class {
-    getPersona = async () => ({ communityDid: COMMUNITY_DID, did: 'did:peer:2.Epersona' })
+    getPersona = async () => ({ communityDid: COMMUNITY_DID, did: 'did:webvh:QmP:example:persona' })
   },
 }))
 jest.mock('../module/VtiCommunityStore', () => ({ GenericRecordsCommunityStore: class {} }))

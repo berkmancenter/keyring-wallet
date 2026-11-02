@@ -208,13 +208,23 @@ jobs:
 
       # Jest's transform cache (babel output per file, keyed by jest on content and config), so a run re-transforms
       # only what changed. Restored from the newest run with the same dependencies and config.
+      #
+      # One entry per pull request and part, not per push: a key is never saved twice, so a PR's entry is written on
+      # its first push and its later pushes restore it and write nothing (four entries per PR instead of four per push,
+      # in a store at its size limit). Files a later push changes re-transform on each run, so a long-lived PR gets
+      # less from it over time; that is the trade. A push to main keeps its sha, or main's entry would freeze at its
+      # first save. A PR that changes yarn.lock or core's babel or jest config gets a new key each push, as it must.
+      # The `-part<N>-` fallback matches every ref's entries; a run reads only its own ref's caches and its base
+      # branch's (GitHub's cache scoping), which is what keeps one PR from restoring another's. That holds only while
+      # this never runs on a ref PRs share.
       - name: Restore jest's cache
         if: steps.plan.outputs.work == 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: packages/core/.jest/cache
-          key: jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-${{ github.sha }}
+          key: jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-${{ github.event_name == 'push' && format('{0}-{1}', github.ref, github.sha) || github.ref }}
           restore-keys: |
+            jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-refs/heads/main-
             jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-
 
       # Jest's default workers: on the runner's 4 vCPUs that leaves one free for jest itself and the tests' timers.

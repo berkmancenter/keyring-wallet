@@ -100,7 +100,7 @@ describe('the words a person reads', () => {
 
   it('names an unnamed community mid-sentence, as its handle is written, never capitalised', () => {
     expect(refusedCardWords('revoked', COMMUNITY, t)).toBe(
-      "A card from keyring-test-vtc (no name published yet) was withdrawn, so Keyring didn't keep it."
+      "A card from keyring-test-vtc was withdrawn, so Keyring didn't keep it."
     )
   })
 })

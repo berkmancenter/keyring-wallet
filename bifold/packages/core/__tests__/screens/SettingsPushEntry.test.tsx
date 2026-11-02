@@ -7,7 +7,7 @@ import { useNavigation } from '@react-navigation/native'
 import { act, render } from '@testing-library/react-native'
 import React from 'react'
 
-import { StoreContext } from '../../src'
+import { StoreContext } from '../../src/contexts/store'
 import { TOKENS } from '../../src/container-api'
 import { defaultConfig } from '../../src/container-impl'
 import { AuthContext } from '../../src/contexts/auth'

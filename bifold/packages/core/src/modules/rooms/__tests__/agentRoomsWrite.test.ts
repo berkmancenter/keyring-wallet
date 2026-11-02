@@ -1,5 +1,5 @@
 import { AgentRoomsService, postKey, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
-import { ROOMS_TASK } from '../real/wire'
+import { KEYS_ACT_TYPES, ROOMS_TASK } from '../real/wire'
 import { chatMessageBody } from '../roomPosts'
 import {
   NOTE_BODY_MAX,
@@ -74,7 +74,10 @@ function setup(o: Setup = {}) {
           plaintext: b64url(JSON.stringify({ title: 'Agenda', body: 'Bring seeds' })),
         }
       }
-      case ROOMS_TASK.keysAct06: {
+      case ROOMS_TASK.keysAct09:
+      case ROOMS_TASK.keysAct08:
+      case ROOMS_TASK.keysAct06:
+      case ROOMS_TASK.keysAct05: {
         // The agent completes the request as the member: the presentation and the proof added, nothing else.
         const document = payload.document as Record<string, unknown>
         const principal = o.principal ?? COMMUNITY.personaDid
@@ -154,7 +157,7 @@ interface ActedDocument {
 /** The documents the service asked the agent to complete, in order. */
 const acted = (agentTask: jest.Mock): ActedDocument[] =>
   agentTask.mock.calls
-    .filter((c) => c[0] === ROOMS_TASK.keysAct06)
+    .filter((c) => (KEYS_ACT_TYPES as readonly string[]).includes(c[0]))
     .map((c) => (c[1] as { document: ActedDocument }).document)
 
 describe('AgentRoomsService writes', () => {
@@ -321,6 +324,133 @@ describe('AgentRoomsService writes', () => {
     })
     const preview = await s.service.prepareWrite(OPEN_ROOM, { title: '', body: 'x' })
     await expect(s.service.confirmWrite(preview.token)).resolves.toEqual({ key: 'note/id-1', version: 1 })
+  })
+})
+
+describe('rooms/keys/act, at the version the agent serves', () => {
+  const WITHOUT_ACT = SERVED.filter((t) => t !== ROOMS_TASK.keysAct06)
+  const V = (v: string) => `https://trusttasks.org/spec/rooms/keys/act/${v}`
+
+  /**
+   * An agent answering as `rooms/keys/act` does at 0.5, 0.6, 0.8 and 0.9 alike (trust-tasks-tf specs/rooms/keys/act,
+   * one request and response schema at each): the document back with `issuer` set to the member, the presentation
+   * inserted, the member's proof, and when the presentation lapses. Any other agent task is refused as unserved.
+   */
+  function agentServing(s: ReturnType<typeof setup>, act: string) {
+    s.agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysList02) return { rooms: [] }
+      if (type !== act) throw new FakeRefusal('unsupportedType')
+      const document = payload.document as Record<string, unknown>
+      return {
+        principal: COMMUNITY.personaDid,
+        document: {
+          ...document,
+          issuer: COMMUNITY.personaDid,
+          payload: {
+            ...(document.payload as Record<string, unknown>),
+            presentation: { type: 'VerifiablePresentation' },
+          },
+          proof: { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022', proofPurpose: 'authentication' },
+        },
+        expiresAt: '2026-11-01T00:00:00Z',
+      }
+    })
+  }
+
+  it.each([
+    ['VTA 0.68 and the 10-30 nightly: 0.8 only', [V('0.8')], V('0.8'), ROOMS_TASK.recordsPut03],
+    ['upstream main: 0.8 and 0.9', [V('0.8'), V('0.9')], V('0.9'), ROOMS_TASK.recordsPut03],
+    ['released 0.67: 0.1, 0.5 and 0.8', [V('0.1'), V('0.5'), V('0.8')], V('0.8'), ROOMS_TASK.recordsPut03],
+    ['the lab pin: 0.5 and 0.6', [V('0.5'), V('0.6')], V('0.6'), ROOMS_TASK.recordsPut],
+    ['an older agent: 0.5 only', [V('0.5')], V('0.5'), ROOMS_TASK.recordsPut],
+  ])('%s: posts and curates at the newest version it serves', async (_label, act, asked, put) => {
+    const s = setup({ served: [...WITHOUT_ACT, ...act] })
+    agentServing(s, asked)
+    expect((await s.service.capabilities()).write).toMatchObject({ status: 'available' })
+    const preview = await s.service.prepareWrite(OPEN_ROOM, { title: '', body: 'x' })
+    await expect(s.service.confirmWrite(preview.token)).resolves.toEqual({ key: 'note/id-1', version: 1 })
+    await s.service.curate(OPEN_ROOM, 'note/abc', 'pin')
+    const asks = s.agentTask.mock.calls.filter((c) => c[0] !== ROOMS_TASK.keysList02)
+    expect(asks.map((c) => c[0])).toEqual([asked, asked])
+    // The request is the same at every version: the unsigned document, no presentation and no proof.
+    const sent = asks[0][1] as { document: Record<string, unknown> }
+    expect(Object.keys(sent)).toEqual(['document'])
+    // Put at the version that act completes: 0.3 from act 0.8, which hosts from VTA 0.68 serve; 0.1 before it.
+    expect(sent.document).toMatchObject({ type: put, issuer: COMMUNITY.personaDid, recipient: HOST })
+    expect((asks[1][1] as { document: Record<string, unknown> }).document.type).toBe(ROOMS_TASK.recordsCurate)
+    expect(sent.document).not.toHaveProperty('proof')
+    expect(sent.document.payload).not.toHaveProperty('presentation')
+    // What the host gets is the agent's completed document, unchanged.
+    expect(s.sendCompleted.mock.calls[0][2]).toMatchObject({
+      issuer: COMMUNITY.personaDid,
+      proof: { proofPurpose: 'authentication' },
+      payload: { presentation: { type: 'VerifiablePresentation' } },
+    })
+  })
+
+  /** A host serving `rooms/records/put` only at `versions`, as VTC 0.12 (0.1), 0.15 (both) and 0.16 (0.3) do. */
+  const hostServing = (versions: () => string[]) => (document: Record<string, unknown>) => {
+    if (!versions().includes(String(document.type))) throw new FakeRefusal('unsupportedVersion')
+    const payload = document.payload as Record<string, unknown>
+    return { key: payload.key, version: 1, epoch: 1 }
+  }
+  const putsSent = (s: ReturnType<typeof setup>) =>
+    s.sendCompleted.mock.calls.map((c) => (c[2] as { type: string }).type)
+  const post = async (s: ReturnType<typeof setup>) =>
+    s.service.confirmWrite((await s.service.prepareWrite(OPEN_ROOM, { title: '', body: 'x' })).token)
+
+  it('a host that serves only put 0.1 (VTC 0.12) is sent 0.1 after refusing 0.3, and 0.1 straight away after', async () => {
+    const s = setup({ served: [...WITHOUT_ACT, V('0.8')], host: hostServing(() => [ROOMS_TASK.recordsPut]) })
+    await expect(post(s)).resolves.toMatchObject({ version: 1 })
+    await expect(post(s)).resolves.toMatchObject({ version: 1 })
+    expect(putsSent(s)).toEqual([ROOMS_TASK.recordsPut03, ROOMS_TASK.recordsPut, ROOMS_TASK.recordsPut])
+    // Each document sent is its own: the one sent again after a refusal is completed anew.
+    expect(new Set(s.sendCompleted.mock.calls.map((c) => (c[2] as { id: string }).id)).size).toBe(3)
+  })
+
+  it('a host that moves on to put 0.3 only (VTC 0.16) is sent 0.3 once 0.1 is refused', async () => {
+    let versions: string[] = [ROOMS_TASK.recordsPut]
+    const s = setup({ served: [...WITHOUT_ACT, V('0.8')], host: hostServing(() => versions) })
+    await post(s)
+    versions = [ROOMS_TASK.recordsPut03]
+    await expect(post(s)).resolves.toMatchObject({ version: 1 })
+    expect(putsSent(s)).toEqual([
+      ROOMS_TASK.recordsPut03,
+      ROOMS_TASK.recordsPut,
+      ROOMS_TASK.recordsPut,
+      ROOMS_TASK.recordsPut03,
+    ])
+  })
+
+  it('control: any other refusal of put 0.3 is not sent again at 0.1', async () => {
+    const s = setup({
+      served: [...WITHOUT_ACT, V('0.8')],
+      host: () => {
+        throw new FakeRefusal('taskFailed', { code: 'rooms/records/put:forbidden' })
+      },
+    })
+    await expect(post(s)).rejects.toMatchObject({ code: 'forbidden' })
+    expect(putsSent(s)).toEqual([ROOMS_TASK.recordsPut03])
+  })
+
+  it('control: an agent before act 0.8 is never asked put 0.3, even by a host that refuses 0.1', async () => {
+    const s = setup({ served: [...WITHOUT_ACT, V('0.6')], host: hostServing(() => [ROOMS_TASK.recordsPut03]) })
+    await expect(post(s)).rejects.toThrow()
+    expect(putsSent(s)).toEqual([ROOMS_TASK.recordsPut])
+  })
+
+  it('control: an agent serving only versions Keyring does not speak (0.1, 0.7) cannot post, and nothing is sent', async () => {
+    const s = setup({ served: [...WITHOUT_ACT, V('0.1'), V('0.7')] })
+    agentServing(s, V('0.7'))
+    expect((await s.service.capabilities()).write).toMatchObject({ status: 'unavailable', reason: 'agentDoesNotServe' })
+    expect((await s.service.capabilities()).curate).toMatchObject({
+      status: 'unavailable',
+      reason: 'agentDoesNotServe',
+    })
+    await expect(s.service.prepareWrite(OPEN_ROOM, { title: '', body: 'x' })).rejects.toMatchObject({
+      reason: 'agentDoesNotServe',
+    })
+    expect(s.sendCompleted).not.toHaveBeenCalled()
   })
 })
 

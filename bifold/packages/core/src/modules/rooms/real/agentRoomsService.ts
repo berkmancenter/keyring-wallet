@@ -24,11 +24,14 @@
  */
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
+import { DeviceEventEmitter } from 'react-native'
 
+import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
 import { deriveCapabilities, deriveRoomCapabilities } from '../capabilities'
 import { inertFlags, toInertText } from '../inertText'
 import { chatMessageText } from '../roomPosts'
 import { newThrowawayKey } from '../../trust-tasks/module/oobSignIn'
+import { roomRef } from '../roomRef'
 import type {
   AgentGrant,
   CommunityRoomMember,
@@ -60,6 +63,8 @@ import {
 } from '../types'
 
 import {
+  KEYS_ACT_TYPES,
+  OFFERS_LIST_TYPES,
   parseAccept,
   parseActed,
   parseBrowse,
@@ -95,6 +100,11 @@ export interface RoomsCommunity {
 
 /** What the service needs from the rest of the app. The adapter wires it to VtaClient and vtiAgent. */
 export interface RoomsBackend {
+  /**
+   * The app's agent this backend talks through. An unlock restarts that same agent, and a service registered
+   * again for it is the one already registered (register.ts).
+   */
+  readonly runsOn?: object
   agentLinked(): boolean
   /** The agent's `trust-task-discovery` answer; undefined when it could not be asked. */
   agentServedTypes(): Promise<readonly string[] | undefined>
@@ -118,6 +128,13 @@ export interface RoomsBackend {
   hideOffer(offerId: string): Promise<void>
   /** A step that went wrong without failing the operation, for the log. */
   warn(message: string): void
+  /**
+   * True for a community task refused because a step keeps this phone's community session as another identity
+   * (vtiAgent `VtiSessionHeld`): not now, rather than unreachable. Absent: no refusal is.
+   */
+  sessionKept?(error: unknown): boolean
+  /** Resolves once a task to `communityDid` would no longer be refused that way (vtiAgent `whenFree`). */
+  sessionFree?(communityDid: string): Promise<void>
   /** What uploading a file needs besides the agent and the community session. Absent: uploads are not built here. */
   uploads?: RoomsUploadBackend
 }
@@ -175,6 +192,17 @@ const SEALED_WRITE_ATTEMPTS = 4
 
 /** How many pages of a community's membership record, or of its offers, to read before stopping. */
 const MAX_MEMBERSHIP_PAGES = 10
+/**
+ * How soon an agent that could not say what it serves is asked again. Its answer was kept until a pull to refresh:
+ * one lost while the session reopened after an unlock left a room on "Couldn't reach your agent" (#772, 10-30).
+ */
+export const SERVED_UNKNOWN_RETRY_MS = 10_000
+
+/**
+ * The least time between two "readable again" calls (`onReadable`): a vetting step's asks come in bursts, and a read
+ * refused again the moment the session was free waits this long before the next.
+ */
+export const KEPT_RETRY_FLOOR_MS = 10_000
 
 /**
  * How often an accept the community answers `admissionPending` is sent again, identically, before the refusal
@@ -227,7 +255,34 @@ const RENEWED = [
   ['authority', 'AuthorityCredential'],
 ] as const
 
-const shortId = (id: string) => id.replace(/^did:[^:]+:/, '').slice(-10)
+/** Where an opened record is kept: a record's version never changes once written, so key and version name it. */
+const openedKey = (roomId: string, key: string, version: number) => `${roomId}\n${key}@${version}`
+/** A record in a room, whatever its version: what the room's last listing said its version is. */
+const listedKey = (roomId: string, key: string) => `${roomId}\n${key}`
+
+/**
+ * The most opened records a service keeps. An opened record is a decrypted body, kept in memory only; past this the
+ * least recently used goes. Ten rooms of fifty posts each fit.
+ */
+export const MAX_OPENED_RECORDS = 500
+
+// The services that hold opened records. When the wallet locks or the person logs out, each forgets them and the set
+// is emptied, so it never keeps a service alive past a lock; a service joins again the next time it keeps a record.
+const holdingOpened = new Set<{ dropOpenedRecords(): void }>()
+DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, () => {
+  for (const service of holdingOpened) service.dropOpenedRecords()
+  holdingOpened.clear()
+})
+
+/** A record's file as a screen lists it: the name is untrusted text, shown inert. */
+const roomFileOf = (file: FileManifest, record: Pick<OpenedRecord, 'author' | 'updatedAt'>): RoomFile => ({
+  fileId: file.fileId,
+  name: toInertText(file.name),
+  ...(file.mediaType ? { mediaType: file.mediaType } : {}),
+  size: file.size,
+  ...(record.author ? { sharedBy: { did: record.author } } : {}),
+  ...(record.updatedAt ? { sharedAt: record.updatedAt } : {}),
+})
 
 /** Where an opened record is kept: a record's version never changes once written, so key and version name it. */
 const openedKey = (roomId: string, key: string, version: number) => `${roomId}\n${key}@${version}`
@@ -249,22 +304,51 @@ interface KnownRoom extends Room {
 export class AgentRoomsService implements RoomsService {
   public readonly isSample = false
   public readonly label = 'rooms: the person’s own agent and communities'
+  public get runsOn(): object | undefined {
+    return this.backend.runsOn
+  }
 
-  private served?: { types: readonly string[] | undefined }
+  private served?: { types: readonly string[] | undefined; at: number }
+  private servedInFlight?: Promise<void>
+  /** How many asks of what the agent serves were started: only the latest one's answer is kept. */
+  private servedAsks = 0
   private heldInFlight?: Promise<HeldRoom[]>
+  private roomsInFlight?: Promise<RoomSummary[]>
+  /** Counts the accepts and leaves: a listing asked before one is neither joined nor kept after it. */
+  private roomsChanged = 0
   private rooms = new Map<string, KnownRoom>()
   private offers = new Map<string, { community: RoomsCommunity; offer: OfferRecord }>()
   private previews = new Map<string, { offerId: string; at: number }>()
   private writes = new Map<string, { roomId: string; draft: WriteDraft; at: number; replacedVersion?: number }>()
-  // Records opened through the agent, by room, key and version: what a file listing reuses.
+  // Records opened through the agent, by room, key and version: what a file listing and a second read of a post
+  // reuse. Kept through keepOpened, oldest use first, within MAX_OPENED_RECORDS; forgotten on lock and on leaving.
   private opened = new Map<string, OpenedRecord>()
+  /** Each record's version as the room's last listing gave it, so a read knows which opened copy is current. */
+  private listed = new Map<string, number>()
+  /**
+   * A room's listing being asked now, by room and the version it starts from. Opening a room lists it twice at once
+   * (its posts and its notes tab), and the agent client sends one task at a time, so the posts waited a whole second
+   * listing before their first read (+0.6–0.9 s on each open, lab sim 10-30).
+   */
+  private listingInFlight = new Map<string, Promise<NoteList>>()
+  /** A record's read being asked now, by room and key: every caller that reads it meanwhile waits for the same one. */
+  private readsInFlight = new Map<string, Promise<OpenedRecord>>()
+  /** How many times opened records were dropped (a lock, a leave): a read asked before the last one is not kept. */
+  private drops = 0
   /** Renewals stored this run, by room and issue time: a renewal stays listed until the authority it renews lapses. */
   private renewed = new Set<string>()
   /** The offers list each community answered, so the badge's poll asks it once a session, not twice a minute. */
   private offersType = new Map<string, string>()
+  /** The `rooms/records/put` each host took, so a host that refused 0.3 is not asked it on every post. */
+  private putTypeOf = new Map<string, string>()
   private nextToken = 1
   private readonly now: () => number
   private readonly sleep: (ms: number) => Promise<void>
+  /** Told when a community skipped because a step kept the session can be read again (`onReadable`). */
+  private readonly readable = new Set<() => void>()
+  /** The communities skipped that way and waited on, one wait each; and when the last "readable again" was said. */
+  private readonly keptWaits = new Set<string>()
+  private readableAt = -Infinity
 
   public constructor(
     private readonly backend: RoomsBackend,
@@ -277,8 +361,31 @@ export class AgentRoomsService implements RoomsService {
 
   public async capabilities(options: { refresh?: boolean } = {}): Promise<RoomsCapabilities> {
     const linked = this.backend.agentLinked()
-    if (linked && (options.refresh || !this.served)) this.served = { types: await this.backend.agentServedTypes() }
+    const unknownAged = !this.served?.types && this.now() - (this.served?.at ?? -Infinity) >= SERVED_UNKNOWN_RETRY_MS
+    if (linked && (options.refresh || unknownAged)) await this.askServed(options.refresh)
     return deriveCapabilities({ agentLinked: linked, servedTypes: this.served?.types, built: this.built })
+  }
+
+  /**
+   * One ask of what the agent serves at a time: every caller that needs it while it is out waits for the same one.
+   * The agent's client sends one task at a time, and an agent that does not answer would otherwise be asked once per
+   * caller (each operation's check, every screen's read) and hold everything queued behind those asks.
+   *
+   * A refresh starts its own ask and does not join one already out: that one may have been sent to the agent before
+   * a switch, and its answer would be kept as the new agent's. Only the latest ask's answer is kept, whichever answers
+   * first.
+   */
+  private askServed(refresh = false): Promise<void> {
+    if (this.servedInFlight && !refresh) return this.servedInFlight
+    const asked = ++this.servedAsks
+    const latest = () => asked === this.servedAsks
+    this.servedInFlight = (async () => {
+      const types = await this.backend.agentServedTypes()
+      if (latest()) this.served = { types, at: this.now() }
+    })().finally(() => {
+      if (latest()) this.servedInFlight = undefined
+    })
+    return this.servedInFlight
   }
 
   private async require(operation: RoomsOperation): Promise<void> {
@@ -286,31 +393,105 @@ export class AgentRoomsService implements RoomsService {
     if (status.status !== 'available') throw new RoomsUnavailable(operation, status.reason, status.detail)
   }
 
-  public async listMyRooms(): Promise<RoomSummary[]> {
+  /**
+   * The member's rooms, one listing shared by every caller while it is out. Each surface that lists rooms (the
+   * Messages rows' poll, My Agent, a community's screen, a room met before it was listed) asked on its own, and a
+   * community is sent its membership list again for each, as a read (six answers at once in a tester's run, 10-30).
+   * A listing that starts after one settles asks again, and so does one after an accept or a leave.
+   */
+  /**
+   * `listener` is called when a community a listing skipped — because a step kept this phone's community session as
+   * another identity — can be read again, so a screen can read again without being asked. Returns the unsubscribe.
+   */
+  public onReadable(listener: () => void): () => void {
+    this.readable.add(listener)
+    return () => {
+      this.readable.delete(listener)
+    }
+  }
+
+  /**
+   * Whether `error` is a step keeping the session (not now, not unreachable). When it is, the community is waited on
+   * — once, however many listings skipped it — and `onReadable` is told when it is free, no sooner than
+   * `KEPT_RETRY_FLOOR_MS` after it was last told.
+   */
+  private sessionKept(community: RoomsCommunity, error: unknown): boolean {
+    if (!this.backend.sessionKept?.(error)) return false
+    const free = this.backend.sessionFree
+    if (free && !this.keptWaits.has(community.did)) {
+      this.keptWaits.add(community.did)
+      void (async () => {
+        try {
+          await free(community.did)
+          const wait = this.readableAt + KEPT_RETRY_FLOOR_MS - this.now()
+          if (wait > 0) await this.sleep(wait)
+        } catch {
+          // Nothing to say: the next listing asks afresh.
+          this.keptWaits.delete(community.did)
+          return
+        }
+        this.keptWaits.delete(community.did)
+        this.readableAt = this.now()
+        for (const listener of [...this.readable]) listener()
+      })()
+    }
+    return true
+  }
+
+  public listMyRooms(): Promise<RoomSummary[]> {
+    if (this.roomsInFlight) return this.roomsInFlight
+    const listing = this.readMyRooms().finally(() => {
+      if (this.roomsInFlight === listing) this.roomsInFlight = undefined
+    })
+    this.roomsInFlight = listing
+    return listing
+  }
+
+  private async readMyRooms(): Promise<RoomSummary[]> {
     await this.require('listMyRooms')
+    const changes = this.roomsChanged
+    // The agent's key list is asked beside the communities' lists, not after them: they are other parties, and
+    // the key list waited out a whole community sign-in first (12 s in a tester's run, 10-30). When no community
+    // answers, the listing fails on that, and the key list's own failure is not left unhandled.
+    const heldAsked = this.heldRooms()
+    heldAsked.catch(() => undefined)
     const communities = await this.backend.communities()
     // A community that cannot answer loses only its own details: its rooms still show from custody,
     // as `detailsNotLoaded`, and the other communities' rooms are unaffected. Why it did not answer is logged.
+    // One skipped because a step keeps the session as another identity is not unreachable: it is read again when the
+    // session is free (`onReadable`), and meanwhile its rooms show from custody too. One that answers it has no such
+    // task was reached, and is too old for rooms; `unsupportedVersion` is not read so, as Keyring may be the one behind.
     const unreachable: string[] = []
+    const tooOld: string[] = []
+    let kept = 0
     const memberships = await Promise.all(
       communities.map(async (community) => ({
         community,
         records: await this.membershipsOf(community).catch((e: unknown): RoomMembershipRecord[] => {
           this.backend.warn(`rooms: ${community.did} did not list this member's rooms: ${message(e)}`)
-          unreachable.push(community.did)
+          if (this.sessionKept(community, e)) kept++
+          else if (refusalCode(e) === 'unsupportedType') tooOld.push(community.did)
+          else unreachable.push(community.did)
           return []
         }),
       }))
     )
     // When none answered, custody alone is not the member's rooms: an open room holds no keys and would be
-    // missing, and every other room would show by its id. The read fails instead, and the screen says why.
-    if (communities.length > 0 && unreachable.length === communities.length)
+    // missing, and every other room would show by its id. The read fails instead, and the screen says why — unless
+    // only a kept session stopped them: that is not a failure, and the read again follows.
+    if (unreachable.length > 0 && unreachable.length + tooOld.length + kept === communities.length)
       throw new RoomsUnavailable(
         'listMyRooms',
         'communityUnreachable',
         `no community answered for this member's rooms (${unreachable.join(', ')})`
       )
-    const held = await this.heldRooms()
+    if (tooOld.length > 0 && tooOld.length === communities.length)
+      throw new RoomsUnavailable(
+        'listMyRooms',
+        'communityDoesNotServe',
+        `no community serves this member's rooms (${tooOld.join(', ')})`
+      )
+    const held = await heldAsked
 
     const next = new Map<string, KnownRoom>()
     for (const { community, records } of memberships) {
@@ -327,7 +508,10 @@ export class AgentRoomsService implements RoomsService {
       }
     }
     for (const custody of held) if (!next.has(custody.roomId)) next.set(custody.roomId, this.fromCustody(custody))
-    this.rooms = next
+    // A listing asked before an accept or a leave answers its callers, but does not undo what that changed. Its
+    // callers may see a room just left once more: the next listing, asked afresh after the leave, drops it. Answering
+    // them from this.rooms instead would show no rooms at all after an accept, which empties it.
+    if (changes === this.roomsChanged) this.rooms = next
     return [...next.values()].map(({ community: _community, actingAs: _actingAs, ...summary }) => summary)
   }
 
@@ -360,6 +544,7 @@ export class AgentRoomsService implements RoomsService {
     return read
   }
 
+  /** @versionLadder rooms/keys/list */
   private async readHeldRooms(): Promise<HeldRoom[]> {
     const served = this.served?.types ?? []
     if (served.includes(ROOMS_TASK.keysList02))
@@ -371,7 +556,7 @@ export class AgentRoomsService implements RoomsService {
     const name = record.label ?? held?.personalLabel
     return {
       roomId: record.roomId,
-      name: toInertText(name ?? shortId(record.roomId)),
+      name: toInertText(name ?? roomRef(record.roomId)),
       nameFrom: record.label ? 'community' : held?.personalLabel ? 'personal' : 'roomId',
       source: 'community',
       communityDid: community.did,
@@ -390,7 +575,7 @@ export class AgentRoomsService implements RoomsService {
     const me: Identity = { did: held.member ?? '' }
     return {
       roomId: held.roomId,
-      name: toInertText(held.personalLabel ?? shortId(held.roomId)),
+      name: toInertText(held.personalLabel ?? roomRef(held.roomId)),
       nameFrom: held.personalLabel ? 'personal' : 'roomId',
       source: 'custody',
       tier: 'unknown',
@@ -481,16 +666,34 @@ export class AgentRoomsService implements RoomsService {
     return room
   }
 
-  public async listNotes(roomId: string, options: { sinceVersion?: number } = {}): Promise<NoteList> {
+  public listNotes(roomId: string, options: { sinceVersion?: number } = {}): Promise<NoteList> {
+    const flightKey = `${roomId}\n${options.sinceVersion ?? 'all'}`
+    let flight = this.listingInFlight.get(flightKey)
+    if (!flight) {
+      const asked = this.readListing(roomId, options.sinceVersion).finally(() => {
+        if (this.listingInFlight.get(flightKey) === asked) this.listingInFlight.delete(flightKey)
+      })
+      this.listingInFlight.set(flightKey, asked)
+      flight = asked
+    }
+    // Each caller its own list, so one sorting or trimming it can't change what another holds.
+    return flight.then((list) => ({ ...list, notes: [...list.notes] }))
+  }
+
+  private async readListing(roomId: string, sinceVersion: number | undefined): Promise<NoteList> {
     const room = await this.requireInRoom(roomId, 'listNotes')
-    const { sinceVersion } = options
     const listing = parseBrowse(
-      await this.backend.agentTask(ROOMS_TASK.keysBrowse, {
+      await this.backend.agentTask(this.browseType(), {
         roomId,
         host: room.host,
         ...(sinceVersion !== undefined ? { sinceVersion } : {}),
       })
     )
+    for (const r of listing.records) {
+      // A version only goes up: an answer that arrives late never takes a record back.
+      const k = listedKey(roomId, r.key)
+      this.listed.set(k, Math.max(r.version, this.listed.get(k) ?? 0))
+    }
     return {
       notes: listing.records.map((r) => ({
         key: r.key,
@@ -503,16 +706,55 @@ export class AgentRoomsService implements RoomsService {
       })),
       complete: listing.complete,
       check: listing.check,
+      ...(listing.lastPrune ? { lastPrune: listing.lastPrune } : {}),
     }
   }
 
+  /**
+   * A post or note, from what was opened before when the room's last listing names that same version, else from the
+   * agent. Reopening a room read its whole first page again, one task at a time (ten reads, ~5 s on the lab sim,
+   * 10-30); a record at a new version (an edit, a retract) is read afresh. A copy reused this way carries the host
+   * check of the read that opened it, not a fresh one: a conflict found since shows on the listing's banner.
+   */
   public async readNote(roomId: string, key: string): Promise<Note> {
     const room = await this.requireInRoom(roomId, 'readNote')
+    const held = this.openedNow(roomId, key)
+    if (held) return this.noteOf(held)
+    // One read of a record at a time, shared by every caller while it is out: opening a room reads its newest records
+    // for the chat and for its Notes tab at the same moment, so ten of an open's first twenty reads were the same
+    // records twice (a tester's run, 10-30). A read that starts after one settles asks again. Shared by the key
+    // asked for; readRecord moves the listed version by the key the agent answered with.
+    const k = listedKey(roomId, key)
+    let read = this.readsInFlight.get(k)
+    if (!read) {
+      const asked = this.readRecord(room, roomId, key).finally(() => {
+        if (this.readsInFlight.get(k) === asked) this.readsInFlight.delete(k)
+      })
+      this.readsInFlight.set(k, (read = asked))
+      // Told of a lock while its first read is still out, not only once one is kept.
+      holdingOpened.add(this)
+    }
+    return this.noteOf(await read)
+  }
+
+  private async readRecord(room: KnownRoom, roomId: string, key: string): Promise<OpenedRecord> {
+    const drops = this.drops
     const opened = parseRead(await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key }), (s) =>
       this.backend.decodeBase64Url(s)
     )
     if (!opened) throw new Error(`the agent's answer for note ${key} could not be read`)
-    this.opened.set(openedKey(roomId, opened.key, opened.version), opened)
+    // An answer that arrives after the lock answers its caller, but is not kept: the lock forgot what was read.
+    if (drops !== this.drops) return opened
+    this.keepOpened(roomId, opened)
+    // A read can find a newer version than the listing named (an edit since): that copy is the one to reuse. Only a
+    // version a listing already named moves; a read never starts one, so with no listing a read always asks.
+    const k = listedKey(roomId, opened.key)
+    const named = this.listed.get(k)
+    if (named !== undefined && opened.version > named) this.listed.set(k, opened.version)
+    return opened
+  }
+
+  private noteOf(opened: OpenedRecord): Note {
     const body = toInertText(opened.body)
     return {
       key: opened.key,
@@ -529,10 +771,63 @@ export class AgentRoomsService implements RoomsService {
     }
   }
 
+  /** The opened copy of the version the room's last listing names, if there is one (and it is now the newest used). */
+  private openedNow(roomId: string, key: string): OpenedRecord | undefined {
+    const version = this.listed.get(listedKey(roomId, key))
+    return version === undefined ? undefined : this.openedAt(roomId, key, version)
+  }
+
+  /** The opened copy of one version, made the newest used: a reuse from the files tab counts as much as the chat's. */
+  private openedAt(roomId: string, key: string, version: number): OpenedRecord | undefined {
+    const k = openedKey(roomId, key, version)
+    const held = this.opened.get(k)
+    if (held) {
+      this.opened.delete(k)
+      this.opened.set(k, held)
+    }
+    return held
+  }
+
+  /** Keep an opened record as the newest used, dropping the least recently used past MAX_OPENED_RECORDS. */
+  private keepOpened(roomId: string, record: OpenedRecord): void {
+    const k = openedKey(roomId, record.key, record.version)
+    this.opened.delete(k)
+    this.opened.set(k, record)
+    for (const oldest of this.opened.keys()) {
+      if (this.opened.size <= MAX_OPENED_RECORDS) break
+      this.opened.delete(oldest)
+    }
+    holdingOpened.add(this)
+  }
+
+  /** Drop every opened record and listed version (the wallet locked, or the person logged out). */
+  public dropOpenedRecords(): void {
+    this.opened.clear()
+    this.listed.clear()
+    // A read asked before the lock is not joined after it, nor kept when it answers.
+    this.readsInFlight.clear()
+    this.drops++
+  }
+
+  private dropRoomReads(roomId: string): void {
+    const prefix = `${roomId}\n`
+    for (const k of [...this.opened.keys()]) if (k.startsWith(prefix)) this.opened.delete(k)
+    for (const k of [...this.listed.keys()]) if (k.startsWith(prefix)) this.listed.delete(k)
+    for (const k of [...this.readsInFlight.keys()]) if (k.startsWith(prefix)) this.readsInFlight.delete(k)
+    // A read of the room still out answers its caller but is not kept, as at a lock (readRecord).
+    this.drops++
+  }
+
   public async leaveViaCommunity(communityDid: string): Promise<void> {
     await this.require('leaveViaCommunity')
     await this.backend.leaveCommunity(communityDid)
-    for (const [id, room] of this.rooms) if (room.communityDid === communityDid) this.rooms.delete(id)
+    this.roomsChanged++
+    this.roomsInFlight = undefined
+    for (const [id, room] of this.rooms)
+      if (room.communityDid === communityDid) {
+        this.rooms.delete(id)
+        this.dropRoomReads(id)
+      }
   }
 
   /**
@@ -545,12 +840,15 @@ export class AgentRoomsService implements RoomsService {
     await this.require('listOffers')
     const communities = (await this.backend.communities()).filter((c) => !communityDid || c.did === communityDid)
     const hidden = new Set(await this.backend.hiddenOffers())
-    // Asked of the agent only when an accepted sealed offer needs it: this is the offers badge's poll.
-    let held: Promise<HeldRoom[]> | undefined
+    // Asked of the agent only when an accepted sealed offer needs it: this is the offers badge's poll. Undefined when
+    // the agent did not answer: whether such an offer was joined is then unknown, and it is left out of this listing.
+    // Read as "holds none", an offer accepted and joined long ago came back as new, and its notice said so after an
+    // unlock, while the agent's session reopened (276.9).
+    let held: Promise<HeldRoom[] | undefined> | undefined
     const heldNow = () =>
-      (held ??= this.heldRooms().catch((e): HeldRoom[] => {
+      (held ??= this.heldRooms().catch((e): undefined => {
         this.backend.warn(`rooms: the agent did not list the rooms it holds: ${message(e)}`)
-        return []
+        return undefined
       }))
     const out: RoomOffer[] = []
     for (const community of communities) {
@@ -558,7 +856,8 @@ export class AgentRoomsService implements RoomsService {
       try {
         listing = await this.offersOf(community)
       } catch (e) {
-        if (communityDid) throw e
+        // A kept session is not the community failing, even the one asked for: its offers come with the read again.
+        if (!this.sessionKept(community, e) && communityDid) throw e
         this.backend.warn(`rooms: ${community.did} did not list its offers: ${message(e)}`)
         continue
       }
@@ -570,11 +869,14 @@ export class AgentRoomsService implements RoomsService {
           this.backend.warn(`rooms: ${community.did} offered ${offer.roomId} hosted by ${offer.host}; left out`)
           continue
         }
-        if (offer.state === 'accepted') {
-          const joined =
-            !isSealed(offer.tier) || (await heldNow()).some((h) => holdsAs(h, offer.roomId, community.personaDid))
-          if (joined) continue
-        }
+        if (offer.state === 'accepted' && isSealed(offer.tier)) {
+          const rooms = await heldNow()
+          if (!rooms) {
+            this.backend.warn(`rooms: whether ${offer.roomId} was joined is unknown; left out of this listing`)
+            continue
+          }
+          if (rooms.some((h) => holdsAs(h, offer.roomId, community.personaDid))) continue
+        } else if (offer.state === 'accepted') continue
         const offerId = offerIdOf(community.did, offer.roomId)
         this.offers.set(offerId, { community, offer })
         if (!hidden.has(offerId)) out.push(this.toRoomOffer(community, offer, offerId))
@@ -585,16 +887,21 @@ export class AgentRoomsService implements RoomsService {
 
   /** Every page of a community's offers to this member, and the renewals the first page carries. */
   private async offersOf(community: RoomsCommunity): Promise<{ items: OfferRecord[]; renewals: RenewalRecord[] }> {
-    let type: string = this.offersType.get(community.did) ?? ROOMS_TASK.offersList03
+    // The version the community last answered first, then the others newest first: a community older than renewals
+    // is read at 0.2, which carries none, and one that moved on to 0.4 alone (VTC 0.16) is still read.
+    const known = this.offersType.get(community.did)
+    const types: string[] = known ? [known, ...OFFERS_LIST_TYPES.filter((t) => t !== known)] : [...OFFERS_LIST_TYPES]
+    let type = types[0]
     let first: unknown
-    try {
-      first = await this.backend.communityTask(community.did, type, {})
-    } catch (e) {
-      const code = refusalCode(e)
-      // A community older than renewals is read at 0.2, which carries none.
-      if (type !== ROOMS_TASK.offersList03 || (code !== 'unsupportedVersion' && code !== 'unsupportedType')) throw e
-      type = ROOMS_TASK.offersList02
-      first = await this.backend.communityTask(community.did, type, {})
+    for (let i = 0; ; i++) {
+      type = types[i]
+      try {
+        first = await this.backend.communityTask(community.did, type, {})
+        break
+      } catch (e) {
+        const code = refusalCode(e)
+        if (i === types.length - 1 || (code !== 'unsupportedVersion' && code !== 'unsupportedType')) throw e
+      }
     }
     this.offersType.set(community.did, type)
     const page = parseOffers(first)
@@ -610,8 +917,10 @@ export class AgentRoomsService implements RoomsService {
 
   /**
    * Stores each renewal's credentials in the agent's vault in place of the ones they renew, never beside them: a
-   * key holder holding two authorities from one room cannot choose between them (`vtc/rooms/offers/list/0.3`).
+   * key holder holding two authorities from one room cannot choose between them (`vtc/rooms/offers/list` 0.3/0.4).
    * Storing one already stored is success, so whichever surface collects it first wins.
+   *
+   * @versionLadder vault/credentials/get
    */
   private async takeRenewals(community: RoomsCommunity, renewals: RenewalRecord[]): Promise<void> {
     const pending = renewals.filter((r) => !this.renewed.has(`${r.roomId}|${r.issuedAt}`))
@@ -658,10 +967,11 @@ export class AgentRoomsService implements RoomsService {
     return {
       offerId,
       roomId: offer.roomId,
-      roomName: toInertText(offer.label || shortId(offer.roomId)),
+      roomName: toInertText(offer.label || roomRef(offer.roomId)),
+      ...(offer.label ? {} : { roomNameFrom: 'roomId' as const }),
       description: offer.description !== undefined ? toInertText(offer.description) : undefined,
       communityDid: community.did,
-      communityName: toInertText(community.name ?? shortId(community.did)),
+      communityName: community.name !== undefined ? toInertText(community.name) : undefined,
       tier: offer.tier,
       verbs: offer.actions,
       validUntil: offer.validUntil,
@@ -674,7 +984,7 @@ export class AgentRoomsService implements RoomsService {
     const served = this.served?.types ?? []
     const missing: string[] = [ROOMS_TASK.keysKeyPackage, ROOMS_TASK.keysWelcome].filter((t) => !served.includes(t))
     // The acceptance carries the agent's KeyPackage, so the agent completes it (`rooms/keys/act`, recipient item 10).
-    if (!this.actType()) missing.push(ROOMS_TASK.keysAct06)
+    if (!this.actType()) missing.push(KEYS_ACT_TYPES[0])
     if (missing.length > 0)
       throw new RoomsUnavailable('acceptOffer', 'agentDoesNotServe', `a ${offer.tier} room needs ${missing.join(', ')}`)
   }
@@ -719,6 +1029,8 @@ export class AgentRoomsService implements RoomsService {
       this.offers.delete(pending.offerId)
       this.rooms = new Map() // the next read lists the room
       this.heldInFlight = undefined // nor joins a key list asked before the room was held
+      this.roomsChanged++
+      this.roomsInFlight = undefined
       return { roomId }
     }
 
@@ -804,10 +1116,50 @@ export class AgentRoomsService implements RoomsService {
     }
   }
 
+  /**
+   * The newest `rooms/keys/browse` the agent serves. 0.3 asks the same and answers the same, plus the room's
+   * `lastPrune`, which `listNotes` passes on; an agent that lists neither is asked 0.1, as before 0.3.
+   *
+   * @versionLadder rooms/keys/browse
+   */
+  private browseType(): string {
+    const served = this.served?.types ?? []
+    return [ROOMS_TASK.keysBrowse03, ROOMS_TASK.keysBrowse].find((t) => served.includes(t)) ?? ROOMS_TASK.keysBrowse
+  }
+
   /** The newest `rooms/keys/act` the agent serves, if any. */
   private actType(): string | undefined {
     const served = this.served?.types ?? []
-    return [ROOMS_TASK.keysAct06, ROOMS_TASK.keysAct05].find((t) => served.includes(t))
+    return KEYS_ACT_TYPES.find((t) => served.includes(t))
+  }
+
+  /**
+   * A record put to `host`, completed as the member by the agent. From act 0.8 the agent completes put 0.3 as well as
+   * 0.1, and which one the host takes is the host's own: VTC 0.16 serves only 0.3, VTC 0.15 both, VTC 0.12 (the lab)
+   * only 0.1 and 0.2. So the version the host last took is sent first (else 0.3), and the other when the host does not
+   * serve it; 0.3 is 0.1 with optional members this client does not send. Before act 0.8 the agent completes only
+   * 0.1. A refused document did nothing, and the one sent again is new (`actAndSend`).
+   *
+   * @versionLadder rooms/records/put
+   */
+  private async put(community: RoomsCommunity, host: string, payload: Record<string, unknown>): Promise<unknown> {
+    const act = this.actType()
+    const types: string[] =
+      act === ROOMS_TASK.keysAct09 || act === ROOMS_TASK.keysAct08
+        ? [ROOMS_TASK.recordsPut03, ROOMS_TASK.recordsPut]
+        : [ROOMS_TASK.recordsPut]
+    const took = this.putTypeOf.get(host)
+    if (took && types.includes(took)) types.sort((a, b) => Number(b === took) - Number(a === took))
+    for (let i = 0; ; i++) {
+      try {
+        const answer = await this.actAndSend('write', community, host, types[i], payload)
+        this.putTypeOf.set(host, types[i])
+        return answer
+      } catch (e) {
+        const code = refusalCode(e)
+        if (i === types.length - 1 || (code !== 'unsupportedVersion' && code !== 'unsupportedType')) throw e
+      }
+    }
   }
 
   /**
@@ -827,7 +1179,7 @@ export class AgentRoomsService implements RoomsService {
       throw new RoomsUnavailable(
         operation,
         'agentDoesNotServe',
-        `the agent serves neither ${ROOMS_TASK.keysAct06} nor ${ROOMS_TASK.keysAct05}`
+        `the agent serves none of ${KEYS_ACT_TYPES.join(', ')}`
       )
     const document = {
       id: `urn:uuid:${this.backend.newId()}`,
@@ -967,7 +1319,7 @@ export class AgentRoomsService implements RoomsService {
       )
     let answer: unknown
     try {
-      answer = await this.actAndSend('write', community, host, ROOMS_TASK.recordsPut, {
+      answer = await this.put(community, host, {
         roomId: room.roomId,
         key,
         expectedVersion,
@@ -1031,20 +1383,13 @@ export class AgentRoomsService implements RoomsService {
       if (!sealed) throw new Error(`the agent answered the seal of ${key} with something else`)
       let answer: unknown
       try {
-        // A record naming a blob is put at 0.2, the version with `blobs`; act 0.5 and 0.6 complete both.
-        answer = await this.actAndSend(
-          'write',
-          community,
-          host,
-          options.blobs ? ROOMS_TASK.recordsPut02 : ROOMS_TASK.recordsPut,
-          {
-            roomId: room.roomId,
-            key,
-            expectedVersion: expected,
-            sealed,
-            ...(options.blobs ? { blobs: options.blobs } : {}),
-          }
-        )
+        answer = await this.put(community, host, {
+          roomId: room.roomId,
+          key,
+          expectedVersion: expected,
+          sealed,
+          ...(options.blobs ? { blobs: options.blobs } : {}),
+        })
       } catch (e) {
         const refused = await this.hostRefusal('write', room, key, expected, e)
         if (attempt === 0 && ownKey && refused instanceof RoomsConflict) return { key, version: refused.currentVersion }
@@ -1140,7 +1485,7 @@ export class AgentRoomsService implements RoomsService {
   /** The newest version among the room's records, as the agent lists them; 0 for an empty room. */
   private async headVersion(room: KnownRoom): Promise<number> {
     const listing = parseBrowse(
-      await this.agentStep('write', 'list the room', ROOMS_TASK.keysBrowse, { roomId: room.roomId, host: room.host })
+      await this.agentStep('write', 'list the room', this.browseType(), { roomId: room.roomId, host: room.host })
     )
     return listing.records.reduce((head, r) => Math.max(head, r.version), 0)
   }
@@ -1208,20 +1553,21 @@ export class AgentRoomsService implements RoomsService {
   }
   /**
    * The room's files. No task lists them: a file is described in its record's sealed body, so the room is browsed
-   * and each live record opened, one at a time (the agent sends one task at a time), keeping what was opened by key
-   * and version so a second look reads only what changed. A record that can't be opened is left out; if none could
-   * be and there were some to open, that failure is the answer rather than "no files".
+   * and each live record opened in turn, keeping what was opened by key and version so a second look reads only
+   * what changed. This loop awaits each read, so it does not use the client's read lane (up to VTA_READ_LANE_SIZE
+   * reads at once, see trust-tasks/module/vtaReadLane.ts). Because a second look reuses what was opened, the
+   * one-after-another cost falls on a first open; a warm open hides it. A record that can't be opened is left out;
+   * if none could be and there were some to open, that failure is the answer rather than "no files".
    */
   public async listFiles(roomId: string): Promise<RoomFile[]> {
     const room = await this.requireInRoom(roomId, 'listFiles')
-    const listing = parseBrowse(await this.backend.agentTask(ROOMS_TASK.keysBrowse, { roomId, host: room.host }))
+    const listing = parseBrowse(await this.backend.agentTask(this.browseType(), { roomId, host: room.host }))
     const files: RoomFile[] = []
     let opened = 0
     let failure: unknown
     for (const record of listing.records) {
       if (record.status === 'retracted') continue
-      const cacheKey = openedKey(roomId, record.key, record.version)
-      let read = this.opened.get(cacheKey)
+      let read = this.openedAt(roomId, record.key, record.version)
       if (!read) {
         try {
           read = parseRead(
@@ -1233,7 +1579,7 @@ export class AgentRoomsService implements RoomsService {
           continue
         }
         if (!read) continue
-        this.opened.set(openedKey(roomId, read.key, read.version), read)
+        this.keepOpened(roomId, read)
       }
       opened++
       if (read.file) files.push(roomFileOf(read.file, read))

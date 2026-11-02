@@ -20,6 +20,8 @@ import { verifyDocumentProof } from '@bifold/trust-tasks'
 // eslint-disable-next-line import/order
 import signed from './fixtures/vti-upstream-signed.json'
 // eslint-disable-next-line import/order
+import { pinClock, unpinClock } from './fixtures/pinClock'
+// eslint-disable-next-line import/order
 import { CREDENTIAL_EXCHANGE_ISSUE } from '../module/vtiInbox'
 // eslint-disable-next-line import/order
 import { VtiApplicant, cardDigestMultibase, type VtiVettingStore } from '../module/vtiVetting'
@@ -44,11 +46,11 @@ describe('proofs upstream made', () => {
 })
 
 describe('a statement upstream signed, delivered to a Keyring applicant', () => {
-  afterEach(() => jest.restoreAllMocks())
+  afterEach(unpinClock)
 
   it('is kept, its proof checked by Keyring', async () => {
-    // Inside the statement's window (the test setup pins Date.now() to 2024).
-    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z'))
+    // Inside the statement's window (the test setup pins only Date.now(), to 2024).
+    pinClock(Date.parse('2026-09-25T00:05:00Z'))
     const application = {
       communityDid: signed.community,
       joinDid: signed.applicantDid,

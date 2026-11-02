@@ -400,11 +400,9 @@ describe('the words', () => {
         'NeedsCredentialCommunity',
         'NeedsCredentialRecognised',
         'NeedsCredentialAny',
-        'NeedsNothing',
         'FollowsAutomatic',
         'FollowsReview',
         'Suggested',
-        'VettingToDo',
         'MissingInvitation',
         'CredentialNotYet',
         'CannotUse',
@@ -431,16 +429,7 @@ describe('the words', () => {
     ] as const) {
       const w = ways(words)
       expect(w.FollowsAutomatic).toMatch(admitted)
-      for (const key of [
-        'FollowsReview',
-        'NeedsNothing',
-        'Suggested',
-        'VettingToDo',
-        'ButtonAsk',
-        'ButtonVetting',
-        'SentForReview',
-        'Title',
-      ]) {
+      for (const key of ['FollowsReview', 'Suggested', 'ButtonAsk', 'ButtonVetting', 'SentForReview', 'Title']) {
         expect(w[key]).not.toMatch(admitted)
       }
     }

@@ -26,7 +26,7 @@ exports[`IconButton Component Left alignment renders correctly 1`] = `
   focusable={true}
   hitSlop={
     Object {
-      "bottom": 44,
+      "bottom": 12,
       "left": 44,
       "right": 44,
       "top": 44,
@@ -106,7 +106,7 @@ exports[`IconButton Component Right alignment renders correctly 1`] = `
   focusable={true}
   hitSlop={
     Object {
-      "bottom": 44,
+      "bottom": 12,
       "left": 44,
       "right": 44,
       "top": 44,
@@ -186,7 +186,7 @@ exports[`IconButton Component Right alignment with text renders correctly 1`] = 
   focusable={true}
   hitSlop={
     Object {
-      "bottom": 44,
+      "bottom": 12,
       "left": 44,
       "right": 44,
       "top": 44,

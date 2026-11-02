@@ -4,8 +4,9 @@
  * place; the host check warns only on `conflict`; a custody-only room is never asked for posts.
  */
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
+import { FlatList } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
@@ -175,6 +176,26 @@ describe('posts', () => {
     expect(tree.getByText('Rooms.You')).toBeTruthy()
   })
 
+  test('scrolling floats the day of the posts at the top of the screen, as the person-to-person chat does', async () => {
+    const tree = open(withPosts([post('a', 'today'), post('c', 'a day before', { updatedAt: '2026-10-25T09:00:00Z' })]))
+    await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(2))
+    expect(tree.queryByTestId(id('RoomFloatingDay'))).toBeNull()
+    const chat = tree.UNSAFE_getAllByType(FlatList).find((l) => l.props.testID === id('RoomPosts'))
+    if (!chat) throw new Error('no chat list')
+    const viewableItems = (chat.props.data as { key: string }[]).map((item, index) => ({
+      item,
+      index,
+      key: item.key,
+      isViewable: true,
+    }))
+    await act(async () => {
+      chat.props.onViewableItemsChanged({ viewableItems, changed: [] })
+      chat.props.onScrollBeginDrag()
+    })
+    // The topmost post in view (the highest index, drawn bottom up) is the older one: its day floats.
+    expect(within(tree.getByTestId(id('RoomFloatingDay'))).getByTestId(id('ChatDayPill'))).toBeTruthy()
+  })
+
   test("a post that couldn't be read keeps its place, and the rest show", async () => {
     const tree = open(
       withPosts([post('a', 'readable'), post('b', 'hidden', { updatedAt: '2026-10-26T08:00:00Z' })], {}, ['b'])
@@ -184,20 +205,48 @@ describe('posts', () => {
     expect(tree.queryByText('hidden')).toBeNull()
   })
 
-  test(`${POSTS_PAGE} at a time: "Load older" shows the next page, and goes once all are shown`, async () => {
+  // 276.9: a reopened room drew 8 posts and stopped: notes among its newest records took places in the page.
+  test(`notes among the newest records leave the chat its ${POSTS_PAGE} posts, with no scroll`, async () => {
+    const at = (i: number) => new Date(Date.UTC(2026, 9, 26, 9, 0, 0) - i * 60_000).toISOString()
+    const records = Array.from({ length: POSTS_PAGE + 4 }, (_, i) =>
+      i === 1 || i === 4
+        ? post(`note${i}`, `note body ${i}`, { updatedAt: at(i), title: toInertText(`Note ${i}`) })
+        : post(`p${i}`, `chat ${i}`, { updatedAt: at(i) })
+    )
+    const tree = open(withPosts(records))
+    await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE))
+    const chat = records.filter((r) => !r.title).slice(0, POSTS_PAGE)
+    for (const r of chat) expect(tree.getByText(String(r.body))).toBeTruthy()
+    expect(tree.queryByText('note body 1')).toBeNull()
+  })
+
+  test(`${POSTS_PAGE} at a time: scrolling up to the oldest post reads the next page, with the spinner and no button`, async () => {
     const many = Array.from({ length: POSTS_PAGE + 1 }, (_, i) =>
       post(`p${i}`, `post ${i}`, { updatedAt: new Date(Date.UTC(2026, 9, 26, 9, 0, 0) - i * 60_000).toISOString() })
     )
-    const tree = open(withPosts(many))
+    const service = withPosts(many)
+    // The older post's read waits until the test lets it answer, so the spinner can be seen.
+    let answer: () => void = () => undefined
+    const answered = new Promise<void>((resolve) => (answer = resolve))
+    const readNote = service.readNote.bind(service)
+    jest.spyOn(service, 'readNote').mockImplementation(async (roomId: string, key: string) => {
+      if (key === `p${POSTS_PAGE}`) await answered
+      return readNote(roomId, key)
+    })
+    const tree = open(service)
     await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE))
     expect(tree.queryByText(`post ${POSTS_PAGE}`)).toBeNull()
-    // The list's footer, which a list drawn from the bottom up shows at its top, above the oldest post.
+    expect(tree.queryByText('Rooms.LoadOlder')).toBeNull()
+    // Drawn bottom up, the list's end is its top: reaching it reads the next page.
     const list = tree.getByTestId(id('RoomPosts'))
     expect(list.props.inverted).toBe(true)
-    expect(list.props.ListFooterComponent.props.testID).toBe(id('RoomLoadOlder'))
-    fireEvent.press(tree.getByTestId(id('RoomLoadOlder')))
+    await act(async () => list.props.onEndReached({ distanceFromEnd: 0 }))
+    expect(tree.getByTestId(id('RoomPosts')).props.ListFooterComponent.props.testID).toBe(id('RoomLoadingOlder'))
+    await act(async () => answer())
     await waitFor(() => expect(tree.getByText(`post ${POSTS_PAGE}`)).toBeTruthy())
-    expect(tree.queryByTestId(id('RoomLoadOlder'))).toBeNull()
+    // Everything is shown: nothing more to read, and no spinner.
+    expect(tree.getByTestId(id('RoomPosts')).props.onEndReached).toBeUndefined()
+    expect(tree.queryByTestId(id('RoomLoadingOlder'))).toBeNull()
   })
 
   test('with no posts yet, pulling down reads the room again, and a new post appears', async () => {

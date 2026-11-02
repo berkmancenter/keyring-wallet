@@ -747,6 +747,53 @@ describe('when the app replaces its agent (an unlock after a lock builds a new o
     expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
   })
 
+  /** What the link does not say: a rooms screen waits for the reopen, and reads again when it is done (#772, 276.9). */
+  it('says a session is opening while the unlock reopens it, and when it opened', async () => {
+    let clock = 1_000
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => clock,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    await vta.restore({ tag: 'A' } as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState()).toMatchObject({ sessionOpening: false, sessionOpenedAt: 1_000 })
+    let open!: () => void
+    mockClient.connect.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => (open = () => resolve(undefined)))
+    )
+    clock = 5_000
+
+    const restoring = vta.restore({ tag: 'B' } as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState()).toMatchObject({ sessionOpening: true, sessionOpenedAt: 1_000 })
+    open()
+    await restoring
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(vta.getState()).toMatchObject({ sessionOpening: false, sessionOpenedAt: 5_000 })
+  })
+
+  it('a reopen that fails ends the opening and keeps when a session last opened (control)', async () => {
+    let clock = 1_000
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => clock,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    await vta.restore({ tag: 'A' } as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    mockClient.connect.mockRejectedValueOnce(new Error('mediator unreachable'))
+    clock = 5_000
+
+    await vta.restore({ tag: 'B' } as never)
+
+    expect(vta.getState()).toMatchObject({ sessionOpening: false, sessionOpenedAt: 1_000 })
+    await vta.unlink({ tag: 'B' } as never)
+  })
+
   it('counts a reopen that fails as a drop, and retries', async () => {
     const vta = new VtaAgentController()
     vta.configure({

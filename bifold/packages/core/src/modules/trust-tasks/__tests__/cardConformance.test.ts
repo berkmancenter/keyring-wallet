@@ -720,8 +720,13 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
         isOpen: true,
         sendTo: async (_to: string, message: { body: Record<string, unknown> }) => {
           toVta.push(message.body)
-          // Answer at once, so each task settles without waiting out a clock.
-          const pending = (client as unknown as { pending?: { resolve(m: unknown): void } }).pending
+          // Answer at once, so each task settles without waiting out a clock. Only one task is ever on the wire
+          // here, so the first pending is the one being answered: the answer resolves it directly, not through
+          // deliver(), so the client never learns that replies are threaded, and none of these tasks is in the
+          // read lane (vtaReadLane.ts) anyway. Route this through the real inbound path or add lane tasks, and
+          // that stops holding: match the pending by thread instead.
+          const pendings = (client as unknown as { pendings: Map<number, { resolve(m: unknown): void }> }).pendings
+          const [pending] = pendings.values()
           pending?.resolve({ type: `${String(message.body.type)}#response`, body: { payload: {} } })
         },
       },

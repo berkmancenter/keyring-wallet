@@ -59,6 +59,7 @@ import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type TspProbeStore } from './tspProbe'
 import { fetchWaitingIfBusy } from './vtcBusy'
+import { isAgentsOwnPersona } from './agentOwnIdentity'
 import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { releaseWarn } from './releaseLog'
@@ -164,6 +165,50 @@ export class VtiSentNoAnswer extends Error {
     super(`vtiAgent: sent ${taskName(taskType)}; the community has not answered yet`)
     this.name = 'VtiSentNoAnswer'
   }
+}
+
+/**
+ * How long an ordinary connect keeps the session from a background one (`connect`'s `background`). A vetting step
+ * connects as its persona and then waits on a peer; the rooms polls of a phone in two communities took the session
+ * back as the other persona every 10–20 s, and the step's answers went to the wrong identity (hidden-vetting run,
+ * 10-31).
+ */
+export const VTI_FOREGROUND_CLAIM_MS = 90_000
+
+/** How long a hold (`holding`) keeps others waiting when its caller names no time: a stuck hold must not freeze sign-ins. */
+export const VTI_HOLD_MAX_MS = 10 * 60_000
+
+/** How long a background hold keeps others waiting when its caller names no time. */
+export const VTI_BACKGROUND_HOLD_MAX_MS = 2 * 60_000
+
+/**
+ * A background connect or hold (`connect`'s `background`) that would have taken the session from another of this
+ * phone's identities: one holding it (`holding`), one waiting to, or one an ordinary connect signed in within
+ * `VTI_FOREGROUND_CLAIM_MS`. Nothing was disconnected; the caller tries again later. The message names no DID: a hold
+ * may be a hidden-vetting step's.
+ */
+export class VtiSessionHeld extends Error {
+  constructor(
+    /**
+     * The DID the session is kept for — a hold may be a hidden-vetting step's persona. Never log it, nor `reason`,
+     * beside a community's DID: the pairing ties that persona to a community.
+     */
+    readonly heldAs: string,
+    /** What keeps it, as its holder named it. */
+    readonly reason?: string
+  ) {
+    super(`vtiAgent: the session is kept for another of this phone's identities${reason ? ` (${reason})` : ''}`)
+    // A literal, read by name in vtiPersonaInbox (a class name does not survive minifying).
+    this.name = 'VtiSessionHeld'
+  }
+}
+
+/** One hold on the session (`holding`). */
+interface SessionHold {
+  did: string
+  background: boolean
+  until: number
+  reason?: string
 }
 
 /**
@@ -862,6 +907,132 @@ class VtiAgentController {
 
   /** The connect in flight, so a second caller waits for it instead of racing it. */
   private connecting?: Promise<void>
+  /** The holds on the session (`holding`), and the ordinary connects waiting for one to end, by DID. */
+  private readonly holds = new Map<symbol, SessionHold>()
+  private readonly foregroundWaiting = new Map<symbol, string>()
+  private readonly holdWatchers = new Set<() => void>()
+  /** The DID an ordinary connect last signed in as, and until when a background one leaves it (`VTI_FOREGROUND_CLAIM_MS`). */
+  private claim?: { did: string; until: number }
+  /** For tests: the clock holds and claims are read by. */
+  now: () => number = () => Date.now()
+
+  /** The live holds; one past its time is dropped, and said once. */
+  private liveHolds(): SessionHold[] {
+    const now = this.now()
+    for (const [key, hold] of this.holds)
+      if (hold.until <= now) {
+        this.holds.delete(key)
+        releaseWarn(
+          `vtiAgent: a hold on the session${hold.reason ? ` (${hold.reason})` : ''} ran past its time; sign-ins no longer wait for it`
+        )
+      }
+    return [...this.holds.values()]
+  }
+
+  /**
+   * What stops a connect as `did` from going ahead now: `wait` until the holds named end, `refuse` with
+   * `VtiSessionHeld`, or nothing. An ordinary connect waits only for another DID's ordinary hold — a background one is
+   * a poll and gives way. A background connect waits for another DID's background hold, and is refused by anything an
+   * ordinary caller holds, waits for, or signed in as within `VTI_FOREGROUND_CLAIM_MS`. No DID (a new identity) never
+   * switches an open session, so nothing stops it then.
+   */
+  private blockerFor(
+    did: string | undefined,
+    background: boolean
+  ): { wait: SessionHold } | { refuse: VtiSessionHeld } | undefined {
+    const holds = this.liveHolds().filter((h) => h.did !== did)
+    const ordinary = holds.find((h) => !h.background)
+    if (!background) return ordinary ? { wait: ordinary } : undefined
+    if (ordinary) return { refuse: new VtiSessionHeld(ordinary.did, ordinary.reason) }
+    const waiting = [...this.foregroundWaiting.values()].find((d) => d !== did)
+    if (waiting) return { refuse: new VtiSessionHeld(waiting, 'an identity is waiting to sign in') }
+    const sessionDid = this.state.did ?? this.state.signingInAs
+    if (
+      this.claim &&
+      this.claim.did !== did &&
+      this.claim.did === sessionDid &&
+      this.claim.until > this.now() &&
+      this.session
+    )
+      return { refuse: new VtiSessionHeld(this.claim.did, 'signed in for a step just now') }
+    const polling = holds.find((h) => h.background)
+    return polling ? { wait: polling } : undefined
+  }
+
+  /** Resolves when a hold or a waiter comes or goes, or when the soonest hold or the claim runs out of time. */
+  private holdsMoved(): Promise<void> {
+    return new Promise((resolve) => {
+      const claimEnds = this.claim && this.claim.until > this.now() ? [this.claim.until] : []
+      const soonest = Math.min(...this.liveHolds().map((h) => h.until), ...claimEnds)
+      const done = () => {
+        if (timer) clearTimeout(timer)
+        this.holdWatchers.delete(done)
+        resolve()
+      }
+      const timer = Number.isFinite(soonest) ? setTimeout(done, Math.max(0, soonest - this.now()) + 1) : undefined
+      this.holdWatchers.add(done)
+    })
+  }
+
+  private holdsChanged(): void {
+    for (const done of [...this.holdWatchers]) done()
+  }
+
+  /**
+   * Resolves once a background connect as `did` would no longer be refused with `VtiSessionHeld`: no ordinary caller
+   * holds the session as another identity or waits for it, and the claim an ordinary connect left has run out. For a
+   * poll refused just now that wants to try again (the rooms screens). Nothing is timed while nobody waits.
+   */
+  async whenFree(did: string): Promise<void> {
+    for (;;) {
+      const blocker = this.blockerFor(did, true)
+      if (!blocker || !('refuse' in blocker)) return
+      await this.holdsMoved()
+    }
+  }
+
+  /**
+   * Keep the session as `persona` while `fn` runs: sign in as it (waiting, like `connect`, for another DID's hold to
+   * end), and let nothing switch the session to another identity until `fn` settles or `maxMs` passes. Holds for the
+   * same DID share the session. `fn` is given the DID held. Never connect as another DID inside `fn`: it would wait
+   * for this hold.
+   *
+   * `background`: a poll's hold (the rooms backend). It gives way to an ordinary caller — refused with
+   * `VtiSessionHeld` when one holds the session or waits for it, and switched away from (its asks fail) when an
+   * ordinary connect comes while it runs — but other polls wait for it, so one persona's asks run together and the
+   * session switches once per persona, not once per ask.
+   */
+  async holding<T>(
+    agent: Agent,
+    mediatorDid: string | undefined,
+    persona: VtiPersona,
+    fn: (did: string) => Promise<T>,
+    opts: { peerRevisionStore?: TspPeerRevisionStore; reason?: string; maxMs?: number; background?: boolean } = {}
+  ): Promise<T> {
+    const background = opts.background === true
+    const key = Symbol(persona.did)
+    const hold = (): SessionHold => ({
+      did: persona.did,
+      background,
+      until: this.now() + (opts.maxMs ?? (background ? VTI_BACKGROUND_HOLD_MAX_MS : VTI_HOLD_MAX_MS)),
+      reason: opts.reason,
+    })
+    // Taken as the sign-in settles, before any other caller waiting on it runs; if the session was not left as
+    // `persona` by then, sign in again.
+    while (!this.holds.has(key))
+      await this.signIn(
+        agent,
+        mediatorDid,
+        { persona, peerRevisionStore: opts.peerRevisionStore, background },
+        { key, hold }
+      )
+    try {
+      return await fn(persona.did)
+    } finally {
+      this.holds.delete(key)
+      this.holdsChanged()
+    }
+  }
 
   /**
    * Open (or keep) the session as `identity` or `persona`.
@@ -889,16 +1060,63 @@ class VtiAgentController {
       persona?: VtiPersona
       /** Where to record what each peer speaks; in memory when absent. */
       peerRevisionStore?: TspPeerRevisionStore
+      /**
+       * A poll's connect (the rooms backend, a persona inbox's look): it never takes the session from an ordinary
+       * caller — see `holding` and `VTI_FOREGROUND_CLAIM_MS` — and is refused with `VtiSessionHeld` instead, with
+       * nothing disconnected.
+       */
+      background?: boolean
     } = {}
   ): Promise<void> {
-    if (this.connecting) releaseWarn('vtiAgent: connect waits for an earlier sign-in to settle')
-    while (this.connecting) await this.connecting.catch(() => undefined)
+    return this.signIn(agent, mediatorDid, options)
+  }
+
+  /** `connect`, and when `take` is given, the hold taken in the same step the sign-in settles in (`holding`). */
+  private async signIn(
+    agent: Agent,
+    mediatorDid: string | undefined,
+    options: Parameters<VtiAgentController['connect']>[2] = {},
+    take?: { key: symbol; hold: () => SessionHold }
+  ): Promise<void> {
+    const wantedDid = options.persona?.did ?? options.identity?.did
+    const background = options.background === true
+    const waiter = Symbol(wantedDid ?? 'new identity')
+    let saidWaiting = false
+    try {
+      for (;;) {
+        if (this.connecting) releaseWarn('vtiAgent: connect waits for an earlier sign-in to settle')
+        while (this.connecting) await this.connecting.catch(() => undefined)
+        // Checked after the earlier sign-in settles, and nothing awaited between this and `connecting` being set.
+        const blocker = this.blockerFor(wantedDid, background)
+        if (!blocker) break
+        if ('refuse' in blocker) throw blocker.refuse
+        if (!saidWaiting) {
+          saidWaiting = true
+          releaseWarn(
+            `vtiAgent: connect waits for a hold on the session${blocker.wait.reason ? ` (${blocker.wait.reason})` : ''} to end`
+          )
+        }
+        if (!background && wantedDid && !this.foregroundWaiting.has(waiter)) {
+          this.foregroundWaiting.set(waiter, wantedDid)
+          this.holdsChanged()
+        }
+        await this.holdsMoved()
+      }
+    } finally {
+      if (this.foregroundWaiting.delete(waiter)) this.holdsChanged()
+    }
     const attempt = this.connectNow(agent, mediatorDid, options)
     this.connecting = attempt
     try {
       await attempt
     } finally {
       if (this.connecting === attempt) this.connecting = undefined
+    }
+    if (!background && wantedDid) this.claim = { did: wantedDid, until: this.now() + VTI_FOREGROUND_CLAIM_MS }
+    // Nothing awaited since the attempt settled: a caller that waited on it sees this hold when it looks.
+    if (take && this.state.did === wantedDid && this.isConnected) {
+      this.holds.set(take.key, take.hold())
+      this.holdsChanged()
     }
   }
 
@@ -955,6 +1173,9 @@ class VtiAgentController {
       let identity = options.identity
       let tspSession: TspSessionIdentity | undefined
       if (options.persona) {
+        // Signed in as the agent, the phone takes its inbox from it (agentOwnIdentity).
+        if (isAgentsOwnPersona(options.persona))
+          throw new Error("vtiAgent: the persona is its agent's own DID; the phone never signs in as its agent")
         const kaKmsKeyId = options.persona.kmsKeyIds?.keyAgreement
         if (!kaKmsKeyId) throw new Error('vtiAgent: the persona has no borrowed key-agreement key')
         identity = await vtiClientIdentityFromPersona(agent, options.persona.did, kaKmsKeyId)

@@ -9,7 +9,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import { useCallback, useEffect, useState } from 'react'
 
-import { loadPetname, loadPetnames, onPetnamesChange, savePetname } from './petnames'
+import { loadPetname, loadPetnames, onPetnamesChange, removePetname, savePetname } from './petnames'
 
 export interface Petname {
   /** Your name for them; undefined while reading or when you gave none. */
@@ -18,6 +18,8 @@ export interface Petname {
   loaded: boolean
   /** Keep a name for them, in place of any you gave; a blank one changes nothing (the screen never offers one). */
   set: (name: string) => Promise<void>
+  /** Remove your name for them. */
+  remove: () => Promise<void>
 }
 
 export function usePetname(communityDid?: string, memberDid?: string): Petname {
@@ -57,7 +59,12 @@ export function usePetname(communityDid?: string, memberDid?: string): Petname {
     [agent, communityDid, memberDid]
   )
 
-  return { name, loaded, set }
+  const remove = useCallback(async () => {
+    if (!agent || !communityDid || !memberDid) return
+    await removePetname(agent, communityDid, memberDid)
+  }, [agent, communityDid, memberDid])
+
+  return { name, loaded, set, remove }
 }
 
 const NONE: ReadonlyMap<string, string> = new Map()

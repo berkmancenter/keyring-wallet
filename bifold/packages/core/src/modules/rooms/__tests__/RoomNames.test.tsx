@@ -5,12 +5,11 @@
  * with Copy, and for the member themselves, their profile.
  */
 import Clipboard from '@react-native-clipboard/clipboard'
-import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
-import { Screens } from '../../../types/navigators'
+import { Screens, Stacks, TabStacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { deriveRoomCapabilities, sampleCapabilities } from '../capabilities'
 import { initialsOf } from '../components/RoomIdentitySheet'
@@ -32,6 +31,16 @@ jest.mock('../usePetname', () => ({
     set: mockSetPetname,
   }),
   usePetnames: () => mockNames,
+}))
+// The names other members wrote on their own directory cards, as the directory gives them to the room.
+let mockDirectoryNames = new Map<string, string>()
+const mockUseDirectoryNames = jest.fn(
+  (_service: unknown, _communityDid?: string, _dids?: readonly string[]) => mockDirectoryNames
+)
+jest.mock('../../directory/useDirectory', () => ({
+  useDirectoryService: () => undefined,
+  useDirectoryNames: (service: unknown, communityDid?: string, dids?: readonly string[]) =>
+    mockUseDirectoryNames(service, communityDid, dids),
 }))
 jest.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 100 }))
 jest.mock('@react-navigation/native', () => ({
@@ -106,12 +115,23 @@ const press = async (tree: Tree, key: string) => {
   })
 }
 const sheet = (tree: Tree) => within(tree.getByTestId(id('RoomIdentitySheet')))
+// The mock's one navigation object, the same one the screen gets.
+const navigation = jest.requireMock('@react-navigation/native').useNavigation() as { navigate: jest.Mock }
+// A profile and a member's card are My Agent's screens: from a room in either tab they open there (rooms in Messages,
+// R2), above what My Agent already shows.
+const inMyAgent = (screen: Screens, params: object) => [
+  Stacks.TabStack,
+  { screen: TabStacks.MyAgentStack, params: { screen, params, initial: false } },
+]
 
 beforeEach(() => {
   mockMe = {}
   mockNames = new Map()
+  mockDirectoryNames = new Map()
+  mockUseDirectoryNames.mockClear()
   mockSetPetname.mockClear()
   ;(Clipboard.setString as jest.Mock | undefined)?.mockClear?.()
+  navigation.navigate.mockClear()
 })
 
 describe("a room's header", () => {
@@ -147,10 +167,8 @@ describe('names in a room, step 1', () => {
     // The room's members see the identity, not the name: the sheet says so, beside the identity itself.
     expect(sheet(tree).getByTestId(id('RoomIdentityDid'))).toHaveTextContent(ME.did)
     expect(sheet(tree).getByTestId(id('RoomIdentityOthersSee'))).toBeTruthy()
-    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
-    navigation.navigate.mockClear()
     await press(tree, 'RoomIdentityOpenProfile')
-    expect(navigation.navigate).toHaveBeenCalledWith(Screens.EditRCard, { profileId: 'p1' })
+    expect(navigation.navigate.mock.calls).toEqual([inMyAgent(Screens.EditRCard, { profileId: 'p1' })])
     expect(tree.queryByTestId(id('RoomIdentitySheet'))).toBeNull()
   })
 
@@ -160,10 +178,8 @@ describe('names in a room, step 1', () => {
     await press(tree, 'RoomComposerPostingAsButton')
     expect(sheet(tree).getByTestId(id('RoomIdentityName'))).toHaveTextContent('Rooms.You')
     expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.NameNotSet')
-    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
-    navigation.navigate.mockClear()
     await press(tree, 'RoomIdentityAddName')
-    expect(navigation.navigate).toHaveBeenCalledWith(Screens.EditRCard, {})
+    expect(navigation.navigate.mock.calls).toEqual([inMyAgent(Screens.EditRCard, {})])
   })
 
   test("another member's name opens their sheet: no name known yet, their identity with Copy, no profile", async () => {
@@ -208,6 +224,57 @@ describe('names in a room, step 1', () => {
     expect(sheet(tree).getByTestId(id('RoomIdentityStandIn'))).toHaveTextContent('Rooms.MemberTail')
     expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.PetnameSource')
     expect(sheet(tree).getByTestId(id('RoomIdentityRename'))).toBeTruthy()
+  })
+
+  test('their own name, where they show it: asked for other authors only, marked as theirs in the chat and on their sheet', async () => {
+    mockDirectoryNames = new Map([[THEM.did, 'Saddle Q']])
+    const tree = await show()
+    expect(mockUseDirectoryNames).toHaveBeenLastCalledWith(undefined, 'did:webvh:lab', [THEM.did])
+    expect(tree.getByTestId(id('RoomPostAuthor'))).toHaveTextContent('Rooms.DirectoryNameLabel')
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).getByTestId(id('RoomIdentityName'))).toHaveTextContent('Saddle Q')
+    // A self-chosen name can claim anything: the stand-in stays beside it.
+    expect(sheet(tree).getByTestId(id('RoomIdentityStandIn'))).toHaveTextContent('Rooms.MemberTail')
+    expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.NameTheirOwn')
+  })
+
+  test('an author who shows their card: "View card" opens it by their DID, with what the room calls them', async () => {
+    mockDirectoryNames = new Map([[THEM.did, 'Saddle Q']])
+    const tree = await show()
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).queryByTestId(id('RoomIdentityNoCard'))).toBeNull()
+    await press(tree, 'RoomIdentityViewCard')
+    expect(navigation.navigate.mock.calls).toEqual([
+      inMyAgent(Screens.CommunityMemberCard, {
+        communityDid: 'did:webvh:lab',
+        memberDid: THEM.did,
+        standIn: 'Rooms.MemberTail',
+      }),
+    ])
+  })
+
+  test('an author who does not: one plain line that there is no card to show, no button', async () => {
+    const tree = await show()
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).getByTestId(id('RoomIdentityNoCard'))).toHaveTextContent('Directory.NoCardToShow')
+    expect(sheet(tree).queryByTestId(id('RoomIdentityViewCard'))).toBeNull()
+  })
+
+  test('your own sheet has neither', async () => {
+    const tree = await show()
+    await press(tree, 'RoomComposerPostingAsButton')
+    expect(sheet(tree).queryByTestId(id('RoomIdentityNoCard'))).toBeNull()
+    expect(sheet(tree).queryByTestId(id('RoomIdentityViewCard'))).toBeNull()
+  })
+
+  test('a name you gave comes before their own name', async () => {
+    mockNames = new Map([[THEM.did, 'River']])
+    mockDirectoryNames = new Map([[THEM.did, 'Saddle Q']])
+    const tree = await show()
+    expect(tree.getByTestId(id('RoomPostAuthor'))).toHaveTextContent('Rooms.PetnameLabel')
+    await press(tree, 'RoomPostAuthor')
+    expect(sheet(tree).getByTestId(id('RoomIdentityName'))).toHaveTextContent('River')
+    expect(sheet(tree).getByTestId(id('RoomIdentitySource'))).toHaveTextContent('Rooms.PetnameSource')
   })
 
   test('your own sheet offers your profile, never a name of your own for yourself', async () => {

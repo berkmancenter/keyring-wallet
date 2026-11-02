@@ -5,6 +5,7 @@ import {
   ROOMS_REQUIREMENTS,
   sampleCapabilities,
 } from '../capabilities'
+import { KEYS_ACT_TYPES } from '../real/wire'
 import type { RoomsOperation } from '../types'
 
 const SPEC = 'https://trusttasks.org/spec/'
@@ -56,6 +57,35 @@ describe('deriveCapabilities', () => {
           expect(type).toMatch(/^https:\/\/trusttasks\.org\/spec\/(rooms\/keys|vault\/credentials)\/[a-z-]+\/0\.\d+$/)
     }
   })
+})
+
+describe('posting needs rooms/keys/act at a version Keyring speaks', () => {
+  const at = (...versions: string[]) =>
+    deriveCapabilities({
+      agentLinked: true,
+      servedTypes: versions.map((v) => `${SPEC}rooms/keys/act/${v}`),
+      built: all,
+    })
+
+  it.each([['0.8'], ['0.9'], ['0.6'], ['0.5']])('an agent serving only act %s may post and curate', (v) => {
+    expect(at(v).write).toMatchObject({ status: 'available', reason: 'ok' })
+    expect(at(v).curate).toMatchObject({ status: 'available', reason: 'ok' })
+  })
+
+  it('control: an agent serving only act 0.1 and 0.7 may not', () => {
+    expect(at('0.1', '0.7').write).toMatchObject({ status: 'unavailable', reason: 'agentDoesNotServe' })
+    expect(at('0.1', '0.7').curate).toMatchObject({ status: 'unavailable', reason: 'agentDoesNotServe' })
+  })
+
+  // The ladder the client sends from is the set asked for, so a version added to it is never missing here.
+  it.each(KEYS_ACT_TYPES.map((type) => [type]))(
+    'an agent serving only %s, which the client sends, may post',
+    (type) => {
+      const caps = deriveCapabilities({ agentLinked: true, servedTypes: [type], built: all })
+      expect(caps.write).toMatchObject({ status: 'available', reason: 'ok' })
+      expect(caps.curate).toMatchObject({ status: 'available', reason: 'ok' })
+    }
+  )
 })
 
 describe('sampleCapabilities', () => {

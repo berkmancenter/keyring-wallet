@@ -19,7 +19,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityCardKey } from '../screens/CommunityCard'
 import { communityHeadingOf, didPathName } from '../screens/communityName'
-import VtaAgentHome, { forgetAgentHoldings } from '../screens/VtaAgentHome'
+import VtaAgentHome, { forgetAgentHoldings, ownHoldings } from '../screens/VtaAgentHome'
 import { localDate } from '../screens/localTime'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -97,6 +97,28 @@ function fakeAgent(records: Rec[]) {
 }
 
 const linkedAt = '2026-09-22T12:00:00Z'
+
+describe("what is and is not this agent's", () => {
+  const AGENT = 'did:webvh:example:vta'
+  const OTHER = 'did:webvh:example:vta-other'
+  const mine = { did: 'did:webvh:example:mine', vtaDid: AGENT } as never
+  const theirs = { did: 'did:webvh:example:theirs', vtaDid: OTHER } as never
+  const held = (personaDid: string) => ({ personaDid }) as never
+
+  it("leaves out a membership nothing ties to this agent, and one known to be another agent's", () => {
+    const { memberships } = ownHoldings(
+      [mine, theirs],
+      [held('did:webvh:example:theirs'), held('did:webvh:example:nobody')],
+      AGENT
+    )
+    expect(memberships).toEqual([])
+  })
+
+  it("keeps this agent's own: through its persona, and held as the agent itself", () => {
+    const own = [held('did:webvh:example:mine'), held(AGENT)]
+    expect(ownHoldings([mine, theirs], own, AGENT).memberships).toEqual(own)
+  })
+})
 
 describe('what your agent holds, card by card', () => {
   beforeEach(() => {
@@ -285,9 +307,9 @@ describe('a community heading, where several stand side by side', () => {
     expect(didPathName('did:peer:2.Ez6LSabc')).toBeUndefined()
   })
 
-  it('prefers a published name, then a claimed one, then says it is unnamed, with its path', () => {
-    // A bare path as a card's title read as the community's name (#12, IN-26).
-    expect(communityHeadingOf(A, t)).toBe('Community.UnnamedRef(ref=keyring-test-vtc)')
+  it('prefers a published name, then a claimed one, then its path (a title adds that it is unnamed)', () => {
+    // A bare path as a card's title read as the community's name (#12, IN-26): communityTitle says it is unnamed.
+    expect(communityHeadingOf(A, t)).toBe('keyring-test-vtc')
     communityTarget.set({ communityDid: A, name: 'Claimed' })
     expect(communityHeadingOf(A, t)).toBe('Community.ClaimedName(name=Claimed)')
     expect(communityHeadingOf(A, t, { claim: 'plain' })).toBe('Claimed')
@@ -298,8 +320,8 @@ describe('a community heading, where several stand side by side', () => {
   it('with no path, tells communities apart by the end of the SCID — not the host', () => {
     const one = communityHeadingOf('did:webvh:QmFirstOne111:vtc.example.org', t)
     const two = communityHeadingOf('did:webvh:QmSecondTwo222:vtc.example.org', t)
-    expect(one).toBe('Community.UnnamedRef(ref=…One111)')
-    expect(two).toBe('Community.UnnamedRef(ref=…Two222)')
+    expect(one).toBe('…One111')
+    expect(two).toBe('…Two222')
     expect(one).not.toContain('example')
   })
 })

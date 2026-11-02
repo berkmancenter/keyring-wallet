@@ -1,5 +1,11 @@
-import { AgentRoomsService, offerIdOf, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
-import { ROOMS_TASK } from '../real/wire'
+import {
+  AgentRoomsService,
+  KEPT_RETRY_FLOOR_MS,
+  offerIdOf,
+  type RoomsBackend,
+  type RoomsCommunity,
+} from '../real/agentRoomsService'
+import { OFFERS_LIST_TYPES, ROOMS_TASK } from '../real/wire'
 import { PREVIEW_TOKEN_TTL_MS, RoomsPreviewExpired, RoomsRefused, RoomsUnavailable } from '../types'
 
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', personaDid: 'did:key:persona-a' }
@@ -62,6 +68,21 @@ interface Setup {
   hidden?: string[]
   accept?: (payload: Record<string, unknown>) => unknown
   welcome?: () => unknown
+  /** The `vtc/rooms/offers/list` versions the community serves: all three unless given. */
+  lists?: string[]
+}
+
+/**
+ * A community's answer to `vtc/rooms/offers/list` at `type`, as the spec shapes it: 0.4's renewals name the instant
+ * `renewsAt` (vtc/_shared/0.4 `Renewal`), 0.3's `renews` (0.1), and 0.2 carries no renewals.
+ */
+const listAnswer = (type: string, offers: Record<string, unknown>[], renewals?: Record<string, unknown>[]) => {
+  if (type === ROOMS_TASK.offersList02) return { items: offers }
+  if (type === ROOMS_TASK.offersList03) return { items: offers, renewals }
+  return {
+    items: offers,
+    renewals: renewals?.map(({ renews, ...rest }) => ({ ...rest, renewsAt: renews })),
+  }
 }
 
 function setup(o: Setup = {}) {
@@ -102,7 +123,11 @@ function setup(o: Setup = {}) {
     }
   })
   const answer = (type: string, payload: Record<string, unknown>): unknown => {
-    if (type === ROOMS_TASK.offersList03) return { items: o.offers ?? [], renewals: o.renewals }
+    if ((OFFERS_LIST_TYPES as readonly string[]).includes(type)) {
+      const lists: readonly string[] = o.lists ?? OFFERS_LIST_TYPES
+      if (!lists.includes(type)) throw new FakeRefusal('unsupportedVersion')
+      return listAnswer(type, o.offers ?? [], o.renewals)
+    }
     if (type === ROOMS_TASK.offersAccept) {
       if (o.accept) return o.accept(payload)
       return { roomId: payload.roomId, state: 'admitted', epoch: 1, welcome: 'welcome-bytes' }
@@ -181,7 +206,7 @@ describe('AgentRoomsService offers', () => {
     })
     const offers = await service.listOffers()
 
-    expect(communityTask).toHaveBeenCalledWith(COMMUNITY.did, ROOMS_TASK.offersList03, {})
+    expect(communityTask).toHaveBeenCalledWith(COMMUNITY.did, ROOMS_TASK.offersList04, {})
     expect(offers.map((x) => x.roomId)).toEqual([OPEN_ROOM, SEALED_ROOM])
     expect(offers[0]).toMatchObject({
       offerId: offerIdOf(COMMUNITY.did, OPEN_ROOM),
@@ -195,36 +220,126 @@ describe('AgentRoomsService offers', () => {
     expect(sent(communityTask, ROOMS_TASK.offersAccept)).toHaveLength(0)
   })
 
+  it('carries the community\'s name only when it has one, never a cut of its DID (276.9: "nity-a-vtc")', async () => {
+    const { service, b } = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    const [unnamed] = await service.listOffers()
+    expect(unnamed.communityName).toBeUndefined()
+
+    b.communities = async () => [{ ...COMMUNITY, name: 'Keyring Lab' }]
+    const [named] = await service.listOffers()
+    expect(String(named.communityName)).toBe('Keyring Lab')
+  })
+
+  it("leaves out an accepted sealed offer while the agent can't say which rooms it holds: never offered as new (276.9)", async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open'), offer(SEALED_ROOM, 'attributed', 'accepted')] })
+    const answer = s.agentTask.getMockImplementation()!
+    s.agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysList02) throw new Error('the agent did not answer')
+      return answer(type, payload)
+    })
+    expect((await s.service.listOffers()).map((x) => x.roomId)).toEqual([OPEN_ROOM])
+    expect(s.b.warn).toHaveBeenCalledWith(expect.stringContaining(`whether ${SEALED_ROOM} was joined is unknown`))
+
+    // Control: the agent answers, and holds none: accepted elsewhere, not joined, so it is offered.
+    s.agentTask.mockImplementation(answer)
+    expect((await s.service.listOffers()).map((x) => x.roomId)).toEqual([OPEN_ROOM, SEALED_ROOM])
+  })
+
+  it('an offered room the community named none is what tells it apart, said to be that, never a cut of its ID (276.9)', async () => {
+    const unnamed = 'did:webvh:QmScid123456:rooms.example:community-a-vtc'
+    const { service } = setup({
+      offers: [offer(unnamed, 'open', 'open', { label: undefined }), offer(OPEN_ROOM, 'open', 'open')],
+    })
+    const [byId, named] = await service.listOffers()
+    expect(String(byId.roomName)).toBe('community-a-vtc')
+    expect(byId.roomNameFrom).toBe('roomId')
+    expect(String(named.roomName)).toBe(`Room ${OPEN_ROOM.slice(-7)}`)
+    expect(named).not.toHaveProperty('roomNameFrom')
+  })
+
   it('reads a community without renewals at 0.2', async () => {
-    const { service, communityTask } = setup()
-    communityTask.mockImplementation(async (_did: string, type: string) => {
-      if (type === ROOMS_TASK.offersList03) throw new FakeRefusal('unsupportedVersion')
-      return { items: [offer(OPEN_ROOM, 'open', 'open')] }
+    const { service, communityTask } = setup({
+      offers: [offer(OPEN_ROOM, 'open', 'open')],
+      lists: [ROOMS_TASK.offersList02],
     })
     expect((await service.listOffers()).map((x) => x.roomId)).toEqual([OPEN_ROOM])
-    expect(communityTask).toHaveBeenLastCalledWith(COMMUNITY.did, ROOMS_TASK.offersList02, {})
+    expect(communityTask.mock.calls.map((c) => c[1])).toEqual([...OFFERS_LIST_TYPES])
   })
 
   it('remembers a community answered at 0.2, and asks it 0.2 alone from then on', async () => {
-    const { service, communityTask } = setup()
-    communityTask.mockImplementation(async (_did: string, type: string) => {
-      if (type === ROOMS_TASK.offersList03) throw new FakeRefusal('unsupportedVersion')
-      return { items: [offer(OPEN_ROOM, 'open', 'open')] }
+    const { service, communityTask } = setup({
+      offers: [offer(OPEN_ROOM, 'open', 'open')],
+      lists: [ROOMS_TASK.offersList02],
     })
     await service.listOffers()
     await service.listOffers()
     await service.listOffers()
-    // One refused 0.3 on the first listing, then 0.2 only: four requests for three listings, not six.
+    // 0.4 and 0.3 refused once on the first listing, then 0.2 only: five requests for three listings, not nine.
+    expect(sent(communityTask, ROOMS_TASK.offersList04)).toHaveLength(1)
     expect(sent(communityTask, ROOMS_TASK.offersList03)).toHaveLength(1)
     expect(sent(communityTask, ROOMS_TASK.offersList02)).toHaveLength(3)
   })
 
-  it('keeps asking 0.3 of a community that serves it', async () => {
+  it('keeps asking 0.4 of a community that serves it', async () => {
     const { service, communityTask } = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
     await service.listOffers()
     await service.listOffers()
-    expect(sent(communityTask, ROOMS_TASK.offersList03)).toHaveLength(2)
-    expect(sent(communityTask, ROOMS_TASK.offersList02)).toHaveLength(0)
+    expect(sent(communityTask, ROOMS_TASK.offersList04)).toHaveLength(2)
+    expect(communityTask).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads a community that moved on to 0.4 alone (VTC 0.16) after it answered 0.2', async () => {
+    const lists: string[] = [ROOMS_TASK.offersList02]
+    const { service, communityTask } = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')], lists })
+    await service.listOffers()
+    lists.splice(0, 1, ROOMS_TASK.offersList04)
+    communityTask.mockClear()
+    expect((await service.listOffers()).map((x) => x.roomId)).toEqual([OPEN_ROOM])
+    expect(communityTask.mock.calls.map((c) => c[1])).toEqual([ROOMS_TASK.offersList02, ROOMS_TASK.offersList04])
+  })
+
+  it('control: any other refusal of 0.4 is passed on, not asked again at 0.3', async () => {
+    const { service, communityTask } = setup()
+    communityTask.mockImplementation(async () => {
+      throw new FakeRefusal('taskFailed', { code: 'vtc/rooms/offers/list:notAMember' })
+    })
+    // Asked of the one community, so its refusal reaches the caller rather than a warning.
+    await expect(service.listOffers(COMMUNITY.did)).rejects.toThrow()
+    expect(communityTask.mock.calls.map((c) => c[1])).toEqual([ROOMS_TASK.offersList04])
+  })
+
+  describe('a renewal, by the version the community serves', () => {
+    const renewal = {
+      roomId: JOINED_ROOM,
+      host: COMMUNITY.did,
+      validUntil: '2027-01-01T00:00:00Z',
+      renews: '2026-11-01T00:00:00Z',
+      issuedAt: '2026-10-26T00:00:00Z',
+      credentials: { membership: '{"id":"urn:vmc:new"}', authority: '{"id":"urn:vac:new"}' },
+    }
+
+    it.each([
+      ['VTC 0.16: 0.4 only (renewsAt)', [ROOMS_TASK.offersList04], ROOMS_TASK.offersList04],
+      ['VTC 0.15: 0.2 and 0.4', [ROOMS_TASK.offersList02, ROOMS_TASK.offersList04], ROOMS_TASK.offersList04],
+      ['a community at 0.3 (renews)', [ROOMS_TASK.offersList02, ROOMS_TASK.offersList03], ROOMS_TASK.offersList03],
+    ])('%s: is stored in place of what it renews', async (_label, lists, answered) => {
+      const { service, agentTask, communityTask } = setup({ renewals: [renewal], held: [JOINED_ROOM], lists })
+      await service.listOffers()
+      expect(communityTask).toHaveBeenLastCalledWith(COMMUNITY.did, answered, {})
+      expect(sent(agentTask, ROOMS_TASK.vaultReceive)).toHaveLength(2)
+    })
+
+    it('control: a renewal naming neither renewsAt nor renews is left, and nothing is stored', async () => {
+      const unnamed: Record<string, unknown> = { ...renewal }
+      delete unnamed.renews
+      const { service, agentTask } = setup({
+        renewals: [unnamed],
+        held: [JOINED_ROOM],
+        lists: [ROOMS_TASK.offersList03],
+      })
+      await service.listOffers()
+      expect(sent(agentTask, ROOMS_TASK.vaultReceive)).toHaveLength(0)
+    })
   })
 
   it('stores a renewal in place of what it renews, once, and never accepts it', async () => {
@@ -344,7 +459,7 @@ describe('AgentRoomsService offers', () => {
       invitation: credentials(SEALED_ROOM).invitation,
     })
     expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysBackfill, { roomId: SEALED_ROOM, host: COMMUNITY.did })
-    const after = calls.slice(calls.lastIndexOf(ROOMS_TASK.offersList03) + 1)
+    const after = calls.slice(calls.lastIndexOf(ROOMS_TASK.offersList04) + 1)
     expect(after).toEqual([
       ROOMS_TASK.vaultReceive,
       ROOMS_TASK.vaultReceive,
@@ -502,7 +617,8 @@ describe('AgentRoomsService offers', () => {
     })
     const err = await s.service.previewOffer(offerIdOf(COMMUNITY.did, SEALED_ROOM)).catch((e) => e)
     expect(err).toMatchObject({ name: 'RoomsUnavailable', reason: 'agentDoesNotServe' })
-    expect((err as Error).message).toContain(ROOMS_TASK.keysAct06)
+    // Named at the newest version this client speaks.
+    expect((err as Error).message).toContain(ROOMS_TASK.keysAct09)
   })
 
   it('needs the agent’s vault to accept at all', async () => {
@@ -587,5 +703,79 @@ describe('the shared key-list read across an accept', () => {
     release()
     expect(await accepting).toEqual({ roomId: SEALED_ROOM })
     await listing
+  })
+})
+
+// 10-31, a phone in two communities: a vetting step keeps the community session as the other community's persona,
+// and a rooms listing is refused for now (vtiAgent VtiSessionHeld). The community screen asked for its own community's
+// offers, and the refusal failed the whole section ("Couldn't read your rooms"), with nothing to read it again.
+describe('a community the session is kept from for now', () => {
+  const kept = () =>
+    Object.assign(new Error("vtiAgent: the session is kept for another of this phone's identities"), {
+      name: 'VtiSessionHeld',
+    })
+  const keptSetup = () => {
+    const s = setup()
+    let free!: () => void
+    const sessionFree = jest.fn(() => new Promise<void>((resolve) => (free = resolve)))
+    s.b.sessionKept = (e) => e instanceof Error && e.name === 'VtiSessionHeld'
+    s.b.sessionFree = sessionFree
+    s.communityTask.mockImplementation(async () => {
+      throw kept()
+    })
+    const readable = jest.fn()
+    s.service.onReadable(readable)
+    return { ...s, sessionFree, readable, free: () => free() }
+  }
+  const settle = () => new Promise((r) => setTimeout(r, 0))
+
+  it("lists the asked community's offers as none for now, and says once when it can be read again", async () => {
+    const s = keptSetup()
+    await expect(s.service.listOffers(COMMUNITY.did)).resolves.toEqual([])
+    // A second listing skipped meanwhile waits on the same wait.
+    await expect(s.service.listOffers(COMMUNITY.did)).resolves.toEqual([])
+    expect(s.sessionFree).toHaveBeenCalledTimes(1)
+    expect(s.sessionFree).toHaveBeenCalledWith(COMMUNITY.did)
+    expect(s.readable).not.toHaveBeenCalled()
+    s.free()
+    await settle()
+    expect(s.readable).toHaveBeenCalledTimes(1)
+  })
+
+  it('still fails the asked community on any other refusal', async () => {
+    const s = keptSetup()
+    s.communityTask.mockImplementation(async () => {
+      throw new Error('community unreachable')
+    })
+    await expect(s.service.listOffers(COMMUNITY.did)).rejects.toThrow('community unreachable')
+    expect(s.sessionFree).not.toHaveBeenCalled()
+  })
+
+  // A step's asks come in bursts: the read again, refused at once, does not come straight back.
+  it('says "readable again" no sooner than the floor after it last said so', async () => {
+    const s = keptSetup()
+    await s.service.listOffers(COMMUNITY.did)
+    s.free()
+    await settle()
+    expect(s.readable).toHaveBeenCalledTimes(1)
+    expect(s.sleeps).toEqual([])
+    await s.service.listOffers(COMMUNITY.did)
+    s.advance(3_000)
+    s.free()
+    await settle()
+    expect(s.sleeps).toEqual([KEPT_RETRY_FLOOR_MS - 3_000])
+    expect(s.readable).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops telling a listener that unsubscribed', async () => {
+    const s = keptSetup()
+    const later = jest.fn()
+    const stop = s.service.onReadable(later)
+    stop()
+    await s.service.listOffers(COMMUNITY.did)
+    s.free()
+    await settle()
+    expect(s.readable).toHaveBeenCalledTimes(1)
+    expect(later).not.toHaveBeenCalled()
   })
 })

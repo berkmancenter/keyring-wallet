@@ -30,11 +30,15 @@ const POLICY_GET = 'https://trusttasks.org/spec/policy/get/0.1'
 const POLICY_UPSERT = 'https://trusttasks.org/spec/policy/upsert/0.2'
 const CONTEXTS_CREATE = 'https://trusttasks.org/spec/vta/contexts/create/1.0'
 const CONTEXTS_DELETE = 'https://trusttasks.org/spec/vta/contexts/delete/1.0'
+const CONTEXTS_DELETE_11 = 'https://trusttasks.org/spec/vta/contexts/delete/1.1'
+const DISCOVERY = 'https://trusttasks.org/spec/trust-task-discovery/0.3'
 const VTA = 'did:webvh:QmFarm:farm.example:alice'
 const PHONE = 'did:peer:2.phone'
 const BACKUP = 'did:peer:2.backup'
 const TEMPORARY = 'did:key:z6Mktemporary'
 const PERMANENT = 'did:peer:2.permanent'
+/** The Farm a claimed agent came from (the vta-claim code's `_from`). */
+const FARM = 'did:webvh:QmHost:farm.example'
 
 type Plain = { from: string; body: { type: string; payload: Record<string, unknown> } }
 type Row = { role: string; scopes?: string[]; label?: string; expiresAt?: string }
@@ -62,6 +66,12 @@ const mockVta = {
   /** The reserved `approvals` row, as vta-service keeps it (operations/policy.rs). */
   policy: undefined as { version: number; module: string; ext: Record<string, unknown> } | undefined,
   contexts: new Set<string>(),
+  /** The contexts/delete versions this agent dispatches: only 1.0 before vta-service v0.67.0, only 1.1 from 61c23f20. */
+  contextsDelete: [CONTEXTS_DELETE] as string[],
+  /** trust-task-discovery/0.3's `supportedTypes`; undefined: discovery is not served. */
+  discovery: undefined as string[] | undefined,
+  /** Hold every task a consent rule in the approvals row names, by its exact type URI (policy_gate.rs, the Rego). */
+  enforceRules: false,
 }
 const mockSessions: { did: string; onMessage: (m: unknown) => void; open: boolean }[] = []
 let mockMinted: string[] = []
@@ -156,7 +166,12 @@ jest.mock('../module/VtiMediatorTransport', () => ({
         refuse(injected)
         return
       }
-      if (mockVta.consentFor.has(body.type) && !mockVta.consentGranted) {
+      const ruled =
+        mockVta.enforceRules &&
+        ((mockVta.policy?.ext['openvtc.approvals'] ?? []) as { taskType: string; requires: string }[]).some(
+          (rule) => rule.requires === 'consent' && rule.taskType === body.type
+        )
+      if ((mockVta.consentFor.has(body.type) || ruled) && !mockVta.consentGranted) {
         // policy_gate.rs consent_gate: held, with the challenge in details.
         refuse({
           code: 'taskFailed',
@@ -226,8 +241,25 @@ jest.mock('../module/VtiMediatorTransport', () => ({
           mockAnswer(this.record, `${CONTEXTS_CREATE}#response`, { id: payload.id, name: payload.name })
           return
         case CONTEXTS_DELETE:
+        case CONTEXTS_DELETE_11:
+          if (!mockVta.contextsDelete.includes(body.type)) {
+            // helpers.rs method_not_found: the family is served, at another version.
+            refuse({
+              code: 'unsupportedVersion',
+              message: `no handler for ${body.type}`,
+              details: { servedVersions: mockVta.contextsDelete },
+            })
+            return
+          }
           mockVta.contexts.delete(String(payload.id))
-          mockAnswer(this.record, `${CONTEXTS_DELETE}#response`, { id: payload.id, deleted: true })
+          mockAnswer(this.record, `${body.type}#response`, { id: payload.id, deleted: true })
+          return
+        case DISCOVERY:
+          if (!mockVta.discovery) {
+            refuse({ code: 'unsupportedType', message: `no handler for ${body.type}` })
+            return
+          }
+          mockAnswer(this.record, `${DISCOVERY}#response`, { supportedTypes: mockVta.discovery })
           return
         case SWAP: {
           const newSubject = String(payload.newSubject)
@@ -462,6 +494,9 @@ beforeEach(() => {
   mockVta.whoami = { roles: ['admin'] }
   mockVta.policy = undefined
   mockVta.contexts = new Set()
+  mockVta.contextsDelete = [CONTEXTS_DELETE]
+  mockVta.discovery = undefined
+  mockVta.enforceRules = false
   mockSessions.length = 0
   mockMinted = []
   for (const key of Object.keys(mockClientOptions)) delete mockClientOptions[key]
@@ -1045,6 +1080,102 @@ describe('creating an agent', () => {
     expect(mockVta.acl.has(TEMPORARY)).toBe(false)
   })
 
+  // IN-388: the Farm signs the person in by the key the agent was claimed with (vtafarm-api c437bfbb, the
+  // binding is `mobile_connections.admin_did`), not by the long-term key the phone swaps onto.
+  it('a claimed agent keeps its Farm and claim key after the swap onto the long-term key, and the key is not deleted', async () => {
+    const { vta, disk } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    const deleteKey = jest.fn()
+    const withKms = { ...(agent as object), kms: { deleteKey } } as never
+    const key = await vta.createClaimKey(withKms)
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.finishClaimedLink(withKms, VTA, key, FARM)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    // Swapped: the agent knows the long-term key only, and the phone acts as it.
+    expect(mockVta.acl.has(PERMANENT)).toBe(true)
+    expect(mockVta.acl.has(TEMPORARY)).toBe(false)
+    expect(disk.manager?.did).toBe(PERMANENT)
+    expect(disk.link?.farmLogin).toEqual({ farmDid: FARM, did: TEMPORARY })
+    expect(deleteKey).not.toHaveBeenCalled()
+  })
+
+  it('a claimed agent that takes its key only later still keeps its Farm', async () => {
+    const { vta, disk } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    const key = await vta.createClaimKey(agent)
+    await vta.finishClaimedLink(agent, VTA, key, FARM)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: VTA, did: TEMPORARY })
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link?.farmLogin).toEqual({ farmDid: FARM, did: TEMPORARY })
+  })
+
+  // A guard: on main nothing records a Farm at all, so this passes there too.
+  it('a claim given up records no Farm on a later link of the same agent made with another key', async () => {
+    const { vta, disk } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    // Restored, as in the app: a cancel then forgets the key given up (IN-135), and the next link makes a new one.
+    await vta.restore(agent)
+    await vta.finishClaimedLink(agent, VTA, 'did:key:z6MkClaimedThenGivenUp', FARM)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: VTA })
+    vta.cancelLink()
+    await until(() => vta.getState().link.kind === 'notLinked' && disk.manager === undefined)
+    mockMinted = []
+    await vta.startManualLink(agent, VTA, 'farm.example')
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link?.farmLogin).toBeUndefined()
+  })
+
+  // A swap the agent never makes undoes the link, Farm and all, and keeps the claim key for a Try again (IN-135).
+  // The Farm still knows that key, so the link a Try again makes must know its Farm too.
+  it('a claim whose swap is refused, tried again with the same key, keeps its Farm', async () => {
+    const deviceCanOwn = jest.fn(async () => true)
+    const { vta, disk } = freshPhone({ deviceCanOwn })
+    const key = await vta.createClaimKey(agent)
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    mockVta.refuseNext.set(SWAP, { code: 'permissionDenied', message: 'forbidden: super admin role required' })
+    await vta.finishClaimedLink(agent, VTA, key, FARM)
+    await until(() => vta.getState().link.kind === 'notLinked')
+    expect(disk.link).toBeUndefined()
+    expect(await vta.pendingLinkKey(agent, VTA)).toMatchObject({ did: TEMPORARY })
+    await vta.startManualLink(agent, VTA, 'farm.example')
+    await vta.checkManualGrant(agent)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link?.farmLogin).toEqual({ farmDid: FARM, did: TEMPORARY })
+  })
+
+  it('the same after the app restarts between the refused swap and the Try again', async () => {
+    const deviceCanOwn = jest.fn(async () => true)
+    const { vta, disk, links, identities } = freshPhone({ deviceCanOwn })
+    const key = await vta.createClaimKey(agent)
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    mockVta.refuseNext.set(SWAP, { code: 'permissionDenied', message: 'forbidden: super admin role required' })
+    await vta.finishClaimedLink(agent, VTA, key, FARM)
+    await until(() => vta.getState().link.kind === 'notLinked')
+    const restarted = new VtaAgentController()
+    alive.push(restarted)
+    restarted.configure({ linkStore: () => links, identityStore: () => identities as never, deviceCanOwn })
+    await restarted.startManualLink(agent, VTA, 'farm.example')
+    await restarted.checkManualGrant(agent)
+    expect(restarted.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link?.farmLogin).toEqual({ farmDid: FARM, did: TEMPORARY })
+  })
+
+  it("the Farm sign-in key stays on the link through the link's later writes", async () => {
+    const farmLogin = { farmDid: FARM, did: TEMPORARY }
+    const p = phone({
+      manager: linkedManager,
+      link: { vtaDid: VTA, label: 'farm.example', linkedAt: 'x', owner: true, farmLogin },
+    })
+    const vta = new VtaAgentController()
+    alive.push(vta)
+    vta.configure({ linkStore: () => p.links, identityStore: () => p.identities as never })
+    await vta.restore(agent)
+    await until(() => p.disk.link?.lastOnlineAt !== undefined)
+    await vta.nameAgent(agent, VTA, 'Home agent')
+    expect(p.disk.link).toMatchObject({ nickname: 'Home agent', farmLogin })
+  })
+
   it('a claimed agent that has not taken the key yet waits on it, and a later check finishes', async () => {
     const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
     const key = await vta.createClaimKey(agent)
@@ -1564,7 +1695,57 @@ describe('"Ask me before…": the agent\'s approval rules', () => {
     const { vta } = await linkedPhone()
     expect(await vta.sendTestRequest(agent)).toEqual({ kind: 'letThrough', cleanedUp: true })
     expect(sentOf(CREATE)[0].payload).toMatchObject({ name: 'Keyring test request' })
+    // An agent before vta-service v0.67.0 refuses 1.1 and is asked 1.0.
+    expect(sentOf(CONTEXTS_DELETE_11)).toHaveLength(1)
     expect(sentOf(CONTEXTS_DELETE)[0].payload).toEqual({ id: sentOf(CREATE)[0].payload.id, force: true })
     expect(mockVta.contexts.size).toBe(0)
+  })
+
+  it('an agent serving contexts/delete only at 1.1 has the test context deleted at 1.1', async () => {
+    mockVta.contextsDelete = [CONTEXTS_DELETE_11]
+    const { vta } = await linkedPhone()
+    expect(await vta.sendTestRequest(agent)).toEqual({ kind: 'letThrough', cleanedUp: true })
+    expect(sentOf(CONTEXTS_DELETE_11)[0].payload).toEqual({ id: sentOf(CREATE)[0].payload.id, force: true })
+    expect(sentOf(CONTEXTS_DELETE)).toEqual([])
+    expect(mockVta.contexts.size).toBe(0)
+  })
+
+  it('"ask me before deleting a context" names every version the agent dispatches', async () => {
+    const ruleOf = () => (rulesHeld() as { taskType: string }[]).map((r) => r.taskType)
+    mockVta.discovery = [CONTEXTS_DELETE_11, CREATE]
+    const { vta } = await linkedPhone()
+    const on = await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, true)
+    expect(ruleOf()).toEqual([CONTEXTS_DELETE_11])
+    expect(on.view.offered.find((o) => o.key === 'contextsDelete')).toMatchObject({ on: true, renew: false })
+
+    // v0.67.0 dispatches both, gated apart.
+    mockVta.discovery = [CONTEXTS_DELETE, CONTEXTS_DELETE_11, CREATE]
+    await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, true)
+    expect(ruleOf()).toEqual([CONTEXTS_DELETE_11, CONTEXTS_DELETE])
+    await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, false)
+    expect(ruleOf()).toEqual([])
+  })
+
+  it('on an agent updated to serve contexts/delete only at 1.1, an old 1.0 rule reads off and, turned on again, holds', async () => {
+    // Turned on while the agent served only 1.0.
+    mockVta.discovery = [CONTEXTS_DELETE, CREATE]
+    mockVta.enforceRules = true
+    const { vta } = await linkedPhone()
+    await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, true)
+
+    // The agent is updated (61c23f20): 1.1 only. The 1.0 rule now holds nothing — the test context goes unasked.
+    mockVta.contextsDelete = [CONTEXTS_DELETE_11]
+    mockVta.discovery = [CONTEXTS_DELETE_11, CREATE]
+    expect(await vta.sendTestRequest(agent)).toEqual({ kind: 'letThrough', cleanedUp: true })
+    expect((await vta.approvalRules(agent)).view.offered.find((o) => o.key === 'contextsDelete')).toMatchObject({
+      on: false,
+      renew: true,
+    })
+
+    // Turned on again: the rule is re-written at 1.1, and a deletion is held for this phone's approval.
+    const renewed = await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, true)
+    expect(renewed.view.offered.find((o) => o.key === 'contextsDelete')).toMatchObject({ on: true, renew: false })
+    expect(await vta.sendTestRequest(agent)).toEqual({ kind: 'letThrough', cleanedUp: false })
+    expect(mockVta.contexts.size).toBe(1)
   })
 })

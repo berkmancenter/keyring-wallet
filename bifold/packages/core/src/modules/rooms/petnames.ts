@@ -11,6 +11,8 @@
 
 import type { Agent } from '@credo-ts/core'
 
+import { createKeyLock } from '../../utils/keyLock'
+
 const PETNAME_TYPE = 'rooms-petname'
 const petnameId = (communityDid: string, memberDid: string): string => `${PETNAME_TYPE}:${communityDid}|${memberDid}`
 
@@ -27,16 +29,7 @@ export const tidyPetname = (name: string | undefined): string | undefined => {
 }
 
 // One member's reads and writes in turn: two saves at once would both find no record and both create one.
-const queues = new Map<string, Promise<unknown>>()
-function inTurn<T>(key: string, task: () => Promise<T>): Promise<T> {
-  const next = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(task)
-  queues.set(key, next)
-  const done = () => {
-    if (queues.get(key) === next) queues.delete(key)
-  }
-  next.then(done, done)
-  return next
-}
+const inTurn = createKeyLock()
 
 // Screens showing a community's names, told when one changes so a name given on the sheet shows in the chat at once.
 const listeners = new Map<string, Set<() => void>>()
@@ -74,8 +67,8 @@ export async function loadPetnames(agent: Agent, communityDid: string): Promise<
 }
 
 /**
- * Keep `name` as your name for this member, in place of any you gave before. A blank name changes nothing: removing
- * a name you gave is not offered yet (it comes with a store build), so the screens never let one be saved blank.
+ * Keep `name` as your name for this member, in place of any you gave before. A blank name changes nothing, so a name
+ * is only ever removed by asking to remove it (removePetname), never by an empty field.
  */
 export async function savePetname(agent: Agent, communityDid: string, memberDid: string, name: string): Promise<void> {
   const id = petnameId(communityDid, memberDid)
@@ -93,6 +86,16 @@ export async function savePetname(agent: Agent, communityDid: string, memberDid:
       content: { name: tidy },
       tags: { type: PETNAME_TYPE, communityDid, memberDid },
     })
+  })
+  listeners.get(communityDid)?.forEach((onChange) => onChange())
+}
+
+/** Remove your name for this member; none to remove is not a failure. */
+export async function removePetname(agent: Agent, communityDid: string, memberDid: string): Promise<void> {
+  const id = petnameId(communityDid, memberDid)
+  await inTurn(id, async () => {
+    const existing = await agent.genericRecords.findById(id)
+    if (existing) await agent.genericRecords.delete(existing)
   })
   listeners.get(communityDid)?.forEach((onChange) => onChange())
 }

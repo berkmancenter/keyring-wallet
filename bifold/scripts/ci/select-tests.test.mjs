@@ -146,10 +146,12 @@ test('guards: a test that reads from disk, or imports a helper that does; not on
     '/p/src/__tests__/fixtures/registryDrift.ts': "const t = fs.readdirSync('src')",
     '/p/src/__tests__/plain.test.ts': "import { a } from '../a'",
     '/p/src/__tests__/globby.test.ts': "const g = require('fast-glob')",
+    '/p/src/__tests__/checker.test.ts': 'const program = ts.createProgram(roots, options, host)',
   }
   const tests = Object.keys(files).filter((f) => f.endsWith('.test.ts'))
   const guards = findGuards(tests, ['/p/src/__tests__/fixtures/registryDrift.ts'], (f) => files[f])
   assert.deepEqual(guards.sort(), [
+    '/p/src/__tests__/checker.test.ts',
     '/p/src/__tests__/drift.test.ts',
     '/p/src/__tests__/globby.test.ts',
     '/p/src/__tests__/plainWords.test.ts',

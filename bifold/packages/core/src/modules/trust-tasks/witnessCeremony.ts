@@ -285,7 +285,7 @@ export interface RunWitnessSessionOptions {
    * `false`, which explicitly declines and is recorded as such).
    */
   localityOffered?: boolean
-  /** Runs the device's radio-side half once the sensor directive arrives. `NullDeviceLocalityProvider` until item 9's real BLE peripheral exists. */
+  /** Runs the device's radio-side half once the sensor directive arrives. `ceremony.ts` passes `createDeviceLocalityProvider`'s result; when absent, no transcript is produced, as with `NullDeviceLocalityProvider`. */
   deviceLocalityProvider?: DeviceLocalityProvider
 }
 

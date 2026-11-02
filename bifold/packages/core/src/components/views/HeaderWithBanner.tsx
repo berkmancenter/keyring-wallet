@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native'
 import { StackHeaderProps, Header } from '@react-navigation/stack'
 import { useServices, TOKENS } from '../../container-api'
 import { useTheme } from '../../contexts/theme'
+import { SiblingNoticeStrip } from '../../modules/trust-tasks/screens/SiblingNoticeHost'
 import { VETTER_HEADER, VetterHeaderBackground } from './VetterHeaderBackground'
 
 const HeaderWithBanner: React.FC<StackHeaderProps> = (props) => {
@@ -32,6 +33,7 @@ const HeaderWithBanner: React.FC<StackHeaderProps> = (props) => {
       {GradientBg && <GradientBg style={StyleSheet.absoluteFillObject} />}
       <Header {...gradientProps} />
       <NotificationBanner />
+      <SiblingNoticeStrip />
     </View>
   )
 }

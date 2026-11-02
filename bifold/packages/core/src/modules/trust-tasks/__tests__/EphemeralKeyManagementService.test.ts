@@ -4,7 +4,20 @@
  * crypto is Credo's own Askar KMS; the TSP adapter's test shows key agreement
  * finding a held key, and the lab run shows the phone signing with one.
  */
-const provisioned: { uri: string; closed: boolean }[] = []
+type Provisioned = {
+  uri: string
+  closed: boolean
+  /** Sessions open now, and what each close and the store's close did, in order. */
+  open: number
+  log: string[]
+  /** The next session opens fail with this, as Askar's do. */
+  failOpen?: string
+  /** Held open before failing: a use that started on this store and hears only later. */
+  failsLate?: Promise<void>
+  /** Said by the failure's cause, not its message. */
+  failCause?: string
+}
+const provisioned: Provisioned[] = []
 
 jest.mock('@openwallet-foundation/askar-shared', () => {
   const actual = jest.requireActual('@openwallet-foundation/askar-shared')
@@ -12,18 +25,35 @@ jest.mock('@openwallet-foundation/askar-shared', () => {
     ...actual,
     Store: {
       provision: jest.fn(async ({ uri }: { uri: string }) => {
-        const entry = { uri, closed: false }
+        const entry: Provisioned = { uri, closed: false, open: 0, log: [] }
         provisioned.push(entry)
         const keys = new Map<string, unknown>()
         return {
           session: () => ({
-            open: async () => ({
-              fetchKey: async ({ name }: { name: string }) => (keys.has(name) ? { key: keys.get(name) } : null),
-              insertKey: async ({ name, key }: { name: string; key: unknown }) => void keys.set(name, key),
-              close: async () => undefined,
-            }),
+            open: async () => {
+              if (entry.failOpen) {
+                const late = entry.failsLate
+                entry.failsLate = undefined
+                await late
+                throw Object.assign(new Error(entry.failOpen), {
+                  cause: entry.failCause ? new Error(entry.failCause) : undefined,
+                })
+              }
+              entry.open++
+              return {
+                fetchKey: async ({ name }: { name: string }) => (keys.has(name) ? { key: keys.get(name) } : null),
+                insertKey: async ({ name, key }: { name: string; key: unknown }) => void keys.set(name, key),
+                close: async () => {
+                  entry.open--
+                  entry.log.push('session closed')
+                },
+              }
+            },
           }),
-          close: async () => void (entry.closed = true),
+          close: async () => {
+            entry.closed = true
+            entry.log.push('store closed')
+          },
         }
       }),
     },
@@ -141,6 +171,230 @@ describe('the in-memory key backend', () => {
     await kms.importKey(ctx, { privateJwk: { kid: 'vta-copy:a:k2' } } as never)
     expect(provisioned).toHaveLength(2)
     await expect(kms.getPublicKey(ctx, 'vta-copy:a:k')).resolves.toBeNull()
+  })
+})
+
+// An in-memory database lasts while a connection to it is open, and the pool closes one left idle: every session then
+// failed "no such table: profiles", until a relaunch (SFSP-52TJ).
+describe('the in-memory database stays, and comes back if it goes', () => {
+  const GONE = 'Error pinging session\nCaused by: error returned from database: (code: 1) no such table: profiles'
+  const ctx = {} as never
+  const KEY = 'vta-copy:one'
+  const sign = (kms: EphemeralKeyManagementService) =>
+    kms.sign(ctx, { keyId: KEY, algorithm: 'EdDSA', data: new Uint8Array([1]) } as never)
+  const importKey = (kms: EphemeralKeyManagementService) =>
+    kms.importKey(ctx, { privateJwk: { kid: KEY, kty: 'OKP', crv: 'Ed25519', x: 'x', d: 'd' } } as never)
+  const fetcherFor = (kms: EphemeralKeyManagementService) => {
+    const fetch = jest.fn(async () => void (await importKey(kms)))
+    kms.setMissingKeyFetcher(fetch)
+    return fetch
+  }
+  let warn: jest.SpyInstance
+
+  beforeEach(() => {
+    provisioned.length = 0
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+  afterEach(() => warn.mockRestore())
+
+  it('keeps one session open for the store, past every use', async () => {
+    const kms = new EphemeralKeyManagementService()
+    await importKey(kms)
+    await importKey(kms).catch(() => undefined)
+    expect(provisioned[0].open).toBe(1)
+  })
+
+  it('closes that session, then the store, when cleared', async () => {
+    const kms = new EphemeralKeyManagementService()
+    await importKey(kms)
+    provisioned[0].log.length = 0
+    await kms.clear()
+    expect(provisioned[0].log).toEqual(['session closed', 'store closed'])
+    expect(provisioned[0].open).toBe(0)
+  })
+
+  it('leaves nothing open when cleared while the store is still being made', async () => {
+    const kms = new EphemeralKeyManagementService()
+    const importing = importKey(kms).catch(() => undefined)
+    await kms.clear()
+    await importing
+    await kms.clear()
+    expect(provisioned.every((p) => p.open === 0 && p.closed)).toBe(true)
+  })
+
+  it('works without that session if it cannot open', async () => {
+    const kms = new EphemeralKeyManagementService()
+    const { Store } = jest.requireMock('@openwallet-foundation/askar-shared') as {
+      Store: { provision: jest.Mock }
+    }
+    const real = Store.provision.getMockImplementation()!
+    Store.provision.mockImplementationOnce(async (options: unknown) => {
+      const store = await real(options)
+      const session = store.session
+      let first = true
+      store.session = () => {
+        if (!first) return session()
+        first = false
+        return { open: async () => Promise.reject(new Error('busy')) }
+      }
+      return store
+    })
+    await importKey(kms)
+    expect(await kms.isHeld(KEY)).toBe(true)
+  })
+
+  it('a database gone is made again, the key fetched again, and the use goes on', async () => {
+    const kms = new EphemeralKeyManagementService()
+    const fetch = fetcherFor(kms)
+    await sign(kms)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    provisioned[0].failOpen = GONE
+
+    await expect(sign(kms)).resolves.toBeTruthy()
+    expect(provisioned).toHaveLength(2)
+    expect(provisioned[0].closed).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(provisioned[1].open).toBe(1)
+  })
+
+  it('is made again once however many uses find it gone', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    provisioned[0].failOpen = GONE
+
+    await Promise.all([sign(kms), sign(kms), sign(kms), sign(kms)])
+    expect(provisioned).toHaveLength(2)
+  })
+
+  it('all of them wait on one new store while it is still being made', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    const { Store } = jest.requireMock('@openwallet-foundation/askar-shared') as {
+      Store: { provision: jest.Mock }
+    }
+    const real = Store.provision.getMockImplementation()!
+    let release: () => void = () => undefined
+    const held = new Promise<void>((resolve) => (release = resolve))
+    Store.provision.mockImplementation(async (options: unknown) => {
+      await held
+      return real(options)
+    })
+    provisioned[0].failOpen = GONE
+
+    const uses = Promise.all([sign(kms), sign(kms), sign(kms), sign(kms)])
+    // Every use has found the store gone, and none has a new one yet.
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+    release()
+    await uses
+    Store.provision.mockImplementation(real)
+
+    expect(provisioned).toHaveLength(2)
+  })
+
+  it('a database found gone through the cause alone is made again too', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    provisioned[0].failOpen = 'Error pinging session'
+    provisioned[0].failCause = 'no such table: profiles'
+
+    await expect(sign(kms)).resolves.toBeTruthy()
+    expect(provisioned).toHaveLength(2)
+  })
+
+  it('a use already past its check fails once, plainly, and the next one goes on', async () => {
+    const kms = new EphemeralKeyManagementService()
+    const fetch = fetcherFor(kms)
+    await sign(kms)
+    // Gone in the moment between the check that the copy is held and the use of it.
+    jest.spyOn(kms, 'isHeld').mockImplementationOnce(async () => {
+      provisioned[0].failOpen = GONE
+      return true
+    })
+
+    await expect(sign(kms)).rejects.toThrow(/not found in backend/)
+    await expect(sign(kms)).resolves.toBeTruthy()
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(provisioned).toHaveLength(2)
+  })
+
+  it('a fetch under way when the database goes lands in the new store', async () => {
+    const kms = new EphemeralKeyManagementService()
+    await importKey(kms)
+    provisioned[0].failOpen = GONE
+    await kms.importKey(ctx, {
+      privateJwk: { kid: 'vta-copy:late', kty: 'OKP', crv: 'Ed25519', x: 'x', d: 'd' },
+    } as never)
+
+    expect(provisioned).toHaveLength(2)
+    expect(await kms.isHeld('vta-copy:late')).toBe(true)
+  })
+
+  it('a use that hears late about the old store leaves the new one alone', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    let release: () => void = () => undefined
+    provisioned[0].failsLate = new Promise((resolve) => (release = resolve))
+    provisioned[0].failOpen = GONE
+    const late = sign(kms)
+    await Promise.resolve()
+
+    await sign(kms)
+    expect(provisioned).toHaveLength(2)
+    release()
+    await late
+
+    expect(provisioned).toHaveLength(2)
+    expect(provisioned[1].closed).toBe(false)
+  })
+
+  it('a key that failed to fetch a moment ago is asked for again once the database is back', async () => {
+    const kms = new EphemeralKeyManagementService()
+    await kms.importKey(ctx, {
+      privateJwk: { kid: 'vta-copy:other', kty: 'OKP', crv: 'Ed25519', x: 'x', d: 'd' },
+    } as never)
+    const fetch = jest.fn<Promise<void>, []>(async () => {
+      throw new Error('the agent is offline')
+    })
+    kms.setMissingKeyFetcher(fetch)
+    await expect(sign(kms)).rejects.toThrow('the agent is offline')
+    fetch.mockImplementation(async () => void (await importKey(kms)))
+    provisioned[0].failOpen = GONE
+
+    await expect(sign(kms)).resolves.toBeTruthy()
+  })
+
+  it('says in the Release log that it happened, naming no key', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    provisioned[0].failOpen = GONE
+    await sign(kms)
+    const said = warn.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(said).toContain('in-memory key store')
+    expect(said).not.toContain(KEY)
+  })
+
+  it('without a way to fetch, the use fails as any missing key does, and does not loop', async () => {
+    const kms = new EphemeralKeyManagementService()
+    await importKey(kms)
+    provisioned[0].failOpen = GONE
+    await expect(sign(kms)).rejects.toThrow(/not found in backend/)
+    expect(provisioned).toHaveLength(2)
+  })
+
+  it('leaves any other failure alone: the store and its keys stay', async () => {
+    const kms = new EphemeralKeyManagementService()
+    fetcherFor(kms)
+    await sign(kms)
+    provisioned[0].failOpen = 'Error acquiring pool connection'
+
+    await expect(sign(kms)).rejects.toThrow('Error acquiring pool connection')
+    expect(provisioned).toHaveLength(1)
+    expect(provisioned[0].closed).toBe(false)
   })
 })
 

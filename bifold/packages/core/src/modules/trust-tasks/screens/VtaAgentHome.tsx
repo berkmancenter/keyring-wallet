@@ -28,6 +28,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { heldByAgent } from '../module/heldByAgent'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { agentTransition, vtaAgent } from '../module/vtaAgent'
@@ -40,7 +41,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { RoomsCard } from '../../rooms/components/RoomsCard'
 import { useMyRooms } from '../../rooms/useMyRooms'
 import { useRereadOnReturn } from '../../rooms/useRereadOnReturn'
-import { useRoomOffersCount } from '../../rooms/useRoomOffersCount'
+import { useRoomOffersBadge } from '../../rooms/useRoomOffersCount'
 import { useRoomsService } from '../../rooms/useRoomsService'
 
 import { DevicesCard } from './DevicesCard'
@@ -75,8 +76,9 @@ interface Holdings {
 /**
  * This agent's identities and memberships only: another agent's are its own,
  * shown when it is current (several-agents device check, R5: B's home said
- * "Member of" a community only A had joined). Only what is known to be another
- * agent's is left out, so a phone with one agent sees what it saw before.
+ * "Member of" a community only A had joined). A membership nothing ties to this
+ * agent is not its own either (heldByAgent); it stays on the phone. An identity
+ * goes only when it is known to be another agent's.
  */
 export function ownHoldings(
   personas: VtiPersona[],
@@ -86,7 +88,7 @@ export function ownHoldings(
   const others = new Set(personas.filter((p) => p.vtaDid && p.vtaDid !== agentDid).map((p) => p.did))
   return {
     personas: personas.filter((p) => !others.has(p.did)),
-    memberships: memberships.filter((m) => !others.has(m.personaDid)),
+    memberships: memberships.filter((m) => heldByAgent(m.personaDid, personas, agentDid)),
   }
 }
 
@@ -314,14 +316,14 @@ const VtaAgentHome: React.FC = () => {
   // card shows it. Each card told it after painting, one render late.
   const held = holdings ? communitiesHeld(holdings) : []
   const journeys = useCommunityJourneysOf(held)
-  // Rooms, while the rooms flag is on: one card, its rooms read here, its offers badge polled while an agent
-  // is linked and the app is in the foreground (nothing pushes an offer).
+  // Rooms, while the rooms flag is on: one card, its rooms read here, its offers badge read from the poll the tab
+  // navigator runs while an agent is linked and the app is in the foreground (nothing pushes an offer).
   const roomsService = useRoomsService()
   const myRooms = useMyRooms(roomsService)
   // Read again on coming back here, and on returning to the app after a read that failed: the first read alone
   // kept a failure until the screen was left (a tester's run, 10-29).
   useRereadOnReturn(myRooms)
-  const roomOffers = useRoomOffersCount(roomsService, link.kind === 'linked')
+  const roomOffers = useRoomOffersBadge()
 
   // Only what still waits: a decided or expired request is not listed. The
   // same rule as the badge on the My Agent tab (waitingRequests.ts).

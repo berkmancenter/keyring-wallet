@@ -10,6 +10,12 @@ export const SignInIds = {
   continue: 'SignInContinue',
   cancel: 'SignInCancel',
   notMember: 'SignInNotMember',
+  // A sender that is neither, on a phone with an agent that kept no sign-in key for its host (IN-388).
+  olderAgents: 'SignInOlderAgents',
+  // A code from a community this phone has not joined: check it is one, and join (IN-406).
+  checkAndJoin: 'SignInCheckAndJoin',
+  notJoinable: 'SignInNotJoinable',
+  joinUnchecked: 'SignInJoinUnchecked',
   // 1b. Several identities hold a membership (IN-296): which one signs in. An option is `SignInIdentity-<n>`, n from 0.
   choose: 'SignInChoose',
   identityOption: 'SignInIdentity',
@@ -30,6 +36,9 @@ export const SignInIds = {
   location: 'SignInLocation',
   sameNetwork: 'SignInSameNetwork',
   identifiedAs: 'SignInIdentifiedAs',
+  // Signing in to the service that hosts the person's agent (IN-388): the service, as it names itself, and the agent.
+  service: 'SignInService',
+  agent: 'SignInAgent',
   website: 'SignInWebsite',
   sessionOnly: 'SignInSessionOnly',
   // 0.2: what else the browser may sign as the person, for the session (auth/oob signingScope).

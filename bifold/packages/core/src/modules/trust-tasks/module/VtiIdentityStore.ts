@@ -20,6 +20,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import { isAgentsOwnPersona } from './agentOwnIdentity'
 import { currentAgentDid } from './currentAgent'
 import { getKeyed, listKeyed, putKeyed, withKeyLock } from './keyedRecords'
 
@@ -52,6 +53,14 @@ export interface VtiManagerIdentity {
    * when this phone may not change them.
    */
   approversFrom?: string
+  /**
+   * The Farm this temporary key claimed the agent from (`vta-claim`): the
+   * Farm signs the person in by this key (VtaLink `farmLogin`). Kept while the
+   * key is the one linking, through a swap that never happened, so a Try
+   * again with it still records the Farm; a new key for the agent, or the
+   * swap onto the long-term one, writes a record without it.
+   */
+  claimedFrom?: string
 }
 
 export interface VtiPersona {
@@ -177,23 +186,28 @@ export class GenericRecordsIdentityStore implements VtiIdentityStore {
     })
   }
 
+  /**
+   * A record that is its agent's own DID, which Bring back took on before 276.12, reads as none (agentOwnIdentity):
+   * left in the store, never used, and passed over, so a record kept by community alone is still read after it.
+   */
   async getPersona(communityDid: string, vtaDid: string | undefined = currentAgentDid()) {
     if (vtaDid) {
       const own = await this.find<VtiPersona>('persona', agentScoped(vtaDid, communityDid))
-      if (own) return own
+      if (own && !isAgentsOwnPersona(own)) return own
     }
     // Kept by community alone, before identities were kept per agent: this
     // agent's, or any one when no agent is known. Moved under its agent at the
     // next write (setPersona).
     const kept = await this.find<VtiPersona>('persona', communityDid)
-    return kept && (!vtaDid || kept.vtaDid === vtaDid) ? kept : undefined
+    return kept && (!vtaDid || kept.vtaDid === vtaDid) && !isAgentsOwnPersona(kept) ? kept : undefined
   }
 
   async listPersonas() {
-    return listKeyed<VtiPersona>(this.agent, RECORD_TYPE, 'persona')
+    return (await listKeyed<VtiPersona>(this.agent, RECORD_TYPE, 'persona')).filter((p) => !isAgentsOwnPersona(p))
   }
 
   async setPersona(persona: VtiPersona) {
+    if (isAgentsOwnPersona(persona)) throw new Error("an agent's own DID is not one of this phone's identities")
     await this.put('persona', agentScoped(persona.vtaDid, persona.communityDid), { ...persona })
     // The same identity kept by community alone is now kept under its agent:
     // not listed twice.

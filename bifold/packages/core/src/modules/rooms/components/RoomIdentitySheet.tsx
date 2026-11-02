@@ -20,24 +20,19 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import SafeAreaModal from '../../../components/modals/SafeAreaModal'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { initialsOf } from '../../../utils/initials'
 import { testIdWithKey } from '../../../utils/testable'
+import { communityLabelOf } from '../../trust-tasks/screens/communityName'
 import type { Identity } from '../types'
 import { PETNAME_MAX } from '../petnames'
 import type { MyName } from '../useMyName'
 import { usePetname } from '../usePetname'
 
+import { useDirectoryName } from './memberWords'
 import { memberText } from './roomWords'
 
 /** Up to two letters for a name's circle; "?" when there is no name. */
-export const initialsOf = (name?: string): string => {
-  const letters = (name ?? '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0].toUpperCase())
-    .join('')
-  return letters || '?'
-}
+export { initialsOf }
 
 export interface RoomIdentitySheetProps {
   /** Whose sheet; none closes it. */
@@ -50,6 +45,11 @@ export interface RoomIdentitySheetProps {
   onClose: () => void
   /** Opens the member's profile to see or edit it, or to add a name when it has none. */
   onOpenProfile: (profileId?: string) => void
+  /**
+   * Opens another member's card in the community's directory, for one who shows their identity to members; `standIn`
+   * is what the room calls them. Without it, the sheet offers no card.
+   */
+  onViewCard?: (did: string, standIn: string) => void
 }
 
 export const RoomIdentitySheet: React.FC<RoomIdentitySheetProps> = ({
@@ -59,6 +59,7 @@ export const RoomIdentitySheet: React.FC<RoomIdentitySheetProps> = ({
   me,
   onClose,
   onOpenProfile,
+  onViewCard,
 }) => (
   <SafeAreaModal visible={!!identity} transparent animationType="slide" onRequestClose={onClose}>
     {identity ? (
@@ -69,6 +70,7 @@ export const RoomIdentitySheet: React.FC<RoomIdentitySheetProps> = ({
         me={me}
         onClose={onClose}
         onOpenProfile={onOpenProfile}
+        onViewCard={onViewCard}
       />
     ) : null}
   </SafeAreaModal>
@@ -81,6 +83,7 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
   me,
   onClose,
   onOpenProfile,
+  onViewCard,
 }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
@@ -88,20 +91,26 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
   // Another member's name of the member's own: given or changed here, never left blank.
   const naming = !mine && !!communityDid
   const petname = usePetname(naming ? communityDid : undefined, naming ? identity.did : undefined)
+  const theirOwn = useDirectoryName(mine ? undefined : identity.did)
   const [draft, setDraft] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
-  const name = mine ? me.name : (petname.name ?? identity.identityWords)
-  const title = mine ? (me.name ?? (t('Rooms.You') as string)) : (petname.name ?? memberText(t, identity))
+  const name = mine ? me.name : (petname.name ?? theirOwn ?? identity.identityWords)
+  const title = mine ? (me.name ?? (t('Rooms.You') as string)) : (petname.name ?? theirOwn ?? memberText(t, identity))
   const source = mine
     ? me.name
       ? t('Rooms.NameFromProfile')
       : t('Rooms.NameNotSet')
     : petname.name
       ? t('Rooms.PetnameSource')
-      : identity.identityWords
-        ? t('Rooms.NameFromCommunity')
-        : t('Rooms.NameNotKnown')
+      : theirOwn
+        ? t('Rooms.NameTheirOwn', {
+            community: communityDid ? communityLabelOf(communityDid, t) : '',
+            interpolation: { escapeValue: false },
+          })
+        : identity.identityWords
+          ? t('Rooms.NameFromCommunity')
+          : t('Rooms.NameNotKnown')
   const canSave = !!draft?.trim() && !saving
   const save = async () => {
     if (!draft?.trim()) return
@@ -178,7 +187,7 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
             <ThemedText variant="headingFour" accessibilityRole="header" testID={testIdWithKey('RoomIdentityName')}>
               {title}
             </ThemedText>
-            {!mine && petname.name ? (
+            {!mine && (petname.name || theirOwn) ? (
               <ThemedText style={styles.muted} testID={testIdWithKey('RoomIdentityStandIn')}>
                 {memberText(t, identity)}
               </ThemedText>
@@ -186,6 +195,16 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
             <ThemedText style={styles.muted} testID={testIdWithKey('RoomIdentitySource')}>
               {source}
             </ThemedText>
+            {/* Their card is reachable only where they show their identity to members; most members don't. */}
+            {!mine && communityDid && !theirOwn ? (
+              <ThemedText variant="caption" style={styles.muted} testID={testIdWithKey('RoomIdentityNoCard')}>
+                {t('Directory.NoCardToShow', {
+                  member: title,
+                  community: communityLabelOf(communityDid, t),
+                  interpolation: { escapeValue: false },
+                })}
+              </ThemedText>
+            ) : null}
           </View>
         </View>
         <View style={styles.idBox}>
@@ -215,6 +234,14 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
             </ThemedText>
           ) : null}
         </View>
+        {!mine && theirOwn && onViewCard ? (
+          <Button
+            title={t('Directory.ViewCard')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => onViewCard(identity.did, memberText(t, identity))}
+            testID={testIdWithKey('RoomIdentityViewCard')}
+          />
+        ) : null}
         {naming && petname.loaded ? (
           draft === undefined ? (
             <Button

@@ -10,6 +10,8 @@ import type {
   RoomVerb,
 } from './types'
 
+import { KEYS_ACT_TYPES } from './real/wire'
+
 const SPEC = 'https://trusttasks.org/spec/'
 
 /**
@@ -27,20 +29,26 @@ const SPEC = 'https://trusttasks.org/spec/'
  * - `adminOnly`: served, but only to a community's administrators.
  */
 type Requirement =
-  | { from: 'agent'; anyOf: string[] }
+  | { from: 'agent'; anyOf: readonly string[] }
   | { from: 'community' }
   | { from: 'local' }
   | { from: 'nowhere'; why: string }
   | { from: 'adminOnly'; why: string }
 
+/**
+ * What each operation needs. An `anyOf` holds every version this client's ladder for that task may send.
+ *
+ * @versionCoverage rooms/keys/list rooms/keys/browse
+ */
 export const ROOMS_REQUIREMENTS: Record<RoomsOperation, Requirement> = {
   listMyRooms: { from: 'agent', anyOf: [`${SPEC}rooms/keys/list/0.2`, `${SPEC}rooms/keys/list/0.1`] },
   getRoom: { from: 'agent', anyOf: [`${SPEC}rooms/keys/list/0.2`, `${SPEC}rooms/keys/list/0.1`] },
-  listNotes: { from: 'agent', anyOf: [`${SPEC}rooms/keys/browse/0.1`] },
+  listNotes: { from: 'agent', anyOf: [`${SPEC}rooms/keys/browse/0.3`, `${SPEC}rooms/keys/browse/0.1`] },
   readNote: { from: 'agent', anyOf: [`${SPEC}rooms/keys/read/0.1`] },
-  // The agent signs host-bound requests as the member's persona (rooms/keys/act).
-  write: { from: 'agent', anyOf: [`${SPEC}rooms/keys/act/0.5`, `${SPEC}rooms/keys/act/0.6`] },
-  curate: { from: 'agent', anyOf: [`${SPEC}rooms/keys/act/0.5`, `${SPEC}rooms/keys/act/0.6`] },
+  // The agent signs host-bound requests as the member's persona (rooms/keys/act), at any version the client sends:
+  // the set is the ladder itself, so a version added there is asked for here too.
+  write: { from: 'agent', anyOf: KEYS_ACT_TYPES },
+  curate: { from: 'agent', anyOf: KEYS_ACT_TYPES },
   listOffers: { from: 'community' },
   // Accepting stores the offer's membership and authority in the agent's vault, where its presentations
   // find them. A sealed room also needs rooms/keys/key-package/0.2 and rooms/keys/welcome/0.1: checked per

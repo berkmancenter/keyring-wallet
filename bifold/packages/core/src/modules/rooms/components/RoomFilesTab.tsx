@@ -9,7 +9,7 @@
  */
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -79,9 +79,12 @@ export const RoomFilesTab: React.FC<RoomFilesTabProps> = ({
       {t('Rooms.FilesNone')}
     </ThemedText>
   ) : (
-    <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomFilesReading')}>
-      {t('Rooms.Reading')}
-    </ThemedText>
+    <ActivityIndicator
+      style={styles.centered}
+      color={ColorPalette.brand.primary}
+      accessibilityLabel={t('Rooms.Reading')}
+      testID={testIdWithKey('RoomFilesReading')}
+    />
   )
 
   return (

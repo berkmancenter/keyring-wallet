@@ -8,6 +8,7 @@ import { act, renderHook } from '@testing-library/react-native'
 import { AppState } from 'react-native'
 
 import { toInertText } from '../inertText'
+import { isChatPost, type RoomPost } from '../roomPosts'
 import type { Note, NoteList, NoteSummary, RoomsService } from '../types'
 import { useInViewAndActive } from '../useInViewAndActive'
 import {
@@ -47,6 +48,8 @@ const summaryOf = ({ body: _b, flags: _f, check: _c, ...summary }: Note): NoteSu
 /** A room whose records the test changes; listing honours `sinceVersion` as the host does. */
 const roomWith = (initial: Note[]) => {
   const records = new Map(initial.map((n) => [n.key, n]))
+  // The room's last prune, as browse 0.3 passes it on: every answer carries it, the full listing and a poll alike.
+  let lastPrune: NoteList['lastPrune']
   const service = {
     listNotes: jest.fn(async (_roomId: string, options: { sinceVersion?: number } = {}): Promise<NoteList> => {
       const since = options.sinceVersion ?? 0
@@ -54,6 +57,7 @@ const roomWith = (initial: Note[]) => {
         notes: [...records.values()].filter((n) => n.version > since).map(summaryOf),
         complete: true,
         check: CONSISTENT,
+        ...(lastPrune ? { lastPrune } : {}),
       }
     }),
     readNote: jest.fn(async (_roomId: string, key: string) => {
@@ -65,6 +69,11 @@ const roomWith = (initial: Note[]) => {
   return {
     service: service as unknown as RoomsService & { listNotes: jest.Mock; readNote: jest.Mock },
     write: (n: Note) => records.set(n.key, n),
+    /** The host removes these records outright, tombstones included, at room version `version`. */
+    prune: (keys: string[], version: number) => {
+      for (const key of keys) records.delete(key)
+      lastPrune = { version, prunedAt: '2026-10-30T12:00:00Z', removed: keys.length }
+    },
   }
 }
 
@@ -324,6 +333,60 @@ describe('a room in view', () => {
   })
 })
 
+// rooms/keys/browse 0.3 passes on the room's `lastPrune`. A prune removes records outright, so a poll from the newest
+// version held never mentions them: a `lastPrune.version` above what this phone has synced means rebuild from a full
+// listing and drop what it no longer holds (browse 0.3 spec, "a caller that keeps its own copy of the room").
+describe('a room pruned while it is open', () => {
+  const keys = (posts?: { key: string }[]) => posts?.map((p) => p.key)
+
+  test('a prune past what the phone holds is caught up from a full listing: the pruned posts go', async () => {
+    const room = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    const { result } = await open(room.service)
+    expect(keys(result.current.posts)).toEqual(['c', 'b', 'a'])
+    room.prune(['b'], 4)
+    await tick()
+    await flush()
+    expect(keys(result.current.posts)).toEqual(['c', 'a'])
+    // One poll, then one full listing to rebuild from.
+    expect(room.service.listNotes.mock.calls.map(([, o]) => o?.sinceVersion)).toEqual([undefined, 3, undefined])
+  })
+
+  test('a prune that took the newest post: rebuilt once, not again on every poll after', async () => {
+    const room = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    const { result } = await open(room.service)
+    room.prune(['c'], 4)
+    await tick()
+    await flush()
+    expect(keys(result.current.posts)).toEqual(['b', 'a'])
+    // The newest version held is now 2, below the prune's 4: the prune already applied is what stops a rebuild loop.
+    await tick()
+    await tick()
+    await flush()
+    const full = room.service.listNotes.mock.calls.filter(([, o]) => o?.sinceVersion === undefined)
+    expect(full).toHaveLength(2)
+  })
+
+  test('a prune the first listing already reflects changes nothing', async () => {
+    const room = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    room.prune(['b'], 2)
+    const { result } = await open(room.service)
+    expect(keys(result.current.posts)).toEqual(['c', 'a'])
+    await tick()
+    await flush()
+    expect(room.service.listNotes.mock.calls.map(([, o]) => o?.sinceVersion)).toEqual([undefined, 3])
+  })
+
+  test('a new post and a prune in the same poll: the full listing has both', async () => {
+    const room = roomWith([note('a', 1), note('b', 2)])
+    const { result } = await open(room.service)
+    room.write(note('d', 4))
+    room.prune(['a'], 5)
+    await tick()
+    await flush()
+    expect(keys(result.current.posts)).toEqual(['d', 'b'])
+  })
+})
+
 describe('a room out of view', () => {
   test('not in view: no poll, tick after tick', async () => {
     const { service } = roomWith([note('a', 1)])
@@ -435,6 +498,52 @@ describe('merging what a poll found', () => {
 
 // Each read is one task for the person's agent, sent one at a time: a post written just after opening a room waits
 // behind every read of the first page (S0.7, 10-29: 40 s from tap to sent on a first page of 30).
+describe('drawing posts as their reads land', () => {
+  /** A room of three posts whose reads answer when the test says: c is newest, a oldest. */
+  const heldRoom = () => {
+    const { service } = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    const answers = new Map<string, { ok: () => void; fail: () => void }>()
+    service.readNote.mockImplementation(
+      (_roomId: string, key: string) =>
+        new Promise<Note>((resolve, reject) =>
+          answers.set(key, {
+            ok: () => resolve(note(key, { a: 1, b: 2, c: 3 }[key] ?? 1)),
+            fail: () => reject(new Error(`could not read ${key}`)),
+          })
+        )
+    )
+    const answer = async (key: string, how: 'ok' | 'fail' = 'ok') => {
+      await act(async () => answers.get(key)?.[how]())
+      await flush()
+    }
+    return { service, answer }
+  }
+  const keys = (posts?: { key: string }[]) => posts?.map((p) => p.key)
+
+  test('newest first, each as it lands: the list grows only at its oldest end', async () => {
+    const { service, answer } = heldRoom()
+    const { result } = await open(service)
+    expect(result.current.posts).toBeUndefined()
+    await answer('c')
+    expect(keys(result.current.posts)).toEqual(['c'])
+    // An older post that lands before a newer one waits for it: nothing is drawn out of order.
+    await answer('a')
+    expect(keys(result.current.posts)).toEqual(['c'])
+    await answer('b')
+    expect(keys(result.current.posts)).toEqual(['c', 'b', 'a'])
+  })
+
+  test('a read that fails holds the older ones until every read has answered; then it shows as unread', async () => {
+    const { service, answer } = heldRoom()
+    const { result } = await open(service)
+    await answer('c')
+    await answer('b', 'fail')
+    await answer('a')
+    expect(keys(result.current.posts)).toEqual(['c', 'b', 'a'])
+    expect(result.current.posts?.[1].unread).toBe(true)
+  })
+})
+
 describe('the first page', () => {
   const many = () => roomWith(Array.from({ length: 31 }, (_, i) => note(`n${i}`, i + 1)))
 
@@ -454,5 +563,92 @@ describe('the first page', () => {
     await flush()
     expect(service.readNote).toHaveBeenCalledTimes(20)
     expect(result.current.posts).toHaveLength(20)
+  })
+})
+
+// 276.9: a reopened room drew 8 of its posts and stopped, with no read slow or failed. Its newest ten records held
+// notes, which the chat leaves out, so the page drew fewer than ten and filled the screen; the rest came only with a
+// scroll up. A chat's page counts chat posts.
+describe('a page counted in chat posts', () => {
+  /** A room of `count` records, n1 oldest; the ones in `notes` have a title (notes, which the chat leaves out). */
+  const roomOf = (count: number, notes: string[]) =>
+    roomWith(
+      Array.from({ length: count }, (_, i) =>
+        note(`n${i + 1}`, i + 1, notes.includes(`n${i + 1}`) ? { title: toInertText(`note n${i + 1}`) } : {})
+      )
+    )
+  const openCounting = async (service: RoomsService) => {
+    const hook = renderHook(() => useRoomPosts(service, ROOM, ME, true, false, isChatPost))
+    for (let i = 0; i < 6; i++) await flush()
+    return hook
+  }
+  const chat = (posts?: RoomPost[]) => (posts ?? []).filter(isChatPost)
+
+  /** The records read, by key. */
+  const readKeys = (service: { readNote: jest.Mock }) => service.readNote.mock.calls.map(([, key]) => key).sort()
+
+  test("an open room's notes, titled in its listing, are not read for the chat; the page holds ten chat posts", async () => {
+    // The open tier's title is cleartext in the listing (vti-rooms metadata()), so the listing already says these are
+    // notes: the chat leaves them out, and the Notes part reads them for itself.
+    const { service } = roomOf(14, ['n13', 'n11'])
+    const { result } = await openCounting(service)
+    expect(chat(result.current.posts)).toHaveLength(10)
+    expect(result.current.posts).toHaveLength(12)
+    expect(service.readNote).toHaveBeenCalledTimes(10)
+    expect(readKeys(service)).not.toEqual(expect.arrayContaining(['n13']))
+    expect(readKeys(service)).not.toEqual(expect.arrayContaining(['n11']))
+    expect(result.current.hasOlder).toBe(true)
+  })
+
+  test('a room full of notes reads only its chat posts (4WGH-FCK5: 53 reads for a page)', async () => {
+    // Ten chat posts among 40 notes: before, every record down to the tenth chat post was read.
+    const notes = Array.from({ length: 50 }, (_, i) => `n${i + 1}`).filter((key) => Number(key.slice(1)) % 5 !== 0)
+    const { service } = roomOf(50, notes)
+    const { result } = await openCounting(service)
+    // About a dozen shortfall rounds (each reads on by what the last one lacked) before ten chat posts are in.
+    for (let i = 0; i < 40; i++) await flush()
+    expect(chat(result.current.posts)).toHaveLength(10)
+    expect(service.readNote).toHaveBeenCalledTimes(10)
+    expect(readKeys(service)).toEqual(['n10', 'n15', 'n20', 'n25', 'n30', 'n35', 'n40', 'n45', 'n5', 'n50'])
+  })
+
+  test('without a count (the Notes part) every record is read, titled or not', async () => {
+    const { service } = roomOf(5, ['n4', 'n2'])
+    renderHook(() => useRoomPosts(service, ROOM, ME, true, false))
+    for (let i = 0; i < 6; i++) await flush()
+    expect(readKeys(service)).toEqual(['n1', 'n2', 'n3', 'n4', 'n5'])
+  })
+
+  test("a private room's note, known as one only once read, does not count either", async () => {
+    const { service } = roomOf(14, ['n13', 'n11'])
+    const list = service.listNotes.getMockImplementation()!
+    // Sealed: the listing does not carry the title, only the read record does.
+    service.listNotes.mockImplementation(async (...args: [string, { sinceVersion?: number }?]) => {
+      const listed = await list(...args)
+      return { ...listed, notes: listed.notes.map(({ title: _t, ...summary }: NoteSummary) => summary) }
+    })
+    const { result } = await openCounting(service)
+    expect(chat(result.current.posts)).toHaveLength(10)
+    expect(service.readNote).toHaveBeenCalledTimes(12)
+  })
+
+  test('"Load older" reads on to the next ten chat posts', async () => {
+    const { service } = roomOf(31, ['n30', 'n25', 'n18'])
+    const { result } = await openCounting(service)
+    expect(chat(result.current.posts)).toHaveLength(10)
+    await act(async () => result.current.loadOlder())
+    for (let i = 0; i < 6; i++) await flush()
+    expect(chat(result.current.posts)).toHaveLength(20)
+    expect(result.current.posts).toHaveLength(23)
+    expect(service.readNote).toHaveBeenCalledTimes(20)
+    expect(result.current.loadingOlder).toBe(false)
+  })
+
+  test('a room with fewer chat posts than a page reads each chat post once and stops', async () => {
+    const { service } = roomOf(5, ['n4', 'n2'])
+    const { result } = await openCounting(service)
+    expect(chat(result.current.posts)).toHaveLength(3)
+    expect(readKeys(service)).toEqual(['n1', 'n3', 'n5'])
+    expect(result.current.hasOlder).toBe(false)
   })
 })

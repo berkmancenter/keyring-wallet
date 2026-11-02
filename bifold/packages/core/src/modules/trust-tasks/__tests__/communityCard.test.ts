@@ -96,9 +96,13 @@ describe("an agent's home holds only its own identities", () => {
     expect(held.memberships).toEqual([])
   })
 
-  it('keeps identities kept before agents were told apart, and a membership of no known identity', () => {
-    const held = ownHoldings([persona('p-old')], [membership('p-old'), membership('p-unknown')], A)
+  it('keeps identities kept before agents were told apart, and their memberships', () => {
+    const held = ownHoldings([persona('p-old')], [membership('p-old')], A)
     expect(held.personas.map((p) => p.did)).toEqual(['p-old'])
-    expect(held.memberships).toHaveLength(2)
+    expect(held.memberships).toHaveLength(1)
+  })
+
+  it("leaves out a membership of no known identity: nothing says it is this agent's", () => {
+    expect(ownHoldings([persona('p-old')], [membership('p-unknown')], A).memberships).toEqual([])
   })
 })

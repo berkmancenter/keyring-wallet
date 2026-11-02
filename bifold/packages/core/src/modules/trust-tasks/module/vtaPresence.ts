@@ -67,6 +67,13 @@ export interface AgentPresenceDeps {
   link?: () => VtaLinkState | undefined
 }
 
+/**
+ * How long a tick waits for the heartbeat's answer. Nothing else waits on it (it goes beside the agent client's
+ * queue, vtaReadLane.ts), so this bounds only the tick: an answer usually comes within a second, and one that has not
+ * in this long is taken as none, and tried again next tick.
+ */
+export const PRESENCE_HEARTBEAT_TIMEOUT_MS = 10_000
+
 /** How many healthy ticks in a row before an "ok" is said again with no change: once an hour at five minutes. */
 export const PRESENCE_OK_EVERY = 12
 
@@ -119,7 +126,7 @@ export class AgentPresence {
           this.deps.log?.(`[VTA] registering this phone with its agent: ${(e as Error)?.message ?? e}`)
         }
       }
-      await heartbeat(port)
+      await heartbeat(port, undefined, PRESENCE_HEARTBEAT_TIMEOUT_MS)
       // device/list alone: an acl/list here held the agent client's one-at-a-time queue for its whole timeout
       // when the agent did not answer it. Without the access list a narrower key that beats can be
       // named too; My devices still marks it limited.

@@ -69,7 +69,7 @@ export function agentVtaClaimSteps(agent: Agent): VtaClaimSteps {
     },
     redeem: (claimed, options) => redeemVta(claimed, depsFor(claimed.walletDid), options),
     finish: async (claimed, redeemed) => {
-      await vtaAgent.finishClaimedLink(agent, redeemed.vtaDid, claimed.walletDid)
+      await vtaAgent.finishClaimedLink(agent, redeemed.vtaDid, claimed.walletDid, claimed.farmDid)
       // The Farm hands over once the administrator is in place, but the agent
       // can take a moment to answer as it: check again a few times, as the
       // manual link's "Check again" would.

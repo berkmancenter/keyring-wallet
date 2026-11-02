@@ -888,7 +888,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                 {t('Join.Ways.NoVetting', named)}
               </ThemedText>
             ) : null}
-            {ways.button === 'start' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
+            {/* "You'll meet a vetter" is said under the vetting way itself (JoinWaysCard). */}
             {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
             {/* With the list, not under the buttons, so the fixed area stays short. */}
             {different}

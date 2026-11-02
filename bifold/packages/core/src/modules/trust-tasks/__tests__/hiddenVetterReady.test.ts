@@ -14,13 +14,30 @@ const mockCriterion = jest.fn()
 const mockIsEnrolled = jest.fn()
 const mockEnrol = jest.fn()
 const mockDraw = jest.fn()
+// The round's hold on the shared session: records whether each step ran inside it.
+const mockHeld = { depth: 0, steps: [] as string[] }
+const mockAsVetter = jest.fn(async (_agent: unknown, _community: string, round: (p: unknown) => Promise<unknown>) => {
+  mockHeld.depth++
+  try {
+    return await round(undefined)
+  } finally {
+    mockHeld.depth--
+  }
+})
+const inHold =
+  (step: string, f: jest.Mock) =>
+  (...a: unknown[]) => {
+    mockHeld.steps.push(`${step}:${mockHeld.depth > 0 ? 'held' : 'unheld'}`)
+    return f(...a)
+  }
 let mockNow = 1_000_000
 
 jest.mock('../module/hiddenVetterRounds', () => ({
   currentHiddenCriterion: (...a: unknown[]) => mockCriterion(...a),
-  isEnrolled: (...a: unknown[]) => mockIsEnrolled(...a),
-  enrolVetter: (...a: unknown[]) => mockEnrol(...a),
-  drawVetterTokens: (...a: unknown[]) => mockDraw(...a),
+  asVetter: (...a: unknown[]) => mockAsVetter(...(a as Parameters<typeof mockAsVetter>)),
+  isEnrolled: (...a: unknown[]) => inHold('isEnrolled', mockIsEnrolled)(...a),
+  enrolVetter: (...a: unknown[]) => inHold('enrol', mockEnrol)(...a),
+  drawVetterTokens: (...a: unknown[]) => inHold('draw', mockDraw)(...a),
   nowMs: () => mockNow,
 }))
 jest.mock('../module/vtiAgent', () => ({
@@ -90,6 +107,9 @@ beforeEach(() => {
   mockEnrol.mockResolvedValue(undefined)
   mockDraw.mockResolvedValue({ drawn: 3 })
   mockNow = 1_000_000
+  mockHeld.depth = 0
+  mockHeld.steps = []
+  mockAsVetter.mockClear()
 })
 
 describe('on its own, when the desk starts', () => {
@@ -99,6 +119,13 @@ describe('on its own, when the desk starts', () => {
     expect(mockEnrol).toHaveBeenCalledWith(agent, COMMUNITY, CRITERION)
     expect(mockDraw).toHaveBeenCalledWith(agent, COMMUNITY, CRITERION)
     expect(mockEnrol.mock.invocationCallOrder[0]).toBeLessThan(mockDraw.mock.invocationCallOrder[0])
+  })
+
+  it("runs enrolment and the draw inside one hold of the session, as the desk's own persona", async () => {
+    await desk().keepHiddenVetterReady('listen')
+    expect(mockAsVetter).toHaveBeenCalledTimes(1)
+    expect(mockAsVetter).toHaveBeenCalledWith(agent, COMMUNITY, expect.any(Function), persona)
+    expect(mockHeld.steps).toEqual(['isEnrolled:held', 'enrol:held', 'draw:held'])
   })
 
   it('listen() starts it, without anyone opening a vetter screen', async () => {

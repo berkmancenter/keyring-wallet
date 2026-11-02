@@ -16,6 +16,7 @@ import { testIdWithKey } from '../utils/testable'
 import { useStore } from '../contexts/store'
 import { useTour } from '../contexts/tour/tour-context'
 import { useDeepLinks } from '../hooks/deep-links'
+import { agentHomeScreen } from '../modules/trust-tasks/screens/agentHome'
 import { useRCardCredential } from '../modules/vrc/hooks/useRCardCredential'
 import CredentialDetails from '../screens/CredentialDetails'
 import OpenIDCredentialDetails from '../modules/openid/screens/OpenIDCredentialDetails'
@@ -42,10 +43,11 @@ const MainStack: React.FC = () => {
     TOKENS.OBJECT_SCREEN_CONFIG,
   ])
   const declinedProofs = useProofByState([DidCommProofState.Declined, DidCommProofState.Abandoned])
-  // Back to where the person was before an inactivity lock (utils/navReturn.ts). Declared before
-  // useDeepLinks, so its effect runs first and a link that came with the unlock navigates on top.
+  // Back to where the person was before an inactivity lock (utils/navReturn.ts), above the agent home for the
+  // link state now. Declared before useDeepLinks, so its effect runs first and a link that came with the unlock
+  // navigates on top.
   useEffect(() => {
-    restoreReturnState()
+    restoreReturnState(agentHomeScreen())
   }, [])
   useDeepLinks()
 

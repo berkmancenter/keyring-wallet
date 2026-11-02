@@ -28,6 +28,8 @@ const CREATE = 'https://trusttasks.org/spec/vta/contexts/create/1.0'
 const REVOKE = 'https://trusttasks.org/spec/keys/revoke/0.1'
 const SET_WAKE = 'https://trusttasks.org/spec/device/set-wake/0.2'
 const ACL_GRANT = 'https://trusttasks.org/spec/acl/grant/0.1'
+const DELETE_10 = 'https://trusttasks.org/spec/vta/contexts/delete/1.0'
+const DELETE_11 = 'https://trusttasks.org/spec/vta/contexts/delete/1.1'
 
 const elsewhere = {
   rules: [
@@ -111,6 +113,67 @@ describe('what the screen shows', () => {
   })
 })
 
+/**
+ * A rule holds only the version it names, and vta-service dispatches
+ * contexts/delete at 1.0 up to v0.66.0, at both in v0.67.0 (gated apart), and
+ * only at 1.1 from 61c23f20: a rule naming 1.0 there never holds anything, and
+ * nothing moves it to 1.1.
+ */
+describe('a task agents serve in more than one version', () => {
+  const versions = (rules: { taskType: string }[]) => rules.map((r) => r.taskType)
+  const deleteSwitch = (model: Parameters<typeof approvalsView>[0], served?: string[]) =>
+    approvalsView(model, ME, served).offered.find((o) => o.key === 'contextsDelete')
+
+  it('one rule per version the agent dispatches, else every version Keyring knows', () => {
+    const rules = (served?: string[]) => versions(withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME, served).rules)
+    expect(rules([DELETE_11, CREATE])).toEqual([DELETE_11])
+    expect(rules([DELETE_10, DELETE_11])).toEqual([DELETE_11, DELETE_10])
+    expect(rules([DELETE_10, CREATE])).toEqual([DELETE_10])
+    expect(rules(undefined)).toEqual([DELETE_11, DELETE_10])
+    expect(rules([CREATE])).toEqual([DELETE_11, DELETE_10])
+    // The rules it writes are a row the agent takes.
+    const both = withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME)
+    expect(() => validateApprovals(both.rules, both.sets)).not.toThrow()
+  })
+
+  it('a rule only on a version the agent no longer dispatches reads off, to be turned on again', () => {
+    const old = { ...withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME, [DELETE_10]), version: 1 }
+    expect(versions(old.rules)).toEqual([DELETE_10])
+    expect(deleteSwitch(old, [DELETE_10])).toMatchObject({ taskType: DELETE_11, on: true, renew: false })
+    expect(deleteSwitch(old, [DELETE_11])).toMatchObject({ on: false, renew: true })
+    // v0.67.0 dispatches both, apart: a 1.0 rule alone lets 1.1 through.
+    expect(deleteSwitch(old, [DELETE_10, DELETE_11])).toMatchObject({ on: false, renew: true })
+    // Unknown served list: nothing to judge against.
+    expect(deleteSwitch(old)).toMatchObject({ on: true, renew: false })
+
+    // Turned on again on the updated agent: one rule, at the version it now dispatches.
+    const renewed = { ...withPhoneRule(old, DELETE_11, true, ME, [DELETE_11]), version: 2 }
+    expect(versions(renewed.rules)).toEqual([DELETE_11])
+    expect(deleteSwitch(renewed, [DELETE_11])).toMatchObject({ on: true, renew: false })
+    expect(withPhoneRule(renewed, DELETE_11, false, ME).rules).toEqual([])
+  })
+
+  it('a task with one version is unaffected', () => {
+    const on = { ...withPhoneRule(EMPTY_APPROVALS, CREATE, true, ME, [CREATE]), version: 1 }
+    expect(versions(on.rules)).toEqual([CREATE])
+    expect(approvalsView(on, ME, [CREATE, DELETE_11]).offered.find((o) => o.key === 'contextsCreate')).toMatchObject({
+      on: true,
+      renew: false,
+    })
+  })
+
+  it('a rule set elsewhere on the older version marks the task as set elsewhere', () => {
+    const theirs = {
+      rules: [{ taskType: DELETE_10, requires: 'consent' as const, approverSet: 'ops' }],
+      sets: { ops: [OTHER] },
+      version: 3,
+    }
+    const view = approvalsView(theirs, ME)
+    expect(view.elsewhere[0].offered).toBe('contextsDelete')
+    expect(view.offered.find((o) => o.key === 'contextsDelete')).toMatchObject({ elsewhere: true, renew: false })
+  })
+})
+
 describe('reading the row', () => {
   it('reads rules and sets, and keeps only the members a rule has', () => {
     const model = modelFromExt(
@@ -171,8 +234,20 @@ describe('the phone never sends an offered task', () => {
     expect(callers('VTA_TASK.contextsDelete')).toEqual(['VtaClient.ts'])
     const client = readFileSync(join(moduleDir, 'VtaClient.ts'), 'utf8')
     const uses = client.split('\n').filter((l) => /VTA_TASK\.contexts(Create|Delete)\b/.test(l))
-    // createContext (no caller in the app) and the two sends of sendTestRequest.
+    // createContext (no caller in the app), sendTestRequest's create, and contexts/delete's versions.
     expect(uses).toHaveLength(3)
+  })
+
+  it('every task the client sends its agent is on the list of what the phone sends', () => {
+    // A rule set elsewhere on one that is missing would hold the phone without the screen saying so.
+    const { VTA_TASK } = jest.requireActual('../module/VtaClient') as { VTA_TASK: Record<string, string> }
+    // Pushed by the agent, never sent to it (VtaClient UNSOLICITED).
+    const received = new Set([VTA_TASK.consentRequest, VTA_TASK.consentGranted])
+    const unlisted = Object.values(VTA_TASK).filter(
+      (uri) =>
+        !received.has(uri) && !PHONE_SENDS.includes(uri) && !(TEST_REQUEST_TASKS as readonly string[]).includes(uri)
+    )
+    expect(unlisted).toEqual([])
   })
 
   it('the app has no caller of createContext', () => {

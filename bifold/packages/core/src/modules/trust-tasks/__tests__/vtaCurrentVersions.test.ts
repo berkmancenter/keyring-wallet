@@ -135,17 +135,22 @@ describe('vta/webvh/dids/create: 1.2, then 1.1', () => {
   })
 })
 
-describe('auth/step-up/approve-response: 0.6 first, the request’s own version as the step-down', () => {
-  it('answers a 0.2 request with 0.6 first, then 0.2', () => {
+describe('auth/step-up/approve-response: 0.7 first, then 0.6, the request’s own version as the last step down', () => {
+  it('answers a 0.2 request with 0.7 first, then 0.6, then 0.2', () => {
     expect(approveResponseTypesFor(STEP_UP_TASK.approveRequest02)).toEqual([
+      STEP_UP_TASK.approveResponse07,
       STEP_UP_TASK.approveResponse06,
       STEP_UP_TASK.approveResponse,
     ])
     expect(approveResponseTypesFor(STEP_UP_TASK.approveRequest03)).toEqual([
+      STEP_UP_TASK.approveResponse07,
       STEP_UP_TASK.approveResponse06,
       STEP_UP_TASK.approveResponse05,
     ])
-    expect(approveResponseTypesFor(STEP_UP_TASK.approveRequest05)).toEqual([STEP_UP_TASK.approveResponse06])
+    expect(approveResponseTypesFor(STEP_UP_TASK.approveRequest05)).toEqual([
+      STEP_UP_TASK.approveResponse07,
+      STEP_UP_TASK.approveResponse06,
+    ])
   })
 })
 
@@ -236,6 +241,7 @@ describe('the approval rules know every version the phone now sends about itself
     'policy/upsert/0.3',
     'acl/list/0.3',
     'auth/step-up/approve-response/0.5',
+    'auth/step-up/approve-response/0.7',
     'vta/webvh/dids/create/1.1',
     'vta/webvh/dids/create/1.2',
   ])('%s', (slug) => {

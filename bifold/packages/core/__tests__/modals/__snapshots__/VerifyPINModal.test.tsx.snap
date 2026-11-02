@@ -81,7 +81,7 @@ exports[`VerifyPINModal Component Renders correctly 1`] = `
         focusable={true}
         hitSlop={
           Object {
-            "bottom": 44,
+            "bottom": 12,
             "left": 44,
             "right": 44,
             "top": 44,

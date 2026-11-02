@@ -25,11 +25,13 @@ jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 const ME = 'did:key:z6MkThisPhone'
 const CREATE = 'https://trusttasks.org/spec/vta/contexts/create/1.0'
 const SET_WAKE = 'https://trusttasks.org/spec/device/set-wake/0.2'
+const DELETE_10 = 'https://trusttasks.org/spec/vta/contexts/delete/1.0'
+const DELETE_11 = 'https://trusttasks.org/spec/vta/contexts/delete/1.1'
 const id = (key: string) => testIdWithKey(key)
 
-const stateOf = (model: ApprovalsModel, canChange = true): ApprovalRulesState => ({
+const stateOf = (model: ApprovalsModel, canChange = true, served?: string[]): ApprovalRulesState => ({
   model: { ...model, unreadable: false },
-  view: approvalsView(model, ME),
+  view: approvalsView(model, ME, served),
   canChange,
 })
 
@@ -74,6 +76,25 @@ describe('Ask me before…', () => {
     expect(set).toHaveBeenCalledWith({}, CREATE, true)
     expect(tree.getByTestId(id('AskMeSwitch_contextsCreate')).props.accessibilityState).toMatchObject({ checked: true })
     expect(tree.getByTestId(id('AskMeTest'))).toBeTruthy()
+  })
+
+  test('a rule only on a version the updated agent no longer serves reads off, with "turn it on again"', async () => {
+    const old = { ...withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME, [DELETE_10]), version: 1 }
+    jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(old, true, [DELETE_11]))
+    const renewed = { ...withPhoneRule(old, DELETE_11, true, ME, [DELETE_11]), version: 2 }
+    const set = jest.spyOn(vtaAgent, 'setApprovalRule').mockResolvedValue(stateOf(renewed, true, [DELETE_11]))
+    const tree = await show()
+    expect(tree.getByTestId(id('AskMeSwitch_contextsDelete')).props.accessibilityState).toMatchObject({
+      checked: false,
+    })
+    expect(tree.getByTestId(id('AskMeTurnOnAgain_contextsDelete'))).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AskMeSwitch_contextsDelete')))
+    })
+    expect(set).toHaveBeenCalledWith({}, DELETE_11, true)
+    expect(tree.getByTestId(id('AskMeSwitch_contextsDelete')).props.accessibilityState).toMatchObject({ checked: true })
+    expect(tree.queryByTestId(id('AskMeTurnOnAgain_contextsDelete'))).toBeNull()
   })
 
   // IN-309: the test request is made while Keyring is open, so its
