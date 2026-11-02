@@ -30,7 +30,7 @@ name: Test builds
 
 on:
   push:
-    # TEMPORARY for validating this workflow; removed before merge.
+    # Keep this: gate-smoke.yml, gate-ci.yml and gate.sh watch --main all take "the newest green push build of main".
     branches: [main]
     paths-ignore:
       - "docs/**"
@@ -38,6 +38,7 @@ on:
       - "e2e/**"
       - "tsp-reference/**"
       - "scripts/openvtc/**"
+      - "scripts/roadmap/**"
   # A pull request that changes what the native compilers see gets both builds
   # before it merges. No required check compiles Objective-C, Swift or Kotlin,
   # and #562 reached main with an AppDelegate.mm that didn't compile (#568).
@@ -178,8 +179,11 @@ jobs:
           sudo xcode-select --switch /Applications/Xcode_26.3.app
           xcodebuild -version
 
+      # Restore here, save after the pod install on main only: a pull request's save lands on its own ref, which no
+      # other PR can read (the wallet cache filled its 10 GB that way with yarn copies, 10-30).
       - name: Cache pod dependencies
-        uses: actions/cache@v4
+        id: pods
+        uses: actions/cache/restore@v4
         with:
           path: |
             app/ios/Pods
@@ -210,6 +214,17 @@ jobs:
         run: |
           export USE_HERMES=1
           yarn run ios:setup
+
+      - name: Save pod dependencies (main only)
+        # By ref, not event: many runs here are branch dispatches, and a save there lands on that branch alone.
+        if: github.ref == 'refs/heads/main' && steps.pods.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('app/ios/Podfile.lock') }}
 
       - name: Create environment settings (store configuration)
         working-directory: app
