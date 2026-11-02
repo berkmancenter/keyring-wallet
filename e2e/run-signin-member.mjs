@@ -13,8 +13,9 @@
  *   signin-member-joined     the community lists the phone after its review-way request is approved
  *   signin-claimed           the phone claimed the code: the portal's redeem shows a match number
  *   signin-idle              with SIGNIN_IDLE_MIN: the phone sits unused that long after joining (the persona key store, 277.2)
- *   signin-version           which the review shows: no SignInSigningScope (0.1), or one (0.2, VTC 0.17). Either is a result, not a verdict
- *   signin-scope-sentence    the scope sentence reads as words and fits the screen; SKIP where the community offers no scope
+ *   signin-version-seen      a line for the report, never a verdict: no SignInSigningScope (0.1), or one (0.2, VTC 0.17)
+ *   signin-scope-above-approve  unscrolled, the scope sentence ends above Approve: a person sees it before approving (#872)
+ *   signin-scope-words       scrolled to, the sentence reads as words and doesn't overflow sideways; SKIP with no scope, as above
  *   signin-approved          redeem approved: subject = the phone's member DID, amr includes "uv"
  *   signin-phone-done        the phone's result screen says it signed in (SignInResult / SignInDone)
  * uvUnavailable / noUvKey on the phone is BROKEN (an environment without biometrics), never a sign-in FAIL.
@@ -161,9 +162,20 @@ try {
   const scope = await existsTestId(d, "SignInSigningScope", 3000);
   const session = await textOf(d, "SignInSessionOnly").catch(() => "");
   await screenshot(d, "signin-review").catch(() => undefined);
-  await rows.row("signin-version", () => ({ ok: true, detail: `${scope ? "SignInSigningScope offered: 0.2 (a VTC with VTI #2190)" : "no SignInSigningScope: 0.1, the fallback every VTC answers today"}; session line "${session.slice(0, 90)}"` }));
-  // 277.2 made this sentence longer: it has to read as words, whole, inside the screen. French wraps it most: owed, the leg runs in English.
-  await rows.row("signin-scope-sentence", async () => {
+  await rows.row("signin-version-seen", () => ({ ok: true, detail: `${scope ? "SignInSigningScope offered: 0.2 (a VTC with VTI #2190)" : "no SignInSigningScope: 0.1, the fallback every VTC answers today"}; session line "${session.slice(0, 90)}"` }));
+  // Before any scroll: what #872 lost was the sentence below the fold, behind the fixed buttons, with Approve still in reach.
+  await rows.row("signin-scope-above-approve", async () => {
+    if (!scope) return { skip: "this community offers no signing scope" };
+    const rectOf = async (key) => {
+      const el = await waitForTestId(d, key, 5000);
+      return { ...(await el.getLocation()), ...(await el.getSize()) };
+    };
+    const [sentence, approve, win] = [await rectOf("SignInSigningScope"), await rectOf("SignInApprove"), await d.getWindowRect()];
+    const ends = sentence.y + sentence.height;
+    return { ok: sentence.y >= 0 && ends <= approve.y && ends <= win.height, detail: `the sentence ends at y ${ends}; Approve starts at y ${approve.y} of ${win.height}` };
+  });
+  // 277.2 made this sentence longer: scrolled to, it reads as words and stays inside the width. French wraps it most: owed, the leg runs in English.
+  await rows.row("signin-scope-words", async () => {
     if (!scope) return { skip: "this community offers no signing scope" };
     const el = await scrollToTestId(d, "SignInSigningScope", 4).catch(() => undefined);
     if (!el) return { ok: false, detail: "SignInSigningScope did not scroll into view" };

@@ -7,7 +7,7 @@
 # answered by posting a match for the whole leg (biometric.log), and the proof of a biometric approval is the portal's
 # redeem ("uv" in amr). The community defaults to keyring-hv-lab1 (HV_C_*), as in `signin`.
 . "$(dirname "$0")/../lib.sh"; gate_env
-SIGNIN_ROWS="signin-member-joined signin-idle signin-claimed signin-version signin-scope-sentence signin-approved signin-phone-done"
+SIGNIN_ROWS="signin-member-joined signin-idle signin-claimed signin-version-seen signin-scope-above-approve signin-scope-words signin-approved signin-phone-done"
 leg_begin signin-ios "$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)" "$CAND_APP"
 SIGNIN_C_DID=${SIGNIN_C_DID:-${HV_C_DID:-}}; SIGNIN_C_REST=${SIGNIN_C_REST:-${HV_C_REST:-}}; SIGNIN_C_ADMIN_CRED=${SIGNIN_C_ADMIN_CRED:-${HV_C_ADMIN_CRED:-}}
 SIGNIN_PORTAL=${SIGNIN_PORTAL:-${SIGNIN_C_REST:+$(node -e 'console.log(new URL(process.argv[1]).origin + "/members/")' "$SIGNIN_C_REST")}}
