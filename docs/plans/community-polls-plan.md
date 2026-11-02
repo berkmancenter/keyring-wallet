@@ -60,7 +60,7 @@ Upstream's register of VTI-VOT requirements is not in that repository; these are
 statements of them.
 
 These sources are ahead of the pins `scripts/openvtc/PINS.json` records: verifiable-trust-infrastructure
-is pinned at `49f5f1be` (2026-10-07), where none of the files quoted here exist yet, and
+is pinned at `49f5f1be` (2026-10-07), where none of the files quoted in this section exist yet, and
 vta-browser-plugin at `bf92427` (2026-10-22), before #404 and #406. To check a quote, fetch the commit named here into the clone in
 `external/` and read it there with `git show <commit>:<path>`; the pins are not moved for this plan.
 
@@ -81,6 +81,11 @@ vta-browser-plugin at `bf92427` (2026-10-22), before #404 and #406. To check a q
 - **Unaudited cryptography.** `docs/07-voting/README.md`, status note: "The ballot cryptography is
   unaudited protocol code over audited group operations: fine for polls and surveys; have it
   reviewed before a binding election."
+
+**Upstream state, 2026-11-02.** The VTA Farm's operator said that voting is usable now, and that
+polls across several communities are coming. The app keeps the community a member reaches a poll
+through apart from the community its manifest names, so a poll run across communities needs no
+change to how the phone records it.
 
 ## Who sees what
 
