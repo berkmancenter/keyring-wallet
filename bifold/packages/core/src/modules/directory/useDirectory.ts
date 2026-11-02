@@ -16,7 +16,9 @@ import { useMyName } from '../rooms/useMyName'
 
 import { createDirectoryBackend } from './directoryBackend'
 import { AgentDirectoryService, directoryStatusOf } from './directoryService'
+import { keepSentPhoto, loadSentPhoto, photoDigest, type SentPhoto } from './myPhoto'
 import { confirmDirectoryNames, keepDirectoryName, loadDirectoryNames } from './names'
+import { noteMyCardPicture } from './pictures'
 import type {
   CardField,
   CardProposal,
@@ -26,8 +28,9 @@ import type {
   MemberRow,
   MyCard,
   OperationStatus,
+  PhotoAudience,
 } from './types'
-import { NAME_FIELD } from './types'
+import { DIRECTORY_AUDIENCES, NAME_FIELD, PICTURE_FIELD } from './types'
 
 /** The least time between two pages, so scrolling stays under a community's read limit (60 a minute by default). */
 export const MEMBERS_PAGE_SPACING_MS = 1000
@@ -240,16 +243,43 @@ export interface CommunityCard {
   /** Why the card is not shown: set when it could not be read. */
   status?: OperationStatus
   loading: boolean
+  /** The profile photo "Your card" would put on it (a `data:` URI); none when the profile has none. */
+  photo?: string
+  /**
+   * Who the member may show the photo to, members first, at most what the community allows for pictures. Empty when
+   * the community defines no picture field: no photo is offered there.
+   */
+  photoChoices: readonly PhotoAudience[]
+  /** Who sees a picture on this card now: the member's choice, else the community's default. */
+  photoAudience?: DirectoryAudience
+  /**
+   * The card still holds the photo this phone put there, and the profile's photo has changed since: ask whether to
+   * update the card. Never acted on without the member's yes.
+   */
+  photoDiffers: boolean
   /**
    * Put the proposal's name on the card, at the revision read. Rejects with `DirectoryConflict` when the card changed
    * meanwhile (read it again with `reload`, then ask again), or `DirectoryRefused` with the community's code.
    */
   save(): Promise<void>
+  /** Put the profile photo on the card, shown to `audience`, at the revision read. Rejects as `save` does. */
+  savePhoto(audience: PhotoAudience): Promise<void>
+  /** Take the photo off the card, at the revision read. Rejects as `save` does. */
+  removePhoto(): Promise<void>
   reload(): void
 }
 
+/** Who the member may show a picture to, members first, at most `ceiling` (the community's limit for the field). */
+export function photoChoicesFor(ceiling: DirectoryAudience | undefined): PhotoAudience[] {
+  if (!ceiling) return []
+  const most = DIRECTORY_AUDIENCES.indexOf(ceiling)
+  return (['members', 'admins'] as const).filter((a) => DIRECTORY_AUDIENCES.indexOf(a) <= most)
+}
+
 export function useMyCommunityCard(service: DirectoryService | undefined, communityDid: string): CommunityCard {
+  const { agent } = useAgent()
   const mine = useMyName(communityDid)
+  const [sent, setSent] = useState<SentPhoto>()
   const [card, setCard] = useState<MyCard>()
   const [fields, setFields] = useState<readonly CardField[]>()
   const [status, setStatus] = useState<OperationStatus>()
@@ -280,6 +310,25 @@ export function useMyCommunityCard(service: DirectoryService | undefined, commun
     }
   }, [service, communityDid, generation])
 
+  // The community's screen shows the same picture on its Your card row (`pictures.ts`).
+  useEffect(() => {
+    if (card) noteMyCardPicture(communityDid, card.entryId, card.picture)
+  }, [communityDid, card])
+
+  // Which profile photo this phone put on the card, to ask when the profile's changes (`myPhoto.ts`).
+  useEffect(() => {
+    if (!agent) return
+    let live = true
+    loadSentPhoto(agent, communityDid)
+      .then((kept) => {
+        if (live) setSent(kept)
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [agent, communityDid])
+
   const proposal = useMemo<CardProposal | undefined>(
     () => (mine.name && mine.profileId ? { name: mine.name, profileId: mine.profileId } : undefined),
     [mine.name, mine.profileId]
@@ -289,6 +338,39 @@ export function useMyCommunityCard(service: DirectoryService | undefined, commun
     if (!service || !card || !proposal) return
     setCard(await service.setMyName(communityDid, proposal.name, card.revision))
   }, [service, card, proposal, communityDid])
+
+  // Who sees the picture changed with it: the fields are read again for the card as it now is.
+  const showCard = useCallback(
+    async (next: MyCard) => {
+      setCard(next)
+      if (service) setFields(await service.cardFields(communityDid, next))
+    },
+    [service, communityDid]
+  )
+
+  const photo = mine.photo
+  const photoNow = useMemo(() => (photo ? photoDigest(photo) : undefined), [photo])
+  const savePhoto = useCallback(
+    async (audience: PhotoAudience) => {
+      if (!service || !card || !photo) return
+      const next = await service.setMyPicture(communityDid, photo, audience, card.revision)
+      const kept = next.picture && photoNow ? { profile: photoNow, card: next.picture.sha256 } : undefined
+      setSent(kept)
+      if (agent) await keepSentPhoto(agent, communityDid, kept).catch(() => undefined)
+      await showCard(next)
+    },
+    [service, card, photo, photoNow, communityDid, agent, showCard]
+  )
+
+  const removePhoto = useCallback(async () => {
+    if (!service || !card) return
+    const next = await service.removeMyPicture(communityDid, card.revision)
+    setSent(undefined)
+    if (agent) await keepSentPhoto(agent, communityDid, undefined).catch(() => undefined)
+    await showCard(next)
+  }, [service, card, communityDid, agent, showCard])
+
+  const pictureField = fields?.find((f) => f.key === PICTURE_FIELD)
 
   const reload = useCallback(() => setGeneration((g) => g + 1), [])
 
@@ -300,7 +382,13 @@ export function useMyCommunityCard(service: DirectoryService | undefined, commun
     differs: !!card?.name && !!proposal && card.name !== proposal.name,
     status,
     loading,
+    photo,
+    photoChoices: photoChoicesFor(pictureField?.ceiling),
+    photoAudience: pictureField?.audience,
+    photoDiffers: !!photoNow && !!card?.picture && sent?.card === card.picture.sha256 && sent.profile !== photoNow,
     save,
+    savePhoto,
+    removePhoto,
     reload,
   }
 }

@@ -10,6 +10,7 @@ import {
   resetDirectoryNameLookups,
   useCommunityMembers,
   useDirectoryNames,
+  photoChoicesFor,
   useMyCommunityCard,
 } from '../useDirectory'
 
@@ -207,5 +208,15 @@ describe('room authors’ own names', () => {
     renderHook(() => useDirectoryNames(refusing, COMMUNITY, [ANA, BO]))
     await waitFor(() => expect(mockAgent.config.logger.warn).toHaveBeenCalled())
     expect(refusing.calls).toEqual([`lookupName ${ANA}`])
+  })
+})
+
+describe('who a photo may be shown to', () => {
+  it('all members first, then administrators only, at most what the community allows; never anyone', () => {
+    expect(photoChoicesFor('public')).toEqual(['members', 'admins'])
+    expect(photoChoicesFor('members')).toEqual(['members', 'admins'])
+    expect(photoChoicesFor('connections')).toEqual(['admins'])
+    expect(photoChoicesFor('admins')).toEqual(['admins'])
+    expect(photoChoicesFor(undefined)).toEqual([])
   })
 })

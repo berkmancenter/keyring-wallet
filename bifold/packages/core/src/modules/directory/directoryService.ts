@@ -12,12 +12,15 @@ import {
   DirectoryConflict,
   DirectoryRefused,
   NAME_FIELD,
+  PICTURE_FIELD,
   type CardField,
+  type CardPicture,
   type DirectoryOperation,
   type DirectoryService,
   type MemberCard,
   type MemberPage,
   type MyCard,
+  type PhotoAudience,
 } from './types'
 import {
   DIRECTORY_TASK,
@@ -27,8 +30,11 @@ import {
   parseEntries,
   parseFields,
   parseMemberCard,
+  parsePicture,
   parseQueryName,
+  parseUploaded,
   queryFields,
+  uploadPayload,
 } from './wire'
 
 export interface DirectoryBackend {
@@ -83,19 +89,7 @@ export class AgentDirectoryService implements DirectoryService {
   public async setMyName(communityDid: string, name: string, expectedRevision: number): Promise<MyCard> {
     const tidy = Array.from(name.replace(/\s+/g, ' ').trim()).slice(0, CARD_NAME_MAX).join('').trim()
     if (!tidy) throw new DirectoryRefused('updateMyCard', 'valueInvalid', false, 'a name is needed')
-    let answer: unknown
-    try {
-      answer = await this.ask('updateMyCard', communityDid, DIRECTORY_TASK.cardUpdate, {
-        values: { [NAME_FIELD]: tidy },
-        expectedRevision,
-      })
-    } catch (e) {
-      if (e instanceof DirectoryRefused && e.code === 'superseded') throw new DirectoryConflict(communityDid)
-      throw e
-    }
-    const card = parseCard(answer)
-    if (!card) throw new Error(`${communityDid} answered the card update with something else`)
-    return card
+    return this.updateCard(communityDid, { values: { [NAME_FIELD]: tidy }, expectedRevision })
   }
 
   public async lookupName(communityDid: string, memberDid: string): Promise<string | undefined> {
@@ -119,6 +113,65 @@ export class AgentDirectoryService implements DirectoryService {
   public async memberCardByDid(communityDid: string, memberDid: string): Promise<MemberCard | undefined> {
     // No `fields` hint: the whole card, as the community projects it for this member.
     return this.memberCard(communityDid, DIRECTORY_TASK.query, { subject: memberDid }, (p) => queryFields(p, memberDid))
+  }
+
+  public async showPicture(communityDid: string, entryId: string, picture: CardPicture): Promise<string | undefined> {
+    let answer: unknown
+    try {
+      // `sha256` names the picture this card showed: if the card holds another by now, the answer is `notFound`.
+      answer = await this.ask('showPicture', communityDid, DIRECTORY_TASK.imagesGet, {
+        entryId,
+        field: PICTURE_FIELD,
+        sha256: picture.sha256,
+      })
+    } catch (e) {
+      // Not shown to you, gone, or a community before pictures: no picture, all the same.
+      if (e instanceof DirectoryRefused && ['notFound', 'unsupportedType', 'unsupportedVersion'].includes(e.code))
+        return undefined
+      throw e
+    }
+    return parsePicture(answer, picture)
+  }
+
+  public async setMyPicture(
+    communityDid: string,
+    photo: string,
+    audience: PhotoAudience,
+    expectedRevision: number
+  ): Promise<MyCard> {
+    const payload = uploadPayload(photo)
+    if (!payload) throw new DirectoryRefused('updateMyCard', 'valueInvalid', false, 'not a photo a card can hold')
+    // The community re-encodes it and keeps only its own copy; an upload no card takes up is erased within a day.
+    const uploaded = parseUploaded(await this.ask('updateMyCard', communityDid, DIRECTORY_TASK.imagesUpload, payload))
+    if (!uploaded) throw new Error(`${communityDid} answered the photo upload with something else`)
+    return this.updateCard(communityDid, {
+      values: { [PICTURE_FIELD]: uploaded },
+      visibility: { [PICTURE_FIELD]: audience },
+      expectedRevision,
+    })
+  }
+
+  public async removeMyPicture(communityDid: string, expectedRevision: number): Promise<MyCard> {
+    // `null` clears the value, and returns who sees it to the field's default; a picture no card holds is erased.
+    return this.updateCard(communityDid, {
+      values: { [PICTURE_FIELD]: null },
+      visibility: { [PICTURE_FIELD]: null },
+      expectedRevision,
+    })
+  }
+
+  /** A `card/update` at the revision read; `superseded` is the card having moved on. */
+  private async updateCard(communityDid: string, payload: Record<string, unknown>): Promise<MyCard> {
+    let answer: unknown
+    try {
+      answer = await this.ask('updateMyCard', communityDid, DIRECTORY_TASK.cardUpdate, payload)
+    } catch (e) {
+      if (e instanceof DirectoryRefused && e.code === 'superseded') throw new DirectoryConflict(communityDid)
+      throw e
+    }
+    const card = parseCard(answer)
+    if (!card) throw new Error(`${communityDid} answered the card update with something else`)
+    return card
   }
 
   /** A card read one way or the other, labelled by the community's fields; `notFound` is no card to show. */

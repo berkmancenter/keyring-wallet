@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "bbbedcfe2c835da740e01754ecb2e7ff97a1363e",
+  "generatedFrom": "0f3a8dc0d4fe5ebd3a51183c5642b66bd016829d",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -502,6 +502,16 @@
     "DirectoryCardNameValue": ["src/modules/directory/screens/CommunityCard.tsx"],
     "DirectoryCardNoName": ["src/modules/directory/screens/CommunityCard.tsx"],
     "DirectoryCardOpenProfile": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhoto": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoDiffers": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoFailed": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoNoProfilePhoto": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoOpenProfile": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoRemove": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoRemoved": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoSaved": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoSeen": ["src/modules/directory/screens/CommunityCard.tsx"],
+    "DirectoryCardPhotoUse": ["src/modules/directory/screens/CommunityCard.tsx"],
     "DirectoryCardProfileNoName": ["src/modules/directory/screens/CommunityCard.tsx"],
     "DirectoryCardReload": ["src/modules/directory/screens/CommunityCard.tsx"],
     "DirectoryCardSaved": ["src/modules/directory/screens/CommunityCard.tsx"],
@@ -878,6 +888,21 @@
     "PersonaAgentNotice": ["src/modules/trust-tasks/screens/PersonaAgentNotice.tsx"],
     "PersonaAgentNoticeLine": ["src/modules/trust-tasks/screens/PersonaAgentNotice.tsx"],
     "PersonaAgentNoticeOpen": ["src/modules/trust-tasks/screens/PersonaAgentNotice.tsx"],
+    "PhotoConsent": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentAdmins": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentBackdrop": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentChoices": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentHostCopy": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentNotNow": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentOnlyAdmins": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentScroll": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentSeen": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoConsentSend": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
+    "PhotoRemove": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
+    "PhotoRemoveBackdrop": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
+    "PhotoRemoveBody": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
+    "PhotoRemoveConfirm": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
+    "PhotoRemoveNotNow": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
     "PredicateInput": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateName": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateValue": ["src/components/misc/VerifierCredentialCard.tsx"],
@@ -1541,6 +1566,7 @@
     "OfferDevice_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],
     "OfferKeep_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],
     "OfferRemove_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],
+    "PhotoConsentChoice_": ["src/modules/directory/components/PhotoConsentSheet.tsx"],
     "RequestNotTaken_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "RequestsOther_": ["src/modules/trust-tasks/screens/OtherAgentsRequests.tsx"],
     "RequestsSwitch_": ["src/modules/trust-tasks/screens/OtherAgentsRequests.tsx"],
@@ -1570,6 +1596,8 @@
     "text-": ["src/components/views/Banner.tsx"]
   },
   "raw": {
+    "CommunityDirectoryCard": ["src/modules/directory/components/CommunityDirectorySection.tsx"],
+    "DirectoryCardPhoto": ["src/modules/directory/screens/CommunityCard.tsx"],
     "LinkedProfileCard": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ListCredentialsLoading": ["src/screens/ListCredentials.tsx"],
     "ListCredentialsRoot": ["src/screens/ListCredentials.tsx"],
@@ -1577,6 +1605,7 @@
       "src/modules/vrc/components/ContactCard.tsx",
       "src/modules/vrc/screens/ContactDetails.tsx"
     ],
+    "MemberCard": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
     "MyQRIdentityCode": ["src/components/misc/QRScanner.tsx"],
     "SecureExchangeBadge": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "SecureExchangeChecking": ["src/modules/vrc/screens/ContactDetails.tsx"],
@@ -1691,6 +1720,12 @@
     },
     {
       "src/modules/directory/components/CommunityDirectorySection.tsx": "key"
+    },
+    {
+      "src/modules/directory/components/MemberPicture.tsx": "`${testID}Initials`"
+    },
+    {
+      "src/modules/directory/components/MemberPicture.tsx": "`${testID}Photo`"
     },
     {
       "src/modules/rooms/components/RoomMembersTab.tsx": "testID"

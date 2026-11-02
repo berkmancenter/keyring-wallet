@@ -6,20 +6,28 @@
  *
  * @module directory/wire
  */
+import { TypedArrayEncoder } from '@credo-ts/core'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
+
 import { toInertText } from '../rooms/inertText'
 
 import {
   DIRECTORY_AUDIENCES,
   NAME_FIELD,
+  PICTURE_FIELD,
+  PICTURE_MEDIA_TYPES,
   ROLE_FIELD,
   type CardEntry,
   type CardField,
+  type CardPicture,
   type CardValue,
   type DirectoryAudience,
   type MemberCard,
   type MemberPage,
   type MemberRow,
   type MyCard,
+  type PictureMediaType,
 } from './types'
 
 const SPEC = 'https://trusttasks.org/spec/'
@@ -33,6 +41,9 @@ export const DIRECTORY_TASK = {
   fieldsList: `${SPEC}vtc/directory/fields/list/0.1`,
   query: `${SPEC}vtc/directory/query/0.1`,
   entriesShow: `${SPEC}vtc/directory/entries/show/0.1`,
+  // vtc-service 0.13 and later; an older community refuses it as an unsupported type.
+  imagesGet: `${SPEC}vtc/directory/images/get/0.1`,
+  imagesUpload: `${SPEC}vtc/directory/images/upload/0.1`,
 } as const
 
 /** A page as the community serves it by default; at most 100 (`entries/list/0.1`). */
@@ -55,6 +66,74 @@ const text = (v: unknown, max: number) => {
   return s ? toInertText(Array.from(s).slice(0, max).join('')) : undefined
 }
 
+const SHA256_HEX = /^[0-9a-f]{64}$/
+const BASE64URL = /^[A-Za-z0-9_-]+$/
+/** The most bytes a stored picture has (`CardBlobRef.size`). */
+export const PICTURE_MAX_BYTES = 262_144
+
+const pictureType = (v: unknown): PictureMediaType | undefined =>
+  (PICTURE_MEDIA_TYPES as readonly unknown[]).includes(v) ? (v as PictureMediaType) : undefined
+
+/** A `CardBlobRef` as a picture to read; undefined for anything else, or a type a phone doesn't show. */
+export function pictureOf(v: unknown): CardPicture | undefined {
+  const ref = obj(v)
+  const digest = str(ref?.sha256)
+  const mediaType = pictureType(ref?.mediaType)
+  return digest && SHA256_HEX.test(digest) && mediaType ? { sha256: digest, mediaType } : undefined
+}
+
+/**
+ * An `images/get/0.1` answer as a `data:` URI, only when it is the picture asked for: the answer names its digest, the
+ * bytes are within the size a card holds, and their SHA-256 is that digest. Anything else is no picture.
+ */
+export function parsePicture(payload: unknown, wanted: CardPicture): string | undefined {
+  const p = obj(payload)
+  const image = pictureOf(p?.image)
+  const data = str(p?.data)
+  if (!image || image.sha256 !== wanted.sha256 || !data || !BASE64URL.test(data)) return undefined
+  let bytes: Uint8Array
+  try {
+    bytes = TypedArrayEncoder.fromBase64Url(data)
+  } catch {
+    return undefined
+  }
+  if (bytes.length === 0 || bytes.length > PICTURE_MAX_BYTES || bytesToHex(sha256(bytes)) !== wanted.sha256)
+    return undefined
+  return `data:${image.mediaType};base64,${TypedArrayEncoder.toBase64(bytes)}`
+}
+
+/**
+ * A `data:` URI (the profile photo) as an `images/upload/0.1` payload: its media type, and its bytes base64url without
+ * padding. Undefined for a type a card can't hold, bytes that aren't base64, or more than a card holds.
+ */
+export function uploadPayload(photo: string): { mediaType: PictureMediaType; data: string } | undefined {
+  const m = /^data:([a-z/]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(photo)
+  const mediaType = pictureType(m?.[1])
+  if (!m || !mediaType) return undefined
+  let bytes: Uint8Array
+  try {
+    bytes = TypedArrayEncoder.fromBase64(m[2])
+  } catch {
+    return undefined
+  }
+  if (bytes.length === 0 || bytes.length > PICTURE_MAX_BYTES) return undefined
+  return { mediaType, data: TypedArrayEncoder.toBase64Url(bytes) }
+}
+
+/**
+ * The reference an `images/upload/0.1` answer gives, as a card's value holds it: digest, media type and size, nothing
+ * else (a stored value never carries a URL). Undefined for an answer that is not one.
+ */
+export function parseUploaded(
+  payload: unknown
+): { sha256: string; mediaType: PictureMediaType; size?: number } | undefined {
+  const image = obj(obj(payload)?.image)
+  const picture = pictureOf(image)
+  if (!picture) return undefined
+  const size = int(image?.size)
+  return size !== undefined && size > 0 && size <= PICTURE_MAX_BYTES ? { ...picture, size } : picture
+}
+
 /** One page of the members list (`entries/list/0.1` response). */
 export function parseEntries(payload: unknown): MemberPage {
   const p = obj(payload)
@@ -68,6 +147,7 @@ export function parseEntries(payload: unknown): MemberPage {
         entryId,
         name: text(fields[NAME_FIELD], 64),
         role: text(fields[ROLE_FIELD], 64),
+        picture: pictureOf(fields[PICTURE_FIELD]),
         connected: typeof e.connected === 'boolean' ? e.connected : undefined,
       },
     ]
@@ -101,6 +181,7 @@ export function parseCard(payload: unknown): MyCard | undefined {
     entryId,
     revision,
     name: text(values[NAME_FIELD], 64),
+    picture: pictureOf(values[PICTURE_FIELD]),
     visibility,
     missingRequired: arr(p?.missingRequired).flatMap((k) => (typeof k === 'string' && FIELD_KEY.test(k) ? [k] : [])),
     updatedAt,
@@ -135,8 +216,8 @@ export function parseFields(payload: unknown, card?: Pick<MyCard, 'visibility'>)
   return out.sort((a, b) => a.order - b.order).map(({ order: _order, ...field }) => field)
 }
 
-// Shown in the card's head (name, role), or not shown as a value at all: the identifier, and pictures (none at 0.12).
-const NOT_A_CARD_LINE = new Set([NAME_FIELD, ROLE_FIELD, 'did'])
+// Shown in the card's head (name, role, picture), or not shown as a value at all: the identifier, and other pictures.
+const NOT_A_CARD_LINE = new Set([NAME_FIELD, ROLE_FIELD, PICTURE_FIELD, 'did'])
 
 /** One value as a card line shows it, by its field's type; undefined for a value of no shape the card schema defines. */
 function cardValue(raw: unknown, type: string | undefined): CardValue | undefined {
@@ -175,7 +256,12 @@ export function parseMemberCard(fields: unknown, definitions: readonly CardField
     const value = cardValue(values[def.key], def.type)
     if (value) entries.push({ key: def.key, label: def.label, value })
   }
-  return { name: text(values[NAME_FIELD], 64), role: text(values[ROLE_FIELD], 64), entries }
+  return {
+    name: text(values[NAME_FIELD], 64),
+    role: text(values[ROLE_FIELD], 64),
+    picture: pictureOf(values[PICTURE_FIELD]),
+    entries,
+  }
 }
 
 /** The fields of an `entries/show/0.1` answer about `entryId`. */

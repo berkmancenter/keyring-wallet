@@ -1,6 +1,7 @@
 /**
  * A community's members, as the community shows them to this member (parity plan §9.3 #3, at VTC 0.12): each one's
- * initials, name and role, a page at a time as the list scrolls. Members who show no name are folded into one line
+ * picture where they show one (VTC 0.13, `pictures.ts`) or initials, name and role, a page at a time as the list
+ * scrolls. Members who show no name are folded into one line
  * at the end, as the member portal does. A name is what that member wrote about themselves, and the screen says so
  * once, above the list.
  *
@@ -19,9 +20,9 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
-import { initialsOf } from '../../../utils/initials'
 import { testIdWithKey } from '../../../utils/testable'
 import { communityLabelOf } from '../../trust-tasks/screens/communityName'
+import { MemberPicture } from '../components/MemberPicture'
 import { directoryRetryable, directoryStatusText, memberRoleText } from '../components/directoryWords'
 import type { MemberRow } from '../types'
 import { useCommunityMembers, useDirectoryService } from '../useDirectory'
@@ -39,17 +40,8 @@ const CommunityMembers: React.FC = () => {
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { flexGrow: 1, paddingHorizontal: 16, paddingVertical: 16 },
-    // Flat rows, as the Messages list draws them: a hairline under the words, starting after the initials.
+    // Flat rows, as the Messages list draws them: a hairline under the words, starting after the picture.
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 },
-    disc: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: ColorPalette.brand.primary,
-    },
-    initials: { color: ColorPalette.grayscale.white, fontSize: 16 },
     words: {
       flex: 1,
       gap: 2,
@@ -79,11 +71,17 @@ const CommunityMembers: React.FC = () => {
         onPress={() => go.navigate(Screens.CommunityMemberCard, { communityDid, entryId: item.entryId })}
         testID={testIdWithKey(`DirectoryMember_${item.entryId}`)}
       >
-        <View style={styles.disc}>
-          <ThemedText variant="bold" style={styles.initials} maxFontSizeMultiplier={1.5}>
-            {initialsOf(name)}
-          </ThemedText>
-        </View>
+        <MemberPicture
+          service={service}
+          communityDid={communityDid}
+          entryId={item.entryId}
+          picture={item.picture}
+          name={name}
+          size={40}
+          initialsSize={16}
+          initialsMaxScale={1.5}
+          testID={`DirectoryMemberPicture_${item.entryId}_`}
+        />
         <View style={styles.words}>
           <ThemedText maxFontSizeMultiplier={1.5}>{name}</ThemedText>
           {role ? (

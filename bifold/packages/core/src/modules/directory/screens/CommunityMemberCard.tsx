@@ -1,6 +1,6 @@
 /**
- * Another member's card in a community: their name and role, then every other field they show to members, in the
- * community's order. Opened from the members list (by entry) or from a room author's sheet (by their DID, for an
+ * Another member's card in a community: their picture (opened by entry, where they show one), name and role, then
+ * every other field they show to members, in the community's order. Opened from the members list (by entry) or from a room author's sheet (by their DID, for an
  * author who shows their identity to members). Everything on it is what they wrote about themselves, or what a card
  * they hold says, and the screen says whose card it is. Nothing here is kept: it is read when the screen opens.
  *
@@ -18,9 +18,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
-import { initialsOf } from '../../../utils/initials'
 import { testIdWithKey } from '../../../utils/testable'
 import { communityLabelOf } from '../../trust-tasks/screens/communityName'
+import { MemberPicture } from '../components/MemberPicture'
 import { directoryRetryable, directoryStatusText, memberRoleText } from '../components/directoryWords'
 import type { CardValue } from '../types'
 import { useDirectoryService, useMemberCard } from '../useDirectory'
@@ -48,15 +48,6 @@ const CommunityMemberCard: React.FC = () => {
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { flexGrow: 1, paddingHorizontal: 16, paddingVertical: 20, gap: 16 },
     head: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-    disc: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: ColorPalette.brand.primary,
-    },
-    initials: { color: ColorPalette.grayscale.white, fontSize: 20 },
     title: { ...TextTheme.headingFour, fontSize: 22, color: ColorPalette.brand.text },
     sub: { color: ColorPalette.grayscale.mediumGrey, fontSize: 15 },
     // The screen and a filled card are the same grey in Keyring's theme: the border is what shows the card.
@@ -107,11 +98,16 @@ const CommunityMemberCard: React.FC = () => {
     return (
       <>
         <View style={styles.head}>
-          <View style={styles.disc}>
-            <ThemedText variant="bold" style={styles.initials}>
-              {initialsOf(name)}
-            </ThemedText>
-          </View>
+          <MemberPicture
+            service={service}
+            communityDid={communityDid}
+            entryId={params.entryId}
+            picture={card.picture}
+            name={name}
+            size={52}
+            initialsSize={20}
+            testID="MemberCard"
+          />
           <View style={{ flex: 1, gap: 2 }}>
             <ThemedText style={styles.title} accessibilityRole="header" testID={testIdWithKey('MemberCardName')}>
               {name ?? params.standIn ?? t('Directory.MemberCardTitle')}

@@ -34,14 +34,23 @@ export function audienceText(t: TFunction, audience: DirectoryAudience, communit
 export function saveFailureText(
   t: TFunction,
   error: unknown,
-  community: string
+  community: string,
+  what: 'name' | 'photo' = 'name'
 ): { text: string; reread: boolean; retryable: boolean } {
   const opts = { community, interpolation: { escapeValue: false } }
   if (error instanceof DirectoryConflict)
     return { text: t('Directory.CardConflict', opts) as string, reread: true, retryable: true }
   if (error instanceof DirectoryRefused && !error.retryable)
-    return { text: t('Directory.CardRefused', opts) as string, reread: false, retryable: false }
-  return { text: t('Directory.CardNotSaved', opts) as string, reread: false, retryable: true }
+    return {
+      text: t(what === 'photo' ? 'Directory.CardPhotoRefused' : 'Directory.CardRefused', opts) as string,
+      reread: false,
+      retryable: false,
+    }
+  return {
+    text: t(what === 'photo' ? 'Directory.CardPhotoNotSaved' : 'Directory.CardNotSaved', opts) as string,
+    reread: false,
+    retryable: true,
+  }
 }
 
 const ROLE_KEY: Record<string, string> = {

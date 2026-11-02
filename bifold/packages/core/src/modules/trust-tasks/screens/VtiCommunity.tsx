@@ -24,6 +24,7 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { CommunityDirectorySection } from '../../directory/components/CommunityDirectorySection'
+import { keepSentPhoto } from '../../directory/myPhoto'
 import { dropDirectoryNames } from '../../directory/names'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
@@ -159,6 +160,8 @@ const VtiCommunity: React.FC = () => {
       )
       // The names its members wrote on their cards, kept for the rooms, go with it.
       await dropDirectoryNames(agent, communityDid).catch(() => undefined)
+      // And what this phone remembers of the photo it put on the member's card there.
+      await keepSentPhoto(agent, communityDid, undefined).catch(() => undefined)
       // The community answered, so it is named plainly here: its published
       // name, else the link's name without "(not confirmed …)", which after
       // "You left" read as if the leave itself was unconfirmed.

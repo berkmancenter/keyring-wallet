@@ -16,6 +16,8 @@ export interface MyName {
   name?: string
   /** The profile to open for "Open profile"; none when there is no profile yet. */
   profileId?: string
+  /** The profile's photo, a `data:` URI, for "Your card" in a community; none when the profile has none. */
+  photo?: string
 }
 
 export const useMyName = (communityDid?: string): MyName => {
@@ -27,5 +29,5 @@ export const useMyName = (communityDid?: string): MyName => {
   if (!profile) return {}
   const form = formInputFromTemplate(profile)
   const name = [form.firstName, form.lastName].filter(Boolean).join(' ').trim()
-  return { name: name || undefined, profileId: profile.id }
+  return { name: name || undefined, profileId: profile.id, photo: form.photo || undefined }
 }

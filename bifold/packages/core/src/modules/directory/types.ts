@@ -25,6 +25,29 @@ export const NAME_FIELD = 'displayName'
 /** The base field the community derives from the member's role. */
 export const ROLE_FIELD = 'role'
 
+/** The base field a member's picture is kept in. */
+export const PICTURE_FIELD = 'avatar'
+
+/** The picture types a phone shows. A card may also name `image/avif`, which is shown as no picture. */
+export const PICTURE_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const
+export type PictureMediaType = (typeof PICTURE_MEDIA_TYPES)[number]
+
+/**
+ * A picture on a card (`CardBlobRef`, VTC 0.13 and later): the community's own re-encoded copy, named by its digest,
+ * never a URL. Its bytes are read with `images/get` and shown only when they match the digest.
+ */
+export interface CardPicture {
+  /** Lowercase hex SHA-256 of the stored bytes. */
+  sha256: string
+  mediaType: PictureMediaType
+}
+
+/**
+ * Who a member may show their picture to from Keyring: all members, or administrators only, at most what the community
+ * allows for pictures. Never `public`: Keyring publishes no card outside the community.
+ */
+export type PhotoAudience = Extract<DirectoryAudience, 'members' | 'admins'>
+
 /** One member as the members list shows them. */
 export interface MemberRow {
   /** Opaque, per community; never a DID. */
@@ -33,6 +56,8 @@ export interface MemberRow {
   name?: InertText
   /** Their role in the community, where it is shown. */
   role?: InertText
+  /** Their picture, where they show it to members. */
+  picture?: CardPicture
   /** Whether the community records a relationship between you and them. */
   connected?: boolean
 }
@@ -79,6 +104,7 @@ export interface CardEntry {
 export interface MemberCard {
   name?: InertText
   role?: InertText
+  picture?: CardPicture
   entries: CardEntry[]
 }
 
@@ -89,6 +115,8 @@ export interface MyCard {
   revision: number
   /** The name on it, if any. */
   name?: InertText
+  /** The picture on it, if any. */
+  picture?: CardPicture
   /** Who sees each field, by key, where the member chose. */
   visibility: Readonly<Record<string, DirectoryAudience>>
   /** Required fields still empty. */
@@ -104,7 +132,13 @@ export interface CardProposal {
 }
 
 /** The directory operations, each with a status a screen shows instead of guessing. */
-export type DirectoryOperation = 'listMembers' | 'showMyCard' | 'updateMyCard' | 'lookupName' | 'showMember'
+export type DirectoryOperation =
+  | 'listMembers'
+  | 'showMyCard'
+  | 'updateMyCard'
+  | 'lookupName'
+  | 'showMember'
+  | 'showPicture'
 
 /** The card changed since it was read (`superseded`): nothing was written. Read it again, then decide. */
 export class DirectoryConflict extends Error {
@@ -152,6 +186,20 @@ export interface DirectoryService {
    * to members. Undefined otherwise.
    */
   memberCardByDid(communityDid: string, memberDid: string): Promise<MemberCard | undefined>
+  /**
+   * The picture a card on `entryId` shows this member (`images/get/0.1`), as a `data:` URI, once its bytes match the
+   * digest the card named. Undefined when it is not shown to you, the card now holds another, the bytes do not match,
+   * or the community serves no pictures.
+   */
+  showPicture(communityDid: string, entryId: string, picture: CardPicture): Promise<string | undefined>
+  /**
+   * Put `photo` (a `data:` URI) on the member's card, shown to `audience`, at the revision read: `images/upload`, then
+   * `card/update` with the community's copy and who sees it. Throws `DirectoryConflict` when the card moved on,
+   * `DirectoryRefused` when the community refused either step. Resolves with the card, holding the community's copy.
+   */
+  setMyPicture(communityDid: string, photo: string, audience: PhotoAudience, expectedRevision: number): Promise<MyCard>
+  /** Take the picture off the member's card, and who sees it back to the community's default, at the revision read. */
+  removeMyPicture(communityDid: string, expectedRevision: number): Promise<MyCard>
 }
 
 /** A status from a failure, for a screen: what it shows instead of the list or the card. */

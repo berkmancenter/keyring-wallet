@@ -10,6 +10,7 @@ import {
   DirectoryConflict,
   DirectoryRefused,
   type CardField,
+  type CardPicture,
   type DirectoryAudience,
   type DirectoryService,
   type MemberCard,
@@ -30,6 +31,18 @@ export interface FakeDirectoryOptions {
   shown?: Record<string, string>
   /** Cards by entry id or member DID, as `showMember` and `memberCardByDid` find them; anyone else has none. */
   cards?: Record<string, MemberCard>
+  /** Pictures on members' rows, by their index in the list. */
+  rowPictures?: Record<number, CardPicture>
+  /** The picture on your card. */
+  cardPicture?: CardPicture
+  /** What `showPicture` answers, by digest: the checked `data:` URI. Any other digest has none. */
+  pictureUris?: Record<string, string>
+  /** The community defines the picture field, allowing at most this audience (default: no picture field). */
+  pictureCeiling?: DirectoryAudience
+  /** Who sees each field on your card, where you chose (e.g. set from the portal). */
+  cardVisibility?: Record<string, DirectoryAudience>
+  /** Make a photo upload or removal fail as the community would refuse it, by the task's code. */
+  refusePhoto?: string
 }
 
 const field = (
@@ -54,12 +67,14 @@ export function createFakeDirectoryService(options: FakeDirectoryOptions = {}): 
     entryId: `dir_member${String(i).padStart(12, '0')}`,
     name: i % 5 === 4 ? undefined : toInertText(`Member ${i + 1}`),
     role: toInertText(i === 0 ? 'admin' : 'member'),
+    picture: options.rowPictures?.[i],
   }))
   let card: MyCard = {
     entryId: 'dir_mine0000000000000000',
     revision: 0,
     name: options.cardName !== undefined ? toInertText(options.cardName) : undefined,
-    visibility: {},
+    picture: options.cardPicture,
+    visibility: { ...options.cardVisibility },
     missingRequired: [],
     updatedAt: '2026-10-30T00:00:00Z',
   }
@@ -96,6 +111,7 @@ export function createFakeDirectoryService(options: FakeDirectoryOptions = {}): 
         field('role', 'Role', 'members', false, 'members'),
         field('nickname', 'Nickname', 'admins', true, 'public'),
         field('did', 'Identifier', 'admins', false, 'members'),
+        ...(options.pictureCeiling ? [field('avatar', 'Picture', 'admins', true, options.pictureCeiling)] : []),
       ].map((f) => ({ ...f, audience: shown.visibility[f.key] ?? f.audience }))
     },
     async setMyName(communityDid, name, expectedRevision) {
@@ -119,6 +135,32 @@ export function createFakeDirectoryService(options: FakeDirectoryOptions = {}): 
       calls.push(`memberCardByDid ${memberDid}`)
       refuse('showMember')
       return options.cards?.[memberDid]
+    },
+    async showPicture(_communityDid, entryId, picture) {
+      calls.push(`showPicture ${entryId} ${picture.sha256.slice(0, 8)}`)
+      return options.pictureUris?.[picture.sha256]
+    },
+    async setMyPicture(communityDid, _photo, audience, expectedRevision) {
+      calls.push(`setMyPicture ${audience} @${expectedRevision}`)
+      if (options.refusePhoto) throw new DirectoryRefused('updateMyCard', options.refusePhoto, false, 'fake refusal')
+      if (expectedRevision !== card.revision) throw new DirectoryConflict(communityDid)
+      // The community's copy: its own digest, never the profile photo's.
+      const sha256 = `${String(card.revision + 1).padStart(2, '0')}${'e'.repeat(62)}`
+      card = {
+        ...card,
+        picture: { sha256, mediaType: 'image/jpeg' },
+        visibility: { ...card.visibility, avatar: audience },
+        revision: card.revision + 1,
+      }
+      return card
+    },
+    async removeMyPicture(communityDid, expectedRevision) {
+      calls.push(`removeMyPicture @${expectedRevision}`)
+      if (options.refusePhoto) throw new DirectoryRefused('updateMyCard', options.refusePhoto, false, 'fake refusal')
+      if (expectedRevision !== card.revision) throw new DirectoryConflict(communityDid)
+      const { avatar: _avatar, ...visibility } = card.visibility
+      card = { ...card, picture: undefined, visibility, revision: card.revision + 1 }
+      return card
     },
     changeElsewhere(name) {
       card = { ...card, name: toInertText(name), revision: card.revision + 1 }

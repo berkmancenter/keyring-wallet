@@ -242,15 +242,22 @@ exports[`the community screen’s directory rows (276.10, option A) Your card na
       >
         <View
           style={
-            Object {
-              "alignItems": "center",
-              "backgroundColor": "#42803E",
-              "borderRadius": 16,
-              "height": 32,
-              "justifyContent": "center",
-              "width": 32,
-            }
+            Array [
+              Object {
+                "borderRadius": 16,
+                "height": 32,
+                "width": 32,
+              },
+              Object {
+                "alignItems": "center",
+                "justifyContent": "center",
+              },
+              Object {
+                "backgroundColor": "#42803E",
+              },
+            ]
           }
+          testID="com.ariesbifold:id/CommunityDirectoryCardInitials"
         >
           <Text
             maxFontSizeMultiplier={2}

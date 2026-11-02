@@ -1,6 +1,18 @@
 import { AgentDirectoryService, directoryStatusOf, type DirectoryBackend } from '../directoryService'
 import { DirectoryConflict, DirectoryRefused } from '../types'
-import { DIRECTORY_TASK, MEMBERS_PAGE, parseCard, parseEntries, parseFields } from '../wire'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
+
+import {
+  DIRECTORY_TASK,
+  MEMBERS_PAGE,
+  parseCard,
+  parseEntries,
+  parseFields,
+  parsePicture,
+  pictureOf,
+  uploadPayload,
+} from '../wire'
 
 const COMMUNITY = 'did:webvh:community:a'
 const ENTRY = (n: number) => `dir_${String(n).padStart(16, '0')}`
@@ -373,7 +385,7 @@ describe('another member’s card', () => {
     'org.unknown.field': 'no label for this',
   }
 
-  it('reads it by entry, labelled and ordered by the community’s fields, leaving out the head, the ID and pictures', async () => {
+  it('reads it by entry, labelled and ordered by the community’s fields, the picture apart from the lines', async () => {
     const entryId = ENTRY(7)
     const { service, communityTask } = setup((type) =>
       type === DIRECTORY_TASK.entriesShow ? { entry: { entryId, fields: FIELDS } } : DEFS
@@ -385,6 +397,7 @@ describe('another member’s card', () => {
     ])
     expect(card?.name).toBe('Ana Lopez')
     expect(card?.role).toBe('member')
+    expect(card?.picture).toEqual({ sha256: 'a'.repeat(64), mediaType: 'image/png' })
     expect(card?.entries.map((e) => [e.key, e.value])).toEqual([
       ['joinedAt', { kind: 'text', text: '2026-09-01' }],
       ['pronouns', { kind: 'text', text: 'she/her' }],
@@ -417,5 +430,150 @@ describe('another member’s card', () => {
       throw new Error('the community did not answer within 30 s')
     })
     await expect(service.memberCardByDid(COMMUNITY, 'did:key:ana')).rejects.toThrow('did not answer')
+  })
+})
+
+describe('pictures', () => {
+  const BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 250, 251, 252])
+  const DIGEST = bytesToHex(sha256(BYTES))
+  const b64url = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64url')
+  const PICTURE = { sha256: DIGEST, mediaType: 'image/jpeg' as const }
+  const answer = (over: Record<string, unknown> = {}) => ({
+    image: { sha256: DIGEST, mediaType: 'image/jpeg', size: BYTES.length },
+    data: b64url(BYTES),
+    ...over,
+  })
+
+  it('reads a picture reference off a row, your card and a member card, and nothing that is not one', () => {
+    expect(pictureOf({ sha256: DIGEST, mediaType: 'image/png', size: 9 })).toEqual({
+      sha256: DIGEST,
+      mediaType: 'image/png',
+    })
+    expect(pictureOf({ sha256: DIGEST.toUpperCase(), mediaType: 'image/png' })).toBeUndefined()
+    expect(pictureOf({ sha256: DIGEST, mediaType: 'image/avif' })).toBeUndefined()
+    expect(pictureOf({ sha256: DIGEST, mediaType: 'image/svg+xml' })).toBeUndefined()
+    expect(pictureOf('https://example.org/a.png')).toBeUndefined()
+    const page = parseEntries({ items: [{ entryId: ENTRY(1), fields: { displayName: 'Ana', avatar: PICTURE } }] })
+    expect(page.rows[0].picture).toEqual(PICTURE)
+    expect(parseCard(card({ values: { displayName: 'Ana', avatar: PICTURE } }))?.picture).toEqual(PICTURE)
+  })
+
+  it('shows the bytes as a data URI only when they are the picture the card named', () => {
+    expect(parsePicture(answer(), PICTURE)).toBe(`data:image/jpeg;base64,${Buffer.from(BYTES).toString('base64')}`)
+    // The answer names another picture.
+    expect(
+      parsePicture(answer({ image: { sha256: 'b'.repeat(64), mediaType: 'image/jpeg' } }), PICTURE)
+    ).toBeUndefined()
+    // Bytes that are not the digest, though the answer says they are.
+    expect(parsePicture(answer({ data: b64url(new Uint8Array([1, 2, 3])) }), PICTURE)).toBeUndefined()
+    // Not base64url without padding.
+    expect(parsePicture(answer({ data: `${Buffer.from(BYTES).toString('base64')}=` }), PICTURE)).toBeUndefined()
+    expect(parsePicture(answer({ data: undefined }), PICTURE)).toBeUndefined()
+    expect(parsePicture('not an answer', PICTURE)).toBeUndefined()
+  })
+
+  it('refuses bytes over the size a card holds, even with the right digest', () => {
+    const big = new Uint8Array(262_145).fill(7)
+    const named = { sha256: bytesToHex(sha256(big)), mediaType: 'image/png' as const }
+    expect(parsePicture({ image: named, data: b64url(big) }, named)).toBeUndefined()
+    const fits = big.subarray(0, 262_144)
+    const fitsNamed = { sha256: bytesToHex(sha256(fits)), mediaType: 'image/png' as const }
+    expect(parsePicture({ image: fitsNamed, data: b64url(fits) }, fitsNamed)).toMatch(/^data:image\/png;base64,/)
+  })
+
+  it('asks for the avatar on that entry, naming the digest it was shown', async () => {
+    const { service, communityTask } = setup(() => answer())
+    expect(await service.showPicture(COMMUNITY, ENTRY(4), PICTURE)).toMatch(/^data:image\/jpeg;base64,/)
+    expect(communityTask).toHaveBeenCalledWith(COMMUNITY, DIRECTORY_TASK.imagesGet, {
+      entryId: ENTRY(4),
+      field: 'avatar',
+      sha256: DIGEST,
+    })
+  })
+
+  it('has no picture when it is not shown to you or the community serves none, and passes anything else on', async () => {
+    for (const code of ['vtc/directory/images/get:notFound', 'unsupportedType', 'unsupportedVersion']) {
+      const { service } = setup(() => {
+        throw new FakeRefusal('taskFailed', { code })
+      })
+      expect(await service.showPicture(COMMUNITY, ENTRY(4), PICTURE)).toBeUndefined()
+    }
+    const lost = setup(() => {
+      throw new Error('the community did not answer within 30 s')
+    })
+    await expect(lost.service.showPicture(COMMUNITY, ENTRY(4), PICTURE)).rejects.toThrow('did not answer')
+  })
+})
+
+describe('putting your photo on your card', () => {
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0xfb, 0xff])
+  const PHOTO = `data:image/jpeg;base64,${Buffer.from(JPEG).toString('base64')}`
+  const COPY = { sha256: 'c'.repeat(64), mediaType: 'image/jpeg', size: 4321 }
+
+  it('hands the community the photo as base64url, then puts its copy on the card for the audience chosen', async () => {
+    const { service, communityTask } = setup((type) =>
+      type === DIRECTORY_TASK.imagesUpload
+        ? { image: COPY, expiresAt: '2026-11-03T00:00:00Z' }
+        : card({ values: { displayName: 'Ana', avatar: COPY }, visibility: { avatar: 'members' }, revision: 4 })
+    )
+    const mine = await service.setMyPicture(COMMUNITY, PHOTO, 'members', 3)
+    expect(communityTask.mock.calls.map((c) => [c[1], c[2]])).toEqual([
+      [DIRECTORY_TASK.imagesUpload, { mediaType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64url') }],
+      [DIRECTORY_TASK.cardUpdate, { values: { avatar: COPY }, visibility: { avatar: 'members' }, expectedRevision: 3 }],
+    ])
+    expect(mine.picture).toEqual({ sha256: COPY.sha256, mediaType: 'image/jpeg' })
+    expect(mine.revision).toBe(4)
+  })
+
+  it('administrators only is sent as admins', async () => {
+    const { service, communityTask } = setup((type) =>
+      type === DIRECTORY_TASK.imagesUpload ? { image: COPY, expiresAt: 'x' } : card()
+    )
+    await service.setMyPicture(COMMUNITY, PHOTO, 'admins', 3)
+    expect(communityTask.mock.calls[1][2]).toMatchObject({ visibility: { avatar: 'admins' } })
+  })
+
+  it('sends nothing for what is not a photo a card can hold', async () => {
+    const { service, communityTask } = setup(() => card())
+    for (const photo of [
+      'data:image/svg+xml;base64,PHN2Zz4=',
+      'https://example.org/me.jpg',
+      `data:image/jpeg;base64,${Buffer.alloc(262_145, 1).toString('base64')}`,
+    ])
+      await expect(service.setMyPicture(COMMUNITY, photo, 'members', 3)).rejects.toMatchObject({
+        code: 'valueInvalid',
+      })
+    expect(communityTask).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing to the card when the upload answer is not one', async () => {
+    const { service, communityTask } = setup(() => ({ image: { sha256: 'nope' } }))
+    await expect(service.setMyPicture(COMMUNITY, PHOTO, 'members', 3)).rejects.toThrow('something else')
+    expect(communityTask).toHaveBeenCalledTimes(1)
+  })
+
+  it('says the card changed elsewhere when the update is superseded', async () => {
+    const { service } = setup((type) => {
+      if (type === DIRECTORY_TASK.imagesUpload) return { image: COPY, expiresAt: 'x' }
+      throw new FakeRefusal('taskFailed', { code: 'vtc/directory/card/update:superseded' })
+    })
+    await expect(service.setMyPicture(COMMUNITY, PHOTO, 'members', 3)).rejects.toBeInstanceOf(DirectoryConflict)
+  })
+
+  it('takes it off the card and returns who sees it to the default, at the revision read', async () => {
+    const { service, communityTask } = setup(() => card({ revision: 5 }))
+    const mine = await service.removeMyPicture(COMMUNITY, 4)
+    expect(communityTask).toHaveBeenCalledWith(COMMUNITY, DIRECTORY_TASK.cardUpdate, {
+      values: { avatar: null },
+      visibility: { avatar: null },
+      expectedRevision: 4,
+    })
+    expect(mine.picture).toBeUndefined()
+  })
+
+  it('turns a data URI into the upload payload, and nothing else', () => {
+    expect(uploadPayload(PHOTO)).toEqual({ mediaType: 'image/jpeg', data: Buffer.from(JPEG).toString('base64url') })
+    expect(uploadPayload('data:image/png;base64,')).toBeUndefined()
+    expect(uploadPayload('data:image/avif;base64,AAAA')).toBeUndefined()
   })
 })

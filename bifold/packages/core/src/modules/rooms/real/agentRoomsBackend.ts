@@ -6,6 +6,7 @@
 import { TypedArrayEncoder, utils, type Agent } from '@credo-ts/core'
 import RNFS from 'react-native-fs'
 
+import { keepSentPhoto } from '../../directory/myPhoto'
 import { dropDirectoryNames } from '../../directory/names'
 import { listKeyed, putKeyed } from '../../trust-tasks/module/keyedRecords'
 import { vtaAgent } from '../../trust-tasks/module/vtaAgent'
@@ -109,6 +110,7 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
       )
       // The names its members wrote on their cards go with it.
       await dropDirectoryNames(agent, communityDid).catch(() => undefined)
+      await keepSentPhoto(agent, communityDid, undefined).catch(() => undefined)
     },
 
     decodeBase64Url: (value) => TypedArrayEncoder.toUtf8String(TypedArrayEncoder.fromBase64Url(value)),

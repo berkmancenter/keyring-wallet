@@ -6,6 +6,8 @@
  * the member by the profile they joined with, a read on this phone, never the card itself: reading the card at
  * VTC 0.12 (card/show) creates one, so it is read only on the Your card screen the member opens. Who sees what is
  * said in fixed words here (name and role go to all members by default); the card's own audiences are on that screen.
+ * The member's picture shows in place of their initials once the Your card screen has read the card in this run
+ * (`pictures.ts`): it is the community's copy, the one other members see.
  *
  * @module directory/components/CommunityDirectorySection
  */
@@ -18,7 +20,6 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
-import { initialsOf } from '../../../utils/initials'
 import { testIdWithKey } from '../../../utils/testable'
 import { useMyName } from '../../rooms/useMyName'
 import {
@@ -26,11 +27,18 @@ import {
   CommunityGroupDivider,
   CommunitySectionLabel,
 } from '../../trust-tasks/screens/CommunitySection'
+import { useMyCardPicture } from '../pictures'
+import { useDirectoryService } from '../useDirectory'
+
+import { MemberPicture } from './MemberPicture'
 
 export const CommunityDirectorySection: React.FC<{ communityDid: string }> = ({ communityDid }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const { name } = useMyName(communityDid)
+  const myPicture = useMyCardPicture(communityDid)
+  // Asked for only when the member's own picture is there to show; nothing is read before Your card was opened.
+  const service = useDirectoryService()
   const go = useNavigation() as unknown as { navigate: (name: string, params: object) => void }
   const styles = StyleSheet.create({
     row: {
@@ -42,14 +50,6 @@ export const CommunityDirectorySection: React.FC<{ communityDid: string }> = ({ 
       paddingVertical: 8,
     },
     lead: { width: 32, alignItems: 'center' },
-    initial: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: ColorPalette.brand.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
     words: { flex: 1, gap: 2 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
@@ -88,12 +88,17 @@ export const CommunityDirectorySection: React.FC<{ communityDid: string }> = ({ 
           Screens.CommunityCard,
           name ? t('Directory.CardRowNamed', { name, interpolation: { escapeValue: false } }) : t('Directory.CardRow'),
           t('Directory.CardRowSeen'),
-          name ? (
-            <View style={styles.initial}>
-              <ThemedText variant="bold" style={{ color: ColorPalette.grayscale.white, fontSize: 13 }}>
-                {initialsOf(name)}
-              </ThemedText>
-            </View>
+          name || myPicture?.picture ? (
+            <MemberPicture
+              service={service}
+              communityDid={communityDid}
+              entryId={myPicture?.entryId}
+              picture={myPicture?.picture}
+              name={name}
+              size={32}
+              initialsSize={13}
+              testID="CommunityDirectoryCard"
+            />
           ) : (
             <Icon name="card-account-details-outline" size={24} color={ColorPalette.brand.primary} />
           )
