@@ -156,6 +156,18 @@ describe('a path that is not the picker’s copy', () => {
     expect(mockUnlink).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^${COPIES}/${ID}$`)))
   })
 
+  it.each([
+    ['a climb', 'file:///caches/../documents/wallet.db', '/documents/wallet.db'],
+    ['a climb spelled in escapes', 'file:///caches/%2e%2e/documents/wallet.db', '/documents/wallet.db'],
+  ])('%s out of the caches is the member’s file, never moved or removed', async (_what, uri, plain) => {
+    mockCopyFile.mockRejectedValueOnce(new Error('disk full'))
+    await expect(adoptRoomFileCopy(uri)).rejects.toThrow('disk full')
+    expect(mockMoveFile).not.toHaveBeenCalled()
+    expect(mockCopyFile.mock.calls[0][0]).toContain(plain)
+    const removed = mockUnlink.mock.calls.map(([path]) => path)
+    expect(removed.every((path) => path.startsWith(`${COPIES}/`))).toBe(true)
+  })
+
   it('a neighbour of the caches is not the caches', async () => {
     await adoptRoomFileCopy('file:///caches-other/a.pdf')
     expect(mockMoveFile).not.toHaveBeenCalled()
@@ -182,7 +194,12 @@ describe('iOS’s own copy of a picked file', () => {
     ['an Android content uri', 'content://provider/doc/1'],
     ['something else in tmp', 'file:///tmp-app/other/a.pdf'],
     ['an Inbox outside the app’s tmp', 'file:///elsewhere/x-Inbox/a.pdf'],
-    ['a climb out of the Inbox', 'file:///tmp-app/x-Inbox/sub/a.pdf'],
+    ['a folder inside the Inbox', 'file:///tmp-app/x-Inbox/sub/a.pdf'],
+    ['tmp itself, named through the Inbox', 'file:///tmp-app/x-Inbox/..'],
+    ['the Inbox itself, by a dot', 'file:///tmp-app/x-Inbox/.'],
+    ['a climb spelled in escapes', 'file:///tmp-app/x-Inbox/%2e%2e'],
+    ['a climb to a file that only looks Inboxed', 'file:///tmp-app/../documents/x-Inbox/a.pdf'],
+    ['an Inbox not directly in tmp', 'file:///tmp-app/deep/x-Inbox/a.pdf'],
     ['nothing', undefined],
     ['null', null],
     ['a malformed name', 'file:///tmp-app/x-Inbox/bad%ZZ.pdf'],

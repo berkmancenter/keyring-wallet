@@ -70,12 +70,18 @@ async function remove(path: string): Promise<void> {
 /** iOS names one directory both with and without `/private`: the comparison here must not depend on which. */
 const realPath = (path: string) => path.replace(/^\/private\/var\//, '/var/')
 
+/** A path that names `.` or `..` anywhere could be anywhere: a prefix says nothing about it. */
+const climbs = (path: string) => path.split('/').some((segment) => segment === '.' || segment === '..')
+
 /** Whether `path` is in iOS's Inbox for this app (`tmp/<bundle>-Inbox/`). Nothing else is the system's leftover. */
-const inSystemInbox = (path: string) =>
-  realPath(path).startsWith(realPath(RNFS.TemporaryDirectoryPath).replace(/\/*$/, '/')) && /-Inbox\/[^/]+$/.test(path)
+const inSystemInbox = (path: string) => {
+  const real = realPath(path)
+  const tmp = realPath(RNFS.TemporaryDirectoryPath).replace(/\/*$/, '/')
+  return !climbs(real) && real.startsWith(tmp) && /^[^/]+-Inbox\/[^/]+$/.test(real.slice(tmp.length))
+}
 
 /** Whether `path` is the picker's own copy in the app's caches, and so the app's to move or remove. */
-const inCaches = (path: string) => realPath(path).startsWith(`${realPath(RNFS.CachesDirectoryPath)}/`)
+const inCaches = (path: string) => !climbs(path) && realPath(path).startsWith(`${realPath(RNFS.CachesDirectoryPath)}/`)
 
 /**
  * Takes the system picker's copy of a file in under this rule, and returns where it now is. The picker writes it to
