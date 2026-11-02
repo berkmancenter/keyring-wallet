@@ -35,6 +35,11 @@ const { withDayPills } = require('../screens/Room')
 const RoomsHome = require('../screens/RoomsHome').default
 
 const id = (key: string) => testIdWithKey(key)
+/**
+ * How long a page drawn in rounds may take on a busy CI runner: past the 3 s every wait has here (jestSetupAfterEnv),
+ * inside jest's 12 s testTimeout with room for the reads after it.
+ */
+const PAGE_DRAWN_MS = 8_000
 const show = (Screen: React.FC = Room) =>
   render(
     <BasicAppContext>
@@ -214,8 +219,12 @@ describe('posts', () => {
         : post(`p${i}`, `chat ${i}`, { updatedAt: at(i) })
     )
     const tree = open(withPosts(records))
-    await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE))
     const chat = records.filter((r) => !r.title).slice(0, POSTS_PAGE)
+    // The page is drawn in two rounds: its first ten records hold two notes, so eight posts show, then the shortfall
+    // is read and the last two land. Waiting on a count can run out between the rounds on a busy runner and see 8
+    // (FLAKY-ROOM-10-POSTS, twice on 11-02), so the wait is on the tenth post itself, with room for a slow round.
+    await tree.findByTestId(id(`RoomPost_${roomHandle(chat[POSTS_PAGE - 1].key)}`), {}, { timeout: PAGE_DRAWN_MS })
+    expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE)
     for (const r of chat) expect(tree.getByText(String(r.body))).toBeTruthy()
     expect(tree.queryByText('note body 1')).toBeNull()
   })
@@ -234,7 +243,9 @@ describe('posts', () => {
       return readNote(roomId, key)
     })
     const tree = open(service)
-    await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE))
+    // On the tenth post itself, as the page above: a count can run out on a busy runner (FLAKY-ROOM-10-POSTS).
+    await tree.findByTestId(id(`RoomPost_${roomHandle(`p${POSTS_PAGE - 1}`)}`), {}, { timeout: PAGE_DRAWN_MS })
+    expect(tree.getAllByTestId(/RoomPost_/)).toHaveLength(POSTS_PAGE)
     expect(tree.queryByText(`post ${POSTS_PAGE}`)).toBeNull()
     expect(tree.queryByText('Rooms.LoadOlder')).toBeNull()
     // Drawn bottom up, the list's end is its top: reaching it reads the next page.
