@@ -62,6 +62,10 @@ describe('a new copy', () => {
     ['', 'file'],
     ['a/', 'file'],
     ['na\u0000me\n.txt', 'name.txt'],
+    ['invoice\u202Egnp.exe', 'invoicegnp.exe'],
+    ['a\u2066b\u2069\u200e\u200f\u061c.pdf', 'ab.pdf'],
+    ['\u202E..', 'file'],
+    ['.\u200e.', 'file'],
   ])('a sharer’s name %j stays one segment inside its directory', async (name, kept) => {
     const path = await roomFileCopyPath(name)
     expect(path).toMatch(new RegExp(`^${COPIES}/${ID}/[^/]+$`))
@@ -73,6 +77,13 @@ describe('a new copy', () => {
     const name = path.split('/').pop() as string
     expect(name).toHaveLength(120)
     expect(name.endsWith('.pdf')).toBe(true)
+  })
+
+  it('a long name never starts on half a character', async () => {
+    const path = await roomFileCopyPath(`${'😀'.repeat(60)}x.pdf`)
+    const name = path.split('/').pop() as string
+    expect(name.charCodeAt(0)).toBeGreaterThanOrEqual(0xd800)
+    expect(name.charCodeAt(0)).toBeLessThan(0xdc00)
   })
 
   it('iOS: the folder stays out of backups and an empty copy is protected before anything is appended', async () => {
