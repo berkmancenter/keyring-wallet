@@ -33,6 +33,8 @@ import RoomPart, { roomPartTitle } from '../modules/rooms/screens/RoomPart'
 import CommunityCard from '../modules/directory/screens/CommunityCard'
 import CommunityMemberCard from '../modules/directory/screens/CommunityMemberCard'
 import CommunityMembers from '../modules/directory/screens/CommunityMembers'
+import Poll from '../modules/polls/screens/Poll'
+import PollBallot from '../modules/polls/screens/PollBallot'
 import { MyAgentStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
@@ -84,6 +86,16 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.VtiCommunity}
         component={VtiCommunity}
         options={{ title: t('Screens.Community'), ...ScreenOptionsDictionary[Screens.VtiCommunity] }}
+      />
+      <Stack.Screen
+        name={Screens.Poll}
+        component={Poll}
+        options={{ title: t('Polls.Poll'), ...ScreenOptionsDictionary[Screens.Poll] }}
+      />
+      <Stack.Screen
+        name={Screens.PollBallot}
+        component={PollBallot}
+        options={{ title: t('Polls.Ballot'), ...ScreenOptionsDictionary[Screens.PollBallot] }}
       />
       <Stack.Screen
         name={Screens.CommunityMembers}

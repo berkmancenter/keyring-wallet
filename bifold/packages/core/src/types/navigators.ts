@@ -97,6 +97,8 @@ export enum Screens {
   RoomsHome = 'Rooms',
   Room = 'Room',
   RoomOffer = 'Room offer',
+  Poll = 'Poll',
+  PollBallot = 'Poll ballot',
   RoomInfo = 'Room details',
   RoomPart = 'Room part',
   CommunityMembers = 'Community members',
@@ -163,6 +165,9 @@ export type MyAgentStackParams = {
   // A member's view of a community's directory: its members, and their own card there.
   [Screens.CommunityMembers]: { communityDid: string }
   [Screens.CommunityCard]: { communityDid: string }
+  // One poll, and its ballot: `communityDid` is the community the member reaches it through.
+  [Screens.Poll]: { communityDid: string; electionId: string }
+  [Screens.PollBallot]: { communityDid: string; electionId: string }
   // Another member's card: by the entry the members list gave, or by a room author's DID.
   [Screens.CommunityMemberCard]: { communityDid: string; entryId?: string; memberDid?: string; standIn?: string }
   [Screens.VtiVetting]: undefined
