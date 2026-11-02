@@ -10,7 +10,7 @@
 # same 5 s auth-validity key. SIGNIN_UV=finger keeps the sensor path, for a fingerprint that works; a real phone still
 # has to prove it.
 . "$(dirname "$0")/../lib.sh"; gate_env
-SIGNIN_ROWS="signin-member-joined signin-claimed signin-version signin-approved signin-phone-done"
+SIGNIN_ROWS="signin-member-joined signin-claimed signin-version-seen signin-scope-above-approve signin-scope-words signin-approved signin-phone-done"
 APK=$APK_OFF
 leg_begin signin "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 SIGNIN_C_DID=${SIGNIN_C_DID:-${HV_C_DID:-}}; SIGNIN_C_REST=${SIGNIN_C_REST:-${HV_C_REST:-}}; SIGNIN_C_ADMIN_CRED=${SIGNIN_C_ADMIN_CRED:-${HV_C_ADMIN_CRED:-}}
