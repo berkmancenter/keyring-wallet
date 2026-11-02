@@ -46,9 +46,9 @@ export const DECISION_WINDOW_S = 120;
 
 export async function createSigninPortal({ trustTaskBase, portalOrigin, vtcDid }) {
   const { generateDidKeyHolder } = await import(fileURLToPath(new URL('di-proof.mjs', REF)));
-  const { signTask } = await import(fileURLToPath(new URL('vtc-admin.mjs', REF)));
+  const { newestServed, signTask } = await import(fileURLToPath(new URL('vtc-admin.mjs', REF)));
   const holder = generateDidKeyHolder();
-  const send = async (task, payload) => {
+  const send = async (task, payload, retried = false) => {
     const doc = signTask(`${SPEC}${task}`, payload, holder, vtcDid);
     const res = await fetch(`${trustTaskBase}/trust-tasks`, {
       method: 'POST',
@@ -59,9 +59,14 @@ export async function createSigninPortal({ trustTaskBase, portalOrigin, vtcDid }
     const text = await res.text();
     let body;
     try { body = JSON.parse(text); } catch { throw new Error(`${task} answered ${res.status} with no JSON: ${text.slice(0, 120)}`); }
-    // A newer community serves a later version of the same task and says which (VTC 0.17: request and redeem 0.2).
+    // A newer community serves a later version of the same task and says which (VTC 0.17: request and redeem 0.2): ask
+    // again at its newest, once.
     const served = body?.payload?.code === 'unsupportedVersion' ? body.payload.details?.servedVersions : undefined;
-    if (served?.length && !served.includes(`${SPEC}${task}`)) return send(served.at(-1).slice(SPEC.length), payload);
+    if (!retried && served?.length && !served.includes(`${SPEC}${task}`)) {
+      const newest = newestServed(served);
+      if (!newest.startsWith(SPEC)) throw new Error(`${task}: the community serves ${newest}, not a task under ${SPEC}`);
+      return send(newest.slice(SPEC.length), payload, true);
+    }
     return { status: res.status, body: body?.payload ?? body };
   };
   return {

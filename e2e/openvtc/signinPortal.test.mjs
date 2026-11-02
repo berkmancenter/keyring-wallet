@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { newestServed } from '../../tsp-reference/ref-20-local-vetting/vtc-admin.mjs';
 import { epochOf, encodeFrom, originOf, redeemState, triggerLink } from './signinPortal.js';
 
 const VTC = 'did:webvh:QmWuySqDabSg7g3CpK2jWR6j6UmWkU5DcT8X7aHBY7iHEc:dids-keyring-hv-lab1.ic3.dev:keyring-hv-lab1-vtc';
@@ -40,4 +41,12 @@ test('auth/oob 0.2 spells its instants in RFC 3339: redeem reads sessionEndsAt a
   assert.equal(epochOf(undefined), undefined);
   assert.equal(redeemState({ subject: 'did:webvh:Qm:x', sessionEndsAt: '2026-11-01T23:00:00Z', amr: ['uv'] }).notAfter, 1793574000);
   assert.equal(redeemState({ subject: 'did:webvh:Qm:x', notAfter: 5, amr: [] }).notAfter, 5);
+});
+
+test('the newest served version is the highest number, whatever order the list is in', () => {
+  const v = (n) => `https://trusttasks.org/spec/auth/oob/request/${n}`;
+  assert.equal(newestServed([v('0.1'), v('0.2')]), v('0.2'));
+  assert.equal(newestServed([v('0.2'), v('0.1')]), v('0.2'));
+  assert.equal(newestServed([v('0.10'), v('0.9')]), v('0.10'));
+  assert.equal(newestServed([v('0.9'), v('1.0')]), v('1.0'));
 });
