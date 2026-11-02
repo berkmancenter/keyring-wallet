@@ -74,7 +74,6 @@ const realPath = (path: string) => path.replace(/^\/private\/var\//, '/var/')
 const inSystemInbox = (path: string) =>
   realPath(path).startsWith(realPath(RNFS.TemporaryDirectoryPath).replace(/\/*$/, '/')) && /-Inbox\/[^/]+$/.test(path)
 
-
 /** Whether `path` is the picker's own copy in the app's caches, and so the app's to move or remove. */
 const inCaches = (path: string) => realPath(path).startsWith(`${realPath(RNFS.CachesDirectoryPath)}/`)
 
