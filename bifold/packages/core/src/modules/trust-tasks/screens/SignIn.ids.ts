@@ -20,6 +20,7 @@ export const SignInIds = {
   choose: 'SignInChoose',
   identityOption: 'SignInIdentity',
   identityAgent: 'SignInIdentityAgent',
+  approveLater: 'SignInApproveLater',
   // 2 and 4. Waiting on the community.
   claiming: 'SignInClaiming',
   checking: 'SignInChecking',
@@ -36,6 +37,11 @@ export const SignInIds = {
   location: 'SignInLocation',
   sameNetwork: 'SignInSameNetwork',
   identifiedAs: 'SignInIdentifiedAs',
+  // Who signs in, as the person chose: the same block as the choice, the DID behind its Details.
+  signingAs: 'SignInSigningAs',
+  identityDetails: 'SignInIdentityDetails',
+  identityHeldBy: 'SignInIdentityHeldBy',
+  identitySince: 'SignInIdentitySince',
   // Signing in to the service that hosts the person's agent (IN-388): the service, as it names itself, and the agent.
   service: 'SignInService',
   agent: 'SignInAgent',
@@ -43,6 +49,8 @@ export const SignInIds = {
   sessionOnly: 'SignInSessionOnly',
   // 0.2: what else the browser may sign as the person, for the session (auth/oob signingScope).
   signingScope: 'SignInSigningScope',
+  scopeShort: 'SignInScopeShort',
+  scopeDetails: 'SignInScopeDetails',
   approve: 'SignInApprove',
   decline: 'SignInDecline',
   busy: 'SignInBusy',
