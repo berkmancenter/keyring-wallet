@@ -80,6 +80,20 @@ export function useRoomOffersWaiting(communityDid?: string): readonly RoomOffer[
   )
 }
 
+/**
+ * The offers the poll last read, as one string that changes only when they do: a screen with a list of its own
+ * re-renders on a new offer, not on every poll. All, or one community's.
+ */
+export function useRoomOfferIds(communityDid?: string): string {
+  return useSyncExternalStore(subscribeBadge, () =>
+    (badge.offers ?? NO_OFFERS)
+      .filter((o) => !communityDid || o.communityDid === communityDid)
+      .map((o) => o.offerId)
+      .sort()
+      .join('\n')
+  )
+}
+
 /** My Agent's badge: the count the poll last read; coming into focus asks again (within the floor). */
 export function useRoomOffersBadge(): number | undefined {
   const count = useSyncExternalStore(subscribeBadge, () => badge.count)

@@ -64,8 +64,11 @@ const no = (reason: OperationStatus['reason']): OperationStatus => ({ status: 'u
 const caps = (over: Partial<RoomsCapabilities> = {}): RoomsCapabilities => ({ ...sampleCapabilities(), ...over })
 const myRooms = (over: Partial<MyRooms> = {}): MyRooms => ({
   failed: false,
+  failures: 0,
+  offersNotShown: '',
   refreshing: false,
   reload: jest.fn(),
+  reread: jest.fn(),
   ...over,
 })
 
