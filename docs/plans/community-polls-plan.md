@@ -45,12 +45,14 @@ all of this for a browser
 
 | Party | Sees | Never sees |
 |---|---|---|
-| Community | Who took a ticket, and when | Any ballot |
-| Ballot box | Every ballot or its encryption, and the IP address and time of each vote | Any member's identity |
+| Community | Who took a ticket, and when; on an `open` poll it can also read the ballots | Which ballot is whose |
+| Ballot box | Every ballot or its encryption, and the IP address and time of each vote | Which member cast it |
 | The member's own agent | The member's choice, because it builds the vote | Nothing is hidden from it |
 | Trustees (sealed and totals-only polls) | Their share of the election key | Any voter's identity |
 
-Linking a voter to a ballot needs the community and the ballot box to collude. That is why upstream
+Linking a voter to a ballot needs the community and the ballot box to collude. A poll's board is
+either public, readable by anyone, or private, readable by the community and its auditors, and the
+ballot wording follows that. That is why upstream
 tells members who runs each one, and whether it's the same operator.
 
 **Every poll uses private tickets.** The secrecy level only decides who can read the ballots:
@@ -79,7 +81,8 @@ The Trust Task each step uses is named so this can be checked against upstream.
    agent (`vta/pcs/voter/receipt/0.1`).
 7. **Remember.** The phone keeps that the member voted, when, and the board entry, never the choice.
    "Change my vote" appears only where the poll allows it.
-8. **See the result.** `voting/result/show/0.1`.
+8. **See the result.** The certified result from `vtc/elections/show/0.2`, because `voting/result/show`
+   refuses a voter on a private board.
 
 ## Privacy rules
 
@@ -94,7 +97,8 @@ The Trust Task each step uses is named so this can be checked against upstream.
 ## Requirements
 
 - **Member's agent:** VTA 0.69.0 or newer. VTA 0.67 serves no voter tasks. An older agent gets a plain
-  "your agent needs an update" before the member starts.
+  "your agent needs an update" before the member starts. The phone's access must be `admin` or
+  `initiator`; a limited-access phone gets its own message.
 - **Community:** a VTC built with the optional `voting` feature, which names a trusted ballot box in
   its configuration. VTC 0.17.1 has the newest voting work; 0.17.0 lacks parts of it.
 - **Ballot box:** a running `vti-voting-service` that lists the community as allowed.
@@ -102,8 +106,10 @@ The Trust Task each step uses is named so this can be checked against upstream.
 ## Phases
 
 **P0, prove the route, no app code.** Vote end to end with upstream's own `pnm elections` on a
-community that has voting on.
-*Done when:* one poll is created, voted in, closed and certified, and we've read its board.
+community that has voting on, then send one signed read and one ticket request over a real Keyring
+session.
+*Done when:* one poll is created, voted in, closed and certified, we've read its board, and the
+session carried both requests.
 
 **P1, vote in `open` polls.** Task types, list and detail, ballot, sending, receipt, "You voted",
 results, and the "needs an update" message.
@@ -115,7 +121,7 @@ form the key.
 *Done when:* one sealed and one totals-only poll run with two trustees using `pnm`.
 
 **P3, polish.** A notice of a new poll, change my vote, and letting a member check their vote is on
-the board.
+the board, through the receipt on a private board.
 
 **Before P1 widens,** the full release test runs again, to prove that joining, hidden vetting and
 sign-in still work.
@@ -144,12 +150,30 @@ approval first, as mocks.
 5. **Where to test:** First VTC, whose maintainer has offered it, or their voting service for a test
    community.
 
-## Open questions
+## One vote per membership
 
-- Can someone with two identities in one community take two tickets and vote twice? Upstream allows
-  one ticket per party per election, and this must be settled before P1.
-- Who can read an open poll's board? The ballot wording depends on it.
-- Does First VTC's build have the `voting` feature, and which ballot box does it trust? Its console
-  shows this; nobody has checked yet.
-- Can Keyring's existing community session carry the signed reads, or do they need the VTC's HTTPS
-  address, as the browser plugin uses? P0 and P1 settle it.
+Upstream counts memberships, not people. A ticket is one per signing DID per poll, and the roll
+checks that exact DID. So someone with two active memberships under two agents can take two tickets
+and vote twice. Blind tickets under separate agents share nothing the app can see, so the app can't
+prevent this.
+
+The app does what it can on one phone:
+
+- It records the poll on the phone, across agents, before asking for a ticket, and refuses a second
+  ticket once a vote is recorded or a linked agent holds one.
+- If the phone holds two live memberships, the poll screen asks once which identity votes. Only that
+  identity reads polls and takes a ticket, so the community isn't shown a link between the two.
+- It uses one voter context per agent.
+- It says "one vote per membership", never "one person, one vote". A `binding` poll adds "This
+  community counts memberships, not people."
+
+The real fix is upstream, and is on our findings list. A community that needs it today can use
+`roll.rule: "listed"` with one DID per person.
+
+## How the app reaches the community
+
+Reads and the ticket request go over Keyring's existing community session, signed as the member's
+identity. No election task is limited by transport, and the VTC's HTTPS address would hand the
+community the phone's IP address beside the ticket. The vote itself still goes over HTTPS to the
+ballot box only. P0 proves this; so far it's read from the code.
+
