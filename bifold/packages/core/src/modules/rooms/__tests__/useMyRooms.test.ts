@@ -136,3 +136,36 @@ describe('rooms read again when a skipped community can be read', () => {
     expect(listeners.size).toBe(0)
   })
 })
+
+// What says how the last read went, and a read that isn't a refresh, whatever came before it.
+describe('how the last read went', () => {
+  test('failures count in a row, and a read that answers clears them', async () => {
+    const rooms = service()
+    const failing = rooms.listMyRooms as unknown as jest.Mock
+    failing.mockRejectedValueOnce(new Error('not connected')).mockRejectedValueOnce(new Error('not connected'))
+    const { result } = renderHook(() => useMyRooms(rooms))
+    await waitFor(() => expect(result.current.failures).toBe(1))
+    expect(result.current.failed).toBe(true)
+    act(() => result.current.reread())
+    await waitFor(() => expect(result.current.failures).toBe(2))
+    act(() => result.current.reread())
+    await waitFor(() => expect(result.current.failures).toBe(0))
+    expect(result.current.failed).toBe(false)
+  })
+
+  test('a reread is quiet, even after a reload; the reload itself refreshes (control)', async () => {
+    const rooms = service()
+    const { result } = renderHook(() => useMyRooms(rooms))
+    await waitFor(() => expect(rooms.capabilities).toHaveBeenCalledTimes(1))
+
+    act(() => result.current.reload())
+    await waitFor(() => expect(rooms.capabilities).toHaveBeenCalledTimes(2))
+    expect(rooms.capabilities).toHaveBeenLastCalledWith({ refresh: true })
+    await waitFor(() => expect(result.current.refreshing).toBe(false))
+
+    act(() => result.current.reread())
+    expect(result.current.refreshing).toBe(false)
+    await waitFor(() => expect(rooms.capabilities).toHaveBeenCalledTimes(3))
+    expect(rooms.capabilities).toHaveBeenLastCalledWith({ refresh: false })
+  })
+})
