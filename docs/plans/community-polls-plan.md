@@ -59,9 +59,9 @@ Quoted from upstream at
 Upstream's register of VTI-VOT requirements is not in that repository; these are upstream's own
 statements of them.
 
-These sources are ahead of the pins `scripts/openvtc/pins.json` records: verifiable-trust-infrastructure
-is pinned at `187ad9cd`, where three of the files quoted here don't exist yet, and vta-browser-plugin
-at `89d70c4`, before #404 and #406. To check a quote, fetch the commit named here into the clone in
+These sources are ahead of the pins `scripts/openvtc/PINS.json` records: verifiable-trust-infrastructure
+is pinned at `49f5f1be` (2026-10-07), where none of the files quoted here exist yet, and
+vta-browser-plugin at `bf92427` (2026-10-22), before #404 and #406. To check a quote, fetch the commit named here into the clone in
 `external/` and read it there with `git show <commit>:<path>`; the pins are not moved for this plan.
 
 - **VTI-VOT-004, the cast door.** The `ballot-box` DID template's description
