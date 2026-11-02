@@ -41,7 +41,7 @@ export function identityName(identity: PersonaSignInIdentity): string {
 
 /** The line under the name, and whether it warns that this identity will likely not sign in. */
 export function identityLine(identity: PersonaSignInIdentity, t: TFunction): { words: string; warns: boolean } {
-  if (identity.agentSilent) return { words: t('SignIn.Failure.agentUnreachable'), warns: true }
+  if (identity.agentSilent) return { words: t('SignIn.ChooseAgentSilent'), warns: true }
   if (identity.endedAt) {
     return { words: t('VtaLink.CardMembershipEnded', { date: localDate(identity.endedAt) }), warns: true }
   }

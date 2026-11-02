@@ -5,9 +5,10 @@
  * steps, so no protocol runs here.
  */
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render, within } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import i18n from 'i18next'
 import React from 'react'
+import { PixelRatio } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -387,6 +388,7 @@ describe('1b. which identity, when several hold a membership', () => {
         'ThisPhonesAgent',
         'AnotherAgent',
         'ChooseApproveLater',
+        'ChooseAgentSilent',
         'IsThisYourBrowser',
         'HideDetails',
         'ScopeShort',
@@ -448,7 +450,7 @@ describe('1b. which identity, when several hold a membership', () => {
       ])
       expect(row(0)).toHaveTextContent(/VtaLink\.CardMembershipEnded/)
       expect(row(0)).not.toHaveTextContent(/MemberSince/)
-      expect(row(1)).toHaveTextContent(/SignIn\.Failure\.agentUnreachable/)
+      expect(row(1)).toHaveTextContent(/SignIn\.ChooseAgentSilent/)
       expect(tree.UNSAFE_queryAllByProps({ name: 'alert-outline' })).toHaveLength(2)
       await press(tree, `${SignInIds.identityOption}-0`)
       expect(steps.claim).toHaveBeenCalledWith(LINK)
@@ -688,16 +690,64 @@ describe('5b. who is signing in, and the decision', () => {
     expect(tree.getByTestId(id(SignInIds.signingAs))).not.toHaveTextContent(/Other agent/)
   })
 
-  test("Approve and Decline stay on screen: outside the review's scroll", async () => {
-    const tree = await toReview(withIdentities([HOME]))
-    const scroll = within(tree.getByTestId(id(SignInIds.screen)))
-    expect(scroll.getByTestId(id(SignInIds.review))).toBeTruthy()
-    expect(scroll.queryByTestId(id(SignInIds.approve))).toBeNull()
-    expect(scroll.queryByTestId(id(SignInIds.decline))).toBeNull()
-    expect(scroll.queryByTestId(id(SignInIds.timeLeft))).toBeNull()
-    expect(tree.getByTestId(id(SignInIds.approve))).toBeTruthy()
-    expect(tree.getByTestId(id(SignInIds.decline))).toBeTruthy()
-    expect(tree.getByTestId(id(SignInIds.timeLeft))).toBeTruthy()
+  describe('Approve is never on screen without what it agrees to', () => {
+    const scoped = { ...proved, signingScope: ['vtc/directory'] }
+    const scopedSteps = () =>
+      fakeSteps({
+        community: jest.fn(async () => ({ member: true, name: 'Test Community', identities: [HOME] })),
+        identifyAndProve: jest.fn(async () => scoped),
+      })
+    /** The keys of what's held in `node`, top to bottom. */
+    const order = (node: { props: Record<string, unknown>; children: unknown[] }, found: string[] = []): string[] => {
+      const testID = node.props?.testID
+      // A component and the native view under it carry the same testID.
+      if (typeof testID === 'string' && found[found.length - 1] !== testID) found.push(testID)
+      for (const child of node.children ?? []) if (typeof child === 'object') order(child as typeof node, found)
+      return found
+    }
+    const held = (tree: ReturnType<typeof render>, key: string) => order(tree.getByTestId(id(key)) as never)
+    const WORDS = [SignInIds.sessionOnly, SignInIds.scopeShort, SignInIds.scopeDetails]
+
+    // Jest's PixelRatio says 2, which is large text here.
+    beforeEach(() => jest.spyOn(PixelRatio, 'getFontScale').mockReturnValue(1))
+    afterEach(() => jest.restoreAllMocks())
+
+    test('at normal text sizes: in the bar, outside the scroll, in order', async () => {
+      const tree = await toReview(scopedSteps())
+      const scroll = held(tree, SignInIds.screen)
+      for (const key of [...WORDS, SignInIds.timeLeft, SignInIds.approve, SignInIds.decline])
+        expect(scroll).not.toContain(id(key))
+      const bar = held(tree, SignInIds.decision)
+      expect(bar.slice(1, 4)).toEqual(WORDS.map(id))
+      expect(bar.indexOf(id(SignInIds.approve))).toBeGreaterThan(bar.indexOf(id(SignInIds.scopeDetails)))
+    })
+
+    test('the scope line sits directly under the bold line, or its "It" names nothing', async () => {
+      const tree = await toReview(scopedSteps())
+      const bar = held(tree, SignInIds.decision)
+      expect(bar.indexOf(id(SignInIds.scopeShort))).toBe(bar.indexOf(id(SignInIds.sessionOnly)) + 1)
+    })
+
+    test('at large text: at the end of the scroll, so Approve is reached only past the words', async () => {
+      jest.spyOn(PixelRatio, 'getFontScale').mockReturnValue(1.35)
+      const tree = await toReview(scopedSteps())
+      const scroll = held(tree, SignInIds.screen)
+      const last = (key: string) => scroll.indexOf(id(key))
+      expect(last(SignInIds.review)).toBeLessThan(last(SignInIds.sessionOnly))
+      expect(last(SignInIds.sessionOnly)).toBeLessThan(last(SignInIds.scopeShort))
+      expect(last(SignInIds.scopeShort)).toBeLessThan(last(SignInIds.approve))
+      expect(last(SignInIds.scopeShort)).toBe(last(SignInIds.sessionOnly) + 1)
+      expect(tree.getAllByTestId(id(SignInIds.approve))).toHaveLength(1)
+    })
+
+    test('while approving, the words stay and the buttons go', async () => {
+      const slow = jest.fn(() => new Promise<never>(() => undefined))
+      const tree = await toReview({ ...scopedSteps(), approve: slow })
+      await press(tree, SignInIds.approve)
+      expect(tree.getByTestId(id(SignInIds.sessionOnly))).toBeTruthy()
+      expect(tree.queryByTestId(id(SignInIds.approve))).toBeNull()
+      expect(tree.getByTestId(id(SignInIds.busy))).toBeTruthy()
+    })
   })
 
   test('another network is the one reported fact that warns, and no fact is marked as checked', async () => {
