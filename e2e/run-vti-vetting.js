@@ -390,7 +390,9 @@ try {
     // (E2E_ONE_FILLED=1; checkVettingStep is a no-op without it).
     const o = { log: process.env.E2E_STEP_LOG || path.join(here, "artifacts", `vetting-steps-${Date.now()}.jsonl`), check: checkVettingStep };
     console.log(`[e2e] step log: ${o.log}`);
-    await roles.vetter.openDesk(vetter, o);
+    // A vetter of several communities has one desk door each: open this community's (lib/vetterDoor.js).
+    const community = process.env.KEYRING_COMMUNITY_DID ? { did: process.env.KEYRING_COMMUNITY_DID, names: process.env.KEYRING_COMMUNITY_NAME ? [process.env.KEYRING_COMMUNITY_NAME] : [] } : undefined;
+    await roles.vetter.openDesk(vetter, { ...o, community });
     await checkVettingStep(vetter, "desk, before a ticket");
     const { value: ticket } = await roles.vetter.issueTicket(vetter, o);
     await screenshot(vetter, "vetting-01-ticket");

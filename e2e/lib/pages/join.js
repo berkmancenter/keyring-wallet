@@ -186,6 +186,9 @@ export const join = {
       if (beforeTap) await beforeTap();
       await tapTestId(d, askId, 15000);
       await waitForTestId(d, "JoinMakeIdentity", 30000).catch(() => undefined);
+      // A community with a member directory (VTC 0.17) shows its preview above Continue, so the button starts below the
+      // fold; Android has no element for it until it scrolls in, and the check alone would skip it without a word.
+      await scrollToTestId(d, "JoinAsContinue", 8).catch(() => undefined);
       if (await existsTestId(d, "JoinAsContinue", 3000)) await tapTestId(d, "JoinAsContinue", 10000);
       await handleBiometricConfirmIfPresent(d).catch(() => undefined);
       await owner(`${tag} identity`);

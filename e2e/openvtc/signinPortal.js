@@ -17,13 +17,16 @@ export function triggerLink({ vtcDid, requestId, claimDeadline, linkHost = 'link
   return `https://${linkHost}/t#_from=${encodeFrom(vtcDid)}&_id=${requestId}&_exp=${claimDeadline}&_type=${flow}`;
 }
 
+/** An RFC 3339 instant (auth/oob 0.2's `claimClosesAt`, `sessionEndsAt`) as epoch seconds; 0.1 spelt them as integers. */
+export const epochOf = (at) => (at ? Math.floor(Date.parse(at) / 1000) : undefined);
+
 /**
  * One redeem answer, classified: `pending` (with the two digits the phone types, once it has claimed), `declined`
  * (the person cancelled), `expired`, `approved` (subject, displayName, notAfter, amr), or `error`.
  */
 export function redeemState(body) {
   const b = body ?? {};
-  if (typeof b.subject === 'string') return { state: 'approved', subject: b.subject, displayName: b.displayName, notAfter: b.notAfter, amr: b.amr ?? [] };
+  if (typeof b.subject === 'string') return { state: 'approved', subject: b.subject, displayName: b.displayName, notAfter: b.notAfter ?? epochOf(b.sessionEndsAt), amr: b.amr ?? [] };
   const code = String(b.code ?? '');
   // The portal reads the local part of `auth/oob/redeem:<code>` (oob.ts); a bare code is its own local part.
   const local = code.slice(code.lastIndexOf(':') + 1);
@@ -43,9 +46,9 @@ export const DECISION_WINDOW_S = 120;
 
 export async function createSigninPortal({ trustTaskBase, portalOrigin, vtcDid }) {
   const { generateDidKeyHolder } = await import(fileURLToPath(new URL('di-proof.mjs', REF)));
-  const { signTask } = await import(fileURLToPath(new URL('vtc-admin.mjs', REF)));
+  const { newestServed, signTask } = await import(fileURLToPath(new URL('vtc-admin.mjs', REF)));
   const holder = generateDidKeyHolder();
-  const send = async (task, payload) => {
+  const send = async (task, payload, retried = false) => {
     const doc = signTask(`${SPEC}${task}`, payload, holder, vtcDid);
     const res = await fetch(`${trustTaskBase}/trust-tasks`, {
       method: 'POST',
@@ -56,6 +59,14 @@ export async function createSigninPortal({ trustTaskBase, portalOrigin, vtcDid }
     const text = await res.text();
     let body;
     try { body = JSON.parse(text); } catch { throw new Error(`${task} answered ${res.status} with no JSON: ${text.slice(0, 120)}`); }
+    // A newer community serves a later version of the same task and says which (VTC 0.17: request and redeem 0.2): ask
+    // again at its newest, once.
+    const served = body?.payload?.code === 'unsupportedVersion' ? body.payload.details?.servedVersions : undefined;
+    if (!retried && served?.length && !served.includes(`${SPEC}${task}`)) {
+      const newest = newestServed(served);
+      if (!newest.startsWith(SPEC)) throw new Error(`${task}: the community serves ${newest}, not a task under ${SPEC}`);
+      return send(newest.slice(SPEC.length), payload, true);
+    }
     return { status: res.status, body: body?.payload ?? body };
   };
   return {
@@ -64,7 +75,7 @@ export async function createSigninPortal({ trustTaskBase, portalOrigin, vtcDid }
     async request() {
       const r = await send('auth/oob/request/0.1', { purpose: 'login', mode: 'scan' });
       if (!r.body?.requestId) throw new Error(`auth/oob/request refused (${r.status}): ${JSON.stringify(r.body).slice(0, 200)}`);
-      return r.body;
+      return { ...r.body, claimDeadline: r.body.claimDeadline ?? epochOf(r.body.claimClosesAt) };
     },
     /** auth/oob/redeem/0.1 once, classified (redeemState). The VTC holds a pending redeem open a while (long poll). */
     async redeem(requestId) {
