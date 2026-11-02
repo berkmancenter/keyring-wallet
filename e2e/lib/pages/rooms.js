@@ -17,3 +17,10 @@ const TROUBLE = [
 
 /** Which failure states the page shows. */
 export const troubleOn = (page) => TROUBLE.filter((id) => String(page).includes(id));
+
+/** How a post stands on this page: "unread" for a page that isn't its room, so a failed read never counts as sent. */
+export const postState = (page) => {
+  if (troubleOn(page).length) return "failed";
+  if (!String(page).includes("RoomComposerInput")) return "unread";
+  return /RoomPostSending|RoomComposerFile/.test(page) ? "sending" : "sent";
+};

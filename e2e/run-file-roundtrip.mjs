@@ -9,10 +9,10 @@
  * PICKER_IN_FOLDER=1 there. The composer's file chip must name this run's file, so a wrong tap fails instead of posting
  * something else.
  *
- * Rows: rtt-control-open (KNOWN_FILE, KNOWN_SHA256: a file already there, opened the same way), rtt-picked, rtt-posted,
- * rtt-listed, rtt-opened, rtt-sha256, rtt-copy-gone.
+ * Rows: rtt-control-open (a file already there, opened the same way), rtt-picked, rtt-posted, rtt-listed, rtt-opened,
+ * rtt-sha256, rtt-copy-gone. Nothing is posted unless the control matched and the composer names this run's file.
  *
- *   UDID=… IOS_DEVICE_NAME=… ROOM_NAME="File test room" [FILE_BYTES=300000] node run-file-roundtrip.mjs
+ *   UDID=… IOS_DEVICE_NAME=… ROOM_NAME="File test room" KNOWN_FILE=… KNOWN_SHA256=… [FILE_BYTES=300000] node run-file-roundtrip.mjs
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
@@ -22,10 +22,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureAppium, existsTestId, screenshot, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
-import { roomHandles } from "./lib/pages/rooms.js";
+import { postState, roomHandles, troubleOn } from "./lib/pages/rooms.js";
 import { createRows } from "./lib/rows.js";
 
-const { UDID, ROOM_NAME } = process.env;
+const { UDID, ROOM_NAME, KNOWN_FILE, KNOWN_SHA256 } = process.env;
 const FILE_BYTES = Number(process.env.FILE_BYTES ?? 300000);
 const PUT = process.env.PUT_FILE ?? `${process.env.HOME}/.keyring-gate/handoff/rooms-f4/put-file-on-sim.sh`;
 const BID = process.env.E2E_APP_ID ?? "asml.bkc.harvard.wallet";
@@ -94,7 +94,7 @@ async function openChip(h) {
 
 let d;
 try {
-  for (const [k, v] of Object.entries({ UDID, ROOM_NAME })) if (!v) throw new Error(`driver: ${k} is not set`);
+  for (const [k, v] of Object.entries({ UDID, ROOM_NAME, KNOWN_FILE, KNOWN_SHA256 })) if (!v) throw new Error(`driver: ${k} is not set`);
   const file = makeFile();
   console.log(`[e2e] file ${file.name}, ${FILE_BYTES} bytes, sha256 ${file.sha256}`);
   execFileSync("bash", [PUT, UDID, file.path], { stdio: "inherit" });
@@ -108,20 +108,22 @@ try {
   console.log(`[e2e] posting as: ${await textOf(d, "RoomComposerPostingAs").catch(() => "(unread)")}`);
 
   // The control, before any write: a file already in the room, with a known digest, opens and matches the same way.
-  if (process.env.KNOWN_FILE && process.env.KNOWN_SHA256) {
-    await rows.row("rtt-control-open", async () => {
-      const h = await chipOf(d, process.env.KNOWN_FILE, 60000);
-      if (!h) return { ok: false, detail: `no chip for ${process.env.KNOWN_FILE}` };
-      const known = await openChip(h);
-      if (!known.ok) return known;
-      const found = copies();
-      const sha = found.length === 1 ? createHash("sha256").update(readFileSync(found[0])).digest("hex") : `${found.length} copies`;
-      await tapTestId(d, "RoomFileSheetClose", 15000);
-      await sleep(3000);
-      return { ok: sha === process.env.KNOWN_SHA256, detail: `${sha} against ${process.env.KNOWN_SHA256}` };
-    });
-  }
+  let controlled = false;
+  await rows.row("rtt-control-open", async () => {
+    const h = await chipOf(d, KNOWN_FILE, 60000);
+    if (!h) return { ok: false, detail: `no chip for ${KNOWN_FILE}` };
+    const known = await openChip(h);
+    if (!known.ok) return known;
+    const found = copies();
+    const sha = found.length === 1 ? createHash("sha256").update(readFileSync(found[0])).digest("hex") : `${found.length} copies`;
+    await tapTestId(d, "RoomFileSheetClose", 15000);
+    await sleep(3000);
+    controlled = sha === KNOWN_SHA256;
+    return { ok: controlled, detail: `${sha} against ${KNOWN_SHA256}` };
+  });
+  if (!controlled) throw new Error("the control did not match: nothing posted");
 
+  let picked = false;
   await rows.row("rtt-picked", async () => {
     await tapTestId(d, "RoomComposerAttach", 30000);
     await sleep(3500);
@@ -134,17 +136,25 @@ try {
     await screenshot(d, "rtt-picker").catch(() => undefined);
     await tapAt(d, POINTS.firstFile);
     if (!(await existsTestId(d, "RoomComposerFile", 30000))) return { ok: false, detail: "no file in the composer after the picker" };
-    const named = ((await d.getPageSource().catch(() => "")) || "").includes(file.name);
-    return { ok: named, detail: named ? `the composer names ${file.name}` : `the composer holds a file, not named ${file.name}` };
+    picked = ((await d.getPageSource().catch(() => "")) || "").includes(file.name);
+    return { ok: picked, detail: picked ? `the composer names ${file.name}` : `the composer holds a file, not named ${file.name}` };
   });
+  if (!picked) throw new Error("not this run's file: nothing posted");
 
   await rows.row("rtt-posted", async () => {
     await tapTestId(d, "RoomComposerSend", 15000);
     const start = Date.now();
+    let unread = 0;
     for (const until = start + 300000; Date.now() < until; await sleep(2000)) {
       const page = (await d.getPageSource().catch(() => "")) || "";
-      if (/RoomPostNotSent/.test(page)) return { ok: false, detail: "the post reads Not sent" };
-      if (Date.now() - start > 5000 && !/RoomPostSending|RoomComposerFile/.test(page)) return { ok: true, detail: `sent in ${Math.round((Date.now() - start) / 1000)} s` };
+      const state = postState(page);
+      if (state === "failed") return { ok: false, detail: `the room shows ${troubleOn(page).join(", ")}` };
+      if (state === "unread") {
+        if (++unread >= 5) return { ok: false, detail: "5 reads running found no room on the page" };
+        continue;
+      }
+      unread = 0;
+      if (state === "sent" && Date.now() - start > 5000) return { ok: true, detail: `sent in ${Math.round((Date.now() - start) / 1000)} s` };
     }
     return { ok: false, detail: "still sending after 5 min" };
   });
