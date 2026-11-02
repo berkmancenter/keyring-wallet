@@ -304,9 +304,18 @@ export interface RoomFile {
   name: InertText
   mediaType?: string
   size?: number
+  /**
+   * Whether the signature on the record the file came in was checked: `confirmed`, it holds; `unconfirmed`, it could
+   * not be checked, and the file opens without saying who shared it; `refused`, it does not hold, and the file is not
+   * opened. Absent: the service made no check (the sample rooms).
+   */
+  sender?: RoomFileSender
+  /** Who shared it: set by the agent's service only once `sender` is `confirmed`. */
   sharedBy?: Identity
   sharedAt?: string
 }
+
+export type RoomFileSender = 'confirmed' | 'unconfirmed' | 'refused'
 
 /**
  * A file opened for viewing: a protected local copy. The file's key never leaves the service:

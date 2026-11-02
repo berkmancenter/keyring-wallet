@@ -23,11 +23,11 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
-import { localDate } from '../../trust-tasks/screens/localTime'
 import type { RoomFile, RoomsService } from '../types'
 import { useRoomFile } from '../useRoomFile'
 
 import { fileSizeText, fileTypeText } from './fileWords'
+import { fileSharedLine } from './RoomListRows'
 import { useMemberWords } from './memberWords'
 
 export interface RoomFileSheetProps {
@@ -87,12 +87,8 @@ const SheetBody: React.FC<
     image: { width: '100%', height: 240 },
   })
   const type = fileTypeText(file)
-  const shared = [
-    file.sharedBy ? memberWords(file.sharedBy) : undefined,
-    file.sharedAt ? localDate(file.sharedAt) : undefined,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const refused = file.sender === 'refused'
+  const shared = refused ? undefined : fileSharedLine(t, file, memberWords)
   const progress = state.step === 'downloading' ? state.progress : undefined
   const fraction = progress && progress.total > 0 ? Math.min(1, progress.sent / progress.total) : 0
 
@@ -131,15 +127,23 @@ const SheetBody: React.FC<
             .join(' · ')}
         </ThemedText>
         {shared ? (
-          <ThemedText style={styles.muted}>
-            {t('Rooms.FileSharedBy', { who: shared, interpolation: { escapeValue: false } })}
+          <ThemedText style={styles.muted} testID={testIdWithKey('RoomFileShared')}>
+            {shared}
           </ThemedText>
         ) : null}
-        <ThemedText variant="caption" style={styles.muted}>
-          {t('Rooms.FileCaution')}
-        </ThemedText>
+        {/* Asks the member to judge who shared it: not on a file that is refused, which names no one and can't be opened. */}
+        {refused ? null : (
+          <ThemedText variant="caption" style={styles.muted} testID={testIdWithKey('RoomFileCaution')}>
+            {t('Rooms.FileCaution')}
+          </ThemedText>
+        )}
 
-        {state.step === 'downloading' ? (
+        {refused ? (
+          // As upstream: a record whose signature does not hold is not opened, so there is nothing to download.
+          <ThemedText style={styles.error} testID={testIdWithKey('RoomFileNotConfirmed')}>
+            {t('Rooms.FileNotConfirmed')}
+          </ThemedText>
+        ) : state.step === 'downloading' ? (
           <View style={{ gap: 8 }} accessibilityLiveRegion="polite">
             <View
               style={styles.track}

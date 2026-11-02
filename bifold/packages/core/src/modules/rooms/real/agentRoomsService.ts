@@ -66,6 +66,7 @@ import {
 } from '../types'
 
 import { OPEN_FILE_BYTES, openRoomFile, type OpenFileCopy } from './files/open'
+import { checkSender, type ResolveSender } from './files/sender'
 import { holdRoomFileTransfer, sweepRoomFileCopiesOnce } from './files/tempCopies'
 import {
   KEYS_ACT_TYPES,
@@ -148,6 +149,12 @@ export interface RoomsBackend {
   uploads?: RoomsUploadBackend
   /** Where an opened file's copy lives while it is shown. */
   fileCopies?: RoomFileCopies
+  /**
+   * A file's author's DID document, to check who shared it (`files/sender.ts`). Fetching it tells the author's host
+   * this phone is reading, so each author's is fetched at most once until the wallet locks. Absent: who shared a file
+   * is never confirmed.
+   */
+  resolveSender?: ResolveSender
 }
 
 /** The picked file, and the room host's HTTPS Trust Task door, which an upload's single-use key sends to. */
@@ -302,13 +309,17 @@ DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, () => {
   holdingOpened.clear()
 })
 
-/** A record's file as a screen lists it: the name is untrusted text, shown inert. */
-const roomFileOf = (file: FileManifest, record: Pick<OpenedRecord, 'author' | 'updatedAt'>): RoomFile => ({
+/**
+ * A record's file as a screen lists it: the name is untrusted text, shown inert. Who shared it is said only once the
+ * record's signature is checked (`files/sender.ts`): the author a record names is otherwise only claimed.
+ */
+const roomFileOf = (file: FileManifest, record: Pick<OpenedRecord, 'author' | 'updatedAt' | 'sender'>): RoomFile => ({
   fileId: file.fileId,
   name: toInertText(file.name),
   ...(file.mediaType ? { mediaType: file.mediaType } : {}),
   size: file.size,
-  ...(record.author ? { sharedBy: { did: record.author } } : {}),
+  sender: record.sender ?? 'unconfirmed',
+  ...(record.sender === 'confirmed' && record.author ? { sharedBy: { did: record.author } } : {}),
   ...(record.updatedAt ? { sharedAt: record.updatedAt } : {}),
 })
 
@@ -769,6 +780,7 @@ export class AgentRoomsService implements RoomsService {
       this.backend.decodeBase64Url(s)
     )
     if (!opened) throw new Error(`the agent's answer for note ${key} could not be read`)
+    await this.noteSender(roomId, opened)
     // An answer that arrives after the lock answers its caller, but is not kept: the lock forgot what was read.
     if (drops !== this.drops) return opened
     this.keepOpened(roomId, opened)
@@ -795,6 +807,27 @@ export class AgentRoomsService implements RoomsService {
       check: opened.check,
       ...(opened.file ? { files: [roomFileOf(opened.file, opened)] } : {}),
     }
+  }
+
+  /**
+   * Checks who shared a file record (`files/sender.ts`) and notes the outcome on it; a record with no file is not
+   * checked. The body must have been signed where it was read: at the version the agent opened it at, never past the
+   * record's own (as upstream refuses).
+   */
+  private async noteSender(roomId: string, opened: OpenedRecord): Promise<void> {
+    if (!opened.file || opened.sender) return
+    const version = opened.sealedAt ?? opened.version
+    const outcome =
+      !opened.signed || version > opened.version
+        ? { check: 'refused' as const, why: `opened at version ${version}, past the record's ${opened.version}` }
+        : await checkSender(
+            opened.signed,
+            { roomId, key: opened.key, version, ...(opened.author ? { hostAuthor: opened.author } : {}) },
+            this.backend.resolveSender
+          )
+    opened.sender = outcome.check
+    if (outcome.check !== 'confirmed')
+      this.backend.warn(`rooms: who shared ${opened.key} in ${roomId} is ${outcome.check}: ${outcome.why}`)
   }
 
   /** The opened copy of the version the room's last listing names, if there is one (and it is now the newest used). */
@@ -1630,6 +1663,7 @@ export class AgentRoomsService implements RoomsService {
           continue
         }
         if (!read) continue
+        await this.noteSender(roomId, read)
         this.keepOpened(roomId, read)
       }
       opened++
@@ -1650,8 +1684,12 @@ export class AgentRoomsService implements RoomsService {
     const { community, host } = this.hostOf(room, 'openFile')
     const copies = this.backend.fileCopies
     if (!copies) throw new RoomsUnavailable('openFile', 'clientNotBuilt', 'this build keeps no local copies')
-    const file = (await this.readFiles(room, roomId)).find((f) => f.file.fileId === fileId)?.file
-    if (!file) throw new RoomsRefused('openFile', 'notFound', false, 'the room has no such file')
+    const found = (await this.readFiles(room, roomId)).find((f) => f.file.fileId === fileId)
+    if (!found) throw new RoomsRefused('openFile', 'notFound', false, 'the room has no such file')
+    // As upstream: a body whose signature does not hold is refused, never opened with a warning.
+    if (found.record.sender === 'refused')
+      throw new RoomsRefused('openFile', 'senderRefused', false, "the file's record is not signed by who it names")
+    const file = found.file
     if (file.size > OPEN_FILE_BYTES) throw new RoomsRefused('openFile', 'tooLarge', false, 'too large to open here')
     const opening = new AbortController()
     const cancelled = () => opening.abort()

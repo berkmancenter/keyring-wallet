@@ -3188,6 +3188,8 @@
     "FileOpenHint": "Shows the file's details and lets you download it.",
     "FileTypeAsShared": "{{type}}, as shared",
     "FileSharedBy": "Shared by {{who}}",
+    "FileSenderNotConfirmed": "Shared in this room · sender not confirmed",
+    "FileNotConfirmed": "This file's record isn't signed by who it names, so it can't be opened.",
     "FileCaution": "Keyring can't check what a file contains. Open it only if you trust who shared it.",
     "FileDownload": "Download",
     "FileFailed": "Couldn't download the file.",

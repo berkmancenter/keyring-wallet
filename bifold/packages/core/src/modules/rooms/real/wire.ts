@@ -8,6 +8,7 @@
  */
 import type { HostCheck, RecordPrune, RoomTier, RoomVerb } from '../types'
 
+import type { SenderCheck } from './files/sender'
 import type { BlobManifest } from './files/stream'
 
 const SPEC = 'https://trusttasks.org/spec/'
@@ -490,6 +491,12 @@ export interface OpenedRecord extends RecordMeta {
   check: HostCheck
   /** The file a sealed record carries, from its body's `file`. */
   file?: FileManifest
+  /** The version the body was sealed at, where the agent says it is not the record's own (`org.openvtc.rooms`). */
+  sealedAt?: number
+  /** A file record's body as its author signed it, proof and all: what `files/sender.ts` checks. */
+  signed?: Record<string, unknown>
+  /** Whether that signature was checked and holds (`files/sender.ts`); set by the service once checked. */
+  sender?: SenderCheck
 }
 
 export function parseRead(payload: unknown, decodeBase64Url: (s: string) => string): OpenedRecord | undefined {
@@ -498,6 +505,7 @@ export function parseRead(payload: unknown, decodeBase64Url: (s: string) => stri
   const version = int(p?.version)
   if (!p || !key || version === undefined) return undefined
   const status = statusOf(p.status)
+  const sealedAt = int(obj(obj(p.ext)?.['org.openvtc.rooms'])?.sealedAt)
   const plaintext = str(p.plaintext)
   const cleartext = obj(p.cleartext)
   const raw =
@@ -508,9 +516,11 @@ export function parseRead(payload: unknown, decodeBase64Url: (s: string) => stri
   let title: string | undefined
   let body = raw
   let file: FileManifest | undefined
+  let signed: Record<string, unknown> | undefined
   try {
     const parsed = obj(JSON.parse(raw))
     file = parseFileManifest(parsed?.file)
+    if (file) signed = parsed
     if (parsed && (typeof parsed.body === 'string' || file)) {
       body = typeof parsed.body === 'string' ? parsed.body : ''
       title = str(parsed.title)
@@ -528,6 +538,8 @@ export function parseRead(payload: unknown, decodeBase64Url: (s: string) => stri
     body,
     check: hostCheckOf(p.verification),
     ...(file ? { file } : {}),
+    ...(sealedAt !== undefined ? { sealedAt } : {}),
+    ...(signed ? { signed } : {}),
   }
 }
 

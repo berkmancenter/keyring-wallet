@@ -3125,6 +3125,8 @@
     "FileOpenHint": "Affiche les détails du fichier et permet de le télécharger.",
     "FileTypeAsShared": "{{type}}, tel que partagé",
     "FileSharedBy": "Partagé par {{who}}",
+    "FileSenderNotConfirmed": "Partagé dans ce salon · expéditeur non confirmé",
+    "FileNotConfirmed": "L'enregistrement de ce fichier n'est pas signé par la personne qu'il nomme, il ne peut donc pas être ouvert.",
     "FileCaution": "Keyring ne peut pas vérifier le contenu d'un fichier. Ne l'ouvrez que si vous faites confiance à la personne qui l'a partagé.",
     "FileDownload": "Télécharger",
     "FileFailed": "Impossible de télécharger le fichier.",

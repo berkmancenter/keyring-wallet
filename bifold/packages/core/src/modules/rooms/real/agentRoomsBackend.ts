@@ -18,6 +18,7 @@ import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vti
 
 import type { RoomsBackend, RoomsCommunity, RoomsUploadBackend } from './agentRoomsService'
 import { createRoomDoors } from './files/door'
+import { senderResolver } from './files/senderDocuments'
 import { createOpenedCopy, releaseOpenedCopy } from './files/openedCopy'
 
 /** A rooms listing (`vtc/rooms/memberships/list`, `vtc/rooms/offers/list`, any version): what the rooms screens poll. */
@@ -122,6 +123,7 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     warn: (message) => agent.config.logger.warn(message),
 
     uploads: createUploadBackend(agent),
+    resolveSender: senderResolver(agent),
     sessionKept: isSessionKept,
     sessionFree: async (communityDid) => {
       const persona = await identityStore.getPersona(communityDid)

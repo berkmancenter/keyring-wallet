@@ -92,6 +92,26 @@ export const NoteRow: React.FC<{ note: NoteSummary }> = ({ note }) => {
   )
 }
 
+/**
+ * Who shared a file and when, as far as it was checked: their words once the record's signature holds, "sender not
+ * confirmed" while it could not be checked, and that the file can't be opened when it does not hold.
+ */
+export const fileSharedLine = (
+  t: TFunction,
+  file: RoomFile,
+  words: (identity: Identity) => string = (identity) => memberText(t, identity)
+): string => {
+  if (file.sender === 'refused') return t('Rooms.FileNotConfirmed') as string
+  // A name only with a checked signature: a sharer the service could not confirm is never named, whatever it passes.
+  const who =
+    file.sharedBy && (file.sender ?? 'confirmed') === 'confirmed'
+      ? (t('Rooms.FileSharedBy', { who: words(file.sharedBy), interpolation: { escapeValue: false } }) as string)
+      : file.sender
+        ? (t('Rooms.FileSenderNotConfirmed') as string)
+        : undefined
+  return [who, file.sharedAt ? localDate(file.sharedAt) : undefined].filter(Boolean).join(' · ')
+}
+
 /** The type and size the sharer gave, in the app's words ("PDF · 84 KB"), then who shared it and when. */
 export const fileLines = (
   t: TFunction,
@@ -102,17 +122,7 @@ export const fileLines = (
   [fileTypeText(file), file.size !== undefined ? fileSizeText(t, file.size, language) : undefined]
     .filter(Boolean)
     .join(' · '),
-  [
-    file.sharedBy
-      ? (t('Rooms.FileSharedBy', {
-          who: words(file.sharedBy),
-          interpolation: { escapeValue: false },
-        }) as string)
-      : undefined,
-    file.sharedAt ? localDate(file.sharedAt) : undefined,
-  ]
-    .filter(Boolean)
-    .join(' · '),
+  fileSharedLine(t, file, words),
 ]
 
 /** A file in the room's library. A tap opens the attachment sheet; with no `onPress` the row is not a button. */

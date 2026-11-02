@@ -6,6 +6,8 @@
 import { AgentRoomsService, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
 import { parseFileManifest, parseRead, ROOMS_TASK } from '../real/wire'
 
+import { resolverOf, signBody, testAuthor } from './fixtures/signedBody'
+
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
 const ROOM = 'did:webvh:room:0123456789abcdef'
 const HOST = 'did:webvh:community:a'
@@ -25,22 +27,19 @@ const manifest = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-/** A sealed record's signed body, as `rooms/keys/read` returns it in `plaintext`. */
+const ALICE = testAuthor('did:key:alice')
+
+/** A sealed record's body as its author's agent signed it, as `rooms/keys/read` returns it in `plaintext`. */
 const sealedBody = (key: string, version: number, members: Record<string, unknown>) =>
-  b64url(
-    JSON.stringify({
-      roomId: ROOM,
-      key,
-      version,
-      author: 'did:key:alice',
-      ...members,
-      proof: { type: 'DataIntegrityProof', proofValue: 'z123' },
-    })
-  )
+  b64url(JSON.stringify(signBody(ALICE, { roomId: ROOM, key, version, author: ALICE.did, ...members })))
 
-type HostRecord = { key: string; version: number; status?: string; plaintext?: string }
+type HostRecord = { key: string; version: number; status?: string; plaintext?: string; sealedAt?: number }
 
-function backend(records: HostRecord[], tier: 'open' | 'attributed' = 'attributed') {
+function backend(
+  records: HostRecord[],
+  tier: 'open' | 'attributed' = 'attributed',
+  resolveSender: RoomsBackend['resolveSender'] = resolverOf(ALICE).resolve
+) {
   const agentTask = jest.fn(async (type: string, payload: Record<string, unknown>): Promise<unknown> => {
     switch (type) {
       case ROOMS_TASK.keysList02:
@@ -66,6 +65,7 @@ function backend(records: HostRecord[], tier: 'open' | 'attributed' = 'attribute
           author: 'did:key:alice',
           updatedAt: '2026-10-30T09:00:00Z',
           plaintext: r.plaintext,
+          ...(r.sealedAt !== undefined ? { ext: { 'org.openvtc.rooms': { sealedAt: r.sealedAt } } } : {}),
         }
       }
       default:
@@ -88,6 +88,7 @@ function backend(records: HostRecord[], tier: 'open' | 'attributed' = 'attribute
     hiddenOffers: async () => [],
     hideOffer: jest.fn(async () => undefined),
     warn: jest.fn(),
+    resolveSender,
   } as RoomsBackend
   const reads = () => agentTask.mock.calls.filter(([type]) => type === ROOMS_TASK.keysRead).map(([, p]) => p.key)
   return { b, agentTask, reads }
@@ -106,10 +107,55 @@ describe('listing a room’s files', () => {
       fileId: FILE_ID,
       mediaType: 'application/pdf',
       size: 1234,
+      sender: 'confirmed',
       sharedBy: { did: 'did:key:alice' },
       sharedAt: '2026-10-30T09:00:00Z',
     })
     expect(String(files[0].name)).toBe('minutes<script>.pdf') // inert text, shown as written
+  })
+
+  it('a file whose record is not signed by who it names is listed as refused, naming no one', async () => {
+    const unsigned = b64url(
+      JSON.stringify({ roomId: ROOM, key: 'f1', version: 4, author: ALICE.did, file: manifest() })
+    )
+    const { b } = backend([{ ...FILE_RECORD, plaintext: unsigned }])
+    const [file] = await new AgentRoomsService(b).listFiles(ROOM)
+    expect(file.sender).toBe('refused')
+    expect(file.sharedBy).toBeUndefined()
+    expect(b.warn).toHaveBeenCalledWith(expect.stringMatching(/who shared f1 .* is refused: the body carries no proof/))
+  })
+
+  it('a file whose sharer can’t be checked is unconfirmed, naming no one', async () => {
+    const { b } = backend([FILE_RECORD], 'attributed', resolverOf().resolve)
+    const [file] = await new AgentRoomsService(b).listFiles(ROOM)
+    expect(file).toMatchObject({ sender: 'unconfirmed', sharedAt: '2026-10-30T09:00:00Z' })
+    expect(file.sharedBy).toBeUndefined()
+  })
+
+  it('a body is checked at the version the agent says it was sealed at, never past the record’s own', async () => {
+    // Curated since it was sealed: the record is at 5, the body was signed at 4.
+    const curated = { key: 'f1', version: 5, plaintext: sealedBody('f1', 4, { file: manifest() }) }
+    const said = backend([{ ...curated, sealedAt: 4 }])
+    expect((await new AgentRoomsService(said.b).listFiles(ROOM))[0].sender).toBe('confirmed')
+    // Control: without the agent saying so, the body was signed for another version than it was read at.
+    const unsaid = backend([curated])
+    expect((await new AgentRoomsService(unsaid.b).listFiles(ROOM))[0].sender).toBe('refused')
+    // An agent saying it opened past the record's own version is refused, as upstream refuses it.
+    const ahead = { key: 'f1', version: 4, sealedAt: 5, plaintext: sealedBody('f1', 5, { file: manifest() }) }
+    expect((await new AgentRoomsService(backend([ahead]).b).listFiles(ROOM))[0].sender).toBe('refused')
+  })
+
+  it('a record with no file is not checked, and asks for no DID document', async () => {
+    const r = resolverOf(ALICE)
+    const { b } = backend([NOTE_RECORD], 'attributed', r.resolve)
+    await new AgentRoomsService(b).readNote(ROOM, 'n1')
+    expect(r.asked).toEqual([])
+  })
+
+  it('a file post read by the chat carries the same check', async () => {
+    const { b } = backend([FILE_RECORD])
+    const note = await new AgentRoomsService(b).readNote(ROOM, 'f1')
+    expect(note.files?.[0]).toMatchObject({ sender: 'confirmed', sharedBy: { did: ALICE.did } })
   })
 
   it('a second look opens only what changed: a record is opened again only at a new version', async () => {

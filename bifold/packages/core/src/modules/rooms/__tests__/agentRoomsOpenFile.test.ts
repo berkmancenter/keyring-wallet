@@ -12,6 +12,8 @@ import { decodeFileId, sealFile } from '../real/files/stream'
 import { KEYS_ACT_TYPES, ROOMS_TASK, type FileManifest } from '../real/wire'
 import { RoomsRefused } from '../types'
 
+import { resolverOf, signBody, testAuthor } from './fixtures/signedBody'
+
 jest.mock('react-native-fs', () => ({
   __esModule: true,
   default: { CachesDirectoryPath: '/caches', unlink: jest.fn(async () => undefined) },
@@ -31,8 +33,13 @@ const seal = (plain: Uint8Array, name = 'minutes.pdf', mediaType?: string) =>
 
 type Sealed = ReturnType<typeof seal>
 
-const body = (file: FileManifest) =>
-  b64url(Buffer.from(JSON.stringify({ roomId: ROOM, key: 'f1', version: 4, author: 'did:key:alice', file })))
+const ALICE = testAuthor('did:key:alice')
+
+/** The record's body as Alice's agent signed it; `signed: false` leaves the proof off. */
+const body = (file: FileManifest, signed = true) => {
+  const unsigned = { roomId: ROOM, key: 'f1', version: 4, author: ALICE.did, file }
+  return b64url(Buffer.from(JSON.stringify(signed ? signBody(ALICE, unsigned) : unsigned)))
+}
 
 /** A copy in memory, as `fileCopies` gives one. */
 function copies(atFinish?: () => void) {
@@ -74,6 +81,10 @@ interface Host {
   fileKey?: () => Promise<unknown>
   file?: FileManifest
   atFinish?: () => void
+  /** The record as stored is not signed by its author. */
+  unsigned?: boolean
+  /** Who shared it can't be checked: no DID document is to be had. */
+  noDocuments?: boolean
 }
 
 function backend(host: Host) {
@@ -90,7 +101,7 @@ function backend(host: Host) {
           complete: true,
         }
       case ROOMS_TASK.keysRead:
-        return { key: 'f1', version: 4, status: 'active', author: 'did:key:alice', plaintext: body(file) }
+        return { key: 'f1', version: 4, status: 'active', author: ALICE.did, plaintext: body(file, !host.unsigned) }
       case ROOMS_TASK.keysFileKey:
         return host.fileKey ? host.fileKey() : { key: b64url(KEY), epoch: 3 }
       default:
@@ -138,6 +149,7 @@ function backend(host: Host) {
     hideOffer: jest.fn(async () => undefined),
     warn,
     fileCopies: made.fileCopies,
+    resolveSender: host.noDocuments ? resolverOf().resolve : resolverOf(ALICE).resolve,
   } as unknown as RoomsBackend
   const service = new AgentRoomsService(b)
   const hostTypes = () => sendCompleted.mock.calls.map(([, , document]) => document.type)
@@ -305,6 +317,24 @@ describe('opening a room file', () => {
     const { service, hostTypes } = backend({ sealed: seal(plaintextOf(5)) })
     await expect(service.openFile(ROOM, 'B'.repeat(43))).rejects.toThrow(RoomsRefused)
     expect(hostTypes()).toEqual([])
+  })
+
+  it('a file whose record is not signed by who it names is refused before anything is fetched, and no copy is made', async () => {
+    const control = backend({ sealed: seal(plaintextOf(5)) })
+    await expect(open(control.service)).resolves.toMatchObject({ size: 5 })
+
+    const { service, sendCompleted, agentTask, made } = backend({ sealed: seal(plaintextOf(5)), unsigned: true })
+    const refused = await open(service).catch((e) => e)
+    expect(refused).toBeInstanceOf(RoomsRefused)
+    expect(refused.code).toBe('senderRefused')
+    expect(sendCompleted).not.toHaveBeenCalled()
+    expect(agentTask.mock.calls.map(([type]) => type)).not.toContain(ROOMS_TASK.keysFileKey)
+    expect(made).toHaveLength(0)
+  })
+
+  it('a file whose sharer can’t be checked still opens: unconfirmed is not refused', async () => {
+    const { service } = backend({ sealed: seal(plaintextOf(5)), noDocuments: true })
+    await expect(open(service)).resolves.toMatchObject({ size: 5 })
   })
 
   it('a file over the limit is refused from its manifest, before anything is fetched', async () => {
