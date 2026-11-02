@@ -59,6 +59,11 @@ Quoted from upstream at
 Upstream's register of VTI-VOT requirements is not in that repository; these are upstream's own
 statements of them.
 
+These sources are ahead of the pins `scripts/openvtc/pins.json` records: verifiable-trust-infrastructure
+is pinned at `187ad9cd`, where three of the files quoted here don't exist yet, and vta-browser-plugin
+at `89d70c4`, before #404 and #406. To check a quote, fetch the commit named here into the clone in
+`external/` and read it there with `git show <commit>:<path>`; the pins are not moved for this plan.
+
 - **VTI-VOT-004, the cast door.** The `ballot-box` DID template's description
   (`vta-sdk/templates/ballot-box.json`): "a cast MUST be accepted over a binding whose sender holds
   no persistent identifier and no session (VTI-VOT-004)". The voting service's guide
