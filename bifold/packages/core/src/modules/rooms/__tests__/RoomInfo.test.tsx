@@ -16,6 +16,8 @@ import type { RoomsService } from '../types'
 let mockService: RoomsService | undefined
 let mockParams: Record<string, string> | undefined
 let mockCanHide = true
+let mockHidden = false
+const mockShowRoom = jest.fn((_roomId: string) => true)
 const mockHideRoom = jest.fn()
 const mockUndo = jest.fn()
 jest.mock('../useRoomsService', () => ({ useRoomsService: () => mockService }))
@@ -31,6 +33,8 @@ jest.mock('../useRoomRows', () => ({
     mockHideRoom(roomId)
     return mockUndo
   },
+  useRoomHidden: () => mockHidden,
+  showRoom: (roomId: string) => mockShowRoom(roomId),
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -57,7 +61,9 @@ const show = async (Screen: React.FC, ready: string) => {
 beforeEach(() => {
   mockService = createSampleRoomsService()
   mockCanHide = true
+  mockHidden = false
   mockHideRoom.mockClear()
+  mockShowRoom.mockClear()
   navigation.navigate.mockClear()
 })
 
@@ -131,6 +137,16 @@ describe("a room's details", () => {
     fireEvent.press(tree.getByTestId(id('RoomInfoHide')))
     expect(mockHideRoom).toHaveBeenCalledWith(PLANNING)
     expect(show_).toHaveBeenCalledWith(expect.objectContaining({ type: 'undo', props: { onUndo: mockUndo } }))
+  })
+
+  test('a hidden room offers Show in Messages instead of Hide, and Show puts it back (control: Hide above)', async () => {
+    mockHidden = true
+    const show_ = jest.spyOn(Toast, 'show')
+    const tree = await show(RoomInfo, 'RoomTitle')
+    expect(tree.queryByTestId(id('RoomInfoHide'))).toBeNull()
+    fireEvent.press(tree.getByTestId(id('RoomInfoShow')))
+    expect(mockShowRoom).toHaveBeenCalledWith(PLANNING)
+    expect(show_).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', text1: 'Rooms.Shown' }))
   })
 
   test('no Hide where Messages has no row for the room (control: Hide above)', async () => {

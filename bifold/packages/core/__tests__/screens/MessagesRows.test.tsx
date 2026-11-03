@@ -50,9 +50,11 @@ jest.mock('../../src/hooks/useUnreadMessages', () => ({
 // Rooms in Messages (R1): the room rows and the offers card are the rooms module's (#787), stood in for here.
 let mockRoomRows: Record<string, unknown>[] = []
 let mockRoomsFailed = false
+let mockHiddenRooms = 0
 const mockReloadRooms = jest.fn()
 jest.mock('../../src/modules/rooms/useRoomRows', () => ({
   useRoomRows: () => ({ rows: mockRoomRows, reload: mockReloadRooms, failed: mockRoomsFailed }),
+  useHiddenRoomCount: () => mockHiddenRooms,
 }))
 const mockOfferCard = jest.fn()
 jest.mock('../../src/modules/rooms/components/RoomOfferCard', () => ({
@@ -139,6 +141,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockRoomRows = []
   mockRoomsFailed = false
+  mockHiddenRooms = 0
   mockLinks = new Map()
   mockUnread = {}
   ;(useConnections as jest.Mock).mockReturnValue({ records, loading: false })
@@ -384,6 +387,22 @@ describe('rooms in Messages (R1)', () => {
     // People shows no room, so nothing about rooms either.
     fireEvent.press(chip(tree, 'People'))
     expect(tree.queryByTestId(testIdWithKey('MessagesRoomsFailed'))).toBeNull()
+  })
+
+  test('hidden rooms: one quiet line at the end, whose Show opens the Rooms list in My Agent (control: none hidden, no line)', () => {
+    mockRoomRows = threeRooms()
+    expect(list(false).queryByTestId(testIdWithKey('MessagesHiddenRooms'))).toBeNull()
+    mockHiddenRooms = 2
+    const tree = list(false)
+    expect(tree.getByTestId(testIdWithKey('MessagesHiddenRooms'))).toHaveTextContent(/Rooms\.HiddenCount/)
+    fireEvent.press(tree.getByTestId(testIdWithKey('MessagesHiddenRoomsShow')))
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'Tab Stack',
+      expect.objectContaining({ params: expect.objectContaining({ screen: 'Rooms' }) })
+    )
+    // People shows no room, so nothing about hidden rooms either.
+    fireEvent.press(chip(tree, 'People'))
+    expect(tree.queryByTestId(testIdWithKey('MessagesHiddenRooms'))).toBeNull()
   })
 
   test('rooms read fine: no failure line', () => {

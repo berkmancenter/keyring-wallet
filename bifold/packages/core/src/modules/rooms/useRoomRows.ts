@@ -20,8 +20,8 @@
  * new. A room met for the first time starts seen up to its newest post: nothing written before Messages showed rooms
  * counts as unread. The member's own posts never count.
  *
- * A room can be hidden from Messages until someone posts in it again ({@link hideRoom}); that is kept on this phone
- * the same way.
+ * A room can be hidden from Messages until someone posts in it again ({@link hideRoom}), or until the member shows it
+ * again ({@link showRoom}); that is kept on this phone the same way.
  *
  * The rows show as soon as the member's rooms are listed, before any room's posts are read: a room whose posts haven't
  * been read yet is a row that says it is reading, never "No posts yet", and each row fills in as its room is read. A
@@ -471,6 +471,34 @@ export function hideRoom(roomId: string): (() => void) | undefined {
     void keepSeen()
     if (feed.service === service) recount(service, roomId, track)
   }
+}
+
+/**
+ * Show: puts a hidden room back on Messages now, rather than at the next post (tester feedback, 11-02: there was no
+ * way back). What was put away as read stays read. False when the room isn't hidden.
+ */
+export function showRoom(roomId: string): boolean {
+  const hash = hashOf(roomId)
+  if (hiddenUntil?.[hash] === undefined) return false
+  hiddenUntil = without(hiddenUntil, hash)
+  void keepHidden()
+  const service = feed.service
+  if (service) showRows(service)
+  publish()
+  return true
+}
+
+/** Whether the member hid this room from Messages and nobody has posted in it since. */
+export const isRoomHidden = (roomId: string): boolean => hiddenUntil?.[hashOf(roomId)] !== undefined
+
+/** {@link isRoomHidden}, kept current for a screen. */
+export function useRoomHidden(roomId: string): boolean {
+  return useSyncExternalStore(subscribe, () => isRoomHidden(roomId))
+}
+
+/** How many of the member's rooms Messages leaves out because they are hidden: for its "rooms hidden" line. */
+export function useHiddenRoomCount(): number {
+  return useSyncExternalStore(subscribe, () => (feed.all ?? NO_ROWS).filter((row) => isRoomHidden(row.roomId)).length)
 }
 
 /** For tests: forget everything read and kept in memory. */

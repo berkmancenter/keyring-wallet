@@ -3170,6 +3170,13 @@
     "InThisRoom": "Dans ce salon",
     "YouHere": "Vous ici",
     "HideFromMessages": "Masquer dans Messages",
+    "ShowInMessages": "Afficher dans Messages",
+    "Shown": "{{room}} est de retour dans Messages.",
+    "HiddenFromMessages": "Masqué dans Messages",
+    "HiddenCount_one": "1 salon masqué",
+    "HiddenCount_other": "{{count}} salons masqués",
+    "HiddenShow": "Afficher",
+    "HiddenShowLabel": "Afficher les salons masqués",
     "OpenCommunity": "Ouvrir {{community}}",
     "OpenCommunityUnnamed": "Ouvrir la communauté du salon"
   },

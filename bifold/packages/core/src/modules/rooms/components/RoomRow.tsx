@@ -1,5 +1,5 @@
 /**
- * One room in a list: its name, tier, and one line on where the member stands. A name that is only the
+ * One room in a list: its name, tier, and one line on where the member stands, and whether it is hidden from Messages. A name that is only the
  * room's ID reads as an ID ("Room 3f9a7c21", in a fixed-width face), never as if the community chose it.
  * A room known only from the agent's keys says "Details not loaded" and shows no tier or expiry.
  *
@@ -18,6 +18,7 @@ import { useTheme } from '../../../contexts/theme'
 import { localDate } from '../../trust-tasks/screens/localTime'
 import { testIdWithKey } from '../../../utils/testable'
 import type { RoomSummary } from '../types'
+import { useRoomHidden } from '../useRoomRows'
 
 import TierBadge from './TierBadge'
 
@@ -57,7 +58,11 @@ export const RoomRow: React.FC<RoomRowProps> = ({ room, withCommunity = false, o
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
   const title = roomTitle(t, room)
-  const line = roomLine(t, room, withCommunity)
+  // Said where the member looks for a room Messages no longer shows; its Room info has the way back.
+  const hidden = useRoomHidden(room.roomId)
+  const line = [roomLine(t, room, withCommunity), hidden ? (t('Rooms.HiddenFromMessages') as string) : '']
+    .filter(Boolean)
+    .join(' · ')
   const content = (
     <>
       <Icon name="door" size={22} color={ColorPalette.brand.primary} />

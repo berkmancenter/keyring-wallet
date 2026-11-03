@@ -18,6 +18,7 @@ import type { Identity, Note, NoteList, NoteSummary, RoomsService, RoomSummary }
 import {
   canHideRoom,
   hideRoom,
+  isRoomHidden,
   markRoomSeen,
   ROOMS_HIDDEN_KEY,
   resetRoomRows,
@@ -26,6 +27,8 @@ import {
   ROWS_RETRY_MS,
   ROWS_RETURN_FLOOR_MS,
   refreshRoomRows,
+  showRoom,
+  useHiddenRoomCount,
   useRoomRows,
   useRoomRowsPoll,
   useRoomsUnreadCount,
@@ -280,6 +283,39 @@ describe('rooms as Messages rows', () => {
     await act(async () => refreshRoomRows())
     expect(again.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['planning', 'desk'])
     expect(again.list.result.current.unread).toBe(1)
+  })
+
+  test('Show puts a hidden room back on Messages at once, still read, and it stays shown after a relaunch', async () => {
+    const notes: Record<string, NoteSummary[]> = { planning: [note('n1', 1)], desk: [note('d1', 1)] }
+    const s = serviceWith([room('planning'), room('desk')], notes)
+    const first = mount(s)
+    const hidden = renderHook(() => useHiddenRoomCount())
+    await flush()
+    notes.planning.push(note('n2', 2))
+    await act(async () => refreshRoomRows())
+    // Control: nothing hidden, nothing to show.
+    expect(hidden.result.current).toBe(0)
+    expect(showRoom('planning')).toBe(false)
+
+    act(() => void hideRoom('planning'))
+    expect(isRoomHidden('planning')).toBe(true)
+    expect(hidden.result.current).toBe(1)
+    expect(first.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['desk'])
+
+    act(() => void showRoom('planning'))
+    expect(isRoomHidden('planning')).toBe(false)
+    expect(hidden.result.current).toBe(0)
+    expect(first.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['planning', 'desk'])
+    // What was put away as read when it was hidden stays read.
+    expect(first.list.result.current.unread).toBe(0)
+
+    first.poll.unmount()
+    first.list.unmount()
+    hidden.unmount()
+    resetRoomRows()
+    const again = mount(s)
+    await flush()
+    expect(again.list.result.current.rows.rows.map((r) => r.roomId)).toEqual(['planning', 'desk'])
   })
 
   test("a room's details offer Hide only for a room Messages has as a row (control: one it hasn't read)", async () => {

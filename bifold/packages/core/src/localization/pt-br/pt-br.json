@@ -3083,6 +3083,13 @@
     "InThisRoom": "Nesta sala",
     "YouHere": "Você aqui",
     "HideFromMessages": "Ocultar em Mensagens",
+    "ShowInMessages": "Mostrar em Mensagens",
+    "Shown": "{{room}} voltou para Mensagens.",
+    "HiddenFromMessages": "Oculta em Mensagens",
+    "HiddenCount_one": "1 sala oculta",
+    "HiddenCount_other": "{{count}} salas ocultas",
+    "HiddenShow": "Mostrar",
+    "HiddenShowLabel": "Mostrar salas ocultas",
     "OpenCommunity": "Abrir {{community}}",
     "OpenCommunityUnnamed": "Abrir a comunidade da sala"
   },

@@ -27,7 +27,8 @@ import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import RoomMessageRow from '../modules/rooms/components/RoomMessageRow'
 import RoomOfferCard from '../modules/rooms/components/RoomOfferCard'
 import { roomTitle } from '../modules/rooms/components/RoomRow'
-import { useRoomRows } from '../modules/rooms/useRoomRows'
+import { openInMyAgent } from '../modules/rooms/roomLinks'
+import { useHiddenRoomCount, useRoomRows } from '../modules/rooms/useRoomRows'
 import { communityLabelAloneOf } from '../modules/trust-tasks/screens/communityName'
 import { conversations, isConversationPartner, messageRows, type MessageRow } from '../modules/vrc/contacts/messageRows'
 import { useVrcNameCache } from '../modules/vrc/context/VrcNameCacheProvider'
@@ -99,6 +100,7 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
 
   // Rooms in Messages (R1): every room the member holds is a row too, merged with the conversations newest first.
   const { rows: roomRows, failed: roomsFailed, reload: reloadRooms } = useRoomRows()
+  const hiddenRooms = useHiddenRoomCount()
   const items = useMemo(
     () => mergeByTime(rows, (row) => Math.max(...row.connectionIds.map((id) => activity(id))), roomRows),
     [rows, roomRows, activity]
@@ -163,6 +165,8 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
     roomsFailed: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 16, marginVertical: 6 },
     roomsFailedText: { flex: 1, fontSize: 14, lineHeight: 19, color: '#4A4A4A' },
     roomsFailedAction: { fontSize: 14, fontWeight: '700', color: ColorPalette.brand.primary },
+    hiddenRooms: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 16 },
+    hiddenRoomsText: { fontSize: 14, lineHeight: 19, color: '#4A4A4A' },
     fetchingText: { color: ColorPalette.grayscale.mediumGrey },
     empty: {
       flex: 1,
@@ -289,6 +293,25 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
           )
         }
         showsVerticalScrollIndicator={false}
+        // Hidden rooms are said once, quietly, at the end, with the way to them: the Rooms list marks each one, and its
+        // Room info shows it again (tester feedback, 11-02: a hidden room had no way back).
+        ListFooterComponent={
+          hiddenRooms > 0 && chip.kind !== 'people' && !query.trim() ? (
+            <View style={style.hiddenRooms} testID={testIdWithKey('MessagesHiddenRooms')}>
+              <ThemedText style={style.hiddenRoomsText}>{t('Rooms.HiddenCount', { count: hiddenRooms })}</ThemedText>
+              <ThemedText style={style.hiddenRoomsText}>·</ThemedText>
+              <Pressable
+                onPress={() => openInMyAgent(navigation, Screens.RoomsHome)}
+                accessibilityRole="button"
+                accessibilityLabel={t('Rooms.HiddenShowLabel') as string}
+                hitSlop={8}
+                testID={testIdWithKey('MessagesHiddenRoomsShow')}
+              >
+                <ThemedText style={style.roomsFailedAction}>{t('Rooms.HiddenShow')}</ThemedText>
+              </Pressable>
+            </View>
+          ) : null
+        }
         ListHeaderComponent={
           <>
             {items.length > 0 ? (

@@ -3233,6 +3233,13 @@
     "InThisRoom": "In this room",
     "YouHere": "You here",
     "HideFromMessages": "Hide from Messages",
+    "ShowInMessages": "Show in Messages",
+    "Shown": "{{room}} is back in Messages.",
+    "HiddenFromMessages": "Hidden from Messages",
+    "HiddenCount_one": "1 room hidden",
+    "HiddenCount_other": "{{count}} rooms hidden",
+    "HiddenShow": "Show",
+    "HiddenShowLabel": "Show hidden rooms",
     "OpenCommunity": "Open {{community}}",
     "OpenCommunityUnnamed": "Open the room's community"
   },

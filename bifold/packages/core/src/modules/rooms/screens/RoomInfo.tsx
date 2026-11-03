@@ -21,6 +21,7 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
+import { ToastType } from '../../../components/toast/BaseToast'
 import { testIdWithKey } from '../../../utils/testable'
 import { UNDO_WINDOW_MS } from '../../chat/pendingChatDeletes'
 import { communityTarget } from '../../trust-tasks/module/vtiCommunityLink'
@@ -32,7 +33,7 @@ import { openInMyAgent } from '../roomLinks'
 import type { Identity } from '../types'
 import { useMyName } from '../useMyName'
 import { type RoomListing, useRoom } from '../useRoom'
-import { canHideRoom, hideRoom } from '../useRoomRows'
+import { canHideRoom, hideRoom, showRoom, useRoomHidden } from '../useRoomRows'
 import { useRoomsService } from '../useRoomsService'
 
 const NO_LISTINGS: readonly RoomListing[] = []
@@ -59,6 +60,7 @@ const RoomInfo: React.FC = () => {
   const { room } = state
   const me = useMyName(room?.communityDid)
   const [sheetFor, setSheetFor] = useState<Identity>()
+  const hidden = useRoomHidden(roomId)
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -146,6 +148,13 @@ const RoomInfo: React.FC = () => {
       props: { onUndo: undo },
     })
   }
+  const show = () => {
+    if (!showRoom(roomId)) return
+    Toast.show({
+      type: ToastType.Success,
+      text1: t('Rooms.Shown', { room: roomTitle(t, room), ...asWritten }) as string,
+    })
+  }
   const chevron = <Icon name="chevron-right" size={24} color={ColorPalette.grayscale.mediumGrey} />
   const icon = (name: string) => <Icon name={name} size={24} color={ColorPalette.brand.primary} />
 
@@ -199,7 +208,21 @@ const RoomInfo: React.FC = () => {
           </View>
           {chevron}
         </Pressable>
-        {canHideRoom(roomId) ? (
+        {/* A hidden room shows the way back where it was hidden from (tester feedback, 11-02: there was none). */}
+        {hidden ? (
+          <>
+            <View style={styles.divider} />
+            <Pressable
+              style={styles.item}
+              onPress={show}
+              accessibilityRole="button"
+              testID={testIdWithKey('RoomInfoShow')}
+            >
+              {icon('eye-outline')}
+              <ThemedText style={styles.label}>{t('Rooms.ShowInMessages')}</ThemedText>
+            </Pressable>
+          </>
+        ) : canHideRoom(roomId) ? (
           <>
             <View style={styles.divider} />
             <Pressable
