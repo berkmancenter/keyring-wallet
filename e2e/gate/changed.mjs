@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { extractReferences } from '../scripts/check-testids.mjs';
+import { extractReferences, manifestDrift } from '../scripts/check-testids.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const e2eDir = path.resolve(here, '..');
@@ -285,14 +285,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     else console.log(`no such file in the wallet or bifold tree: ${missing.join(', ')}`);
     process.exitCode = 2;
   }
-  // The manifest is generated from one bifold commit; a file that gained testIDs since reads as unmapped.
+  // The manifest is bifold's at one pin; a file that gained testIDs since reads as unmapped. Compared by its ids (the
+  // manifest carries no commit id): the change's pin's manifest against the synced copy.
   let warning = '';
   try {
-    const gen = manifests[0]?.json.generatedFrom || '';
     const ref = arg('--range') ? arg('--range').split('..')[1] : 'HEAD';
     const pin = execFileSync('git', ['-C', repo, 'rev-parse', `${ref}:bifold`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    if (gen && pin && !pin.startsWith(gen) && !gen.startsWith(pin)) warning = `testids manifest from bifold ${gen.slice(0, 8)}, change judged at bifold ${pin.slice(0, 8)}: IDs added since read as unmapped (sync: e2e/scripts/sync-testids.sh)`;
-  } catch { /* no pin to compare */ }
+    const upstream = JSON.parse(execFileSync('git', ['-C', path.join(repo, 'bifold'), 'show', `${pin}:packages/core/testids.json`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }));
+    const { added } = manifestDrift(manifests[0]?.json, upstream);
+    if (added.length) warning = `testids manifest lacks ${added.length} id(s) bifold ${pin.slice(0, 8)} has, so files owning them read as unmapped (sync: e2e/scripts/sync-testids.sh)`;
+  } catch { /* no pin, or its manifest not readable here */ }
   if (warning) console.error(`warning: ${warning}`);
   if (missing.length) process.exit();
   const r = select(changed, { manifests, legsDir: path.join(here, 'legs') });
