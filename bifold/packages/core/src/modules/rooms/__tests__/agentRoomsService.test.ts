@@ -376,6 +376,51 @@ describe('AgentRoomsService', () => {
     expect(b.leaveCommunity).toHaveBeenCalledWith(COMMUNITY.did)
   })
 
+  // The agent keeps its keys to a room after the leave (no task drops them): listed from custody, the room came back
+  // by its ID, "Details not loaded", with no community (277.7, 11-03).
+  it('does not show the keys an identity the phone left as still holds', async () => {
+    const { b } = backend({
+      communities: async () => [],
+      departedPersonas: async () => ['did:key:persona-a'],
+    })
+    expect(await new AgentRoomsService(b).listMyRooms()).toEqual([])
+  })
+
+  it('still shows the keys held as an identity it did not leave as', async () => {
+    const { b } = backend({
+      communities: async () => [],
+      departedPersonas: async () => ['did:key:persona-b'],
+    })
+    const rooms = await new AgentRoomsService(b).listMyRooms()
+    expect(rooms.map((r) => [r.roomId, r.source])).toEqual([
+      [ROOM, 'custody'],
+      [CUSTODY_ROOM, 'custody'],
+    ])
+  })
+
+  it('shows every held room when the departures cannot be read', async () => {
+    const { b } = backend({
+      communities: async () => [],
+      departedPersonas: async () => Promise.reject(new Error('store locked')),
+    })
+    expect(await new AgentRoomsService(b).listMyRooms()).toHaveLength(2)
+  })
+
+  it('drops a community left elsewhere at once, and lists afresh after', async () => {
+    const { b, communityTask } = backend()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    const asked = communityTask.mock.calls.length
+    // A listing asked before the leave, still out: its answer is not what the next caller gets.
+    const before = service.listMyRooms()
+    service.leftCommunity(COMMUNITY.did)
+    const after = service.listMyRooms()
+    expect(after).not.toBe(before)
+    await Promise.all([before, after])
+    expect(communityTask.mock.calls.length).toBeGreaterThan(asked)
+    expect(b.leaveCommunity).not.toHaveBeenCalled()
+  })
+
   it('reports later phases as not built, without sending anything', async () => {
     const { b, agentTask } = backend({
       agentServedTypes: async () => [ROOMS_TASK.keysList02, `${SPEC}rooms/keys/present/0.2`],

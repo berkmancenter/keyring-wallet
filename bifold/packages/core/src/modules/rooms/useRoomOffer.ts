@@ -25,6 +25,8 @@ export const ROOM_ADMITTED_EVENT = 'rooms:admitted'
 export interface RoomAdmitted {
   roomId: string
   roomName: string
+  /** `roomId` when the community published no name: the notice then says "Unnamed room" (`roomTitle`). */
+  roomNameFrom?: 'roomId'
 }
 
 export type OfferStep = 'reading' | 'ready' | 'accepting' | 'hiding'
@@ -135,7 +137,11 @@ export function useRoomOffer(service: RoomsService | undefined, offerRef: string
     try {
       const { roomId } = await service.acceptOffer(preview.token)
       setStep('ready')
-      const admitted: RoomAdmitted = { roomId, roomName: String(preview.offer.roomName) }
+      const admitted: RoomAdmitted = {
+        roomId,
+        roomName: String(preview.offer.roomName),
+        roomNameFrom: preview.offer.roomNameFrom,
+      }
       DeviceEventEmitter.emit(ROOM_ADMITTED_EVENT, admitted)
       return roomId
     } catch (e) {

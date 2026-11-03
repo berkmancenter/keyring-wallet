@@ -96,7 +96,11 @@ export function resendAdmission(service: RoomsService, agreed: OfferPreview): vo
         const { roomId } = await service.acceptOffer(now.token)
         if (stopped) return
         stop()
-        const admitted: RoomAdmitted = { roomId, roomName: String(now.offer.roomName) }
+        const admitted: RoomAdmitted = {
+          roomId,
+          roomName: String(now.offer.roomName),
+          roomNameFrom: now.offer.roomNameFrom,
+        }
         DeviceEventEmitter.emit(ROOM_ADMITTED_EVENT, admitted)
         return
       } catch (e) {

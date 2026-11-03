@@ -51,12 +51,18 @@ export interface MyRooms {
 export const MY_ROOMS_RETRY_MS = 30_000
 
 type Listing = Pick<MyRooms, 'capabilities' | 'rooms' | 'offers'>
+/** Emitted with a community's DID once the phone has left it (roomsLeave): every rooms list drops its rooms now. */
+export const ROOMS_LEFT_EVENT = 'keyring.rooms.communityLeft'
+
 // The last listing each screen read, by service and community, so that opening it again shows it at once while it
 // is read again (in memory only; another service, another agent, starts with none). Forgotten when the wallet locks,
 // as the service forgets the records it opened (agentRoomsService, dropOpenedRecords): room names and offers don't
-// outlive a lock either.
+// outlive a lock either. Nor a leave: a screen opened after it showed the left community's rooms until it read.
 let remembered = new WeakMap<RoomsService, Map<string, Listing>>()
 DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, () => {
+  remembered = new WeakMap()
+})
+DeviceEventEmitter.addListener(ROOMS_LEFT_EVENT, () => {
   remembered = new WeakMap()
 })
 const rememberedOf = (service: RoomsService | undefined, communityDid?: string): Listing | undefined =>
@@ -99,6 +105,18 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
   const reread = useCallback(() => setRereads((n) => n + 1), [])
   // A community skipped because a step kept the community session is read again once it is free (onReadable).
   useEffect(() => service?.onReadable?.(reread), [service, reread])
+  // A community left: its rooms and offers go from the list at once, and the read after says what else changed.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(ROOMS_LEFT_EVENT, (left: string) => {
+      setState((s) => ({
+        ...s,
+        rooms: s.rooms?.filter((room) => room.communityDid !== left),
+        offers: s.offers?.filter((offer) => offer.communityDid !== left),
+      }))
+      reread()
+    })
+    return () => sub.remove()
+  }, [reread])
 
   useEffect(() => {
     if (!service) return

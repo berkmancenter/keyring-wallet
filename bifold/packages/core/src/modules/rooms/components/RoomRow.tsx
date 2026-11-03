@@ -10,7 +10,7 @@
 import type { TFunction } from 'i18next'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Platform, Pressable, StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -25,11 +25,12 @@ import TierBadge from './TierBadge'
 /** A short, stable handle for a room's test IDs: the last characters of its ID that are letters or digits. */
 export const roomHandle = (roomId: string): string => roomId.replace(/[^A-Za-z0-9]/g, '').slice(-10)
 
-/** The room's name as shown: a room ID reads as an ID. */
+/**
+ * The room's name as shown. A room with no published name reads "Unnamed room", its community on the line beside it
+ * when known, and never its ID: rooms left behind by a leave showed as 32 hex characters (11-03).
+ */
 export const roomTitle = (t: TFunction, room: Pick<RoomSummary, 'name' | 'nameFrom'>): string =>
-  room.nameFrom === 'roomId'
-    ? (t('Rooms.RoomById', { id: room.name, interpolation: { escapeValue: false } }) as string)
-    : room.name
+  room.nameFrom === 'roomId' ? (t('Rooms.UnnamedRoom') as string) : room.name
 
 /** Where the member stands in the room, in one line. */
 export const roomLine = (t: TFunction, room: RoomSummary, withCommunity: boolean): string => {
@@ -54,7 +55,6 @@ export const RoomRow: React.FC<RoomRowProps> = ({ room, withCommunity = false, o
   const { ColorPalette } = useTheme()
   const styles = StyleSheet.create({
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingVertical: 6 },
-    name: room.nameFrom === 'roomId' ? { fontFamily: Platform.select({ ios: 'Courier', default: 'monospace' }) } : {},
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
   const title = roomTitle(t, room)
@@ -68,7 +68,7 @@ export const RoomRow: React.FC<RoomRowProps> = ({ room, withCommunity = false, o
       <Icon name="door" size={22} color={ColorPalette.brand.primary} />
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <ThemedText variant="bold" style={styles.name} testID={testIdWithKey(`RoomName_${roomHandle(room.roomId)}`)}>
+          <ThemedText variant="bold" testID={testIdWithKey(`RoomName_${roomHandle(room.roomId)}`)}>
             {title}
           </ThemedText>
           <TierBadge tier={room.tier} />

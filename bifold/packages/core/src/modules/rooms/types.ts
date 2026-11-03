@@ -479,4 +479,9 @@ export interface RoomsService {
 
   /** Leaving goes through the community: leaving it takes the member out of its rooms. */
   leaveViaCommunity(communityDid: string): Promise<void>
+  /**
+   * The phone left `communityDid` another way (the community's own screen): its rooms and what was read of them
+   * go now, and the next listing is asked afresh. None for the sample.
+   */
+  leftCommunity?(communityDid: string): void
 }

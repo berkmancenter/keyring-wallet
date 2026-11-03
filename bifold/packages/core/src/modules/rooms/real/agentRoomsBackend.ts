@@ -6,8 +6,6 @@
 import { TypedArrayEncoder, utils, type Agent } from '@credo-ts/core'
 import RNFS from 'react-native-fs'
 
-import { keepSentPhoto } from '../../directory/myPhoto'
-import { dropDirectoryNames } from '../../directory/names'
 import { listKeyed, putKeyed } from '../../trust-tasks/module/keyedRecords'
 import { vtaAgent } from '../../trust-tasks/module/vtaAgent'
 import { GenericRecordsCommunityStore } from '../../trust-tasks/module/VtiCommunityStore'
@@ -16,6 +14,8 @@ import { leaveCommunity } from '../../trust-tasks/module/vtiJoin'
 import { GenericRecordsVettingStore } from '../../trust-tasks/module/vtiVetting'
 import { vtiAgent } from '../../trust-tasks/module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vtiTsp'
+
+import { afterLeavingCommunity } from '../roomsLeave'
 
 import type { RoomsBackend, RoomsCommunity, RoomsUploadBackend } from './agentRoomsService'
 import { createRoomDoors } from './files/door'
@@ -108,9 +108,13 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
         },
         communityDid
       )
-      // The names its members wrote on their cards go with it.
-      await dropDirectoryNames(agent, communityDid).catch(() => undefined)
-      await keepSentPhoto(agent, communityDid, undefined).catch(() => undefined)
+      await afterLeavingCommunity(agent, communityDid)
+    },
+    departedPersonas: async () => {
+      const held = new Set((await identityStore.listPersonas()).map((p) => p.did))
+      const left = await listKeyed<{ personaDid?: unknown }>(agent, 'keyring/vti-community', 'departure')
+      // An identity left one community and still held for another keeps its rooms.
+      return left.flatMap((d) => (typeof d.personaDid === 'string' && !held.has(d.personaDid) ? [d.personaDid] : []))
     },
 
     decodeBase64Url: (value) => TypedArrayEncoder.toUtf8String(TypedArrayEncoder.fromBase64Url(value)),

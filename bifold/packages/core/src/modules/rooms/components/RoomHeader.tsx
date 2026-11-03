@@ -13,7 +13,7 @@
 import type { TFunction } from 'i18next'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Platform, Pressable, StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -75,7 +75,6 @@ export const RoomHeader: React.FC<{ room: RoomSummary; onPress?: () => void }> =
     letters: { color: ColorPalette.brand.primary, fontSize: 18 },
     words: { flex: 1, minWidth: 0, gap: 2 },
     title: { fontSize: 22, color: ColorPalette.brand.text },
-    idName: { fontFamily: Platform.select({ ios: 'Courier', default: 'monospace' }) },
     where: { fontSize: 15, color: ColorPalette.grayscale.mediumGrey },
   })
   const header = (
@@ -92,7 +91,7 @@ export const RoomHeader: React.FC<{ room: RoomSummary; onPress?: () => void }> =
       <View style={styles.words}>
         <ThemedText
           variant="headingFour"
-          style={[styles.title, byId ? styles.idName : undefined]}
+          style={styles.title}
           accessibilityRole="header"
           testID={testIdWithKey('RoomTitle')}
         >

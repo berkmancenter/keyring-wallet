@@ -25,6 +25,7 @@ import { LOOK_WAIT_MS } from '../screens/CommunityMark'
 import { unnamedRef } from '../screens/communityName'
 import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVetterSeam'
 
+import { ROOMS_LEFT_EVENT } from '../../rooms/useMyRooms'
 import { readDirectoryDisclosure } from '../module/directoryDisclosure'
 import { statement } from './fixtures/directoryStatement'
 
@@ -236,6 +237,22 @@ describe('leaving a community (220)', () => {
     Object.assign(new Error('vtiAgent: sent vtc/members/self-remove; the community has not answered yet'), {
       name: 'VtiSentNoAnswer',
     })
+
+  // Left from here, the rooms were never told: My Agent kept "1 room" and the Rooms list kept the room (277.7, 11-03).
+  it("a leave drops the community's rooms from every list; one that fails drops nothing (control)", async () => {
+    const heard: string[] = []
+    const sub = DeviceEventEmitter.addListener(ROOMS_LEFT_EVENT, (did: string) => heard.push(did))
+    try {
+      mockLeave.mockRejectedValueOnce(noAnswer()).mockResolvedValueOnce({ disposition: 'purge', alreadyGone: false })
+      const tree = await openLeave()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityConfirm'))))
+      expect(heard).toEqual([])
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityRetry'))))
+      expect(heard).toEqual([communityDid])
+    } finally {
+      sub.remove()
+    }
+  })
 
   it('a leave that goes unanswered says so in words, and offers Try again, which leaves', async () => {
     mockLeave.mockRejectedValueOnce(noAnswer()).mockResolvedValueOnce({ disposition: 'purge', alreadyGone: false })

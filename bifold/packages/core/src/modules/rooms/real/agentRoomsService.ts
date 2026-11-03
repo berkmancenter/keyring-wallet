@@ -131,6 +131,11 @@ export interface RoomsBackend {
   /** A fresh random identifier (a UUID). */
   newId(): string
   leaveCommunity(communityDid: string): Promise<void>
+  /**
+   * The identities this phone left a community as and holds no more. The agent keeps its keys to their rooms after
+   * a leave (no task drops them), so those rooms are not shown from custody. Absent: every held room is.
+   */
+  departedPersonas?(): Promise<string[]>
   decodeBase64Url(value: string): string
   encodeBase64Url(text: string): string
   /** The offers hidden on this phone, by `offerId`. Upstream has no decline, so this is all hiding is. */
@@ -487,6 +492,8 @@ export class AgentRoomsService implements RoomsService {
     // answers, the listing fails on that, and the key list's own failure is not left unhandled.
     const heldAsked = this.heldRooms()
     heldAsked.catch(() => undefined)
+    // A failed read of the departures hides nothing: a room left shows by its keys, not a room missing.
+    const departedAsked = this.backend.departedPersonas?.().catch((): string[] => []) ?? Promise.resolve([])
     const communities = await this.backend.communities()
     // A community that cannot answer loses only its own details: its rooms still show from custody,
     // as `detailsNotLoaded`, and the other communities' rooms are unaffected. Why it did not answer is logged.
@@ -539,7 +546,11 @@ export class AgentRoomsService implements RoomsService {
         )
       }
     }
-    for (const custody of held) if (!next.has(custody.roomId)) next.set(custody.roomId, this.fromCustody(custody))
+    // Keys held as an identity the phone left a community as are what the leave left behind, not a room.
+    const departed = new Set(await departedAsked)
+    for (const custody of held)
+      if (!next.has(custody.roomId) && !(custody.member && departed.has(custody.member)))
+        next.set(custody.roomId, this.fromCustody(custody))
     // A listing asked before an accept or a leave answers its callers, but does not undo what that changed. Its
     // callers may see a room just left once more: the next listing, asked afresh after the leave, drops it. Answering
     // them from this.rooms instead would show no rooms at all after an accept, which empties it.
@@ -883,6 +894,10 @@ export class AgentRoomsService implements RoomsService {
   public async leaveViaCommunity(communityDid: string): Promise<void> {
     await this.require('leaveViaCommunity')
     await this.backend.leaveCommunity(communityDid)
+    this.leftCommunity(communityDid)
+  }
+
+  public leftCommunity(communityDid: string): void {
     this.roomsChanged++
     this.roomsInFlight = undefined
     for (const [id, room] of this.rooms)

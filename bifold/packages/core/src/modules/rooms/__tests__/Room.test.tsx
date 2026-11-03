@@ -131,11 +131,11 @@ describe('a room, on sample data', () => {
     expect(tree.queryByTestId(id('RoomPostRemoved'))).toBeNull()
   })
 
-  test('a custody-only room: an ID for a name, "Details not loaded", and no posts asked for', async () => {
+  test('a custody-only room: "Unnamed room", "Details not loaded", and no posts asked for', async () => {
     const sample = createSampleRoomsService()
     const listNotes = jest.spyOn(sample, 'listNotes')
     const tree = open(sample, CUSTODY)
-    await waitFor(() => expect(tree.getByTestId(id('RoomTitle'))).toHaveTextContent('Rooms.RoomById'))
+    await waitFor(() => expect(tree.getByTestId(id('RoomTitle'))).toHaveTextContent('Rooms.UnnamedRoom'))
     expect(tree.queryByTestId(id('RoomTier'))).toBeNull()
     expect(tree.getByTestId(id('RoomPostsUnavailable'))).toHaveTextContent('Rooms.DetailsNotLoaded')
     expect(listNotes).not.toHaveBeenCalled()

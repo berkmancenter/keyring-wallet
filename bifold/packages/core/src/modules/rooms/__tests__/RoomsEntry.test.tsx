@@ -82,9 +82,9 @@ describe('a room row', () => {
     expect(tree.getByTestId(id(`RoomRow_${roomHandle(room().roomId)}`)).props.accessibilityRole).toBeUndefined()
   })
 
-  test('a custody-only room: named as an ID, "Details not loaded", and no tier badge (control above)', () => {
+  test('a custody-only room: "Unnamed room", never its ID, "Details not loaded", and no tier badge (control above)', () => {
     const tree = inApp(<RoomRow room={custody} />)
-    expect(tree.getByText('Rooms.RoomById')).toBeTruthy()
+    expect(tree.getByText('Rooms.UnnamedRoom')).toBeTruthy()
     expect(tree.queryByText('3f9a7c21')).toBeNull()
     expect(tree.getByText('Rooms.DetailsNotLoaded')).toBeTruthy()
     expect(tree.queryByTestId(id('RoomTier'))).toBeNull()

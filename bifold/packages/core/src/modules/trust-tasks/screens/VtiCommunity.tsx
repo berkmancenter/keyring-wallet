@@ -24,8 +24,6 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { CommunityDirectorySection } from '../../directory/components/CommunityDirectorySection'
-import { keepSentPhoto } from '../../directory/myPhoto'
-import { dropDirectoryNames } from '../../directory/names'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { selfRemoveRefusal, vtiAgent, type VtiManifest } from '../module/vtiAgent'
@@ -36,6 +34,8 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { joinKnown, readFailed, useCommunityJourney, vetterGrantKnown } from '../module/communityJourney'
 import { CommunityPollsSection } from '../../polls/components/CommunityPollsSection'
 import { CommunityRoomsSection } from '../../rooms/components/CommunityRoomsSection'
+import { afterLeavingCommunity } from '../../rooms/roomsLeave'
+import { useRoomsService } from '../../rooms/useRoomsService'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf, unnamedRef } from './communityName'
 import { CommunityMark } from './CommunityMark'
@@ -76,6 +76,7 @@ const VtiCommunity: React.FC = () => {
   const [refusalCode, setRefusalCode] = useState<string>()
   const [showDetails, setShowDetails] = useState(false)
   const { agent } = useAgent()
+  const roomsService = useRoomsService()
   const navigation = useNavigation()
   // Where this phone stands with the community: a member is not asked to apply.
   const { journey, refresh } = useCommunityJourney(agent, communityDid)
@@ -159,10 +160,8 @@ const VtiCommunity: React.FC = () => {
         communityDid,
         { disposition: keep }
       )
-      // The names its members wrote on their cards, kept for the rooms, go with it.
-      await dropDirectoryNames(agent, communityDid).catch(() => undefined)
-      // And what this phone remembers of the photo it put on the member's card there.
-      await keepSentPhoto(agent, communityDid, undefined).catch(() => undefined)
+      // Its rooms go from every list now, and its members' names and the photo sent there with them.
+      await afterLeavingCommunity(agent, communityDid, roomsService)
       // The community answered, so it is named plainly here: its published
       // name, else the link's name without "(not confirmed …)", which after
       // "You left" read as if the leave itself was unconfirmed.
@@ -206,7 +205,7 @@ const VtiCommunity: React.FC = () => {
       setLeaving(false)
       setConfirmingLeave(false)
     }
-  }, [agent, communityDid, navigation, keep, t, toastBottomOffset])
+  }, [agent, communityDid, navigation, keep, t, toastBottomOffset, roomsService])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },

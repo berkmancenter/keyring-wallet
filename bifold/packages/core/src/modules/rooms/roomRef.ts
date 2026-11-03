@@ -1,7 +1,7 @@
 /**
  * What tells a room the community named none apart: its DID's last path segment, whole, else the end of its SCID
- * after "…", as a community's (`unnamedRef`). Shown with "(no name published yet)" (`Rooms.RoomById`), never as a
- * cut of the ID that reads like a name: the last 10 characters of `…:community-a-vtc` read "nity-a-vtc" (276.9).
+ * after "…", as a community's (`unnamedRef`). Never shown: a room so named reads "Unnamed room" (`roomTitle`). Never a
+ * cut of the ID that reads like a name either: the last 10 characters of `…:community-a-vtc` read "nity-a-vtc" (276.9).
  *
  * @module rooms/roomRef
  */

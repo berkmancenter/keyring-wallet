@@ -2902,7 +2902,7 @@
     "None": "Nenhuma sala ainda. Quando uma comunidade oferecer uma sala, ela aparece aqui.",
     "Off": "As salas estão desativadas. Ative-as nas configurações de Desenvolvedor.",
     "CommunityNotKnown": "Comunidade ainda não conhecida",
-    "RoomById": "{{id}} (nenhum nome publicado ainda)",
+    "UnnamedRoom": "Sala sem nome",
     "SoonWriteTitle": "Publicar nesta sala",
     "SoonWriteLine": "Em breve você poderá escrever para todos nesta sala.",
     "SoonFilesTitle": "Arquivos da sala",

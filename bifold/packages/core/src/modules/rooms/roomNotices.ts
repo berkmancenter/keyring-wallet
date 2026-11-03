@@ -39,6 +39,8 @@ import { vtaAgent } from '../trust-tasks/module/vtaAgent'
 import { useToastAboveTabBar } from '../trust-tasks/screens/aboveTabBar'
 import { communityLabelOf } from '../trust-tasks/screens/communityName'
 
+import { roomTitle } from './components/RoomRow'
+import { toInertText } from './inertText'
 import { type AccessNotice, nextAccessNotice } from './roomAccess'
 import type { RoomOffer } from './types'
 import { useRoomOffersCount } from './useRoomOffersCount'
@@ -126,7 +128,10 @@ export function accessWords(notice: AccessNotice, t: TFunction): { text1: string
     if (notice.rooms.length > 1) return { text1: t('Rooms.NoticeGoneMany', { number: notice.rooms.length }) as string }
     const { room, ended } = notice.rooms[0]
     return {
-      text1: t(ended ? 'Rooms.NoticeAccessEnded' : 'Rooms.NoticeRemoved', { room: room.name, ...named }) as string,
+      text1: t(ended ? 'Rooms.NoticeAccessEnded' : 'Rooms.NoticeRemoved', {
+        room: roomTitle(t, room),
+        ...named,
+      }) as string,
     }
   }
   if (notice.rooms.length > 1)
@@ -137,12 +142,12 @@ export function accessWords(notice: AccessNotice, t: TFunction): { text1: string
   const { room, days } = notice.rooms[0]
   const text1 =
     days <= 0
-      ? t('Rooms.NoticeAccessEndsToday', { room: room.name, ...named })
+      ? t('Rooms.NoticeAccessEndsToday', { room: roomTitle(t, room), ...named })
       : days === 1
-        ? t('Rooms.NoticeAccessEndsTomorrow', { room: room.name, ...named })
+        ? t('Rooms.NoticeAccessEndsTomorrow', { room: roomTitle(t, room), ...named })
         : // Only 2 to 7 days come here, so `NoticeAccessEndsIn_one` is never shown; it is there because i18next wants
           // every count-bearing key's forms.
-          t('Rooms.NoticeAccessEndsIn', { room: room.name, count: days, ...named })
+          t('Rooms.NoticeAccessEndsIn', { room: roomTitle(t, room), count: days, ...named })
   return { text1: text1 as string, text2: t('Rooms.NoticeSeeRoom') as string }
 }
 
@@ -222,7 +227,10 @@ export function useRoomNotices(): void {
       if (!e?.roomName) return
       Toast.show({
         type: ToastType.Success,
-        text1: t('Rooms.NoticeAdmitted', { room: e.roomName, interpolation: { escapeValue: false } }) as string,
+        text1: t('Rooms.NoticeAdmitted', {
+          room: roomTitle(t, { name: toInertText(e.roomName), nameFrom: e.roomNameFrom ?? 'community' }),
+          interpolation: { escapeValue: false },
+        }) as string,
         visibilityTime: NOTICE_MS,
         position: 'bottom',
         bottomOffset,

@@ -12,7 +12,7 @@ import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
 import { deriveCapabilities, ROOMS_OPERATIONS, ROOMS_REQUIREMENTS } from '../capabilities'
 import { toInertText } from '../inertText'
 import { RoomsUnavailable, type RoomsService, type RoomSummary } from '../types'
-import { forgetMyRooms, MY_ROOMS_RETRY_MS, useMyRooms } from '../useMyRooms'
+import { forgetMyRooms, MY_ROOMS_RETRY_MS, ROOMS_LEFT_EVENT, useMyRooms } from '../useMyRooms'
 
 let mockAgent: string | undefined
 const mockListeners = new Set<() => void>()
@@ -298,5 +298,62 @@ describe('the rooms never wait on the offers, and a failed read says so and trie
     } finally {
       jest.useRealTimers()
     }
+  })
+})
+
+// Left from the community's own screen, its room stayed in My Agent's count and in the Rooms list (277.7, 11-03).
+describe('a community left goes from every rooms list at once', () => {
+  const LEFT = 'did:webvh:QmLeft:left.example'
+  const STAYS = 'did:webvh:QmStays:stays.example'
+  const roomOf = (communityDid: string, id: string): RoomSummary => ({
+    roomId: `did:webvh:r:${id}`,
+    name: toInertText(id),
+    nameFrom: 'community',
+    source: 'community',
+    communityDid,
+    tier: 'open',
+    standing: 'member',
+  })
+  const left = roomOf(LEFT, 'left')
+  const stays = roomOf(STAYS, 'stays')
+  beforeEach(() => forgetMyRooms())
+
+  test("its rooms go before the read after says so, and the other community's stay (control)", async () => {
+    const s = service()
+    ;(s.listMyRooms as jest.Mock).mockResolvedValue([left, stays])
+    const { result } = renderHook(() => useMyRooms(s))
+    await waitFor(() => expect(result.current.rooms).toEqual([left, stays]))
+    ;(s.listMyRooms as jest.Mock).mockReturnValue(new Promise<never>(() => undefined))
+    act(() => void DeviceEventEmitter.emit(ROOMS_LEFT_EVENT, LEFT))
+    expect(result.current.rooms).toEqual([stays])
+    // And it reads again, for whatever else the leave changed.
+    await waitFor(() => expect(s.listMyRooms).toHaveBeenCalledTimes(2))
+  })
+
+  test('a screen opened after the leave does not show the rooms remembered before it (control: before, it does)', async () => {
+    const s = service()
+    ;(s.listMyRooms as jest.Mock).mockResolvedValue([left, stays])
+    const first = renderHook(() => useMyRooms(s))
+    await waitFor(() => expect(first.result.current.rooms).toEqual([left, stays]))
+    first.unmount()
+    ;(s.listMyRooms as jest.Mock).mockReturnValue(new Promise<never>(() => undefined))
+    const before = renderHook(() => useMyRooms(s))
+    expect(before.result.current.rooms).toEqual([left, stays])
+    before.unmount()
+    act(() => void DeviceEventEmitter.emit(ROOMS_LEFT_EVENT, LEFT))
+    const after = renderHook(() => useMyRooms(s))
+    expect(after.result.current.rooms).toBeUndefined()
+  })
+
+  test("the left community's own list empties", async () => {
+    const s = service()
+    ;(s.listMyRooms as jest.Mock).mockResolvedValue([left, stays])
+    const { result } = renderHook(() => useMyRooms(s, LEFT))
+    await waitFor(() => expect(result.current.rooms).toEqual([left]))
+    ;(s.listMyRooms as jest.Mock).mockResolvedValue([stays])
+    act(() => void DeviceEventEmitter.emit(ROOMS_LEFT_EVENT, LEFT))
+    expect(result.current.rooms).toEqual([])
+    await waitFor(() => expect(s.listMyRooms).toHaveBeenCalledTimes(2))
+    expect(result.current.rooms).toEqual([])
   })
 })
