@@ -132,8 +132,9 @@ export interface RoomsBackend {
   newId(): string
   leaveCommunity(communityDid: string): Promise<void>
   /**
-   * The identities this phone left a community as and holds no more. The agent keeps its keys to their rooms after
-   * a leave (no task drops them), so those rooms are not shown from custody. Absent: every held room is.
+   * The identities this phone left a community as and holds no more, and those a community removed that are a member
+   * of no other. The agent keeps its keys to their rooms after a leave or a removal (no task drops them), so those
+   * rooms are not shown from custody. Absent: every held room is.
    */
   departedPersonas?(): Promise<string[]>
   decodeBase64Url(value: string): string

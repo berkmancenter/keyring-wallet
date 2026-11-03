@@ -114,7 +114,17 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
       const held = new Set((await identityStore.listPersonas()).map((p) => p.did))
       const left = await listKeyed<{ personaDid?: unknown }>(agent, 'keyring/vti-community', 'departure')
       // An identity left one community and still held for another keeps its rooms.
-      return left.flatMap((d) => (typeof d.personaDid === 'string' && !held.has(d.personaDid) ? [d.personaDid] : []))
+      const forgotten = left.flatMap((d) =>
+        typeof d.personaDid === 'string' && !held.has(d.personaDid) ? [d.personaDid] : []
+      )
+      // A removal keeps the identity, and the rooms listing skips its community (`communities`), so its rooms came
+      // back from the agent's keys: "Rooms · 3 rooms" after First VTC removed the member (277.7, 11-03). The keys name
+      // the identity, not the community, so an identity still a member of another community keeps all its rooms: never
+      // one Keyring makes (one per community, VtaClient `ensurePersona`), possibly one another client made and adopted.
+      const memberships = await communityStore.listMemberships()
+      const member = new Set(memberships.filter((m) => !m.removal).map((m) => m.personaDid))
+      const removed = memberships.filter((m) => m.removal && !member.has(m.personaDid)).map((m) => m.personaDid)
+      return [...new Set([...forgotten, ...removed])]
     },
 
     decodeBase64Url: (value) => TypedArrayEncoder.toUtf8String(TypedArrayEncoder.fromBase64Url(value)),
