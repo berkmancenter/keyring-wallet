@@ -70,7 +70,8 @@ export const RULES = [
   // What the app never ships, by file type.
   ['none', 'docs', /\.(md|txt)$/],
   ['none', 'tests', /(^|\/)(__tests__|__mocks__)\/|\.(test|spec)\.[jt]sx?$/],
-  ['none', 'repository dotfile', /^\.(gitignore|gitattributes|editorconfig|nvmrc|prettierrc[^/]*|prettierignore|eslintrc[^/]*|eslintignore|commitlintrc[^/]*|lintstagedrc[^/]*)$/],
+  // At the wallet root and at bifold's (the submodule's own .prettierignore keeps vendored bundles byte-identical).
+  ['none', 'repository dotfile', /^(bifold\/)?\.(gitignore|gitattributes|editorconfig|nvmrc|prettierrc[^/]*|prettierignore|eslintrc[^/]*|eslintignore|commitlintrc[^/]*|lintstagedrc[^/]*)$/],
   ['none', 'the .env template (builds read their own .env)', /^app\/\.env\.sample$/],
   ['none', "a package's test or type-check config", /^bifold\/packages\/[^/]+\/(jest\.config\.[jt]s|tsconfig[^/]*\.json|\.eslintrc[^/]*|\.prettierrc[^/]*)$/],
   ['none', "bifold's own lockfile (the app installs from the wallet's yarn.lock, which a new dependency changes)", /^bifold\/yarn\.lock$/],

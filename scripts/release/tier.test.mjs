@@ -54,6 +54,11 @@ test('what the app never ships is none, even a manifest there', () => {
     'ota'
   );
   assert.equal(tierOf('bifold/packages/core/src/__tests__/x.test.ts'), 'none');
+  // The same tooling dotfiles at bifold's root; any other dotfile there, or its babel config, still reads store.
+  assert.equal(tierOf('bifold/.prettierignore', 'bifold/.gitignore', 'bifold/.eslintrc.js'), 'none');
+  assert.equal(tierOf('bifold/.babelrc'), 'store');
+  assert.equal(tierOf('bifold/.env'), 'store');
+  assert.equal(tierOf('bifold/packages/core/.prettierignore'), 'store');
   // The app's tooling: a hot fix branch carries its publisher, which must not make the fix read store.
   assert.equal(tierOf('app/scripts/ota-deploy.mjs', 'app/scripts/refresh-ledgers.cjs'), 'none');
   assert.equal(tierOf('app/scripts/ota-deploy.mjs', 'app/src/screens/Home.tsx'), 'ota');
