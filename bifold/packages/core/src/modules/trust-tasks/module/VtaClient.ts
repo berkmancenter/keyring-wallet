@@ -763,6 +763,13 @@ const UNSOLICITED = new Set<string>([VTA_TASK.consentRequest, VTA_TASK.consentGr
 /** Persona mints running now, by VTA and community (see `ensurePersona`). */
 const personasInFlight = new Map<string, Promise<VtiPersona>>()
 
+/**
+ * Key copies being fetched now, by the in-memory key id they go to (see `holdPersonaKeys`): only that a fetch is
+ * running, never the key. Each entry goes when its fetch ends, so nothing outlives it to be cleared on a lock. The id
+ * names the agent and its key (`inMemoryKeyId(vtaDid, vtaKeyId)`), so two agents never share an entry.
+ */
+const keysInFlight = new Map<string, Promise<void>>()
+
 /** A task dropped from the queue before it was sent ({@link VtaClient.dropQueued}). */
 export class VtaTaskDropped extends Error {
   constructor(readonly taskType: string) {
@@ -2583,6 +2590,10 @@ export class VtaClient {
    * and no copies at all, so nothing on the phone could sign in as it (vtiAgent: "the persona has no borrowed
    * key-agreement key"): its rooms, its community's messages and its vetting all stopped there. Its copies are
    * borrowed and recorded here, the first time it is asked for.
+   *
+   * A copy is fetched once however many ask for it at the same moment: the session-open sweep and a sign-in that
+   * needs the key both found it missing and each exported both keys, four exports one after another in the agent's
+   * queue for one sign-in (a tester's 277.4 log, 11-02). The second waits for the first's fetch.
    */
   async holdPersonaKeys(persona: VtiPersona): Promise<boolean> {
     if (!persona.kmsKeyIds?.keyAgreement || !persona.kmsKeyIds.signing) return this.borrowAdoptedKeys(persona)
@@ -2595,18 +2606,47 @@ export class VtaClient {
       if (!kmsKeyId || !isInMemoryKeyId(kmsKeyId)) continue
       // Asked without fetching: getPublicKey would fetch a missing copy itself
       // (EphemeralKeyManagementService), and this is the fetch.
-      const held =
-        (await heldInMemory(this.agent, kmsKeyId)) ??
-        (await this.agent.kms
-          .getPublicKey({ keyId: kmsKeyId, backend: EPHEMERAL_KMS_BACKEND })
-          .then(() => true)
-          .catch(() => false))
-      if (held) continue
-      await this.connect()
-      await this.borrowKey(vtaKeyId)
+      if (await this.holdsKeyNow(kmsKeyId)) continue
+      const joined = keysInFlight.get(kmsKeyId)
+      if (joined) {
+        await joined
+        // Someone else's fetch: the copy is this agent's only if it is held now. A fetch started before a lock lands
+        // in the agent that locked, and a caller after the unlock (a new agent, the same id) would otherwise take it as
+        // held. Not held: this caller fetches it itself.
+        if (!(await this.holdsKeyNow(kmsKeyId))) await this.fetchKeyCopy(kmsKeyId, vtaKeyId)
+      } else {
+        await this.fetchKeyCopy(kmsKeyId, vtaKeyId)
+      }
       fetched = true
     }
     return fetched
+  }
+
+  /**
+   * Whether this agent's in-memory backend holds the copy now: one answer for before a fetch and after joining one.
+   * Asked without fetching where the backend can say; where it can't, getPublicKey is asked, which would fetch a
+   * missing copy itself (EphemeralKeyManagementService), so "can't tell" is never taken as held.
+   */
+  private async holdsKeyNow(kmsKeyId: string): Promise<boolean> {
+    return (
+      (await heldInMemory(this.agent, kmsKeyId)) ??
+      (await this.agent.kms
+        .getPublicKey({ keyId: kmsKeyId, backend: EPHEMERAL_KMS_BACKEND })
+        .then(() => true)
+        .catch(() => false))
+    )
+  }
+
+  /** One fetch of a key copy, shared with whoever asks for the same copy while it runs (`keysInFlight`). */
+  private fetchKeyCopy(kmsKeyId: string, vtaKeyId: string): Promise<void> {
+    const running = (async () => {
+      await this.connect()
+      await this.borrowKey(vtaKeyId)
+    })().finally(() => {
+      if (keysInFlight.get(kmsKeyId) === running) keysInFlight.delete(kmsKeyId)
+    })
+    keysInFlight.set(kmsKeyId, running)
+    return running
   }
 
   // ---------------------------------------------------------------------------
