@@ -1076,10 +1076,21 @@ export class VtaAgentController {
   async lookAtOtherAgents(agent: Agent): Promise<void> {
     if (this.looking) return this.looking
     this.looking = (async () => {
+      // Which agent is current is not known until the stored link is read, as fetchKeyCopy waits for: looked at
+      // before then (at start-up, a push wake), the current agent was taken for another and signed in to on a second
+      // session as the same manager key, and the mediator closed one of the two, 1008, twice in 3 s (a tester's
+      // 277.4 log, 11-02). A link never read is no look: better none than one that knocks the live session off.
+      try {
+        await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
+      } catch {
+        return
+      }
       const store = this.linkStore(agent)
       const links = (await Promise.resolve(store.list?.()).catch(() => undefined)) ?? []
-      const current = this.state.link.kind === 'linked' ? this.state.link.vtaDid : undefined
-      for (const { vtaDid } of links.filter((l) => l.vtaDid !== current)) {
+      const current = () => (this.state.link.kind === 'linked' ? this.state.link.vtaDid : undefined)
+      for (const { vtaDid } of links) {
+        // Asked again before each look: a look takes seconds, and the current agent can change under it.
+        if (vtaDid === current()) continue
         const seen = await this.lookAt(agent, vtaDid)
         const now = this.now()
         const before = this.state.otherRequests?.[vtaDid]?.approvals ?? []

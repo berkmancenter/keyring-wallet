@@ -1572,6 +1572,29 @@ describe('several agents', () => {
     expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: HOME.vtaDid })
   })
 
+  // A tester's 277.4 log (11-02): at a push-wake start the look ran before the stored link was read, took the current
+  // agent for another, and signed in to it on a second session as the same manager key; the mediator closed one of
+  // the two (1008) twice in 3 s.
+  it('a look asked before the stored link is read waits for it, and never signs in to the current agent', async () => {
+    const { looked, deps } = lookDelivering([])
+    const { vta } = twoAgents(deps)
+    const look = vta.lookAtOtherAgents({} as never)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    // Control: nothing looked at while the link is unread, the current agent least of all.
+    expect(looked).toEqual([])
+    await vta.restore({} as never)
+    await look
+    expect(looked).toEqual([WORK.vtaDid])
+  })
+
+  it('a link never read within the wait: no look at all, rather than one that could knock the live session off', async () => {
+    const { looked, deps } = lookDelivering([])
+    const { vta } = twoAgents({ ...deps, keyFetchWaitMs: 50 })
+    await vta.lookAtOtherAgents({} as never)
+    expect(looked).toEqual([])
+    expect(vta.getState().otherRequests).toBeUndefined()
+  })
+
   it('an agent the look cannot reach is said unreachable, not "nothing waits"', async () => {
     const { deps } = lookDelivering([], { fail: true })
     const { vta } = twoAgents(deps)

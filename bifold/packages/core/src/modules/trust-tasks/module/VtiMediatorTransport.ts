@@ -477,6 +477,13 @@ export async function authcryptTo(
 }
 
 /**
+ * An endpoint's host, whatever its scheme. Not `new URL(…).host`: React Native's URL finds a host only in http(s)
+ * addresses, so a wss:// one gave '' and the log said "on  closed" (a tester's 277.4 log, 11-02).
+ */
+export const endpointHost = (endpoint: string | undefined): string | undefined =>
+  (endpoint && /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(endpoint)?.[1]) || undefined
+
+/**
  * One authenticated socket to one mediator, for one DID.
  *
  * `start()` performs the login and opens the socket; inbound frames are handed
@@ -1043,11 +1050,7 @@ export class VtiMediatorSession {
 
   /** The mediator this session collects on, by host: what a report has to show (D7FG-2Y9J). */
   private get where(): string {
-    try {
-      return new URL(this.mediator.wsEndpoint).host
-    } catch {
-      return didPrefix(this.mediator.did)
-    }
+    return endpointHost(this.mediator.wsEndpoint) ?? didPrefix(this.mediator.did)
   }
 
   /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */
