@@ -9,9 +9,17 @@
  * (over a contact's chat and its composer, IN-350) and said "didn't answer"
  * of an agent that had answered by refusing this phone.
  *
+ * It speaks for the identity that failed. When the community has another
+ * identity under the agent linked now, that one is the community's, and the
+ * notice is not said: after leaving and joining again with a new identity, an
+ * older one under an agent no longer linked failed to sign in, and the
+ * community read "Your agent is no longer connected" while its new identity
+ * was signed in (277.7, 11-03).
+ *
  * @module trust-tasks/screens/PersonaAgentNotice
  */
-import React from 'react'
+import { useAgent } from '@bifold/react-hooks'
+import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, View } from 'react-native'
 
@@ -19,6 +27,9 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
+import { currentAgentDid } from '../module/currentAgent'
+import { vtaAgent } from '../module/vtaAgent'
+import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { usePersonaAgentState } from '../module/vtiPersonaInbox'
 
 import { communityLabelOf } from './communityName'
@@ -53,7 +64,26 @@ export const PersonaAgentNotice: React.FC<PersonaAgentNoticeProps> = ({ communit
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const state = usePersonaAgentState(communityDid)
+  const { agent } = useAgent()
+  // The community's identity under the agent linked now, read again when that agent changes. Read-only.
+  const linkedAgent = useSyncExternalStore(vtaAgent.subscribe, currentAgentDid)
+  const [current, setCurrent] = useState<string | undefined>()
+  const failed = state?.persona?.did
+  useEffect(() => {
+    setCurrent(undefined)
+    if (!agent || !failed || !linkedAgent) return
+    let live = true
+    new GenericRecordsIdentityStore(agent)
+      .getPersona(communityDid, linkedAgent)
+      .then((persona) => live && setCurrent(persona?.did))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [agent, communityDid, failed, linkedAgent])
   if (!state) return null
+  // Another identity is the community's now: the one that failed is not.
+  if (current && failed && current !== failed) return null
   const words = WORDS[state.kind] ?? WORDS.unreachable
   const styles = StyleSheet.create({
     card: {
