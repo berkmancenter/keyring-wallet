@@ -1184,6 +1184,7 @@
     "RoomOfferUnavailable": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferUntil": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOffers": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomOffersFailed": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomPart": ["src/modules/rooms/screens/RoomPart.tsx"],
     "RoomPollFailed": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPollTryAgain": ["src/modules/rooms/screens/Room.tsx"],
@@ -1234,6 +1235,7 @@
       "src/modules/rooms/screens/RoomsHome.tsx"
     ],
     "RoomsReadFailed": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomsReadFailedCard": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomsReading": [
       "src/modules/rooms/components/CommunityRoomsSection.tsx",
       "src/modules/rooms/components/RoomsListBody.tsx"
@@ -1241,6 +1243,7 @@
     "RoomsSampleDataBanner": ["src/modules/rooms/components/SampleDataBanner.tsx"],
     "RoomsStale": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomsTryAgain": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomsTryingAgain": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomsUnavailable": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "Save": [
       "src/components/forms/WalletNameForm.tsx",

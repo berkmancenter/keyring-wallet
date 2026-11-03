@@ -101,6 +101,8 @@ export interface RoomsListBodyProps {
   onOpenOffer?: (offer: RoomOffer) => void
   /** What shows while the rooms are read; the app's spinner unless a screen draws its own (a community's rows). */
   whileReading?: React.ReactNode
+  /** The community these rooms are of, by name, when one is: who to name when it doesn't answer. */
+  communityName?: string
 }
 
 export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
@@ -109,30 +111,56 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
   onOpenRoom,
   onOpenOffer,
   whileReading,
+  communityName,
 }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const styles = StyleSheet.create({
     section: { gap: 4 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
+    failed: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+    trying: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
   })
   const { capabilities, rooms, offers, failed } = myRooms
 
-  if (!capabilities && failed)
+  if (!capabilities && failed) {
+    // Who didn't answer, by name where the screen knows it: on a community's screen its rooms failed as "Couldn't
+    // reach your agent" while the agent was fine (a tester's 277.4 log, 11-02).
+    const named = myRooms.failure?.reason === 'communityUnreachable' && communityName
     return (
-      <View style={styles.section}>
-        <ThemedText testID={testIdWithKey('RoomsReadFailed')}>{roomsReadFailedText(t, myRooms.failure)}</ThemedText>
-        {/* Trying again doesn't update a community. */}
-        {myRooms.failure?.reason === 'communityDoesNotServe' ? null : (
-          <Button
-            title={t('Rooms.TryAgain')}
-            buttonType={ButtonType.Secondary}
-            onPress={myRooms.reload}
-            testID={testIdWithKey('RoomsTryAgain')}
-          />
-        )}
+      <View style={styles.failed} testID={testIdWithKey('RoomsReadFailedCard')}>
+        <Icon name="cloud-off-outline" size={24} color={ColorPalette.grayscale.mediumGrey} />
+        <View style={{ flex: 1, gap: 8 }}>
+          <View style={{ gap: 2 }}>
+            <ThemedText testID={testIdWithKey('RoomsReadFailed')}>
+              {named
+                ? t('Rooms.CommunityNotAnswering', { community: communityName, interpolation: { escapeValue: false } })
+                : roomsReadFailedText(t, myRooms.failure)}
+            </ThemedText>
+            {named ? (
+              <ThemedText variant="caption" style={styles.muted}>
+                {t('Rooms.ShowWhenItAnswers')}
+              </ThemedText>
+            ) : null}
+          </View>
+          {/* Trying again doesn't update a community. While it runs, it says so: a tap used to change nothing. */}
+          {myRooms.failure?.reason === 'communityDoesNotServe' ? null : myRooms.refreshing ? (
+            <View style={styles.trying} accessibilityLiveRegion="polite" testID={testIdWithKey('RoomsTryingAgain')}>
+              <ActivityIndicator color={ColorPalette.brand.primary} />
+              <ThemedText style={styles.muted}>{t('Rooms.TryingAgain')}</ThemedText>
+            </View>
+          ) : (
+            <Button
+              title={t('Rooms.TryAgain')}
+              buttonType={ButtonType.Secondary}
+              onPress={myRooms.reload}
+              testID={testIdWithKey('RoomsTryAgain')}
+            />
+          )}
+        </View>
       </View>
     )
+  }
   const reading = whileReading ?? (
     <ActivityIndicator color={ColorPalette.brand.primary} testID={testIdWithKey('RoomsReading')} />
   )
@@ -154,6 +182,11 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
       {failed ? (
         <ThemedText style={styles.muted} testID={testIdWithKey('RoomsStale')}>
           {t('Rooms.Stale')}
+        </ThemedText>
+      ) : null}
+      {myRooms.offersFailed ? (
+        <ThemedText style={styles.muted} testID={testIdWithKey('RoomOffersFailed')}>
+          {t('Rooms.OffersNotRead')}
         </ThemedText>
       ) : null}
       {waiting.length > 0 ? (

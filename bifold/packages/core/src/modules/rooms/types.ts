@@ -427,6 +427,8 @@ export interface RoomsService {
   readonly label: string
   /** The app's agent a real service is built on (`RoomsBackend.runsOn`); none for the sample. */
   readonly runsOn?: object
+  /** A line for the app's log, from a screen's read of the rooms: what failed, and each retry. None for the sample. */
+  note?(line: string): void
   /** One status per operation. Cached per agent; `refresh` asks again. */
   capabilities(options?: { refresh?: boolean }): Promise<RoomsCapabilities>
 

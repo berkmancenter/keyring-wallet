@@ -5,10 +5,14 @@
  * its services afresh (A, then B, then A must not read B's). Nothing changing reads nothing.
  */
 import { act, renderHook, waitFor } from '@testing-library/react-native'
+import { DeviceEventEmitter } from 'react-native'
+
+import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
 
 import { deriveCapabilities, ROOMS_OPERATIONS, ROOMS_REQUIREMENTS } from '../capabilities'
-import type { RoomsService } from '../types'
-import { useMyRooms } from '../useMyRooms'
+import { toInertText } from '../inertText'
+import { RoomsUnavailable, type RoomsService, type RoomSummary } from '../types'
+import { forgetMyRooms, MY_ROOMS_RETRY_MS, useMyRooms } from '../useMyRooms'
 
 let mockAgent: string | undefined
 const mockListeners = new Set<() => void>()
@@ -167,5 +171,132 @@ describe('how the last read went', () => {
     expect(result.current.refreshing).toBe(false)
     await waitFor(() => expect(rooms.capabilities).toHaveBeenCalledTimes(3))
     expect(rooms.capabilities).toHaveBeenLastCalledWith({ refresh: false })
+  })
+})
+
+// A tester's 277.4 log (11-02): First VTC left its offers unanswered for minutes. The list waited for each 30 s ask,
+// and on the community's own screen failed as "Couldn't reach your agent", whose Try again joined the same ask.
+describe('the rooms never wait on the offers, and a failed read says so and tries again', () => {
+  const LAB = 'did:webvh:QmLab:lab.example'
+  const room: RoomSummary = {
+    roomId: 'did:webvh:r:planning',
+    name: toInertText('Planning'),
+    nameFrom: 'community',
+    source: 'community',
+    communityDid: LAB,
+    tier: 'open',
+    standing: 'member',
+  }
+  const never = () => new Promise<never>(() => undefined)
+  beforeEach(() => forgetMyRooms())
+
+  test('the rooms show as soon as they are listed, while the offers are still asked (control: then they come)', async () => {
+    const s = service()
+    let answer: (offers: never[]) => void = () => undefined
+    ;(s.listMyRooms as jest.Mock).mockResolvedValue([room])
+    ;(s.listOffers as jest.Mock).mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    const { result } = renderHook(() => useMyRooms(s, LAB))
+    await waitFor(() => expect(result.current.rooms).toEqual([room]))
+    expect(result.current.offers).toBeUndefined()
+    await act(async () => answer([]))
+    expect(result.current.offers).toEqual([])
+  })
+
+  test("offers a community didn't answer leave its rooms shown, not failed, and say so", async () => {
+    const s = Object.assign(service(), { note: jest.fn() })
+    ;(s.listMyRooms as jest.Mock).mockResolvedValue([room])
+    // The offers give up after the rooms are shown, as a 30 s wait does.
+    let giveUp: (e: Error) => void = () => undefined
+    ;(s.listOffers as jest.Mock).mockReturnValue(new Promise((_, reject) => (giveUp = reject)))
+    const { result } = renderHook(() => useMyRooms(s, LAB))
+    await waitFor(() => expect(result.current.rooms).toEqual([room]))
+    await act(async () => giveUp(new Error('vtiAgent: sent vtc/rooms/offers/list; the community has not answered yet')))
+    expect(result.current.offersFailed).toBe(true)
+    expect(result.current.rooms).toEqual([room])
+    expect(result.current.failed).toBe(false)
+    expect(s.note).toHaveBeenCalledWith(expect.stringMatching(/the offers for the rooms of .* were not read/))
+  })
+
+  test('opened again, the screen shows the last listing at once, while it is read again', async () => {
+    const s = service()
+    ;(s.listMyRooms as jest.Mock).mockResolvedValue([room])
+    const first = renderHook(() => useMyRooms(s, LAB))
+    await waitFor(() => expect(first.result.current.rooms).toEqual([room]))
+    first.unmount()
+    ;(s.listMyRooms as jest.Mock).mockReturnValue(never())
+    const again = renderHook(() => useMyRooms(s, LAB))
+    expect(again.result.current.rooms).toEqual([room])
+    expect(again.result.current.capabilities).toBeDefined()
+    // Control: another community's screen remembers nothing of this one.
+    expect(renderHook(() => useMyRooms(s, 'did:webvh:QmOther:x')).result.current.rooms).toBeUndefined()
+  })
+
+  test('a lock forgets what was remembered: reopened after it, the screen shows nothing until it reads (control above)', async () => {
+    const s = service()
+    ;(s.listMyRooms as jest.Mock).mockResolvedValue([room])
+    const first = renderHook(() => useMyRooms(s, LAB))
+    await waitFor(() => expect(first.result.current.rooms).toEqual([room]))
+    first.unmount()
+    act(() => void DeviceEventEmitter.emit(WALLET_LOCKED_EVENT))
+    ;(s.listMyRooms as jest.Mock).mockReturnValue(never())
+    const again = renderHook(() => useMyRooms(s, LAB))
+    expect(again.result.current.rooms).toBeUndefined()
+    expect(again.result.current.capabilities).toBeUndefined()
+  })
+
+  test('a failed read is tried once more after MY_ROOMS_RETRY_MS, as "trying again", and logged; a second failure waits', async () => {
+    jest.useFakeTimers()
+    try {
+      const s = Object.assign(service(), { note: jest.fn() })
+      ;(s.listMyRooms as jest.Mock).mockRejectedValue(
+        new RoomsUnavailable('listMyRooms', 'communityUnreachable', 'no community answered')
+      )
+      const { result } = renderHook(() => useMyRooms(s, LAB))
+      await act(async () => undefined)
+      expect(result.current).toMatchObject({ failed: true, failures: 1, failure: { reason: 'communityUnreachable' } })
+      expect(s.note).toHaveBeenCalledWith(
+        expect.stringMatching(/the rooms of .* were not read \(\d+ ms\): .*no community answered/)
+      )
+      expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+      await act(async () => void (await jest.advanceTimersByTimeAsync(MY_ROOMS_RETRY_MS - 1)))
+      expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+      await act(async () => void (await jest.advanceTimersByTimeAsync(1)))
+      expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+      expect(s.note).toHaveBeenCalledWith(expect.stringMatching(/trying the rooms of .* again/))
+      expect(result.current).toMatchObject({ failures: 2, refreshing: false })
+      await act(async () => void (await jest.advanceTimersByTimeAsync(MY_ROOMS_RETRY_MS * 3)))
+      expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test("the member's Try again shows as refreshing until it answers, and is logged", async () => {
+    const s = Object.assign(service(), { note: jest.fn() })
+    ;(s.listMyRooms as jest.Mock).mockRejectedValueOnce(new Error('the agent did not answer'))
+    const { result } = renderHook(() => useMyRooms(s, LAB))
+    await waitFor(() => expect(result.current.failed).toBe(true))
+    let answer: (rooms: RoomSummary[]) => void = () => undefined
+    ;(s.listMyRooms as jest.Mock).mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    act(() => result.current.reload())
+    expect(result.current.refreshing).toBe(true)
+    expect(s.note).toHaveBeenCalledWith(expect.stringMatching(/asked to try the rooms again/))
+    await act(async () => answer([room]))
+    expect(result.current).toMatchObject({ failed: false, refreshing: false, rooms: [room] })
+  })
+
+  test('an unmounted screen tries nothing again (control: a mounted one does, above)', async () => {
+    jest.useFakeTimers()
+    try {
+      const s = service()
+      ;(s.listMyRooms as jest.Mock).mockRejectedValue(new Error('down'))
+      const { unmount } = renderHook(() => useMyRooms(s, LAB))
+      await act(async () => undefined)
+      unmount()
+      await act(async () => void (await jest.advanceTimersByTimeAsync(MY_ROOMS_RETRY_MS * 2)))
+      expect(s.listMyRooms).toHaveBeenCalledTimes(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

@@ -4,9 +4,18 @@
  * not called: its status is kept, so the screen shows why instead of an empty list. When a screen reads
  * again is useRereadOnReturn's: this says how the last read went and what the offers poll knows beyond it.
  *
+ * The rooms show as soon as they are listed, and the last listing at once when the screen opens again; the offers are
+ * read beside them and never hold them back or fail them. A community that left its offers unanswered for minutes
+ * (First VTC, a tester's 277.4 log, 11-02) held the whole list for each 30 s wait, and on the community's own screen
+ * failed it as "Couldn't reach your agent", whose Try again waited on the same unanswered ask. A read that fails is
+ * tried once more after {@link MY_ROOMS_RETRY_MS} while the screen is open, and every failure and retry is logged.
+ *
  * @module rooms/useMyRooms
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { DeviceEventEmitter } from 'react-native'
+
+import { WALLET_LOCKED_EVENT } from '../../utils/walletLocked'
 
 import { vtaAgent } from '../trust-tasks/module/vtaAgent'
 
@@ -19,8 +28,10 @@ export interface MyRooms {
   capabilities?: RoomsCapabilities
   /** Undefined while reading, and when listing rooms is not available (see `capabilities.listMyRooms`). */
   rooms?: RoomSummary[]
-  /** Empty when listing offers is not available. */
+  /** Empty when listing offers is not available; undefined until they are first read. */
   offers?: RoomOffer[]
+  /** The last read of the offers failed: the rooms show anyway, and the screen says the offers couldn't be read. */
+  offersFailed: boolean
   /** The last read failed; what was read before stays. */
   failed: boolean
   /** Why, when the service said (a community that did not answer); undefined for anything else. */
@@ -36,17 +47,46 @@ export interface MyRooms {
   reread: () => void
 }
 
+/** How long after a failed read it is tried once more, unasked, while the screen is open. */
+export const MY_ROOMS_RETRY_MS = 30_000
+
+type Listing = Pick<MyRooms, 'capabilities' | 'rooms' | 'offers'>
+// The last listing each screen read, by service and community, so that opening it again shows it at once while it
+// is read again (in memory only; another service, another agent, starts with none). Forgotten when the wallet locks,
+// as the service forgets the records it opened (agentRoomsService, dropOpenedRecords): room names and offers don't
+// outlive a lock either.
+let remembered = new WeakMap<RoomsService, Map<string, Listing>>()
+DeviceEventEmitter.addListener(WALLET_LOCKED_EVENT, () => {
+  remembered = new WeakMap()
+})
+const rememberedOf = (service: RoomsService | undefined, communityDid?: string): Listing | undefined =>
+  service ? remembered.get(service)?.get(communityDid ?? '') : undefined
+const remember = (service: RoomsService, communityDid: string | undefined, listing: Listing) => {
+  const byCommunity = remembered.get(service) ?? new Map<string, Listing>()
+  byCommunity.set(communityDid ?? '', { ...rememberedOf(service, communityDid), ...listing })
+  remembered.set(service, byCommunity)
+}
+/** Forget every listing remembered (the wallet locked; tests). */
+export const forgetMyRooms = (): void => {
+  remembered = new WeakMap()
+}
+
+const why = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
 export function useMyRooms(service: RoomsService | undefined, communityDid?: string): MyRooms {
-  const [state, setState] = useState<Omit<MyRooms, 'reload' | 'reread' | 'offersNotShown'>>({
+  const [state, setState] = useState<Omit<MyRooms, 'reload' | 'reread' | 'offersNotShown'>>(() => ({
+    ...rememberedOf(service, communityDid),
     failed: false,
+    offersFailed: false,
     failures: 0,
     refreshing: false,
-  })
+  }))
   const [generation, setGeneration] = useState(0)
   const reload = useCallback(() => {
+    if (state.failed) service?.note?.(`[Rooms:list] the member asked to try the rooms again`)
     setState((s) => ({ ...s, refreshing: true }))
     setGeneration((g) => g + 1)
-  }, [])
+  }, [service, state.failed])
   // The agent the reads are for. An Add given up passes through "no agent": coming back to the screen read the rooms
   // then, and the agent came back after (it signs in again), so the card said "Link your agent first" until the
   // screen was left (nightly, 10-30). A read is made again whenever the agent changes, and one for another agent than
@@ -63,6 +103,8 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
   useEffect(() => {
     if (!service) return
     let live = true
+    const where = communityDid ? `rooms of ${communityDid}` : 'rooms'
+    const began = Date.now()
     void (async () => {
       try {
         const refresh = generation !== lastGeneration.current || agentKey !== lastAgent.current
@@ -71,23 +113,39 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
         const capabilities = await service.capabilities({ refresh })
         const listRooms = capabilities.listMyRooms.status === 'available'
         const listOffers = capabilities.listOffers.status === 'available'
-        const [rooms, offers] = await Promise.all([
-          listRooms ? service.listMyRooms() : Promise.resolve(undefined),
-          listOffers ? service.listOffers(communityDid) : Promise.resolve([]),
-        ])
+        // The offers on their own: answered or not, they never hold the rooms back or fail them.
+        const offersRead = listOffers ? service.listOffers(communityDid) : Promise.resolve([])
+        offersRead.then(
+          (offers) => {
+            if (!live) return
+            const mine = communityDid ? offers.filter((o) => o.communityDid === communityDid) : offers
+            remember(service, communityDid, { offers: mine })
+            setState((s) => ({ ...s, offers: mine, offersFailed: false }))
+          },
+          (e: unknown) => {
+            service.note?.(
+              `[Rooms:list] the offers for the ${where} were not read (${Date.now() - began} ms): ${why(e)}`
+            )
+            if (live) setState((s) => ({ ...s, offersFailed: true }))
+          }
+        )
+        const rooms = listRooms ? await service.listMyRooms() : undefined
         if (!live) return
-        setState({
+        const mine = communityDid ? rooms?.filter((r) => r.communityDid === communityDid) : rooms
+        remember(service, communityDid, { capabilities, rooms: mine })
+        setState((s) => ({
+          ...s,
           capabilities,
-          rooms: communityDid ? rooms?.filter((r) => r.communityDid === communityDid) : rooms,
-          offers: communityDid ? offers.filter((o) => o.communityDid === communityDid) : offers,
+          rooms: mine,
           failed: false,
           failure: undefined,
           failures: 0,
           refreshing: false,
-        })
+        }))
       } catch (e) {
         const failure: OperationStatus | undefined =
           e instanceof RoomsUnavailable ? { status: 'unavailable', reason: e.reason, detail: e.message } : undefined
+        service.note?.(`[Rooms:list] the ${where} were not read (${Date.now() - began} ms): ${why(e)}`)
         if (live) setState((s) => ({ ...s, failed: true, failure, failures: s.failures + 1, refreshing: false }))
       }
     })()
@@ -95,6 +153,19 @@ export function useMyRooms(service: RoomsService | undefined, communityDid?: str
       live = false
     }
   }, [service, communityDid, generation, agentKey, rereads])
+
+  // A failed read is tried once more while the screen is open, as Messages tries its rows again: the member need not
+  // find Try again. Only after the first failure in a row; one that fails again waits for the member or a return.
+  useEffect(() => {
+    if (!service || !state.failed || state.failures !== 1) return
+    const timer = setTimeout(() => {
+      service.note?.(`[Rooms:list] trying the ${communityDid ? `rooms of ${communityDid}` : 'rooms'} again`)
+      // Said on the screen as the member's Try again is: "Trying again…", not a still failure.
+      setState((s) => ({ ...s, refreshing: true }))
+      reread()
+    }, MY_ROOMS_RETRY_MS)
+    return () => clearTimeout(timer)
+  }, [service, communityDid, state.failed, state.failures, reread])
 
   const polled = useRoomOfferIds(communityDid)
   const { offers } = state

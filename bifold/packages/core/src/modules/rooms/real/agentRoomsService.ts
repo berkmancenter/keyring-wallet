@@ -329,6 +329,9 @@ interface KnownRoom extends Room {
 
 export class AgentRoomsService implements RoomsService {
   public readonly isSample = false
+  public note(line: string): void {
+    this.backend.warn(line)
+  }
   public readonly label = 'rooms: the person’s own agent and communities'
   public get runsOn(): object | undefined {
     return this.backend.runsOn

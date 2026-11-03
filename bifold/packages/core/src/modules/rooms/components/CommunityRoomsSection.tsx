@@ -19,6 +19,7 @@ import { View } from 'react-native'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { communityTarget } from '../../trust-tasks/module/vtiCommunityLink'
 import { CommunityGroup, CommunitySectionLabel } from '../../trust-tasks/screens/CommunitySection'
 import { useMyRooms } from '../useMyRooms'
 import { useRereadOnReturn } from '../useRereadOnReturn'
@@ -65,6 +66,7 @@ export const CommunityRoomsSection: React.FC<{ communityDid: string }> = ({ comm
           onOpenRoom={(room) => go.navigate(Screens.Room, { roomId: room.roomId })}
           onOpenOffer={(offer) => go.navigate(Screens.RoomOffer, { offerRef: offer.offerId })}
           whileReading={<RoomRowsReading />}
+          communityName={communityTarget.publishedNameOf(communityDid)}
         />
       </CommunityGroup>
     </View>
