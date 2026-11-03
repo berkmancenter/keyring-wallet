@@ -74,6 +74,9 @@ export const RULES = [
   ['none', 'repository dotfile', /^(bifold\/)?\.(gitignore|gitattributes|editorconfig|nvmrc|prettierrc[^/]*|prettierignore|eslintrc[^/]*|eslintignore|commitlintrc[^/]*|lintstagedrc[^/]*)$/],
   ['none', 'the .env template (builds read their own .env)', /^app\/\.env\.sample$/],
   ['none', "a package's test or type-check config", /^bifold\/packages\/[^/]+\/(jest\.config\.[jt]s|tsconfig[^/]*\.json|\.eslintrc[^/]*|\.prettierrc[^/]*)$/],
+  // A package's dev-time generators (core: gen-testids, the emoji data). Their OUTPUT lands in src and grades there;
+  // nothing the app ships imports scripts/. The two native packages match the native rule above first.
+  ['none', "a package's dev-time scripts (generators and their tests; nothing shipped imports them)", /^bifold\/packages\/[^/]+\/scripts\//],
   ['none', "bifold's own lockfile (the app installs from the wallet's yarn.lock, which a new dependency changes)", /^bifold\/yarn\.lock$/],
   // The e2e test-id manifest, the same artefact the wallet's own e2e/lib/testids.json is, on the other side of
   // the submodule. Nothing the app ships reads it: testIdWithKey is `testIdPrefix + key`, no src imports the

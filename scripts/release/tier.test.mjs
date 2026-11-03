@@ -61,6 +61,11 @@ test('what the app never ships is none, even a manifest there', () => {
   assert.equal(tierOf('bifold/packages/core/.prettierignore'), 'store');
   // The app's tooling: a hot fix branch carries its publisher, which must not make the fix read store.
   assert.equal(tierOf('app/scripts/ota-deploy.mjs', 'app/scripts/refresh-ledgers.cjs'), 'none');
+  // A bifold package's dev-time generators are tooling; a native package's scripts and core's src still grade as before.
+  assert.equal(tierOf('bifold/packages/core/scripts/gen-testids.mjs', 'bifold/packages/core/scripts/emoji/generate-emoji-data.mjs'), 'none');
+  assert.equal(tierOf('bifold/packages/react-native-attestation/scripts/x.mjs'), 'store');
+  assert.equal(tierOf('bifold/packages/core/src/scripts/x.ts'), 'ota');
+  assert.equal(tierOf('bifold/packages/core/scripts/gen-testids.mjs', 'bifold/packages/core/src/screens/X.tsx'), 'ota');
   assert.equal(tierOf('app/scripts/ota-deploy.mjs', 'app/src/screens/Home.tsx'), 'ota');
   // Only its script files: a manifest or anything deeper there is not tooling by this rule.
   assert.equal(tierOf('app/scripts/package.json'), 'store');
