@@ -279,6 +279,27 @@ describe('voting', () => {
     expect(sleeps).toEqual([5_000])
   })
 
+  test('a screen hears each step as it starts: ready, the pause and when it ends, sending, the receipt; never the choice', async () => {
+    const w = world()
+    await w.service.takeTicket(COMMUNITY, POLL)
+    w.state.random = 0.25
+    const steps: unknown[] = []
+    await w.service.vote(COMMUNITY, POLL, { motion: { choice: [CHOICE] } }, (s) => steps.push(s))
+    expect(steps.map((s) => (s as { step: string }).step)).toEqual(['ready', 'pause', 'sending', 'receipt'])
+    const pause = steps[1] as { from: number; until: number }
+    expect(pause.until - pause.from).toBe(5_000)
+    expect(JSON.stringify(steps)).not.toContain(CHOICE)
+  })
+
+  test('with no pause left, no pause step is heard (control for the step above)', async () => {
+    const w = world()
+    await w.service.takeTicket(COMMUNITY, POLL)
+    w.state.random = 0
+    const steps: string[] = []
+    await w.service.vote(COMMUNITY, POLL, { motion: { choice: [CHOICE] } }, (s) => steps.push(s.step))
+    expect(steps).toEqual(['ready', 'sending', 'receipt'])
+  })
+
   test('killed during the pause: the stored cast goes the next time, the same bytes, and no second cast is built', async () => {
     const w = world()
     await w.service.takeTicket(COMMUNITY, POLL)

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "64dda2f28584b939978d9c2f8492530ded0fc0b9",
+  "generatedFrom": "d436e42736bc80aaebfc92f2fcef12fd418a8290",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -332,8 +332,11 @@
     "CommunityPassTechnicalRows": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "CommunityPassTitle": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
     "CommunityPollRow": ["src/modules/polls/components/Polls.ids.ts"],
+    "CommunityPollRowChip": ["src/modules/polls/components/Polls.ids.ts"],
     "CommunityPollRowStatus": ["src/modules/polls/components/Polls.ids.ts"],
+    "CommunityPollRowTimeBar": ["src/modules/polls/components/Polls.ids.ts"],
     "CommunityPolls": ["src/modules/polls/components/Polls.ids.ts"],
+    "CommunityPollsWaiting": ["src/modules/polls/components/Polls.ids.ts"],
     "CommunityReadAgain": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityReadFailed": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityReading": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
@@ -908,47 +911,59 @@
     "PhotoRemoveBody": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
     "PhotoRemoveConfirm": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
     "PhotoRemoveNotNow": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
+    "PollBackToCommunity": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotBack": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotBeforeItGoes": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotBoardLine": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCantShow": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCast": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCastFailed": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollBallotCastStep": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCasting": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCheck": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotDetails": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotFirstHour": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotOption": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollBallotPauseBar": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotQuestion": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotScreen": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotSeenLine": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotTextAnswer": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollCertifiedLine": ["src/modules/polls/components/Polls.ids.ts"],
     "PollClosed": ["src/modules/polls/components/Polls.ids.ts"],
     "PollClosedEarly": ["src/modules/polls/components/Polls.ids.ts"],
     "PollGetTicket": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollHead": ["src/modules/polls/components/Polls.ids.ts"],
     "PollHostedAgent": ["src/modules/polls/components/Polls.ids.ts"],
     "PollLimited": ["src/modules/polls/components/Polls.ids.ts"],
     "PollNeedsUpdate": ["src/modules/polls/components/Polls.ids.ts"],
     "PollNoAgent": ["src/modules/polls/components/Polls.ids.ts"],
     "PollNotOpenYet": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollParties": ["src/modules/polls/components/Polls.ids.ts"],
     "PollReadFailed": ["src/modules/polls/components/Polls.ids.ts"],
     "PollReading": ["src/modules/polls/components/Polls.ids.ts"],
     "PollRefused": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollResultOption": ["src/modules/polls/components/Polls.ids.ts"],
     "PollResults": ["src/modules/polls/components/Polls.ids.ts"],
     "PollResultsNotReady": ["src/modules/polls/components/Polls.ids.ts"],
     "PollSameOperator": ["src/modules/polls/components/Polls.ids.ts"],
     "PollScreen": ["src/modules/polls/components/Polls.ids.ts"],
     "PollSending": ["src/modules/polls/components/Polls.ids.ts"],
     "PollSendingStopped": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollStepBar": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTicketHeld": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollTicketTimeline": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTitle": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTryAgain": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteIn": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteLater": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteLaterAdvice": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollVoteLaterKeeps": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteNow": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollVotesCounted": ["src/modules/polls/components/Polls.ids.ts"],
     "PollWhoRunsIt": ["src/modules/polls/components/Polls.ids.ts"],
     "PollWhoSeesWhat": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollYourPart": ["src/modules/polls/components/Polls.ids.ts"],
     "PredicateInput": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateName": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateValue": ["src/components/misc/VerifierCredentialCard.tsx"],
@@ -1778,13 +1793,37 @@
       "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.row"
     },
     {
+      "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.rowChip"
+    },
+    {
       "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.rowStatus"
+    },
+    {
+      "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.rowTimeBar"
     },
     {
       "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.section"
     },
     {
+      "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.waiting"
+    },
+    {
+      "src/modules/polls/components/PollParts.tsx": "PollsIds.stepBar"
+    },
+    {
+      "src/modules/polls/components/PollResults.tsx": "PollsIds.certifiedLine"
+    },
+    {
+      "src/modules/polls/components/PollResults.tsx": "PollsIds.resultOption"
+    },
+    {
       "src/modules/polls/components/PollResults.tsx": "PollsIds.results"
+    },
+    {
+      "src/modules/polls/components/PollResults.tsx": "PollsIds.votesCounted"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.backToCommunity"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.closed"
@@ -1794,6 +1833,9 @@
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.getTicket"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.head"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.hostedAgent"
@@ -1809,6 +1851,9 @@
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.notOpenYet"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.parties"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.readFailed"
@@ -1838,6 +1883,9 @@
       "src/modules/polls/screens/Poll.tsx": "PollsIds.ticketHeld"
     },
     {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.ticketTimeline"
+    },
+    {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.title"
     },
     {
@@ -1853,6 +1901,9 @@
       "src/modules/polls/screens/Poll.tsx": "PollsIds.voteLaterAdvice"
     },
     {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.voteLaterKeeps"
+    },
+    {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.voteNow"
     },
     {
@@ -1860,6 +1911,9 @@
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.whoSeesWhat"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.yourPart"
     },
     {
       "src/modules/polls/screens/PollBallot.tsx": "PollsIds.back"
@@ -1898,6 +1952,9 @@
       "src/modules/polls/screens/PollBallot.tsx": "PollsIds.option"
     },
     {
+      "src/modules/polls/screens/PollBallot.tsx": "PollsIds.pauseBar"
+    },
+    {
       "src/modules/polls/screens/PollBallot.tsx": "PollsIds.question"
     },
     {
@@ -1911,6 +1968,9 @@
     },
     {
       "src/modules/polls/screens/PollBallot.tsx": "PollsIds.textAnswer"
+    },
+    {
+      "src/modules/polls/screens/PollBallot.tsx": "`${PollsIds.castStep}_${state}`"
     },
     {
       "src/modules/rooms/components/RoomMembersTab.tsx": "testID"

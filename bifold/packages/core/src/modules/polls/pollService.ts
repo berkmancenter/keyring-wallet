@@ -119,6 +119,16 @@ export type PollRefusalReason =
   | 'ballotInvalid'
   | 'refused'
 
+/**
+ * Where a vote is, for a screen to show while it goes: the agent building it (`ready`), the pause before it is sent,
+ * with when the pause ends (`until`), sending it, and handing the receipt to the agent. Never what was chosen.
+ */
+export type VoteStep =
+  | { step: 'ready' }
+  | { step: 'pause'; from: number; until: number }
+  | { step: 'sending' }
+  | { step: 'receipt' }
+
 /** Why the phone did not go on: said before anything was sent, or a party's refusal read by its name. */
 export class PollRefusal extends Error {
   constructor(
@@ -240,13 +250,19 @@ export function createPollService(b: PollsBackend) {
   /**
    * Vote: the ballot checked here, the cast built by the agent, stored, and sent after its pause. Returns once the
    * receipt is kept, or throws: a `CastFailure` of kind `unreachable` leaves the cast stored, and `resumePending` (or
-   * voting again) sends the same one.
+   * voting again) sends the same one. `onStep` hears each step as it starts.
    */
-  const vote = (via: string, electionId: string, given: Record<string, GivenAnswer>): Promise<PollRecord> =>
+  const vote = (
+    via: string,
+    electionId: string,
+    given: Record<string, GivenAnswer>,
+    onStep?: (step: VoteStep) => void
+  ): Promise<PollRecord> =>
     b.serially(workKey(via, electionId), async () => {
+      onStep?.({ step: 'ready' })
       const shown = await readPoll(via, electionId)
       const record = await b.records.get(shown.manifest.community, electionId)
-      if (record?.pending) return carryOn(record)
+      if (record?.pending) return carryOn(record, onStep)
       if (record?.votedAt !== undefined) throw new PollRefusal('voted')
       if (record?.ticketAt === undefined) throw new PollRefusal('noTicket')
       const t = await target(via)
@@ -273,16 +289,21 @@ export function createPollService(b: PollsBackend) {
       }
       const next = { ...record, pending }
       await b.records.put(next)
-      return carryOn(next)
+      return carryOn(next, onStep)
     })
 
   /** Take a pending vote one stage further, as far as it goes. */
-  const carryOn = async (record: PollRecord): Promise<PollRecord> => {
+  const carryOn = async (record: PollRecord, onStep?: (step: VoteStep) => void): Promise<PollRecord> => {
     let current = record
     if (current.pending?.stage === 'cast') {
       const { cast, ballotBox, sendAfter } = current.pending
-      const wait = sendAfter - b.now()
-      if (wait > 0) await b.sleep(wait)
+      const now = b.now()
+      const wait = sendAfter - now
+      if (wait > 0) {
+        onStep?.({ step: 'pause', from: now, until: sendAfter })
+        await b.sleep(wait)
+      }
+      onStep?.({ step: 'sending' })
       let receipt: Record<string, unknown>
       try {
         receipt = await postCast(cast, ballotBox, b.door)
@@ -308,6 +329,7 @@ export function createPollService(b: PollsBackend) {
       await b.records.put(current)
     }
     if (current.pending?.stage === 'receipt') {
+      onStep?.({ step: 'receipt' })
       // The receipt goes to the agent that built the cast, in the context its voter key is in.
       const voter = await b.voterTarget(current.via)
       if (!voter || voter.member !== current.member || b.currentAgent() !== current.agent)

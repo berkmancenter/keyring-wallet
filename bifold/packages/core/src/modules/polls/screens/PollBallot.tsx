@@ -14,7 +14,7 @@
  * @module polls/screens/PollBallot
  */
 import { useNavigation, useRoute } from '@react-navigation/native'
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -34,8 +34,9 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { ballotOf, ballotRefusal, type GivenAnswer } from '../ballot'
 import { CastFailure } from '../ballotBox'
+import { PollCallout, PollLine, PollStepBar } from '../components/PollParts'
 import { PollsIds } from '../components/Polls.ids'
-import { PollRefusal } from '../pollService'
+import { PollRefusal, type VoteStep } from '../pollService'
 import type { Question } from '../pollTasks'
 import { boardLine, castFailureText, minutesSinceTicket, pollTitle, refusalText } from '../pollWords'
 import { usePoll, usePollService } from '../usePolls'
@@ -63,6 +64,14 @@ const PollBallot: React.FC = () => {
   const [checking, setChecking] = useState(false)
   const [casting, setCasting] = useState(false)
   const [failure, setFailure] = useState<string>()
+  // Where the vote is while it goes, and a clock for the pause's progress.
+  const [step, setStep] = useState<VoteStep>()
+  const [tick, setTick] = useState(Date.now())
+  useEffect(() => {
+    if (step?.step !== 'pause') return
+    const timer = setInterval(() => setTick(Date.now()), 500)
+    return () => clearInterval(timer)
+  }, [step])
   const scroll = useRef<ScrollView>(null)
   // Set when Details is opened, so the screen scrolls to the lines once; never on other changes, or the check step
   // would open scrolled past the choice it shows.
@@ -117,8 +126,9 @@ const PollBallot: React.FC = () => {
     if (!service || !castable) return
     setCasting(true)
     setFailure(undefined)
+    setStep(undefined)
     try {
-      await service.vote(communityDid, electionId, given)
+      await service.vote(communityDid, electionId, given, setStep)
       navigation.goBack()
     } catch (e) {
       setFailure(
@@ -236,10 +246,14 @@ const PollBallot: React.FC = () => {
   const lines = (
     <>
       {minutes !== undefined ? (
-        <ThemedText testID={testIdWithKey(PollsIds.firstHour)}>{t('Polls.FirstHour', { count: minutes })}</ThemedText>
+        <PollCallout tone="warn" icon="clock-outline" testID={testIdWithKey(PollsIds.firstHour)}>
+          {t('Polls.FirstHour', { count: minutes })}
+        </PollCallout>
       ) : null}
-      <ThemedText testID={testIdWithKey(PollsIds.boardLine)}>{boardLine(t, shown)}</ThemedText>
-      <ThemedText testID={testIdWithKey(PollsIds.seenLine)}>
+      <PollLine icon="eye-outline" testID={testIdWithKey(PollsIds.boardLine)}>
+        {boardLine(t, shown)}
+      </PollLine>
+      <PollLine icon="cellphone" testID={testIdWithKey(PollsIds.seenLine)}>
         {`${t('Polls.Seen')} `}
         <ThemedText
           style={styles.link}
@@ -252,7 +266,7 @@ const PollBallot: React.FC = () => {
         >
           {details ? t('Polls.HideDetails') : t('Polls.Details')}
         </ThemedText>
-      </ThemedText>
+      </PollLine>
       {details ? (
         <View style={{ gap: 6 }}>
           <ThemedText>{t('Polls.SeesAgent')}</ThemedText>
@@ -291,16 +305,66 @@ const PollBallot: React.FC = () => {
   let body: React.ReactNode
   let bar: React.ReactNode
   if (casting) {
+    // Each step done, going, or still to come, as the service reports it; a vote resumed past the pause skips it.
+    const order: VoteStep['step'][] = ['ready', 'pause', 'sending', 'receipt']
+    const at = order.indexOf(step?.step ?? 'ready')
+    const pause = step?.step === 'pause' ? step : undefined
+    const share = pause ? Math.min(1, Math.max(0, (tick - pause.from) / Math.max(1, pause.until - pause.from))) : 0
     body = (
-      <View style={styles.card} testID={testIdWithKey(PollsIds.casting)}>
-        <ThemedText variant="bold">{t('Polls.Casting')}</ThemedText>
-        {['Polls.StepReady', 'Polls.StepPause', 'Polls.StepSending', 'Polls.StepReceipt'].map((key) => (
-          <ThemedText key={key}>{t(key)}</ThemedText>
-        ))}
-        <ThemedText style={styles.muted}>{t('Polls.PauseExplains')}</ThemedText>
-        <ThemedText style={styles.muted}>{t('Polls.LeaveIsFine')}</ThemedText>
-        <ActivityIndicator color={ColorPalette.brand.primary} />
-      </View>
+      <>
+        <ThemedText variant="headingFour" accessibilityRole="header">
+          {t('Polls.Casting')}
+        </ThemedText>
+        <View style={styles.card} testID={testIdWithKey(PollsIds.casting)}>
+          {(['Polls.StepReady', 'Polls.StepPause', 'Polls.StepSending', 'Polls.StepReceipt'] as const).map((key, i) => {
+            const state = i < at ? 'done' : i === at ? 'now' : 'later'
+            return (
+              <View key={key} style={{ gap: 6 }} testID={testIdWithKey(`${PollsIds.castStep}_${state}`)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 40 }}>
+                  {state === 'done' ? (
+                    <Icon name="check-circle" size={26} color={ColorPalette.semantic.success} />
+                  ) : state === 'now' ? (
+                    <ActivityIndicator color={ColorPalette.brand.primary} style={{ width: 26 }} />
+                  ) : (
+                    <Icon name="circle-outline" size={26} color={ColorPalette.grayscale.lightGrey} />
+                  )}
+                  <ThemedText
+                    variant={state === 'now' ? 'bold' : 'normal'}
+                    style={[styles.flex, state === 'later' ? styles.muted : null]}
+                    accessibilityState={{ busy: state === 'now' }}
+                  >
+                    {t(key)}
+                  </ThemedText>
+                </View>
+                {key === 'Polls.StepPause' && pause ? (
+                  <View
+                    style={{
+                      marginLeft: 38,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: ColorPalette.grayscale.veryLightGrey,
+                    }}
+                    testID={testIdWithKey(PollsIds.pauseBar)}
+                  >
+                    <View
+                      style={{
+                        height: 6,
+                        borderRadius: 3,
+                        width: `${Math.round(share * 100)}%`,
+                        backgroundColor: ColorPalette.brand.primary,
+                      }}
+                    />
+                  </View>
+                ) : null}
+              </View>
+            )
+          })}
+        </View>
+        <ThemedText>{t('Polls.PauseExplains')}</ThemedText>
+        <View style={styles.card}>
+          <PollLine icon="refresh">{t('Polls.LeaveIsFine')}</PollLine>
+        </View>
+      </>
     )
   } else if (checking) {
     // Ballot B: a binding poll shows what was picked, and what's seen, before it goes.
@@ -343,6 +407,7 @@ const PollBallot: React.FC = () => {
   } else {
     body = (
       <>
+        <PollStepBar at="vote" />
         <ThemedText variant="headingFour" accessibilityRole="header">
           {pollTitle(t, shown.manifest.title)}
         </ThemedText>
