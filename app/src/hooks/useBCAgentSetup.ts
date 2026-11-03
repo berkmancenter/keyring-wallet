@@ -38,6 +38,7 @@ import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
+import { foregroundPickupRestart } from '@/utils/foregroundPickupRestart'
 import { disarmLivePickup, isLivePickupEnabled, livePickupFor, trackingWebSocketClass } from '@/utils/livePickup'
 import BCLogger from '@/utils/logger'
 import { chooseMediator } from '@/utils/mediatorPreference'
@@ -480,9 +481,11 @@ const useBCAgentSetup = () => {
   // appMessagePickupLifecycle). In live mode this restart is also the check on
   // return: it closes the socket, which may have died while suspended, and
   // starts on a fresh one.
+  //
+  // Once per return from the background, never on the first 'active' after
+  // launch, and one at a time (utils/foregroundPickupRestart.ts).
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState !== 'active') return
+    const restarts = foregroundPickupRestart(async () => {
       const activeAgent = agentInstanceRef.current
       if (!activeAgent?.isInitialized) return
       try {
@@ -492,6 +495,9 @@ const useBCAgentSetup = () => {
       } catch (error) {
         logger.warn(`Could not restart message pickup on foreground: ${(error as Error).message}`)
       }
+    }, AppState.currentState)
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      void restarts.onAppStateChange(nextAppState)
     })
 
     return () => subscription.remove()
