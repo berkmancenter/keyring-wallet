@@ -3244,6 +3244,8 @@
     "OpenUntil": "Open until {{date}}",
     "OpensOn": "Voting opens {{date}}",
     "ClosedOn": "Closed on {{date}}",
+    "ClosedEarly": "Closed early",
+    "ClosedNoDate": "Closed",
     "Cancelled": "Cancelled",
     "YouVoted": "You voted",
     "Sending": "Sending your vote",

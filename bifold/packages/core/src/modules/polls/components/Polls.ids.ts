@@ -26,6 +26,7 @@ export const PollsIds = {
   sendingStopped: 'PollSendingStopped',
   voteIn: 'PollVoteIn',
   closed: 'PollClosed',
+  closedEarly: 'PollClosedEarly',
   results: 'PollResults',
   resultsNotReady: 'PollResultsNotReady',
   ballotScreen: 'PollBallotScreen',

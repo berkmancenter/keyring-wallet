@@ -3094,6 +3094,8 @@
     "OpenUntil": "Aberta até {{date}}",
     "OpensOn": "A votação abre em {{date}}",
     "ClosedOn": "Encerrada em {{date}}",
+    "ClosedEarly": "Encerrada antes do previsto",
+    "ClosedNoDate": "Encerrada",
     "Cancelled": "Cancelada",
     "YouVoted": "Você votou",
     "Sending": "Enviando seu voto",

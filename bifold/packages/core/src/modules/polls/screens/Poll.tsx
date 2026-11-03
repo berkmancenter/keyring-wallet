@@ -27,7 +27,15 @@ import { localDate, localDateTime } from '../../trust-tasks/screens/localTime'
 import { PollsIds } from '../components/Polls.ids'
 import { PollResults } from '../components/PollResults'
 import { PollRefusal } from '../pollService'
-import { castFailureText, lessLikelyFrom, minutesSinceTicket, pollPhase, pollTitle, refusalText } from '../pollWords'
+import {
+  castFailureText,
+  closedEarly,
+  lessLikelyFrom,
+  minutesSinceTicket,
+  pollPhase,
+  pollTitle,
+  refusalText,
+} from '../pollWords'
 import { usePoll, usePollService } from '../usePolls'
 
 /**
@@ -187,7 +195,13 @@ const Poll: React.FC = () => {
       <>
         <View style={styles.card} testID={testIdWithKey(PollsIds.closed)}>
           <ThemedText variant="bold">{phase === 'cancelled' ? t('Polls.Cancelled') : t('Polls.Closed')}</ThemedText>
-          <ThemedText style={styles.muted}>{t('Polls.ClosedOn', date(manifest.votingClosesAt))}</ThemedText>
+          {/* Never the set date: an early close makes it untrue, and once it has passed one can't be told apart. */}
+          {phase === 'closed' &&
+          (closedEarly(manifest, now) || (certified && closedEarly(manifest, Date.parse(certified.certifiedAt)))) ? (
+            <ThemedText style={styles.muted} testID={testIdWithKey(PollsIds.closedEarly)}>
+              {t('Polls.ClosedEarly')}
+            </ThemedText>
+          ) : null}
           <ThemedText>{t('Polls.DidntVote')}</ThemedText>
         </View>
         {phase === 'closed' ? results : null}

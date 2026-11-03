@@ -12,8 +12,8 @@ import { View } from 'react-native'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
-import { localDateTime } from '../../trust-tasks/screens/localTime'
 import type { Certification, Manifest, Question } from '../pollTasks'
+import { closeLine } from '../pollWords'
 
 import { PollsIds } from './Polls.ids'
 
@@ -36,7 +36,7 @@ export const PollResults: React.FC<{ manifest: Manifest; certification: Certific
         {t('Polls.Results')}
       </ThemedText>
       <ThemedText style={muted}>
-        {`${t('Polls.ClosedOn', { date: localDateTime(manifest.votingClosesAt), interpolation: { escapeValue: false } })} · ${t('Polls.VotesCount', { count: result.ballotsCounted })}`}
+        {`${closeLine(t, manifest, Date.now(), certification.certifiedAt)} · ${t('Polls.VotesCount', { count: result.ballotsCounted })}`}
       </ThemedText>
       {result.questions.map((row) => {
         const q = manifest.questions.find((x) => x.key === row.question)

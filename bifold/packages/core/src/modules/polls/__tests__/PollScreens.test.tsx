@@ -5,15 +5,18 @@
  * than abstaining it; and no screen after the vote says what the member chose.
  */
 import { useRoute } from '@react-navigation/native'
+import type { TFunction } from 'i18next'
 import { fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
 import { ScrollView } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
+import PollResults from '../components/PollResults'
 import { PollsIds } from '../components/Polls.ids'
 import type { PollRecord } from '../pollService'
 import type { PollShown } from '../pollTasks'
+import { pollRowStatus } from '../pollWords'
 import Poll from '../screens/Poll'
 import PollBallot from '../screens/PollBallot'
 
@@ -293,5 +296,51 @@ describe('the ballot', () => {
     const tree = renderIn(<PollBallot />)
     expect(tree.getByTestId(id(PollsIds.cantShow))).toBeTruthy()
     expect(tree.getByTestId(id(PollsIds.cast)).props.accessibilityState?.disabled).toBe(true)
+  })
+})
+
+// A community closed a poll before its scheduled close, and the row said "Closed on <the scheduled date>", still ahead.
+describe('a poll closed early', () => {
+  const t = ((key: string) => key) as unknown as TFunction
+  const listed = (votingClosesAt: string) => ({
+    electionId: 'charter',
+    state: 'closed' as const,
+    votingOpensAt: '2023-12-01T00:00:00Z',
+    votingClosesAt,
+    binding: false,
+    ticketHeld: false,
+  })
+
+  test('the row says closed early while that can be told, and never the date it was due to close', () => {
+    expect(pollRowStatus(t, listed('2099-11-08T17:00:00Z'), undefined, Date.now())).toBe('Polls.ClosedEarly')
+    // Past its set time an early close reads like an on-time one, so neither gets a date.
+    expect(pollRowStatus(t, listed('2023-12-08T17:00:00Z'), undefined, Date.now())).toBe('Polls.ClosedNoDate')
+  })
+
+  // "Closed early" says how the community ran its poll; a phone clock a little slow must not say it.
+  test('a close within a minute of the set time is not called early', () => {
+    const inThirtySeconds = new Date(Date.now() + 30_000).toISOString()
+    expect(pollRowStatus(t, listed(inThirtySeconds), undefined, Date.now())).toBe('Polls.ClosedNoDate')
+  })
+
+  test('the poll screen says closed early, with no date', () => {
+    mockState.shown = { ...shownWith(), state: 'closed' }
+    const tree = renderIn(<Poll />)
+    expect(tree.getByTestId(id(PollsIds.closedEarly))).toBeTruthy()
+    expect(tree.queryByText('Polls.ClosedOn')).toBeNull()
+  })
+
+  // Results are certified after the close, often after the date it was due to close: compare the certification, not now.
+  test('the results say closed early when they were certified before the set close, even once that date has passed', () => {
+    const manifest = shownWith({ votingClosesAt: '2023-12-20T00:00:00Z' }).manifest
+    const certified = (certifiedAt: string) => ({
+      certifiedAt,
+      result: { electionId: 'charter', manifestDigest: 'zQmDigest', ballotsCounted: 3, questions: [] },
+    })
+    const early = renderIn(<PollResults manifest={manifest} certification={certified('2023-12-15T00:00:00Z')} voted />)
+    expect(early.getByText(/Polls\.ClosedEarly/)).toBeTruthy()
+    const onTime = renderIn(<PollResults manifest={manifest} certification={certified('2023-12-21T00:00:00Z')} voted />)
+    expect(onTime.queryByText(/Polls\.ClosedEarly/)).toBeNull()
+    expect(onTime.getByText(/Polls\.ClosedNoDate/)).toBeTruthy()
   })
 })
