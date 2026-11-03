@@ -60,4 +60,11 @@ export const PollsIds = {
   castStep: 'PollBallotCastStep',
   pauseBar: 'PollBallotPauseBar',
   parties: 'PollParties',
+  // Messages' Waiting for you stack
+  waitingStack: 'MessagesWaitingForYou',
+  waitingCard: 'PollWaitingCard',
+  waitingCardTitle: 'PollWaitingCardTitle',
+  waitingCardOpen: 'PollWaitingCardOpen',
+  waitingCardNotNow: 'PollWaitingCardNotNow',
+  waitingFold: 'MessagesWaitingForYouMore',
 } as const

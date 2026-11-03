@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "daeae8eb816022f68fefd948022cffaebf712a84",
+  "generatedFrom": "3b9c694fbd0f45a625da860edd2b532fc246d7d1",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -833,6 +833,8 @@
     "MessagesRoomsTryAgain": ["src/screens/Messages.tsx"],
     "MessagesSearch": ["src/screens/Messages.tsx"],
     "MessagesSearchClear": ["src/screens/Messages.tsx"],
+    "MessagesWaitingForYou": ["src/modules/polls/components/Polls.ids.ts"],
+    "MessagesWaitingForYouMore": ["src/modules/polls/components/Polls.ids.ts"],
     "MyAgent": ["src/navigators/TabStack.tsx"],
     "MyAgentActivity": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentApprovalCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -972,6 +974,10 @@
     "PollVoteLaterKeeps": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteNow": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVotesCounted": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollWaitingCard": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollWaitingCardNotNow": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollWaitingCardOpen": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollWaitingCardTitle": ["src/modules/polls/components/Polls.ids.ts"],
     "PollWhoRunsIt": ["src/modules/polls/components/Polls.ids.ts"],
     "PollWhoSeesWhat": ["src/modules/polls/components/Polls.ids.ts"],
     "PollYourPart": ["src/modules/polls/components/Polls.ids.ts"],
@@ -1783,6 +1789,12 @@
       "src/components/chat/ReactionBar.tsx": "`${ChatIds.reaction}-${index}`"
     },
     {
+      "src/components/messages/WaitingForYou.tsx": "PollsIds.waitingFold"
+    },
+    {
+      "src/components/messages/WaitingForYou.tsx": "PollsIds.waitingStack"
+    },
+    {
       "src/components/misc/CredentialCard11ActionFooter.tsx": "testID"
     },
     {
@@ -1868,6 +1880,18 @@
     },
     {
       "src/modules/polls/components/PollResults.tsx": "PollsIds.votesCounted"
+    },
+    {
+      "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCard"
+    },
+    {
+      "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCardNotNow"
+    },
+    {
+      "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCardOpen"
+    },
+    {
+      "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCardTitle"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.backToCommunity"

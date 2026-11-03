@@ -49,6 +49,7 @@ import { useVtiVetterGrantedNotice } from '../modules/trust-tasks/screens/vetter
 import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { useVtiTurnedDownNotice } from '../modules/trust-tasks/screens/turnedDownNotice'
+import { usePollsWaitingCheck } from '../modules/polls/pollsWaiting'
 import { useRoomNotices } from '../modules/rooms/roomNotices'
 import { useRoomsUnreadCount } from '../modules/rooms/useRoomRows'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
@@ -138,6 +139,8 @@ const TabStack: React.FC = () => {
   // …and the member's rooms: a new offer, an admission, a post that didn't send. Runs the offers poll, so a new
   // offer is said from the start, not only once My Agent has been opened.
   useRoomNotices()
+  // …and the polls waiting for the member, for Messages: checked when the app opens or comes back, then hourly.
+  usePollsWaitingCheck()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18

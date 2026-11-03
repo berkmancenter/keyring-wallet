@@ -25,7 +25,7 @@ import { useConnectionActivity } from '../hooks/useConnectionActivity'
 import { pendingChatDeletes } from '../modules/chat/pendingChatDeletes'
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import RoomMessageRow from '../modules/rooms/components/RoomMessageRow'
-import RoomOfferCard from '../modules/rooms/components/RoomOfferCard'
+import WaitingForYou from '../components/messages/WaitingForYou'
 import { roomTitle } from '../modules/rooms/components/RoomRow'
 import { openInMyAgent } from '../modules/rooms/roomLinks'
 import { useHiddenRoomCount, useRoomRows } from '../modules/rooms/useRoomRows'
@@ -395,12 +395,18 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
                 </Pressable>
               </View>
             ) : null}
-            {/* Room offers wait at the top: every one under All (a first room arrives as one, so with no chips too), a
-                community's under its chip, none under People. */}
+            {/* Room offers and polls wait at the top: every one under All (a first room arrives as one, so with no chips
+                too), a community's under its chip, none under People. */}
             {chip.kind === 'people' ? null : (
-              <RoomOfferCard
+              <WaitingForYou
                 communityDid={chip.kind === 'community' ? chip.communityDid : undefined}
-                onOpen={(offerId) => navigation.navigate(Screens.RoomOffer, { offerRef: offerId })}
+                onOpenOffer={(offerId) => navigation.navigate(Screens.RoomOffer, { offerRef: offerId })}
+                onOpenPoll={(poll) =>
+                  openInMyAgent(navigation, Screens.Poll, {
+                    communityDid: poll.communityDid,
+                    electionId: poll.electionId,
+                  })
+                }
               />
             )}
             {fetchingNew ? (

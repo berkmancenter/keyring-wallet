@@ -13,6 +13,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { offerCommunity, offerRoom } from '../offerCommunity'
+import type { RoomOffer } from '../types'
 import { useRoomOffersWaiting } from '../useRoomOffersCount'
 
 import { ROOM_MARK_FILL } from './RoomHeader'
@@ -28,14 +29,14 @@ export interface RoomOfferCardProps {
   onOpen: (offerId: string) => void
 }
 
-const RoomOfferCard: React.FC<RoomOfferCardProps> = ({ communityDid, onOpen }) => {
+/** One room offer's card: what the room is, who offers it, and Look. Also a card in Messages' Waiting for you stack. */
+export const RoomOfferCardItem: React.FC<{ offer: RoomOffer; onOpen: (offerId: string) => void }> = ({
+  offer,
+  onOpen,
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
-  const offers = useRoomOffersWaiting(communityDid)
-  if (offers.length === 0) return null
-
   const styles = StyleSheet.create({
-    list: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6, gap: 8 },
     card: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -77,38 +78,43 @@ const RoomOfferCard: React.FC<RoomOfferCardProps> = ({ communityDid, onOpen }) =
     },
     lookText: { fontSize: 15, fontWeight: '700', color: ColorPalette.grayscale.white },
   })
-
+  const room = offerRoom(offer, t)
+  const from = t('Rooms.OfferFrom', { community: offerCommunity(offer, t), ...asWritten }) as string
   return (
-    <View style={styles.list}>
-      {offers.map((offer) => {
-        const room = offerRoom(offer, t)
-        const from = t('Rooms.OfferFrom', { community: offerCommunity(offer, t), ...asWritten }) as string
-        return (
-          <View key={offer.offerId} style={styles.card} testID={testIdWithKey('RoomOfferCard')}>
-            <View style={styles.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <ThemedText style={styles.letters}>{initialsOf(String(offer.roomName))}</ThemedText>
-            </View>
-            <View style={styles.words}>
-              <ThemedText style={styles.waiting}>{t('Rooms.OfferWaiting')}</ThemedText>
-              <ThemedText style={styles.room} numberOfLines={1}>
-                {room}
-              </ThemedText>
-              <ThemedText style={styles.from} numberOfLines={1}>
-                {from}
-              </ThemedText>
-            </View>
-            <TouchableOpacity
-              style={styles.look}
-              onPress={() => onOpen(offer.offerId)}
-              accessibilityRole="button"
-              accessibilityLabel={t('Rooms.OfferLookLabel', { room, ...asWritten }) as string}
-              testID={testIdWithKey('RoomOfferCardLook')}
-            >
-              <ThemedText style={styles.lookText}>{t('Rooms.OfferLook')}</ThemedText>
-            </TouchableOpacity>
-          </View>
-        )
-      })}
+    <View style={styles.card} testID={testIdWithKey('RoomOfferCard')}>
+      <View style={styles.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <ThemedText style={styles.letters}>{initialsOf(String(offer.roomName))}</ThemedText>
+      </View>
+      <View style={styles.words}>
+        <ThemedText style={styles.waiting}>{t('Rooms.OfferWaiting')}</ThemedText>
+        <ThemedText style={styles.room} numberOfLines={1}>
+          {room}
+        </ThemedText>
+        <ThemedText style={styles.from} numberOfLines={1}>
+          {from}
+        </ThemedText>
+      </View>
+      <TouchableOpacity
+        style={styles.look}
+        onPress={() => onOpen(offer.offerId)}
+        accessibilityRole="button"
+        accessibilityLabel={t('Rooms.OfferLookLabel', { room, ...asWritten }) as string}
+        testID={testIdWithKey('RoomOfferCardLook')}
+      >
+        <ThemedText style={styles.lookText}>{t('Rooms.OfferLook')}</ThemedText>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+const RoomOfferCard: React.FC<RoomOfferCardProps> = ({ communityDid, onOpen }) => {
+  const offers = useRoomOffersWaiting(communityDid)
+  if (offers.length === 0) return null
+  return (
+    <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6, gap: 8 }}>
+      {offers.map((offer) => (
+        <RoomOfferCardItem key={offer.offerId} offer={offer} onOpen={onOpen} />
+      ))}
     </View>
   )
 }

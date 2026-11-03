@@ -57,10 +57,10 @@ jest.mock('../../src/modules/rooms/useRoomRows', () => ({
   useHiddenRoomCount: () => mockHiddenRooms,
 }))
 const mockOfferCard = jest.fn()
-jest.mock('../../src/modules/rooms/components/RoomOfferCard', () => ({
+jest.mock('../../src/components/messages/WaitingForYou', () => ({
   __esModule: true,
-  default: (props: unknown) => {
-    mockOfferCard(props)
+  default: (props: { onOpenOffer: (offerId: string) => void }) => {
+    mockOfferCard({ ...props, onOpen: props.onOpenOffer })
     return null
   },
 }))
