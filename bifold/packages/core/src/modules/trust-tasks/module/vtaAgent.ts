@@ -83,6 +83,7 @@ import { migratePersonaKeys } from './vtaKeyMigration'
 import { forgetKeyCopy, setInMemoryKeyFetcher } from './vtaKeys'
 import {
   initialLinkState,
+  QUIET_DROP_MS,
   reconnectDelayMs,
   reduceLink,
   resumableFailure,
@@ -440,6 +441,13 @@ export const DEVICE_LIST_DEADLINE_MS = 15000
 /** Reconnect tries in a row (1 s, 2 s, 4 s, 8 s, 16 s apart) before the agent screen says it didn't answer. */
 export const MAX_RECONNECT_TRIES = 5
 
+/**
+ * How long after a return a drop still counts as found because the app was
+ * away: the foreground's alive check (VtiMediatorTransport's ALIVE_CHECK_MS,
+ * 10 s) finds a socket iOS let die, then {@link QUIET_DROP_MS} more.
+ */
+export const RETURN_DROP_WINDOW_MS = 15_000
+
 /** How long the step-up card waits for the person; unanswered, nothing is sent. */
 export const STEP_UP_ASK_TIMEOUT_MS = 120_000
 
@@ -648,6 +656,12 @@ export class VtaAgentController {
   private attemptToken = 0
   private reconnectAttempt = 0
   private retryTimer?: ReturnType<typeof setTimeout>
+  /** When the session last dropped, for the reconnect's log line. */
+  private droppedAt?: number
+  /** Whether the app is in the background now (`backgrounded`/`foregrounded`). */
+  private suspended = false
+  /** When the app last came back to the foreground. */
+  private returnedAt?: number
   /** The next check of a resumed link that went unanswered: a timer, or a wait for the foreground. */
   private resumeRetry?: { timer?: ReturnType<typeof setTimeout>; subscription?: { remove(): void } }
   private reconnecting = false
@@ -743,8 +757,14 @@ export class VtaAgentController {
         this.set({ status: 'disconnected' })
         void this.reset().catch(() => undefined)
       }
-    } else if (wasOnline && !isOnline) this.note('wentOffline')
-    else if (!wasOnline && isOnline && previous.kind === 'linked') this.note('reconnected')
+    } else if (wasOnline && !isOnline) {
+      // A drop found while suspended or just back is not news to the person: it stays out of the list (quietUntil).
+      if (!(next.kind === 'linked' && 'quietUntil' in next.connection && next.connection.quietUntil !== undefined))
+        this.note('wentOffline')
+    } else if (!wasOnline && isOnline && previous.kind === 'linked') {
+      if (!('quietUntil' in previous.connection && previous.connection.quietUntil !== undefined))
+        this.note('reconnected')
+    }
   }
 
   private note(kind: VtaActivity['kind']) {
@@ -796,7 +816,7 @@ export class VtaAgentController {
         // A socket that went away while linked is a drop, not a failure to
         // show: go offline quietly and let the backoff bring it back.
         if (this.state.link.kind === 'linked' && !client.isConnected) {
-          this.dispatch({ type: 'sessionDropped', reason: error.message, now: this.now() })
+          this.dropped(error.message)
           this.scheduleReconnect(agent)
         }
       },
@@ -3092,6 +3112,9 @@ export class VtaAgentController {
    * breaker lets one probe go early, and then the link is brought online as before.
    */
   async foregrounded(given: Agent): Promise<void> {
+    this.suspended = false
+    this.returnedAt = this.now()
+    this.dispatch({ type: 'returned', now: this.returnedAt })
     const link = this.state.link
     if (link.kind === 'linked') {
       this.current?.client.checkAlive()
@@ -3101,6 +3124,48 @@ export class VtaAgentController {
         )
     }
     await this.ensureOnline(given)
+  }
+
+  /** The app went to the background: a drop found from now until just after the return is a quiet one. */
+  backgrounded(): void {
+    this.suspended = true
+  }
+
+  /**
+   * Until when a drop found now stays out of sight, if it is quiet: found while
+   * the app is suspended, or within {@link RETURN_DROP_WINDOW_MS} of the return.
+   */
+  private quietUntil(now: number): number | undefined {
+    if (this.suspended) return now + QUIET_DROP_MS
+    if (this.returnedAt === undefined || now - this.returnedAt >= RETURN_DROP_WINDOW_MS) return undefined
+    return now + QUIET_DROP_MS
+  }
+
+  /** The session dropped: said in the log (a report could not show it, 277.6), and to the link. */
+  private dropped(reason: string): void {
+    const link = this.state.link
+    if (link.kind !== 'linked') return
+    const now = this.now()
+    const quietUntil = this.quietUntil(now)
+    if (link.connection.kind === 'online') this.droppedAt = now
+    // Identifiers as prefixes only: these lines reach testers' problem reports.
+    const words = reason.replace(/did:[a-z0-9]+:[^\s,;)]+/gi, (did) => didPrefix(did)).slice(0, 160)
+    const what =
+      link.connection.kind === 'online'
+        ? 'session dropped'
+        : link.connection.kind === 'connecting'
+          ? 'start-up sign-in failed'
+          : 'reconnect failed'
+    const quiet =
+      quietUntil !== undefined ? `, found while away: shown only if not back in ${QUIET_DROP_MS / 1000} s` : ''
+    releaseWarn(`[VTA] ${what}${quiet}: ${words}`)
+    this.dispatch({
+      type: 'sessionDropped',
+      reason,
+      now,
+      quietUntil,
+      ...(quietUntil !== undefined && this.suspended ? { untilReturn: true as const } : {}),
+    })
   }
 
   /**
@@ -3121,8 +3186,14 @@ export class VtaAgentController {
     this.retryTimer = undefined
     try {
       await this.signInWithin(agent, link.vtaDid)
+      const tries = this.reconnectAttempt
       this.reconnectAttempt = 0
       if (this.state.reconnectGaveUp) this.set({ reconnectGaveUp: false })
+      if (link.connection.kind !== 'connecting' && this.droppedAt !== undefined)
+        releaseWarn(
+          `[VTA] back online ${Math.round((this.now() - this.droppedAt) / 100) / 10} s after the drop (${tries} ${tries === 1 ? 'retry' : 'retries'})`
+        )
+      this.droppedAt = undefined
       this.dispatch({ type: 'sessionOpened' })
       void this.noteReached(agent, link.vtaDid)
       void this.holdPersonaKeys(agent, link.vtaDid)
@@ -3148,7 +3219,7 @@ export class VtaAgentController {
         this.dispatch({ type: 'accessRevoked', reason })
         return
       }
-      this.dispatch({ type: 'sessionDropped', reason, now: this.now() })
+      this.dropped(reason)
       this.scheduleReconnect(agent)
       // Beside the retry, never in front of it: the lookup can take seconds.
       void this.markIfGone(agent, link.vtaDid)
@@ -3250,10 +3321,14 @@ export class VtaAgentController {
     if (this.retryTimer || this.state.link.kind !== 'linked') return
     const attempt = ++this.reconnectAttempt
     if (attempt > MAX_RECONNECT_TRIES) {
+      releaseWarn(
+        `[VTA] reconnecting stopped after ${MAX_RECONNECT_TRIES} tries: Try again on My Agent, or the next foreground`
+      )
       this.set({ reconnectGaveUp: true })
       return
     }
     const delay = reconnectDelayMs(attempt - 1)
+    releaseWarn(`[VTA] reconnect try ${attempt} of ${MAX_RECONNECT_TRIES} in ${delay / 1000} s`)
     this.dispatch({ type: 'retryScheduled', attempt, nextRetryAt: this.now() + delay })
     this.retryTimer = setTimeout(() => {
       this.retryTimer = undefined

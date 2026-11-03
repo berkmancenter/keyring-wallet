@@ -318,6 +318,7 @@ const TabStack: React.FC = () => {
     void vtaAgent.restore(agent)
     const subscription = AppState.addEventListener('change', (next) => {
       if (next === 'active') void vtaAgent.foregrounded(agent)
+      else if (next === 'background') vtaAgent.backgrounded()
     })
     return () => subscription.remove()
   }, [agent, store.authentication.didAuthenticate])

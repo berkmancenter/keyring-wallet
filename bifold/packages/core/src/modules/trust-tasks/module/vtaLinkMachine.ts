@@ -47,8 +47,25 @@ export type VtaConnection =
    * `STARTUP_GRACE_MS` has passed.
    */
   | { kind: 'connecting'; since: number; reason?: string }
-  | { kind: 'reconnecting'; attempt: number; nextRetryAt: number; since: number }
-  | { kind: 'offline'; since: number; reason?: string }
+  | {
+      kind: 'reconnecting'
+      attempt: number
+      nextRetryAt: number
+      since: number
+      quietUntil?: number
+      untilReturn?: true
+    }
+  /**
+   * `quietUntil`: a drop found while the app was suspended, or just after it
+   * came back (iOS ends a suspended app's sockets). It is shown as online
+   * until then, so a return that reconnects within {@link QUIET_DROP_MS} shows
+   * nothing, and it is kept out of the activity list.
+   *
+   * `untilReturn`: found while suspended, so not seen yet; the next return
+   * starts its {@link QUIET_DROP_MS}, once. A later return never hides it again:
+   * a drop the person has seen stays shown.
+   */
+  | { kind: 'offline'; since: number; reason?: string; quietUntil?: number; untilReturn?: true }
   /**
    * The agent is gone for good (agentGone.ts): its address does not exist, or
    * it has not been reached for days. Retrying stops; reaching it again (a
@@ -169,7 +186,10 @@ export type VtaLinkEvent =
   | { type: 'linkLost'; failure: VtaLinkFailure }
   | { type: 'failed'; failure: VtaLinkFailure }
   | { type: 'sessionOpened' }
-  | { type: 'sessionDropped'; reason?: string; now: number }
+  /** `quietUntil`: found while suspended or just back (see the offline connection). */
+  | { type: 'sessionDropped'; reason?: string; now: number; quietUntil?: number; untilReturn?: true }
+  /** The app came back to the foreground: a quiet drop's wait counts from now. */
+  | { type: 'returned'; now: number }
   | { type: 'retryScheduled'; attempt: number; nextRetryAt: number }
   /** The agent was found gone for good (agentGone.ts). Never from online. */
   | { type: 'agentGone'; why: AgentGoneWhy; now: number }
@@ -351,9 +371,27 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
       }
       // Keep the moment it first went away: "Offline since" is about the
       // person's view, not about the latest failed retry.
-      return state.connection.kind !== 'online'
-        ? state
-        : { ...state, connection: { kind: 'offline', since: event.now, reason: event.reason } }
+      if (state.connection.kind !== 'online') return state
+      return {
+        ...state,
+        connection: {
+          kind: 'offline',
+          since: event.now,
+          reason: event.reason,
+          ...(event.quietUntil !== undefined ? { quietUntil: event.quietUntil } : {}),
+          ...(event.quietUntil !== undefined && event.untilReturn ? { untilReturn: true as const } : {}),
+        },
+      }
+
+    case 'returned': {
+      // Found while suspended, the drop has not been seen yet: its wait starts at this return, and only this one.
+      if (state.kind !== 'linked') return state
+      const connection = state.connection
+      if ((connection.kind !== 'offline' && connection.kind !== 'reconnecting') || !connection.untilReturn) return state
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { untilReturn: _seen, ...rest } = connection
+      return { ...state, connection: { ...rest, quietUntil: event.now + QUIET_DROP_MS } }
+    }
 
     case 'retryScheduled':
       return state.kind === 'linked' &&
@@ -367,6 +405,12 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
               attempt: event.attempt,
               nextRetryAt: event.nextRetryAt,
               since: state.connection.since,
+              ...('quietUntil' in state.connection && state.connection.quietUntil !== undefined
+                ? { quietUntil: state.connection.quietUntil }
+                : {}),
+              ...('untilReturn' in state.connection && state.connection.untilReturn
+                ? { untilReturn: true as const }
+                : {}),
             },
           }
         : state
@@ -408,11 +452,25 @@ export function reconnectDelayMs(attempt: number): number {
 export const STARTUP_GRACE_MS = 30_000
 
 /**
+ * How long a drop found while the app was suspended, or just after it came
+ * back, stays out of sight. A return that reconnects within it shows nothing
+ * (277.6 reports: "Reconnecting…" at moments of coming back to the app).
+ */
+export const QUIET_DROP_MS = 5_000
+
+/**
  * The connection as a person should see it at `now`: a start-up connect is
- * "connecting" for `STARTUP_GRACE_MS`, then offline since the app started.
- * Every other state is shown as it is.
+ * "connecting" for `STARTUP_GRACE_MS`, then offline since the app started; a
+ * quiet drop is online until its `quietUntil`. Every other state is shown as
+ * it is.
  */
 export function connectionShown(connection: VtaConnection, now: number): VtaConnection {
+  if (
+    (connection.kind === 'offline' || connection.kind === 'reconnecting') &&
+    connection.quietUntil !== undefined &&
+    now < connection.quietUntil
+  )
+    return { kind: 'online' }
   if (connection.kind !== 'connecting' || now - connection.since < STARTUP_GRACE_MS) return connection
   return connection.reason === undefined
     ? { kind: 'offline', since: connection.since }
