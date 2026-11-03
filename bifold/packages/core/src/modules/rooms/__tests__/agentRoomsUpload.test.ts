@@ -167,7 +167,8 @@ describe('posting a file to a room', () => {
     const put = sendCompleted.mock.calls.find((c) => c[2].type === ROOMS_TASK.recordsPut03)![2]
     const blobRef = (body.file as { blobRef: string }).blobRef
     expect((put.payload as Record<string, unknown>).blobs).toEqual([blobRef])
-    expect(written).toEqual({ key: expect.stringMatching(/^note\//), version: 1 })
+    // The backend's random id, with no descriptive prefix (it was "note/…" before 277.8).
+    expect(written).toEqual({ key: expect.stringMatching(/^id-\d+$/), version: 1 })
     expect(progress.length).toBeGreaterThan(0)
   })
 

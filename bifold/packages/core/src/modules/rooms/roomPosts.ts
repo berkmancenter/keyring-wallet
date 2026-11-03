@@ -1,8 +1,9 @@
 /**
  * A room's records as a conversation (rooms member sprint): each record is a post, newest first. A post's words
- * are its keyring.chat/1 message when its body is one (the same parser one-to-one chat uses), and otherwise the
- * record's body as it was written. Either way they are inert text: shown, never followed. Nothing here throws on
- * what a room holds.
+ * are the record's body as it was written, which is how Keyring writes them from 277.8 and how every other client
+ * writes a record; a post written before carries a keyring.chat/1 message, whose words are read out of it (the same
+ * parser one-to-one chat uses). Either way they are inert text: shown, never followed. Nothing here throws on what
+ * a room holds.
  *
  * This reads the body itself until the rooms service hands over the parsed event (`Note.event`); then `postOf`
  * takes it from there and nothing on screen changes.
@@ -63,7 +64,7 @@ export function chatMessageText(body: string, now: number = Date.now()): string 
   return result.event.content?.text
 }
 
-/** A post's body as it is written to the room: a keyring.chat/1 message, which `chatMessageText` reads back. */
+/** A post's body as Keyring wrote it before 277.8: a keyring.chat/1 message, which `chatMessageText` reads back. */
 export function chatMessageBody(text: string, eventId: string, at: Date): string {
   const event: ChatMessageEvent = {
     profile: CHAT_PROFILE,

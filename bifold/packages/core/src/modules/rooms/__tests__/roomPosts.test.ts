@@ -31,6 +31,14 @@ const note = (body: string, over: Partial<Note> = {}): Note => ({
 const me = { did: 'did:peer:me', identityWords: 'negative-weird' }
 
 describe('a record as a post', () => {
+  // From 277.8 Keyring writes a post's words as the body; the posts written before stay readable (IN-447).
+  test('a post written before 277.8 and one written after read as the same words', () => {
+    const before = postOf(note(message('See you Thursday.')), me)
+    const after = postOf(note('See you Thursday.'), me)
+    expect(before.text).toBe('See you Thursday.')
+    expect(after.text).toBe('See you Thursday.')
+  })
+
   test("a keyring.chat/1 message: its text, not the JSON it's carried in", () => {
     const post = postOf(note(message('Agenda v2 is up.')), me)
     expect(post.text).toBe('Agenda v2 is up.')

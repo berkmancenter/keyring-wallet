@@ -206,10 +206,11 @@ export const BUILT: ReadonlySet<RoomsOperation> = new Set<RoomsOperation>([
 
 /**
  * A post's record key, from its idempotency key: the same on every retry, so a post sent again after its answer
- * was lost meets itself (create-only) instead of landing twice. Opaque, as a sealed room's keys must be.
+ * was lost meets itself (create-only) instead of landing twice. Opaque, as a sealed room's keys must be: "a random
+ * identifier, never a descriptive slug" (room schema `RecordMetadata.key`). It began "note/" before 277.8.
  */
 export function postKey(idempotencyKey: string): string {
-  return `note/${bytesToHex(sha256(utf8ToBytes(`keyring.rooms.post|${idempotencyKey}`))).slice(0, 32)}`
+  return bytesToHex(sha256(utf8ToBytes(`keyring.rooms.post|${idempotencyKey}`))).slice(0, 32)
 }
 
 /**
@@ -1377,7 +1378,7 @@ export class AgentRoomsService implements RoomsService {
     const room = await this.requireInRoom(pending.roomId, 'write')
     const { community, host } = this.hostOf(room, 'write')
     const { title, body, replaceKey, idempotencyKey } = pending.draft
-    const key = replaceKey ?? (idempotencyKey ? postKey(idempotencyKey) : `note/${this.backend.newId()}`)
+    const key = replaceKey ?? (idempotencyKey ? postKey(idempotencyKey) : this.backend.newId())
     const expectedVersion = pending.replacedVersion ?? 0
     if (pending.draft.attachment) {
       const uploaded = await this.upload(room, community, host, pending.draft.attachment, options)

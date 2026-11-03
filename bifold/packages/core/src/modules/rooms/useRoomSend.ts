@@ -25,7 +25,6 @@ import { MAX_TEXT_LENGTH } from '../chat/chatEvent'
 import { newEventId } from '../chat/eventId'
 
 import { holdRoomFileTransfer, removeRoomFileCopy } from './real/files/tempCopies'
-import { chatMessageBody } from './roomPosts'
 import type { RoomsAttachment, RoomsService, RoomsTransferProgress } from './types'
 
 /** The longest post, in characters: the chat's own limit (keyring.chat/1), within the sprint's 16 KiB cap. */
@@ -234,9 +233,11 @@ export function useRoomSend(
       const post: PendingPost = {
         localId,
         text: trimmed,
-        // A file with no words is a record with an empty body: keyring.chat/1 has no hosted-file message, and the
-        // record's own file details (its blobs) are what the room shows.
-        body: trimmed ? chatMessageBody(trimmed, localId, at) : '',
+        // The words are the record's body as they were typed: the room schema's text, which every member's client
+        // shows (the community's web page, the browser wallet, pnm). Posts were a keyring.chat/1 message, which those
+        // showed as raw JSON (277.7, IN-447); they still read here (`chatMessageText`). A file with no words is a
+        // record with an empty body, and the record's own file details are what the room shows.
+        body: trimmed,
         at,
         state: 'sending',
         ...(file ? { file } : {}),

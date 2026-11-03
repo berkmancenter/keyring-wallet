@@ -133,7 +133,7 @@ describe('posting to a room', () => {
     }
   })
 
-  test("Send writes the text as a chat message, and the post becomes the member's own", async () => {
+  test("Send writes the words as the record's plain body, and the post becomes the member's own", async () => {
     const service = mockService as RoomsService
     const prepareWrite = jest.spyOn(service, 'prepareWrite')
     const confirmWrite = jest.spyOn(service, 'confirmWrite')
@@ -144,7 +144,9 @@ describe('posting to a room', () => {
     expect(prepareWrite).toHaveBeenCalledTimes(1)
     const [roomId, draft] = prepareWrite.mock.calls[0] as [string, WriteDraft]
     expect(roomId).toBe(PLANNING)
-    expect(chatMessageText(draft.body)).toBe('See you Thursday.')
+    // As every other client writes a record, and shows one: the words, not a keyring.chat/1 message (IN-447).
+    expect(draft.body).toBe('See you Thursday.')
+    expect(chatMessageText(draft.body)).toBeUndefined()
     expect(confirmWrite).toHaveBeenCalledTimes(1)
     expect(tree.getByTestId(id('RoomComposerInput')).props.value).toBe('')
     // Who the member posts as is said at the composer. No profile name in this store: the line says so.

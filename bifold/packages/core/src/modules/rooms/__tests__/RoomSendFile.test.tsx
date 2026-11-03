@@ -28,7 +28,6 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { WALLET_LOCKED_EVENT } from '../../../utils/walletLocked'
 import { MAX_FILE_BYTES, pickRoomFile } from '../pickRoomFile'
-import { chatMessageText } from '../roomPosts'
 import { createSampleRoomsService } from '../sample/sampleRooms'
 import type { RoomsService, WriteDraft } from '../types'
 
@@ -155,14 +154,15 @@ describe('sending a file', () => {
     expect(removedCopies()).toHaveLength(1)
   })
 
-  test('words and a file: the words are a chat message, sent with the file', async () => {
+  // The words go as the record's plain body beside its file: a photo's caption read as raw JSON on the web page (IN-447).
+  test("words and a file: the words are the record's plain body, sent with the file", async () => {
     const prepareWrite = jest.spyOn(mockService as RoomsService, 'prepareWrite')
     const tree = show()
     await attach(tree)
     fireEvent.changeText(tree.getByTestId(id('RoomComposerInput')), 'Minutes attached')
     await press(tree, 'RoomComposerSend')
     const [, draft] = prepareWrite.mock.calls[0] as [string, WriteDraft]
-    expect(chatMessageText(draft.body)).toBe('Minutes attached')
+    expect(draft.body).toBe('Minutes attached')
     expect(draft.attachment?.name).toBe('Minutes.pdf')
     await waitFor(() => expect(tree.getByText('Minutes attached')).toBeTruthy())
   })

@@ -181,7 +181,7 @@ describe('AgentRoomsService writes', () => {
   it('writes a new note: completed as the member by the agent, sent to the host unchanged, create-only', async () => {
     const { service, agentTask, sendCompleted } = setup()
     const preview = await service.prepareWrite(OPEN_ROOM, { title: 'Agenda', body: 'Bring seeds' })
-    expect(await service.confirmWrite(preview.token)).toEqual({ key: 'note/id-1', version: 1 })
+    expect(await service.confirmWrite(preview.token)).toEqual({ key: 'id-1', version: 1 })
 
     expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysAct06, {
       document: {
@@ -192,7 +192,7 @@ describe('AgentRoomsService writes', () => {
         issuedAt: new Date(1_000_000).toISOString(),
         payload: {
           roomId: OPEN_ROOM,
-          key: 'note/id-1',
+          key: 'id-1',
           expectedVersion: 0,
           cleartext: { title: 'Agenda', body: 'Bring seeds' },
         },
@@ -323,7 +323,7 @@ describe('AgentRoomsService writes', () => {
       return { principal: COMMUNITY.personaDid, document: { ...document, proof: { type: 'DataIntegrityProof' } } }
     })
     const preview = await s.service.prepareWrite(OPEN_ROOM, { title: '', body: 'x' })
-    await expect(s.service.confirmWrite(preview.token)).resolves.toEqual({ key: 'note/id-1', version: 1 })
+    await expect(s.service.confirmWrite(preview.token)).resolves.toEqual({ key: 'id-1', version: 1 })
   })
 })
 
@@ -368,7 +368,7 @@ describe('rooms/keys/act, at the version the agent serves', () => {
     agentServing(s, asked)
     expect((await s.service.capabilities()).write).toMatchObject({ status: 'available' })
     const preview = await s.service.prepareWrite(OPEN_ROOM, { title: '', body: 'x' })
-    await expect(s.service.confirmWrite(preview.token)).resolves.toEqual({ key: 'note/id-1', version: 1 })
+    await expect(s.service.confirmWrite(preview.token)).resolves.toEqual({ key: 'id-1', version: 1 })
     await s.service.curate(OPEN_ROOM, 'note/abc', 'pin')
     const asks = s.agentTask.mock.calls.filter((c) => c[0] !== ROOMS_TASK.keysList02)
     expect(asks.map((c) => c[0])).toEqual([asked, asked])
@@ -519,7 +519,8 @@ describe('a post sent again', () => {
   it('takes its key from its idempotency key: the same on every retry, its own per post, opaque', async () => {
     expect(postKey('post-1')).toBe(postKey('post-1'))
     expect(postKey('post-1')).not.toBe(postKey('post-2'))
-    expect(postKey('post-1')).toMatch(/^note\/[0-9a-f]{32}$/)
+    // No descriptive prefix: a sealed room's keys are random identifiers (it was "note/<hex>" before 277.8).
+    expect(postKey('post-1')).toMatch(/^[0-9a-f]{32}$/)
     expect(postKey('post-1')).not.toContain('post-1')
 
     const { service, agentTask } = setup()
@@ -603,6 +604,18 @@ describe('a long post', () => {
   })
 })
 
+describe('writing to an open room, as every other client reads it', () => {
+  // `rooms/records/put/0.3` cleartext: title, description, body (required) and tags, nothing else
+  // (dtgwg-trust-tasks-tf specs/rooms/records/put/0.3/payload.schema.json:36-81).
+  it("puts the post's words as the cleartext body, with no member the schema does not name", async () => {
+    const { service, agentTask } = setup()
+    const draft = { title: '', body: 'Hello', idempotencyKey: 'post-1' }
+    await service.confirmWrite((await service.prepareWrite(OPEN_ROOM, draft)).token)
+    const cleartext = acted(agentTask)[0].payload.cleartext as Record<string, unknown>
+    expect(cleartext).toEqual({ body: 'Hello' })
+  })
+})
+
 describe('writing to an attributed room', () => {
   /** A host assigning versions from one room-wide counter, starting after `head`; `takenBy` writes land first. */
   const countingHost = (head: number, takenBy: number[] = []) => {
@@ -618,6 +631,24 @@ describe('writing to an attributed room', () => {
   const bodyOf = (seal: Record<string, unknown>) =>
     JSON.parse(Buffer.from(String(seal.plaintext), 'base64url').toString('utf8')) as Record<string, unknown>
 
+  // IN-447 (277.7): every other client showed a Keyring post as an untitled record whose text was raw JSON. The body is
+  // the room schema's `SealedRecordBody` (dtgwg-trust-tasks-tf specs/rooms/_shared/0.1/room.schema.json:111-191),
+  // which the browser wallet, the community's web page and pnm refuse with any member it does not name
+  // (vta-browser-plugin packages/core/src/rooms/files.ts:265-267, 403-405).
+  it("writes a post as every other client reads a record: the schema's members only, the words as the body", async () => {
+    const UPSTREAM_BODY_MEMBERS = ['roomId', 'key', 'version', 'author', 'title', 'description', 'body', 'tags', 'file']
+    const { service, agentTask } = setup({ host: countingHost(0) })
+    const draft = { title: '', body: 'Hello', idempotencyKey: 'post-1' }
+    const written = await service.confirmWrite((await service.prepareWrite(SEALED_ROOM, draft)).token)
+    const body = bodyOf(sealCalls(agentTask)[0])
+    expect(Object.keys(body).filter((m) => !UPSTREAM_BODY_MEMBERS.includes(m))).toEqual([])
+    expect(body.body).toBe('Hello')
+    expect(body).not.toHaveProperty('title')
+    // An opaque key, as the schema requires of a sealed room's keys.
+    expect(written.key).toMatch(/^[0-9a-f]{32}$/)
+    expect(body.key).toBe(written.key)
+  })
+
   it('previews a note readable by the members only', async () => {
     const { service } = setup()
     const preview = await service.prepareWrite(SEALED_ROOM, { title: '', body: 'x' })
@@ -627,14 +658,14 @@ describe('writing to an attributed room', () => {
   it('has the agent sign the body as the member and seal it for the next version, then puts only the sealed form', async () => {
     const { service, agentTask } = setup({ head: 7, host: countingHost(7) })
     const preview = await service.prepareWrite(SEALED_ROOM, { title: 'Agenda', body: 'Bring seeds' })
-    expect(await service.confirmWrite(preview.token)).toEqual({ key: 'note/id-1', version: 8 })
+    expect(await service.confirmWrite(preview.token)).toEqual({ key: 'id-1', version: 8 })
 
     const [seal] = sealCalls(agentTask)
-    expect(seal).toMatchObject({ roomId: SEALED_ROOM, key: 'note/id-1', version: 8, signAsPrincipal: true })
+    expect(seal).toMatchObject({ roomId: SEALED_ROOM, key: 'id-1', version: 8, signAsPrincipal: true })
     // Unsigned, naming the member as its author, at the location it is sealed for: the agent adds the proof.
     expect(bodyOf(seal)).toEqual({
       roomId: SEALED_ROOM,
-      key: 'note/id-1',
+      key: 'id-1',
       version: 8,
       author: COMMUNITY.personaDid,
       title: 'Agenda',
@@ -644,7 +675,7 @@ describe('writing to an attributed room', () => {
     expect(put.type).toBe(ROOMS_TASK.recordsPut)
     expect(put.payload).toEqual({
       roomId: SEALED_ROOM,
-      key: 'note/id-1',
+      key: 'id-1',
       expectedVersion: 0,
       sealed: { ciphertext: `sealed:${String(seal.plaintext)}`, nonce: 'nonce', epoch: 2 },
     })
@@ -664,7 +695,7 @@ describe('writing to an attributed room', () => {
     // One write lands between the read of the head and this one's put.
     const { service, agentTask } = setup({ head: 7, host: countingHost(7, [1]) })
     const preview = await service.prepareWrite(SEALED_ROOM, { title: '', body: 'hi' })
-    expect(await service.confirmWrite(preview.token)).toEqual({ key: 'note/id-1', version: 10 })
+    expect(await service.confirmWrite(preview.token)).toEqual({ key: 'id-1', version: 10 })
 
     expect(sealCalls(agentTask).map((s) => [s.version, bodyOf(s).version])).toEqual([
       [8, 8],
