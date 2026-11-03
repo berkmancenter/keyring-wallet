@@ -25,6 +25,14 @@ import { useComposerText } from '../components/chat/useComposerText'
 import { ToastType } from '../components/toast/BaseToast'
 import { pickAndSendPhoto } from '../modules/chat/media/compose'
 import { confirmGifAsIs, showPhotoOutcome } from '../modules/chat/media/outcome'
+import {
+  addPendingPhoto,
+  pendingPhoto,
+  removePendingPhoto,
+  updatePendingPhoto,
+  usePendingPhotos,
+  type PendingPhoto,
+} from '../modules/chat/media/pending'
 import type { PhotoSource } from '../modules/chat/media/pick'
 import EmojiPickerSheet from '../modules/chat/emoji/EmojiPickerSheet'
 import { type ChatMessageIds, deleteChatMessages } from '../modules/chat/history'
@@ -466,18 +474,61 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
 
   // A photo from the camera or the library (rich-messaging-plan.md §5): fitted to one message and sent, or the reason
   // it was not. A GIF goes as it is, with whatever it carries, so the person is asked first.
+  // It shows in the chat the moment it is picked (media/pending.ts): being made ready, which can be stopped; being sent,
+  // which can't; or not sent, with Try again and Delete. Its stored message appears only once it really went.
   const onPhoto = useCallback(
     async (source: PhotoSource) => {
       setShowActionSlider(false)
       if (!agent) return
+      let id: string | undefined
       const outcome = await pickAndSendPhoto(agent, connectionId, source, {
         fallbackText: t('Chat.PhotoFallback'),
         confirmGif: confirmGifAsIs(t),
+        hooks: {
+          picked: (photo) => {
+            id = addPendingPhoto(connectionId, photo)
+          },
+          // Stopping takes the bubble away: a photo no longer pending is not sent.
+          goOn: () => !!id && !!pendingPhoto(connectionId, id),
+          sending: () => id && updatePendingPhoto(connectionId, id, { stage: 'sending' }),
+          failed: (retry) => id && updatePendingPhoto(connectionId, id, { stage: 'failed', retry }),
+        },
       })
+      // A photo that wasn't sent stays, saying so on its bubble; every other outcome takes the bubble away.
+      if (id && outcome === 'not-sent') return
+      if (id) removePendingPhoto(connectionId, id)
       showPhotoOutcome(outcome, t)
     },
     [agent, connectionId, t]
   )
+
+  const pendingPhotos = usePendingPhotos(connectionId)
+  const messages = useMemo(() => {
+    if (!pendingPhotos.length) return chatMessages
+    const retry = async (p: PendingPhoto) => {
+      if (!p.retry) return
+      updatePendingPhoto(connectionId, p.id, { stage: 'sending' })
+      if (await p.retry()) removePendingPhoto(connectionId, p.id)
+      else updatePendingPhoto(connectionId, p.id, { stage: 'failed' })
+    }
+    // Newest first, as gifted-chat lists them: the photos on their way are the newest.
+    const pending: ExtendedChatMessage[] = [...pendingPhotos].reverse().map((p) => ({
+      _id: p.id,
+      createdAt: new Date(p.createdAt),
+      user: { _id: Role.me },
+      text: '',
+      image: p.uri,
+      imageSize: { width: p.width, height: p.height },
+      renderEvent: () => <></>,
+      photoSending: {
+        stage: p.stage,
+        onStop: p.stage === 'preparing' ? () => removePendingPhoto(connectionId, p.id) : undefined,
+        onRetry: p.stage === 'failed' ? () => void retry(p) : undefined,
+        onDelete: p.stage === 'failed' ? () => removePendingPhoto(connectionId, p.id) : undefined,
+      },
+    }))
+    return [...pending, ...chatMessages]
+  }, [pendingPhotos, chatMessages, connectionId])
 
   const actions = useMemo(() => {
     const photo = _isWitnessConnection
@@ -545,7 +596,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         <ContinuityRequestCard connectionId={connectionId} />
         <GiftedChat<ExtendedChatMessage>
           keyboardAvoidingViewProps={{ keyboardVerticalOffset: headerHeight }}
-          messages={chatMessages}
+          messages={messages}
           isAvatarVisibleForEveryMessage={true}
           renderAvatar={() => null}
           messageIdGenerator={(msg) => msg?._id.toString() || '0'}

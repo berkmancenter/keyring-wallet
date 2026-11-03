@@ -1,6 +1,6 @@
 import { useConnectionById, useBasicMessagesByConnectionId } from '@bifold/react-hooks'
 import { DidCommConnectionRecord, DidCommDidExchangeRole, DidCommDidExchangeState } from '@credo-ts/didcomm'
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
 import { Alert } from 'react-native'
 import { Actions } from 'react-native-gifted-chat'
@@ -9,6 +9,7 @@ import Toast from 'react-native-toast-message'
 import * as network from '../../src/contexts/network'
 import { useChatMessagesByConnection } from '../../src/hooks/chat-messages'
 import { pickAndSendPhoto } from '../../src/modules/chat/media/compose'
+import { resetPendingPhotos } from '../../src/modules/chat/media/pending'
 import { useWitnessConnection } from '../../src/modules/vrc/context/WitnessConnectionProvider'
 import Chat from '../../src/screens/Chat'
 import { testIdWithKey } from '../../src/utils/testable'
@@ -72,6 +73,7 @@ beforeEach(() => {
   }))
   jest.spyOn(Toast, 'show').mockImplementation(() => undefined)
   ;(useChatMessagesByConnection as jest.Mock).mockReturnValue([])
+  resetPendingPhotos()
 })
 
 describe('the composer’s "+"', () => {
@@ -208,5 +210,112 @@ describe('the composer (Option A)', () => {
     } finally {
       ;(useWitnessConnection as jest.Mock).mockReturnValue({ connectedWitness: undefined })
     }
+  })
+})
+
+// The photo-sending mock: the photo shows the moment it is picked, and says what is happening until it went.
+describe('a photo while it goes', () => {
+  const PICKED = { uri: 'file:///cache/IMG.jpg', width: 400, height: 300 }
+  type Hooks = {
+    picked: (p: typeof PICKED) => void
+    goOn: () => boolean
+    sending: () => void
+    failed: (retry: () => Promise<boolean>) => void
+  }
+  const hooksOf = (call: unknown[]) => (call[3] as { hooks: Hooks }).hooks
+  const pickCamera = async (tree: ReturnType<typeof render>) => {
+    await openPlus(tree)
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatAttachCamera'))))
+  }
+
+  it('shows it at once while it is made ready, with Stop; Stop takes it away and nothing goes', async () => {
+    let done: (v: string) => void = () => undefined
+    send.mockImplementationOnce(async (...call: unknown[]) => {
+      hooksOf(call).picked(PICKED)
+      const went = await new Promise<string>((resolve) => (done = resolve))
+      return hooksOf(call).goOn() ? went : 'cancelled'
+    })
+    const tree = renderChat()
+    await pickCamera(tree)
+    expect(tree.getByTestId(id('ChatPendingPhoto'))).toBeTruthy()
+    expect(tree.getByTestId(id('ChatPendingPhotoStatus'))).toHaveTextContent('Chat.PhotoPreparing')
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoStop'))))
+    expect(tree.queryByTestId(id('ChatPendingPhoto'))).toBeNull()
+    await act(async () => done('sent'))
+    expect(tree.queryByTestId(id('ChatPendingPhoto'))).toBeNull()
+    expect(Toast.show).not.toHaveBeenCalled()
+  })
+
+  it('once it is being sent it says so, and has no Stop (control for Stop above)', async () => {
+    send.mockImplementationOnce(async (...call: unknown[]) => {
+      hooksOf(call).picked(PICKED)
+      hooksOf(call).sending()
+      return new Promise(() => undefined)
+    })
+    const tree = renderChat()
+    await pickCamera(tree)
+    expect(tree.getByTestId(id('ChatPendingPhotoStatus'))).toHaveTextContent('Chat.PhotoSending')
+    expect(tree.queryByTestId(id('ChatPendingPhotoStop'))).toBeNull()
+  })
+
+  it('not sent: it stays, saying so, with no toast; Try again sends it again and it leaves once it went', async () => {
+    const retry = jest.fn(async () => true)
+    send.mockImplementationOnce(async (...call: unknown[]) => {
+      hooksOf(call).picked(PICKED)
+      hooksOf(call).sending()
+      hooksOf(call).failed(retry)
+      return 'not-sent'
+    })
+    const tree = renderChat()
+    await pickCamera(tree)
+    await waitFor(() =>
+      expect(tree.getByTestId(id('ChatPendingPhotoStatus'))).toHaveTextContent('Chat.PhotoNotSentTap')
+    )
+    expect(Toast.show).not.toHaveBeenCalled()
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoFailed'))))
+    expect(tree.getByTestId(id('ChatPendingPhotoSheet'))).toBeTruthy()
+    // A render at the largest text showed the sheet reaching under the status bar: its words and buttons scroll, the
+    // buttons last, so they are reached only past the words.
+    const scrolled = within(tree.getByTestId(id('ChatPendingPhotoSheetScroll')))
+    expect(scrolled.getByText('Chat.PhotoFailedBody')).toBeTruthy()
+    expect(scrolled.getByTestId(id('ChatPendingPhotoNotNow'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoRetry'))))
+    expect(retry).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(tree.queryByTestId(id('ChatPendingPhoto'))).toBeNull())
+  })
+
+  it('a retry that fails again leaves it not sent; Not now keeps it, Delete takes it away', async () => {
+    const retry = jest.fn(async () => false)
+    send.mockImplementationOnce(async (...call: unknown[]) => {
+      hooksOf(call).picked(PICKED)
+      hooksOf(call).failed(retry)
+      return 'not-sent'
+    })
+    const tree = renderChat()
+    await pickCamera(tree)
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoFailed'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoRetry'))))
+    await waitFor(() =>
+      expect(tree.getByTestId(id('ChatPendingPhotoStatus'))).toHaveTextContent('Chat.PhotoNotSentTap')
+    )
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoFailed'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoNotNow'))))
+    expect(tree.getByTestId(id('ChatPendingPhoto'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoFailed'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('ChatPendingPhotoDelete'))))
+    expect(tree.queryByTestId(id('ChatPendingPhoto'))).toBeNull()
+  })
+
+  it("a photo that can't be made ready leaves no bubble, and the toast says why (control)", async () => {
+    send.mockImplementationOnce(async (...call: unknown[]) => {
+      hooksOf(call).picked(PICKED)
+      return 'unreadable'
+    })
+    const tree = renderChat()
+    await pickCamera(tree)
+    await waitFor(() =>
+      expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Chat.PhotoUnreadable' }))
+    )
+    expect(tree.queryByTestId(id('ChatPendingPhoto'))).toBeNull()
   })
 })

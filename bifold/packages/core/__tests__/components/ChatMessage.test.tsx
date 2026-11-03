@@ -1,7 +1,7 @@
 import { render, fireEvent, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { StyleSheet } from 'react-native'
-import { MessageImage, MessageProps } from 'react-native-gifted-chat'
+import { Bubble, MessageImage, MessageProps } from 'react-native-gifted-chat'
 
 import {
   ChatMessage,
@@ -276,6 +276,38 @@ describe('chat lines and replies', () => {
       accessibilityLabel: 'Chat.Photo',
     })
     expect(StyleSheet.flatten(image.props.imageStyle)).toMatchObject({ width: 220, height: 165 })
+  })
+
+  // A photo is stored only once it really went (send.ts), so a stored photo of this phone's says Sent beside its time.
+  test('a photo this phone sent says Sent beside its time; one received does not (control)', () => {
+    const time = (overrides: Partial<ExtendedChatMessage>) => {
+      const bubble = render(<ChatMessage messageProps={chatItem(overrides)} />).UNSAFE_getByType(Bubble)
+      return render(bubble.props.renderTime())
+    }
+    const photo = { image: 'file:///chat-media/A/p.jpg', chatEventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9P' }
+    const mine = time({ ...photo, user: { _id: Role.me } })
+    expect(mine.getByTestId(testIdWithKey(ChatIds.photoSent))).toBeTruthy()
+    expect(mine.getByText('✓ Chat.PhotoSent')).toBeTruthy()
+    expect(time({ ...photo, user: { _id: Role.them } }).queryByTestId(testIdWithKey(ChatIds.photoSent))).toBeNull()
+    expect(
+      time({ text: 'hi', chatEventId: photo.chatEventId, user: { _id: Role.me } }).queryByText(/PhotoSent/)
+    ).toBeNull()
+  })
+
+  test('a photo on its way is its pending bubble, not a sent one', () => {
+    const tree = render(
+      <ChatMessage
+        messageProps={chatItem({
+          user: { _id: Role.me },
+          image: 'file:///cache/IMG.jpg',
+          imageSize: { width: 400, height: 300 },
+          photoSending: { stage: 'sending' },
+        })}
+      />
+    )
+    expect(tree.getByTestId(testIdWithKey(ChatIds.pendingPhoto))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey(ChatIds.photoSent))).toBeNull()
+    expect(tree.UNSAFE_queryByType(Bubble)).toBeNull()
   })
 
   test('a tall photo is bounded by height, and a missing size draws a square', () => {

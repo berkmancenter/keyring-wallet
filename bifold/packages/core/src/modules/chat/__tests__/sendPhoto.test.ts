@@ -158,6 +158,20 @@ describe('sendChatPhoto, to a contact that speaks chat', () => {
     )
   })
 
+  // A retry of a send that may have arrived names the same event, so a receiver that has it drops the copy (inbound.ts).
+  it('sends under the event id it is given, its file named by it; with none, a new one each time (control)', async () => {
+    const fake = makeAgent({ rceVersion: 6 })
+    const eventId = '01JB3XKX6F8Q2W4E5R6T7Y8Z9P'
+    await sendChatPhoto(fake.agent, 'conn-1', photoOf(200_000), { fallbackText: FALLBACK, eventId })
+    expect((fake.sent[0].event as Record<string, unknown>).eventId).toBe(eventId)
+    expect(write).toHaveBeenCalledWith('conn-1', eventId, 'image/jpeg', expect.any(String))
+    await sendChatPhoto(fake.agent, 'conn-1', photoOf(200_000), { fallbackText: FALLBACK })
+    await sendChatPhoto(fake.agent, 'conn-1', photoOf(200_000), { fallbackText: FALLBACK })
+    const fresh = fake.sent.slice(1).map((s) => (s.event as Record<string, unknown>).eventId)
+    expect(fresh[0]).not.toBe(eventId)
+    expect(fresh[0]).not.toBe(fresh[1])
+  })
+
   it('leaves the copy in place when the send succeeds', async () => {
     const fake = makeAgent({ rceVersion: 6 })
     await sendChatPhoto(fake.agent, 'conn-1', photoOf(200_000), { fallbackText: FALLBACK })

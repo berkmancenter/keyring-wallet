@@ -37,4 +37,21 @@ export const ChatIds = {
   composerCamera: 'ChatComposerCamera',
   // A day's marker ("Today", "Wed 15 Oct"): above its first message, and floating at the top while scrolling.
   dayPill: 'ChatDayPill',
+  // A photo on its way: shown from the moment it is picked until it is sent, or until a failed one is deleted.
+  pendingPhoto: 'ChatPendingPhoto',
+  pendingPhotoStatus: 'ChatPendingPhotoStatus',
+  // Stops a photo while it is made ready; there is none once it is being sent.
+  pendingPhotoStop: 'ChatPendingPhotoStop',
+  // A photo that wasn't sent: tapping it opens the sheet below.
+  pendingPhotoFailed: 'ChatPendingPhotoFailed',
+  pendingPhotoSheet: 'ChatPendingPhotoSheet',
+  // The sheet's words and buttons scroll, the buttons last.
+  pendingPhotoSheetScroll: 'ChatPendingPhotoSheetScroll',
+  pendingPhotoRetry: 'ChatPendingPhotoRetry',
+  pendingPhotoDelete: 'ChatPendingPhotoDelete',
+  pendingPhotoNotNow: 'ChatPendingPhotoNotNow',
+  // Tapping outside that sheet closes it, as Not now.
+  pendingPhotoBackdrop: 'ChatPendingPhotoBackdrop',
+  // "✓ Sent" beside the time of a photo this phone sent.
+  photoSent: 'ChatPhotoSent',
 } as const

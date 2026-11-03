@@ -140,12 +140,15 @@ export class ChatPhotoRefusedError extends Error {
  * the chat's media folder first, then the message is sent, then its record is stored. To one that does not,
  * `fallbackText` ("📷 Photo — update Keyring to see it", in this phone's language) goes as a plain message, with the
  * caption after it.
+ *
+ * `eventId`, when given, is the event's id: a retry of a send that may have arrived names the same event, so a
+ * receiver that already has it drops the copy (inbound.ts) instead of showing the photo twice.
  */
 export async function sendChatPhoto(
   agent: Agent,
   connectionId: string,
   photo: PreparedPhoto,
-  options: { fallbackText: string; caption?: string }
+  options: { fallbackText: string; caption?: string; eventId?: string }
 ): Promise<ChatSendOutcome> {
   const descriptor: ImageAttachmentDescriptor = {
     id: 'a1',
@@ -171,6 +174,7 @@ export async function sendChatPhoto(
   const timer = await currentTimer(agent, connectionId)
   const event = {
     ...base(),
+    ...(options.eventId ? { eventId: options.eventId } : {}),
     type: 'message' as const,
     ...(caption ? { content: { format: 'text/plain' as const, text: caption } } : {}),
     attachments: [descriptor] as [ImageAttachmentDescriptor],
