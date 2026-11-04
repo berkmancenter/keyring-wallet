@@ -134,12 +134,12 @@ The rule is `SealedRecordBody` *Reading*: a reader "MUST, before showing any mem
 
 **Stage 1, a count: [#925](https://github.com/berkmancenter/keyring-bifold/pull/925).** Logs counts and closed kinds, and nothing on screen.
 *Acceptance:* one line of counts and closed words per interval; a phone's cost measured or reported from the line itself.
-*What its report decides:* how often `document-unavailable`, `document-timeout` and `key-not-listed` happen on real rooms.
+*What its report decides:* how often each kind happens on real rooms.
 
 **Stage 2, applying them. Conditional on decision 1 (§7).** What it has to do that stage 1 doesn't:
 1. **Which document.** *Which DID document*: "`author`'s DID document **as it stood at the host's `bodyStoredAt`**"; for `did:webvh`, "resolved with `versionTime`". Credo's `WebVhDidResolver` doesn't pass `versionTime` and `resolveDidDocument` can't, so this needs a patch or our own `resolveDIDFromLog` call over the one fetched log. One fetch per author still holds, since the log has every version.
 2. **Records with no `bodyStoredAt`**, which is every record today: "it uses the current document, and treats a proof that fails there the same way". So a failed old record is the placeholder, not a refusal.
-3. **Deactivated authors.** The draft treats one like an unresolvable DID. Credo's resolver drops `meta.deactivated`, so a deactivated author's signature reads as holding unless we read the metadata ourselves.
+3. **Deactivated authors.** The draft treats one like an unresolvable DID, so stage 2 reads the resolver's metadata as well as the document.
 4. **Rule (1)**, refusing an unknown member, with an allow-list from the released schema so honest provenance members pass.
 5. **Showing before checking.** The rule says *before showing*. A check costs a fetch once per author and a verify per record on the JS thread (§9). Stage 2 needs a saved verdict per record version, kept with what's already stored and by hash, so a re-read costs nothing and a lock doesn't cause a new fetch. A first read waits or shows a placeholder until checked.
 
