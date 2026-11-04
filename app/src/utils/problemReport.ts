@@ -20,6 +20,7 @@ import { CachesDirectoryPath, writeFile } from 'react-native-fs'
 import { currentOtaLabel } from '../ota/otaStatus'
 
 import { getRecentLogLines } from './logBuffer'
+import { logPersist } from './logPersist'
 import { generateReferenceCode } from './reference-code'
 
 export interface ProblemReportInput {
@@ -75,7 +76,8 @@ export const buildProblemReport = (
   input: ProblemReportInput,
   env: ReportEnvironment,
   logLines: string[],
-  maxLogLines?: number
+  maxLogLines?: number,
+  previousRun?: { log: string; slowestJsMs: number }
 ): string => {
   const chain = errorChain(input.error)
   const shownLines = maxLogLines !== undefined ? logLines.slice(-maxLogLines) : logLines
@@ -92,6 +94,14 @@ export const buildProblemReport = (
     '',
     `Recent log (${shownLines.length} of ${logLines.length} lines, oldest first):`,
     ...shownLines,
+    ...(previousRun
+      ? [
+          '',
+          `Log file: slowest write ${previousRun.slowestJsMs} ms of the app's time in this run.`,
+          // Last, so a reader of the file meets this run first.
+          previousRun.log ? `The end of the run before this one (oldest first):\n${previousRun.log}` : undefined,
+        ]
+      : []),
   ]
   return sections.filter((line) => line !== undefined).join('\n')
 }
@@ -112,7 +122,12 @@ const emailReport = async (to: string, input: ProblemReportInput, env: ReportEnv
  * 150 lines (IN-15). A file carries all of it, to any app that takes one.
  */
 export const shareReport = async (input: ProblemReportInput, env: ReportEnvironment): Promise<void> => {
-  const text = buildProblemReport(input, env, getRecentLogLines())
+  // Only here: the file carries all of it. Email is cut to its newest lines, and a URL can't hold this.
+  const log = (await logPersist.previousRun()) ?? ''
+  const text = buildProblemReport(input, env, getRecentLogLines(), undefined, {
+    log,
+    slowestJsMs: logPersist.slowestJsMs(),
+  })
   const path = `${CachesDirectoryPath}/keyring-report-${input.referenceCode}.txt`
   await writeFile(path, text, 'utf8')
   if (Platform.OS === 'ios') {
@@ -140,7 +155,7 @@ export const offerProblemReport = (input: ProblemReportInput): void => {
   }
   Alert.alert(
     'Send this problem report?',
-    `Reference ${input.referenceCode}. The report includes what went wrong, your app version and device, and the app's recent activity log. The log can include the names and cards exchanged with your contacts, but never keys, passwords or your PIN. Only you decide where it goes.`,
+    `Reference ${input.referenceCode}. The report includes what went wrong, your app version and device, and the app's recent activity log, including the end of its last run. The log can include the names and cards exchanged with your contacts, but never keys, passwords or your PIN. Only you decide where it goes.`,
     [
       ...(to ? [{ text: 'Email report', onPress: run(() => emailReport(to, input, env)) }] : []),
       { text: 'Share…', onPress: run(() => shareReport(input, env)) },

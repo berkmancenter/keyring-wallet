@@ -36,6 +36,11 @@ const OPAQUE_TOKEN = /[A-Za-z0-9_-]{81,}/g
 
 const lines: string[] = []
 let installed = false
+// Bumped by anything that changes what getRecentLogLines returns.
+let version = 0
+
+/** Changes whenever there is something new to read: a cheap way to skip reading it. */
+export const getLogVersion = (): number => version
 
 // Mediator polling is most of a quiet app's log: every few seconds a Pickup
 // status-request, its status answer, and credo's service lookup for the send.
@@ -113,6 +118,7 @@ export const recordLogLine = (level: string, args: unknown[], now: Date = new Da
   // for good and still leave the largest line in the buffer. Shortening first
   // fits the whole record in a few hundred characters — this recovers evidence
   // the cap currently discards. Do not reorder these two steps.
+  version++
   let text = shortenOpaqueTokens(args.map(stringify).join(' '))
   if (text.length > LOG_LINE_MAX_LENGTH) {
     text = `${text.slice(0, LOG_LINE_MAX_LENGTH)}… (${text.length - LOG_LINE_MAX_LENGTH} more chars)`
@@ -141,6 +147,7 @@ export const getRecentLogLines = (): string[] => {
 }
 
 export const clearLogBuffer = (): void => {
+  version++
   lines.length = 0
   pollMinute = ''
   pollCounts = {}
