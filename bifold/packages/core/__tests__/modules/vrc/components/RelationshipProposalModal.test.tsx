@@ -26,6 +26,16 @@ const show = () =>
     </BasicAppContext>
   )
 
+/** Past a large text size the sheet scrolls: the words and the buttons are in one scroll, the words first. */
+const expectButtonPastTheWords = (tree: ReturnType<typeof render>, words: string, buttonId: string) => {
+  let parent = tree.getByTestId(buttonId).parent
+  while (parent && String(parent.type) !== 'RCTScrollView') parent = parent.parent
+  expect(parent).toBeTruthy()
+  const json = JSON.stringify(tree.toJSON())
+  expect(json.indexOf(words)).toBeGreaterThanOrEqual(0)
+  expect(json.indexOf(words)).toBeLessThan(json.indexOf(buttonId))
+}
+
 describe('the relationship request sheet', () => {
   beforeEach(() => {
     ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
@@ -51,5 +61,10 @@ describe('the relationship request sheet', () => {
     expect(tree.queryByText(/wants to form a relationship/)).toBeNull()
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('ProposalAccept'))))
     expect(mockRespond).toHaveBeenCalledWith({}, 'conn-1', true)
+  })
+
+  test('Accept is reached only past the words, in a scroll', () => {
+    vrcFlowStore.setProposalPrompt({ connectionId: 'conn-1', exchangeId: 'x1', counterpartyLabel: 'Ori' })
+    expectButtonPastTheWords(show(), 'wants to form a relationship with you', testIdWithKey('ProposalAccept'))
   })
 })

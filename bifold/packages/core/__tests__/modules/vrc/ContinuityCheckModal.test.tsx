@@ -42,6 +42,16 @@ const prompt = {
   receivedAt: new Date().toISOString(),
 }
 
+/** Past a large text size the sheet scrolls: the words and the buttons are in one scroll, the words first. */
+const expectButtonPastTheWords = (tree: ReturnType<typeof render>, words: string, buttonId: string) => {
+  let parent = tree.getByTestId(buttonId).parent
+  while (parent && String(parent.type) !== 'RCTScrollView') parent = parent.parent
+  expect(parent).toBeTruthy()
+  const json = JSON.stringify(tree.toJSON())
+  expect(json.indexOf(words)).toBeGreaterThanOrEqual(0)
+  expect(json.indexOf(words)).toBeLessThan(json.indexOf(buttonId))
+}
+
 describe('ContinuityCheckModal', () => {
   beforeEach(() => {
     resetContinuityLimits()
@@ -80,5 +90,11 @@ describe('ContinuityCheckModal', () => {
     act(() => continuityPromptStore.set(prompt))
     fireEvent.press(tree.getByTestId(testIdWithKey('ContinuityNotNow')))
     expect(mockRespond).toHaveBeenCalledWith(agent, 'conn-new', false)
+  })
+
+  test('Confirm is reached only past the words, in a scroll', () => {
+    const tree = render(<ContinuityCheckModal />)
+    act(() => continuityPromptStore.set(prompt))
+    expectButtonPastTheWords(tree, 'Relationship.ContinuityBody', testIdWithKey('ContinuityConfirm'))
   })
 })

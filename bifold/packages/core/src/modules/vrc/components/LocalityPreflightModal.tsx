@@ -43,7 +43,7 @@
  */
 
 import React, { useState } from 'react'
-import { Linking, Platform, StyleSheet, View } from 'react-native'
+import { Linking, Platform, ScrollView, StyleSheet, View } from 'react-native'
 import { PERMISSIONS, RESULTS, request } from 'react-native-permissions'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -89,6 +89,9 @@ const LocalityPreflightModal: React.FC = () => {
       justifyContent: 'flex-end',
     },
     safeAreaView: {
+      // Past a large text size the words and buttons are taller than the screen: the sheet stops at its top and they
+      // scroll, so the buttons are reached only past the words (as sign-in's review).
+      flexShrink: 1,
       backgroundColor: ColorPalette.brand.modalPrimaryBackground,
       borderTopRightRadius: 20,
       borderTopLeftRadius: 20,
@@ -148,9 +151,9 @@ const LocalityPreflightModal: React.FC = () => {
 
   return (
     <SafeAreaModal visible transparent animationType="slide">
-      <View style={styles.overlay}>
+      <SafeAreaView style={styles.overlay} edges={['top']}>
         <SafeAreaView style={styles.safeAreaView} edges={['bottom']}>
-          <View style={styles.container}>
+          <ScrollView bounces={false} contentContainerStyle={styles.container}>
             {showRequiredRefusal ? (
               <>
                 <ThemedText
@@ -162,8 +165,9 @@ const LocalityPreflightModal: React.FC = () => {
                   {`${eventLabel} requires in-person confirmation`}
                 </ThemedText>
                 <ThemedText style={styles.body}>
-                  {`Exchanges here need Bluetooth confirmation that you're at the venue. You can allow it in
-                  Settings, or continue without it and this exchange won't carry that confirmation.`}
+                  {
+                    "Exchanges here need Bluetooth confirmation that you're at the venue. You can allow it in Settings, or continue without it and this exchange won't carry that confirmation."
+                  }
                 </ThemedText>
                 <Button
                   title="Open settings"
@@ -215,9 +219,9 @@ const LocalityPreflightModal: React.FC = () => {
                 />
               </>
             )}
-          </View>
+          </ScrollView>
         </SafeAreaView>
-      </View>
+      </SafeAreaView>
     </SafeAreaModal>
   )
 }

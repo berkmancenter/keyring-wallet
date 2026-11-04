@@ -4,6 +4,7 @@ import { Linking, Platform } from 'react-native'
 
 import LocalityPreflightModal from '../../../../src/modules/vrc/components/LocalityPreflightModal'
 import { useWitnessConnection } from '../../../../src/modules/vrc/context/WitnessConnectionProvider'
+import { testIdWithKey } from '../../../../src/utils/testable'
 
 jest.mock('../../../../src/modules/vrc/context/WitnessConnectionProvider', () => ({
   useWitnessConnection: jest.fn(),
@@ -41,6 +42,16 @@ function withPreflight(overrides?: { eventName?: string; required?: boolean }) {
     resolveLocalityPreflight,
   })
   return { resolveLocalityPreflight }
+}
+
+/** Past a large text size the sheet scrolls: the words and the buttons are in one scroll, the words first. */
+const expectButtonPastTheWords = (tree: ReturnType<typeof render>, words: string, buttonId: string) => {
+  let parent = tree.getByTestId(buttonId).parent
+  while (parent && String(parent.type) !== 'RCTScrollView') parent = parent.parent
+  expect(parent).toBeTruthy()
+  const json = JSON.stringify(tree.toJSON())
+  expect(json.indexOf(words)).toBeGreaterThanOrEqual(0)
+  expect(json.indexOf(words)).toBeLessThan(json.indexOf(buttonId))
 }
 
 describe('LocalityPreflightModal', () => {
@@ -133,6 +144,14 @@ describe('LocalityPreflightModal', () => {
 
     expect(resolveLocalityPreflight).not.toHaveBeenCalled()
     expect(getByText('Gated Summit requires in-person confirmation')).toBeTruthy()
+    // One sentence, with no gap from a line break inside its text.
+    expect(
+      getByText(
+        /You can allow it in Settings, or continue without it and this exchange won't carry that confirmation\.$/,
+        // The default normalizer would hide exactly this: it collapses the whitespace.
+        { normalizer: (text) => text }
+      )
+    ).toBeTruthy()
   })
 
   it('the refusal state\'s "Continue without it" resolves allow:false', () => {
@@ -154,5 +173,16 @@ describe('LocalityPreflightModal', () => {
 
     await waitFor(() => expect(resolveLocalityPreflight).toHaveBeenCalledWith(false))
     expect(Linking.openSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('Allow is reached only past the question and the words, in a scroll', () => {
+    withPreflight({ eventName: 'IIW Fall 2026' })
+    const tree = render(<LocalityPreflightModal />)
+    expectButtonPastTheWords(
+      tree,
+      "Allow Bluetooth to confirm you're at IIW Fall 2026?",
+      testIdWithKey('LocalityPreflightAllow')
+    )
+    expectButtonPastTheWords(tree, 'never your exact', testIdWithKey('LocalityPreflightAllow'))
   })
 })

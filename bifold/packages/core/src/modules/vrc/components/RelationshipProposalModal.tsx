@@ -17,7 +17,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -69,6 +69,9 @@ const RelationshipProposalModal: React.FC = () => {
       justifyContent: 'flex-end',
     },
     safeAreaView: {
+      // Past a large text size the words and buttons are taller than the screen: the sheet stops at its top and they
+      // scroll, so the buttons are reached only past the words (as sign-in's review).
+      flexShrink: 1,
       backgroundColor: ColorPalette.brand.modalPrimaryBackground,
       borderTopRightRadius: 20,
       borderTopLeftRadius: 20,
@@ -93,9 +96,9 @@ const RelationshipProposalModal: React.FC = () => {
 
   return (
     <SafeAreaModal visible transparent animationType="slide">
-      <View style={styles.overlay}>
+      <SafeAreaView style={styles.overlay} edges={['top']}>
         <SafeAreaView style={styles.safeAreaView} edges={['bottom']}>
-          <View style={styles.container}>
+          <ScrollView bounces={false} contentContainerStyle={styles.container}>
             {prompt.upgrade ? (
               // An existing relationship asking to sign again: says what it adds, and nothing more.
               <>
@@ -137,9 +140,9 @@ const RelationshipProposalModal: React.FC = () => {
               onPress={() => respond(false)}
               disabled={busy}
             />
-          </View>
+          </ScrollView>
         </SafeAreaView>
-      </View>
+      </SafeAreaView>
     </SafeAreaModal>
   )
 }
