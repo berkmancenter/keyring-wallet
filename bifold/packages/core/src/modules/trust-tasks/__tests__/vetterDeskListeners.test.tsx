@@ -18,7 +18,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import VtiVetting from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
-import { VETTING, VtiVetterDesk } from '../module/vtiVetting'
+import { VETTING, VtiApplicant, VtiVetterDesk } from '../module/vtiVetting'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -53,10 +53,16 @@ const records: Rec[] = [
     },
   },
 ]
+// While set, the seat's grant read waits on it: the seconds a status read can take on a phone.
+let grantReadHeld: Promise<void> | undefined
 const agent = {
   genericRecords: {
-    findAllByQuery: async (query: Record<string, string>) =>
-      records.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v)).map((r) => ({ ...r, id: 'r' })),
+    findAllByQuery: async (query: Record<string, string>) => {
+      if (query.kind === 'credential' && grantReadHeld) await grantReadHeld
+      return records
+        .filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
+        .map((r) => ({ ...r, id: 'r', content: { ...r.content } }))
+    },
     save: async () => undefined,
     update: async () => undefined,
     delete: async () => undefined,
@@ -138,5 +144,83 @@ describe('the Vetting screen and its desk', () => {
     await deliver(request)
     expect(heard).toHaveBeenCalledTimes(1)
     second.unmount()
+  })
+
+  // 277.7, 0.69 gate kk (2026-11-03): the vetter's listener left a vetting request on the mediator and named the
+  // persona; the screen signed the session in again, and the mediator delivered the request while the desk was
+  // unhooked: the re-run of the screen's connect handed it a new persona object, the desk effect's cleanup stopped
+  // the desk, and it listened again only after the grant read. The request was acknowledged and never reached it.
+  describe('a vetting request delivered while the seat is read again', () => {
+    let release: () => void = () => undefined
+    const holdGrantRead = () => {
+      grantReadHeld = new Promise<void>((resolve) => (release = resolve))
+    }
+    afterEach(() => {
+      release()
+      grantReadHeld = undefined
+    })
+
+    it('after the bump a waiting message makes: the desk hears it', async () => {
+      const connect = jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined)
+      const tree = await mount()
+      await waitFor(() => expect(connect).toHaveBeenCalled())
+      const before = connect.mock.calls.length
+      holdGrantRead()
+      DeviceEventEmitter.emit('vti:persona-message-waiting', { did: personaDid })
+      await waitFor(() => expect(connect).toHaveBeenCalledTimes(before + 1))
+      await act(async () => undefined)
+      await deliver(request)
+      expect(heard).toHaveBeenCalledTimes(1)
+      tree.unmount()
+      connect.mockRestore()
+    })
+
+    it('after the persona itself changed and the seat is read again: the desk hears it', async () => {
+      // A stored persona that really changed is a new object, and the desk effect runs again. The seated desk
+      // listens again before the read, not after it.
+      const connect = jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined)
+      const tree = await mount()
+      await waitFor(() => expect(connect).toHaveBeenCalled())
+      const before = connect.mock.calls.length
+      holdGrantRead()
+      const persona = records[0].content
+      const createdAt = persona.createdAt
+      persona.createdAt = '2026-11-03T22:12:18Z'
+      try {
+        DeviceEventEmitter.emit('vti:persona-message-waiting', { did: personaDid })
+        await waitFor(() => expect(connect).toHaveBeenCalledTimes(before + 1))
+        await act(async () => undefined)
+        await deliver(request)
+        expect(heard).toHaveBeenCalledTimes(1)
+      } finally {
+        persona.createdAt = createdAt
+        tree.unmount()
+        connect.mockRestore()
+      }
+    })
+  })
+
+  // A seat that changes side: the grant record is gone, so the next read seats the applicant. The desk must stop,
+  // or it takes a vetting request it cannot serve and the mediator counts it delivered.
+  it('a desk whose grant is gone stops listening when the applicant is seated', async () => {
+    const connect = jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined)
+    const applicantListens = jest.spyOn(VtiApplicant.prototype, 'listen')
+    const tree = await mount()
+    applicantListens.mockClear()
+    const grant = records.splice(1, 1)
+    try {
+      await act(async () => {
+        jest.advanceTimersByTime(3000)
+      })
+      await waitFor(() => expect(applicantListens).toHaveBeenCalled())
+      await act(async () => undefined)
+      await deliver(request)
+      expect(heard).not.toHaveBeenCalled()
+    } finally {
+      records.splice(1, 0, ...grant)
+      tree.unmount()
+      connect.mockRestore()
+      applicantListens.mockRestore()
+    }
   })
 })
