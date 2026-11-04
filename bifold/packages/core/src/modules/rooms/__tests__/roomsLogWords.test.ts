@@ -81,6 +81,20 @@ describe('rooms log words', () => {
     })
 
     test.each([
+      'hostRefused',
+      'hostUnreachable',
+      'cannotOpen',
+      'notAttempted',
+      'principalAmbiguous',
+      'versionConflict',
+    ])("a room task's own %s is known, the way a read's refusal carries it", (code) => {
+      expect(failureCategory(new VtiRefusal(`rooms/keys/read:${code}`, SAID))).toBe(`refused (${code})`)
+      expect(failureCategory(new VtiRefusal('taskFailed', SAID, { code: `rooms/keys/read:${code}` }))).toBe(
+        `refused (${code})`
+      )
+    })
+
+    test.each([
       ['free text as the code', () => new VtiRefusal(SAID, 'x')],
       ['a DID as the code', () => new VtiRefusal('did:key:persona-a', 'x')],
       ['free text in the details code', () => new VtiRefusal('taskFailed', 'x', { code: SAID })],
