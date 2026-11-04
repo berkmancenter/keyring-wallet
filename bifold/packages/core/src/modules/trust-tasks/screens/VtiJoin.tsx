@@ -70,6 +70,7 @@ const wholeWord = (did: string): string => {
   return word.startsWith('…') && did.endsWith(`:${word.slice(1)}`) ? word.slice(1) : word
 }
 import { useTakingLong } from './useTakingLong'
+import { releaseWarn } from '../module/releaseLog'
 import { useRoomAboveTabBar } from './aboveTabBar'
 import { VtiJoinIds } from './VtiJoin.ids'
 
@@ -286,6 +287,13 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // A private way's agent check, asked on the "Meet a vetter" tap, and why it said no.
   const [privateRefusal, setPrivateRefusal] = useState<HiddenVettingRefusal>()
   const [privateChecking, setPrivateChecking] = useState(false)
+  const privateCheckingLong = useTakingLong(privateChecking)
+  // Why this person's agent can't carry the private way, said on screen and in the Release log by its kind alone:
+  // the tap has no other result to show, and no identity or community goes beside it.
+  const refusePrivate = useCallback((reason: HiddenVettingRefusal) => {
+    releaseWarn(`[Join] the private way in was not started: ${reason}`)
+    setPrivateRefusal(reason)
+  }, [])
   /** What the identity step leads to: a plain request, or vetting (named or private, one flow). */
   const chooseNext = useCallback((plain: boolean) => {
     setPlainRequest(plain)
@@ -328,6 +336,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     errorDetail: { maxHeight: 160 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     error: { color: ColorPalette.semantic.error },
+    refusalBar: {
+      flexGrow: 0,
+      maxHeight: 160,
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderTopWidth: 1,
+      borderTopColor: ColorPalette.semantic.error,
+    },
+    refusalBarContent: { paddingHorizontal: 24, paddingVertical: 12 },
   })
 
   const onJoinAs = useCallback(async () => {
@@ -760,14 +776,17 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           ) : ways.button !== 'none' ? (
             <Button
               title={
-                ways.button === 'join'
-                  ? t('Join.Ways.ButtonJoin', named)
-                  : ways.button === 'ask'
-                    ? t('Join.Ways.ButtonAsk')
-                    : // Beside "Ask to join", the button names where it leads.
-                      ways.alsoAsk
-                      ? t('Join.Ways.ButtonVetting')
-                      : t('Join.Start')
+                // The agent is being asked, which can take as long as it takes to answer: said, not only dimmed.
+                privateChecking
+                  ? t('Join.Ways.PrivateVettingChecking')
+                  : ways.button === 'join'
+                    ? t('Join.Ways.ButtonJoin', named)
+                    : ways.button === 'ask'
+                      ? t('Join.Ways.ButtonAsk')
+                      : // Beside "Ask to join", the button names where it leads.
+                        ways.alsoAsk
+                        ? t('Join.Ways.ButtonVetting')
+                        : t('Join.Start')
               }
               buttonType={ButtonType.Primary}
               disabled={privateChecking}
@@ -785,7 +804,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                     const seam = hiddenVettingSeam()
                     const criterion = manifest?.criteria.find((c) => c.id === privateRow.id)
                     if (!seam || !agent || !criterion) {
-                      setPrivateRefusal('cannotTell')
+                      refusePrivate('cannotTell')
                       return
                     }
                     setPrivateChecking(true)
@@ -793,13 +812,13 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                     try {
                       const checked = await seam.check(agent, criterion)
                       if (!checked.ok) {
-                        setPrivateRefusal(checked.reason)
+                        refusePrivate(checked.reason)
                         return
                       }
                       chooseNext(false)
                       setStep('as')
                     } catch {
-                      setPrivateRefusal('cannotTell')
+                      refusePrivate('cannotTell')
                     } finally {
                       setPrivateChecking(false)
                     }
@@ -813,7 +832,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                 }
               }}
               testID={testIdWithKey(VtiJoinIds.start)}
-            />
+            >
+              {privateChecking ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+            </Button>
           ) : null
         // The other door: the review way the phone meets as it stands.
         const askButton = ways.alsoAsk ? (
@@ -878,11 +899,6 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                       : null
               }
             />
-            {privateRefusal ? (
-              <ThemedText testID={testIdWithKey(VtiJoinIds.privateRefused)}>
-                {t(REFUSAL_KEY[privateRefusal], named)}
-              </ThemedText>
-            ) : null}
             {noVetting ? (
               <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.noVetting)}>
                 {t('Join.Ways.NoVetting', named)}
@@ -1262,6 +1278,21 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           </View>
         ) : null}
       </ScrollView>
+      {/* Pinned under the scroll: this page runs past the fold on a phone, and a refusal written after the ways sat
+          below it, so "Meet a vetter" looked like it did nothing (0.69 gate, hv, 2026-11-04). */}
+      {step === 'asks' && privateRefusal ? (
+        <ScrollView style={styles.refusalBar} contentContainerStyle={styles.refusalBarContent}>
+          <ThemedText style={styles.error} testID={testIdWithKey(VtiJoinIds.privateRefused)}>
+            {t(REFUSAL_KEY[privateRefusal], { community: name, interpolation: { escapeValue: false } })}
+          </ThemedText>
+        </ScrollView>
+      ) : step === 'asks' && privateCheckingLong ? (
+        <View style={styles.refusalBarContent}>
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.preparingSlow)}>
+            {t('Invited.PreparingSlow')}
+          </ThemedText>
+        </View>
+      ) : null}
     </SafeAreaView>
   )
 }

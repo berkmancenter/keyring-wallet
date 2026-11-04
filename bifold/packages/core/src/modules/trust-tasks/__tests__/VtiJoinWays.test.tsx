@@ -212,6 +212,59 @@ describe('Join, at manifest 0.3', () => {
       }
     })
 
+    // 0.69 gate, hv, 2026-11-04: on a slow agent "Meet a vetter" only dimmed for its wait, and its refusal was written
+    // after the ways, below the fold, so the tap looked like it did nothing; nor did the log say why.
+    describe('the tap says what is happening', () => {
+      const offered = { ...privateVetting, hiddenVetting: { suite: 'ps-ddh-bls12381' } }
+      const open = async (check: jest.Mock) => {
+        registerHiddenVetting({ check } as unknown as HiddenVettingSeam)
+        jest
+          .spyOn(vtiAgent, 'fetchManifest')
+          .mockResolvedValue({ wire: '0.3', criteria: [{ id: 'vetted-member' }] } as never)
+        return toAsks({ wire: '0.3', accepting: true, ways: [offered] })
+      }
+      afterEach(() => registerHiddenVetting(undefined))
+
+      it('while the agent is asked: the button says so, a second tap asks nothing, and a long wait is said on screen', async () => {
+        let answer: (value: { ok: true }) => void = () => undefined
+        const check = jest.fn(() => new Promise((resolve) => (answer = resolve)))
+        const tree = await open(check)
+        expect(tree.getByTestId(id('JoinStart'))).not.toHaveTextContent('Join.Ways.PrivateVettingChecking')
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+        expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent('Join.Ways.PrivateVettingChecking')
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+        expect(check).toHaveBeenCalledTimes(1)
+        expect(tree.queryByTestId(id('PreparingSlow'))).toBeNull()
+        await act(async () => {
+          jest.advanceTimersByTime(20_000)
+        })
+        // Outside the scroll, so the page's length cannot put it out of sight.
+        expect(tree.getByTestId(id('PreparingSlow'))).toHaveTextContent('Invited.PreparingSlow')
+        expect(within(tree.getByTestId(id('JoinScroll'))).queryByTestId(id('PreparingSlow'))).toBeNull()
+        await act(async () => answer({ ok: true }))
+        expect(tree.getByTestId(id('JoinAsContinue'))).toBeTruthy()
+      })
+
+      it.each([
+        ['the agent says no', jest.fn(async () => ({ ok: false, reason: 'agentTooOld' })), 'agentTooOld'],
+        ['the check throws', jest.fn(async () => Promise.reject(new Error('did:webvh:secret-agent'))), 'cannotTell'],
+      ])(
+        '%s: the refusal stays in sight, outside the scroll, and the log names its kind alone',
+        async (_w, check, kind) => {
+          const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+          const tree = await open(check as jest.Mock)
+          await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+          expect(tree.getByTestId(id('JoinPrivateVettingRefused'))).toBeTruthy()
+          expect(within(tree.getByTestId(id('JoinScroll'))).queryByTestId(id('JoinPrivateVettingRefused'))).toBeNull()
+          expect(warn).toHaveBeenCalledWith(`[Join] the private way in was not started: ${kind}`)
+          expect(warn.mock.calls.flat().join(' ')).not.toContain('secret-agent')
+          // The button is back, to try again.
+          expect(tree.getByTestId(id('JoinStart'))).not.toHaveTextContent('Join.Ways.PrivateVettingChecking')
+          warn.mockRestore()
+        }
+      )
+    })
+
     it('at manifest 0.2 too: the message, and no way to start', async () => {
       const tree = await toAsks({ wire: '0.2', accepting: true, ways: [{ ...privateVetting, admission: 'unstated' }] })
       expect(tree.getByTestId(id('JoinVettingNotSupported'))).toHaveTextContent('Join.Ways.PrivateVetting')

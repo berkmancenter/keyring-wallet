@@ -1957,6 +1957,7 @@
       "PrivateVettingAgentTooOld": "Your agent can't do private vetting yet. Updating your agent usually fixes this.",
       "PrivateVettingPhoneNotAllowed": "This phone's access to your agent doesn't allow private vetting. Ask whoever manages your agent to give this phone more access.",
       "PrivateVettingCannotTell": "Keyring couldn't tell whether your agent can do private vetting. Make sure your agent is online, then try again.",
+      "PrivateVettingChecking": "Checking with your agent…",
       "ButtonJoin": "Join {{community}}",
       "ButtonAsk": "Ask to join",
       "NoVetting": "None of these ways asks a vetter to check who you are.",

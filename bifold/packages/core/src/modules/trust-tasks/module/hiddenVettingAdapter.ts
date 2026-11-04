@@ -61,9 +61,11 @@ async function connected(agent: Agent): Promise<{ client: VtaClient } | { refusa
   const vtaDid = vtaAgent.agentAddress()
   if (!vtaDid) return { refusal: { ok: false, reason: 'noAgent' } }
   try {
-    const client = vtaAgent.client(agent, vtaDid)
-    await client.connect()
-    return { client }
+    // Through the controller, not the client: one session per client, so a tap while the app reopens the session
+    // (a slow agent, a reconnect) waits for that one. Opened directly, it raced the reopen for the one connection a
+    // mediator keeps per DID (0.69 gate, hv, 2026-11-04).
+    await vtaAgent.connect(agent, vtaDid)
+    return { client: vtaAgent.client(agent, vtaDid) }
   } catch (error) {
     return {
       refusal: { ok: false, reason: 'cannotTell', detail: error instanceof Error ? error.message : String(error) },
