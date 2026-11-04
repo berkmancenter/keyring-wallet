@@ -1,5 +1,4 @@
 {
-  "generatedFrom": "f7e73023ee21d0a7917f31dab476945fd4c64104",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -924,6 +923,7 @@
     "PhotoRemoveBody": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
     "PhotoRemoveConfirm": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
     "PhotoRemoveNotNow": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
+    "PollAppBehind": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBackToCommunity": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotBack": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotBeforeItGoes": ["src/modules/polls/components/Polls.ids.ts"],
@@ -945,6 +945,7 @@
     "PollCertifiedLine": ["src/modules/polls/components/Polls.ids.ts"],
     "PollClosed": ["src/modules/polls/components/Polls.ids.ts"],
     "PollClosedEarly": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollCredentialRoll": ["src/modules/polls/components/Polls.ids.ts"],
     "PollGetTicket": ["src/modules/polls/components/Polls.ids.ts"],
     "PollHead": ["src/modules/polls/components/Polls.ids.ts"],
     "PollHostedAgent": ["src/modules/polls/components/Polls.ids.ts"],
@@ -964,6 +965,7 @@
     "PollSending": ["src/modules/polls/components/Polls.ids.ts"],
     "PollSendingStopped": ["src/modules/polls/components/Polls.ids.ts"],
     "PollStepBar": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollTextReleaseEarly": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTicketHeld": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTicketTimeline": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTitle": ["src/modules/polls/components/Polls.ids.ts"],
@@ -1005,6 +1007,7 @@
     "PushNotificationContinue": ["src/screens/PushNotifications.tsx"],
     "PushNotificationImage": ["src/components/views/PushNotificationsContent.tsx"],
     "PushNotificationNotNow": ["src/screens/PushNotifications.tsx"],
+    "PushNotificationNotSetUp": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationSettings": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationSwitch": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationWhatItSays": ["src/components/views/PushNotificationsContent.tsx"],
@@ -1145,6 +1148,8 @@
     "RoomMessageRow": ["src/modules/rooms/components/RoomMessageRow.tsx"],
     "RoomMessageRowHide": ["src/modules/rooms/components/RoomMessageRow.tsx"],
     "RoomMonogram": ["src/modules/rooms/components/RoomHeader.tsx"],
+    "RoomNotJoined": ["src/modules/rooms/components/RoomNotJoined.tsx"],
+    "RoomNotJoinedOffer": ["src/modules/rooms/components/RoomNotJoined.tsx"],
     "RoomNoteBack": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteBodyInput": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteCancel": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
@@ -1152,6 +1157,9 @@
     "RoomNoteEdit": ["src/modules/rooms/components/RoomNoteCard.tsx"],
     "RoomNoteEditor": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteFailed": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
+    "RoomNoteMarker": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
+    "RoomNoteMarkerOpen": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
+    "RoomNoteMarkerWords": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
     "RoomNoteNew": ["src/modules/rooms/components/RoomNotesTab.tsx"],
     "RoomNotePinned": ["src/modules/rooms/components/RoomNoteCard.tsx"],
     "RoomNotePost": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
@@ -1665,6 +1673,7 @@
     "RoomPost_": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomRow_": ["src/modules/rooms/components/RoomRow.tsx"],
     "RoomsGroup_": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomsStillLoading_": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "SetActiveProfile-": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "SwitchProfile-": ["src/components/misc/QRScanner.tsx"],
     "SwitchProfileAvatar-": ["src/components/misc/QRScanner.tsx"],
@@ -1896,6 +1905,9 @@
       "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCardTitle"
     },
     {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.appBehind"
+    },
+    {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.backToCommunity"
     },
     {
@@ -1903,6 +1915,9 @@
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.closedEarly"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.credentialRoll"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.getTicket"
@@ -1951,6 +1966,9 @@
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.sendingStopped"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.textReleaseEarly"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.ticketHeld"
