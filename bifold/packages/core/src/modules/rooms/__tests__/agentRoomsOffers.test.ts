@@ -234,11 +234,14 @@ describe('AgentRoomsService offers', () => {
     const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open'), offer(SEALED_ROOM, 'attributed', 'accepted')] })
     const answer = s.agentTask.getMockImplementation()!
     s.agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
-      if (type === ROOMS_TASK.keysList02) throw new Error('the agent did not answer')
+      if (type === ROOMS_TASK.keysList02) throw new Error('the agent did not answer for did:key:persona-a')
       return answer(type, payload)
     })
     expect((await s.service.listOffers()).map((x) => x.roomId)).toEqual([OPEN_ROOM])
     expect(s.b.warn).toHaveBeenCalledWith(expect.stringContaining(`whether ${SEALED_ROOM} was joined is unknown`))
+    // Why the agent did not list them, by kind alone: its words named an identity (#903 review).
+    expect(s.b.warn).toHaveBeenCalledWith('rooms: the agent did not list the rooms it holds: failed')
+    expect((s.b.warn as jest.Mock).mock.calls.join('\n')).not.toContain('persona-a')
 
     // Control: the agent answers, and holds none: accepted elsewhere, not joined, so it is offered.
     s.agentTask.mockImplementation(answer)
@@ -732,6 +735,10 @@ describe('a community the session is kept from for now', () => {
   it("lists the asked community's offers as none for now, and says once when it can be read again", async () => {
     const s = keptSetup()
     await expect(s.service.listOffers(COMMUNITY.did)).resolves.toEqual([])
+    // Said by kind alone: never the hold's reason beside the community (34VR-Y58H, 11-03).
+    expect(s.b.warn).toHaveBeenCalledWith(
+      `rooms: ${COMMUNITY.did} did not list its offers: the session is kept for another identity`
+    )
     // A second listing skipped meanwhile waits on the same wait.
     await expect(s.service.listOffers(COMMUNITY.did)).resolves.toEqual([])
     expect(s.sessionFree).toHaveBeenCalledTimes(1)

@@ -13,6 +13,7 @@ import { keepSentPhoto } from '../directory/myPhoto'
 import { dropDirectoryNames } from '../directory/names'
 import { isCommunityCard } from '../trust-tasks/module/vtiWalletCards'
 
+import { failureCategory } from './roomsLogWords'
 import type { RoomsService } from './types'
 import { ROOMS_LEFT_EVENT } from './useMyRooms'
 import { refreshRoomRows } from './useRoomRows'
@@ -89,8 +90,6 @@ export async function afterLeavingCommunity(agent: Agent, communityDid: string, 
   await keepSentPhoto(agent, communityDid, undefined).catch(() => undefined)
   // Never fails the leave, which is done: a line that cannot be read or written is only missing.
   await logWhatStays(agent, communityDid).catch((e: unknown) =>
-    agent.config?.logger?.warn?.(
-      `[Rooms:leave] what the leave left was not read: ${e instanceof Error ? e.message : String(e)}`
-    )
+    agent.config?.logger?.warn?.(`[Rooms:leave] what the leave left was not read: ${failureCategory(e)}`)
   )
 }

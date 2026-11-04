@@ -122,6 +122,7 @@ describe('after leaving a community', () => {
     const agent = fakeAgent({}, [])
     agent.w3cCredentials.getAll.mockRejectedValueOnce(new Error('wallet closed'))
     await afterLeavingCommunity(agent as never, COMMUNITY)
-    expect(leaveLine(agent)).toBe('[Rooms:leave] what the leave left was not read: wallet closed')
+    // By kind alone, as every rooms line says why (roomsLogWords).
+    expect(leaveLine(agent)).toBe('[Rooms:leave] what the leave left was not read: failed')
   })
 })

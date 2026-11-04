@@ -720,12 +720,19 @@ describe('a slow agent (X5JN-PEWP: the posts came 30 s after the listing)', () =
     const lines: string[] = []
     renderHook(() => useRoomRowsPoll(s, true, (line) => lines.push(line)))
     await flush()
-    expect(lines).toEqual([expect.stringMatching(/^\[Rooms:rows\] 1 rooms listed, 1 not read yet, in \d+ ms$/)])
+    // Why the room did not read, by kind: a row "reading" for a whole report said nothing of why (34VR-Y58H, 11-03).
+    expect(lines).toEqual([
+      expect.stringMatching(/^\[Rooms:rows\] .+ of .+ not read: failed$/),
+      expect.stringMatching(/^\[Rooms:rows\] 1 rooms listed, 1 not read yet, in \d+ ms$/),
+    ])
+    expect(lines[0]).not.toContain('agent not ready')
 
     s.listMyRooms.mockRejectedValueOnce(new Error('community unreachable'))
     await step(ROWS_RETRY_MS[0])
-    expect(lines[1]).toMatch(/^\[Rooms:rows\] the rooms were not listed \(\d+ ms\); the rows read before stay$/)
+    // Found by what it says, not where it sits: a line added before it must not move this test.
+    const notListed = lines.find((line) => line.includes('the rooms were not listed'))
+    expect(notListed).toMatch(/^\[Rooms:rows\] the rooms were not listed \(\d+ ms\); the rows read before stay$/)
     // The cause is the service's own line; this one never repeats the error's words.
-    expect(lines[1]).not.toContain('unreachable')
+    expect(notListed).not.toContain('unreachable')
   })
 })

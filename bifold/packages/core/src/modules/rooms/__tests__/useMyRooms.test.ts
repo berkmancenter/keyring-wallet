@@ -255,7 +255,7 @@ describe('the rooms never wait on the offers, and a failed read says so and trie
       await act(async () => undefined)
       expect(result.current).toMatchObject({ failed: true, failures: 1, failure: { reason: 'communityUnreachable' } })
       expect(s.note).toHaveBeenCalledWith(
-        expect.stringMatching(/the rooms of .* were not read \(\d+ ms\): .*no community answered/)
+        expect.stringMatching(/the rooms of .* were not read \(\d+ ms\): unavailable \(communityUnreachable\)$/)
       )
       expect(s.listMyRooms).toHaveBeenCalledTimes(1)
       await act(async () => void (await jest.advanceTimersByTimeAsync(MY_ROOMS_RETRY_MS - 1)))

@@ -46,6 +46,7 @@ import { AppState } from 'react-native'
 
 import { onSessionOpened } from './agentSession'
 import type { InertText } from './inertText'
+import { failureCategory, logRef } from './roomsLogWords'
 import { isNote, newestFirst, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
 
@@ -317,8 +318,10 @@ async function readAll(service: RoomsService): Promise<void> {
       if (feed.service !== service) return
       try {
         byRoom.set(room.roomId, await readRoom(service, room, byRoom.get(room.roomId)))
-      } catch {
-        // The next read tries again.
+      } catch (e) {
+        // The next read tries again. Why it did not read is said, by kind only: a row that stayed "reading" through a
+        // whole report said nothing of why (34VR-Y58H, 11-03).
+        log?.(`[Rooms:rows] ${logRef(room.roomId)} of ${logRef(room.communityDid)} not read: ${failureCategory(e)}`)
       }
       if (feed.service !== service) return
       show()
