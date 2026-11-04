@@ -89,8 +89,14 @@ const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1
 const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
 const SELF_REMOVE = 'https://trusttasks.org/spec/vtc/members/self-remove/0.1'
 const ROOM_MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
-const ELECTIONS_LIST = 'https://trusttasks.org/spec/vtc/elections/list/0.3'
-const ELECTIONS_SHOW = 'https://trusttasks.org/spec/vtc/elections/show/0.2'
+/** The polls reads, at every version `polls/pollTasks` may send. @versionCoverage */
+const ELECTIONS_READS = [
+  'https://trusttasks.org/spec/vtc/elections/list/0.5',
+  'https://trusttasks.org/spec/vtc/elections/list/0.3',
+  'https://trusttasks.org/spec/vtc/elections/show/0.6',
+  'https://trusttasks.org/spec/vtc/elections/show/0.3',
+  'https://trusttasks.org/spec/vtc/elections/show/0.2',
+]
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 /*
  * Every document `ask` sends is signed. `ask` carries only DIDComm and TSP,
@@ -119,7 +125,7 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
  *   each version this wallet speaks (`joinWire`).
  * - `STATUS` — `vtc/join-requests/status/0.1`, where the applicant's request stands.
  * - `ROOM_MEMBERSHIPS` — `vtc/rooms/memberships/list/0.1`, the member's rooms there (`modules/rooms`).
- * - `ELECTIONS_LIST`, `ELECTIONS_SHOW` — `vtc/elections/list/0.3` and `show/0.2`, the community's polls (`modules/polls`).
+ * - `ELECTIONS_READS` — `vtc/elections/list` and `show`, at each version polls send, the community's polls (`modules/polls`).
  *
  * Everything else `ask` sends changes state and is a WRITE: the submit,
  * `SUPPLEMENT`, `WITHDRAW`, `SELF_REMOVE` above, and the vetter profile publish
@@ -133,8 +139,7 @@ export const VTI_READ_TASKS: ReadonlySet<string> = new Set([
   ...JOIN_MANIFEST_TYPES,
   STATUS,
   ROOM_MEMBERSHIPS,
-  ELECTIONS_LIST,
-  ELECTIONS_SHOW,
+  ...ELECTIONS_READS,
 ])
 
 /** What a Trust Task's answer adds to its type. */

@@ -1,5 +1,5 @@
 /**
- * A voter's payloads, graded by upstream's own bundles (fixtures/polls-schemas, VTI 3139e00e).
+ * A voter's payloads, graded by upstream's own bundles (fixtures/polls-schemas, see its README).
  *
  * The types in pollTasks.ts are mirrored by hand, so upstream's schemas judge the shapes: every payload the phone
  * builds must validate against the task's payload schema, and every answer these tests hand the parsers must validate
@@ -11,7 +11,9 @@ import { join } from 'path'
 import Ajv from 'ajv/dist/2020'
 
 import {
+  POLL_GENERATIONS,
   POLL_TASK,
+  agentGenerationIndex,
   acceptPayload,
   parseCastAnswer,
   parsePollList,
@@ -41,16 +43,38 @@ function grader(name: string, which: 'schema' | 'responseSchema') {
     validate(value) ? [] : (validate.errors ?? []).map((e) => `${e.instancePath} ${e.message}`)
 }
 
-const BUNDLES = {
-  list: 'vtc-elections-list-0.3',
-  show: 'vtc-elections-show-0.2',
-  ticketsIssue: 'vtc-elections-tickets-issue-0.1',
-  register: 'vta-pcs-voter-register-0.2',
+/** Each generation's bundles, in `POLL_GENERATIONS`' order. */
+const GENERATIONS = [
+  {
+    list: 'vtc-elections-list-0.5',
+    show: 'vtc-elections-show-0.6',
+    ticketsIssue: 'vtc-elections-tickets-issue-0.3',
+    register: 'vta-pcs-voter-register-0.5',
+    vote: 'vta-pcs-vote-0.4',
+  },
+  {
+    list: 'vtc-elections-list-0.3',
+    show: 'vtc-elections-show-0.3',
+    ticketsIssue: 'vtc-elections-tickets-issue-0.1',
+    register: 'vta-pcs-voter-register-0.3',
+    vote: 'vta-pcs-vote-0.3',
+  },
+  {
+    list: 'vtc-elections-list-0.3',
+    show: 'vtc-elections-show-0.2',
+    ticketsIssue: 'vtc-elections-tickets-issue-0.1',
+    register: 'vta-pcs-voter-register-0.2',
+    vote: 'vta-pcs-vote-0.2',
+  },
+] as const
+
+const FIXED = {
   accept: 'vta-pcs-voter-accept-0.1',
-  vote: 'vta-pcs-vote-0.2',
   cast: 'voting-ballot-cast-0.1',
   receipt: 'vta-pcs-voter-receipt-0.1',
 } as const
+
+const BUNDLES = { ...GENERATIONS[2], ...FIXED }
 
 const target = {
   contextId: 'vta',
@@ -76,8 +100,66 @@ const shown: PollShown = {
 const showAnswer = { ...shown, checkpoints: [] }
 
 describe('the voter tasks against upstream bundles', () => {
-  test.each(Object.entries(BUNDLES))('%s names the version its bundle is', (key, name) => {
+  test.each(Object.entries(FIXED))('%s names the version its bundle is', (key, name) => {
     expect(POLL_TASK[key as keyof typeof POLL_TASK]).toBe(bundle(name).typeUri)
+  })
+
+  test.each([0, 1, 2])('generation %i names the versions its bundles are', (i) => {
+    const { ticketsIssue: _sentAsTheAgentBuiltIt, ...named } = GENERATIONS[i]
+    for (const [key, name] of Object.entries(named)) {
+      expect(POLL_GENERATIONS[i][key as keyof (typeof POLL_GENERATIONS)[number]]).toBe(bundle(name).typeUri)
+    }
+  })
+
+  describe.each([0, 1, 2])('at generation %i', (i) => {
+    const g = GENERATIONS[i]
+
+    test('the reads the phone sends, and a show answer upstream sends', () => {
+      expect(grader(g.list, 'schema')({ cursor: 'c2', state: 'voting' })).toEqual([])
+      expect(grader(g.show, 'schema')({ electionId: vectors.manifest.electionId })).toEqual([])
+      expect(grader(g.show, 'responseSchema')(showAnswer)).toEqual([])
+    })
+
+    test('the register and vote payloads the phone builds', () => {
+      const given = Object.fromEntries(
+        vectors.fullAnswers.map(({ question, ...answer }: { question: string }) => [question, answer])
+      )
+      const ballot = ballotOf(shown.manifest, shown.manifestDigest, given)
+      expect(grader(g.register, 'schema')(registerPayload(target, shown))).toEqual([])
+      expect(grader(g.vote, 'schema')(votePayload(target, shown, ballot))).toEqual([])
+    })
+  })
+
+  // Why the versions move together: each manifest travels only at the generations that can carry it.
+  test('a threshold under 10 travels from the middle generation; the oldest forbids it', () => {
+    const manifest = { ...shown.manifest, textReleaseThreshold: 5 }
+    const payload = registerPayload(target, { ...shown, manifest })
+    expect(grader(GENERATIONS[0].register, 'schema')(payload)).toEqual([])
+    expect(grader(GENERATIONS[1].register, 'schema')(payload)).toEqual([])
+    expect(grader(GENERATIONS[2].register, 'schema')(payload)).not.toEqual([])
+  })
+
+  test('a credential roll travels only at the newest generation', () => {
+    const manifest = {
+      ...shown.manifest,
+      roll: { rule: 'credential' as const, memberOf: 'did:webvh:QmParty:party.example.org' },
+    }
+    const payload = registerPayload(target, { ...shown, manifest })
+    expect(grader(GENERATIONS[0].register, 'schema')(payload)).toEqual([])
+    expect(grader(GENERATIONS[1].register, 'schema')(payload)).not.toEqual([])
+  })
+
+  test('the generation an agent votes at', () => {
+    const fixed = [POLL_TASK.accept, POLL_TASK.receipt]
+    const at = (i: number) => [POLL_GENERATIONS[i].register, POLL_GENERATIONS[i].vote]
+    expect(agentGenerationIndex([...fixed, ...at(2)])).toBe(2)
+    expect(agentGenerationIndex([...fixed, ...at(2), ...at(1)])).toBe(1)
+    expect(agentGenerationIndex([...fixed, ...at(2), ...at(1), ...at(0)])).toBe(0)
+    expect(agentGenerationIndex(at(0))).toBe(-1)
+    expect(agentGenerationIndex(fixed)).toBe(-1)
+    // Register and vote alone can't finish a vote: accept takes the ticket in, receipt keeps the proof.
+    expect(agentGenerationIndex([POLL_TASK.accept, ...at(0)])).toBe(-1)
+    expect(agentGenerationIndex([POLL_TASK.receipt, ...at(0)])).toBe(-1)
   })
 
   test('the list and show requests the phone sends', () => {

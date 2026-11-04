@@ -190,6 +190,10 @@ export function refusalText(t: TFunction, refusal: PollRefusal): string {
       return t('Polls.Unsupported')
     case 'noTicket':
       return t('Polls.NoTicket')
+    case 'credentialRoll':
+      return t('Polls.CredentialRoll')
+    case 'appBehind':
+      return t('Polls.AppBehind')
     default:
       return t(refusalName(refusal.code) === 'notEligible' ? 'Polls.NotEligible' : 'Polls.Refused')
   }

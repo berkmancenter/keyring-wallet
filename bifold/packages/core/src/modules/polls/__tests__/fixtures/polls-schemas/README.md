@@ -31,6 +31,13 @@ resolving, unlike `../../../../trust-tasks/__tests__/fixtures/pcs-schemas`.
 | `voting-ballot-cast-0.1.bundle.json`          | `vti-specs-core/trust-tasks/voting/ballot/cast/0.1.bundle.json`         |
 | `vta-pcs-voter-receipt-0.1.bundle.json`       | `vti-specs-vta/trust-tasks/vta/pcs/voter/receipt/0.1.bundle.json`       |
 
+## The later generations
+
+The newer versions `POLL_GENERATIONS` names, copied 2026-11-04 from commit
+`e84bb1eda56e64a0e4ea4b151423ab30aa654cb5` (the second line of `PROVENANCE.sha`), `voting/_shared` 0.3 and 0.4. Paths as above, by version:
+`vtc/elections/list/0.5`, `show/0.3`, `show/0.6`, `tickets/issue/0.3`,
+`vta/pcs/voter/register/0.3`, `register/0.5`, `vta/pcs/vote/0.3`, `vote/0.4`.
+
 ## Off the shared pin, deliberately
 
 `scripts/openvtc/PINS.json` pins `verifiable-trust-infrastructure` at an older

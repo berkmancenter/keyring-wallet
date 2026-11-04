@@ -15,7 +15,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { useCallback, useRef, useState } from 'react'
 
 import { createAgentPollsBackend } from './agentPollsBackend'
-import { createPollService, type PollRecord, type PollService } from './pollService'
+import { createPollService, PollRefusal, type PollRecord, type PollService } from './pollService'
 import type { PollListItem, PollShown } from './pollTasks'
 
 let made: { agent: Agent; service: PollService } | undefined
@@ -96,6 +96,8 @@ export interface PollState {
   shown?: PollShown
   record?: PollRecord
   readiness?: 'ready' | 'noAgent' | 'tooOld'
+  /** A poll this version of the app can't read at any version it knows. */
+  behind?: boolean
   failed: boolean
   reload: () => Promise<void>
 }
@@ -113,8 +115,15 @@ export function usePoll(communityDid: string, electionId: string): PollState {
         service.agentReadiness(),
       ])
       setState({ shown, record, readiness, failed: false })
-    } catch {
-      setState((s) => ({ ...s, failed: true }))
+    } catch (e) {
+      // A poll this agent, or this app, can't carry: which of them to update is what the member can act on.
+      const reason = e instanceof PollRefusal ? e.reason : undefined
+      setState((s) => ({
+        ...s,
+        failed: true,
+        ...(reason === 'agentTooOld' ? { readiness: 'tooOld' as const } : {}),
+        ...(reason === 'appBehind' ? { behind: true } : {}),
+      }))
     }
   }, [service, communityDid, electionId])
   useFocusEffect(

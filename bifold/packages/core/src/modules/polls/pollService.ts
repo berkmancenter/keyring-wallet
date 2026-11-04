@@ -32,7 +32,9 @@ import { CastFailure, castDelayMs, postCast, type BallotBoxDoor } from './ballot
 import { ballotOf, ballotRefusal, type BallotRefusal, type GivenAnswer } from './ballot'
 import {
   POLL_TASK,
-  VOTER_AGENT_TASKS,
+  POLL_GENERATIONS,
+  agentGenerationIndex,
+  type PollGeneration,
   acceptPayload,
   parsePollList,
   parsePollShown,
@@ -116,6 +118,8 @@ export type PollRefusalReason =
   | 'noTicket'
   | 'notOpen'
   | 'unsupportedSecrecy'
+  | 'credentialRoll'
+  | 'appBehind'
   | 'ballotInvalid'
   | 'refused'
 
@@ -164,31 +168,95 @@ export function createPollService(b: PollsBackend) {
   /** An agent from before VTA 0.69 serves no voter task: said before anything is asked of it. */
   const agentServesVoting = async () => {
     const served = await b.agentServedTypes().catch(() => undefined)
-    if (served && !VOTER_AGENT_TASKS.every((type) => served.includes(type))) throw new PollRefusal('agentTooOld')
+    if (served && agentGenerationIndex(served) < 0) throw new PollRefusal('agentTooOld')
   }
 
+  const OLDEST = POLL_GENERATIONS.length - 1
+
+  /**
+   * The newest generation the agent can follow a read through at, and whether that's known. No agent yet: a read is
+   * only shown, so the newest. An agent that doesn't say what it serves: the oldest, which every voter agent serves.
+   */
+  const agentGeneration = async (): Promise<{ at: number; known: boolean }> => {
+    if (!b.currentAgent()) return { at: 0, known: false }
+    const served = await b.agentServedTypes().catch(() => undefined)
+    if (!served) return { at: OLDEST, known: false }
+    const at = agentGenerationIndex(served)
+    return { at: at < 0 ? OLDEST : at, known: true }
+  }
+
+  /** The newest generation each community was found to serve, this run: it sees each read, so one is asked for once. */
+  const communityFrom = new Map<string, number>()
+
+  /** A refusal that says the other side doesn't serve this version, not that it refused the request. */
+  const isUnserved = (e: unknown) => {
+    const name = refusalName(codeOf(e))
+    return name === 'unsupportedVersion' || name === 'unsupportedType'
+  }
+
+  /**
+   * A community's polls, at the newest list it serves.
+   *
+   * @versionLadder vtc/elections/list
+   */
   const readPolls = async (community: string, filter: { state?: string } = {}): Promise<PollListItem[]> => {
     const polls: PollListItem[] = []
+    let at = communityFrom.get(community) ?? 0
     let cursor: string | undefined
     for (let page = 0; page < LIST_PAGES; page++) {
-      const answer = parsePollList(
-        await b.communityTask(community, POLL_TASK.list, {
-          ...(filter.state ? { state: filter.state } : {}),
-          ...(cursor ? { cursor } : {}),
-        })
-      )
-      polls.push(...answer.polls)
-      cursor = answer.nextCursor
+      let answer: Record<string, unknown>
+      for (;;) {
+        const type = POLL_GENERATIONS[at].list
+        try {
+          answer = await b.communityTask(community, type, {
+            ...(filter.state ? { state: filter.state } : {}),
+            ...(cursor ? { cursor } : {}),
+          })
+          break
+        } catch (e) {
+          const next = POLL_GENERATIONS.findIndex((g, i) => i > at && g.list !== type)
+          if (!isUnserved(e) || next < 0) throw e
+          at = next
+          communityFrom.set(community, at)
+        }
+      }
+      const parsed = parsePollList(answer)
+      polls.push(...parsed.polls)
+      cursor = parsed.nextCursor
       if (!cursor) break
     }
     return polls
   }
 
-  const readPoll = async (community: string, electionId: string): Promise<PollShown> => {
-    const shown = parsePollShown(await b.communityTask(community, POLL_TASK.show, { electionId }))
-    if (!shown || shown.manifest.electionId !== electionId) throw new PollRefusal('unreadable')
-    return shown
+  /**
+   * A poll, and the generation to follow it through at: the newest the agent can, stepping down from there for a
+   * community that doesn't serve it. When no generation left is served, the poll is one this side can't carry, and what
+   * limits it is said: the agent, when it stopped below the newest, else this version of the app.
+   *
+   * @versionLadder vtc/elections/show
+   */
+  const readAt = async (community: string, electionId: string): Promise<{ shown: PollShown; at: PollGeneration }> => {
+    const agent = await agentGeneration()
+    const from = Math.max(agent.at, communityFrom.get(community) ?? 0)
+    for (let i = from; ; i++) {
+      let answer: Record<string, unknown>
+      try {
+        answer = await b.communityTask(community, POLL_GENERATIONS[i].show, { electionId })
+      } catch (e) {
+        if (!isUnserved(e)) throw e
+        if (i < OLDEST) continue
+        if (agent.at > 0 && !agent.known) throw new PollRefusal('unreadable', codeOf(e))
+        throw new PollRefusal(agent.at > 0 ? 'agentTooOld' : 'appBehind', codeOf(e))
+      }
+      const shown = parsePollShown(answer)
+      if (!shown || shown.manifest.electionId !== electionId) throw new PollRefusal('unreadable')
+      if (i > from) communityFrom.set(community, i)
+      return { shown, at: POLL_GENERATIONS[i] }
+    }
   }
+
+  const readPoll = async (community: string, electionId: string): Promise<PollShown> =>
+    (await readAt(community, electionId)).shown
 
   /** Whether this phone may ask for a ticket: no vote recorded, and no other agent still linked holding one. */
   const mayTakeTicket = (record: PollRecord | undefined, agent: string) => {
@@ -200,13 +268,17 @@ export function createPollService(b: PollsBackend) {
   /**
    * Take a ticket for a poll the member has been shown (its disclosure first, VTI-VOT-090): the agent's blinded
    * request, signed as the member, to the community; the community's blind answer back to the agent.
+   *
+   * @versionLadder vta/pcs/voter/register
    */
   const takeTicket = (via: string, electionId: string): Promise<PollRecord> =>
     b.serially(workKey(via, electionId), async () => {
       const t = await target(via)
       const agent = b.currentAgent() as string
       await agentServesVoting()
-      const shown = await readPoll(via, electionId)
+      const { shown, at } = await readAt(via, electionId)
+      // Claiming under a credential roll presents a membership to the community: the member's choice, and not built yet.
+      if (shown.manifest.roll?.rule === 'credential') throw new PollRefusal('credentialRoll')
       const community = shown.manifest.community
       const earlier = await b.records.get(community, electionId)
       mayTakeTicket(earlier, agent)
@@ -217,7 +289,7 @@ export function createPollService(b: PollsBackend) {
       await b.records.put(record)
       let registered: ReturnType<typeof parseRegistered>
       try {
-        registered = parseRegistered(await b.agentTask(POLL_TASK.register, registerPayload(t, shown)))
+        registered = parseRegistered(await b.agentTask(at.register, registerPayload(t, shown)))
       } catch (e) {
         if (refusalName(codeOf(e)) === 'ticketHeld') return held(record)
         throw refused(e)
@@ -251,6 +323,8 @@ export function createPollService(b: PollsBackend) {
    * Vote: the ballot checked here, the cast built by the agent, stored, and sent after its pause. Returns once the
    * receipt is kept, or throws: a `CastFailure` of kind `unreachable` leaves the cast stored, and `resumePending` (or
    * voting again) sends the same one. `onStep` hears each step as it starts.
+   *
+   * @versionLadder vta/pcs/vote
    */
   const vote = (
     via: string,
@@ -260,7 +334,7 @@ export function createPollService(b: PollsBackend) {
   ): Promise<PollRecord> =>
     b.serially(workKey(via, electionId), async () => {
       onStep?.({ step: 'ready' })
-      const shown = await readPoll(via, electionId)
+      const { shown, at } = await readAt(via, electionId)
       const record = await b.records.get(shown.manifest.community, electionId)
       if (record?.pending) return carryOn(record, onStep)
       if (record?.votedAt !== undefined) throw new PollRefusal('voted')
@@ -274,7 +348,7 @@ export function createPollService(b: PollsBackend) {
       if (wrong) throw new PollRefusal('ballotInvalid', undefined, wrong)
       let voted: ReturnType<typeof parseVoted>
       try {
-        voted = parseVoted(await b.agentTask(POLL_TASK.vote, votePayload(t, shown, ballot)))
+        voted = parseVoted(await b.agentTask(at.vote, votePayload(t, shown, ballot)))
       } catch (e) {
         throw refused(e)
       }

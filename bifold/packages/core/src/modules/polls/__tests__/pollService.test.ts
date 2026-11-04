@@ -4,8 +4,16 @@
  * answer; once the agent keeps the receipt the phone holds only when the member voted.
  */
 import { CastFailure, type BallotBoxDoor } from '../ballotBox'
-import { POLL_TASK } from '../pollTasks'
+import { POLL_GENERATIONS, POLL_TASK } from '../pollTasks'
 import { PollRefusal, createPollService, type PollRecord, type PollsBackend } from '../pollService'
+
+const [G3, G2, G1] = POLL_GENERATIONS
+// The ticket request is the agent's document, sent as it came: register 0.5 builds a 0.3 one, the others a 0.1.
+const tickets = (g: (typeof POLL_GENERATIONS)[number]) =>
+  `https://trusttasks.org/spec/vtc/elections/tickets/issue/${g === G3 ? '0.3' : '0.1'}`
+const reads = (...gs: (typeof POLL_GENERATIONS)[number][]) => gs.flatMap((g) => [g.list, g.show]) as string[]
+const voter = (g: (typeof POLL_GENERATIONS)[number]) =>
+  [g.register, POLL_TASK.accept, g.vote, POLL_TASK.receipt] as string[]
 
 const COMMUNITY = 'did:webvh:QmCommunity:vtc.example.org'
 const BOX = 'did:webvh:QmVote:vote.example.net'
@@ -83,7 +91,12 @@ function world() {
   let current: string | undefined = AGENT
   let clock = 1_000_000
   const state = {
-    served: [POLL_TASK.register, POLL_TASK.accept, POLL_TASK.vote, POLL_TASK.receipt] as string[] | undefined,
+    served: [G1.register, POLL_TASK.accept, G1.vote, POLL_TASK.receipt] as string[] | undefined,
+    /** What the community serves; asked anything else, it says `unsupportedType`. */
+    communityServes: reads(G1),
+    /** A poll's refusal at a served version, by type: its manifest can't travel at that version. */
+    communityRefuses: {} as Record<string, string>,
+    shown: shown as Record<string, unknown>,
     registerRefusal: undefined as string | undefined,
     postFails: 0,
     receiptFails: 0,
@@ -105,9 +118,10 @@ function world() {
   const backend: PollsBackend = {
     communityTask: async (_community, type) => {
       asked.push(type)
-      if (type === POLL_TASK.show) return shown as never
-      if (type === POLL_TASK.list) return { elections: [] }
-      throw new Error(`unexpected ${type}`)
+      if (state.communityRefuses[type])
+        throw Object.assign(new Error('refused'), { code: state.communityRefuses[type] })
+      if (!state.communityServes.includes(type)) throw Object.assign(new Error('unserved'), { code: 'unsupportedType' })
+      return (type.includes('/show/') ? state.shown : { elections: [] }) as never
     },
     sendCompleted: async (_community, document) => {
       asked.push(String(document.type))
@@ -116,17 +130,18 @@ function world() {
     agentTask: async (type, payload) => {
       asked.push(type)
       // Each record write is seen in order: the ticket's must come before the agent is asked.
-      if (type === POLL_TASK.register) {
+      const g = POLL_GENERATIONS.find((x) => x.register === type)
+      if (g) {
         if (state.registerRefusal) throw Object.assign(new Error('refused'), { code: state.registerRefusal })
         return {
           electionId: POLL,
           manifestDigest: 'zQmDigest',
           request: {},
-          ticketDocument: { type: `${POLL_TASK.ticketsIssue}#request`, payload: {} },
+          ticketDocument: { type: `${tickets(g)}#request`, payload: {} },
         }
       }
       if (type === POLL_TASK.accept) return { electionId: POLL, ticketHeld: true }
-      if (type === POLL_TASK.vote)
+      if (POLL_GENERATIONS.some((x) => x.vote === type))
         return { castDocument: buildCast((payload as { ballot: unknown }).ballot), tag: 'z3tag' }
       if (type === POLL_TASK.receipt) {
         if (state.receiptFails > 0) {
@@ -187,10 +202,10 @@ describe('taking a ticket', () => {
     const w = world()
     const record = await w.service.takeTicket(COMMUNITY, POLL)
     expect(w.asked).toEqual([
-      POLL_TASK.show,
+      G1.show,
       'put:asked',
-      POLL_TASK.register,
-      `${POLL_TASK.ticketsIssue}#request`,
+      G1.register,
+      `${tickets(G1)}#request`,
       POLL_TASK.accept,
       'put:ticket',
     ])
@@ -203,7 +218,7 @@ describe('taking a ticket', () => {
     w.state.registerRefusal = 'vta/pcs/voter/register:ticketHeld'
     const record = await w.service.takeTicket(COMMUNITY, POLL)
     expect(record.ticketAt).toBeDefined()
-    expect(w.asked).not.toContain(`${POLL_TASK.ticketsIssue}#request`)
+    expect(w.asked).not.toContain(`${tickets(G1)}#request`)
   })
 
   test('an agent that serves no voter task is said to be too old before anything is asked of it', async () => {
@@ -257,7 +272,7 @@ describe('voting', () => {
     await w.service.takeTicket(COMMUNITY, POLL)
     w.asked.length = 0
     const record = await vote(w)
-    expect(w.asked).toEqual([POLL_TASK.show, POLL_TASK.vote, 'put:cast', 'put:receipt', POLL_TASK.receipt, 'put:voted'])
+    expect(w.asked).toEqual([G1.show, G1.vote, 'put:cast', 'put:receipt', POLL_TASK.receipt, 'put:voted'])
     expect(record.votedAt).toBeDefined()
     expect(record.pending).toBeUndefined()
     // Nothing that proves how the member voted: no choice, no cast, no receipt.
@@ -374,7 +389,7 @@ describe('voting', () => {
       reason: 'ballotInvalid',
       ballot: { reason: 'unknownOption', question: 'motion' },
     })
-    expect(w.asked).toEqual([POLL_TASK.show])
+    expect(w.asked).toEqual([G1.show])
   })
 
   test('without a ticket, nothing is built', async () => {
@@ -391,5 +406,135 @@ describe('voting', () => {
     await vote(w)
     expect(w.warnings.length).toBeGreaterThan(0)
     expect(w.warnings.join('\n')).not.toContain(CHOICE)
+  })
+})
+
+// A community and an agent can each be any age: what's sent has to be what both serve, or a poll stops for the wrong
+// reason. Versions by release: pollTasks.ts, `POLL_GENERATIONS`.
+describe('the newest generation both sides serve', () => {
+  const REFUSED = 'vtc/elections/show:unsupportedVersion'
+  const sentTo = (w: ReturnType<typeof world>) => w.asked.filter((a) => !a.startsWith('put:'))
+
+  test('both new: all of it at the newest', async () => {
+    const w = world()
+    w.state.served = voter(G3)
+    w.state.communityServes = reads(G3)
+    await w.service.takeTicket(COMMUNITY, POLL)
+    await vote(w)
+    expect(sentTo(w)).toEqual([
+      G3.show,
+      G3.register,
+      `${tickets(G3)}#request`,
+      POLL_TASK.accept,
+      G3.show,
+      G3.vote,
+      POLL_TASK.receipt,
+    ])
+  })
+
+  test('a new agent with an old community stays old, and never sends a ticket request it cannot take', async () => {
+    const w = world()
+    w.state.served = [...voter(G3), ...voter(G2), ...voter(G1)]
+    await w.service.takeTicket(COMMUNITY, POLL)
+    expect(sentTo(w)).toEqual([G3.show, G2.show, G1.show, G1.register, `${tickets(G1)}#request`, POLL_TASK.accept])
+  })
+
+  test('the community sees each read: a version it does not serve is asked for once a run', async () => {
+    const w = world()
+    w.state.served = [...voter(G3), ...voter(G2), ...voter(G1)]
+    await w.service.readPoll(COMMUNITY, POLL)
+    w.asked.length = 0
+    await w.service.readPoll(COMMUNITY, POLL)
+    expect(w.asked).toEqual([G1.show])
+  })
+
+  test('a list that steps down says the community is too old for the newest show', async () => {
+    const w = world()
+    w.state.served = voter(G3)
+    w.state.communityServes = reads(G2)
+    await w.service.readPolls(COMMUNITY)
+    expect(w.asked).toEqual([G3.list, G2.list])
+    w.asked.length = 0
+    await w.service.readPoll(COMMUNITY, POLL)
+    expect(w.asked).toEqual([G2.show])
+  })
+
+  test('an old agent with a new community stays at what the agent can vote at', async () => {
+    const w = world()
+    w.state.served = voter(G2)
+    w.state.communityServes = reads(G3, G2, G1)
+    await w.service.takeTicket(COMMUNITY, POLL)
+    await vote(w)
+    expect(sentTo(w)).toEqual([
+      G2.show,
+      G2.register,
+      `${tickets(G2)}#request`,
+      POLL_TASK.accept,
+      G2.show,
+      G2.vote,
+      POLL_TASK.receipt,
+    ])
+  })
+
+  test('a ticket taken at one generation is voted with at the next, once the agent is updated', async () => {
+    const w = world()
+    w.state.communityServes = reads(G3, G2, G1)
+    await w.service.takeTicket(COMMUNITY, POLL)
+    w.state.served = voter(G3)
+    w.asked.length = 0
+    await vote(w)
+    expect(sentTo(w)).toEqual([G3.show, G3.vote, POLL_TASK.receipt])
+  })
+
+  test('a poll the agent is too old to carry says so, and nothing goes to the agent', async () => {
+    const w = world()
+    w.state.communityServes = reads(G3, G2, G1)
+    w.state.communityRefuses = { [G1.show]: REFUSED }
+    await expect(w.service.takeTicket(COMMUNITY, POLL)).rejects.toMatchObject({ reason: 'agentTooOld' })
+    expect(w.asked).toEqual([G1.show])
+    expect(w.record()).toBeUndefined()
+  })
+
+  test('a poll no version this app knows can carry says the app is behind, not the agent', async () => {
+    const w = world()
+    w.state.served = voter(G3)
+    w.state.communityServes = []
+    await expect(w.service.readPoll(COMMUNITY, POLL)).rejects.toMatchObject({ reason: 'appBehind' })
+  })
+
+  test('an agent that does not say what it serves is asked at the oldest, and is not blamed', async () => {
+    const w = world()
+    w.state.served = undefined
+    w.state.communityServes = reads(G3, G2, G1)
+    await w.service.takeTicket(COMMUNITY, POLL)
+    expect(sentTo(w)[1]).toBe(G1.register)
+    const refused = world()
+    refused.state.served = undefined
+    refused.state.communityRefuses = { [G1.show]: REFUSED }
+    await expect(refused.service.readPoll(COMMUNITY, POLL)).rejects.toMatchObject({ reason: 'unreadable' })
+  })
+
+  test('any other refusal is not a version: it stops there, and nothing older is asked', async () => {
+    const w = world()
+    w.state.served = voter(G3)
+    w.state.communityServes = reads(G3, G2, G1)
+    w.state.communityRefuses = { [G3.show]: 'vtc/elections/show:electionUnknown' }
+    await expect(w.service.readPoll(COMMUNITY, POLL)).rejects.toMatchObject({
+      code: 'vtc/elections/show:electionUnknown',
+    })
+    expect(w.asked).toEqual([G3.show])
+  })
+
+  test('a credential roll stops before the ticket: presenting a membership is the member choice not built yet', async () => {
+    const w = world()
+    w.state.served = voter(G3)
+    w.state.communityServes = reads(G3)
+    w.state.shown = {
+      ...shown,
+      manifest: { ...manifest, roll: { rule: 'credential', memberOf: 'did:webvh:QmParty:p' } },
+    }
+    await expect(w.service.takeTicket(COMMUNITY, POLL)).rejects.toMatchObject({ reason: 'credentialRoll' })
+    expect(w.asked).toEqual([G3.show])
+    expect(w.record()).toBeUndefined()
   })
 })

@@ -29,7 +29,9 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   default: () => ({ width: 390, height: 844, scale: 3, fontScale: mockFontScale }),
 }))
 
-const mockState: { shown?: PollShown; record?: PollRecord; readiness?: string; failed: boolean } = { failed: false }
+const mockState: { shown?: PollShown; record?: PollRecord; readiness?: string; behind?: boolean; failed: boolean } = {
+  failed: false,
+}
 const mockService = { takeTicket: jest.fn(), vote: jest.fn() }
 jest.mock('../usePolls', () => ({
   usePollService: () => mockService,
@@ -126,7 +128,13 @@ const renderIn = (screen: React.ReactElement) => render(<BasicAppContext>{screen
 
 beforeEach(() => {
   ;(useRoute as jest.Mock).mockReturnValue({ params: { communityDid: COMMUNITY, electionId: 'charter' } })
-  Object.assign(mockState, { shown: shownWith(), record: undefined, readiness: 'ready', failed: false })
+  Object.assign(mockState, {
+    shown: shownWith(),
+    record: undefined,
+    readiness: 'ready',
+    behind: undefined,
+    failed: false,
+  })
   mockFontScale = 1
   mockService.takeTicket.mockReset()
   mockService.vote.mockReset()
@@ -492,5 +500,66 @@ describe('a poll closed early', () => {
     const onTime = head('2023-12-21T00:00:00Z')
     expect(onTime.queryByText(/Polls\.ClosedEarly/)).toBeNull()
     expect(onTime.getByText(/Polls\.ClosedNoDate/)).toBeTruthy()
+  })
+})
+
+// A poll this side can't carry: the screen says which side, because that is what the member can update.
+describe('a poll this phone or its agent cannot carry', () => {
+  test('the agent is the limit: needs an update, not "could not read"', () => {
+    Object.assign(mockState, { shown: undefined, readiness: 'tooOld', failed: true })
+    const tree = renderIn(<Poll />)
+    expect(tree.getByTestId(id(PollsIds.needsUpdate))).toBeTruthy()
+    expect(tree.queryByTestId(id(PollsIds.readFailed))).toBeNull()
+  })
+
+  test('the app is the limit: says so, not the agent', () => {
+    Object.assign(mockState, { shown: undefined, readiness: undefined, behind: true, failed: true })
+    const tree = renderIn(<Poll />)
+    expect(tree.getByTestId(id(PollsIds.appBehind))).toBeTruthy()
+    expect(tree.queryByTestId(id(PollsIds.needsUpdate))).toBeNull()
+  })
+
+  test('any other failed read still offers to try again', () => {
+    Object.assign(mockState, { shown: undefined, failed: true })
+    expect(renderIn(<Poll />).getByTestId(id(PollsIds.readFailed))).toBeTruthy()
+  })
+
+  test('a credential roll says why, and offers no ticket', () => {
+    mockState.shown = shownWith({ roll: { rule: 'credential', memberOf: 'did:webvh:QmParty:p' } })
+    const tree = renderIn(<Poll />)
+    expect(tree.getByTestId(id(PollsIds.credentialRoll))).toBeTruthy()
+    expect(tree.queryByTestId(id(PollsIds.getTicket))).toBeNull()
+    // A render showed the card with nothing saying which poll it meant.
+    expect(tree.getByText('Adopt the community charter?')).toBeTruthy()
+  })
+
+  test('a ticket already held under a credential roll can still be voted with', () => {
+    mockState.shown = shownWith({ roll: { rule: 'credential', memberOf: 'did:webvh:QmParty:p' } })
+    mockState.record = record({ ticketAt: Date.now() - 2 * 3600_000 })
+    const tree = renderIn(<Poll />)
+    expect(tree.queryByTestId(id(PollsIds.credentialRoll))).toBeNull()
+    expect(tree.getByTestId(id(PollsIds.voteNow))).toBeTruthy()
+  })
+})
+
+// VTI-VOT-065, VTI-VOT-090: below 10, told before taking a ticket.
+describe('written answers released after few ballots', () => {
+  test('below 10 the member is told, before the ticket', () => {
+    mockState.shown = shownWith({ textReleaseThreshold: 9 })
+    const tree = renderIn(<Poll />)
+    expect(tree.getByTestId(id(PollsIds.textReleaseEarly))).toBeTruthy()
+    expect(tree.getByTestId(id(PollsIds.getTicket))).toBeTruthy()
+  })
+
+  // A render showed it below the fold with Get my ticket already there to press.
+  test('it stays with the button: in the fixed bar, not the scroll above it', () => {
+    mockState.shown = shownWith({ textReleaseThreshold: 9 })
+    const tree = renderIn(<Poll />)
+    expect(within(tree.getByTestId(id(PollsIds.screen))).queryByTestId(id(PollsIds.textReleaseEarly))).toBeNull()
+  })
+
+  test('at 10 or more nothing is added', () => {
+    mockState.shown = shownWith({ textReleaseThreshold: 10 })
+    expect(renderIn(<Poll />).queryByTestId(id(PollsIds.textReleaseEarly))).toBeNull()
   })
 })

@@ -145,6 +145,21 @@ const Poll: React.FC = () => {
 
   if (!service || readiness === 'noAgent')
     return screen(<ThemedText testID={testIdWithKey(PollsIds.noAgent)}>{t('Polls.NoAgent')}</ThemedText>)
+  // A poll that can't be read at any version this side can follow it through at: what limits it is what to update.
+  if (!shown && readiness === 'tooOld')
+    return screen(
+      <View style={styles.card} testID={testIdWithKey(PollsIds.needsUpdate)}>
+        <ThemedText variant="bold">{t('Polls.NeedsUpdate')}</ThemedText>
+        <ThemedText>{t('Polls.NeedsUpdateBody')}</ThemedText>
+      </View>
+    )
+  if (!shown && poll.behind)
+    return screen(
+      <View style={styles.card} testID={testIdWithKey(PollsIds.appBehind)}>
+        <ThemedText variant="bold">{t('Polls.AppBehind')}</ThemedText>
+        <ThemedText>{t('Polls.AppBehindBody')}</ThemedText>
+      </View>
+    )
   if (!shown && poll.failed)
     return screen(
       <View style={{ gap: 8 }}>
@@ -333,6 +348,17 @@ const Poll: React.FC = () => {
       </View>
     )
 
+  if (record?.ticketAt === undefined && manifest.roll?.rule === 'credential')
+    return screen(
+      <>
+        {head(undefined, undefined)}
+        <View style={styles.card} testID={testIdWithKey(PollsIds.credentialRoll)}>
+          <ThemedText variant="bold">{t('Polls.CredentialRoll')}</ThemedText>
+          <ThemedText>{t('Polls.CredentialRollBody')}</ThemedText>
+        </View>
+      </>
+    )
+
   if (record?.ticketAt !== undefined) {
     if (phase === 'notOpenYet')
       return screen(
@@ -510,6 +536,12 @@ const Poll: React.FC = () => {
         <ThemedText style={styles.error} accessibilityLiveRegion="polite" testID={testIdWithKey(PollsIds.refused)}>
           {refusalText(t, refusal)}
         </ThemedText>
+      ) : null}
+      {/* VTI-VOT-065: below 10, a member is told before taking a ticket (VTI-VOT-090), so it stays with the button. */}
+      {manifest.textReleaseThreshold < 10 ? (
+        <PollLine icon="alert-outline" testID={testIdWithKey(PollsIds.textReleaseEarly)}>
+          {t('Polls.TextReleaseEarly', { count: manifest.textReleaseThreshold })}
+        </PollLine>
       ) : null}
       <ThemedText>{t('Polls.TicketLine')}</ThemedText>
       <Button

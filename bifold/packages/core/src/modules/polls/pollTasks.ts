@@ -22,19 +22,60 @@
 
 const SPEC = 'https://trusttasks.org/spec'
 
+/** The tasks that don't move with a generation. */
 export const POLL_TASK = {
-  list: `${SPEC}/vtc/elections/list/0.3`,
-  show: `${SPEC}/vtc/elections/show/0.2`,
-  ticketsIssue: `${SPEC}/vtc/elections/tickets/issue/0.1`,
-  register: `${SPEC}/vta/pcs/voter/register/0.2`,
   accept: `${SPEC}/vta/pcs/voter/accept/0.1`,
-  vote: `${SPEC}/vta/pcs/vote/0.2`,
   cast: `${SPEC}/voting/ballot/cast/0.1`,
   receipt: `${SPEC}/vta/pcs/voter/receipt/0.1`,
 } as const
 
-/** The agent tasks a phone needs to vote: an agent that serves none of them is too old (VTA 0.67 serves none). */
-export const VOTER_AGENT_TASKS = [POLL_TASK.register, POLL_TASK.accept, POLL_TASK.vote, POLL_TASK.receipt] as const
+/**
+ * The versions that have to move together, newest first. The manifest a read returns goes to the agent to register and
+ * to vote, and the agent's register answer holds the ticket request the community then gets (`vtc/elections/tickets/issue`
+ * 0.3 from register 0.5, else 0.1; the phone sends it unchanged, so it names no version), so a read at one generation is
+ * followed through at that generation. A poll is asked for at the newest one both sides serve.
+ *
+ * - The newest: VTC 0.19 and VTA 0.71. Its manifest can name a credential roll.
+ * - The middle: VTC 0.18 and VTA 0.70. Its manifest can release written answers after fewer than 10 ballots.
+ * - The oldest: VTC 0.15 and VTA 0.69. A community from 0.18 refuses it a manifest it can't carry, `unsupportedVersion`.
+ *
+ * A manifest's members, and so its digest, read the same at every generation that can carry it, so a ticket taken at
+ * one is good at the next.
+ *
+ * @versionLadder
+ */
+export const POLL_GENERATIONS = [
+  {
+    list: `${SPEC}/vtc/elections/list/0.5`,
+    show: `${SPEC}/vtc/elections/show/0.6`,
+    register: `${SPEC}/vta/pcs/voter/register/0.5`,
+    vote: `${SPEC}/vta/pcs/vote/0.4`,
+  },
+  {
+    list: `${SPEC}/vtc/elections/list/0.3`,
+    show: `${SPEC}/vtc/elections/show/0.3`,
+    register: `${SPEC}/vta/pcs/voter/register/0.3`,
+    vote: `${SPEC}/vta/pcs/vote/0.3`,
+  },
+  {
+    list: `${SPEC}/vtc/elections/list/0.3`,
+    show: `${SPEC}/vtc/elections/show/0.2`,
+    register: `${SPEC}/vta/pcs/voter/register/0.2`,
+    vote: `${SPEC}/vta/pcs/vote/0.2`,
+  },
+] as const
+
+export type PollGeneration = (typeof POLL_GENERATIONS)[number]
+
+/**
+ * The generation an agent votes at, as an index into `POLL_GENERATIONS`, or -1 for an agent that serves none.
+ *
+ * @versionLadder
+ */
+export const agentGenerationIndex = (served: readonly string[]): number =>
+  served.includes(POLL_TASK.accept) && served.includes(POLL_TASK.receipt)
+    ? POLL_GENERATIONS.findIndex((g) => served.includes(g.register) && served.includes(g.vote))
+    : -1
 
 /** A poll's state as the community holds it (`RegistrarState`). */
 export type PollState =
@@ -47,7 +88,7 @@ export type PollState =
   | 'pendingRegistration'
   | 'registrationRefused'
 
-/** One poll as `vtc/elections/list/0.3` lists it. */
+/** One poll as `vtc/elections/list` lists it. */
 export interface PollListItem {
   electionId: string
   title?: string
@@ -96,7 +137,7 @@ export interface Manifest {
   description?: string
   questions: Question[]
   secrecy: SecrecyLevel
-  roll: { rule: 'members' | 'membersAndListed' | 'listed'; listed?: string[] }
+  roll: { rule: 'members' | 'membersAndListed' | 'listed' | 'credential'; listed?: string[]; memberOf?: string }
   registrationOpensAt: string
   votingOpensAt: string
   votingClosesAt: string
@@ -144,7 +185,7 @@ export interface Certification {
   result: { electionId: string; manifestDigest: string; ballotsCounted: number; questions: QuestionResult[] }
 }
 
-/** One poll read whole (`vtc/elections/show/0.2`). */
+/** One poll read whole (`vtc/elections/show`). */
 export interface PollShown {
   manifest: Manifest
   manifestDigest: string
@@ -185,7 +226,7 @@ export interface RegisterPayload {
   manifest: Manifest
 }
 
-/** `vta/pcs/voter/register/0.2`: the blinded request, and — `member` named — that request signed as the member. */
+/** `vta/pcs/voter/register`: the blinded request, and — `member` named — that request signed as the member. */
 export function registerPayload(t: VoterTarget, shown: Pick<PollShown, 'parameters' | 'manifest'>): RegisterPayload {
   return {
     contextId: t.contextId,
@@ -254,7 +295,7 @@ export function parsePollShown(payload: unknown): PollShown | undefined {
   return payload as unknown as PollShown
 }
 
-/** `vta/pcs/voter/register/0.2`'s answer. The ticket document is there only when `member` was named. */
+/** `vta/pcs/voter/register`'s answer. The ticket document is there only when `member` was named. */
 export function parseRegistered(
   payload: unknown
 ): { electionId: string; manifestDigest: string; ticketDocument: Record<string, unknown> } | undefined {
@@ -267,7 +308,7 @@ export function parseRegistered(
   }
 }
 
-/** `vta/pcs/vote/0.2`'s answer: the whole signed cast, sent as it is. */
+/** `vta/pcs/vote`'s answer: the whole signed cast, sent as it is. */
 export function parseVoted(payload: unknown): { castDocument: Record<string, unknown>; tag: string } | undefined {
   if (!isObject(payload) || !isObject(payload.castDocument) || !isString(payload.tag)) return undefined
   return { castDocument: payload.castDocument, tag: payload.tag }
