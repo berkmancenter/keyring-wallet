@@ -37,16 +37,22 @@ export function createPollRecordStore(agent: Agent): PollRecordStore {
   }
 }
 
+/** A polls listing read (`vtc/elections/list`, `vtc/elections/show`, any version): a screen's, not a step's. */
+export const isPollsListing = (type: string): boolean => /\/vtc\/elections\/(list|show)\/[\d.]+$/.test(type)
+
 export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: string } = {}): PollsBackend {
   const identityStore = new GenericRecordsIdentityStore(agent)
   // The session to a community is the persona the phone joined it with, held while the task runs: a read and a
-  // ticket request are the person's own acts, and hold it as an ordinary caller does.
-  const asPersona = async <T>(community: string, fn: () => Promise<T>): Promise<T> => {
+  // ticket request are the person's own acts, and hold it as an ordinary caller does. A listing read leaves no claim on
+  // the session after it (`claims: false`): each one renewed it, and another community's rooms were refused for as long
+  // as the polls were open (34VR-Y58H, 277.8, 11-03). A ticket request still does.
+  const asPersona = async <T>(community: string, fn: () => Promise<T>, claims = true): Promise<T> => {
     const persona = await identityStore.getPersona(community)
     if (!persona) throw new Error('polls: this phone holds no identity for that community')
     return vtiAgent.holding(agent, options.mediatorDid, persona, fn, {
       peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
       reason: 'polls',
+      claims,
     })
   }
   // The signed-in client rooms use: `task` and what the agent serves, nothing else.
@@ -58,7 +64,7 @@ export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: s
 
   return {
     communityTask: (community, type, payload) =>
-      asPersona(community, () => vtiAgent.communityTask(community, type, payload)),
+      asPersona(community, () => vtiAgent.communityTask(community, type, payload), !isPollsListing(type)),
     sendCompleted: (community, document) => asPersona(community, () => vtiAgent.sendCompleted(community, document)),
     agentTask: async (type, payload) =>
       (await (await client()).task(type, payload as Record<string, unknown>)) as Record<string, unknown>,

@@ -99,7 +99,13 @@ jest.mock('../../trust-tasks/module/VtiIdentityStore', () => ({
   },
 }))
 
-import { VTI_FOREGROUND_CLAIM_MS, VtiSessionHeld, vtiAgent } from '../../trust-tasks/module/vtiAgent'
+import {
+  VTI_FOREGROUND_CLAIM_MS,
+  VTI_TURN_AFTER_REFUSALS,
+  VtiSessionHeld,
+  vtiAgent,
+} from '../../trust-tasks/module/vtiAgent'
+import { createAgentPollsBackend, isPollsListing } from '../../polls/agentPollsBackend'
 import { createAgentRoomsBackend, isRoomsListing } from '../real/agentRoomsBackend'
 
 const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() }
@@ -132,6 +138,11 @@ beforeEach(async () => {
   vtiAgent.answerTimeoutMs = 400
   clock = 1_000_000
   vtiAgent.now = () => clock
+  // vtiAgent is one for the file and disconnecting keeps its claim, while this clock starts again: an earlier test's claim
+  // and refusals would still be running, so whether a test passed depended on what ran before it.
+  const state = vtiAgent as unknown as { claim?: unknown; refusedByClaim: Map<string, number> }
+  state.claim = undefined
+  state.refusedByClaim.clear()
   mockPersonas[A.community] = persona(A.persona, A.community)
   mockPersonas[B.community] = persona(B.persona, B.community)
 })
@@ -273,6 +284,122 @@ describe('the session claim', () => {
     expect(free).toBe(true)
     await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(B.persona, B.community), background: true })
     expect(vtiAgent.getState().did).toBe(B.persona)
+  })
+
+  // 34VR-Y58H (277.8, 11-03): a phone in two communities. Each polls read held the session as one community's identity
+  // as an ordinary caller and renewed the claim, and the other community's rooms listing was refused every 30 s for as
+  // long as the app was open.
+  const poll = (who: { persona: string; community: string }) =>
+    vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(who.persona, who.community), background: true })
+
+  // Past whatever claim is running now, within a test.
+  const noClaimLeft = () => {
+    clock += VTI_FOREGROUND_CLAIM_MS + 1
+  }
+
+  it("a listing read that claims nothing leaves no claim: another identity's poll goes through at once", async () => {
+    await vtiAgent.holding(agent, 'did:peer:lab', persona(A.persona, A.community), async () => undefined, {
+      reason: 'polls',
+      claims: false,
+    })
+    await poll(B)
+    expect(vtiAgent.getState().did).toBe(B.persona)
+  })
+
+  it('an ordinary hold that claims leaves the claim behind it (control)', async () => {
+    await vtiAgent.holding(agent, 'did:peer:lab', persona(A.persona, A.community), async () => undefined, {
+      reason: 'polls',
+    })
+    await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+    expect(vtiAgent.getState().did).toBe(A.persona)
+  })
+
+  it('the polls backend claims nothing on a listing read, and does on a ticket request (the wiring)', async () => {
+    const holding = jest.spyOn(vtiAgent, 'holding').mockImplementation(async () => undefined as never)
+    try {
+      const polls = createAgentPollsBackend(agent, { mediatorDid: 'did:peer:lab' })
+      await polls.communityTask(A.community, 'https://trusttasks.org/spec/vtc/elections/list/0.3', {})
+      await polls.communityTask(A.community, 'https://trusttasks.org/spec/vtc/elections/show/0.2', {})
+      await polls.communityTask(A.community, 'https://trusttasks.org/spec/vtc/elections/tickets/issue/0.1', {})
+      await polls.sendCompleted(A.community, {})
+      expect(holding.mock.calls.map((call) => call[4]?.claims)).toEqual([false, false, true, true])
+    } finally {
+      holding.mockRestore()
+    }
+  })
+
+  it('names the polls listing reads, which claim nothing, and not a ticket request', () => {
+    expect(isPollsListing('https://trusttasks.org/spec/vtc/elections/list/0.3')).toBe(true)
+    expect(isPollsListing('https://trusttasks.org/spec/vtc/elections/show/0.2')).toBe(true)
+    expect(isPollsListing('https://trusttasks.org/spec/vtc/elections/tickets/issue/0.1')).toBe(false)
+  })
+
+  it(`gives a poll refused by the claim alone the next turn, after ${VTI_TURN_AFTER_REFUSALS} refusals running`, async () => {
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    for (let i = 0; i < VTI_TURN_AFTER_REFUSALS; i++) await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+    // Its turn, with the claim still running: whenFree says so too, so the rooms read again now.
+    await expect(vtiAgent.whenFree(B.persona)).resolves.toBeUndefined()
+    await poll(B)
+    expect(vtiAgent.getState().did).toBe(B.persona)
+  })
+
+  it('a claim that ran out and came back does not start the count again: the wait is the same wait', async () => {
+    // A identity acting just past the claim's length takes a fresh claim each time, and B is refused between them.
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    for (let i = 0; i < VTI_TURN_AFTER_REFUSALS; i++) {
+      await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+      noClaimLeft()
+      await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    }
+    expect(vtiAgent.getState().did).toBe(A.persona)
+    await poll(B)
+    expect(vtiAgent.getState().did).toBe(B.persona)
+  })
+
+  it('an identity that took a claim starts its own count afresh: it was not waiting', async () => {
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    for (let i = 0; i < VTI_TURN_AFTER_REFUSALS; i++) await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+    // B signs in as a step would, then A claims: B's earlier refusals are behind it.
+    noClaimLeft()
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(B.persona, B.community) })
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+    expect(vtiAgent.getState().did).toBe(A.persona)
+  })
+
+  it('renewing the claim does not start the count again: that is what starved the other identity', async () => {
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    for (let i = 0; i < VTI_TURN_AFTER_REFUSALS; i++) {
+      await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+      await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    }
+    await poll(B)
+    expect(vtiAgent.getState().did).toBe(B.persona)
+  })
+
+  it('one refusal fewer is still refused (control), and the count starts afresh after a turn', async () => {
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    for (let i = 0; i < VTI_TURN_AFTER_REFUSALS - 1; i++) await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+    expect(vtiAgent.getState().did).toBe(A.persona)
+    await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+    await poll(B)
+    expect(vtiAgent.getState().did).toBe(B.persona)
+    // A claims the session again: B waits its turn again from nothing.
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(A.persona, A.community) })
+    await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+    expect(vtiAgent.getState().did).toBe(A.persona)
+  })
+
+  it("never gives the turn over a step's hold: refused every time, however often", async () => {
+    const { done, release } = untilReleased()
+    const step = vtiAgent.holding(agent, 'did:peer:lab', persona(A.persona, A.community), () => done, {
+      reason: 'a step',
+    })
+    await new Promise((r) => realSetTimeout(r, 10))
+    for (let i = 0; i < VTI_TURN_AFTER_REFUSALS + 3; i++) await expect(poll(B)).rejects.toBeInstanceOf(VtiSessionHeld)
+    expect(vtiAgent.getState().did).toBe(A.persona)
+    release()
+    await step
   })
 
   it('stops keeping others waiting once a hold runs past its time', async () => {
