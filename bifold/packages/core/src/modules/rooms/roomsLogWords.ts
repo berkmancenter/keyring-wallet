@@ -9,6 +9,7 @@
  *
  * @module rooms/roomsLogWords
  */
+import { refusalCode } from './real/wire'
 import { RoomsRefused, RoomsUnavailable } from './types'
 
 /** vtiAgent's `VtiSessionHeld`, by name, as the rooms backend and the persona inbox read it. */
@@ -22,6 +23,91 @@ export const logRef = (did: string | undefined): string =>
   !did ? 'none' : did.length <= 28 ? did : `${did.slice(0, 16)}…${did.slice(-8)}`
 
 /**
+ * The refusal codes a log line may repeat, and no others. A community writes a refusal's code and details as well as
+ * its message, so a code is only a kind while it is one this list knows: anything else reads as `other`, whatever it
+ * says. An unlisted code loses a word in a report, never more.
+ */
+const LOGGED_REFUSAL_CODES = new Set([
+  // The framework's own (trust-tasks-rs StandardCode, SPEC 8.3).
+  'malformedRequest',
+  'unsupportedType',
+  'unsupportedVersion',
+  'unsupportedExtension',
+  'expired',
+  'proofRequired',
+  'proofInvalid',
+  'permissionDenied',
+  'wrongRecipient',
+  'identityMismatch',
+  'idConflict',
+  'cancelled',
+  'taskFailed',
+  'unavailable',
+  'internalError',
+  'indeterminate',
+  // A room task's own (data-rooms.md, community-rooms.md).
+  'admissionPending',
+  'alreadyAccepted',
+  'alreadyExists',
+  'alreadyJoined',
+  'alreadyMember',
+  'epochConflict',
+  'epochMismatch',
+  'invalidSettings',
+  'keyHolderRefused',
+  'keyHolderUnavailable',
+  'keyPackageNotHeld',
+  'lastAdmin',
+  'noAuthority',
+  'noGroup',
+  'noKeyHolder',
+  'noList',
+  'noRetention',
+  'noSigningKey',
+  'noTransferMode',
+  'notAhead',
+  'notAMember',
+  'notDelivered',
+  'notFound',
+  'notMember',
+  'offerExpired',
+  'offerWithdrawn',
+  'rateLimited',
+  'welcomeInvalid',
+  // Keyring's own, for a step that went wrong between a room's tasks.
+  'empty',
+  'fileTooLarge',
+  'joinFailed',
+  'senderRefused',
+  'tooLarge',
+  'tooLong',
+  'welcomeMissing',
+])
+
+/**
+ * What a VTA says in `details.reason` when everything else reads `taskFailed` (vta-sdk `trust_task_reject_reasons`).
+ * It is the only thing that tells "no persona holds this room" (`not_found`) from "more than one does" (`conflict`).
+ */
+const LOGGED_REFUSAL_REASONS = new Set([
+  'not_found',
+  'conflict',
+  'gone',
+  'upstream_unavailable',
+  'no_matching_protocol',
+])
+
+const loggedCode = (code: string | undefined): string => (code && LOGGED_REFUSAL_CODES.has(code) ? code : 'other')
+
+/** A `VtiRefusal` by its closed code and reason. Its message is the community's and is never read here. */
+function refusalKind(e: Error): string {
+  const reason = (e as Error & { details?: { reason?: unknown } }).details?.reason
+  const code = loggedCode(refusalCode(e))
+  return typeof reason === 'string' && LOGGED_REFUSAL_REASONS.has(reason)
+    ? `refused (${code}, ${reason})`
+    : `refused (${code})`
+}
+
+/**
  * Why a read failed, by kind only: no persona, step or task detail. The only form a line that names a community or room
  * may use. An error's own words can name an identity ("did:key:…'s agent is no longer linked"), and beside a
  * community that is the pairing the hold's rule forbids, whatever the error.
@@ -29,7 +115,8 @@ export const logRef = (did: string | undefined): string =>
 export function failureCategory(e: unknown): string {
   if (isSessionHeld(e)) return 'the session is kept for another identity'
   if (e instanceof RoomsUnavailable) return `unavailable (${e.reason})`
-  if (e instanceof RoomsRefused) return `refused (${e.code})`
+  if (e instanceof RoomsRefused) return `refused (${loggedCode(e.code)})`
+  if (e instanceof Error && e.name === 'VtiRefusal') return refusalKind(e)
   if (e instanceof Error && e.name === 'VtiSentNoAnswer') return 'no answer yet'
   return e instanceof Error && e.name && e.name !== 'Error' ? e.name : 'failed'
 }

@@ -709,7 +709,21 @@ describe('every community kept from for now', () => {
     [
       'refused',
       Object.assign(new Error('did:key:persona-a is not one'), { name: 'VtiRefusal', code: 'notMember' }),
-      'VtiRefusal',
+      'refused (notMember)',
+    ],
+    [
+      'refused for more than one persona',
+      Object.assign(new Error('you may act as 2 personas, did:key:persona-a among them'), {
+        name: 'VtiRefusal',
+        code: 'taskFailed',
+        details: { reason: 'conflict' },
+      }),
+      'refused (taskFailed, conflict)',
+    ],
+    [
+      'refused with words for a code',
+      Object.assign(new Error('said no'), { name: 'VtiRefusal', code: 'did:key:persona-a said no' }),
+      'refused (other)',
     ],
     ['a TypeError', new TypeError("did:key:persona-a's agent is gone"), 'TypeError'],
     ['a plain error naming an identity', new Error("did:key:persona-a's agent is no longer linked"), 'failed'],
