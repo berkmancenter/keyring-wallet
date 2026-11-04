@@ -144,7 +144,10 @@ export interface RoomsBackend {
   /** The offers hidden on this phone, by `offerId`. Upstream has no decline, so this is all hiding is. */
   hiddenOffers(): Promise<string[]>
   hideOffer(offerId: string): Promise<void>
-  /** A step that went wrong without failing the operation, for the log. */
+  /**
+   * A step worth a line in the log: one that went wrong without failing the operation, or one whose outcome a report
+   * could not otherwise tell.
+   */
   warn(message: string): void
   /**
    * True for a community task refused because a step keeps this phone's community session as another identity
@@ -1178,8 +1181,10 @@ export class AgentRoomsService implements RoomsService {
         invitation: offer.credentials.invitation,
         ...(accepted.ratchetTree ? { ratchetTree: accepted.ratchetTree } : {}),
       })
+      this.backend.warn(`rooms: ${logRef(roomId)} Welcome: joined`)
     } catch (e) {
-      // Another surface handed the same Welcome over first.
+      // Another surface handed the same Welcome over first or, by the agent's source, it still holds the group from
+      // before a removal: both answer the same. Said apart from a real join, by kind alone (roomsLogWords).
       if (refusalCode(e) !== 'alreadyJoined')
         throw new RoomsRefused(
           'acceptOffer',
@@ -1187,6 +1192,7 @@ export class AgentRoomsService implements RoomsService {
           true,
           `the agent did not join from the Welcome: ${message(e)}`
         )
+      this.backend.warn(`rooms: ${logRef(roomId)} Welcome: not used, the agent already holds a group for this room`)
     }
     // The epoch keys the member may read, so the room opens at once. A failure here leaves reads to repair it.
     if ((this.served?.types ?? []).includes(ROOMS_TASK.keysBackfill)) {
