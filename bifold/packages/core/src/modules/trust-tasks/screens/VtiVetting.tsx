@@ -748,8 +748,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     // A ticket for another community is not asked with: the field shows why.
     if (!checkTicketFor(ticket, communityDid).ok) return
     void run('request', async () => {
-      await vettingManifest(application.requirementsDigest)
-      await applicantRef.current!.requestVetter({ link: ticket })
+      const m = await vettingManifest(application.requirementsDigest)
+      await applicantRef.current!.requestVetter({ link: ticket, manifest: m })
     })
   }, [ticketLink, application, communityDid, busy, run, vettingManifest])
 
@@ -767,7 +767,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       hiddenVettingSuite(c) === HIDDEN_VETTING_SUITE &&
       (!application?.requirementsDigest || c.requirementsDigest === application.requirementsDigest)
   )
-  const privateHere = carriesPrivate && (checklist ? checklist.mode === 'private' : Boolean(privateCriterion))
+  // The way in counts as well as the checklist: an application with no private
+  // record for its own join DID yet reads as named, and the mark stays.
+  const privateHere = carriesPrivate && (checklist?.mode === 'private' || Boolean(privateCriterion))
   // The manifest, read in a build that carries private vetting: the
   // applicant's mark from the first step, and the vetter's private way. Read
   // afresh even when one from earlier is shown: the community's answer now counts.
@@ -1512,8 +1514,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         disabled={!!busy || !ticketLink.trim() || !!ticketRefused}
         onPress={() =>
           run('request', async () => {
-            await vettingManifest(application?.requirementsDigest)
-            await applicantRef.current!.requestVetter({ link: ticketLink.trim() })
+            const m = await vettingManifest(application?.requirementsDigest)
+            await applicantRef.current!.requestVetter({ link: ticketLink.trim(), manifest: m })
           })
         }
       >

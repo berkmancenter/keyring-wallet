@@ -74,6 +74,9 @@ export function hiddenVettingErrorKey(code: string | undefined): string {
   // A step this build does not carry yet (an interim build, for testing).
   if (code.endsWith(':notImplemented')) return 'Vetting.Hidden.NotInThisBuild'
   if (code.endsWith(':notFound')) return 'Vetting.Hidden.ApplicationGone'
+  // No private application at the agent for this join DID, and none could be
+  // made: nothing was sent (a request) or submitted.
+  if (code.endsWith(':noApplication')) return 'Vetting.Hidden.NoApplication'
   if (code.endsWith(':attestationInvalid')) return 'Vetting.Hidden.AttestationRefused'
   // The community runs a suite agents cannot: what Join says of it.
   if (code.endsWith(':unsupportedSuite')) return 'Join.Ways.PrivateVetting'

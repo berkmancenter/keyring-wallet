@@ -215,6 +215,9 @@ describe('the agent’s codes, in words', () => {
     ['vta/pcs/tokens/accept:noDrawInFlight', 'Vetting.Vouch.DrawBusy'],
     ['vta/pcs/tokens/request:countExceedsDrip', 'Vetting.Vouch.DrawBusy'],
     ['keyring/hidden-vetter/attest:notImplemented', 'Vetting.Hidden.NotInThisBuild'],
+    ['keyring/hidden-vetter/attest:requestNotPrivate', 'Vetting.Vouch.RequestNotPrivate'],
+    ['keyring/hidden-vetter/attest:rulesUnread', 'Vetting.Vouch.RulesUnread'],
+    ['keyring/hidden-vetter/attest:rulesUnusable', 'Vetting.Vouch.RulesUnusable'],
     ['vta/pcs/attest:parametersInvalid', 'Vetting.Vouch.ErrorGeneric'],
     [undefined, 'Vetting.Vouch.ErrorGeneric'],
   ])('%s → %s', (code, key) => {

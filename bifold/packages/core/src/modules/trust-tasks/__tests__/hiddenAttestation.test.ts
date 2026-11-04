@@ -36,6 +36,8 @@ const mockApply = jest.fn(async () => ({ effect: 'joined', requestId: 'req-9' })
 const mockExtensions = jest.fn(async () => ({ hiddenVetting: { proof: 'z2proof' } }))
 const mockBegin = jest.fn(async () => HIDDEN_RECORD)
 const mockConnect = jest.fn(async () => undefined)
+const NAMED_WAY = { wire: '0.3', criteria: [{ id: 'Named', vetting: { version: '0.1', minStatements: 1 } }] }
+const mockFetchManifest = jest.fn(async (..._args: unknown[]) => NAMED_WAY as unknown)
 const CLIENT = { name: 'the agent client' }
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -56,6 +58,7 @@ jest.mock('../module/vtiAgent', () => ({
     onInbound: () => () => undefined,
     fetchChallenge: (...a: unknown[]) => mockFetchChallenge(...a),
     apply: (...a: unknown[]) => mockApply(...a),
+    fetchManifest: (...a: unknown[]) => mockFetchManifest(...a),
   },
 }))
 jest.mock('../module/hiddenVetting', () => ({
@@ -171,6 +174,7 @@ beforeEach(() => {
   mockApply.mockClear()
   mockExtensions.mockClear()
   mockBegin.mockClear()
+  mockFetchManifest.mockClear()
 })
 
 describe('the published shapes', () => {
@@ -242,7 +246,7 @@ describe("a vetter's attestation arriving", () => {
     const log = logger()
     const onChange = jest.fn()
     // No named application: the hidden one is kept apart and is enough.
-    await deliver(applicantWith(memoryStore(), log, onChange), attestationMessage(ATTESTATION))
+    await deliver(applicantWith(memoryStore({}), log, onChange), attestationMessage(ATTESTATION))
     expect(mockConnect).toHaveBeenCalled()
     expect(mockTake).toHaveBeenCalledTimes(1)
     const [, client, community, attestation] = mockTake.mock.calls[0]
@@ -256,7 +260,7 @@ describe("a vetter's attestation arriving", () => {
     mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
     mockTake.mockResolvedValue({ ...HIDDEN_RECORD, held: 1 })
     const log = logger()
-    await deliver(applicantWith(memoryStore(), log), attestationMessage(ATTESTATION))
+    await deliver(applicantWith(memoryStore({}), log), attestationMessage(ATTESTATION))
     const everything = JSON.stringify([
       log.debug.mock.calls,
       log.info.mock.calls,
@@ -281,7 +285,7 @@ describe("a vetter's attestation arriving", () => {
     mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
     mockTake.mockRejectedValue({ document: { payload: { code: 'vta/pcs/verify-attestation:wrongCommunity' } } })
     const log = logger()
-    await expect(deliver(applicantWith(memoryStore(), log), attestationMessage(ATTESTATION))).resolves.toBeUndefined()
+    await expect(deliver(applicantWith(memoryStore({}), log), attestationMessage(ATTESTATION))).resolves.toBeUndefined()
     expect(JSON.stringify(log.warn.mock.calls)).toContain('wrongCommunity')
   })
 
@@ -340,7 +344,7 @@ describe("a vetter's attestation arriving", () => {
   it('is left for redelivery when the agent cannot be reached', async () => {
     mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
     mockTake.mockRejectedValue(new Error('socket closed'))
-    await expect(deliver(applicantWith(memoryStore()), attestationMessage(ATTESTATION))).rejects.toThrow(
+    await expect(deliver(applicantWith(memoryStore({})), attestationMessage(ATTESTATION))).rejects.toThrow(
       'socket closed'
     )
   })
@@ -639,5 +643,175 @@ describe('the named flow, applied to a private way in', () => {
       .catch((e: unknown) => (e as { code?: string }).code)
     expect(code).toBe('vta/pcs/prove:noUsableAttestation')
     expect(mockApply).not.toHaveBeenCalled()
+  })
+})
+
+// 2026-11-03 (277.7, First VTC): the private record is kept per community and
+// outlived a join as another identity. Asking a vetter read only a record for
+// this join DID and sent a named request; the statement that came back was
+// refused because a record, any record, existed. These start from such a phone,
+// which a reinstall must not be the only way to mend.
+describe('a private record left by an earlier identity', () => {
+  const ticket = encodeTicketUri({
+    community: COMMUNITY,
+    vetter: VETTER,
+    presentation: { code: { code: 'ABCD-EFGH' } },
+  })
+  const PRIVATE_WAY = {
+    wire: '0.3',
+    criteria: [
+      {
+        id: 'Vetted-Member',
+        requirementsDigest: 'zQmDigest',
+        vetting: {
+          version: '0.1',
+          statementType: 'https://registry.trustoverip.org/dtg/vsc/vetted/1',
+          minStatements: 1,
+          acceptedMethods: ['inPerson', 'video'],
+          requiredClaims: ['name.legal'],
+          maxStatementAge: 'P120D',
+          eligibleVetters: { role: 'vetter' },
+          independence: { requireConsistentIdentityCommitment: true },
+          invitation: 'none',
+          ext: { 'org.openvtc.hidden-vetting': { suite: 'ps-ddh-bls12381' } },
+        },
+      },
+    ],
+  } as never
+  const STALE = { ...HIDDEN_RECORD, joinDid: 'did:webvh:Qm:vta.example:earlier-me', id: 'zEarlierIdentifier' }
+  const sentPayload = () => (mockSend.mock.calls[0][2] as { payload: Record<string, unknown> }).payload
+  const namedStatement = {
+    id: 'm-2',
+    type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1',
+    from: VETTER,
+    to: [PERSONA.did],
+    thid: 'session-1',
+    body: {
+      credential_response: {
+        credential: {
+          id: 'urn:uuid:statement-1',
+          type: ['VerifiableCredential', 'StatementCredential'],
+          issuer: VETTER,
+          credentialSubject: {
+            id: PERSONA.did,
+            predicate: 'https://registry.trustoverip.org/dtg/vsc/vetted/1',
+            object: { value: { method: 'inPerson', claimsVerified: ['name.legal'] } },
+          },
+        },
+      },
+    },
+  }
+
+  it('heals on the next request: a current application is made, and the request carries the private mark', async () => {
+    mockLoadRecord.mockResolvedValue(STALE)
+    await applicantWith(memoryStore({})).requestVetter({ link: ticket, manifest: PRIVATE_WAY })
+    expect(mockBegin).toHaveBeenCalledTimes(1)
+    // Bound to this application's join DID, never the earlier one.
+    expect((mockBegin.mock.calls[0] as unknown[] | undefined)?.[4]).toBe(PERSONA.did)
+    expect(sentPayload().ext).toEqual({
+      [HIDDEN_VETTING_NS]: { suite: 'ps-ddh-bls12381', id: 'zApplicantPcsIdentifier' },
+    })
+  })
+
+  it('heals the same way when the screen passes no manifest: the community is asked', async () => {
+    mockLoadRecord.mockResolvedValue(STALE)
+    mockFetchManifest.mockResolvedValueOnce(PRIVATE_WAY)
+    await applicantWith(memoryStore({})).requestVetter({ link: ticket })
+    expect(mockFetchManifest).toHaveBeenCalledWith(COMMUNITY, expect.anything())
+    expect(sentPayload().ext).toMatchObject({ [HIDDEN_VETTING_NS]: { id: 'zApplicantPcsIdentifier' } })
+  })
+
+  it('sends nothing named into a private way in when no application can be made', async () => {
+    mockLoadRecord.mockResolvedValue(STALE)
+    mockBegin.mockRejectedValueOnce(new Error('agentTooOld'))
+    const code = await applicantWith(memoryStore({}))
+      .requestVetter({ link: ticket, manifest: PRIVATE_WAY })
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetting/request:noApplication')
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('control: a named community with the same old record gets a named request, and no application is made', async () => {
+    mockLoadRecord.mockResolvedValue(STALE)
+    await applicantWith(memoryStore({})).requestVetter({ link: ticket, manifest: NAMED_WAY as never })
+    expect(mockBegin).not.toHaveBeenCalled()
+    expect(sentPayload()).not.toHaveProperty('ext')
+  })
+
+  it('control: a current record is used as it is, with no second application', async () => {
+    mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
+    await applicantWith(memoryStore({})).requestVetter({ link: ticket, manifest: PRIVATE_WAY })
+    expect(mockBegin).not.toHaveBeenCalled()
+    expect(sentPayload().ext).toMatchObject({ [HIDDEN_VETTING_NS]: { id: 'zApplicantPcsIdentifier' } })
+  })
+
+  it('start makes a current application over the old one', async () => {
+    mockLoadRecord.mockResolvedValue(STALE)
+    await applicantWith(memoryStore()).start(PRIVATE_WAY, { 'name.legal': 'A Person' })
+    expect(mockBegin).toHaveBeenCalledTimes(1)
+    expect((mockBegin.mock.calls[0] as unknown[] | undefined)?.[4]).toBe(PERSONA.did)
+  })
+
+  it('start makes one when the vetting digest differs from the private criterion’s (it skipped silently)', async () => {
+    mockLoadRecord.mockResolvedValue(undefined)
+    const moved = {
+      wire: '0.3',
+      requirementsDigest: 'zQmTopLevel',
+      criteria: [{ ...(PRIVATE_WAY as { criteria: object[] }).criteria[0], requirementsDigest: undefined }],
+    } as never
+    await applicantWith(memoryStore()).start(moved, { 'name.legal': 'A Person' })
+    expect(mockBegin).toHaveBeenCalledTimes(1)
+  })
+
+  it('control: start keeps a current application rather than making another', async () => {
+    mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
+    await applicantWith(memoryStore({})).start(PRIVATE_WAY, { 'name.legal': 'A Person' })
+    expect(mockBegin).not.toHaveBeenCalled()
+  })
+
+  it('does not refuse a named statement as meant for a private application', async () => {
+    mockLoadRecord.mockResolvedValue(STALE)
+    const store = memoryStore({ requests: [{ vetterDid: VETTER, status: 'session', sentAt: 't' }] } as never)
+    await deliver(applicantWith(store), namedStatement)
+    const kept = await store.getApplication(COMMUNITY)
+    expect(kept?.requests?.[0]?.statementRefusal).not.toBe('namedForPrivate')
+  })
+
+  it('control: with a current record, the same statement is refused as namedForPrivate', async () => {
+    mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
+    const store = memoryStore({ requests: [{ vetterDid: VETTER, status: 'session', sentAt: 't' }] } as never)
+    await deliver(applicantWith(store), namedStatement)
+    const kept = await store.getApplication(COMMUNITY)
+    expect(kept?.requests?.[0]?.statementRefusal).toBe('namedForPrivate')
+  })
+
+  it('is not counted on the checklist', async () => {
+    mockLoadRecord.mockResolvedValue({ ...STALE, held: 1, minimum: 1 })
+    const community = { listHeldCredentials: async () => [] }
+    const list = await new VtiApplicant(
+      { config: { logger: logger() } } as never,
+      PERSONA as never,
+      memoryStore({}),
+      community as never
+    ).checklist()
+    expect(list.mode).toBeUndefined()
+  })
+
+  it('is not proved from at submit: the private way in refuses, naming nobody', async () => {
+    mockLoadRecord.mockResolvedValue({ ...STALE, held: 1, minimum: 1 })
+    const code = await applicantWith(memoryStore({}))
+      .submit(PRIVATE_WAY, [], 'zQmDigest')
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetting/submit:noApplication')
+    expect(mockExtensions).not.toHaveBeenCalled()
+    expect(mockApply).not.toHaveBeenCalled()
+  })
+
+  it('takes no attestation into it', async () => {
+    mockLoadRecord.mockResolvedValue(STALE)
+    await deliver(applicantWith(memoryStore({})), attestationMessage(ATTESTATION))
+    expect(mockTake).not.toHaveBeenCalled()
   })
 })

@@ -32,6 +32,8 @@ jest.mock('../module/vtiAgent', () => ({
     ask: (...a: unknown[]) => mockAsk(...a),
     sentNoAnswer: () => new Error('no answer'),
     onInbound: () => () => undefined,
+    // A named way in: attesting reads the community's rules first.
+    fetchManifest: async () => ({ criteria: [{ id: 'vetted', vetting: { minStatements: 1 } }] }),
   },
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))

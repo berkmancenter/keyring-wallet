@@ -16,7 +16,12 @@ jest.mock('@bifold/trust-tasks', () => ({
 }))
 jest.mock('../module/vtiAgent', () => ({
   ...jest.requireActual('../module/vtiAgent'),
-  vtiAgent: { send: jest.fn(async () => undefined), onInbound: () => () => undefined },
+  vtiAgent: {
+    send: jest.fn(async () => undefined),
+    onInbound: () => () => undefined,
+    // A named way in: asking a vetter reads whether the community vets privately.
+    fetchManifest: async () => ({ criteria: [{ id: 'vetted', vetting: { minStatements: 1 } }] }),
+  },
 }))
 
 const COMMUNITY = 'did:webvh:Qm:vtc.example:mine'

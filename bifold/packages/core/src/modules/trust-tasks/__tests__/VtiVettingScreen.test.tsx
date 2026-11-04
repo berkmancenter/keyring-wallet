@@ -503,7 +503,11 @@ describe('Vetting — one filled button per step', () => {
       await routeKeyringAgentLink(ticket, {} as never, jest.fn())
       jest.advanceTimersByTime(10)
     })
-    expect(ask).toHaveBeenCalledWith({ link: ticket })
+    // With the manifest the screen just read: whether the way in is private is its answer.
+    expect(ask).toHaveBeenCalledWith({
+      link: ticket,
+      manifest: expect.objectContaining({ criteria: expect.any(Array) }),
+    })
     ask.mockRestore()
   })
 
@@ -566,7 +570,13 @@ describe('Vetting — one filled button per step', () => {
         fireEvent.press(tree.getByTestId(testIdWithKey('VettingRequestButton')))
         jest.advanceTimersByTime(10)
       })
-      expect(ask).toHaveBeenCalledWith({ link: ticket })
+      // The private way in goes with the request, so the module can make a current private application.
+      expect(ask).toHaveBeenCalledWith({
+        link: ticket,
+        manifest: expect.objectContaining({
+          criteria: expect.arrayContaining([expect.objectContaining({ id: 'kernel-developer-private' })]),
+        }),
+      })
       expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
       expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
       expect(tree.getByTestId(testIdWithKey('VettingPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)

@@ -307,6 +307,8 @@ describe('error codes, in words', () => {
     ['vta/pcs/prove:parametersInvalid', 'Vetting.Hidden.ErrorGeneric'],
     ['keyring/hidden-vetting/fetchChallenge:notImplemented', 'Vetting.Hidden.NotInThisBuild'],
     ['vta/pcs/prove:unsupportedSuite', 'Join.Ways.PrivateVetting'],
+    ['keyring/hidden-vetting/request:noApplication', 'Vetting.Hidden.NoApplication'],
+    ['keyring/hidden-vetting/submit:noApplication', 'Vetting.Hidden.NoApplication'],
     [undefined, 'Vetting.Hidden.ErrorGeneric'],
   ])('%s → %s', (code, key) => {
     expect(hiddenVettingErrorKey(code)).toBe(key)

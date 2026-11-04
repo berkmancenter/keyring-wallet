@@ -2010,6 +2010,9 @@
       "NoTokensError": "Você não tem fichas de garantia no momento. O Keyring as obtém para você quando você abre sua mesa de avaliação — abra-a, aguarde um instante e tente de novo.",
       "RequirementsChanged": "{{community}} mudou o que pede de novos membros desde que esta pessoa se candidatou, então garantir agora não valeria. Peça que ela se candidate de novo.",
       "NotEnrolledError": "Você não está inscrito neste período. Inscreva-se e tente de novo.",
+      "RequestNotPrivate": "Nada foi assinado: {{community}} só verifica em privado, e este pedido não era privado. Dê um novo ticket a essa pessoa.",
+      "RulesUnread": "Não foi possível verificar as regras de verificação desta comunidade. Tente novamente em instantes.",
+      "RulesUnusable": "As regras de verificação desta comunidade não podem ser lidas, então nada foi assinado. Avise a comunidade.",
       "PeriodClosed": "Este período de verificação terminou. Inscreva-se no novo e tente de novo.",
       "MemberMismatch": "Este agente não pode dar garantia de forma privada nesta comunidade. Uma versão anterior do Keyring o inscreveu na verificação privada com uma identidade diferente daquela com que você verifica aqui, e um agente não pode mudar isso, então a comunidade recusaria todo token de garantia que ele retirar. A inscrição dele aqui está travada e não se resolve reabrindo a mesa, e os tokens que ele guarda para esta comunidade não podem ser usados. Para dar garantia de forma privada aqui, conecte outro agente.",
       "ErrorGeneric": "Algo deu errado. Tente de novo em um instante.",
@@ -2049,6 +2052,7 @@
       "StartAgain": "Começar uma nova solicitação",
       "NotEnoughYet": "Ainda não há verificadores suficientes garantindo você. Peça a outro verificador e tente de novo.",
       "ApplicationGone": "Esta solicitação não está mais no seu agente. Comece uma nova.",
+      "NoApplication": "O Keyring não conseguiu preparar a verificação privada com o seu agente, então nada foi enviado. Verifique se o seu agente está conectado e tente novamente.",
       "AttestationRefused": "Seu agente não conseguiu verificar a atestação de um verificador. Peça para ele verificar você de novo, ou peça a outro verificador.",
       "ErrorGeneric": "Algo deu errado. Tente de novo em um instante.",
       "NotInThisBuild": "Esta etapa ainda não está nesta versão do Keyring."
@@ -2159,7 +2163,7 @@
       "proof": "Detalhes: não foi possível verificar a assinatura da declaração.",
       "noCard": "Detalhes: a declaração chegou antes de este telefone enviar seu cartão nessa sessão.",
       "legacyShape": "Detalhes: a declaração está em um formato antigo que este telefone não aceita mais. Peça ao seu verificador para atualizar o aplicativo e verificar você novamente.",
-      "namedForPrivate": "O Keyring deste garantidor ainda não consegue garantir em privado, então a declaração dele não pode contar aqui. Peça que ele atualize o Keyring e garanta novamente."
+      "namedForPrivate": "Este garantidor enviou uma declaração que o identifica, mas esta comunidade faz a verificação em privado, então ela não pode contar. Peça que ele abra seu pedido novamente e garanta em privado."
     },
     "CardRefused": "O cartão do solicitante chegou, mas este telefone não pôde aceitá-lo. A sessão continua aberta, então ele pode enviá-lo de novo.",
     "CardRefusedReason": {

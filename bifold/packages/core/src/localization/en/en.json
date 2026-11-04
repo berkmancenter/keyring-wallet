@@ -2155,6 +2155,9 @@
       "NoTokensError": "You have no vouching tokens right now. Keyring draws them for you when you open your vetting desk — open it, give it a moment, and try again.",
       "RequirementsChanged": "{{community}} has changed what it asks of new members since this person applied, so vouching now wouldn't count. Ask them to apply again.",
       "NotEnrolledError": "You're not enrolled for this period. Enrol, then try again.",
+      "RequestNotPrivate": "Nothing was signed: {{community}} only vets privately, and this request wasn't private. Give them a new ticket.",
+      "RulesUnread": "Couldn't check this community's vetting rules. Try again in a moment.",
+      "RulesUnusable": "This community's vetting rules can't be read, so nothing was signed. Let the community know.",
       "PeriodClosed": "This vetting period has ended. Enrol for the new one, then try again.",
       "MemberMismatch": "This agent can't vouch privately in this community. An earlier Keyring build enrolled it for private vetting under a different identity from the one you vet with here, and an agent can't change that, so the community would refuse every vouching token it draws. Its enrolment here is stuck and won't clear by reopening the desk, and any tokens it holds for this community can't be used. To vouch privately here, connect a different agent.",
       "ErrorGeneric": "Something went wrong. Try again in a moment.",
@@ -2194,6 +2197,7 @@
       "StartAgain": "Start a new application",
       "NotEnoughYet": "Not enough vetters have vouched for you yet. Ask another vetter, then try again.",
       "ApplicationGone": "This application is no longer on your agent. Start a new one.",
+      "NoApplication": "Keyring couldn't set up private vetting with your agent, so nothing was sent. Check that your agent is connected, then try again.",
       "AttestationRefused": "Your agent couldn't verify an attestation from a vetter. Ask them to vet you again, or ask another vetter.",
       "ErrorGeneric": "Something went wrong. Try again in a moment.",
       "NotInThisBuild": "This step isn't in this build of Keyring yet."
@@ -2309,7 +2313,7 @@
       "proof": "Details: the statement's signature could not be verified.",
       "noCard": "Details: the statement came before this phone sent your card in that session.",
       "legacyShape": "Details: the statement is in an older format this phone no longer accepts. Ask your vetter to update their app and vet you again.",
-      "namedForPrivate": "This vetter's Keyring can't vouch privately yet, so their statement can't count here. Ask them to update Keyring and vouch again."
+      "namedForPrivate": "This vetter sent a statement that names them, but this community vets privately, so it can't count. Ask them to open your request again and vouch privately."
     },
     "CardRefused": "The applicant's card arrived, but this phone could not accept it. The session is still open, so they can send it again.",
     "CardRefusedReason": {

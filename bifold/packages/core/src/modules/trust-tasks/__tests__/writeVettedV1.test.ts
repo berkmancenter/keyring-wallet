@@ -46,6 +46,10 @@ import {
   vettedV1Statement,
 } from '../module/dtgV1Writing'
 // eslint-disable-next-line import/order
+import { readManifest } from '../module/joinManifest'
+// eslint-disable-next-line import/order
+import { VtiRefusal } from '../module/vtiAgent'
+// eslint-disable-next-line import/order
 import { CREDENTIAL_EXCHANGE_ISSUE } from '../module/vtiInbox'
 // eslint-disable-next-line import/order
 import {
@@ -411,9 +415,12 @@ describe('the desk in mode auto', () => {
     expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
   })
 
-  it('goes by its own grant when the requirements cannot be read: a VAC means vetted/1', async () => {
+  // A community that vets and publishes no statement type: the read worked, and said nothing about the shape.
+  const manifestNamingNoShape = { criteria: [{ id: 'vetted-member', vetting: { minStatements: 1 } }] }
+
+  it('goes by its own grant when the requirements name no shape: a VAC means vetted/1', async () => {
     setDtgV1WritingMode('auto')
-    mockFetchManifest.mockRejectedValue(new Error('offline'))
+    mockFetchManifest.mockResolvedValue(manifestNamingNoShape)
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     await deskWith(digest(), grantStore('vac')).attest('r', decision)
     expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
@@ -421,17 +428,68 @@ describe('the desk in mode auto', () => {
     warn.mockRestore()
   })
 
-  it('requirements unread twice and no grant held: vetted/1, said at warn with the shape chosen', async () => {
+  it('requirements that name no shape and no grant held: vetted/1 by default', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNamingNoShape)
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(warn).toHaveBeenCalledWith('[VTI] statement shape: writing vetted/1 (by default)')
+    warn.mockRestore()
+  })
+
+  it('requirements unread twice: nothing is signed or sent, whatever grant it holds, and it says why', async () => {
     setDtgV1WritingMode('auto')
     mockFetchManifest.mockReset()
     mockFetchManifest.mockRejectedValue(new Error('the VTA did not answer'))
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
-    await deskWith(digest()).attest('r', decision)
-    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    const code = await deskWith(digest(), grantStore('vac'))
+      .attest('r', decision)
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetter/attest:rulesUnread')
+    expect(sent).toHaveLength(0)
     expect(mockFetchManifest).toHaveBeenCalledTimes(2)
     expect(warn).toHaveBeenCalledWith(
-      "[VTI] statement shape: the community's requirements could not be read twice (the VTA did not answer); writing vetted/1 by default"
+      "[VTI] statement not written: the community's requirements could not be read twice (the VTA did not answer)"
     )
+    warn.mockRestore()
+  })
+
+  // Rules that came and cannot be used: the same again next time, so this code's words do not promise a retry helps.
+  // `readManifest` reads a malformed answer as no criteria rather than throwing, so it comes here as a manifest.
+  it.each([
+    ['a malformed answer, as the reader hands it over', () => readManifest({ criteria: 'nope' } as never, '0.3')],
+    ['an answer with no payload, as the reader hands it over', () => readManifest(undefined, '0.3')],
+    ['criteria that are not a list', () => ({ criteria: 'nope' })],
+    ['criteria of which none vets', () => ({ criteria: [{ id: 'open-door' }] })],
+    ['a vetting member that is not an object', () => ({ criteria: [{ id: 'vetted-member', vetting: 'nope' }] })],
+  ])('rules that cannot be used, %s: nothing is signed or sent', async (_what, manifest) => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockReset()
+    mockFetchManifest.mockResolvedValue(manifest())
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const code = await deskWith(digest(), grantStore('vac'))
+      .attest('r', decision)
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetter/attest:rulesUnusable')
+    expect(sent).toHaveLength(0)
+    warn.mockRestore()
+  })
+
+  it('a community that serves no version this phone speaks: nothing is signed, and it is not asked twice', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockReset()
+    mockFetchManifest.mockRejectedValue(new VtiRefusal('unsupportedVersion', 'no such version'))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const code = await deskWith(digest())
+      .attest('r', decision)
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetter/attest:rulesUnusable')
+    expect(mockFetchManifest).toHaveBeenCalledTimes(1)
+    expect(sent).toHaveLength(0)
     warn.mockRestore()
   })
 
@@ -446,7 +504,7 @@ describe('the desk in mode auto', () => {
 
   it('… and an endorsement grant means the old shape', async () => {
     setDtgV1WritingMode('auto')
-    mockFetchManifest.mockRejectedValue(new Error('offline'))
+    mockFetchManifest.mockResolvedValue(manifestNamingNoShape)
     await deskWith(digest(), grantStore('endorsement')).attest('r', decision)
     expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
   })
@@ -458,6 +516,42 @@ describe('the desk in mode auto', () => {
     await deskWith(digest(), grantStore('endorsement')).attest('r', decision)
     expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
     expect(logger.warn.mock.calls.some((c) => String(c[0]).includes('statement shape'))).toBe(true)
+  })
+
+  // 2026-11-03 (277.7): an applicant's Keyring holding an earlier identity's
+  // private record sent a request without the private mark to a community that
+  // vets only privately; the vetter signed a statement naming them, which could
+  // not count there and was refused on arrival.
+  describe('a request without the private mark, for a community that vets privately', () => {
+    const PRIVATE_EXT = { ext: { 'org.openvtc.hidden-vetting': { suite: 'ps-ddh-bls12381' } } }
+    const privateOnly = { criteria: [{ id: 'vetted-member', vetting: { statementType: VETTED, ...PRIVATE_EXT } }] }
+
+    it('signs and sends nothing, and says why in a code the screen words', async () => {
+      setDtgV1WritingMode('auto')
+      mockFetchManifest.mockResolvedValue(privateOnly)
+      const code = await deskWith(digest())
+        .attest('r', decision)
+        .then(() => undefined)
+        .catch((e: unknown) => (e as { code?: string }).code)
+      expect(code).toBe('keyring/hidden-vetter/attest:requestNotPrivate')
+      expect(sent).toHaveLength(0)
+    })
+
+    it('control: the same community with a named way in as well still gets the statement', async () => {
+      setDtgV1WritingMode('auto')
+      mockFetchManifest.mockResolvedValue({
+        criteria: [...privateOnly.criteria, { id: 'named-member', vetting: { statementType: VETTED } }],
+      })
+      await deskWith(digest()).attest('r', decision)
+      expect(sent).toHaveLength(1)
+    })
+
+    it('control: a community that vets by name gets the statement as before', async () => {
+      setDtgV1WritingMode('auto')
+      mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+      await deskWith(digest()).attest('r', decision)
+      expect(sent).toHaveLength(1)
+    })
   })
 
   it('in mode off, writes the old shape even for a moved community, and reads nothing', async () => {

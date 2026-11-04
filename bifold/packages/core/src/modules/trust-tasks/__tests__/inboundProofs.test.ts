@@ -24,6 +24,8 @@ jest.mock('../module/vtiAgent', () => ({
       sent.push({ to, type, body, options })
     }),
     onInbound: () => () => undefined,
+    // A named way in: asking a vetter reads whether the community vets privately.
+    fetchManifest: async () => ({ criteria: [{ id: 'vetted', vetting: { minStatements: 1 } }] }),
   },
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))

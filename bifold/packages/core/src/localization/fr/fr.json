@@ -2100,6 +2100,9 @@
       "NoTokensError": "Vous n'avez aucun jeton pour vous porter garant en ce moment. Keyring les tire pour vous à l'ouverture de votre bureau de parrainage — ouvrez-le, patientez un instant, puis réessayez.",
       "RequirementsChanged": "{{community}} a changé ce qu'elle demande aux nouveaux membres depuis la candidature de cette personne, donc se porter garant maintenant ne compterait pas. Demandez-lui de recommencer sa candidature.",
       "NotEnrolledError": "Vous n'êtes pas inscrit pour cette période. Inscrivez-vous, puis réessayez.",
+      "RequestNotPrivate": "Rien n'a été signé : {{community}} ne vérifie qu'en privé, et cette demande n'était pas privée. Donnez-lui un nouveau ticket.",
+      "RulesUnread": "Impossible de vérifier les règles de vérification de cette communauté. Réessayez dans un instant.",
+      "RulesUnusable": "Les règles de vérification de cette communauté sont illisibles, donc rien n'a été signé. Prévenez la communauté.",
       "PeriodClosed": "Cette période de vérification est terminée. Inscrivez-vous pour la nouvelle, puis réessayez.",
       "MemberMismatch": "Cet agent ne peut pas se porter garant en privé dans cette communauté. Une version antérieure de Keyring l'a inscrit à la vérification privée sous une autre identité que celle avec laquelle vous vérifiez ici, et un agent ne peut pas changer cela : la communauté refuserait donc chaque jeton de garantie qu'il tire. Son inscription ici est bloquée et ne se débloquera pas en rouvrant le bureau, et les jetons qu'il détient pour cette communauté sont inutilisables. Pour vous porter garant en privé ici, connectez un autre agent.",
       "ErrorGeneric": "Un problème est survenu. Réessayez dans un instant.",
@@ -2139,6 +2142,7 @@
       "StartAgain": "Commencer une nouvelle demande",
       "NotEnoughYet": "Pas encore assez de vérificateurs se sont portés garants de vous. Demandez à un autre vérificateur, puis réessayez.",
       "ApplicationGone": "Cette demande n'est plus sur votre agent. Commencez-en une nouvelle.",
+      "NoApplication": "Keyring n'a pas pu préparer la vérification privée avec votre agent, donc rien n'a été envoyé. Vérifiez que votre agent est connecté, puis réessayez.",
       "AttestationRefused": "Votre agent n'a pas pu vérifier l'attestation d'un vérificateur. Demandez-lui de vous vérifier à nouveau, ou demandez à un autre vérificateur.",
       "ErrorGeneric": "Un problème est survenu. Réessayez dans un instant.",
       "NotInThisBuild": "Cette étape n'est pas encore dans cette version de Keyring."
@@ -2249,7 +2253,7 @@
       "proof": "Détails : la signature de la déclaration n'a pas pu être vérifiée.",
       "noCard": "Détails : la déclaration est arrivée avant que ce téléphone envoie votre carte pendant cette session.",
       "legacyShape": "Détails : la déclaration est dans un ancien format que ce téléphone n'accepte plus. Demandez à votre vérificateur de mettre à jour son application et de vous vérifier à nouveau.",
-      "namedForPrivate": "Le Keyring de ce garant ne peut pas encore se porter garant en privé, donc son attestation ne peut pas compter ici. Demandez-lui de mettre à jour Keyring et de recommencer."
+      "namedForPrivate": "Ce garant a envoyé une attestation qui le nomme, mais cette communauté procède à la vérification en privé, donc elle ne peut pas compter. Demandez-lui de rouvrir votre demande et de se porter garant en privé."
     },
     "CardRefused": "La carte du demandeur est arrivée, mais ce téléphone n'a pas pu l'accepter. La session est toujours ouverte ; il peut la renvoyer.",
     "CardRefusedReason": {

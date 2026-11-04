@@ -74,6 +74,8 @@ jest.mock('../module/vtiAgent', () => ({
     ask: (...a: unknown[]) => mockAsk(...a),
     sentNoAnswer: () => new Error('no answer'),
     onInbound: () => () => undefined,
+    // A named way in: asking a vetter reads whether the community vets privately.
+    fetchManifest: async () => ({ criteria: [{ id: 'vetted', vetting: { minStatements: 1 } }] }),
   },
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
