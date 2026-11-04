@@ -50,6 +50,8 @@ interface Setup {
   head?: number
   /** The agent's answer to `rooms/keys/seal/0.2`. */
   seal?: (payload: Record<string, unknown>) => unknown
+  /** The agent cannot be asked what it serves. */
+  servedFails?: boolean
 }
 
 function setup(o: Setup = {}) {
@@ -126,7 +128,10 @@ function setup(o: Setup = {}) {
   let ids = 0
   const b: RoomsBackend = {
     agentLinked: () => true,
-    agentServedTypes: async () => o.served ?? SERVED,
+    agentServedTypes: async () => {
+      if (o.servedFails) throw new Error('no answer')
+      return o.served ?? SERVED
+    },
     agentTask,
     communities: async () => [COMMUNITY],
     communityTask,
@@ -144,6 +149,7 @@ function setup(o: Setup = {}) {
     service,
     agentTask,
     sendCompleted,
+    warn: b.warn as jest.Mock,
     advance: (ms: number) => {
       clock += ms
     },
@@ -757,5 +763,52 @@ describe('writing to an attributed room', () => {
       key: postKey('post-1'),
       version: 1,
     })
+  })
+})
+
+describe('a write refused, said in the log by kind alone', () => {
+  const LONG_ROOM = 'did:webvh:QmRoomScidThatIsLong0123456789:first.example:room-dids:9381cab61f82'
+  const lines = (warn: jest.Mock) =>
+    warn.mock.calls.map(([line]) => String(line)).filter((l) => l.includes('a write to'))
+
+  it('refused on this phone: the room by short id and the reason, nothing sent', async () => {
+    const { service, warn, sendCompleted } = setup()
+    await expect(service.prepareWrite(READ_ONLY_ROOM, { title: '', body: 'Hi' })).rejects.toBeInstanceOf(
+      RoomsUnavailable
+    )
+    expect(lines(warn)).toEqual([
+      `rooms: a write to ${READ_ONLY_ROOM} was refused on this phone: unavailable (noRight)`,
+    ])
+    expect(sendCompleted).not.toHaveBeenCalled()
+  })
+
+  it('the agent refusing for two authority credentials: named, and the refusal is not retryable', async () => {
+    const refusal = new FakeRefusal('taskFailed', { code: 'rooms/keys/seal:conflict' })
+    refusal.message = `conflict: this VTA holds more than one AuthorityCredential issued by room \`${LONG_ROOM}\` to one persona`
+    const { service, warn } = setup({
+      seal: () => {
+        throw refusal
+      },
+    })
+    const { token } = await service.prepareWrite(SEALED_ROOM, { title: '', body: 'Hi', idempotencyKey: 'post-9' })
+    const error = await service.confirmWrite(token).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(RoomsRefused)
+    expect((error as RoomsRefused).retryable).toBe(false)
+    const [line] = lines(warn)
+    expect(line).toBe(`rooms: a write to ${SEALED_ROOM} was not written: refused (conflict), two authority credentials`)
+    // The agent's words name the room's whole DID; the line carries the kind only.
+    expect(line).not.toContain('QmRoomScid')
+  })
+
+  it('a failure that may pass is not called refused: it could not be prepared this time', async () => {
+    const { service, warn } = setup({ servedFails: true })
+    await expect(service.prepareWrite(OPEN_ROOM, { title: '', body: 'Hi' })).rejects.toThrow('no answer')
+    expect(lines(warn)).toEqual([`rooms: a write to ${OPEN_ROOM} could not be prepared: failed`])
+  })
+
+  it('a write that goes says nothing (control)', async () => {
+    const { service, warn } = setup()
+    await service.confirmWrite((await service.prepareWrite(OPEN_ROOM, { title: '', body: 'Hi' })).token)
+    expect(lines(warn)).toEqual([])
   })
 })

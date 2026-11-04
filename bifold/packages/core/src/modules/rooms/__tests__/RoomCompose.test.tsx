@@ -12,7 +12,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { chatMessageText } from '../roomPosts'
 import { createSampleRoomsService } from '../sample/sampleRooms'
-import { RoomsPreviewExpired, type RoomsService, type WriteDraft } from '../types'
+import { RoomsPreviewExpired, RoomsRefused, RoomsUnavailable, type RoomsService, type WriteDraft } from '../types'
 
 let mockService: RoomsService | undefined
 let mockParams: Record<string, string> | undefined
@@ -193,6 +193,34 @@ describe('posting to a room', () => {
     const bodies = prepareWrite.mock.calls.map(([, draft]) => (draft as WriteDraft).body)
     expect(bodies[1]).toBe(bodies[0])
     await waitFor(() => expect(tree.getAllByText('Second try')).toHaveLength(1))
+  })
+
+  test('a post refused on this phone for good says why, and offers no retry (control: the test above)', async () => {
+    const service = mockService as RoomsService
+    const prepareWrite = jest
+      .spyOn(service, 'prepareWrite')
+      .mockRejectedValueOnce(new RoomsUnavailable('write', 'noRight', "this member's rights do not include write"))
+    const tree = show(PLANNING)
+    await type(tree, 'Hello')
+    await send(tree)
+    await waitFor(() => expect(tree.getByTestId(id('RoomPostNotSent'))).toHaveTextContent('Rooms.PostNotSentWhy'))
+    expect(tree.queryByText('Rooms.PostNotSent')).toBeNull()
+    expect(tree.queryByTestId(id('RoomPostRetry'))).toBeNull()
+    expect(prepareWrite).toHaveBeenCalledTimes(1)
+  })
+
+  test('the agent refusing for two authority credentials: said, and not offered again', async () => {
+    const service = mockService as RoomsService
+    jest
+      .spyOn(service, 'confirmWrite')
+      .mockRejectedValueOnce(
+        new RoomsRefused('write', 'conflict', false, 'conflict: this VTA holds more than one AuthorityCredential')
+      )
+    const tree = show(PLANNING)
+    await type(tree, 'Hello again')
+    await send(tree)
+    await waitFor(() => expect(tree.getByTestId(id('RoomPostNotSent'))).toHaveTextContent('Rooms.PostNotSentWhy'))
+    expect(tree.queryByTestId(id('RoomPostRetry'))).toBeNull()
   })
 
   test('a preview gone stale between the two steps is prepared once more', async () => {

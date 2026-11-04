@@ -105,6 +105,7 @@ export const pendingAsPost = (pending: PendingPost, actingAs: RoomPost['author']
   pinned: false,
   unread: false,
   delivery: pending.state === 'sent' ? undefined : pending.state,
+  ...(pending.state === 'failed' && pending.refused ? { refused: pending.refused } : {}),
   files: pending.file
     ? [
         {

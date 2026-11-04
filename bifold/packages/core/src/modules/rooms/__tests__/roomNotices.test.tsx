@@ -25,7 +25,7 @@ import {
   useRoomNotices,
 } from '../roomNotices'
 import { createSampleRoomsService } from '../sample/sampleRooms'
-import type { RoomOffer, RoomsService, RoomSummary } from '../types'
+import { RoomsRefused, type RoomOffer, type RoomsService, type RoomSummary } from '../types'
 import { ROOM_ADMITTED_EVENT, useRoomOffer } from '../useRoomOffer'
 import { refreshRoomRows, resetRoomRows } from '../useRoomRows'
 import { ROOM_POST_FAILED_EVENT, useRoomSend } from '../useRoomSend'
@@ -207,6 +207,27 @@ describe("a post that didn't send", () => {
     expect(heard).toEqual([])
     room.unmount()
     sub.remove()
+  })
+
+  test('refused for good away from its room: says why, and a tap does not send it again (control: the next test)', async () => {
+    mockService = undefined
+    const notices = renderHook(() => useRoomNotices())
+    const service = writing()
+    const room = renderHook(() => useRoomSend(service, 'r1', () => undefined, { onScreen: true, roomName: 'Planning' }))
+    let release: () => void = () => undefined
+    service.confirmWrite.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => (release = () => reject(new RoomsRefused('write', 'forbidden', false, 'refused'))))
+    )
+    await act(async () => void room.result.current.send('On my way.'))
+    room.unmount()
+    await act(async () => release())
+    expect(show).toHaveBeenCalledTimes(1)
+    expect(toast(0)).toMatchObject({ type: 'error', text1: 'Rooms.NoticePostFailed', text2: 'Rooms.PostNotTaken' })
+    await act(async () => toast(0).onPress())
+    await flush()
+    expect(service.prepareWrite).toHaveBeenCalledTimes(1)
+    notices.unmount()
   })
 
   test('away from its room it is said, still kept for the room, and a tap sends the same event again', async () => {

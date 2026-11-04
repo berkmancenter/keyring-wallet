@@ -24,6 +24,7 @@ import { DeviceEventEmitter } from 'react-native'
 import { MAX_TEXT_LENGTH } from '../chat/chatEvent'
 import { newEventId } from '../chat/eventId'
 
+import { permanentRefusal, type PostRefusal } from './postRefusal'
 import { holdRoomFileTransfer, removeRoomFileCopy } from './real/files/tempCopies'
 import type { RoomsAttachment, RoomsService, RoomsTransferProgress } from './types'
 
@@ -41,6 +42,8 @@ export interface RoomPostFailed {
   roomName?: string
   /** It carried a file, so it cannot be sent again from the notice. */
   hasFile?: boolean
+  /** Refused in a way no retry passes: the notice says why and offers no retry. */
+  refused?: PostRefusal
 }
 
 export interface PendingPost {
@@ -56,6 +59,8 @@ export interface PendingPost {
   file?: RoomsAttachment
   /** How far the file's upload has come, while sending. */
   progress?: RoomsTransferProgress
+  /** Failed in a way no retry passes (postRefusal): said, and never sent again. */
+  refused?: PostRefusal
 }
 
 export interface RoomSend {
@@ -144,11 +149,12 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
     }
     update(box, post.localId, { state: 'sent', key: written.key, progress: undefined })
     box.onSent?.()
-  } catch {
+  } catch (e) {
     // A cancelled upload is gone already (`cancel` took it off); anything else stays, to send again, or for a file,
-    // to say it was not sent: a stop by the lock is not the member's cancelling.
+    // to say it was not sent: a stop by the lock is not the member's cancelling. One refused for good says why.
     if (box.posts.some((p) => p.localId === post.localId)) {
-      update(box, post.localId, { state: 'failed', progress: undefined })
+      const refused = permanentRefusal(e)
+      update(box, post.localId, { state: 'failed', progress: undefined, refused })
       if (!box.onScreen) {
         const failed: RoomPostFailed = {
           service,
@@ -156,6 +162,7 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
           localId: post.localId,
           roomName: box.name,
           hasFile: Boolean(post.file),
+          ...(refused ? { refused } : {}),
         }
         DeviceEventEmitter.emit(ROOM_POST_FAILED_EVENT, failed)
       }
@@ -173,7 +180,8 @@ export function retryRoomPost(service: RoomsService, roomId: string, localId: st
   const box = outboxOf(service, roomId)
   const post = box.posts.find((p) => p.localId === localId)
   // A failed post's file is gone with its upload, so that post cannot be sent again: the member adds the file again.
-  if (!post || post.state !== 'failed' || post.file) return
+  // One refused for good fails the same way however often it is sent.
+  if (!post || post.state !== 'failed' || post.file || post.refused) return
   update(box, localId, { state: 'sending' })
   void deliver(service, roomId, post)
 }

@@ -15,6 +15,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { timeLabel, useDateWords, useUses24HourClock } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
+import { postRefusalText } from '../postRefusal'
 import type { RoomPost } from '../roomPosts'
 import type { Identity, RoomFile } from '../types'
 
@@ -79,7 +80,10 @@ export const RoomPostBubble: React.FC<{
     </ThemedText>
   )
   // A failed post's file went with its upload, so that post is cleared and the file added again, not sent again.
-  const notSent = t(post.files.length > 0 ? 'Rooms.PostFileNotSent' : 'Rooms.PostNotSent')
+  // One refused for good says why, and is not offered again.
+  const notSent = post.refused
+    ? postRefusalText(t, post.refused)
+    : t(post.files.length > 0 ? 'Rooms.PostFileNotSent' : 'Rooms.PostNotSent')
   const bubble = (
     <View style={styles.row} testID={testIdWithKey(`RoomPost_${roomHandle(post.key)}`)}>
       <View style={styles.bubble}>
@@ -154,7 +158,7 @@ export const RoomPostBubble: React.FC<{
       </View>
     </View>
   )
-  if (post.delivery !== 'failed' || !onRetry) return bubble
+  if (post.delivery !== 'failed' || !onRetry || post.refused) return bubble
   return (
     <Pressable
       onPress={onRetry}
