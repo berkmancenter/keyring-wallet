@@ -8,7 +8,7 @@ import { useTheme } from '../../contexts/theme'
  * The header behind the vetter's side of vetting: the theme's own header
  * gradient with its far end changed, so a vetter and an applicant can tell
  * at a glance whose side of the exchange they are on, and the brand stays
- * (Alberto, 10-06: "two headers that look the same but with different text").
+ * (Alberto, 10-06: two headers that looked the same with different text).
  *
  * The far end is the theme's `vetterHeaderEnd` when it sets one, else its
  * focus colour. Drawn with react-native-svg, which core already ships.
