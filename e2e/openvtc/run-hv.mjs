@@ -108,24 +108,34 @@ try {
   const tapped = Date.now();
   let retapped = false;
   let refusedText = '';
+  const keepRefusal = async (el) => {
+    refusedText = (await el.getText().catch(() => '')) || '(no text read)';
+    await dumpSource(app, 'hv-private-refused').catch(() => undefined);
+    await screenshot(app, 'hv-private-refused').catch(() => undefined);
+  };
   for (let until = tapped + 120000; Date.now() < until; ) {
+    // Each pass, without scrolling: a refusal on screen is kept even if the next step comes before the retap would look.
+    if (!refusedText && (await existsTestId(app, 'JoinPrivateVettingRefused', 500))) await keepRefusal(byTestId(app, 'JoinPrivateVettingRefused'));
     if ((await existsTestId(app, 'JoinMakeIdentity', 3000)) || (await existsTestId(app, 'VettingPrivate', 1000))) break;
     // 11-04: one tap left the ways showing for over 3 min while the agent's sign-in was timing out. One more tap, never a loop;
     // the RETRY line is counted in the report, and the row says so, so a retry never hides a tap the app ignored.
     if (!retapped && Date.now() - tapped > 45000 && (await existsTestId(app, 'JoinStart', 1000))) {
       retapped = true;
-      // The refusal line renders below the fold, so a tap that was answered can look like one that was ignored.
-      const refused = await scrollToTestId(app, 'JoinPrivateVettingRefused', 4).catch(() => undefined);
-      if (refused) {
-        refusedText = (await refused.getText().catch(() => '')) || '(no text read)';
-        await dumpSource(app, 'hv-private-refused').catch(() => undefined);
-        await screenshot(app, 'hv-private-refused').catch(() => undefined);
+      // The refusal line renders below the fold, so a tap that was answered can look like one that was ignored. Scrolled
+      // to only here: on every pass it would swipe the button away.
+      if (!refusedText) {
+        const refused = await scrollToTestId(app, 'JoinPrivateVettingRefused', 4).catch(() => undefined);
+        if (refused) await keepRefusal(refused);
       }
-      console.log(`RETRY hv-start ${new Date().toISOString().slice(11, 19)}Z — "Meet a vetter" tapped, still on the ways after 45 s${refused ? `; refused: ${refusedText}` : '; no refusal line'}`);
+      console.log(`RETRY hv-start ${new Date().toISOString().slice(11, 19)}Z — "Meet a vetter" tapped, still on the ways after 45 s${refusedText ? `; refused: ${refusedText}` : '; no refusal line'}`);
       await scrollToTestId(app, 'JoinStart', 6, { from: 0.6 }).catch(() => undefined);
       await tapTestId(app, 'JoinStart', 10000).catch(() => undefined);
     }
+    // A dead session makes existsTestId return at once: this keeps the wait from hammering the driver.
+    await sleep(1000);
   }
+  // A refusal that was on screen and then passed still says so.
+  if (refusedText) console.log(`[hv] JoinPrivateVettingRefused seen: ${refusedText}`);
   // Below the fold on a community with a member directory: its preview sits above Continue (join.js ask).
   if (await existsTestId(app, 'JoinMakeIdentity', 1000)) {
     await scrollToTestId(app, 'JoinAsContinue', 8).catch(() => undefined);
