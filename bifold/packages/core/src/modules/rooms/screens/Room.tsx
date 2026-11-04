@@ -46,12 +46,13 @@ import { RoomHeader } from '../components/RoomHeader'
 import { RoomIdentitySheet } from '../components/RoomIdentitySheet'
 import { useDirectoryNames, useDirectoryService } from '../../directory/useDirectory'
 import { PetnamesProvider } from '../components/memberWords'
+import { RoomNotesWaiting } from '../components/RoomNotesWaiting'
 import { RoomPostBubble } from '../components/RoomPostBubble'
 import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import { toInertText } from '../inertText'
-import { isChatPost, type RoomPost } from '../roomPosts'
+import { isChatPost, isNote, type RoomPost } from '../roomPosts'
 import { openInMyAgent } from '../roomLinks'
 import type { Identity, RoomFile } from '../types'
 import { useMyName } from '../useMyName'
@@ -271,6 +272,8 @@ const Room: React.FC = () => {
     roomCapabilities.uploadFile.status === 'available' && roomCapabilities.listFiles.status === 'available'
   // Titled records and removed ones are the room's notes, on their own screen; the chat shows the rest.
   const chatPosts = feed.posts?.filter(isChatPost)
+  // The notes the chat leaves out, said under an empty chat: a note from the web page read as an empty room (IN-434).
+  const notesHere = feed.posts?.filter((post) => isNote(post) && !post.retracted) ?? []
   const items = chatPosts || pendingPosts.length ? withDayPills([...pendingPosts, ...(chatPosts ?? [])]) : []
   const shown = unavailable ? [] : items
 
@@ -285,9 +288,18 @@ const Room: React.FC = () => {
       {t('Rooms.PostsFailed')}
     </ThemedText>
   ) : feed.posts ? (
-    <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsNone')}>
-      {t('Rooms.PostsNone')}
-    </ThemedText>
+    <View style={styles.centered}>
+      <ThemedText style={styles.muted} testID={testIdWithKey('RoomPostsNone')}>
+        {t('Rooms.PostsNone')}
+      </ThemedText>
+      {notesHere.length > 0 ? (
+        <RoomNotesWaiting
+          count={notesHere.length}
+          newest={notesHere[0].title}
+          onOpen={() => navigation.navigate(Screens.RoomPart, { roomId, part: 'notes' })}
+        />
+      ) : null}
+    </View>
   ) : (
     <ActivityIndicator
       style={styles.centered}
