@@ -27,6 +27,8 @@ export interface OtherAgentWaiting {
   name: string
   count: number
   reachable: boolean
+  /** Its address no longer exists (a deleted agent). */
+  gone?: boolean
 }
 
 /** The other agents with requests waiting, or that a look could not reach; oldest agent first. */
@@ -45,6 +47,7 @@ export function useOtherAgentsWaiting(now: number = Date.now()): OtherAgentWaiti
         name: agentDisplayName(withAgentName(a, state.agentNames), t),
         count: waitingRequests(seen.approvals, now).length,
         reachable: seen.reachable,
+        gone: Boolean(seen.gone),
       }
     })
     .filter((o) => o.count > 0 || !o.reachable)
@@ -91,7 +94,11 @@ export const OtherAgentsRequests: React.FC<{ shape: 'rows' | 'line' }> = ({ shap
       {waiting.map((o) => (
         <View key={o.vtaDid} style={styles.card} testID={testIdWithKey(`RequestsOther_${o.vtaDid}`)}>
           <ThemedText variant="bold">
-            {o.reachable ? t('Requests.OtherWaiting', named(o)) : t('Requests.OtherUnreachable', named(o))}
+            {o.gone
+              ? t('Requests.OtherGone', named(o))
+              : o.reachable
+                ? t('Requests.OtherWaiting', named(o))
+                : t('Requests.OtherUnreachable', named(o))}
           </ThemedText>
           {o.count > 0 ? (
             <Button

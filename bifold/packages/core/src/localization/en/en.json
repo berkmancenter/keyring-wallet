@@ -1017,6 +1017,7 @@
     "OtherWaiting_one": "{{agent}}: 1 request waits for you",
     "OtherWaiting_other": "{{agent}}: {{count}} requests wait for you",
     "OtherUnreachable": "{{agent}}: not reachable now",
+    "OtherGone": "{{agent}}: no longer exists",
     "SwitchTo": "Switch to {{agent}}",
     "Empty": "Nothing is waiting for you. A request may have been handled on another device, or it may have expired.",
     "DoneApproved": "Approved. Your agent carries on.",

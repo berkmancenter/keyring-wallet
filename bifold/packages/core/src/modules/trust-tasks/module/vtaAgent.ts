@@ -16,7 +16,7 @@ import { AppState, DeviceEventEmitter, Platform } from 'react-native'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
-import { agentGoneVerdict, type AgentGoneWhy } from './agentGone'
+import { AGENT_NOT_FOUND_CONFIRM_MS, agentGoneVerdict, type AgentGoneWhy } from './agentGone'
 import { didPrefix } from './didPrefix'
 import {
   AGENT_HOST_QR_LIFETIME_MS,
@@ -224,7 +224,15 @@ export interface VtaAgentState {
    * as last seen by a look at each (several agents, step 3), with whether the
    * look reached it. Carried into `approvals` when the person switches to it.
    */
-  otherRequests?: Readonly<Record<string, { approvals: VtiApproval[]; reachable: boolean; at: number }>>
+  /**
+   * What a look at each other agent found. `notFoundAt`: when its address first answered "not found" (any HTTP 404,
+   * which a host mid-deploy also gives), so not yet a verdict. `gone`: "not found" again at least
+   * AGENT_NOT_FOUND_CONFIRM_MS later, the same bar as the current agent's address: said so, and not looked at again
+   * for {@link GONE_OTHER_RECHECK_MS}.
+   */
+  otherRequests?: Readonly<
+    Record<string, { approvals: VtiApproval[]; reachable: boolean; at: number; notFoundAt?: number; gone?: true }>
+  >
   /**
    * Whether the saved link has been read at start-up (`restore`). Until then
    * `link` reads "not linked" on every phone, linked or not, so a screen that
@@ -440,6 +448,13 @@ export const APPROVE_REASON = 'Approve a request from your agent'
 export const DEVICE_LIST_DEADLINE_MS = 15000
 /** Reconnect tries in a row (1 s, 2 s, 4 s, 8 s, 16 s apart) before the agent screen says it didn't answer. */
 export const MAX_RECONNECT_TRIES = 5
+
+/**
+ * How long an other agent found gone (its address answers "not found") is left before one more address check.
+ * Until then it is not looked at: a look's sign-in resolves the address four times, and the look runs on every
+ * return to the foreground (a deleted agent cost ~6 s of 404s per return on 277.8, DEAD-AGENT-LOOK).
+ */
+export const GONE_OTHER_RECHECK_MS = 24 * 60 * 60_000
 
 /**
  * How long after a return a drop still counts as found because the app was
@@ -1111,6 +1126,41 @@ export class VtaAgentController {
       for (const { vtaDid } of links) {
         // Asked again before each look: a look takes seconds, and the current agent can change under it.
         if (vtaDid === current()) continue
+        const known = this.state.otherRequests?.[vtaDid]
+        if (known?.gone && this.now() - known.at < GONE_OTHER_RECHECK_MS) continue
+        // One bounded address check first. "Not found" is any HTTP 404, which a host mid-deploy or a moved path also
+        // answers, so one is noted, not a verdict: the agent is skipped this time (no four-try sign-in) and said
+        // unreachable; "not found" again an hour or more later is the verdict, as for the current agent's address.
+        // A non-current agent is not signed in to for the bar the current one has (a failed sign-in first): the
+        // sign-in is the cost being saved, and a wrong verdict here only hides a look, never the agent itself.
+        const address = await (this.deps.agentAddress ?? agentAddressOf)(agent, vtaDid).catch(() => 'unknown' as const)
+        if (address === 'notFound') {
+          const at = this.now()
+          const firstAt = known?.notFoundAt ?? at
+          const gone = at - firstAt >= AGENT_NOT_FOUND_CONFIRM_MS
+          releaseWarn(
+            gone
+              ? `[VTA] another agent, ${didPrefix(vtaDid)}, no longer exists (its address is not found, again): not looked at`
+              : `[VTA] another agent, ${didPrefix(vtaDid)}: its address is not found; not looked at this time`
+          )
+          this.set({
+            otherRequests: {
+              ...(this.state.otherRequests ?? {}),
+              [vtaDid]: {
+                // Kept, as a failed look keeps them: one miss is not a verdict, and the waiting count is what the
+                // screen is for. Gone, the address can act on none of them.
+                approvals: gone ? [] : stillWaiting(known?.approvals ?? [], at),
+                reachable: false,
+                at,
+                notFoundAt: firstAt,
+                ...(gone ? { gone: true as const } : {}),
+              },
+            },
+          })
+          continue
+        }
+        // Found: an earlier "not found" is forgotten. Unknown (the host did not answer): kept, not confirmed.
+        const notFoundAt = address === 'unknown' ? known?.notFoundAt : undefined
         const seen = await this.lookAt(agent, vtaDid)
         const now = this.now()
         const before = this.state.otherRequests?.[vtaDid]?.approvals ?? []
@@ -1118,7 +1168,12 @@ export class VtaAgentController {
         this.set({
           otherRequests: {
             ...(this.state.otherRequests ?? {}),
-            [vtaDid]: { approvals: stillWaiting([...byId.values()], now), reachable: seen !== undefined, at: now },
+            [vtaDid]: {
+              approvals: stillWaiting([...byId.values()], now),
+              reachable: seen !== undefined,
+              at: now,
+              ...(notFoundAt !== undefined ? { notFoundAt } : {}),
+            },
           },
         })
       }

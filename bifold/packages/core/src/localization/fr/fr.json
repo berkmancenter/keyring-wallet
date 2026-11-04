@@ -934,6 +934,7 @@
     "OtherWaiting_one": "{{agent}} : 1 demande vous attend",
     "OtherWaiting_other": "{{agent}} : {{count}} demandes vous attendent",
     "OtherUnreachable": "{{agent}} : injoignable pour le moment",
+    "OtherGone": "{{agent}} : n'existe plus",
     "SwitchTo": "Passer à {{agent}}",
     "Empty": "Rien ne vous attend. Une demande a peut-être été traitée sur un autre appareil, ou elle a expiré.",
     "DoneApproved": "Approuvé. Votre agent poursuit.",

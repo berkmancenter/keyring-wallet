@@ -1,7 +1,9 @@
 import { DeviceEventEmitter } from 'react-native'
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
+import { AGENT_NOT_FOUND_CONFIRM_MS } from '../module/agentGone'
 import {
+  GONE_OTHER_RECHECK_MS,
   GRANT_HOLD_MS,
   MAX_RECONNECT_TRIES,
   SESSION_CONNECT_DEADLINE_MS,
@@ -1257,7 +1259,7 @@ describe('several agents', () => {
     const vta = new VtaAgentController()
     vta.configure({
       ...extra,
-      now: () => 1_000,
+      now: (extra.now as () => number) ?? (() => 1_000),
       linkStore: () => ({
         get: async () => links.find((l) => l.vtaDid === current) as never,
         set: async (l) => {
@@ -1593,6 +1595,121 @@ describe('several agents', () => {
     await vta.lookAtOtherAgents({} as never)
     expect(looked).toEqual([])
     expect(vta.getState().otherRequests).toBeUndefined()
+  })
+
+  // DEAD-AGENT-LOOK (277.8, a report from 11-03): an agent deleted on its host stayed linked on the phone, and the
+  // look resolved its address four times (~6 s of 404s) at start-up and on every return.
+  describe('an other agent whose address no longer exists', () => {
+    const answering = (answers: Record<string, 'notFound' | 'found' | 'unknown'>) => {
+      const asked: string[] = []
+      const agentAddress = jest.fn(async (_a: unknown, did: string) => {
+        asked.push(did)
+        return answers[did] ?? 'found'
+      })
+      return { asked, agentAddress }
+    }
+
+    // One 404 is not a verdict: a host mid-deploy or a moved path answers 404 too (classifyDid reads any 404 as
+    // notFound). The first miss only skips the costly sign-in; gone takes a second miss an hour or more later.
+    it('a first "not found" skips the look and is noted, not a verdict; the current agent is never checked', async () => {
+      const { looked, deps } = lookDelivering([])
+      const { asked, agentAddress } = answering({ [WORK.vtaDid]: 'notFound' })
+      const { vta } = twoAgents({ ...deps, agentAddress })
+      await vta.restore({} as never)
+      await vta.lookAtOtherAgents({} as never)
+      expect(looked).toEqual([])
+      expect(asked).toEqual([WORK.vtaDid])
+      const seen = vta.getState().otherRequests?.[WORK.vtaDid]
+      expect(seen).toMatchObject({ reachable: false, approvals: [], notFoundAt: 1_000 })
+      expect(seen).not.toHaveProperty('gone')
+      expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: HOME.vtaDid })
+    })
+
+    it('"not found" again within the hour is still no verdict; an hour on it is gone, and left alone for a day', async () => {
+      const { looked, deps } = lookDelivering([])
+      const { asked, agentAddress } = answering({ [WORK.vtaDid]: 'notFound' })
+      let clock = 1_000
+      const { vta } = twoAgents({ ...deps, agentAddress, now: () => clock })
+      await vta.restore({} as never)
+      await vta.lookAtOtherAgents({} as never)
+      clock += AGENT_NOT_FOUND_CONFIRM_MS - 1
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).not.toHaveProperty('gone')
+      clock += 1
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).toMatchObject({ gone: true, notFoundAt: 1_000 })
+      expect(asked).toHaveLength(3)
+      // Gone: no check and no look within a day, then one check.
+      const goneAt = clock
+      clock = goneAt + GONE_OTHER_RECHECK_MS - 1
+      await vta.lookAtOtherAgents({} as never)
+      expect(asked).toHaveLength(3)
+      clock = goneAt + GONE_OTHER_RECHECK_MS
+      await vta.lookAtOtherAgents({} as never)
+      expect(asked).toHaveLength(4)
+      expect(looked).toEqual([])
+    })
+
+    it('an address found in between forgets the earlier "not found"; one that cannot be told keeps it, unconfirmed', async () => {
+      const answers: Record<string, 'notFound' | 'found' | 'unknown'> = { [WORK.vtaDid]: 'notFound' }
+      const { looked, deps } = lookDelivering([])
+      const agentAddress = jest.fn(async (_a: unknown, did: string) => answers[did])
+      let clock = 1_000
+      const { vta } = twoAgents({ ...deps, agentAddress, now: () => clock })
+      await vta.restore({} as never)
+      await vta.lookAtOtherAgents({} as never)
+      answers[WORK.vtaDid] = 'unknown'
+      clock += 10
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).toMatchObject({ notFoundAt: 1_000, reachable: true })
+      answers[WORK.vtaDid] = 'found'
+      clock += 10
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).not.toHaveProperty('notFoundAt')
+      // A "not found" an hour after the first, with a "found" between, is a first again: no verdict.
+      answers[WORK.vtaDid] = 'notFound'
+      clock = 1_000 + AGENT_NOT_FOUND_CONFIRM_MS
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).not.toHaveProperty('gone')
+      expect(looked).toEqual([WORK.vtaDid, WORK.vtaDid])
+    })
+
+    // Review of #908: one 404 (a host mid-deploy) must not hide requests a look already found waiting.
+    it('a first "not found" keeps the requests already seen waiting; the verdict an hour on clears them', async () => {
+      const answers: Record<string, 'notFound' | 'found' | 'unknown'> = { [WORK.vtaDid]: 'found' }
+      const { deps } = lookDelivering([request('r1'), request('r2')])
+      const agentAddress = jest.fn(async (_a: unknown, did: string) => answers[did])
+      let clock = 1_000
+      const { vta } = twoAgents({ ...deps, agentAddress, now: () => clock })
+      await vta.restore({} as never)
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]?.approvals).toHaveLength(2)
+      answers[WORK.vtaDid] = 'notFound'
+      clock += 10
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).toMatchObject({ reachable: false, notFoundAt: 1_010 })
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]?.approvals).toHaveLength(2)
+      // Another miss inside the hour keeps them still.
+      clock += 10
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]?.approvals).toHaveLength(2)
+      // Control: the verdict an hour after the first miss marks it gone, and its requests with it.
+      clock = 1_010 + AGENT_NOT_FOUND_CONFIRM_MS
+      await vta.lookAtOtherAgents({} as never)
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).toMatchObject({ gone: true, approvals: [] })
+    })
+
+    // Control: an address that answers, or that cannot be told, is looked at as before.
+    it.each(['found', 'unknown'] as const)('an address that is %s: looked at as before', async (answer) => {
+      const { looked, deps } = lookDelivering([request('r1')])
+      const { agentAddress } = answering({ [WORK.vtaDid]: answer })
+      const { vta } = twoAgents({ ...deps, agentAddress })
+      await vta.restore({} as never)
+      await vta.lookAtOtherAgents({} as never)
+      expect(looked).toEqual([WORK.vtaDid])
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).toMatchObject({ reachable: true, approvals: [{ id: 'r1' }] })
+      expect(vta.getState().otherRequests?.[WORK.vtaDid]).not.toHaveProperty('gone')
+    })
   })
 
   it('an agent the look cannot reach is said unreachable, not "nothing waits"', async () => {

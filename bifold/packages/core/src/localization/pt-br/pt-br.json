@@ -877,6 +877,7 @@
     "OtherWaiting_one": "{{agent}}: 1 pedido espera por você",
     "OtherWaiting_other": "{{agent}}: {{count}} pedidos esperam por você",
     "OtherUnreachable": "{{agent}}: inacessível agora",
+    "OtherGone": "{{agent}}: não existe mais",
     "SwitchTo": "Trocar para {{agent}}",
     "Empty": "Nada espera por você. Um pedido pode ter sido tratado em outro dispositivo, ou pode ter expirado.",
     "DoneApproved": "Aprovado. Seu agente continua.",
