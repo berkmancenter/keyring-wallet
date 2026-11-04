@@ -15,5 +15,7 @@ describe("the rooms' words", () => {
     expect(en.Rooms.NotesWaiting_one).toBe('{{count}} note in this room')
     expect(en.Rooms.NotesWaiting_other).toBe('{{count}} notes in this room')
     expect(en.Rooms.NotesWaitingOpen).toBe('See notes')
+    expect(en.Rooms.NoteMarker).toBe('Note:')
+    expect(en.Rooms.NoteMarkerOpen).toBe('See')
   })
 })

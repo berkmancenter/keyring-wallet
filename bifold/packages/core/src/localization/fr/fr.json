@@ -3091,6 +3091,8 @@
     "NotesWaiting_one": "{{count}} note dans ce salon",
     "NotesWaiting_other": "{{count}} notes dans ce salon",
     "NotesWaitingOpen": "Voir les notes",
+    "NoteMarker": "Note :",
+    "NoteMarkerOpen": "Voir",
     "Offer": "Invitation à un salon",
     "OfferFrom": "{{community}} vous invite dans un salon",
     "OfferWhatJoiningShares": "Ce que rejoindre partage",

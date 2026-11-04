@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f7e73023ee21d0a7917f31dab476945fd4c64104",
+  "generatedFrom": "ae371e77b3d873fa286eb64e5fa245016bad2755",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -1152,6 +1152,9 @@
     "RoomNoteEdit": ["src/modules/rooms/components/RoomNoteCard.tsx"],
     "RoomNoteEditor": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteFailed": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
+    "RoomNoteMarker": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
+    "RoomNoteMarkerOpen": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
+    "RoomNoteMarkerWords": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
     "RoomNoteNew": ["src/modules/rooms/components/RoomNotesTab.tsx"],
     "RoomNotePinned": ["src/modules/rooms/components/RoomNoteCard.tsx"],
     "RoomNotePost": ["src/modules/rooms/components/RoomNoteEditor.tsx"],

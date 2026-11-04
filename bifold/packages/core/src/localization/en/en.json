@@ -3154,6 +3154,8 @@
     "NotesWaiting_one": "{{count}} note in this room",
     "NotesWaiting_other": "{{count}} notes in this room",
     "NotesWaitingOpen": "See notes",
+    "NoteMarker": "Note:",
+    "NoteMarkerOpen": "See",
     "Offer": "Room offer",
     "OfferFrom": "{{community}} offers you a room",
     "OfferWhatJoiningShares": "What joining shares",

@@ -3004,6 +3004,8 @@
     "NotesWaiting_one": "{{count}} nota nesta sala",
     "NotesWaiting_other": "{{count}} notas nesta sala",
     "NotesWaitingOpen": "Ver notas",
+    "NoteMarker": "Nota:",
+    "NoteMarkerOpen": "Ver",
     "Offer": "Convite para sala",
     "OfferFrom": "{{community}} convida você para uma sala",
     "OfferWhatJoiningShares": "O que entrar compartilha",
