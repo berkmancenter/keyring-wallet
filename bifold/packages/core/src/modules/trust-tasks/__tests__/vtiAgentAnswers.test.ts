@@ -229,6 +229,70 @@ describe('T1: concurrent asks each get their own answer', () => {
   })
 })
 
+// 277.8: the session asked as one identity and moved to another 2 ms later. The answer reached the first identity's
+// listener, was left on the mediator for a session no longer signed in as it, and came back at every drain until the
+// session's next turn. A listener may now hand over an answer the session asked for, or drop one nothing waits for.
+describe('an answer a listener heard for the shared session', () => {
+  const MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
+  const orphanOf = (type: string) => ({
+    id: 'urn:uuid:late',
+    type,
+    thid: 'urn:uuid:no-such-request',
+    body: { type, threadId: 'urn:uuid:no-such-request', payload: {} },
+  })
+
+  it('is given to the ask waiting for it, by thread', async () => {
+    const community = 'did:webvh:c:listener-answer'
+    const who = 'did:webvh:p:listener-answer'
+    const session = await connectTo(community, 'didcomm', who)
+    const status = vtiAgent.ask(community, STATUS, {}, 1000)
+    await until(() => session.didcomm.length === 1)
+    const reply = didcommReply((session.didcomm as Sent[])[0], STATUS, { status: 'pending' })
+    expect(vtiAgent.answerFromListener(who, reply as never)).toBe('answered')
+    expect(await status).toMatchObject({ body: { payload: { status: 'pending' } } })
+  })
+
+  it("is not given to another identity's ask, which goes on waiting for its own answer", async () => {
+    const community = 'did:webvh:c:listener-other'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:listener-other')
+    const status = vtiAgent.ask(community, STATUS, {}, 1000)
+    await until(() => session.didcomm.length === 1)
+    const reply = didcommReply((session.didcomm as Sent[])[0], STATUS, { status: 'pending' })
+    expect(vtiAgent.answerFromListener('did:webvh:p:someone-else', reply as never)).toBeUndefined()
+    session.onMessage(reply)
+    expect(await status).toMatchObject({ body: { payload: { status: 'pending' } } })
+  })
+
+  it('is an orphan when it answers a read and threads on no ask, in the binding envelope or not', () => {
+    const type = `${MEMBERSHIPS}#response`
+    expect(vtiAgent.answerFromListener('did:webvh:p:a', orphanOf(type) as never)).toBe('orphan')
+    const enveloped = {
+      id: 'urn:uuid:late-2',
+      type: 'https://trusttasks.org/binding/didcomm/0.1/envelope',
+      thid: 'urn:uuid:no-such-request',
+      body: { type, threadId: 'urn:uuid:no-such-request', payload: {} },
+    }
+    expect(vtiAgent.answerFromListener('did:webvh:p:a', enveloped as never)).toBe('orphan')
+  })
+
+  // What 276.10 protects: taken by a listener, a vetting request was acknowledged and lost. All of these stay.
+  it.each([
+    ['a vetting request', orphanOf('https://trusttasks.org/spec/vetting/request/0.1')],
+    [
+      'an answer to a vetting request, which is a write',
+      orphanOf('https://trusttasks.org/spec/vetting/request/0.1#response'),
+    ],
+    ['an answer to a write nothing waits for', orphanOf(`${SUBMIT}#response`)],
+    ['a refusal', orphanOf('https://trusttasks.org/spec/trust-task-error/0.1')],
+    [
+      'an answer to a read that names no thread',
+      { id: 'urn:uuid:bare', type: `${MEMBERSHIPS}#response`, body: { type: `${MEMBERSHIPS}#response`, payload: {} } },
+    ],
+  ])("stays the shared session's: %s", (_what, message) => {
+    expect(vtiAgent.answerFromListener('did:webvh:p:a', message as never)).toBeUndefined()
+  })
+})
+
 describe('T2: a write is sent once', () => {
   it('is not sent again over DIDComm when TSP is silent', async () => {
     const community = 'did:webvh:c:silent-write'

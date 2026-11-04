@@ -23,9 +23,11 @@ const mockShared = {
 const mockSharedListeners = new Set<() => void>()
 const mockGuards = new Set<Guard>()
 const mockSharedCheckAlive = jest.fn()
+const mockAnswerFromListener = jest.fn()
 jest.mock('../module/vtiAgent', () => ({
   vtiAgent: {
     checkAlive: () => mockSharedCheckAlive(),
+    answerFromListener: (...a: unknown[]) => mockAnswerFromListener(...a),
     getState: () => ({
       did: mockShared.did,
       signingInAs: mockShared.signingInAs,
@@ -494,6 +496,40 @@ describe('what a listener keeps', () => {
     warn.mockRestore()
     sub.remove()
   })
+
+  // 277.8: an answer the shared session asked for, heard here after the session moved on, came back at every drain.
+  it.each([
+    ['answered', 'given to the ask waiting for it'],
+    ['orphan', 'answers no ask: dropped'],
+  ])(
+    'an answer vtiAgent calls %s is taken: acknowledged, said once, and nobody is told one waits',
+    async (verdict, said) => {
+      const keep = keepForPersona as jest.Mock
+      keep.mockClear()
+      mockAnswerFromListener.mockReturnValueOnce(verdict)
+      const waiting = jest.fn()
+      const sub = DeviceEventEmitter.addListener(MESSAGE_WAITING, waiting)
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const a = persona('a')
+      const answer = {
+        id: `m6-${++freshIds}-${Math.random()}`,
+        type: 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1#response',
+        thid: 'urn:uuid:r',
+        body: {},
+      }
+      await expect(
+        keepFromListener({ config: { logger: {} } } as never, a, answer as never, 'didcomm')
+      ).resolves.toBeUndefined()
+      expect(mockAnswerFromListener).toHaveBeenLastCalledWith(a.did, answer)
+      expect(keep).not.toHaveBeenCalled()
+      expect(waiting).not.toHaveBeenCalled()
+      const lines = warn.mock.calls.map(([line]) => String(line))
+      expect(lines.filter((line) => line.includes(said))).toHaveLength(1)
+      expect(lines.filter((line) => line.includes('left on the mediator'))).toHaveLength(0)
+      warn.mockRestore()
+      sub.remove()
+    }
+  )
 
   it('an answer to an ask the shared session sent is left for it too, in the envelope or not', async () => {
     const keep = keepForPersona as jest.Mock

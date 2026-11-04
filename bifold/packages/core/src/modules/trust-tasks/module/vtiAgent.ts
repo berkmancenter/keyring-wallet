@@ -137,6 +137,9 @@ export const VTI_READ_TASKS: ReadonlySet<string> = new Set([
   ELECTIONS_SHOW,
 ])
 
+/** What a Trust Task's answer adds to its type. */
+const RESPONSE_SUFFIX = '#response'
+
 /** Whether `type` is a read `ask` may send again over DIDComm after TSP silence (see `VTI_READ_TASKS`). */
 export function isVtiReadTask(type: string): boolean {
   return VTI_READ_TASKS.has(type)
@@ -751,6 +754,38 @@ class VtiAgentController {
       .filter((entry) => !entry.answer && answersTask(entry) && fresh(entry))
       .sort((a, b) => a.sentAt - b.sentAt)
     return candidates.find((entry) => entry.waiters.length) ?? candidates[0]
+  }
+
+  /**
+   * A `#response` a persona's listener heard while the shared session is signed in as another identity. The session
+   * moved on before the answer came, so nothing collects as that persona: left on the mediator, it came back at every
+   * drain (15 s) until the session's next turn as the persona (277.8, SHARED-SESSION-ORPHAN-REPLY).
+   *
+   * - 'answered': the ask it threads on, sent as that persona, is given it, as `deliver` gives it.
+   * - 'orphan': it threads on no ask, and answers a read (`VTI_READ_TASKS`): nothing waits for it and the read is asked
+   *   again, so it may be dropped.
+   * - undefined: anything else stays the shared session's. A request, a refusal, a reply naming no thread (matched by
+   *   type, which a listener must not guess at), an ask of another identity, or an unclaimed answer to a write, whose
+   *   only copy this may be (276.10: a vetting request taken by a listener was lost).
+   *
+   * Not a pure check, though it reads like one: it lets go of expired holds first, whatever it returns. That is only
+   * time-based housekeeping on the holds.
+   */
+  answerFromListener(did: string, received: DidCommV2PlaintextMessage): 'answered' | 'orphan' | undefined {
+    const plaintext = unwrapBindingEnvelope(received)
+    const type = String(plaintext.type ?? '')
+    if (!type.endsWith(RESPONSE_SUFFIX)) return undefined
+    const threadId = (plaintext.body as { threadId?: unknown } | undefined)?.threadId
+    const threaded = [threadId, plaintext.thid, plaintext.pthid].some((id) => typeof id === 'string' && id.length > 0)
+    if (!threaded) return undefined
+    this.dropExpiredHolds()
+    const entry = this.askAnswered(plaintext)
+    if (entry) {
+      if (entry.did !== did) return undefined
+      this.settle(entry, plaintext)
+      return 'answered'
+    }
+    return isVtiReadTask(type.slice(0, -RESPONSE_SUFFIX.length)) ? 'orphan' : undefined
   }
 
   /** Hand an answer to whoever waits on the ask, or keep it for the next caller. */
