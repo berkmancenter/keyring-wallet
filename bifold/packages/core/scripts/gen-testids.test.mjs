@@ -77,7 +77,7 @@ test('rule 6: a key read from a same-file lookup table contributes every value o
   assert.deepEqual(r.raw, [])
   assert.deepEqual(r.stems, [])
   // A table read twice yields each value once in the manifest.
-  const m = buildManifest([r], { generatedFrom: 'x' })
+  const m = buildManifest([r])
   assert.deepEqual(m.keys.FixtureContinue, ['scripts/__fixtures__/lookup-table.tsx'])
 })
 
@@ -100,27 +100,26 @@ test('derived: calls and variables are recorded with their expression text', () 
 test('buildManifest sorts keys and files, merges duplicates and is unchanged by a shifted line', () => {
   const a = extractFromSource(`testIdWithKey('Zed'); testIdWithKey('Alpha'); testIdWithKey(label)`, 'src/b.ts')
   const b = extractFromSource(`\n\ntestIdWithKey('Alpha'); testIdWithKey(\`Alpha_\${x}\`)`, 'src/a.ts')
-  const m = buildManifest([a, b], { generatedFrom: 'abc' })
-  assert.equal(m.generatedFrom, 'abc')
+  const m = buildManifest([a, b])
+  assert.equal('generatedFrom' in m, false, 'no commit id: two branches that regenerate must not conflict on one')
   assert.equal(m.prefix, PREFIX)
   assert.deepEqual(Object.keys(m.keys), ['Alpha', 'Zed'])
   assert.deepEqual(m.keys.Alpha, ['src/a.ts', 'src/b.ts'])
   assert.deepEqual(m.stems, { Alpha_: ['src/a.ts'] })
   assert.deepEqual(m.raw, {})
   assert.deepEqual(m.derived, [{ 'src/b.ts': 'label' }])
-  assert.equal(formatManifest(m), formatManifest(buildManifest([b, a], { generatedFrom: 'abc' })))
+  assert.equal(formatManifest(m), formatManifest(buildManifest([b, a])))
   const shifted = extractFromSource(
     `\n\n\ntestIdWithKey('Zed');\ntestIdWithKey('Alpha');\ntestIdWithKey(label)`,
     'src/b.ts'
   )
-  assert.equal(formatManifest(m), formatManifest(buildManifest([shifted, b], { generatedFrom: 'abc' })))
-  assert.deepEqual(diffManifests(m, buildManifest([shifted, b], { generatedFrom: 'def' })), {})
+  assert.equal(formatManifest(m), formatManifest(buildManifest([shifted, b])))
+  assert.deepEqual(diffManifests(m, { ...buildManifest([shifted, b]), generatedFrom: 'def' }), {})
 })
 
 test('formatManifest writes valid JSON, one-line arrays that fit and expanded ones that do not', () => {
   const long = Array.from({ length: 12 }, (_, i) => `src/modules/some/long/path/Component${i}.tsx`)
   const m = {
-    generatedFrom: 'x',
     prefix: PREFIX,
     keys: { A: ['src/a.ts'], B: long },
     stems: {},

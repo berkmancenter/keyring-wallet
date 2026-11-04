@@ -12,7 +12,6 @@
  *   node scripts/gen-testids.mjs --json      print the manifest to stdout
  *   node scripts/gen-testids.mjs --out PATH  write somewhere else
  */
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -227,11 +226,12 @@ const groupSorted = (entries, field) => {
 }
 
 /**
- * Builds the manifest object from per-file extraction results.
+ * Builds the manifest object from per-file extraction results. It carries no commit id: one rewritten on every
+ * regeneration made any two branches that regenerate the file conflict on it.
  * @param {ReturnType<typeof extractFromSource>[]} perFile
- * @param {{generatedFrom: string, prefix?: string}} meta
+ * @param {{prefix?: string}} [meta]
  */
-export const buildManifest = (perFile, { generatedFrom, prefix = PREFIX }) => {
+export const buildManifest = (perFile, { prefix = PREFIX } = {}) => {
   const all = { keys: [], stems: [], raw: [], derived: [] }
   for (const r of perFile) for (const s of MANIFEST_SECTIONS) all[s].push(...r[s])
   const seen = new Set()
@@ -240,7 +240,6 @@ export const buildManifest = (perFile, { generatedFrom, prefix = PREFIX }) => {
     .filter(({ loc, expr }) => !seen.has(`${loc} ${expr}`) && seen.add(`${loc} ${expr}`))
     .map(({ loc, expr }) => ({ [loc]: expr }))
   return {
-    generatedFrom,
     prefix,
     keys: groupSorted(all.keys, 'key'),
     stems: groupSorted(all.stems, 'stem'),
@@ -249,24 +248,12 @@ export const buildManifest = (perFile, { generatedFrom, prefix = PREFIX }) => {
   }
 }
 
-export const generateManifest = ({ root = coreDir, generatedFrom = gitHead(root) } = {}) => {
+export const generateManifest = ({ root = coreDir } = {}) => {
   const srcDir = path.join(root, 'src')
   const perFile = listSourceFiles(srcDir).map((file) =>
     extractFromSource(fs.readFileSync(file, 'utf8'), path.relative(root, file).split(path.sep).join('/'))
   )
-  return buildManifest(perFile, { generatedFrom })
-}
-
-const gitHead = (cwd) => {
-  try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-  } catch {
-    return 'unknown'
-  }
+  return buildManifest(perFile)
 }
 
 // --------------------------------------------------------------- formatting
@@ -323,7 +310,7 @@ const derivedId = (entry) => {
   return `${loc} ${entry[loc]}`
 }
 
-/** Names what `next` adds to, removes from and moves between files in `current`, section by section; generatedFrom is ignored. */
+/** Names what `next` adds to, removes from and moves between files in `current`, section by section; a generatedFrom left in an older file is ignored. */
 export const diffManifests = (current, next) => {
   const diff = {}
   for (const section of MANIFEST_SECTIONS) {

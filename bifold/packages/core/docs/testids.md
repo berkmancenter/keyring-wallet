@@ -10,7 +10,6 @@ time rather than at the next gate.
 
 ```json
 {
-  "generatedFrom": "<bifold commit the file was generated at>",
   "prefix": "com.ariesbifold:id/",
   "keys": { "AgentCreateDone": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"] },
   "stems": { "AgentDevice_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"] },
@@ -44,8 +43,11 @@ Each entry maps to the files that produce it (paths relative to
 `packages/core`), sorted, so the file is deterministic for a given tree. Lines
 are deliberately not recorded: nearly every UI change shifts lines, and a
 manifest that changed with them would go stale between a PR's last push and its
-merge and conflict between concurrent branches. The file changes only when an
-id is added, removed, renamed or moved to another file.
+merge and conflict between concurrent branches. For the same reason it records
+no commit id (an older copy's `generatedFrom` line did exactly that: every
+regeneration rewrote it, so any two branches that regenerated conflicted on
+it). The file changes only when an id is added, removed, renamed or moved to
+another file, and two branches that add ids in different places merge cleanly.
 
 The generator walks the TypeScript AST of `src/**/*.{ts,tsx}` (no type
 checker), skipping `__tests__/` and `*.test.*`.
@@ -62,10 +64,9 @@ yarn testids:check    # what CI runs: exit 1 and list the differences if the fil
 yarn testids:test     # the extractor's own tests (node:test, not jest)
 ```
 
-`generatedFrom` records the commit the file was generated at and is ignored by
-the check, so an unrelated commit does not make the file stale. Neither does
-editing a file around its ids: only the set of ids, or the set of files an id
-lives in, counts.
+An unrelated commit does not make the file stale, and neither does editing a
+file around its ids: only the set of ids, or the set of files an id lives in,
+counts. A `generatedFrom` left in an older copy is ignored.
 
 CI runs the check in the `Linting and formatter` job of `quality.yaml`, after
 the linter. A failing check prints the added (`+`), removed (`-`) and moved-between-files
