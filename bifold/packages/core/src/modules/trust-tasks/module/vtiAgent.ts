@@ -89,6 +89,8 @@ const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1
 const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
 const SELF_REMOVE = 'https://trusttasks.org/spec/vtc/members/self-remove/0.1'
 const ROOM_MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
+/** A member's room offers there, at each version this client asks (`modules/rooms`, `OFFERS_LIST_TYPES`). */
+const ROOM_OFFERS_LISTS = ['0.4', '0.3', '0.2'].map((v) => `https://trusttasks.org/spec/vtc/rooms/offers/list/${v}`)
 /** The polls reads, at every version `polls/pollTasks` may send. @versionCoverage */
 const ELECTIONS_READS = [
   'https://trusttasks.org/spec/vtc/elections/list/0.5',
@@ -125,6 +127,8 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
  *   each version this wallet speaks (`joinWire`).
  * - `STATUS` — `vtc/join-requests/status/0.1`, where the applicant's request stands.
  * - `ROOM_MEMBERSHIPS` — `vtc/rooms/memberships/list/0.1`, the member's rooms there (`modules/rooms`).
+ * - `ROOM_OFFERS_LISTS` — `vtc/rooms/offers/list`, the rooms offered to the member there. Left off until 277.11, so
+ *   read as a write: its answer, heard while another identity held the session, came back every 15 s.
  * - `ELECTIONS_READS` — `vtc/elections/list` and `show`, at each version polls send, the community's polls (`modules/polls`).
  *
  * Everything else `ask` sends changes state and is a WRITE: the submit,
@@ -139,6 +143,7 @@ export const VTI_READ_TASKS: ReadonlySet<string> = new Set([
   ...JOIN_MANIFEST_TYPES,
   STATUS,
   ROOM_MEMBERSHIPS,
+  ...ROOM_OFFERS_LISTS,
   ...ELECTIONS_READS,
 ])
 
@@ -763,8 +768,10 @@ class VtiAgentController {
     if (type === PROBLEM_REPORT) return undefined
     const fresh = (entry: AskEntry) =>
       typeof plaintext.created_time !== 'number' || plaintext.created_time * 1000 >= entry.lastSentAt - 5000
+    // By type alone only for this session's own asks: one kept across a switch is another identity's, and a reply naming
+    // no thread can't say it is for that one.
     const candidates = [...this.asks.values()]
-      .filter((entry) => !entry.answer && answersTask(entry) && fresh(entry))
+      .filter((entry) => entry.did === this.state.did && !entry.answer && answersTask(entry) && fresh(entry))
       .sort((a, b) => a.sentAt - b.sentAt)
     return candidates.find((entry) => entry.waiters.length) ?? candidates[0]
   }
@@ -866,6 +873,7 @@ class VtiAgentController {
       .filter(
         (entry) =>
           entry.answer &&
+          entry.did === this.state.did &&
           entry.communityDid === communityDid &&
           entry.type === type &&
           (!requestId || entry.id === requestId)
@@ -1335,9 +1343,11 @@ class VtiAgentController {
   async disconnect(): Promise<void> {
     await this.session?.stop()
     this.session = undefined
-    // What this session asked can no longer be answered on it. A caller still
-    // waiting runs out its own clock, as before.
-    this.asks.clear()
+    // What this session asked can no longer be answered on it, but its answer can still come: a switch to another
+    // identity leaves that identity's listener hearing it (`answerFromListener`). So an ask a caller still waits on stays
+    // until the caller's own clock ends. Cleared, the answer was dropped as answering nothing and the caller waited out
+    // its clock for it (277.11). Nothing else stays.
+    for (const [id, entry] of this.asks) if (!entry.waiters.length) this.asks.delete(id)
     this.tsp = undefined
     this.persona = undefined
     this.set({

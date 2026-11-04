@@ -117,6 +117,7 @@ import { DeviceEventEmitter } from 'react-native'
 import { plainError } from '../screens/plainError'
 import { VTI_ANSWER_HOLD_MS, VtiSentNoAnswer, isVtiReadTask, vtiAgent } from '../module/vtiAgent'
 import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
+import { OFFERS_LIST_TYPES } from '../../rooms/real/wire'
 
 const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() }
 const agent = { config: { logger } } as never
@@ -290,6 +291,112 @@ describe('an answer a listener heard for the shared session', () => {
     ],
   ])("stays the shared session's: %s", (_what, message) => {
     expect(vtiAgent.answerFromListener('did:webvh:p:a', message as never)).toBeUndefined()
+  })
+})
+
+// The real order on a phone in two communities: the session moves to another identity with an ask out, and the first
+// identity's listener hears the answer. `connect` disconnects the old session on the way, so a test that doesn't switch
+// never sees what that does to the ask (277.11, report 482B: the answer was dropped, the caller waited out 30 s).
+describe('an answer that comes after the session moved on', () => {
+  const FIRST = 'did:webvh:c:switch-first'
+  const SECOND = 'did:webvh:c:switch-second'
+  const A = 'did:webvh:p:switch-a'
+  const B = 'did:webvh:p:switch-b'
+  const MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
+  // Longer than a sign-in, which here takes its real 2 s: an ask whose clock ended during the switch is the control's case below.
+  const asked = async (type: string, timeoutMs = 15000) => {
+    const session = await connectTo(FIRST, 'didcomm', A)
+    const before = session.didcomm.length
+    const answer = vtiAgent.ask(FIRST, type, {}, timeoutMs)
+    await until(() => session.didcomm.length === before + 1)
+    const sent = (session.didcomm as Sent[])[before]
+    return { session, sent, answer }
+  }
+
+  it('reaches the ask that waits for it, sent as that identity', async () => {
+    const { sent, answer } = await asked(MEMBERSHIPS)
+    await connectTo(SECOND, 'didcomm', B)
+    expect(vtiAgent.getState().did).toBe(B)
+    expect(vtiAgent.answerFromListener(A, didcommReply(sent, MEMBERSHIPS, { items: [] }) as never)).toBe('answered')
+    expect(await answer).toMatchObject({ body: { payload: { items: [] } } })
+  })
+
+  it("reaches a write's ask too: its only copy", async () => {
+    const { sent, answer } = await asked(SUBMIT)
+    await connectTo(SECOND, 'didcomm', B)
+    expect(vtiAgent.answerFromListener(A, didcommReply(sent, SUBMIT, { id: 'r1' }) as never)).toBe('answered')
+    expect(await answer).toMatchObject({ body: { payload: { id: 'r1' } } })
+  })
+
+  it("is no one else's: another identity's listener doesn't take it", async () => {
+    const { sent, answer } = await asked(MEMBERSHIPS, 100)
+    await connectTo(SECOND, 'didcomm', B)
+    expect(vtiAgent.answerFromListener(B, didcommReply(sent, MEMBERSHIPS, { items: [] }) as never)).toBeUndefined()
+    expect(await answer).toBeUndefined()
+  })
+
+  it("a reply naming no thread on the new session doesn't answer the old identity's ask", async () => {
+    const { sent, answer } = await asked(MEMBERSHIPS)
+    let answered = false
+    void answer.then(() => (answered = true))
+    const second = await connectTo(SECOND, 'didcomm', B)
+    second.onMessage({
+      id: 'urn:uuid:bare',
+      type: `${MEMBERSHIPS}#response`,
+      from: FIRST,
+      body: { payload: { items: ['not a'] } },
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(answered).toBe(false)
+    // Its own answer still reaches it.
+    expect(vtiAgent.answerFromListener(A, didcommReply(sent, MEMBERSHIPS, { items: ['a'] }) as never)).toBe('answered')
+    expect(await answer).toMatchObject({ body: { payload: { items: ['a'] } } })
+  })
+
+  it("the new identity's identical ask is its own, sent anew", async () => {
+    const { sent, answer } = await asked(MEMBERSHIPS)
+    const second = await connectTo(FIRST, 'didcomm', B)
+    const own = vtiAgent.ask(FIRST, MEMBERSHIPS, {}, 2000)
+    await until(() => second.didcomm.length === 1)
+    second.onMessage(didcommReply((second.didcomm as Sent[])[0], MEMBERSHIPS, { items: ['b'] }))
+    expect(await own).toMatchObject({ body: { payload: { items: ['b'] } } })
+    expect(vtiAgent.answerFromListener(A, didcommReply(sent, MEMBERSHIPS, { items: ['a'] }) as never)).toBe('answered')
+    expect(await answer).toMatchObject({ body: { payload: { items: ['a'] } } })
+  })
+
+  it('an ask no one waits for any more is not kept (control): its answer is an orphan', async () => {
+    const { sent, answer } = await asked(MEMBERSHIPS, 1)
+    expect(await answer).toBeUndefined()
+    await connectTo(SECOND, 'didcomm', B)
+    expect(vtiAgent.answerFromListener(A, didcommReply(sent, MEMBERSHIPS, { items: [] }) as never)).toBe('orphan')
+  })
+
+  it("a late answer kept for later is the identity's that asked: another doesn't take it", async () => {
+    const kept = await asked(MEMBERSHIPS, 50)
+    await connectTo(SECOND, 'didcomm', B)
+    expect(await kept.answer).toBeUndefined()
+    expect(vtiAgent.answerFromListener(A, didcommReply(kept.sent, MEMBERSHIPS, { items: [] }) as never)).toBe(
+      'answered'
+    )
+    const second = await connectTo(FIRST, 'didcomm', B)
+    expect(second).toBeDefined()
+    expect(vtiAgent.takeHeldAnswer(FIRST, MEMBERSHIPS)).toBeUndefined()
+  })
+})
+
+describe('a room offers listing is a read', () => {
+  it.each(OFFERS_LIST_TYPES)('%s', (type) => {
+    expect(isVtiReadTask(type)).toBe(true)
+  })
+
+  it('an answer to one that threads on no ask is dropped, not left on the mediator to come back', () => {
+    const type = `${OFFERS_LIST_TYPES[0]}#response`
+    const orphan = { id: 'urn:uuid:late', type, thid: 'urn:uuid:no-such', body: { type, threadId: 'urn:uuid:no-such' } }
+    expect(vtiAgent.answerFromListener('did:webvh:p:a', orphan as never)).toBe('orphan')
+  })
+
+  it('accepting an offer is still a write (control)', () => {
+    expect(isVtiReadTask('https://trusttasks.org/spec/vtc/rooms/offers/accept/0.1')).toBe(false)
   })
 })
 
