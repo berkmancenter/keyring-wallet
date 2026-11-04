@@ -144,4 +144,57 @@ describe('TogglePushNotification Screen', () => {
     )
     expect(tree.queryByTestId(testIdWithKey('PushNotificationBlockedByRule'))).toBeNull()
   })
+
+  describe('what came of turning them on', () => {
+    const mount = (usePushNotifications = false) => {
+      status.mockResolvedValue('granted')
+      return render(
+        <StoreProvider
+          initialState={{ ...defaultState, preferences: { ...defaultState.preferences, usePushNotifications } }}
+          reducer={stableReducer}
+        >
+          <CustomBasicAppContext container={testContainer}>
+            <TogglePushNotifications />
+          </CustomBasicAppContext>
+        </StoreProvider>
+      )
+    }
+    const flip = async (tree: ReturnType<typeof render>, to: boolean) => {
+      await act(async () => {
+        fireEvent(tree.getByTestId(testIdWithKey('PushNotificationSwitch')), 'onValueChange', to)
+      })
+      await waitFor(() => expect(toggle).toHaveBeenCalled())
+    }
+
+    test('a failure says so under the switch, which stays on: the choice has not changed', async () => {
+      toggle.mockResolvedValue('failed')
+      const tree = mount()
+      await flip(tree, true)
+      expect(tree.getByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeTruthy()
+      expect(tree.getByTestId(testIdWithKey('PushNotificationSwitch')).props.value).toBe(true)
+    })
+
+    test.each(['on', 'later', undefined])('says nothing more with %s', async (outcome) => {
+      toggle.mockResolvedValue(outcome)
+      const tree = mount()
+      await flip(tree, true)
+      expect(tree.queryByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeNull()
+    })
+
+    test('turning off again takes the line away', async () => {
+      toggle.mockResolvedValueOnce('failed').mockResolvedValueOnce('off')
+      const tree = mount()
+      await flip(tree, true)
+      expect(tree.getByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeTruthy()
+      await flip(tree, false)
+      expect(tree.queryByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeNull()
+    })
+
+    test('a failure turning off says nothing about setting up', async () => {
+      toggle.mockResolvedValue('failed')
+      const tree = mount(true)
+      await flip(tree, false)
+      expect(tree.queryByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeNull()
+    })
+  })
 })

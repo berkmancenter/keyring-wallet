@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "98b165adfb0773fe747377cfb965e8f3e29737ed",
+  "generatedFrom": "3b4f4a982c5714076895c636ab667de1d2768fc3",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -1005,6 +1005,7 @@
     "PushNotificationContinue": ["src/screens/PushNotifications.tsx"],
     "PushNotificationImage": ["src/components/views/PushNotificationsContent.tsx"],
     "PushNotificationNotNow": ["src/screens/PushNotifications.tsx"],
+    "PushNotificationNotSetUp": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationSettings": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationSwitch": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationWhatItSays": ["src/components/views/PushNotificationsContent.tsx"],

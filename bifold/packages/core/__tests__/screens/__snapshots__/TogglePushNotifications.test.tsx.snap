@@ -317,7 +317,9 @@ exports[`TogglePushNotification Screen Push notification screen renders correctl
                 "fontSize": 18,
                 "fontWeight": "normal",
               },
-              undefined,
+              Object {
+                "flexShrink": 1,
+              },
             ]
           }
         >

@@ -28,6 +28,8 @@ const TogglePushNotifications: React.FC = () => {
   // The agent holds this phone's own notification setting for an approval
   // (vtaAgent wakeBlockedByRule): say so, rather than look as if nothing happened.
   const { wakeBlockedByRule } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  // Turning on did not make the phone wakeable: say so, or the switch promises something that is not happening.
+  const [notSetUp, setNotSetUp] = useState(false)
 
   if (!enablePushNotifications) {
     throw new Error('Push notification configuration not found')
@@ -36,6 +38,8 @@ const TogglePushNotifications: React.FC = () => {
   const styles = StyleSheet.create({
     controls: { gap: Spacing.md },
     blocked: { color: ColorPalette.semantic.error },
+    // A long label at the largest text sizes wraps, rather than pushing itself and the switch off the screen.
+    toggleLabel: { flexShrink: 1 },
     toggleContainer: {
       display: 'flex',
       flexDirection: 'row',
@@ -71,7 +75,9 @@ const TogglePushNotifications: React.FC = () => {
     dispatch({ type: DispatchAction.USE_PUSH_NOTIFICATIONS, payload: [!previous] })
     setNotificationState(!previous)
 
-    await enablePushNotifications.toggle(!previous, agent)
+    setNotSetUp(false)
+    const outcome = await enablePushNotifications.toggle(!previous, agent)
+    setNotSetUp(!previous && outcome === 'failed')
 
     // An approval rule held the change: the agent kept what it had, so the
     // switch (and the preference) go back to it rather than say otherwise.
@@ -96,8 +102,11 @@ const TogglePushNotifications: React.FC = () => {
           {t('PushNotifications.BlockedByApprovalRule')}
         </ThemedText>
       ) : null}
+      {notSetUp && !wakeBlockedByRule ? (
+        <ThemedText testID={testIdWithKey('PushNotificationNotSetUp')}>{t('PushNotifications.NotSetUpYet')}</ThemedText>
+      ) : null}
       <View style={styles.toggleContainer}>
-        <ThemedText>{t('PushNotifications.ReceiveNotifications')}</ThemedText>
+        <ThemedText style={styles.toggleLabel}>{t('PushNotifications.ReceiveNotifications')}</ThemedText>
         <Switch
           trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
           thumbColor={notificationState ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}

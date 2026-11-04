@@ -456,7 +456,7 @@ export * from './container-api'
 export { MainContainer } from './container-impl'
 export type { CredentialListFooterProps }
 
-export type { Config, HistoryEventsLoggerConfig } from './types/config'
+export type { Config, HistoryEventsLoggerConfig, PushToggleOutcome } from './types/config'
 export type { ContactCardProps } from './types/contact-card'
 export type { ContactDetailsFooterProps } from './types/contact-details-footer'
 export type { ContactCredentialDetails, OnboardingTask, ScreenLayoutConfig } from './types/navigators'
