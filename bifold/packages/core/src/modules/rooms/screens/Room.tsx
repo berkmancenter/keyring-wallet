@@ -43,6 +43,7 @@ import { RoomFileSheet } from '../components/RoomFileSheet'
 import { useFloatingDay } from '../components/useFloatingDay'
 import { isComingSoon, RoomFeatureCard } from '../components/RoomFeatureCard'
 import { RoomHeader } from '../components/RoomHeader'
+import { RoomNotJoined } from '../components/RoomNotJoined'
 import { RoomIdentitySheet } from '../components/RoomIdentitySheet'
 import { useDirectoryNames, useDirectoryService } from '../../directory/useDirectory'
 import { PetnamesProvider } from '../components/memberWords'
@@ -137,7 +138,14 @@ const Room: React.FC = () => {
   const canList = roomCapabilities?.listNotes.status === 'available'
   const inView = useInViewAndActive()
   // The chat draws its posts and not the room's notes: a page is counted in chat posts.
-  const feed = useRoomPosts(service, roomId, room?.actingAs, !!room && canList, inView, isChatPost)
+  const feed = useRoomPosts(
+    service,
+    roomId,
+    room?.actingAs,
+    !!room && canList && room.joined !== false,
+    inView,
+    isChatPost
+  )
   // On screen, a post that fails is marked in the list; away from it, a notice says so (useRoomNotices).
   const outbox = useRoomSend(service, roomId, feed.refresh, {
     onScreen: inView,
@@ -324,137 +332,142 @@ const Room: React.FC = () => {
             <ThemedText style={styles.warnText}>{t('Rooms.HostConflict')}</ThemedText>
           </View>
         ) : null}
-        {/* keyboard-controller's view, which lifts on Android too: the app draws under the system bars there. */}
-        <KeyboardAvoidingView
-          ref={keyboard.ref}
-          onLayout={keyboard.onLayout}
-          style={{ flex: 1 }}
-          behavior="padding"
-          keyboardVerticalOffset={keyboard.offset}
-        >
-          <FlatList
-            ref={list}
-            testID={testIdWithKey('RoomPosts')}
-            data={shown}
-            keyExtractor={(item) => item.key}
-            // Newest at the bottom, as the person-to-person chat (gifted-chat's list is inverted too). Only with posts:
-            // an empty list's message reads from the top.
-            inverted={shown.length > 0}
-            // A page is small (POSTS_PAGE posts and their day pills): draw it whole, so "Load older" sits above it.
-            initialNumToRender={POSTS_PAGE * 2}
-            contentContainerStyle={styles.list}
-            renderItem={({ item }) =>
-              item.kind === 'day' ? (
-                <DayPill date={item.date} />
-              ) : isNoteMarker(item.post) ? (
-                <RoomNoteMarker
-                  title={item.post.title}
-                  onOpen={() => navigation.navigate(Screens.RoomPart, { roomId, part: 'notes' })}
-                />
-              ) : (
-                <RoomPostBubble
-                  post={item.post}
-                  onRetry={
-                    item.post.delivery === 'failed'
-                      ? () => (item.post.files.length > 0 ? outbox.cancel : outbox.retry)(item.post.key)
-                      : undefined
-                  }
-                  onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
-                  onOpenFile={canOpenFiles ? setOpenedFile : undefined}
-                  onOpenAuthor={setSheetFor}
-                />
-              )
-            }
-            ListEmptyComponent={empty}
-            // Only while there are no posts, where it is the way to try again. Drawn bottom up, a list would put the
-            // control at the bottom; with posts, the room is read again every few seconds while it is in view.
-            refreshControl={
-              unavailable || shown.length > 0 ? undefined : (
-                <RefreshControl
-                  refreshing={feed.refreshing}
-                  onRefresh={feed.refresh}
-                  tintColor={ColorPalette.brand.primary}
-                />
-              )
-            }
-            // The header of a list drawn bottom up is at its bottom, under the newest post: where a failed poll is said.
-            ListHeaderComponent={
-              feed.pollFailed && shown.length > 0 ? (
-                <View style={styles.pollFailed} testID={testIdWithKey('RoomPollFailed')}>
-                  <ThemedText style={styles.muted}>{t('Rooms.RefreshFailed')}</ThemedText>
-                  <ThemedText style={styles.muted}>·</ThemedText>
-                  <Pressable
-                    onPress={feed.pollNow}
-                    accessibilityRole="button"
-                    hitSlop={12}
-                    testID={testIdWithKey('RoomPollTryAgain')}
-                  >
-                    <ThemedText style={styles.tryAgain}>{t('Rooms.TryAgain')}</ThemedText>
-                  </Pressable>
-                </View>
-              ) : null
-            }
-            // Older posts load as the member scrolls up to them, as a chat's do: the end of a list drawn bottom up is
-            // its top. No button.
-            onEndReached={feed.hasOlder && !feed.loadingOlder ? feed.loadOlder : undefined}
-            onEndReachedThreshold={0.25}
-            onViewableItemsChanged={floating.onViewableItemsChanged}
-            viewabilityConfig={floating.viewabilityConfig}
-            onScrollBeginDrag={floating.onScrollStart}
-            onMomentumScrollBegin={floating.onScrollStart}
-            onScrollEndDrag={floating.onScrollStop}
-            onMomentumScrollEnd={floating.onScrollStop}
-            // The footer of a list drawn bottom up is at its top, above the oldest post shown: the app's spinner while
-            // older posts are read.
-            ListFooterComponent={
-              feed.loadingOlder ? (
-                <ActivityIndicator
-                  style={styles.centered}
-                  color={ColorPalette.brand.primary}
-                  accessibilityLabel={t('Rooms.Reading')}
-                  testID={testIdWithKey('RoomLoadingOlder')}
-                />
-              ) : feed.incomplete && !feed.hasOlder ? (
-                <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsIncomplete')}>
-                  {t('Rooms.NotesIncomplete')}
-                </ThemedText>
-              ) : null
-            }
-          />
-          {/* Over the top of the list, which is the top of this view: pinned there, never in the way of a tap. */}
-          {floating.day && shown.length > 0 ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[styles.floatingDay, { opacity: floating.opacity }]}
-              testID={testIdWithKey('RoomFloatingDay')}
-            >
-              <DayPill date={floating.day} />
-            </Animated.View>
-          ) : null}
-          {unavailable ? null : isComingSoon(roomCapabilities.write) ? (
-            <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
-          ) : (
-            <RoomComposer
-              // A screen reused for another room (navigating to a room already in the stack updates its params)
-              // starts its field afresh: the last room's words never sit in this one's, or are saved as its draft.
-              key={roomId}
-              onSend={send}
-              unavailable={cannotPost}
-              postingAs={
-                me.name
-                  ? (t('Rooms.PostingAs', { who: me.name, interpolation: { escapeValue: false } }) as string)
-                  : (t('Rooms.PostingAsAddName') as string)
+        {/* Not joined yet: nothing here can be read or sent, and trying again cannot help. Said in place of all of it. */}
+        {room.joined === false ? (
+          <RoomNotJoined room={room} />
+        ) : (
+          /* keyboard-controller's view, which lifts on Android too: the app draws under the system bars there. */
+          <KeyboardAvoidingView
+            ref={keyboard.ref}
+            onLayout={keyboard.onLayout}
+            style={{ flex: 1 }}
+            behavior="padding"
+            keyboardVerticalOffset={keyboard.offset}
+          >
+            <FlatList
+              ref={list}
+              testID={testIdWithKey('RoomPosts')}
+              data={shown}
+              keyExtractor={(item) => item.key}
+              // Newest at the bottom, as the person-to-person chat (gifted-chat's list is inverted too). Only with posts:
+              // an empty list's message reads from the top.
+              inverted={shown.length > 0}
+              // A page is small (POSTS_PAGE posts and their day pills): draw it whole, so "Load older" sits above it.
+              initialNumToRender={POSTS_PAGE * 2}
+              contentContainerStyle={styles.list}
+              renderItem={({ item }) =>
+                item.kind === 'day' ? (
+                  <DayPill date={item.date} />
+                ) : isNoteMarker(item.post) ? (
+                  <RoomNoteMarker
+                    title={item.post.title}
+                    onOpen={() => navigation.navigate(Screens.RoomPart, { roomId, part: 'notes' })}
+                  />
+                ) : (
+                  <RoomPostBubble
+                    post={item.post}
+                    onRetry={
+                      item.post.delivery === 'failed'
+                        ? () => (item.post.files.length > 0 ? outbox.cancel : outbox.retry)(item.post.key)
+                        : undefined
+                    }
+                    onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
+                    onOpenFile={canOpenFiles ? setOpenedFile : undefined}
+                    onOpenAuthor={setSheetFor}
+                  />
+                )
               }
-              postingAsName={me.name}
-              onPressPostingAs={() => setSheetFor(room.actingAs)}
-              canAttach={canAttach}
-              maxFileBytes={fileLimit}
-              attachRequest={params?.attach}
-              draft={draft.saved}
-              onTextChange={draft.onTextChange}
+              ListEmptyComponent={empty}
+              // Only while there are no posts, where it is the way to try again. Drawn bottom up, a list would put the
+              // control at the bottom; with posts, the room is read again every few seconds while it is in view.
+              refreshControl={
+                unavailable || shown.length > 0 ? undefined : (
+                  <RefreshControl
+                    refreshing={feed.refreshing}
+                    onRefresh={feed.refresh}
+                    tintColor={ColorPalette.brand.primary}
+                  />
+                )
+              }
+              // The header of a list drawn bottom up is at its bottom, under the newest post: where a failed poll is said.
+              ListHeaderComponent={
+                feed.pollFailed && shown.length > 0 ? (
+                  <View style={styles.pollFailed} testID={testIdWithKey('RoomPollFailed')}>
+                    <ThemedText style={styles.muted}>{t('Rooms.RefreshFailed')}</ThemedText>
+                    <ThemedText style={styles.muted}>·</ThemedText>
+                    <Pressable
+                      onPress={feed.pollNow}
+                      accessibilityRole="button"
+                      hitSlop={12}
+                      testID={testIdWithKey('RoomPollTryAgain')}
+                    >
+                      <ThemedText style={styles.tryAgain}>{t('Rooms.TryAgain')}</ThemedText>
+                    </Pressable>
+                  </View>
+                ) : null
+              }
+              // Older posts load as the member scrolls up to them, as a chat's do: the end of a list drawn bottom up is
+              // its top. No button.
+              onEndReached={feed.hasOlder && !feed.loadingOlder ? feed.loadOlder : undefined}
+              onEndReachedThreshold={0.25}
+              onViewableItemsChanged={floating.onViewableItemsChanged}
+              viewabilityConfig={floating.viewabilityConfig}
+              onScrollBeginDrag={floating.onScrollStart}
+              onMomentumScrollBegin={floating.onScrollStart}
+              onScrollEndDrag={floating.onScrollStop}
+              onMomentumScrollEnd={floating.onScrollStop}
+              // The footer of a list drawn bottom up is at its top, above the oldest post shown: the app's spinner while
+              // older posts are read.
+              ListFooterComponent={
+                feed.loadingOlder ? (
+                  <ActivityIndicator
+                    style={styles.centered}
+                    color={ColorPalette.brand.primary}
+                    accessibilityLabel={t('Rooms.Reading')}
+                    testID={testIdWithKey('RoomLoadingOlder')}
+                  />
+                ) : feed.incomplete && !feed.hasOlder ? (
+                  <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsIncomplete')}>
+                    {t('Rooms.NotesIncomplete')}
+                  </ThemedText>
+                ) : null
+              }
             />
-          )}
-        </KeyboardAvoidingView>
+            {/* Over the top of the list, which is the top of this view: pinned there, never in the way of a tap. */}
+            {floating.day && shown.length > 0 ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.floatingDay, { opacity: floating.opacity }]}
+                testID={testIdWithKey('RoomFloatingDay')}
+              >
+                <DayPill date={floating.day} />
+              </Animated.View>
+            ) : null}
+            {unavailable ? null : isComingSoon(roomCapabilities.write) ? (
+              <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
+            ) : (
+              <RoomComposer
+                // A screen reused for another room (navigating to a room already in the stack updates its params)
+                // starts its field afresh: the last room's words never sit in this one's, or are saved as its draft.
+                key={roomId}
+                onSend={send}
+                unavailable={cannotPost}
+                postingAs={
+                  me.name
+                    ? (t('Rooms.PostingAs', { who: me.name, interpolation: { escapeValue: false } }) as string)
+                    : (t('Rooms.PostingAsAddName') as string)
+                }
+                postingAsName={me.name}
+                onPressPostingAs={() => setSheetFor(room.actingAs)}
+                canAttach={canAttach}
+                maxFileBytes={fileLimit}
+                attachRequest={params?.attach}
+                draft={draft.saved}
+                onTextChange={draft.onTextChange}
+              />
+            )}
+          </KeyboardAvoidingView>
+        )}
         <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />
         <RoomIdentitySheet
           identity={sheetFor}

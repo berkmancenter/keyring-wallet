@@ -29,6 +29,7 @@ import { RoomFilesTab } from '../components/RoomFilesTab'
 import { RoomIdentitySheet } from '../components/RoomIdentitySheet'
 import { RoomMembersTab } from '../components/RoomMembersTab'
 import { type NoteEditorTarget, RoomNoteEditor } from '../components/RoomNoteEditor'
+import { RoomNotJoined } from '../components/RoomNotJoined'
 import { RoomNotesTab } from '../components/RoomNotesTab'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { isNote } from '../roomPosts'
@@ -106,6 +107,15 @@ const RoomPart: React.FC = () => {
             testID={testIdWithKey('RoomReading')}
           />
         )}
+      </SafeAreaView>
+    )
+
+  // Not joined yet: its notes and files cannot be read, and trying again cannot help (RoomNotJoined). Its members are
+  // the community's, and show.
+  if (room.joined === false && part !== 'members')
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomPart')}>
+        <RoomNotJoined room={room} />
       </SafeAreaView>
     )
 

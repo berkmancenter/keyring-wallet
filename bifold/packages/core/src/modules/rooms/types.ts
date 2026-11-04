@@ -121,6 +121,12 @@ export interface RoomSummary {
   /** The DID of the host serving this room. Unknown for a custody-only room. */
   host?: string
   standing: 'member' | 'lapsed' | 'removed'
+  /**
+   * False for a sealed room the community lists for this identity while the agent holds none of its keys as it: not
+   * joined yet. A community's re-invite does not re-admit to a room, and its posts, notes and files said "Couldn't
+   * read… Try again later" for ever (34VR-Y58H, 277.8, 11-03). Absent: joined, or not known to be otherwise.
+   */
+  joined?: false
 }
 
 /** The operations whose status also depends on the room: its source and this member's rights in it. */
@@ -420,6 +426,12 @@ export class RoomsConflict extends Error {
   }
 }
 
+/** A community whose rooms are still to come: the screens say "Still loading…" under its name, and nothing of why. */
+export interface HeldBackCommunity {
+  communityDid: string
+  communityName?: InertText
+}
+
 export interface RoomsService {
   /** True for the fixture service: every screen it feeds shows the "Sample data" banner. */
   readonly isSample: boolean
@@ -433,6 +445,11 @@ export interface RoomsService {
   capabilities(options?: { refresh?: boolean }): Promise<RoomsCapabilities>
 
   listMyRooms(): Promise<RoomSummary[]>
+  /**
+   * The communities the last `listMyRooms` could not read for now because the community session was kept for another
+   * of this phone's identities: their rooms come with a read again (`onReadable`). Never why. None for the sample.
+   */
+  heldBack?(): HeldBackCommunity[]
   getRoom(roomId: string): Promise<Room>
   /** One status per room operation: the service-wide status, narrowed by the room's source and rights. */
   roomCapabilities(roomId: string): Promise<RoomCapabilities>

@@ -89,6 +89,8 @@ export interface RoomRow {
   lastPost?: RoomRowPost
   /** Its posts not read yet: the row says it is reading, not that there are none. */
   reading?: boolean
+  /** A sealed room not joined yet (`RoomSummary.joined`): never read, and the row says so rather than reading. */
+  notJoined?: boolean
 }
 
 interface Track {
@@ -226,7 +228,7 @@ const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | unde
   lastActivityAt: track?.at && !Number.isNaN(track.at.getTime()) ? track.at : undefined,
   unread: track?.unread.size ?? 0,
   lastPost: track?.last,
-  ...(track ? {} : { reading: true }),
+  ...(room.joined === false ? { notJoined: true } : track ? {} : { reading: true }),
 })
 
 /**
@@ -241,6 +243,7 @@ const sameRow = (a: RoomRow, b: RoomRow): boolean =>
   a.communityName === b.communityName &&
   a.nameFrom === b.nameFrom &&
   !!a.reading === !!b.reading &&
+  !!a.notJoined === !!b.notJoined &&
   a.unread === b.unread &&
   a.lastActivityAt?.getTime() === b.lastActivityAt?.getTime() &&
   a.lastPost?.text === b.lastPost?.text &&
@@ -316,6 +319,8 @@ async function readAll(service: RoomsService): Promise<void> {
     show()
     for (const room of rooms) {
       if (feed.service !== service) return
+      // Not joined: there are no keys to read it with, and asking again every poll only fails again.
+      if (room.joined === false) continue
       try {
         byRoom.set(room.roomId, await readRoom(service, room, byRoom.get(room.roomId)))
       } catch (e) {

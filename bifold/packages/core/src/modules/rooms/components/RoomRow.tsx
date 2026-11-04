@@ -37,6 +37,7 @@ export const roomLine = (t: TFunction, room: RoomSummary, withCommunity: boolean
   const parts: string[] = []
   if (withCommunity && room.communityName) parts.push(room.communityName)
   if (room.source === 'custody') parts.push(t('Rooms.DetailsNotLoaded') as string)
+  else if (room.joined === false) parts.push(t('Rooms.NotJoinedYet') as string)
   else if (room.standing === 'lapsed') parts.push(t('Rooms.StandingLapsed') as string)
   else if (room.standing === 'removed') parts.push(t('Rooms.StandingRemoved') as string)
   else if (room.validUntil) parts.push(t('Rooms.Until', { date: localDate(room.validUntil) }) as string)

@@ -64,9 +64,9 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
   const post = row.lastPost
   // Not read yet (the agent not ready on a cold launch): the app's spinner, as the rooms card shows (#775), never "No
   // posts yet" for a room that may have some. The words stay in the row's label, for a screen reader.
-  const reading = !post && !!row.reading
+  const reading = !post && !!row.reading && !row.notJoined
   const what = !post
-    ? (t(row.reading ? 'Rooms.Reading' : 'Rooms.RowNoPosts') as string)
+    ? (t(row.notJoined ? 'Rooms.NotJoinedYet' : row.reading ? 'Rooms.Reading' : 'Rooms.RowNoPosts') as string)
     : post.kind === 'note'
       ? (t('Rooms.RowNote', { title: post.text, ...asWritten }) as string)
       : post.kind === 'file'

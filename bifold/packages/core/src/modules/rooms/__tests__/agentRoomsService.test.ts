@@ -581,6 +581,59 @@ describe("the member's rooms, listed by several surfaces at once", () => {
 
 // 10-31: a step kept the community session as an identity of none of the listed communities (a join under way). That
 // is not every community failing: the rooms show from custody for now, and are read again when the session is free.
+// 34VR-Y58H (277.8, 11-03): removed, then re-invited with a new identity. First VTC listed its sealed room for the new
+// identity, the agent held its keys only as the old one, and the room's posts, notes and files said "Couldn't read…
+// Try again later" for ever.
+describe('a sealed room the agent holds no keys to as this identity', () => {
+  const SEALED = 'did:webvh:room:sealed1'
+  const listing = (tier: string) => async (_did: string, type: string, payload: Record<string, unknown>) => {
+    if (type !== ROOMS_TASK.membershipsList || payload.cursor) return { items: [] }
+    return {
+      items: [
+        {
+          roomId: SEALED,
+          host: HOST,
+          label: 'First Room',
+          visibility: tier,
+          actions: ['read', 'write'],
+          state: 'admitted',
+        },
+      ],
+    }
+  }
+  const keys = (rooms: Record<string, unknown>[]) =>
+    jest.fn(async (type: string): Promise<unknown> => {
+      if (type === ROOMS_TASK.keysList02) return { rooms }
+      throw new Error(`unexpected agent task ${type}`)
+    })
+  const sealedRoom = async (tier: string, held: Record<string, unknown>[]) => {
+    const { b } = backend({ communityTask: jest.fn(listing(tier)), agentTask: keys(held) })
+    return (await new AgentRoomsService(b).listMyRooms()).find((r) => r.roomId === SEALED)
+  }
+
+  it('is not joined yet when the agent holds none of its keys', async () => {
+    expect(await sealedRoom('attributed', [])).toMatchObject({ source: 'community', joined: false })
+  })
+
+  it('nor when it holds them only as another identity: an old, removed one is not this member', async () => {
+    const room = await sealedRoom('attributed', [
+      { roomId: SEALED, epoch: 3, earliestReadableEpoch: 1, member: 'did:key:old-removed-identity' },
+    ])
+    expect(room).toMatchObject({ joined: false })
+  })
+
+  it('is joined when the agent holds its keys as this identity (control)', async () => {
+    const room = await sealedRoom('attributed', [
+      { roomId: SEALED, epoch: 3, earliestReadableEpoch: 1, member: COMMUNITY.personaDid },
+    ])
+    expect(room).not.toHaveProperty('joined')
+  })
+
+  it('an open room needs no keys, and is never "not joined" (control)', async () => {
+    expect(await sealedRoom('open', [])).not.toHaveProperty('joined')
+  })
+})
+
 describe('every community kept from for now', () => {
   const kept = () => Object.assign(new Error('vtiAgent: the session is kept'), { name: 'VtiSessionHeld' })
 
@@ -600,6 +653,22 @@ describe('every community kept from for now', () => {
     free()
     await new Promise((r) => setTimeout(r, 0))
     expect(readable).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the communities it could not read for now, and only those, for the screens to say "Still loading…"', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', name: 'Choir', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string, type: string, payload: Record<string, unknown>) => {
+        if (did === other.did) throw kept()
+        return backend().communityTask(did, type, payload)
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+    })
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    expect(service.heldBack().map((c) => [c.communityDid, String(c.communityName)])).toEqual([[other.did, 'Choir']])
   })
 
   // 34VR-Y58H (277.8, 11-03): the warn put the hold's reason beside the community's whole DID, every 30 s. The hold's

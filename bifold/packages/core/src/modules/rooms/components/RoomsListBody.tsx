@@ -20,7 +20,7 @@ import { useTheme } from '../../../contexts/theme'
 import { localDate } from '../../trust-tasks/screens/localTime'
 import { testIdWithKey } from '../../../utils/testable'
 import { offerCommunityAlone, offerRoom } from '../offerCommunity'
-import type { RoomOffer, RoomSummary } from '../types'
+import type { HeldBackCommunity, RoomOffer, RoomSummary } from '../types'
 import type { MyRooms } from '../useMyRooms'
 
 import { roomHandle, RoomRow } from './RoomRow'
@@ -81,13 +81,29 @@ const OfferRow: React.FC<{ offer: RoomOffer; withCommunity: boolean; onPress?: (
   )
 }
 
-/** Rooms by community, in first-seen order; custody-only rooms last, in their own group. */
-export const groupRooms = (rooms: RoomSummary[]): { key: string; title?: string; rooms: RoomSummary[] }[] => {
-  const groups = new Map<string, { key: string; title?: string; rooms: RoomSummary[] }>()
+type RoomsGroup = { key: string; title?: string; rooms: RoomSummary[]; loading?: boolean }
+
+/**
+ * Rooms by community, in first-seen order; custody-only rooms last, in their own group. A community whose rooms are
+ * still to come (`stillLoading`) has its group, with or without rooms yet, marked loading.
+ */
+export const groupRooms = (rooms: RoomSummary[], stillLoading: HeldBackCommunity[] = []): RoomsGroup[] => {
+  const groups = new Map<string, RoomsGroup>()
   for (const room of rooms) {
     const key = room.source === 'custody' || !room.communityDid ? 'custody' : room.communityDid
     if (!groups.has(key)) groups.set(key, { key, title: key === 'custody' ? undefined : room.communityName, rooms: [] })
     groups.get(key)?.rooms.push(room)
+  }
+  for (const held of stillLoading) {
+    const group = groups.get(held.communityDid)
+    if (group) group.loading = true
+    else
+      groups.set(held.communityDid, {
+        key: held.communityDid,
+        title: held.communityName !== undefined ? String(held.communityName) : undefined,
+        rooms: [],
+        loading: true,
+      })
   }
   const all = [...groups.values()]
   return [...all.filter((g) => g.key !== 'custody'), ...all.filter((g) => g.key === 'custody')]
@@ -176,7 +192,12 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
   if (!rooms) return <>{reading}</>
 
   const waiting = offers ?? []
-  const groups = acrossCommunities ? groupRooms(rooms) : [{ key: 'one', title: undefined, rooms }]
+  // A community whose rooms are still to come says so under its name, and the list is not "No rooms yet" meanwhile: a
+  // community read while the session was kept for another identity showed nothing at all (34VR-Y58H, 11-03).
+  const stillLoading = myRooms.stillLoading ?? []
+  const groups: RoomsGroup[] = acrossCommunities
+    ? groupRooms(rooms, stillLoading)
+    : [{ key: 'one', title: undefined, rooms, loading: stillLoading.length > 0 }]
   return (
     <View style={{ gap: 16 }}>
       {failed ? (
@@ -199,7 +220,7 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
           ))}
         </View>
       ) : null}
-      {rooms.length === 0 ? (
+      {rooms.length === 0 && stillLoading.length === 0 ? (
         <ThemedText style={styles.muted} testID={testIdWithKey('RoomsNone')}>
           {t('Rooms.None')}
         </ThemedText>
@@ -214,6 +235,11 @@ export const RoomsListBody: React.FC<RoomsListBodyProps> = ({
             {group.rooms.map((room) => (
               <RoomRow key={room.roomId} room={room} onPress={onOpenRoom} />
             ))}
+            {group.loading ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey(`RoomsStillLoading_${roomHandle(group.key)}`)}>
+                {t('Rooms.StillLoading')}
+              </ThemedText>
+            ) : null}
           </View>
         ))
       )}

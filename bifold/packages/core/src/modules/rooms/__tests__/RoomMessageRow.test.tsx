@@ -112,6 +112,18 @@ describe("a room's Messages row", () => {
     expect(reading.queryByText('Rooms.Reading')).toBeNull()
     expect(reading.queryByText('Rooms.RowNoPosts')).toBeNull()
   })
+
+  // 34VR-Y58H (277.8, 11-03): a room he was not in spun for good. It says so, with no spinner.
+  test('a room not joined yet says so, with no spinner (control above: reading has one)', () => {
+    const notJoined = show(
+      <RoomMessageRow
+        row={row({ unread: 0, lastPost: undefined, lastActivityAt: undefined, notJoined: true })}
+        onOpen={jest.fn()}
+      />
+    )
+    expect(notJoined.getByText('Rooms.NotJoinedYet')).toBeTruthy()
+    expect(notJoined.UNSAFE_queryByType(ActivityIndicator)).toBeNull()
+  })
 })
 
 describe("Hide, behind a room's row", () => {

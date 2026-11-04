@@ -446,6 +446,22 @@ describe('a room not read yet', () => {
   })
 })
 
+// 34VR-Y58H (277.8, 11-03): a room listed for a re-invited identity whose keys the agent does not hold read as
+// "reading" on every poll, and its read failed each time. Not joined, it is not read, and says so.
+describe('a room not joined yet', () => {
+  test('is never read, nor shown as reading, and is not counted as unread (control: a joined room beside it reads)', async () => {
+    const s = serviceWith([room('first', { tier: 'attributed', joined: false }), room('planning')], {
+      planning: [note('n1', 1)],
+    })
+    const { list } = mount(s)
+    await flush()
+    const rows = list.result.current.rows.rows as readonly { roomId: string; reading?: boolean; notJoined?: boolean }[]
+    expect(rows.find((r) => r.roomId.endsWith('first'))).toMatchObject({ notJoined: true })
+    expect(rows.find((r) => r.roomId.endsWith('first'))?.reading).toBeUndefined()
+    expect(s.listNotes.mock.calls.map(([roomId]) => String(roomId))).toEqual([expect.stringMatching(/planning$/)])
+  })
+})
+
 describe('a slow agent (X5JN-PEWP: the posts came 30 s after the listing)', () => {
   /** A promise this test settles: a room's posts the agent hasn't answered yet. */
   const held = () => {

@@ -6,7 +6,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { FlatList } from 'react-native'
+import { FlatList, ScrollView } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
@@ -435,6 +435,74 @@ describe('reaching a room', () => {
     await waitFor(() => expect(tree.getByText('Planning')).toBeTruthy())
     fireEvent.press(tree.getByTestId(id(`RoomRow_${roomHandle(PLANNING)}`)))
     expect(navigate).toHaveBeenCalledWith(Screens.Room, { roomId: PLANNING })
+  })
+})
+
+// 34VR-Y58H (277.8, 11-03): re-invited to the community, not to the room. Its posts, notes and files said "Couldn't
+// read… Try again later" for ever; the room now says he is not in it yet, and how to get in.
+describe('a room not joined yet', () => {
+  const notJoined = (offers: { offerId: string; roomId: string }[]) => {
+    const service = withPosts([])
+    const getRoom = service.getRoom.bind(service)
+    service.getRoom = async (roomId: string) => ({ ...(await getRoom(roomId)), tier: 'attributed', joined: false })
+    ;(service as unknown as { listOffers: jest.Mock }).listOffers = jest.fn(async () => offers)
+    return service
+  }
+
+  test('says so in place of the posts and the composer, with no Try again', async () => {
+    const tree = open(notJoined([]))
+    await waitFor(() => expect(tree.getByTestId(id('RoomNotJoined'))).toHaveTextContent(/Rooms\.NotJoinedTitle/))
+    expect(tree.getByTestId(id('RoomNotJoined'))).toHaveTextContent(/Rooms\.NotJoinedBody/)
+    expect(tree.queryByTestId(id('RoomComposerInput'))).toBeNull()
+    expect(tree.queryByTestId(id('RoomPostsFailed'))).toBeNull()
+    expect(tree.queryByText('Rooms.TryAgain')).toBeNull()
+    expect(tree.queryByTestId(id('RoomNotJoinedOffer'))).toBeNull()
+  })
+
+  // At the largest text the words and the button run past the screen. A render found it: nothing asserted that it fits.
+  test('its words and its button scroll, at any text size', async () => {
+    const tree = open(notJoined([]))
+    await waitFor(() => expect(tree.getByTestId(id('RoomNotJoined'))).toBeTruthy())
+    expect(within(tree.UNSAFE_getByType(ScrollView)).getByTestId(id('RoomNotJoined'))).toBeTruthy()
+  })
+
+  test('offers the way to an offer for the room when one is waiting, and only then', async () => {
+    const navigate = useNavigation().navigate as jest.Mock
+    navigate.mockClear()
+    const tree = open(
+      notJoined([
+        { offerId: 'other', roomId: 'x' },
+        { offerId: 'offer-1', roomId: 'did:webvh:r:one' },
+      ])
+    )
+    const button = await waitFor(() => tree.getByTestId(id('RoomNotJoinedOffer')))
+    fireEvent.press(button)
+    expect(navigate).toHaveBeenCalledWith(Screens.RoomOffer, { offerRef: 'offer-1' })
+  })
+
+  test('no button for an offer of another room (control)', async () => {
+    const service = notJoined([{ offerId: 'other', roomId: 'x' }])
+    const tree = open(service)
+    await waitFor(() => expect(tree.getByTestId(id('RoomNotJoined'))).toBeTruthy())
+    await waitFor(() => expect((service as unknown as { listOffers: jest.Mock }).listOffers).toHaveBeenCalled())
+    await act(async () => undefined)
+    expect(tree.queryByTestId(id('RoomNotJoinedOffer'))).toBeNull()
+  })
+
+  // Its notes and files can't be read either; they said "Couldn't read… Try again later".
+  test.each(['notes', 'files'])('its %s say so too, with no Try again', async (part) => {
+    mockService = notJoined([])
+    mockParams = { roomId: 'did:webvh:r:one', part }
+    const tree = show(require('../screens/RoomPart').default)
+    await waitFor(() => expect(tree.getByTestId(id('RoomNotJoined'))).toBeTruthy())
+    expect(tree.queryByText('Rooms.NotesFailed')).toBeNull()
+    expect(tree.queryByText('Rooms.TryAgain')).toBeNull()
+  })
+
+  test('a joined room has its composer and no such card (control)', async () => {
+    const tree = open(withPosts([]))
+    await waitFor(() => expect(tree.getByTestId(id('RoomPostsNone'))).toBeTruthy())
+    expect(tree.queryByTestId(id('RoomNotJoined'))).toBeNull()
   })
 })
 
