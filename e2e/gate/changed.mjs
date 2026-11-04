@@ -294,7 +294,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const upstream = JSON.parse(execFileSync('git', ['-C', path.join(repo, 'bifold'), 'show', `${pin}:packages/core/testids.json`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }));
     const { added } = manifestDrift(manifests[0]?.json, upstream);
     if (added.length) warning = `testids manifest lacks ${added.length} id(s) bifold ${pin.slice(0, 8)} has, so files owning them read as unmapped (sync: e2e/scripts/sync-testids.sh)`;
-  } catch { /* no pin, or its manifest not readable here */ }
+  } catch {
+    // Said, not swallowed: a comparison that cannot run here must not read like one that found nothing.
+    warning = 'testids manifest not compared with the pin (no pin, or its manifest not readable here: submodule not checked out, or that commit not fetched), so files owning newer ids may read as unmapped';
+  }
   if (warning) console.error(`warning: ${warning}`);
   if (missing.length) process.exit();
   const r = select(changed, { manifests, legsDir: path.join(here, 'legs') });
