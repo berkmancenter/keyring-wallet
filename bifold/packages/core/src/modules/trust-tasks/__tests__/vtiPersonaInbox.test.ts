@@ -79,6 +79,8 @@ const mockForgetApplication = jest.fn(async () => undefined)
 jest.mock('../module/vtiVetting', () => ({
   GenericRecordsVettingStore: jest.fn().mockImplementation(() => ({ forgetApplication: mockForgetApplication })),
   VtiApplicant: jest.fn().mockImplementation(() => ({ receiveStatement: mockReceiveStatement })),
+  isVettingRequest: () => false,
+  closeExpiredParkedRequests: async () => undefined,
 }))
 const mockReceiveNotice = jest.fn(async (): Promise<string> => 'ignored')
 jest.mock('../module/vtiCommunityNotices', () => ({

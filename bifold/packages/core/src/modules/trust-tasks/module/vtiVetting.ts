@@ -506,6 +506,28 @@ export interface VettingApplication {
   pendingTicket?: string
 }
 
+/**
+ * A vetting request that arrived while no desk was listening, kept until the
+ * desk takes it. While it waits, `message` holds what the applicant presented,
+ * ticket code or secret included, so it is never logged. Once closed the message
+ * is gone and only this note remains, which tells a copy delivered again that
+ * the request is done. `forget` removes the note with the community's other
+ * records.
+ */
+export interface ParkedVettingRequest {
+  requestDocumentId: string
+  personaDid: string
+  communityDid: string
+  /** The ticket it presented, which bounds how many are kept (`MAX_PARKED_PER_TICKET`). */
+  ticketId: string
+  parkedAt: string
+  /** The ticket's own expiry: after it the desk could not take the request anyway. */
+  expiresAt: string
+  message?: DidCommV2PlaintextMessage
+  closed?: 'taken' | 'expired'
+  closedAt?: string
+}
+
 export interface VtiVettingStore {
   listTickets(communityDid: string): Promise<VettingTicket[]>
   saveTicket(ticket: VettingTicket): Promise<void>
@@ -519,6 +541,11 @@ export interface VtiVettingStore {
   saveApplication(application: VettingApplication): Promise<void>
   /** The application alone, leaving a vetter's desk, tickets and profile for that community. */
   forgetApplication?(communityDid: string): Promise<void>
+  /** Keep a request for the desk (`parkVettingRequest` decides whether it may be kept). */
+  parkRequest?(request: ParkedVettingRequest): Promise<void>
+  listParkedRequests?(): Promise<ParkedVettingRequest[]>
+  /** Blank a parked request's message and mark why it is finished. */
+  closeParkedRequest?(requestDocumentId: string, closed: 'taken' | 'expired'): Promise<void>
   forget(communityDid: string): Promise<void>
 }
 
@@ -589,6 +616,30 @@ export class GenericRecordsVettingStore implements VtiVettingStore {
     }
     emitCommunityChanged(communityDid, 'application')
   }
+  async parkRequest(request: ParkedVettingRequest) {
+    await this.put('parked', request.requestDocumentId, { ...request })
+  }
+  async listParkedRequests() {
+    return this.list<ParkedVettingRequest>('parked')
+  }
+  async closeParkedRequest(requestDocumentId: string, closed: 'taken' | 'expired') {
+    const held = (await this.list<ParkedVettingRequest>('parked')).find(
+      (p) => p.requestDocumentId === requestDocumentId
+    )
+    if (!held || held.closed) return
+    // Rewritten field by field, so nothing the message held can stay behind.
+    const note: ParkedVettingRequest = {
+      requestDocumentId: held.requestDocumentId,
+      personaDid: held.personaDid,
+      communityDid: held.communityDid,
+      ticketId: held.ticketId,
+      parkedAt: held.parkedAt,
+      expiresAt: held.expiresAt,
+      closed,
+      closedAt: new Date().toISOString(),
+    }
+    await this.put('parked', requestDocumentId, { ...note })
+  }
   async forget(communityDid: string) {
     const rs = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE })
     for (const r of rs) {
@@ -614,6 +665,23 @@ function randomBytes(n: number): Uint8Array {
   }
   return out
 }
+/** The live ticket a request presents, by code or by QR secret: the desk's one test, whenever it runs. */
+function liveTicketFor(
+  tickets: VettingTicket[],
+  presented: { code?: string; ticketId?: string; secret?: string } | undefined,
+  applicantDid: string,
+  now: number
+): VettingTicket | undefined {
+  return tickets.find((t) => {
+    if (t.usesLeft <= 0 || new Date(t.expiresAt).getTime() < now) return false
+    if (t.boundTo && t.boundTo !== applicantDid) return false
+    if (presented?.code) return constantTimeEqual(t.code, presented.code)
+    if (presented?.ticketId && presented?.secret)
+      return t.ticketId === presented.ticketId && constantTimeEqual(t.secret, presented.secret)
+    return false
+  })
+}
+
 /** `XXXX-XXXX` from 40 fresh bits — a ticket code is a secret, not a derivation. */
 function randomCode(): string {
   const b = randomBytes(5)
@@ -918,6 +986,79 @@ export function identityCommitment(salt: string, claims: { type: string; value: 
 }
 
 /**
+ * How many requests one ticket can keep, closed ones included: a real applicant
+ * keeps one. Closed ones count because a refused request closes and spends
+ * nothing, so its ticket stays live for the next.
+ */
+export const MAX_PARKED_PER_TICKET = 10
+
+/** The largest request kept, in characters: a real one is a few thousand, and the sender decides. */
+export const MAX_PARKED_REQUEST_CHARS = 64 * 1024
+
+/** Whether a message is an applicant's vetting request. */
+export const isVettingRequest = (m: DidCommV2PlaintextMessage): boolean => typeOf(m) === VETTING.request
+
+/** Blank every parked request whose ticket has expired. */
+export async function closeExpiredParkedRequests(store: VtiVettingStore, now = Date.now()): Promise<void> {
+  const parked = (await store.listParkedRequests?.()) ?? []
+  for (const p of parked) {
+    if (!p.closed && new Date(p.expiresAt).getTime() < now)
+      await store.closeParkedRequest?.(p.requestDocumentId, 'expired')
+  }
+}
+
+/**
+ * Keep a vetting request for this identity's desk, before the mediator is told it
+ * was taken. A request reaching the shared session with no desk listening, the
+ * vetter elsewhere in the app, was acknowledged and lost (2026-11-04).
+ *
+ * Only a request presenting a live ticket here: the desk would answer nothing
+ * else but a wrong QR secret, so a stranger can't write here and a wrong secret is
+ * never stored. Who sent it is checked when the desk takes it.
+ *
+ * Holding a ticket doesn't make the sender trusted: keeping spends no use, an
+ * unbound ticket fits any sender, a code gets shared, and the sender picks the
+ * document id. So what one ticket can keep is bounded, in number and in size. A
+ * request past the bound isn't kept, as before this existed: a desk listening
+ * still takes it, and with none it is lost.
+ */
+export async function parkVettingRequest(
+  store: VtiVettingStore,
+  persona: VtiPersona,
+  m: DidCommV2PlaintextMessage
+): Promise<void> {
+  await closeExpiredParkedRequests(store)
+  const body = bodyOf(m)
+  const p = payloadOf(m)
+  const requestDocumentId = String(body.id ?? m.id ?? '')
+  if (!requestDocumentId || String(p.community ?? '') !== persona.communityDid) return
+  const presented = p.ticket as { code?: string; ticketId?: string; secret?: string } | undefined
+  const applicantDid = String(body.issuer ?? m.from ?? '')
+  const tickets = await store.listTickets(persona.communityDid)
+  const ticket = liveTicketFor(tickets, presented, applicantDid, Date.now())
+  if (!ticket) return
+  // A desk listening took it already.
+  if ((await store.listDesk()).some((r) => r.requestDocumentId === requestDocumentId)) return
+  const parked = (await store.listParkedRequests?.()) ?? []
+  // A copy of one already kept changes nothing, whatever the count.
+  if (parked.some((held) => held.requestDocumentId === requestDocumentId)) return
+  const forTicket = parked.filter((held) => held.ticketId === ticket.ticketId).length
+  if (forTicket >= MAX_PARKED_PER_TICKET || JSON.stringify(m).length > MAX_PARKED_REQUEST_CHARS) {
+    releaseWarn('[VTI] a vetting request was not kept for the desk: past the bound for its ticket')
+    return
+  }
+  await store.parkRequest?.({
+    requestDocumentId,
+    personaDid: persona.did,
+    communityDid: persona.communityDid,
+    ticketId: ticket.ticketId,
+    parkedAt: new Date().toISOString(),
+    expiresAt: ticket.expiresAt,
+    message: m,
+  })
+}
+
+/**
  * A Vetting Card's `digestMultibase`, the value a statement names in
  * `cardDigestMultibase`: JCS of the card WITHOUT its top-level `proof`, as DTG
  * Credentials §Digest Encoding defines it and the VTI SDK computes it
@@ -1072,7 +1213,42 @@ export class VtiVetterDesk {
     // told it was taken, and a failure leaves it for redelivery.
     this.stop = vtiAgent.onInbound((m) => this.inbound(m))
     void this.keepHiddenVetterReady('listen')
+    void this.takeParkedRequests()
     return this.stop
+  }
+
+  /** The look running now: the screen calls `listen` every few seconds, and a take can outlast that. */
+  private takingParked?: Promise<void>
+
+  /**
+   * Take what the inbox kept while no desk was listening (`parkVettingRequest`),
+   * through the same path as a live delivery. Only while the session is this
+   * identity: the answer goes out on it. Otherwise the request waits for the next
+   * look. A request whose proof doesn't verify also waits, since that is what
+   * being offline looks like (a DID that won't resolve); its expiry ends it.
+   */
+  private takeParkedRequests(): Promise<void> {
+    if (this.takingParked) return this.takingParked
+    const look = async () => {
+      await closeExpiredParkedRequests(this.store)
+      const parked = (await this.store.listParkedRequests?.()) ?? []
+      const waiting = parked
+        .filter((p) => !p.closed && p.message && p.personaDid === this.persona.did)
+        .sort((a, b) => a.parkedAt.localeCompare(b.parkedAt))
+      if (waiting.length === 0) return
+      if (!vtiAgent.isConnected || vtiAgent.getState().did !== this.persona.did) return
+      for (const { message } of waiting) {
+        const opened = await openPeerDocument(this.agent, message as DidCommV2PlaintextMessage)
+        if (!opened.ok && opened.code === 'proof') continue
+        await this.inbound(message as DidCommV2PlaintextMessage)
+      }
+    }
+    this.takingParked = look()
+      .catch(() => releaseWarn('[VTI] a parked vetting request was not taken; it waits for the next look'))
+      .finally(() => {
+        this.takingParked = undefined
+      })
+    return this.takingParked
   }
 
   /** When this desk last ran its hidden-vetting round, on the one clock (`nowMs`). */
@@ -1203,6 +1379,10 @@ export class VtiVetterDesk {
       // taken. A card does — the session it answers — when the sender is the
       // applicant that session is with.
       if (isCard) await this.noteRefusedCard(m, opened.code)
+      // Refused for good: a parked copy would be refused the same way. `proof` can be a DID that won't resolve offline.
+      else if (opened.code !== 'proof' && typeof bodyOf(m).id === 'string') {
+        await this.store.closeParkedRequest?.(String(bodyOf(m).id), 'taken')
+      }
       return
     }
     if (isRequest) return this.takeRequest(m)
@@ -1249,9 +1429,9 @@ export class VtiVetterDesk {
     try {
       if ((await this.store.listDesk()).some((r) => r.requestDocumentId === requestDocumentId)) {
         this.agent.config?.logger?.debug?.(`[VTI] vetting request ${requestDocumentId} already taken; copy ignored`)
-        return
-      }
-      await this.takeRequestOnce(m, requestDocumentId)
+      } else await this.takeRequestOnce(m, requestDocumentId)
+      // Answered or passed over, it is finished: what it presented doesn't stay here.
+      await this.store.closeParkedRequest?.(requestDocumentId, 'taken')
     } finally {
       takingRequests.delete(key)
     }
@@ -1267,14 +1447,7 @@ export class VtiVetterDesk {
     const presented = p.ticket as { code?: string; ticketId?: string; secret?: string } | undefined
     const tickets = await this.store.listTickets(this.persona.communityDid)
     const now = Date.now()
-    const ticket = tickets.find((t) => {
-      if (t.usesLeft <= 0 || new Date(t.expiresAt).getTime() < now) return false
-      if (t.boundTo && t.boundTo !== applicantDid) return false
-      if (presented?.code) return constantTimeEqual(t.code, presented.code)
-      if (presented?.ticketId && presented?.secret)
-        return t.ticketId === presented.ticketId && constantTimeEqual(t.secret, presented.secret)
-      return false
-    })
+    const ticket = liveTicketFor(tickets, presented, applicantDid, now)
     if (!ticket) {
       // A wrong code is never answered; a wrong QR secret says so.
       if (presented?.ticketId) await this.refuse(m, applicantDid, 'vetting/request:invalidTicket')

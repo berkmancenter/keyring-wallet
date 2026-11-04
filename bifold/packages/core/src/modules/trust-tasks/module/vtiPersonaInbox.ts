@@ -39,7 +39,13 @@ import { vtaAgent } from './vtaAgent'
 import { refusedAsNotOnAcl } from './VtaClient'
 import { KeyCopyUnavailable } from './EphemeralKeyManagementService'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
-import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
+import {
+  closeExpiredParkedRequests,
+  GenericRecordsVettingStore,
+  isVettingRequest,
+  parkVettingRequest,
+  VtiApplicant,
+} from './vtiVetting'
 
 /** Emitted with `{ communityDid, kinds }` whenever the inbox stores something. */
 export { VTI_PERSONA_DELIVERIES_EVENT }
@@ -227,6 +233,11 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     // and lost (227.1: five invitation offers; a vetter grant, 227 gate).
     const { did, signingInAs } = vtiAgent.getState()
     const sessionDid = did ?? signingInAs
+    // Whose it is decides which desk takes it, so this waits on the mediator too. Named by kind only: nothing of a
+    // vetting request reaches the log.
+    if (isVettingRequest(message) && !sessionDid) {
+      throw new Error("[VTI] persona inbox: a vetting request not taken yet: the session's identity is not known")
+    }
     if (owned && !sessionDid) {
       // Not taken, so not acknowledged: the mediator keeps it for the next drain.
       throw new Error(
@@ -250,8 +261,12 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
           ? `the session is ${sessionDid ? didPrefix(sessionDid) : 'not connected'}, not an identity of this phone`
           : `no persona for ${options.communityDid ? didPrefix(options.communityDid) : 'any community'}`
       )
+    // Kept for the desk before it is acknowledged: the desk listens only while the Vetting screen is open.
+    if (isVettingRequest(message)) return parkVettingRequest(new GenericRecordsVettingStore(agent), holder, message)
     return keepForPersona(agent, holder, message, options)
   })
+  // A parked request's ticket can expire with the vetter never back at the desk.
+  void closeExpiredParkedRequests(new GenericRecordsVettingStore(agent)).catch(() => undefined)
 
   const tick = async (): Promise<void> => {
     if (stopped) return
