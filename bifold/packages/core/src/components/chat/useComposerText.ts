@@ -36,6 +36,9 @@ export function insertAtSelection(
  * text to the `text` prop when one is given, so a Send landing while a
  * hand-over is still on (a kept draft or an insert just put back) left the sent
  * words in the field, with Send still showing. Handing over '' wins either way.
+ *
+ * `putBack` returns a message that could not be sent. A send can take a while to fail, so the person may have started
+ * the next one: the returned words go first, on their own line, and nothing typed since is lost.
  */
 export function useComposerText(options: { onTextChange?: (text: string) => void } = {}) {
   const onTextChangeRef = useRef(options.onTextChange)
@@ -88,6 +91,16 @@ export function useComposerText(options: { onTextChange?: (text: string) => void
     setText('')
   }, [])
 
+  /** A message that could not be sent: back in the field, ahead of anything typed since, caret at the end. */
+  const putBack = useCallback(
+    (value: string) => {
+      const next = textRef.current.length > 0 ? `${value}\n${textRef.current}` : value
+      onChangeText(next)
+      setText(next)
+    },
+    [onChangeText]
+  )
+
   /** Focus the field with its caret where the last insert left it. */
   const focusAtCaret = useCallback(() => {
     const input = inputRef.current
@@ -102,5 +115,5 @@ export function useComposerText(options: { onTextChange?: (text: string) => void
     if (text !== undefined) setText(undefined)
   }, [text])
 
-  return { text, textInputProps, inputRef, insert, restore, sent, focusAtCaret, hasDraft }
+  return { text, textInputProps, inputRef, insert, restore, sent, putBack, focusAtCaret, hasDraft }
 }

@@ -159,6 +159,44 @@ describe('the actions sheet and accessibility', () => {
   })
 })
 
+describe('a reply that fails to send', () => {
+  const send = async (tree: ReturnType<typeof render>, words: string) => {
+    fireEvent.changeText(tree.getByPlaceholderText('Chat.MessagePlaceholder'), words)
+    await act(async () => fireEvent.press(tree.getByTestId('GC_SEND_TOUCHABLE')))
+  }
+  const replyTo = (tree: ReturnType<typeof render>, words: string) => {
+    fireEvent(tree.getByText(words), 'longPress')
+    fireEvent.press(tree.getByTestId(id('ChatActionReply')))
+  }
+
+  it('comes back still a reply to the same message', async () => {
+    ;(sendChatText as jest.Mock).mockRejectedValueOnce(new Error('undeliverable'))
+    const tree = renderChat()
+    replyTo(tree, 'see you at noon')
+    await send(tree, 'see you there')
+    expect(sendChatText).toHaveBeenCalledWith(expect.anything(), '1', 'see you there', { inReplyTo: RECEIVED })
+    await waitFor(() => expect(tree.getByText('Replying to Alice')).toBeTruthy())
+  })
+
+  it('leaves alone a message chosen to reply to since', async () => {
+    let fail: () => void = () => undefined
+    ;(sendChatText as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          fail = () => reject(new Error('undeliverable'))
+        })
+    )
+    const tree = renderChat()
+    replyTo(tree, 'see you at noon')
+    await send(tree, 'see you there')
+    replyTo(tree, 'on my way')
+    await act(async () => fail())
+    await waitFor(() => expect(Toast.show).toHaveBeenCalled())
+    expect(tree.getByText('Replying to Chat.UserYou')).toBeTruthy()
+    expect(tree.queryByText('Replying to Alice')).toBeNull()
+  })
+})
+
 describe('who a quote is by', () => {
   it('names the contact above the reply preview when answering their message', () => {
     const tree = renderChat()

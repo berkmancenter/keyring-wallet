@@ -36,7 +36,9 @@ import {
 import type { PhotoSource } from '../modules/chat/media/pick'
 import EmojiPickerSheet from '../modules/chat/emoji/EmojiPickerSheet'
 import { type ChatMessageIds, deleteChatMessages } from '../modules/chat/history'
+import { loadChatDraft, saveChatDraft } from '../modules/chat/draft'
 import { removeReaction, sendChatText, sendReaction } from '../modules/chat/send'
+import { failureCategory } from '../modules/rooms/roomsLogWords'
 import type { ChatSendOutcome } from '../modules/chat/send'
 import { chatEventsShown } from '../modules/chat/shown'
 import { renderActions } from '../components/chat/ChatActions'
@@ -331,6 +333,17 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   // disappears: the person is asked first, and their text and reply are put back if they would rather not.
   const chatEvents = useChatEvents(connectionId)
   const timerOn = useMemo(() => (chatEvents ? (timerOf(chatEvents)?.expiresIn ?? 0) > 0 : false), [chatEvents])
+  // The chat on screen now, none once the screen has gone. A deep link or a message wake can change the chat under
+  // this screen while a send is out, and the person can leave it.
+  const chatOnScreen = useRef<string | undefined>(connectionId)
+  useEffect(() => {
+    chatOnScreen.current = connectionId
+    return () => {
+      chatOnScreen.current = undefined
+    }
+  }, [connectionId])
+  // Failed sends kept as drafts, one at a time: each reads what the last one wrote, so two can't lose one.
+  const keepingNotSent = useRef<Promise<void>>(Promise.resolve())
   const onSend = useCallback(
     async (messages: IMessage[]) => {
       // gifted-chat has just reset the field, to a hand-over's text if one was still on: empty it either way.
@@ -338,8 +351,49 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
       if (!agent) return
       const message = messages[0]
       const inReplyTo = message.replyMessage?._id
+      // The field was emptied above, and a chat event that failed is stored nowhere (send.ts), so the words are only
+      // here. They stay with the chat they were written for: never in another contact's field, where Send would give
+      // them to that contact. With that chat gone from the screen, the notice says which chat and where the words are.
+      const notSent = async (error: unknown) => {
+        // The kind only: an agent's or transport's words can name the contact.
+        agent.config?.logger?.warn(`[Chat] a message was not sent: ${failureCategory(error)}`)
+        if (chatOnScreen.current === connectionId) {
+          Toast.show({ type: ToastType.Error, text1: t('Chat.MessageNotSent') })
+          composer.putBack(message.text)
+          if (message.replyMessage) setReplyTarget((current) => current ?? (message.replyMessage as ReplyMessage))
+          return
+        }
+        const keep = keepingNotSent.current.then(async () => {
+          const kept = await loadChatDraft(agent, connectionId)
+          await saveChatDraft(agent, connectionId, kept ? `${message.text}\n${kept}` : message.text)
+        })
+        keepingNotSent.current = keep.catch(() => undefined)
+        try {
+          await keep
+          Toast.show({
+            type: ToastType.Error,
+            text1: t('Chat.MessageNotSentKept', { name: theirLabel, interpolation: { escapeValue: false } }),
+            // About 20 words, and the person may be looking elsewhere. Missed, it costs a moment's confusion: the words
+            // are in that chat's draft.
+            visibilityTime: 8000,
+          })
+        } catch (keepError) {
+          agent.config?.logger?.warn(`[Chat] a message not sent was not kept: ${failureCategory(keepError)}`)
+          Toast.show({
+            type: ToastType.Error,
+            text1: t('Chat.MessageNotSentLost', { name: theirLabel, interpolation: { escapeValue: false } }),
+            // Longer than the one above: missed, this loss is silent. This toast is the only record of it.
+            visibilityTime: 15_000,
+          })
+        }
+      }
       const send = () =>
-        sendChatText(agent, connectionId, message.text, typeof inReplyTo === 'string' && inReplyTo ? { inReplyTo } : {})
+        sendChatText(
+          agent,
+          connectionId,
+          message.text,
+          typeof inReplyTo === 'string' && inReplyTo ? { inReplyTo } : {}
+        ).catch(notSent)
       if (timerOn && !(await counterpartySpeaksChat(agent, connectionId))) {
         const putBack = () => {
           composer.insert(message.text)
