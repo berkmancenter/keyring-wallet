@@ -46,6 +46,11 @@ export interface CommunityCardProps {
   agent?: Agent
   communityDid: string
   persona?: VtiPersona
+  /**
+   * The other communities this same identity is kept for (sharedIdentity): each of them sees the same DID, so the
+   * person is told the communities can tell it is them.
+   */
+  sharedWith?: string[]
   membership?: VtiMembership
   invited: boolean
   vetter: boolean
@@ -70,6 +75,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   agent,
   communityDid,
   persona,
+  sharedWith = [],
   membership,
   invited,
   vetter,
@@ -226,6 +232,14 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
             <Icon name="share-variant" size={22} color={ColorPalette.brand.link} />
           </Pressable>
         </View>
+      ) : null}
+      {persona && sharedWith.length > 0 ? (
+        <ThemedText style={styles.muted} testID={testIdWithKey(`AgentIdentityShared_${key}`)}>
+          {t('MyAgent.IdentitySharedWith', {
+            other: communityHeadingOf(sharedWith[0], t),
+            interpolation: { escapeValue: false },
+          })}
+        </ThemedText>
       ) : null}
       {/* The identifier the community and its admins see for this person, to
           compare or give to an admin (IN-120: the admin saw a persona DID the

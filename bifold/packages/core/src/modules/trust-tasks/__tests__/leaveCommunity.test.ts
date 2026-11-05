@@ -11,7 +11,12 @@ import { leaveCommunity, readJoinState } from '../module/vtiJoin'
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
 const COMMUNITY = 'did:webvh:Qm:vtc.example:c'
-const persona = { did: 'did:webvh:Qm:vta.example:p', communityDid: COMMUNITY }
+// Signable: both key copies recorded (canSignAs).
+const persona = {
+  did: 'did:webvh:Qm:vta.example:p',
+  communityDid: COMMUNITY,
+  kmsKeyIds: { signing: 's', keyAgreement: 'k' },
+}
 const answer = (payload: unknown, type = 'https://trusttasks.org/spec/vtc/members/self-remove/0.1#response') =>
   ({ type, body: { payload } }) as unknown as DidCommV2PlaintextMessage
 const refusal = (code: string) => answer({ code, message: 'no' }, 'https://trusttasks.org/spec/trust-task-error/0.1')
@@ -21,12 +26,16 @@ function stores() {
   const communityStore = {
     forgetCommunity: jest.fn(async () => undefined),
     getMembership: jest.fn(async () => undefined),
+    // No membership here under an identity kept for another community (sharedIdentity): nothing to heal.
+    listMemberships: jest.fn(async () => []),
     getSubmission: jest.fn(async () => undefined),
     getDeparture: jest.fn(async () => departure),
     saveDeparture: jest.fn(async (d: VtiDeparture) => void (departure = d)),
   }
   const identityStore = {
     getPersona: jest.fn(async () => persona),
+    listPersonas: jest.fn(async () => [persona]),
+    setPersona: jest.fn(async () => undefined),
     forgetPersona: jest.fn(async () => undefined),
   }
   const vettingStore = { forget: jest.fn(async () => undefined) }

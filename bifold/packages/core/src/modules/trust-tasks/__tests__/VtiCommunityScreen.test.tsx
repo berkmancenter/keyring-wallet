@@ -57,9 +57,13 @@ const mockForgetCommunity = jest.fn(async () => undefined)
 const mockForgetPersona = jest.fn(async () => undefined)
 // What the phone keeps of how communities look, set by the tests of the community's mark.
 let mockBrands: unknown[] = []
+// A membership the phone holds here, set by the tests of one with no identity to sign as (IN-517).
+let mockMembership: unknown = undefined
 jest.mock('../module/VtiCommunityStore', () => ({
+  isCurrentMembership: jest.requireActual('../module/VtiCommunityStore').isCurrentMembership,
   GenericRecordsCommunityStore: class {
-    getMembership = async () => undefined
+    getMembership = async () => mockMembership
+    listMemberships = async () => (mockMembership ? [mockMembership] : [])
     listHeldCredentials = async () => []
     listCommunityBrands = async () => mockBrands
     forgetCommunity = (...a: unknown[]) => mockForgetCommunity(...(a as []))
@@ -187,7 +191,8 @@ describe('the community screen, when its identity cannot sign in because of its 
 })
 
 describe('leaving a community (220)', () => {
-  const persona = { did: 'did:webvh:QmPersona:p', communityDid }
+  // Signable: both key copies recorded (canSignAs).
+  const persona = { did: 'did:webvh:QmPersona:p', communityDid, kmsKeyIds: { signing: 's', keyAgreement: 'k' } }
   beforeEach(() => {
     mockPersona = persona
     mockLeave.mockReset()
@@ -220,6 +225,29 @@ describe('leaving a community (220)', () => {
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityConfirm'))))
     expect(mockLeave).toHaveBeenCalledWith(expect.anything(), communityDid, { disposition: 'purge' })
     expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Community.LeftPurge' }))
+  })
+
+  it('an identity also kept for another community: leaving says the identity stays for it (IN-517)', async () => {
+    mockPersona = { ...persona, vtaDid: 'did:webvh:QmAgent:a' }
+    mockPersonas = [
+      mockPersona,
+      { ...persona, communityDid: 'did:webvh:QmOther:other-vtc', vtaDid: 'did:webvh:QmAgent:a' },
+    ]
+    try {
+      const tree = await openLeave()
+      expect(tree.getByTestId(testIdWithKey('LeaveCommunityConfirmCard'))).toHaveTextContent(
+        /Community\.LeaveExplainsShared/
+      )
+    } finally {
+      mockPersonas = []
+    }
+  })
+
+  it('an identity kept for this community only: the usual words (control)', async () => {
+    const tree = await openLeave()
+    const confirm = tree.getByTestId(testIdWithKey('LeaveCommunityConfirmCard'))
+    expect(confirm).toHaveTextContent(/Community\.LeaveExplains/)
+    expect(confirm).not.toHaveTextContent(/Community\.LeaveExplainsShared/)
   })
 
   it('keeps only a note when the person chooses so, and says what the community applied', async () => {
@@ -348,7 +376,7 @@ describe('the community screen, for a member', () => {
   // 276.10, option A: who the community is first, then Rooms and Directory, and About last with Leave out of the way.
   it('reads top to bottom: the name, Rooms, Directory, then About with Details and Leave', async () => {
     mockJourney = { join: { kind: 'member', membership }, vetterGrant: { state: 'none' } }
-    mockPersona = { did: 'did:webvh:QmPersona:p', communityDid }
+    mockPersona = { did: 'did:webvh:QmPersona:p', communityDid, kmsKeyIds: { signing: 's', keyAgreement: 'k' } }
     mockRoomsService = {
       isSample: false,
       capabilities: async () => jest.requireActual('../../rooms/capabilities').sampleCapabilities(),
@@ -728,8 +756,60 @@ describe("a community known only through another agent's identity", () => {
     expect(mockForgetPersona).toHaveBeenCalledWith(communityDid, AL_PHONE)
   })
 
-  it("the current agent's own identity: a member as before, with Leave", async () => {
+  it('a membership with no identity this phone can sign in as: no Leave, and words saying to ask its admin (IN-517)', async () => {
+    mockPersona = undefined
+    mockPersonas = []
+    mockMembership = { communityDid, personaDid: 'did:webvh:QmAgentItself:agent', role: 'member' }
+    try {
+      const tree = await open()
+      expect(tree.queryByTestId(testIdWithKey('LeaveCommunityButton'))).toBeNull()
+      expect(tree.getByText(/Community\.LeaveNotFromThisPhone/)).toBeTruthy()
+    } finally {
+      mockMembership = undefined
+    }
+  })
+
+  it('an identity whose keys are not on the phone yet: no Leave, and words saying the agent hands them over (ac, #938)', async () => {
+    // Kept for a second community while the first held its copies in the wallet's store: no copies named yet.
     mockPersona = { did: 'did:webvh:QmP:mine', communityDid, vtaDid: AL_SIGNER }
+    mockPersonas = [mockPersona]
+    mockMembership = { communityDid, personaDid: 'did:webvh:QmP:mine', role: 'member' }
+    try {
+      const tree = await open()
+      expect(tree.queryByTestId(testIdWithKey('LeaveCommunityButton'))).toBeNull()
+      expect(tree.getByText(/Community\.LeaveWaitsForKeys/)).toBeTruthy()
+      expect(tree.queryByText(/Community\.LeaveNotFromThisPhone/)).toBeNull()
+    } finally {
+      mockMembership = undefined
+    }
+  })
+
+  it('an identity this phone can sign in as: Leave, and no such words (control)', async () => {
+    mockPersona = {
+      did: 'did:webvh:QmP:mine',
+      communityDid,
+      vtaDid: AL_SIGNER,
+      kmsKeyIds: { signing: 's', keyAgreement: 'k' },
+    }
+    mockPersonas = [mockPersona]
+    mockMembership = { communityDid, personaDid: 'did:webvh:QmP:mine', role: 'member' }
+    try {
+      const tree = await open()
+      expect(tree.getByTestId(testIdWithKey('LeaveCommunityButton'))).toBeTruthy()
+      expect(tree.queryByText(/Community\.LeaveNotFromThisPhone/)).toBeNull()
+      expect(tree.queryByText(/Community\.LeaveWaitsForKeys/)).toBeNull()
+    } finally {
+      mockMembership = undefined
+    }
+  })
+
+  it("the current agent's own identity: a member as before, with Leave", async () => {
+    mockPersona = {
+      did: 'did:webvh:QmP:mine',
+      communityDid,
+      vtaDid: AL_SIGNER,
+      kmsKeyIds: { signing: 's', keyAgreement: 'k' },
+    }
     mockPersonas = [mockPersona]
     const tree = await open()
     expect(tree.queryByTestId(testIdWithKey('CommunityHeldElsewhere'))).toBeNull()

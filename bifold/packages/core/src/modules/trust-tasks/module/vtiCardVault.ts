@@ -43,7 +43,8 @@ import {
   isCurrentMembership,
   type VtiCommunityStore,
 } from './VtiCommunityStore'
-import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
+import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } from './VtiIdentityStore'
+import { shareIdentityWith } from './sharedIdentity'
 import { checkDeliveredCard, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { withoutRoomCards } from './roomCards'
 import { classifyCredential, roleNameOf } from './vtiInbox'
@@ -361,6 +362,8 @@ export async function recoverCardsFromAgent(
     onProgress?: (p: { found: number; restored: number }) => void
     check?: (credential: Record<string, unknown>, issuer: string) => Promise<string | undefined>
     cards?: AgentCard[]
+    /** Where a card for another community keeps this identity for that community too (sharedIdentity). */
+    identities?: Pick<VtiIdentityStore, 'getPersona' | 'setPersona'>
   } = {}
 ): Promise<{ found: number; restored: string[]; already: string[]; refused: RecoveredRefusal[] }> {
   const check = options.check ?? ((c, issuer) => checkDeliveredCard(agent, c, issuer))
@@ -391,7 +394,22 @@ export async function recoverCardsFromAgent(
       continue
     }
     let held = false
-    if (item.kind === 'membership') {
+    // A card from a community this identity was not made for: the identity is kept for that community too, or,
+    // when the phone keeps another identity there, the card is kept on its own (IN-517).
+    let onItsOwn = false
+    if ((item.kind === 'membership' || item.kind === 'role') && item.communityDid !== persona.communityDid) {
+      const identities = options.identities ?? new GenericRecordsIdentityStore(agent)
+      const outcome = await shareIdentityWith(identities, persona, item.communityDid)
+      onItsOwn = outcome !== 'shared' && outcome !== 'already'
+    }
+    if (onItsOwn) {
+      // Held as any other card (a held membership is not a kind), so it shows as no membership of this identity.
+      const heldKind = item.kind === 'role' ? 'role' : 'other'
+      held = (await store.listHeldCredentials(heldKind, item.communityDid)).some((c) =>
+        sameCard(c.credential, credential)
+      )
+      if (!held) await store.saveHeldCredential({ ...item, subjectDid: persona.did, kind: heldKind })
+    } else if (item.kind === 'membership') {
       const found = await store.getMembership(item.communityDid, persona.did)
       // The very card the community ended does not bring the membership back.
       if (found && !isCurrentMembership(found) && found.vmc?.id === credential.id) continue

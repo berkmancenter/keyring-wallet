@@ -26,6 +26,7 @@ import {
   type VtiMembership,
 } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } from './VtiIdentityStore'
+import { canSignAs, personaForCommunity, VtiKeysNotHeld, VtiNoIdentity } from './sharedIdentity'
 import { selfRemoveRefusal, vtiAgent, VtiSentNoAnswer, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
 import { cardStandingOf, recordCardRevocation } from './vtiCardStanding'
 import { checkDeliveredCard, deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
@@ -435,7 +436,9 @@ export interface LeaveCommunityDeps {
  * Leave a community (p220 item 5): `members/self-remove/0.1`, as the
  * community's persona, then clear what this phone held for it — the
  * membership, invitations, held credentials, the vetting application and the
- * persona record — so joining again starts from a fresh identity. A community
+ * persona record — so joining again starts from a fresh identity. Only this
+ * community's record goes: an identity also kept for another community stays
+ * that community's (sharedIdentity). A community
  * that says the caller is not a member (`notMember`) is gone already: the
  * phone clears the same way and says so (`alreadyGone`). Any other refusal —
  * leaving as the last admin — throws, and nothing is cleared.
@@ -445,8 +448,13 @@ export async function leaveCommunity(
   communityDid: string,
   options: { disposition?: 'purge' | 'tombstone' } = {}
 ): Promise<{ disposition: string; alreadyGone: boolean }> {
-  const persona = await deps.identityStore.getPersona(communityDid)
-  if (!persona) throw new Error('vtiJoin: this phone holds no identity for that community')
+  // The identity kept for this community, or the one its membership names when the phone kept that identity only
+  // for another community (sharedIdentity, IN-517). With none the phone cannot sign the request: nothing is cleared.
+  const persona = await personaForCommunity(deps.identityStore, deps.communityStore, communityDid)
+  if (!persona) throw new VtiNoIdentity()
+  // Without both key copies the session cannot sign: the request would go unsigned, or not at all. The agent's
+  // session-open sweep borrows them (sharedIdentity); nothing is sent or cleared before then.
+  if (!canSignAs(persona)) throw new VtiKeysNotHeld()
   await vtiAgent.connect(deps.agent, deps.mediatorDid, {
     persona,
     peerRevisionStore: new GenericRecordsTspPeerRevisionStore(deps.agent),

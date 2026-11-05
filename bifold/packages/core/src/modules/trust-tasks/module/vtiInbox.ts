@@ -218,6 +218,14 @@ export async function receiveIssue(
     /** Told of each card once it is filed (a membership, a role card or a held credential) — for the log. */
     onFiled?: (item: VtiReceivedCredential) => void
     /**
+     * Whether a membership card or a role card may be filed on a membership
+     * of this persona, asked of each one. A card from a community this persona
+     * was not made for is filed only once the persona is kept for that
+     * community too (`sharedIdentity`); false keeps it on its own, as a held
+     * credential. Absent, every card is filed on the membership.
+     */
+    fileUnder?: (item: VtiReceivedCredential) => Promise<boolean>
+    /**
      * Checks a card before it is kept (`deliveredCardCheck(agent)`). Required,
      * so no caller can keep a card unchecked. It may throw to leave the
      * delivery for redelivery (a status list that cannot be read now).
@@ -268,7 +276,9 @@ export async function receiveIssue(
       if (ended && !isCurrentMembership(ended) && ended.vmc?.id === item.credential.id) continue
     }
     kept.push(item)
-    if (item.kind === 'membership' || item.kind === 'role') {
+    const onMembership =
+      (item.kind === 'membership' || item.kind === 'role') && (!options.fileUnder || (await options.fileUnder(item)))
+    if (onMembership) {
       // A community issues the membership card and the role card in two
       // messages a few milliseconds apart, and each is kept as it arrives:
       // one at a time per membership, or one overwrote the other's work and
@@ -282,7 +292,8 @@ export async function receiveIssue(
         !((await store.listHeldCredentials?.('vetter-grant', item.communityDid).catch(() => [])) ?? []).some(
           (held) => held.credential?.id !== undefined && held.credential.id === item.credential.id
         )
-      await store.saveHeldCredential({ ...item, kind: item.kind })
+      // A membership card kept on its own (fileUnder) is held as any other card: a held membership is not a kind.
+      await store.saveHeldCredential({ ...item, kind: item.kind === 'membership' ? 'other' : item.kind })
       if (news) DeviceEventEmitter.emit(VTI_VETTER_GRANTED_EVENT, { communityDid: item.communityDid })
     }
     options.onFiled?.(item)

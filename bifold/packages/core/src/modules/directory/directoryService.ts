@@ -213,9 +213,17 @@ export class AgentDirectoryService implements DirectoryService {
 
 /**
  * What a screen shows when a directory read or write failed: a community that does not serve the directory, a
- * phone that is no longer a member, or a community that did not answer (including a rate refusal: try again later).
+ * phone that is no longer a member, a phone with no identity it can sign in as there (nothing was asked of the
+ * community: IN-517 read this as "didn't answer"), or a community that did not answer (including a rate refusal:
+ * try again later).
  */
 export function directoryStatusOf(error: unknown): OperationStatus {
+  // sharedIdentity's VtiNoIdentity, read by its name so the directory does not import the identity stores.
+  if (error instanceof Error && error.name === 'VtiNoIdentity')
+    return { status: 'unavailable', reason: 'noIdentity', detail: error.message }
+  // Its keys not on the phone yet: nothing was asked either, and the agent's next connection fixes it.
+  if (error instanceof Error && error.name === 'VtiKeysNotHeld')
+    return { status: 'unavailable', reason: 'keysNotHeld', detail: error.message }
   if (error instanceof DirectoryRefused) {
     if (error.code === 'unsupportedType' || error.code === 'unsupportedVersion')
       return { status: 'unavailable', reason: 'communityDoesNotServe', detail: error.message }

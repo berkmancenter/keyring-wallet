@@ -10,6 +10,8 @@ import type { Agent } from '@credo-ts/core'
 import { getKeyed, listKeyed, putKeyed, withKeyLock } from '../trust-tasks/module/keyedRecords'
 import { vtaAgent } from '../trust-tasks/module/vtaAgent'
 import { vtiAgent } from '../trust-tasks/module/vtiAgent'
+import { canConnectAs, personaForCommunity, VtiKeysNotHeld, VtiNoIdentity } from '../trust-tasks/module/sharedIdentity'
+import { GenericRecordsCommunityStore } from '../trust-tasks/module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../trust-tasks/module/VtiIdentityStore'
 import { GenericRecordsTspPeerRevisionStore } from '../trust-tasks/module/vtiTsp'
 
@@ -42,13 +44,22 @@ export const isPollsListing = (type: string): boolean => /\/vtc\/elections\/(lis
 
 export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: string } = {}): PollsBackend {
   const identityStore = new GenericRecordsIdentityStore(agent)
+  const communityStore = new GenericRecordsCommunityStore(agent)
   // The session to a community is the persona the phone joined it with, held while the task runs: a read and a
   // ticket request are the person's own acts, and hold it as an ordinary caller does. A listing read leaves no claim on
   // the session after it (`claims: false`): each one renewed it, and another community's rooms were refused for as long
   // as the polls were open (34VR-Y58H, 277.8, 11-03). A ticket request still does.
   const asPersona = async <T>(community: string, fn: () => Promise<T>, claims = true): Promise<T> => {
-    const persona = await identityStore.getPersona(community)
-    if (!persona) throw new Error('polls: this phone holds no identity for that community')
+    // As rooms: the identity kept for this community, or the one its membership names (sharedIdentity, IN-517).
+    const persona = await personaForCommunity(identityStore, communityStore, community)
+    if (!persona) {
+      agent.config?.logger?.warn?.('[Polls] no identity for the community: nothing asked (noIdentity)')
+      throw new VtiNoIdentity('polls: this phone holds no identity for that community')
+    }
+    if (!canConnectAs(persona)) {
+      agent.config?.logger?.warn?.("[Polls] the identity's keys are not on the phone yet: nothing asked (keysNotHeld)")
+      throw new VtiKeysNotHeld("polls: this identity's keys are not on this phone yet")
+    }
     return vtiAgent.holding(agent, options.mediatorDid, persona, fn, {
       peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
       reason: 'polls',
@@ -72,7 +83,7 @@ export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: s
     currentAgent: () => vtaAgent.agentAddress(),
     linkedAgents: () => (vtaAgent.getState().agents ?? []).map((a) => a.vtaDid),
     voterTarget: async (community) => {
-      const persona = await identityStore.getPersona(community)
+      const persona = await personaForCommunity(identityStore, communityStore, community)
       return persona ? { contextId: persona.contextId, community, member: persona.did } : undefined
     },
     records: createPollRecordStore(agent),

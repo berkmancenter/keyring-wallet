@@ -16,6 +16,7 @@ import {
   fakeCommunityStore,
   membership,
   membershipCard,
+  persona,
   roleCard,
   seedCardVaultState,
 } from '../../../../__tests__/helpers/cardVault'
@@ -300,5 +301,36 @@ describe('whose card it is, with several agents', () => {
       ['did:me:a', 'Personal'],
       ['did:me:b', 'Work'],
     ])
+  })
+})
+
+// IN-517: one identity kept for two communities. Each community sees the same DID, so the person is told.
+describe('an identity the card shares with another community', () => {
+  const renderWith = (sharedWith?: string[]) =>
+    render(
+      <BasicAppContext>
+        <CommunityCard
+          communityDid={COMMUNITY}
+          persona={persona}
+          sharedWith={sharedWith}
+          membership={membership}
+          invited={false}
+          vetter={false}
+          onOpen={jest.fn()}
+          onPrimary={jest.fn()}
+        />
+      </BasicAppContext>
+    )
+
+  it('says the other community sees the same identity', () => {
+    const tree = renderWith(['did:webvh:QmOther:vtc.example:first-vtc'])
+    expect(tree.getByTestId(testIdWithKey(`AgentIdentityShared_${key}`))).toHaveTextContent(
+      /MyAgent\.IdentitySharedWith/
+    )
+  })
+
+  it('says nothing of the kind for an identity kept for this community only (control)', () => {
+    const tree = renderWith()
+    expect(tree.queryByTestId(testIdWithKey(`AgentIdentityShared_${key}`))).toBeNull()
   })
 })

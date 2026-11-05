@@ -517,6 +517,8 @@ export class AgentRoomsService implements RoomsService {
     const unreachable: string[] = []
     const tooOld: string[] = []
     const kept: RoomsCommunity[] = []
+    // Its identity's keys are not on the phone yet (sharedIdentity's VtiKeysNotHeld, read by name): not unreached.
+    const awaitingKeys: string[] = []
     const memberships = await Promise.all(
       communities.map(async (community) => ({
         community,
@@ -524,6 +526,7 @@ export class AgentRoomsService implements RoomsService {
           // By short id, and why by kind alone: no error's words beside a community (roomsLogWords).
           this.backend.warn(`rooms: ${logRef(community.did)} did not list this member's rooms: ${failureCategory(e)}`)
           if (this.sessionKept(community, e)) kept.push(community)
+          else if (e instanceof Error && e.name === 'VtiKeysNotHeld') awaitingKeys.push(community.did)
           else if (refusalCode(e) === 'unsupportedType') tooOld.push(community.did)
           else unreachable.push(community.did)
           return []
@@ -533,11 +536,22 @@ export class AgentRoomsService implements RoomsService {
     // When none answered, custody alone is not the member's rooms: an open room holds no keys and would be
     // missing, and every other room would show by its id. The read fails instead, and the screen says why — unless
     // only a kept session stopped them: that is not a failure, and the read again follows.
-    if (unreachable.length > 0 && unreachable.length + tooOld.length + kept.length === communities.length)
+    const failedAll = unreachable.length + tooOld.length + kept.length + awaitingKeys.length === communities.length
+    if (unreachable.length > 0 && failedAll)
       throw new RoomsUnavailable(
         'listMyRooms',
         'communityUnreachable',
         `no community answered for this member's rooms (${unreachable.join(', ')})`
+      )
+    // None reached because none can sign yet: said as that, with what to do, not as communities that didn't answer.
+    // After `communityUnreachable` on purpose: a mix of the two is rare, as only a record naming no key-agreement copy
+    // at all is caught here (one brought back, or shared while the first held stored copies). After a restart a record
+    // still names its in-memory copies, so a phone just restarted is not this case, and the order is not reversed for it.
+    if (awaitingKeys.length > 0 && failedAll && kept.length === 0)
+      throw new RoomsUnavailable(
+        'listMyRooms',
+        'keysNotHeld',
+        `this member's identity keys are not on the phone yet (${awaitingKeys.join(', ')})`
       )
     if (tooOld.length > 0 && tooOld.length === communities.length)
       throw new RoomsUnavailable(

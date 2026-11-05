@@ -50,6 +50,10 @@ export type RoomsOperation =
  *   record of it (rights, host). The operation needs those ("Details not loaded").
  * - `noRight`: this member's rights in the room do not include it ("You can't post here").
  * - `communityUnreachable`: none of the member's communities answered for their rooms; try again later.
+ * - `noIdentity`: the phone holds a membership in the community but no identity it can sign in as there, so nothing
+ *   was asked of it; trying again does not help (IN-517).
+ * - `keysNotHeld`: the identity is on the phone but its keys are not yet: the agent hands them over when it next
+ *   connects, and trying again then helps.
  * - `tierNotYet`: served, but Keyring does not yet do it in a room of this tier, e.g. writing in an `attributed`
  *   room, whose records are sealed ("not available yet in this kind of room").
  */
@@ -66,6 +70,8 @@ export type RoomsReason =
   | 'detailsNotLoaded'
   | 'noRight'
   | 'communityUnreachable'
+  | 'noIdentity'
+  | 'keysNotHeld'
   | 'tierNotYet'
   // Never in this kind of room: files exist on attributed and private rooms only (upstream refuses them on open ones).
   | 'notOnThisTier'

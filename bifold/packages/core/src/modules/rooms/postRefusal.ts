@@ -26,6 +26,8 @@ const PASSING: ReadonlySet<RoomsReason> = new Set([
   'agentUnknown',
   'communityUnreachable',
   'detailsNotLoaded',
+  // The agent hands the identity's keys over when it next connects.
+  'keysNotHeld',
 ])
 
 /**

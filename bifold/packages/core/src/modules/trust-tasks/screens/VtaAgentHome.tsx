@@ -29,6 +29,7 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { heldByAgent } from '../module/heldByAgent'
+import { communitiesSharing, healSharedIdentities } from '../module/sharedIdentity'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { agentTransition, vtaAgent } from '../module/vtaAgent'
@@ -92,6 +93,12 @@ export function ownHoldings(
   }
 }
 
+/** The other communities the identity kept for `communityDid` is kept for too (sharedIdentity). */
+export const sharedWithOf = (personas: VtiPersona[], communityDid: string): string[] => {
+  const persona = personas.find((p) => p.communityDid === communityDid)
+  return persona ? communitiesSharing(personas, persona) : []
+}
+
 export const communitiesHeld = (holdings: Pick<Holdings, 'personas' | 'memberships' | 'invited'>): string[] =>
   Array.from(
     new Set([
@@ -122,8 +129,12 @@ async function readHoldings(agent: Agent, agentKey: string | undefined, options:
   // A cold start may come here before anything loaded what was recorded.
   if (options.local) await loadCardStanding(agent).catch(() => undefined)
   const communities = new GenericRecordsCommunityStore(agent)
+  const identities = new GenericRecordsIdentityStore(agent)
+  // A membership whose identity was kept only for another community gets it kept for its own first, so its card
+  // shows the identity and its Leave works (sharedIdentity, IN-517). Never in the way of the page.
+  await healSharedIdentities(identities, communities).catch(() => undefined)
   const [allPersonas, allMemberships, invitations, names] = await Promise.all([
-    new GenericRecordsIdentityStore(agent).listPersonas(),
+    identities.listPersonas(),
     communities.listMemberships(),
     communities.listInvitations(),
     communities.listCommunityNames().catch(() => []),
@@ -1024,6 +1035,7 @@ const VtaAgentHome: React.FC = () => {
                   agent={agent}
                   communityDid={communityDid}
                   persona={holdings.personas.find((p) => p.communityDid === communityDid)}
+                  sharedWith={sharedWithOf(holdings.personas, communityDid)}
                   membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
                   invited={holdings.invited.includes(communityDid)}
                   vetter={holdings.vetterFor.includes(communityDid)}

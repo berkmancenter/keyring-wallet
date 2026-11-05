@@ -26,6 +26,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { CommunityDirectorySection } from '../../directory/components/CommunityDirectorySection'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
+import { canSignAs, communitiesSharing, personaForCommunity } from '../module/sharedIdentity'
 import { selfRemoveRefusal, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { leaveCommunity } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
@@ -119,15 +120,35 @@ const VtiCommunity: React.FC = () => {
   // Leave is offered only where the phone holds something — an identity, a
   // membership: a community only looked at through a link has nothing to leave.
   const [holds, setHolds] = useState(false)
-  const canLeave = holds && !heldElsewhere
+  // Leaving is a request the phone signs as its identity here. A membership with no identity the phone can sign in
+  // as (the agent's own DID, or one this phone does not keep) cannot be left from here: the screen says so instead
+  // of a Leave that fails (IN-517).
+  const [canSign, setCanSign] = useState(false)
+  // An identity is here but its keys are not on the phone yet: its agent hands them over when it next connects.
+  const [awaitingKeys, setAwaitingKeys] = useState(false)
+  // The other communities this identity is kept for: leaving here keeps it for them.
+  const [sharedWith, setSharedWith] = useState<string[]>([])
+  const canLeave = holds && !heldElsewhere && canSign
+  const cannotLeaveHere = holds && !heldElsewhere && !canSign && !awaitingKeys
+  const leaveWaitsForKeys = holds && !heldElsewhere && !canSign && awaitingKeys
   useEffect(() => {
     if (!agent) return
     let live = true
+    const identities = new GenericRecordsIdentityStore(agent)
+    const communities = new GenericRecordsCommunityStore(agent)
     void Promise.all([
-      new GenericRecordsIdentityStore(agent).getPersona(communityDid),
-      new GenericRecordsCommunityStore(agent).getMembership(communityDid),
+      // A read that fails is no identity to sign as: Leave is not offered, the words say why.
+      personaForCommunity(identities, communities, communityDid).catch(() => undefined),
+      communities.getMembership(communityDid),
+      identities.listPersonas(),
     ])
-      .then(([p, m]) => live && setHolds(Boolean(p || m)))
+      .then(([p, m, all]) => {
+        if (!live) return
+        setHolds(Boolean(p || m))
+        setCanSign(canSignAs(p))
+        setAwaitingKeys(Boolean(p) && !canSignAs(p))
+        setSharedWith(p ? communitiesSharing(all, p) : [])
+      })
       .catch(() => undefined)
     return () => {
       live = false
@@ -190,6 +211,10 @@ const VtiCommunity: React.FC = () => {
       })
       navigation.goBack()
     } catch (err) {
+      // Its kind in the log, never the community or an identity: a failed leave left no line before (IN-517).
+      agent.config?.logger?.warn?.(
+        `[VTI] leave failed (${selfRemoveRefusal(err) ?? (err instanceof Error ? err.name : 'unknown')})`
+      )
       // Asked twice and still no answer: say so, and offer to try again. The
       // phone is still a member as far as it knows, and keeps what it holds.
       const unanswered = err instanceof Error && err.name === 'VtiSentNoAnswer'
@@ -416,10 +441,16 @@ const VtiCommunity: React.FC = () => {
         {!canLeave ? null : confirmingLeave ? (
           <View style={styles.card} testID={testIdWithKey(VtiCommunityIds.leaveCommunityConfirmCard)}>
             <Text style={styles.value}>
-              {t('Community.LeaveExplains', {
-                community: communityLabelOf(communityDid, t),
-                interpolation: { escapeValue: false },
-              })}
+              {sharedWith.length > 0
+                ? t('Community.LeaveExplainsShared', {
+                    community: communityLabelOf(communityDid, t),
+                    other: communityLabelOf(sharedWith[0], t),
+                    interpolation: { escapeValue: false },
+                  })
+                : t('Community.LeaveExplains', {
+                    community: communityLabelOf(communityDid, t),
+                    interpolation: { escapeValue: false },
+                  })}
             </Text>
             <Text style={styles.label}>
               {t('Community.LeaveKeepWhat', {
@@ -537,6 +568,22 @@ const VtiCommunity: React.FC = () => {
           </CommunityGroup>
           {canLeave && !confirmingLeave && !leaveUnanswered ? (
             <Text style={styles.label}>{t('Join.StandingAgain')}</Text>
+          ) : null}
+          {leaveWaitsForKeys ? (
+            <Text style={styles.label}>
+              {t('Community.LeaveWaitsForKeys', {
+                community: communityLabelOf(communityDid, t),
+                interpolation: { escapeValue: false },
+              })}
+            </Text>
+          ) : null}
+          {cannotLeaveHere ? (
+            <Text style={styles.label}>
+              {t('Community.LeaveNotFromThisPhone', {
+                community: communityLabelOf(communityDid, t),
+                interpolation: { escapeValue: false },
+              })}
+            </Text>
           ) : null}
         </View>
       </ScrollView>

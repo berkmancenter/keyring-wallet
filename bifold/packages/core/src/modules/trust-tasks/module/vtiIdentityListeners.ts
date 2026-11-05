@@ -40,6 +40,8 @@ import { releaseWarn } from './releaseLog'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
 import { vtaAgent } from './vtaAgent'
 import { unwrapBindingEnvelope, vtiAgent } from './vtiAgent'
+import { healSharedIdentities } from './sharedIdentity'
+import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import {
   advertisedMediatorDid,
@@ -471,6 +473,17 @@ export function defaultListenerFactory(agent: Agent, configuredMediatorDid: stri
 export function useVtiIdentityListeners(agent: Agent | undefined, mediatorDid: string | undefined): void {
   useEffect(() => {
     if (!agent) return
+    // A phone that filed a community's cards under an identity kept for another community has no identity for the
+    // first: it is kept for it now, in place, once per start (sharedIdentity, IN-517). Never in the way of listening.
+    void healSharedIdentities(new GenericRecordsIdentityStore(agent), new GenericRecordsCommunityStore(agent))
+      .then((kept) => {
+        if (kept) agent.config?.logger?.info?.(`[VTI] identities kept for a second community: ${kept}`)
+      })
+      .catch((error: unknown) =>
+        agent.config?.logger?.warn?.(
+          `[VTI] identities for a second community not checked (${error instanceof Error ? error.name : 'error'})`
+        )
+      )
     const stop = startIdentityListeners(agent, { mediatorDid })
     return () => {
       void stop()

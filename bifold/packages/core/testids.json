@@ -1618,6 +1618,7 @@
     "AgentDeviceUntil_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDevice_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentGetCardsRefused_": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
+    "AgentIdentityShared_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentJourney": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
     "AgentJourneyStop_": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
     "AgentMemberBeforeLink_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],

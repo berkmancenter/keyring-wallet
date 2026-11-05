@@ -19,6 +19,7 @@ import CommunityCard from '../screens/CommunityCard'
 import CommunityMemberCard from '../screens/CommunityMemberCard'
 import CommunityMembers from '../screens/CommunityMembers'
 import { createFakeDirectoryService, type FakeDirectoryService } from '../testing/fakeDirectoryService'
+import { VtiKeysNotHeld, VtiNoIdentity } from '../../trust-tasks/module/sharedIdentity'
 
 const COMMUNITY = 'did:webvh:lab'
 const id = (key: string) => testIdWithKey(key)
@@ -94,6 +95,27 @@ describe('Members', () => {
     const tree = show(<CommunityMembers />)
     await waitFor(() => tree.getByTestId(id('DirectoryMembersReload')))
     expect(tree.getByTestId(id('DirectoryMembersStatus'))).toHaveTextContent('Directory.StatusUnreachable')
+  })
+
+  // IN-517: the phone holds no identity it can sign in as there. Nothing was asked of the community, so "didn't
+  // answer" is not what happened, and Try again cannot help.
+  it('says the phone has no identity there, with nothing to retry', async () => {
+    mockService = createFakeDirectoryService()
+    jest.spyOn(mockService, 'listMembers').mockRejectedValue(new VtiNoIdentity())
+    const tree = show(<CommunityMembers />)
+    await waitFor(() => tree.getByTestId(id('DirectoryMembersStatus')))
+    expect(tree.getByTestId(id('DirectoryMembersStatus'))).toHaveTextContent('Directory.StatusNoIdentity')
+    expect(tree.queryByTestId(id('DirectoryMembersReload'))).toBeNull()
+  })
+
+  // #938: the identity is here but its keys are not yet; the agent hands them over when it next connects, so Try
+  // again helps then.
+  it("says the identity's keys are not here yet, with Try again", async () => {
+    mockService = createFakeDirectoryService()
+    jest.spyOn(mockService, 'listMembers').mockRejectedValue(new VtiKeysNotHeld())
+    const tree = show(<CommunityMembers />)
+    await waitFor(() => tree.getByTestId(id('DirectoryMembersReload')))
+    expect(tree.getByTestId(id('DirectoryMembersStatus'))).toHaveTextContent('Directory.StatusKeysNotHeld')
   })
 })
 
