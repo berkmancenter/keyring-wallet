@@ -231,6 +231,27 @@ describe('parseFileManifest', () => {
     expect(parseFileManifest({ ...manifest(), blobRef: undefined })).toBeUndefined()
   })
 
+  it('takes the image members of trust-tasks-tf #1027, keeping them, so the file still opens', () => {
+    const preview = { mediaType: 'image/webp', data: 'AAAA_-' }
+    const withImage = manifest({ width: 800, height: 600, preview })
+    expect(parseFileManifest(withImage)).toEqual(withImage)
+  })
+
+  it('refuses them when they do not read, as the schema does', () => {
+    for (const over of [
+      { width: 0 },
+      { height: 1048577 },
+      { width: 1.5 },
+      { height: '600' },
+      { preview: { mediaType: 'image/svg+xml', data: 'AAAA' } },
+      { preview: { mediaType: 'image/png' } },
+      { preview: { mediaType: 'image/png', data: 'not base64url!' } },
+      { preview: { mediaType: 'image/png', data: 'A'.repeat(10924) } },
+      { preview: { mediaType: 'image/png', data: 'AAAA', extra: 1 } },
+    ])
+      expect(parseFileManifest(manifest(over))).toBeUndefined()
+  })
+
   it('a body whose file is not a manifest is shown whole, as any unknown JSON', () => {
     const raw = JSON.stringify({ file: { name: 'x' } })
     const opened = parseRead({ key: 'k', version: 1, plaintext: b64url(raw) }, (s) =>
@@ -238,5 +259,77 @@ describe('parseFileManifest', () => {
     )
     expect(opened?.body).toBe(raw)
     expect(opened?.file).toBeUndefined()
+  })
+})
+
+describe('parseRead, what a record says it is (trust-tasks-tf #1027)', () => {
+  const decode = (s: string) => Buffer.from(s, 'base64url').toString('utf8')
+  const sealed = (body: Record<string, unknown>) =>
+    parseRead({ key: 'k', version: 2, author: 'did:peer:host-said', plaintext: b64url(JSON.stringify(body)) }, decode)
+  const members = {
+    kind: 'message',
+    inReplyTo: { key: 'k0', version: 1 },
+    writtenAt: '2026-11-04T09:00:00Z',
+    editedAt: '2026-11-04T09:05:00.5Z',
+  }
+
+  it('reads them from a sealed body and from an open room s cleartext', () => {
+    expect(sealed({ body: 'Words', ...members })).toMatchObject({ body: 'Words', ...members })
+    const open = parseRead({ key: 'k', version: 2, cleartext: { body: 'Words', ...members } }, decode)
+    expect(open).toMatchObject({ body: 'Words', ...members })
+  })
+
+  it('drops one that does not read, alone, and the record reads on', () => {
+    for (const bad of [{ kind: 'Message' }, { kind: 'a-b' }, { kind: 7 }, { kind: 'a'.repeat(65) }, { kind: '' }])
+      expect(sealed({ body: 'Words', ...bad })).toMatchObject({ body: 'Words' })
+    expect(sealed({ body: 'Words', kind: 'Message' })?.kind).toBeUndefined()
+    expect(sealed({ body: 'Words', kind: 'a'.repeat(64) })?.kind).toBe('a'.repeat(64))
+    for (const bad of [
+      { version: 1 },
+      { key: '' },
+      { key: 7 },
+      { key: 'a'.repeat(513) },
+      { key: 'k0', version: 0 },
+      { key: 'k0', x: 1 },
+      'k0',
+    ])
+      expect(sealed({ body: 'Words', inReplyTo: bad })?.inReplyTo).toBeUndefined()
+    expect(sealed({ body: 'Words', inReplyTo: { key: 'k0' } })?.inReplyTo).toEqual({ key: 'k0' })
+    for (const bad of ['2026-11-04', '2026-11-04T09:00:00+01:00', '2026-13-45T09:00:00Z', 7]) {
+      expect(sealed({ body: 'Words', writtenAt: bad })?.writtenAt).toBeUndefined()
+      expect(sealed({ body: 'Words', editedAt: bad })?.editedAt).toBeUndefined()
+    }
+  })
+
+  it('a record that says what it is, with no words, is no JSON to show: a withdrawn message', () => {
+    const opened = sealed({ kind: 'message', writtenAt: members.writtenAt })
+    expect(opened?.body).toBe('')
+    expect(opened?.kind).toBe('message')
+    // With nothing to say what it is, a JSON body with no `body` is shown whole, as it always was (control).
+    const raw = { some: 'json' }
+    expect(sealed(raw)?.body).toBe(JSON.stringify(raw))
+  })
+
+  it("today's records read as they did, with no new member", () => {
+    const shapes = [
+      sealed({ title: 'T', body: 'B' }),
+      sealed({ body: 'B' }),
+      parseRead({ key: 'k', version: 1, plaintext: b64url('not json {') }, decode),
+      parseRead({ key: 'k', version: 1, status: 'retracted' }, decode),
+    ]
+    for (const opened of shapes)
+      for (const member of Object.keys(members)) expect(Object.keys(opened!)).not.toContain(member)
+    expect(shapes[0]).toMatchObject({ title: 'T', body: 'B' })
+    expect(shapes[2]?.body).toBe('not json {')
+  })
+
+  it("the author is the host's, never the body's: one is not trusted until its signature is checked", () => {
+    expect(sealed({ body: 'Words', author: 'did:peer:body-said' })?.author).toBe('did:peer:host-said')
+    expect(
+      parseRead(
+        { key: 'k', version: 1, plaintext: b64url(JSON.stringify({ body: 'W', author: 'did:peer:body-said' })) },
+        decode
+      )?.author
+    ).toBeUndefined()
   })
 })

@@ -214,6 +214,15 @@ export interface Note extends NoteSummary {
   body: InertText
   flags: InertFlags
   check: HostCheck
+  /** What the record says it is (trust-tasks-tf #1027). An open set: see `placeOf`. Only once it is read. */
+  kind?: string
+  /** The record it answers, in this room. */
+  inReplyTo?: { key: string; version?: number }
+  /** When its author says they wrote it, and last edited it: the author's claim, not an attested time. */
+  writtenAt?: string
+  editedAt?: string
+  /** A reaction whose body, as written and before it was made inert, a reader must not show. */
+  reactionRefused?: true
 }
 
 /** A file to post, as the phone picked it: a local copy the service reads and uploads through the member's agent. */

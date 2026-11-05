@@ -54,7 +54,7 @@ import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import { toInertText } from '../inertText'
-import { isChatPost, isNote, isNoteMarker, type RoomPost } from '../roomPosts'
+import { isChatPost, isNoteMarker, type RoomPost } from '../roomPosts'
 import { openInMyAgent } from '../roomLinks'
 import type { Identity, RoomFile } from '../types'
 import { useMyName } from '../useMyName'
@@ -283,7 +283,7 @@ const Room: React.FC = () => {
   // Titled records and removed ones are the room's notes, on their own screen; the chat shows the rest.
   const chatPosts = feed.posts?.filter(isChatPost)
   // The notes the chat leaves out, said under an empty chat: a note from the web page read as an empty room (IN-434).
-  const notesHere = feed.posts?.filter((post) => isNote(post) && !post.retracted) ?? []
+  const notesHere = feed.posts?.filter(isNoteMarker) ?? []
   // In a chat with messages, a note is one line at its time (RoomNoteMarker). In a chat with none, the card below says it.
   const hasMessages = !!chatPosts?.length || pendingPosts.length > 0
   const items = hasMessages

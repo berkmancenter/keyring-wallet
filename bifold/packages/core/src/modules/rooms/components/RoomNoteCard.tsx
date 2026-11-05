@@ -15,7 +15,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { localDate } from '../../trust-tasks/screens/localTime'
-import type { RoomPost } from '../roomPosts'
+import { carriesRecordMembers, type RoomPost } from '../roomPosts'
 import type { RoomFile } from '../types'
 
 import { RoomFileChip } from './RoomFileChip'
@@ -52,7 +52,8 @@ export const RoomNoteCard: React.FC<{
       ? (t('Rooms.NoteByAgentFor', { who: author, interpolation: { escapeValue: false } }) as string)
       : author
     : undefined
-  const editable = !!onEdit && note.mine && !note.retracted && !note.unread && !note.delivery
+  const editable =
+    !!onEdit && note.mine && !note.retracted && !note.unread && !note.delivery && !carriesRecordMembers(note)
   const line = [who, note.at ? localDate(note.at.toISOString()) : undefined].filter(Boolean).join(' · ')
   const title = note.retracted
     ? (t('Rooms.NoteRetracted') as string)

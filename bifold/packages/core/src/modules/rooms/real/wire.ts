@@ -395,6 +395,17 @@ export interface FileManifest {
   segmentSize: number
   padding?: 'none' | 'padme'
   blobRef: string
+  /** The image's size in pixels, as the uploader read it (trust-tasks-tf #1027). Advisory, and nothing shows it yet. */
+  width?: number
+  height?: number
+  /** A small raster image standing in for the file. Nothing shows it yet. */
+  preview?: FilePreview
+}
+
+export interface FilePreview {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp'
+  /** Base64url without padding, at most 8192 bytes decoded. */
+  data: string
 }
 
 const FILE_MANIFEST_FIELDS = new Set([
@@ -407,7 +418,26 @@ const FILE_MANIFEST_FIELDS = new Set([
   'segmentSize',
   'padding',
   'blobRef',
+  'width',
+  'height',
+  'preview',
 ])
+/** A manifest's `width` and `height`, as the schema bounds them. */
+const FILE_PIXELS_MAX = 1048576
+const FILE_PREVIEW_DATA_MAX = 10923
+const FILE_PREVIEW_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const pixelsOk = (v: unknown): boolean =>
+  v === undefined || (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= FILE_PIXELS_MAX)
+
+function filePreviewOf(v: unknown): FilePreview | undefined {
+  const m = obj(v)
+  if (!m || Object.keys(m).some((k) => k !== 'mediaType' && k !== 'data')) return undefined
+  const data = str(m.data)
+  if (typeof m.mediaType !== 'string' || !FILE_PREVIEW_TYPES.has(m.mediaType)) return undefined
+  if (!data || data.length > FILE_PREVIEW_DATA_MAX || !/^[A-Za-z0-9_-]+$/.test(data)) return undefined
+  return { mediaType: m.mediaType as FilePreview['mediaType'], data }
+}
+
 const FILE_ID = /^[A-Za-z0-9_-]{43}$/
 
 /** A body's `file`, or undefined when it is missing or not a manifest: as upstream, an unknown member is refused. */
@@ -425,6 +455,9 @@ export function parseFileManifest(v: unknown): FileManifest | undefined {
   if (!digest || epoch === undefined || segmentSize === undefined || segmentSize <= 0 || !blobRef) return undefined
   if (m.mediaType !== undefined && typeof m.mediaType !== 'string') return undefined
   if (m.padding !== undefined && m.padding !== 'none' && m.padding !== 'padme') return undefined
+  if (!pixelsOk(m.width) || !pixelsOk(m.height)) return undefined
+  const preview = m.preview === undefined ? undefined : filePreviewOf(m.preview)
+  if (m.preview !== undefined && !preview) return undefined
   return {
     fileId,
     name,
@@ -435,6 +468,9 @@ export function parseFileManifest(v: unknown): FileManifest | undefined {
     segmentSize,
     ...(m.padding !== undefined ? { padding: m.padding as 'none' | 'padme' } : {}),
     blobRef,
+    ...(m.width !== undefined ? { width: m.width as number } : {}),
+    ...(m.height !== undefined ? { height: m.height as number } : {}),
+    ...(preview ? { preview } : {}),
   }
 }
 
@@ -485,8 +521,54 @@ export function parseFileKey(v: unknown, epoch: number): string | undefined {
   return m?.epoch === epoch ? str(m.key) : undefined
 }
 
+/** What a record says it is and answers, from its body (trust-tasks-tf #1027). Each present only when it reads. */
+export interface RecordMembers {
+  /** An open set: a kind this client doesn't know reads as a note (`placeOf`). */
+  kind?: string
+  inReplyTo?: { key: string; version?: number }
+  /** The author's claim, not an attested time. */
+  writtenAt?: string
+  editedAt?: string
+}
+
+const RECORD_KIND = /^[a-z][A-Za-z0-9]*$/
+const RECORD_KIND_MAX = 64
+const RECORD_KEY_MAX = 512
+const RECORD_TIME = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$/
+
+function recordReferenceOf(v: unknown): RecordMembers['inReplyTo'] {
+  const m = obj(v)
+  if (!m || Object.keys(m).some((k) => k !== 'key' && k !== 'version')) return undefined
+  const key = str(m.key)
+  if (!key || key.length > RECORD_KEY_MAX) return undefined
+  if (m.version === undefined) return { key }
+  const version = int(m.version)
+  return version !== undefined && version >= 1 ? { key, version } : undefined
+}
+
+const recordTimeOf = (v: unknown): string | undefined =>
+  typeof v === 'string' && RECORD_TIME.test(v) && !Number.isNaN(new Date(v).getTime()) ? v : undefined
+
+/** A body's `kind`, `inReplyTo`, `writtenAt` and `editedAt`: type-checked, and one that doesn't read is dropped alone. */
+export function recordMembersOf(body: Record<string, unknown> | undefined): RecordMembers {
+  if (!body) return {}
+  const kind =
+    typeof body.kind === 'string' && body.kind.length <= RECORD_KIND_MAX && RECORD_KIND.test(body.kind)
+      ? body.kind
+      : undefined
+  const inReplyTo = recordReferenceOf(body.inReplyTo)
+  const writtenAt = recordTimeOf(body.writtenAt)
+  const editedAt = recordTimeOf(body.editedAt)
+  return {
+    ...(kind ? { kind } : {}),
+    ...(inReplyTo ? { inReplyTo } : {}),
+    ...(writtenAt ? { writtenAt } : {}),
+    ...(editedAt ? { editedAt } : {}),
+  }
+}
+
 /** One opened record (`rooms/keys/read`). The body is decoded text, or the open room's cleartext as JSON text. */
-export interface OpenedRecord extends RecordMeta {
+export interface OpenedRecord extends RecordMeta, RecordMembers {
   body: string
   check: HostCheck
   /** The file a sealed record carries, from its body's `file`. */
@@ -517,11 +599,14 @@ export function parseRead(payload: unknown, decodeBase64Url: (s: string) => stri
   let body = raw
   let file: FileManifest | undefined
   let signed: Record<string, unknown> | undefined
+  let members: RecordMembers = {}
   try {
     const parsed = obj(JSON.parse(raw))
     file = parseFileManifest(parsed?.file)
     if (file) signed = parsed
-    if (parsed && (typeof parsed.body === 'string' || file)) {
+    members = recordMembersOf(parsed)
+    // A record that says what it is is a record, not JSON to show, even with no words: a withdrawn message has none.
+    if (parsed && (typeof parsed.body === 'string' || file || members.kind)) {
       body = typeof parsed.body === 'string' ? parsed.body : ''
       title = str(parsed.title)
     }
@@ -540,6 +625,7 @@ export function parseRead(payload: unknown, decodeBase64Url: (s: string) => stri
     ...(file ? { file } : {}),
     ...(sealedAt !== undefined ? { sealedAt } : {}),
     ...(signed ? { signed } : {}),
+    ...members,
   }
 }
 

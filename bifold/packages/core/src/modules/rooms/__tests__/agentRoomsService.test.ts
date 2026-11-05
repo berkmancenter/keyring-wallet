@@ -6,6 +6,7 @@ import {
 } from '../real/agentRoomsService'
 import { ROOMS_TASK } from '../real/wire'
 import { RoomsUnavailable } from '../types'
+import { postOf, reactionValueOf } from '../roomPosts'
 
 const SPEC = 'https://trusttasks.org/spec/'
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
@@ -102,6 +103,40 @@ function backend(overrides: Partial<RoomsBackend> = {}) {
   }
   return { b, agentTask, communityTask }
 }
+
+describe('a reaction, read from its body as written', () => {
+  const read = async (body: string) => {
+    const { b, agentTask } = backend()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type !== ROOMS_TASK.keysRead) return {}
+      return {
+        key: payload.key,
+        version: 2,
+        status: 'active',
+        plaintext: b64url(JSON.stringify({ kind: 'reaction', inReplyTo: { key: 'm1' }, body })),
+      }
+    })
+    return postOf(await service.readNote(ROOM, 'r1'))
+  }
+
+  it('refuses a line terminator that making it inert would have removed', async () => {
+    for (const eol of ['\u000B', '\u000C', '\u0085']) {
+      const post = await read(`a${eol}b`)
+      expect(String(post.text)).toBe('ab')
+      expect(reactionValueOf(post)).toBeUndefined()
+    }
+  })
+
+  it('takes a value that reads, and says nothing of it being refused (control)', async () => {
+    const post = await read('👍')
+    expect(post.kind).toBe('reaction')
+    expect(post.inReplyTo).toEqual({ key: 'm1' })
+    expect(reactionValueOf(post)).toBe('👍')
+    expect(Object.keys(post)).not.toContain('reactionRefused')
+  })
+})
 
 describe('AgentRoomsService', () => {
   it('joins the community’s record with the agent’s custody', async () => {

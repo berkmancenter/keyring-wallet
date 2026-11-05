@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useAgentSession } from './agentSession'
-import { newestFirst, postOf, type RoomPost } from './roomPosts'
+import { newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
 import type { HostCheck, Identity, Note, NoteList, NoteSummary, RoomsService } from './types'
 
 /**
@@ -288,7 +288,7 @@ export function useRoomPosts(
     const read = reads.current.notes
     const page = listing.notes.slice(0, shown)
     const postsOf = (notes: NoteSummary[]) =>
-      notes.map((summary) => postOf(read.get(readKey(summary)) ?? summary, actingAs))
+      withRepliesToReactions(notes.map((summary) => postOf(read.get(readKey(summary)) ?? summary, actingAs)))
     const draw = (notes: NoteSummary[]) => setPosts(postsOf(notes))
     const show = () => {
       const drawn = postsOf(page)

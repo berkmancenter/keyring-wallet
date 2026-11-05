@@ -9,6 +9,7 @@ import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
+import { RoomNoteCard } from '../components/RoomNoteCard'
 import { pinnedFirst } from '../components/RoomNotesTab'
 import { roomHandle } from '../components/RoomRow'
 import { toInertText } from '../inertText'
@@ -80,6 +81,34 @@ describe('which records are notes', () => {
       post({ key: 'd' }),
     ]
     expect(pinnedFirst(notes).map((n) => n.key)).toEqual(['b', 'a', 'c', 'd'])
+  })
+})
+
+describe('what a Notes card offers for a record that says what it is', () => {
+  const card = (over: Partial<RoomPost>) =>
+    render(
+      <BasicAppContext>
+        <RoomNoteCard note={post({ mine: true, title: toInertText('Agenda'), ...over })} onEdit={jest.fn()} />
+      </BasicAppContext>
+    )
+
+  test('my own note with none of the members can be edited, as today (control)', () => {
+    expect(card({}).queryByTestId(id('RoomNoteEdit'))).toBeTruthy()
+  })
+
+  test.each([
+    ['kind', { kind: 'note' }],
+    ['inReplyTo', { inReplyTo: { key: 'k0' } }],
+    ['writtenAt', { writtenAt: '2026-11-04T09:00:00Z' }],
+    ['editedAt', { editedAt: '2026-11-04T09:00:00Z' }],
+  ] as [string, Partial<RoomPost>][])('one carrying %s offers no Edit: the editor would drop it', (_name, over) => {
+    expect(card(over).queryByTestId(id('RoomNoteEdit'))).toBeNull()
+  })
+
+  test('a reaction and a withdrawn message are no notes; a titled record is one (control)', () => {
+    expect(isNote(post({ kind: 'reaction', text: toInertText('x') }))).toBe(false)
+    expect(isNote(post({ kind: 'message', text: toInertText('') }))).toBe(false)
+    expect(isNote(post({ kind: 'poll', text: toInertText('x') }))).toBe(true)
   })
 })
 

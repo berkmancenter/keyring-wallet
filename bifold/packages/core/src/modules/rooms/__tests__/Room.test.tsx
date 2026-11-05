@@ -87,7 +87,10 @@ const withPosts = (posts: Note[] | Error, list: Partial<NoteList> = {}, unreadab
     roomCapabilities: async () => deriveRoomCapabilities(sampleCapabilities(), room),
     listNotes: jest.fn(async () => {
       if (posts instanceof Error) throw posts
-      const notes = posts.map(({ body: _b, flags: _f, check: _c, ...summary }) => summary)
+      const notes = posts.map(
+        ({ body: _b, flags: _f, check: _c, kind: _k, inReplyTo: _r, writtenAt: _w, editedAt: _e, ...summary }) =>
+          summary
+      )
       return { notes, complete: true, check: { verdict: 'consistent', detail: '' }, ...list }
     }),
     readNote: async (_roomId: string, key: string) => {
@@ -378,6 +381,79 @@ describe('a chat with messages says a note is there, in one line', () => {
     const tree = open(withPosts([post('m1', 'Hi all'), post('m2', 'No title here')]))
     await waitFor(() => expect(tree.getByText('No title here')).toBeTruthy())
     expect(tree.queryByTestId(id('RoomNoteMarker'))).toBeNull()
+  })
+})
+
+describe('a record that says what it is (trust-tasks-tf #1027)', () => {
+  const reaction = (key: string, target = 'm1') => post(key, '👍', { kind: 'reaction', inReplyTo: { key: target } })
+
+  test('a reaction shows in the chat nowhere, as neither a message nor a note', async () => {
+    const tree = open(withPosts([post('m1', 'Hi all'), reaction('r1')]))
+    await waitFor(() => expect(tree.getByText('Hi all')).toBeTruthy())
+    expect(tree.queryByText('👍')).toBeNull()
+    expect(tree.queryByTestId(id('RoomNoteMarker'))).toBeNull()
+  })
+
+  test('a room holding only reactions reads as having no messages, and no notes', async () => {
+    const tree = open(withPosts([reaction('r1'), reaction('r2')]))
+    await waitFor(() => expect(tree.getByTestId(id('RoomPostsNone'))).toBeTruthy())
+    expect(tree.queryByTestId(id('RoomNotesWaiting'))).toBeNull()
+  })
+
+  test('a page is still its posts: reactions do not use it up', async () => {
+    const chat = Array.from({ length: POSTS_PAGE + 2 }, (_, i) => post(`m${i}`, `Message ${i}`))
+    const reactions = Array.from({ length: POSTS_PAGE }, (_, i) => reaction(`r${i}`))
+    const tree = open(withPosts([...reactions, ...chat]))
+    await waitFor(
+      () => {
+        const drawn = (tree.UNSAFE_getByType(FlatList).props.data as { kind: string }[]).filter(
+          (i) => i.kind === 'post'
+        )
+        expect(drawn).toHaveLength(POSTS_PAGE)
+      },
+      { timeout: PAGE_DRAWN_MS }
+    )
+  })
+
+  test('a withdrawn message shows nowhere', async () => {
+    const tree = open(withPosts([post('m1', 'Hi all'), post('m2', '', { kind: 'message' })]))
+    await waitFor(() => expect(tree.getByText('Hi all')).toBeTruthy())
+    const drawn = (tree.UNSAFE_getByType(FlatList).props.data as { kind: string; post?: { key: string } }[]).filter(
+      (i) => i.kind === 'post'
+    )
+    expect(drawn.map((i) => i.post?.key)).toEqual(['m1'])
+  })
+
+  test('a kind it does not know is a note, and never refused', async () => {
+    const tree = open(
+      withPosts([post('m1', 'Hi all'), post('n1', 'Words', { kind: 'poll', title: toInertText('A poll') })])
+    )
+    await waitFor(() => expect(tree.getByTestId(id('RoomNoteMarkerWords'))).toHaveTextContent(/A poll/))
+    expect(tree.queryByText('Words')).toBeNull()
+  })
+
+  test('a titled message on an open room, which the listing shows by its title, reaches Notes and is never lost', async () => {
+    const service = withPosts([
+      post('m1', 'Hi all'),
+      post('m2', 'Titled', { kind: 'message', title: toInertText('Named') }),
+    ])
+    const tree = open(service)
+    await waitFor(() => expect(tree.getByTestId(id('RoomNoteMarkerWords'))).toHaveTextContent(/Named/))
+    // The real `leftOut` path: the listing's title kept it from being read for the chat, so its words aren't there.
+    expect(tree.queryByText('Titled')).toBeNull()
+  })
+
+  test('a record answering a reaction shows nowhere; one answering a message shows (control)', async () => {
+    const tree = open(
+      withPosts([
+        post('m1', 'Hi all'),
+        reaction('r1'),
+        post('m2', 'To the reaction', { kind: 'message', inReplyTo: { key: 'r1' } }),
+        post('m3', 'To the message', { kind: 'message', inReplyTo: { key: 'm1' } }),
+      ])
+    )
+    await waitFor(() => expect(tree.getByText('To the message')).toBeTruthy())
+    expect(tree.queryByText('To the reaction')).toBeNull()
   })
 })
 

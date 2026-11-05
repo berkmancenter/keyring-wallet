@@ -221,6 +221,64 @@ describe('rooms as Messages rows', () => {
     expect(list.result.current.rows.rows[0].lastActivityAt?.toISOString()).toBe(note('n2', 2).updatedAt)
   })
 
+  describe('a record shown nowhere is not what the row says', () => {
+    const reaction = (key: string, version: number) =>
+      ({ ...note(key, version), kind: 'reaction', inReplyTo: { key: 'n1' }, updatedAt: at(version) }) as NoteSummary
+    const at = (version: number) => new Date(Date.UTC(2026, 10, 4, 9, version)).toISOString()
+    const message = (key: string, version: number, over: object = {}) =>
+      ({ ...note(key, version), updatedAt: at(version), ...over }) as NoteSummary
+
+    test('a newest reaction: the row says the last thing that is not one, at its time', async () => {
+      const notes = { planning: [message('n1', 1), reaction('r1', 2), reaction('r2', 3)] }
+      const s = serviceWith([room('planning')], notes, { n1: chat('Hello'), r1: '👍', r2: '🎉' })
+      const { list } = mount(s)
+      await flush()
+      expect(list.result.current.rows.rows[0].lastPost?.text).toBe('Hello')
+      expect(list.result.current.rows.rows[0].lastActivityAt?.toISOString()).toBe(at(1))
+      expect(s.readNote).toHaveBeenCalledTimes(3)
+    })
+
+    test('only reactions: the row says nothing of them', async () => {
+      const notes = { planning: [reaction('r1', 1)] }
+      const s = serviceWith([room('planning')], notes, { r1: '👍' })
+      const { list } = mount(s)
+      await flush()
+      expect(list.result.current.rows.rows[0].lastPost).toBeUndefined()
+    })
+
+    test('a reaction after a message read before leaves the row as it was', async () => {
+      const notes: Record<string, NoteSummary[]> = { planning: [message('n1', 1)] }
+      const s = serviceWith([room('planning')], notes, { n1: chat('Hello'), r1: '👍' })
+      const { list } = mount(s)
+      await flush()
+      notes.planning.push(reaction('r1', 2))
+      await act(async () => refreshRoomRows())
+      expect(list.result.current.rows.rows[0].lastPost?.text).toBe('Hello')
+      expect(list.result.current.rows.rows[0].lastActivityAt?.toISOString()).toBe(at(1))
+    })
+
+    test('the message the row quotes, taken back: the row stops quoting it', async () => {
+      const notes: Record<string, NoteSummary[]> = { planning: [message('n1', 1)] }
+      const bodies: Record<string, string> = { n1: chat('Taken back') }
+      const s = serviceWith([room('planning')], notes, bodies)
+      const { list } = mount(s)
+      await flush()
+      expect(list.result.current.rows.rows[0].lastPost?.text).toBe('Taken back')
+      notes.planning[0] = message('n1', 2, { kind: 'message' })
+      bodies.n1 = ''
+      await act(async () => refreshRoomRows())
+      expect(list.result.current.rows.rows[0].lastPost).toBeUndefined()
+    })
+
+    test('reads a few records at most to find it', async () => {
+      const notes = { planning: Array.from({ length: 9 }, (_, i) => reaction(`r${i}`, i + 1)) }
+      const s = serviceWith([room('planning')], notes, {})
+      mount(s)
+      await flush()
+      expect(s.readNote).toHaveBeenCalledTimes(5)
+    })
+  })
+
   test('every two minutes only while Messages is in view; on coming back to the app, not within a minute', async () => {
     const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
     mount(s)
