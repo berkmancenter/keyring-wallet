@@ -49,6 +49,10 @@ export interface RoomPost {
   inReplyTo?: { key: string; version?: number }
   writtenAt?: string
   editedAt?: string
+  /** When the host first stored the record, where an agent serves it. */
+  createdAt?: string
+  /** Who wrote the record's first version, where an agent serves it. */
+  createdBy?: Identity
   /** It answers a reaction, which nothing may: shown nowhere, and counted as no reaction (`withRepliesToReactions`). */
   answersReaction?: true
   /** A reaction whose body, as written, a reader must not show (`reactionValueOfBody`). */
@@ -99,7 +103,8 @@ export function postOf(note: Note | NoteSummary, actingAs?: Identity, now: numbe
     author: note.author,
     byAgent: !!note.byAgent,
     mine: sameIdentity(note.author, actingAs),
-    at: dateOf(note.updatedAt),
+    // When it arrived, where the host says: an edit or a pin doesn't move it. Else when this version was stored.
+    at: dateOf(note.createdAt ?? note.updatedAt),
     title: note.title,
     text: retracted || !read ? toInertText('') : chatText !== undefined ? toInertText(chatText) : note.body,
     isChatMessage: chatText !== undefined,
@@ -112,6 +117,8 @@ export function postOf(note: Note | NoteSummary, actingAs?: Identity, now: numbe
     ...(read && note.writtenAt ? { writtenAt: note.writtenAt } : {}),
     ...(read && note.editedAt ? { editedAt: note.editedAt } : {}),
     ...(read && note.reactionRefused ? { reactionRefused: true as const } : {}),
+    ...(note.createdAt ? { createdAt: note.createdAt } : {}),
+    ...(note.createdBy ? { createdBy: note.createdBy } : {}),
   }
 }
 

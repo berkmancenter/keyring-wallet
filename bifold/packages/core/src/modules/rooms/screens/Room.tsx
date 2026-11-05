@@ -21,6 +21,7 @@
  * @module rooms/screens/Room
  */
 import { useAgent } from '@bifold/react-hooks'
+import Clipboard from '@react-native-clipboard/clipboard'
 import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -28,10 +29,14 @@ import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Toast from 'react-native-toast-message'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { DayPill } from '../../../components/chat/DayPill'
+import MessageActions from '../../../components/chat/MessageActions'
+import { ReactionChips, reactionChipsLabel } from '../../../components/chat/ReactionChips'
+import { ToastType } from '../../../components/toast/BaseToast'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
@@ -49,12 +54,13 @@ import { useDirectoryNames, useDirectoryService } from '../../directory/useDirec
 import { PetnamesProvider } from '../components/memberWords'
 import { RoomNoteMarker } from '../components/RoomNoteMarker'
 import { RoomNotesWaiting } from '../components/RoomNotesWaiting'
-import { RoomPostBubble } from '../components/RoomPostBubble'
+import { RoomThreadPost, RoomThreadReactions } from '../components/RoomThreadPost'
 import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { SampleDataBanner } from '../components/SampleDataBanner'
-import { toInertText } from '../inertText'
+import { type InertText, toInertText } from '../inertText'
 import { isChatPost, isNoteMarker, type RoomPost } from '../roomPosts'
+import { byArrival, drawnInChat, type RoomReactionTally } from '../roomThread'
 import { openInMyAgent } from '../roomLinks'
 import type { Identity, RoomFile } from '../types'
 import { useMyName } from '../useMyName'
@@ -66,6 +72,7 @@ import { markRoomSeen } from '../useRoomRows'
 import { useRoomDraft } from '../useRoomDraft'
 import { type PendingPost, useRoomSend } from '../useRoomSend'
 import { useRoomsService } from '../useRoomsService'
+import { useRoomThread } from '../useRoomThread'
 
 const NO_LISTINGS: readonly RoomListing[] = []
 
@@ -122,6 +129,35 @@ export const pendingAsPost = (pending: PendingPost, actingAs: RoomPost['author']
       : undefined,
 })
 
+/** A post with words to copy, already in the room. A withdrawn message has none. */
+const canActOn = (post: RoomPost): boolean => !post.delivery && !post.retracted && !post.unread && !!String(post.text)
+
+/** What a note's line says when the note has no title: the start of its text, cut by the line itself. */
+const firstLineOf = (text: InertText): InertText | undefined =>
+  (String(text)
+    .split('\n')
+    .find((line) => line.trim()) as InertText | undefined) ?? undefined
+
+/** A note's reactions, under its line in the chat. */
+const RoomMarkerChips: React.FC<{ tallies: readonly RoomReactionTally[]; onOpen: () => void }> = ({
+  tallies,
+  onOpen,
+}) => {
+  const { t } = useTranslation()
+  const chips = tallies.map((tally) => ({ value: tally.shown, count: tally.count, mine: tally.mine }))
+  return (
+    <View style={{ marginLeft: 12, marginBottom: 4 }}>
+      <ReactionChips
+        chips={chips}
+        isMe={false}
+        label={reactionChipsLabel(t, chips)}
+        onPress={onOpen}
+        testID={testIdWithKey('RoomNoteReactions')}
+      />
+    </View>
+  )
+}
+
 const Room: React.FC = () => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
@@ -147,6 +183,11 @@ const Room: React.FC = () => {
     inView,
     isChatPost
   )
+  // What the records say about each other: reactions, the quotes above replies, and who wrote a record first.
+  const thread = useRoomThread(service, roomId, room?.actingAs, feed.posts)
+  // The post a long press is on, and the post whose chips were tapped.
+  const [actionFor, setActionFor] = useState<RoomPost>()
+  const [reactionsFor, setReactionsFor] = useState<readonly RoomReactionTally[]>()
   // On screen, a post that fails is marked in the list; away from it, a notice says so (useRoomNotices).
   const outbox = useRoomSend(service, roomId, feed.refresh, {
     onScreen: inView,
@@ -287,7 +328,10 @@ const Room: React.FC = () => {
   // In a chat with messages, a note is one line at its time (RoomNoteMarker). In a chat with none, the card below says it.
   const hasMessages = !!chatPosts?.length || pendingPosts.length > 0
   const items = hasMessages
-    ? withDayPills([...pendingPosts, ...(feed.posts ?? []).filter((post) => isChatPost(post) || isNoteMarker(post))])
+    ? withDayPills([
+        ...pendingPosts,
+        ...byArrival(thread.posts.filter((post) => drawnInChat(post, thread, thread.held.get(post.key)))),
+      ])
     : []
   const shown = unavailable ? [] : items
 
@@ -309,7 +353,7 @@ const Room: React.FC = () => {
       {notesHere.length > 0 ? (
         <RoomNotesWaiting
           count={notesHere.length}
-          newest={notesHere[0].title}
+          newest={notesHere[0].title ?? firstLineOf(notesHere[0].text)}
           onOpen={() => navigation.navigate(Screens.RoomPart, { roomId, part: 'notes' })}
         />
       ) : null}
@@ -360,13 +404,24 @@ const Room: React.FC = () => {
                 item.kind === 'day' ? (
                   <DayPill date={item.date} />
                 ) : isNoteMarker(item.post) ? (
-                  <RoomNoteMarker
-                    title={item.post.title}
-                    onOpen={() => navigation.navigate(Screens.RoomPart, { roomId, part: 'notes' })}
-                  />
+                  <View>
+                    <RoomNoteMarker
+                      title={item.post.title ?? firstLineOf(item.post.text)}
+                      onOpen={() => navigation.navigate(Screens.RoomPart, { roomId, part: 'notes' })}
+                    />
+                    {thread.reactions.get(item.post.key) ? (
+                      <RoomMarkerChips
+                        tallies={thread.reactions.get(item.post.key) ?? []}
+                        onOpen={() => setReactionsFor(thread.reactions.get(item.post.key))}
+                      />
+                    ) : null}
+                  </View>
                 ) : (
-                  <RoomPostBubble
+                  <RoomThreadPost
+                    thread={thread}
                     post={item.post}
+                    onLongPress={canActOn(item.post) ? () => setActionFor(item.post) : undefined}
+                    onOpenReactions={() => setReactionsFor(thread.reactions.get(item.post.key))}
                     onRetry={
                       item.post.delivery === 'failed'
                         ? () => (item.post.files.length > 0 ? outbox.cancel : outbox.retry)(item.post.key)
@@ -470,6 +525,17 @@ const Room: React.FC = () => {
           </KeyboardAvoidingView>
         )}
         <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />
+        {/* Nothing sends a reaction or a reply until a room turns them on and an agent can seal them. */}
+        <MessageActions
+          visible={!!actionFor}
+          onClose={() => setActionFor(undefined)}
+          onCopy={() => {
+            Clipboard.setString(String(actionFor?.text ?? ''))
+            setActionFor(undefined)
+            Toast.show({ type: ToastType.Success, text1: t('Chat.Copied') as string })
+          }}
+        />
+        <RoomThreadReactions tallies={reactionsFor} onClose={() => setReactionsFor(undefined)} />
         <RoomIdentitySheet
           identity={sheetFor}
           communityDid={room.communityDid}

@@ -59,7 +59,7 @@ export const RoomNoteCard: React.FC<{
     ? (t('Rooms.NoteRetracted') as string)
     : note.title
       ? String(note.title)
-      : (t('Rooms.NoteEncrypted') as string)
+      : (t(note.unread ? 'Rooms.NoteEncrypted' : 'Rooms.QuoteNote') as string)
   return (
     <View style={styles.card} testID={testIdWithKey(`RoomNote_${roomHandle(note.key)}`)}>
       <View style={styles.head}>

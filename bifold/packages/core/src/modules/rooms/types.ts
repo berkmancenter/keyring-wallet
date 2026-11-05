@@ -167,6 +167,10 @@ export interface NoteSummary {
   /** Set when an AI agent wrote it under its person's membership. */
   byAgent?: boolean
   updatedAt?: string
+  /** When the host first stored the record; neither an edit nor a curation moves it. Only where an agent serves it. */
+  createdAt?: string
+  /** Who wrote the record's first version, as the host recorded it. Only where an agent serves it, never on a private room. */
+  createdBy?: Identity
   /** Upstream's curation state (`RecordMetadata.status`). `retracted` is a tombstone: no body. */
   status: 'active' | 'deprecated' | 'retracted'
   pinned: boolean

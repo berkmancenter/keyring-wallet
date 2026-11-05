@@ -17,6 +17,7 @@ import type { ChatEventRecord } from '../../modules/chat/records/ChatEventRecord
 import { testIdWithKey } from '../../utils/testable'
 import { ChatIds } from './Chat.ids'
 import { PendingPhotoBubble, type PhotoSending } from './PendingPhotoBubble'
+import { ReactionChips } from './ReactionChips'
 import { timeLabel, useDateWords, useUses24HourClock } from '../../utils/localDay'
 
 // Date separator color as per design
@@ -96,31 +97,12 @@ export const MessageReactions: React.FC<{ reactions: ChatReaction[]; isMe: boole
     )
     .join(', ')
   return (
-    <View
-      style={{ flexDirection: 'row', justifyContent: isMe ? 'flex-end' : 'flex-start', marginTop: -6, gap: 4 }}
-      accessible
-      accessibilityLabel={label}
+    <ReactionChips
+      chips={[...counts.entries()].map(([value, { count, mine }]) => ({ value, count, mine }))}
+      isMe={isMe}
+      label={label}
       testID={testIdWithKey(ChatIds.reactions)}
-    >
-      {[...counts.entries()].map(([emoji, { count, mine }]) => (
-        <View
-          key={emoji}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: mine ? '#E8E0EC' : '#FFFFFF',
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: 'rgba(170, 170, 170, 0.4)',
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-          }}
-        >
-          <Text style={{ fontSize: 14 }}>{emoji}</Text>
-          {count > 1 && <Text style={{ fontSize: 12, color: '#555555', marginLeft: 2 }}>{count}</Text>}
-        </View>
-      ))}
-    </View>
+    />
   )
 }
 
