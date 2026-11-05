@@ -17,6 +17,7 @@ import {
   useContainer,
   type Container,
   setTspCarriageEnabled,
+  setSharedConnectEnabled,
   setDidCommV2Enabled,
   findV2MediationRecord,
   provisionV2Mediation,
@@ -404,6 +405,8 @@ const useBCAgentSetup = () => {
       // effect on outbound sends immediately, but needs a restart for inbound.
       setTspCarriageEnabled(!!store.developer.enableTspCarriage)
       setDidCommV2Enabled(!!store.developer.enableDidCommV2)
+      // Relationship over TSP: the shared-connect trigger-link flow, off unless a developer turns it on.
+      setSharedConnectEnabled(!!store.developer.enableSharedConnect)
 
       logger.info('Setting up Trust Tasks inbound handler (binding 0.2)...')
       setupTrustTasksInbound(newAgent)
@@ -426,6 +429,7 @@ const useBCAgentSetup = () => {
       store.preferences.availableMediators,
       dispatch,
       store.developer.enableTspCarriage,
+      store.developer.enableSharedConnect,
       store.developer.enableDidCommV2,
       logger,
       indyLedgers,

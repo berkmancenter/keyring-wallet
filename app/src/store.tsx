@@ -27,6 +27,7 @@ export interface Developer {
   enableProxy: boolean
   enableAppToAppPersonFlow: boolean
   enableTspCarriage: boolean
+  enableSharedConnect: boolean
   enableDidCommV2: boolean
   /** Mediator pickup over a live WebSocket instead of polling (utils/livePickup.ts). */
   enableLivePickup: boolean
@@ -46,6 +47,7 @@ enum DeveloperDispatchAction {
   TOGGLE_PROXY = 'developer/toggleProxy',
   TOGGLE_APP_TO_APP_PERSON_FLOW = 'developer/toggleAppToAppPersonFlow',
   TOGGLE_TSP_CARRIAGE = 'developer/toggleTspCarriage',
+  TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
   TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
   TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
 }
@@ -107,6 +109,7 @@ const developerState: Developer = {
   remoteDebugging: remoteDebuggingState,
   enableAppToAppPersonFlow: false,
   enableTspCarriage: false,
+  enableSharedConnect: false,
   enableDidCommV2: false,
   // Off unless the build says otherwise: LIVE_MESSAGE_PICKUP=true in app/.env
   // turns it on for a review build with no code change. A value saved from
@@ -126,6 +129,7 @@ export enum BCLocalStorageKeys {
   EnableProxy = 'EnableProxy',
   EnableAppToAppPersonFlow = 'EnableAppToAppPersonFlow',
   EnableTspCarriage = 'EnableTspCarriage',
+  EnableSharedConnect = 'EnableSharedConnect',
   EnableDidCommV2 = 'EnableDidCommV2',
   EnableLivePickup = 'EnableLivePickup',
 }
@@ -194,6 +198,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableTspCarriage }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableTspCarriage, developer.enableTspCarriage)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_SHARED_CONNECT: {
+      const enableSharedConnect: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableSharedConnect }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableSharedConnect, developer.enableSharedConnect)
 
       return { ...state, developer }
     }

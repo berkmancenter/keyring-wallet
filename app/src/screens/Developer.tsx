@@ -11,6 +11,7 @@ import {
   seedTestContacts,
   clearTestContacts,
   setTspCarriageEnabled,
+  setSharedConnectEnabled,
   setDidCommV2Enabled,
   vtaAgent,
 } from '@bifold/core'
@@ -76,6 +77,7 @@ const Developer: React.FC = () => {
   const [featureRooms, setFeatureRooms] = useState(!!store.preferences.featureRooms)
   const [enableAppToAppPersonFlow, setEnableAppToAppPersonFlow] = useState(!!store.developer.enableAppToAppPersonFlow)
   const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
+  const [enableSharedConnect, setEnableSharedConnect] = useState(!!store.developer.enableSharedConnect)
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
   const [enableLivePickup, setEnableLivePickup] = useState(!!store.developer.enableLivePickup)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
@@ -353,6 +355,17 @@ const Developer: React.FC = () => {
     // most of this screen's other developer toggles.
     setTspCarriageEnabled(next)
     setEnableTspCarriage(next)
+  }
+
+  const toggleEnableSharedConnectSwitch = () => {
+    const next = !enableSharedConnect
+    dispatch({
+      type: BCDispatchAction.TOGGLE_SHARED_CONNECT,
+      payload: [next],
+    })
+    // The scanner reads this flag live, so it takes effect at once.
+    setSharedConnectEnabled(next)
+    setEnableSharedConnect(next)
   }
 
   const toggleEnableDidCommV2Switch = () => {
@@ -867,6 +880,20 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableTspCarriageSwitch}
             value={enableTspCarriage}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableSharedConnect')}
+          accessibilityLabel={t('Developer.EnableSharedConnect')}
+          testID={testIdWithKey('ToggleEnableSharedConnect')}
+          onPress={toggleEnableSharedConnectSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableSharedConnect ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableSharedConnectSwitch}
+            value={enableSharedConnect}
           />
         </SectionRow>
         <View style={styles.sectionSeparator}></View>
