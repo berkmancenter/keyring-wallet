@@ -26,6 +26,7 @@ describe('who shared a file, checked', () => {
   it('control: a body its author signed, read where it was signed, by the author the host recorded, is confirmed', async () => {
     expect(await checkSender(signBody(ALICE, unsigned()), AT, resolve)).toEqual({
       check: 'confirmed',
+      kind: 'holds',
       signer: ALICE.did,
       why: 'the signature holds',
     })

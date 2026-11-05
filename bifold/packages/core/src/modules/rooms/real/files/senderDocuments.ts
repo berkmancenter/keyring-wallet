@@ -10,7 +10,7 @@ import { DeviceEventEmitter } from 'react-native'
 
 import { WALLET_LOCKED_EVENT } from '../../../../utils/walletLocked'
 
-import type { ResolveSender, SenderDidDocument } from './sender'
+import { DOCUMENT_TIMEOUT, type ResolveSender, type SenderDidDocument } from './sender'
 
 /** How long a file's author's DID document is waited for before who shared it is left unconfirmed. */
 export const SENDER_RESOLVE_MS = 5000
@@ -31,7 +31,10 @@ export function senderResolver(agent: Agent): ResolveSender {
         agent.dids.resolveDidDocument(did) as Promise<SenderDidDocument>,
         new Promise<never>((_, reject) => {
           timer = setTimeout(
-            () => reject(new Error(`no DID document within ${SENDER_RESOLVE_MS} ms`)),
+            () =>
+              reject(
+                Object.assign(new Error(`no DID document within ${SENDER_RESOLVE_MS} ms`), { name: DOCUMENT_TIMEOUT })
+              ),
             SENDER_RESOLVE_MS
           )
         }),
