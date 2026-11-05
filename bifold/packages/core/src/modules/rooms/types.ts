@@ -417,7 +417,9 @@ export class RoomsRefused extends Error {
     public readonly operation: RoomsOperation,
     public readonly code: string,
     public readonly retryable: boolean,
-    detail?: string
+    detail?: string,
+    /** The agent's or community's own refusal, where this passes one on: what a log reads its reason from. */
+    public readonly refusal?: unknown
   ) {
     super(`${operation} was refused (${code})${detail ? `: ${detail}` : ''}`)
     this.name = 'RoomsRefused'

@@ -241,16 +241,18 @@ describe('AgentRoomsService writes', () => {
     expect(err).toMatchObject({ key: 'note/abc', currentVersion: 5 })
   })
 
-  it('passes any other refusal from the host on by its code', async () => {
+  it('passes any other refusal from the host on by its code, and the refusal itself for a log to read', async () => {
+    const refusal = new FakeRefusal('taskFailed', { code: 'rooms/records/put:recordTooLarge' })
     const s = setup({
       host: () => {
-        throw new FakeRefusal('taskFailed', { code: 'rooms/records/put:recordTooLarge' })
+        throw refusal
       },
     })
     const preview = await s.service.prepareWrite(OPEN_ROOM, { title: '', body: 'big' })
     const err = await s.service.confirmWrite(preview.token).catch((e) => e)
     expect(err).toBeInstanceOf(RoomsRefused)
     expect(err).toMatchObject({ operation: 'write', code: 'recordTooLarge', retryable: false })
+    expect((err as RoomsRefused).refusal).toBe(refusal)
   })
 
   it('passes the agent’s refusal on and delivers nothing', async () => {
@@ -473,16 +475,18 @@ describe('AgentRoomsService curation', () => {
     ])
   })
 
-  it('passes the host’s refusal on by its code', async () => {
+  it('passes the host’s refusal on by its code, and the refusal itself', async () => {
+    const refusal = new FakeRefusal('taskFailed', { code: 'rooms/records/curate:alreadyRetracted' })
     const s = setup({
       host: () => {
-        throw new FakeRefusal('taskFailed', { code: 'rooms/records/curate:alreadyRetracted' })
+        throw refusal
       },
     })
     await expect(s.service.curate(OPEN_ROOM, 'note/abc', 'retract')).rejects.toMatchObject({
       name: 'RoomsRefused',
       operation: 'curate',
       code: 'alreadyRetracted',
+      refusal,
     })
   })
 
@@ -782,7 +786,30 @@ describe('a write refused, said in the log by kind alone', () => {
     expect(sendCompleted).not.toHaveBeenCalled()
   })
 
-  it('the agent refusing for two authority credentials: named, and the refusal is not retryable', async () => {
+  // The shape a VTA sends: vta-service-v0.72.0 room_oracle.rs:188 raises AppError::Conflict, and helpers.rs:193 answers
+  // it as `taskFailed` with `details.reason: "conflict"` and no task code; AppError prints "conflict: …" (read, not
+  // run). Only the message was in the 277.8 reports, so this is the case those reports were.
+  it('the agent refusing for two authority credentials, as an agent sends it: named, and not retryable', async () => {
+    const refusal = new FakeRefusal('taskFailed', { reason: 'conflict' })
+    refusal.message = `conflict: this VTA holds more than one AuthorityCredential issued by room \`${LONG_ROOM}\` to one persona; which one to attenuate from is not a question this can answer safely`
+    const { service, warn } = setup({
+      seal: () => {
+        throw refusal
+      },
+    })
+    const { token } = await service.prepareWrite(SEALED_ROOM, { title: '', body: 'Hi', idempotencyKey: 'post-9' })
+    const error = await service.confirmWrite(token).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(RoomsRefused)
+    expect((error as RoomsRefused).retryable).toBe(false)
+    const [line] = lines(warn)
+    expect(line).toBe(
+      `rooms: a write to ${SEALED_ROOM} was not written: refused (taskFailed, conflict), two authority credentials`
+    )
+    expect(line).not.toContain('QmRoomScid')
+  })
+
+  // A task code, which no agent is known to send for this: kept as a precaution (roomsLogWords).
+  it('the same refusal carried as a task code: named, and not retryable', async () => {
     const refusal = new FakeRefusal('taskFailed', { code: 'rooms/keys/seal:conflict' })
     refusal.message = `conflict: this VTA holds more than one AuthorityCredential issued by room \`${LONG_ROOM}\` to one persona`
     const { service, warn } = setup({

@@ -28,7 +28,14 @@ const SERVED = [
 ]
 
 function setup(
-  o: { served?: string[]; version?: string; uploads?: boolean; putRefused?: string; plain?: Uint8Array } = {}
+  o: {
+    served?: string[]
+    version?: string
+    uploads?: boolean
+    putRefused?: string
+    beginRefused?: Error
+    plain?: Uint8Array
+  } = {}
 ) {
   const calls: string[] = []
   let manifest: unknown
@@ -64,6 +71,7 @@ function setup(
   const sendCompleted = jest.fn(async (_did: string, _to: string, document: Record<string, unknown>) => {
     const payload = document.payload as Record<string, unknown>
     if (document.type === UPLOAD_TASK.begin) {
+      if (o.beginRefused) throw o.beginRefused
       manifest = payload.manifest
       return { uploadId: 'up-1', mode: 'proxied', missing: [0], expiresAt: '2030-01-01T00:00:00Z' }
     }
@@ -186,6 +194,19 @@ describe('posting a file to a room', () => {
     const preview = await service.prepareWrite(SEALED_ROOM, { title: '', body: '', attachment: attachment() })
     await expect(service.confirmWrite(preview.token)).rejects.toBeTruthy()
     expect(sendCompleted.mock.calls.map((c) => c[2].type)).not.toContain(ROOMS_TASK.recordsPut)
+  })
+
+  it('a host refusing the upload is that refusal by its code, carrying the refusal for a log to read', async () => {
+    const refusal = Object.assign(new Error('slow down'), {
+      name: 'VtiRefusal',
+      code: 'taskFailed',
+      details: { code: 'rooms/files/upload/begin:rateLimited' },
+    })
+    const { service } = setup({ beginRefused: refusal })
+    const preview = await service.prepareWrite(SEALED_ROOM, { title: '', body: '', attachment: attachment() })
+    const err = await service.confirmWrite(preview.token).catch((e: unknown) => e)
+    expect(err).toMatchObject({ name: 'RoomsRefused', operation: 'write', code: 'rateLimited', retryable: true })
+    expect((err as { refusal?: unknown }).refusal).toBe(refusal)
   })
 
   it('seals in the large segment for a host from VTC 0.15, and the small one before it', async () => {

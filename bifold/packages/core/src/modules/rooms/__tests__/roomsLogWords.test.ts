@@ -134,6 +134,17 @@ describe('rooms log words', () => {
       expect(failureCategory(new RoomsRefused('listNotes', 'did:key:persona-a', false))).toBe('refused (other)')
     })
 
+    test("a refusal the service passed on keeps its agent's reason, closed the same way", () => {
+      const agents = new VtiRefusal('taskFailed', SAID, { reason: 'conflict' })
+      expect(failureCategory(new RoomsRefused('write', 'taskFailed', false, SAID, agents))).toBe(
+        'refused (taskFailed, conflict)'
+      )
+      const words = new VtiRefusal('taskFailed', SAID, { reason: SAID })
+      expect(failureCategory(new RoomsRefused('write', 'taskFailed', false, SAID, words))).toBe('refused (taskFailed)')
+      expect(failureCategory(new RoomsRefused('write', 'taskFailed', false, SAID, SAID))).toBe('refused (taskFailed)')
+      expect(failureCategory(new RoomsRefused('write', 'taskFailed', false, SAID, null))).toBe('refused (taskFailed)')
+    })
+
     test('nothing a community wrote reaches the line, whatever carries it', () => {
       const carriers = [
         new VtiRefusal(SAID, SAID, { code: SAID, reason: SAID, message: SAID }),

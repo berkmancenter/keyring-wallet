@@ -509,17 +509,19 @@ describe('AgentRoomsService offers', () => {
     })
   })
 
-  it('passes the community’s refusal on by its code', async () => {
+  it('passes the community’s refusal on by its code, and the refusal itself', async () => {
+    const refusal = taskRefusal('offerExpired')
     const { service } = setup({
       offers: [offer(OPEN_ROOM, 'open', 'open')],
       accept: () => {
-        throw taskRefusal('offerExpired')
+        throw refusal
       },
     })
     const err = await service
       .acceptOffer((await service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))).token)
       .catch((e) => e)
     expect(err).toMatchObject({ name: 'RoomsRefused', code: 'offerExpired', retryable: false })
+    expect(err.refusal).toBe(refusal)
   })
 
   it('passes a transport failure on unchanged, not as a refusal', async () => {

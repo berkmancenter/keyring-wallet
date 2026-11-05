@@ -153,8 +153,10 @@ const LOGGED_REFUSAL_CODES = new Set([
   'visibilityNotPermitted',
   'welcomeInvalid',
   'wrongState',
-  // Sent by an agent though no specification declares it: `rooms/keys/seal:conflict`, more than one credential for a
-  // room (277.8). Why this refusal needs a word of its own is the reason this list exists at all.
+  // Declared by no specification and not seen as a code. A test models the two-credential refusal as
+  // `rooms/keys/seal:conflict`. A VTA at vta-service-v0.72.0 sends `taskFailed` with `details.reason: "conflict"`
+  // instead (room_oracle.rs:188, helpers.rs:193, read, not run); that reads through LOGGED_REFUSAL_REASONS. 277.8's
+  // reports hold only the message. Listed as a precaution, should an agent ever send it as a code.
   'conflict',
   // Keyring's own, for a step that went wrong between a room's tasks.
   'empty',
@@ -181,13 +183,18 @@ const LOGGED_REFUSAL_REASONS = new Set([
 
 const loggedCode = (code: string | undefined): string => (code && LOGGED_REFUSAL_CODES.has(code) ? code : 'other')
 
+/** A refusal's `details.reason`, where it is on the closed list; else nothing. */
+function loggedReason(e: unknown): string | undefined {
+  const reason = (e as { details?: { reason?: unknown } } | null | undefined)?.details?.reason
+  return typeof reason === 'string' && LOGGED_REFUSAL_REASONS.has(reason) ? reason : undefined
+}
+
+const refusedAs = (code: string, reason: string | undefined) =>
+  reason ? `refused (${code}, ${reason})` : `refused (${code})`
+
 /** A `VtiRefusal` by its closed code and reason. Its message is the community's and is never read here. */
 function refusalKind(e: Error): string {
-  const reason = (e as Error & { details?: { reason?: unknown } }).details?.reason
-  const code = loggedCode(refusalCode(e))
-  return typeof reason === 'string' && LOGGED_REFUSAL_REASONS.has(reason)
-    ? `refused (${code}, ${reason})`
-    : `refused (${code})`
+  return refusedAs(loggedCode(refusalCode(e)), loggedReason(e))
 }
 
 /**
@@ -198,7 +205,7 @@ function refusalKind(e: Error): string {
 export function failureCategory(e: unknown): string {
   if (isSessionHeld(e)) return 'the session is kept for another identity'
   if (e instanceof RoomsUnavailable) return `unavailable (${e.reason})`
-  if (e instanceof RoomsRefused) return `refused (${loggedCode(e.code)})`
+  if (e instanceof RoomsRefused) return refusedAs(loggedCode(e.code), loggedReason(e.refusal))
   if (e instanceof Error && e.name === 'VtiRefusal') return refusalKind(e)
   if (e instanceof Error && e.name === 'VtiSentNoAnswer') return 'no answer yet'
   return e instanceof Error && e.name && e.name !== 'Error' ? e.name : 'failed'

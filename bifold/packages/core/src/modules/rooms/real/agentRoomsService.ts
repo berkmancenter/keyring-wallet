@@ -1224,7 +1224,7 @@ export class AgentRoomsService implements RoomsService {
       return await this.backend.agentTask(type, payload)
     } catch (e) {
       const code = refusalCode(e)
-      if (code) throw new RoomsRefused(operation, code, false, `the agent would not ${what}: ${message(e)}`)
+      if (code) throw new RoomsRefused(operation, code, false, `the agent would not ${what}: ${message(e)}`, e)
       throw e
     }
   }
@@ -1336,7 +1336,7 @@ export class AgentRoomsService implements RoomsService {
           await this.sleep(ADMISSION_PENDING_WAITS_MS[attempt])
           continue
         }
-        throw new RoomsRefused('acceptOffer', code, RETRYABLE.has(code), message(e))
+        throw new RoomsRefused('acceptOffer', code, RETRYABLE.has(code), message(e), e)
       }
       const accepted = parseAccept(answer)
       if (!accepted || accepted.roomId !== roomId)
@@ -1636,7 +1636,7 @@ export class AgentRoomsService implements RoomsService {
     } catch (e) {
       const code = refusalCode(e)
       if (code && !(e instanceof RoomsRefused))
-        throw new RoomsRefused('write', code, code === 'rateLimited', message(e))
+        throw new RoomsRefused('write', code, code === 'rateLimited', message(e), e)
       throw e
     } finally {
       // The file in the clear does not stay in memory either.
@@ -1711,7 +1711,7 @@ export class AgentRoomsService implements RoomsService {
       const current = await this.versionOf(room, key).catch(() => undefined)
       if (current !== undefined && current !== expectedVersion) return new RoomsConflict(key, current)
     }
-    return new RoomsRefused(operation, code, false, message(e))
+    return new RoomsRefused(operation, code, false, message(e), e)
   }
   /**
    * The room's files. No task lists them: a file is described in its record's sealed body, so the room is browsed
