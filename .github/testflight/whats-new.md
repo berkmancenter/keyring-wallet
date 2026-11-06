@@ -6,10 +6,13 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Build 260: private vetting uses your community identity throughout, so vouching tokens draw and private vouches count. If your agent's vetter enrolment was set up for another identity, Keyring says so and how to reset it.
-• Private vetting. Communities that use private vetting now work in Keyring, both when you apply and when you vouch for someone. It uses the same vetting steps as before, with a "Private vetting" mark where it applies: your vetters stay private, and the community learns that enough members vouched for you, not who. It needs your agent on version 0.60 or later.
-• Vouching privately: when you open the vetting desk in such a community, Keyring enrols you and draws your vouching tokens by itself, and shows how many people you can vouch for now. Open Keyring at least every few days to keep vouching. When you vouch, Keyring asks how you know the person.
-• Relationship and witness records now use the new DTG credential formats. Your existing contacts keep working.
-• After an update, a community identity whose key was held only in the app gets it back from your agent, or Keyring asks you to reconnect your agent, instead of failing to sign in.
-• A vetter opening the vetting screen no longer briefly sees the applicant's steps.
-
+• Communities: if you keep a different identity for each community, each one now keeps its own keys, so signing in and posting work for every community, not only the first. Please check that each of your communities still opens and signs in.
+• Rooms: a room shows replies, reactions, edits and withdrawn messages. A room you haven't joined yet says so, a community that is still loading says "Still loading…", and a community you left or were removed from takes its rooms with it.
+• Rooms: the room list shows up without waiting for invitations, and says which community didn't answer. On Android the keyboard no longer covers the message box.
+• Sending: a text that couldn't be sent goes back into the box and Keyring says why, instead of offering a retry that fails the same way. A photo being sent shows how far it has got.
+• Polls: community polls. You see the polls waiting for you on Messages, vote with a private ticket, and a poll closed early says so.
+• Directory: members' photos, and your profile photo on your community card.
+• Joining and vetting: each way into a community is its own choice, with private vetting marked. "Meet a vetter" says what it is doing, and a vetter's desk keeps listening while you move around the app.
+• Agent: coming back to the app no longer looks like your agent went away, and an answer that arrives late still reaches the screen that asked.
+• Notifications: if turning notifications on didn't work, the switch says so.
+• iPhone: the tinted home-screen icon is no longer blank.
