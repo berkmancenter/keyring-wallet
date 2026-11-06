@@ -572,6 +572,10 @@ const QRScanner: React.FC<Props> = ({
                 <ThemedText style={styles.shareLinkNote} testID={testIdWithKey('MyQRShareLinkNote')}>
                   {t('Scan.ShareLinkNote')}
                 </ThemedText>
+                {/* A remote exchange runs only while both apps are open: no push reaches a phone without an agent (IN-448). */}
+                <ThemedText style={styles.shareLinkNote} testID={testIdWithKey('MyQRShareLinkKeepOpen')}>
+                  {t('LateStep.KeepOpenShare')}
+                </ThemedText>
                 {shareLinkFailed ? (
                   <ThemedText
                     style={{ color: ColorPalette.semantic.error, textAlign: 'center' }}

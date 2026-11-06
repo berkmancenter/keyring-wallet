@@ -999,6 +999,26 @@ exports[`QRScanner Component Renders QR code view when defaultToConnect is true 
         >
           Scan.ShareLinkNote
         </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+                "fontSize": 14,
+                "textAlign": "center",
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/MyQRShareLinkKeepOpen"
+        >
+          LateStep.KeepOpenShare
+        </Text>
       </View>
     </View>
   </RNCSafeAreaView>

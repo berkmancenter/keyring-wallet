@@ -205,7 +205,15 @@ describe('Chat screen while an exchange waits on the other phone', () => {
     expect(tree.getByText('Relationship.WaitingForAnswer')).toBeTruthy()
     expect(tree.queryByText('Chat.Flow.DidNotComplete')).toBeNull()
 
-    fireEvent.press(tree.getByText('Global.Dismiss'))
+    // It says how long it has waited and that both apps must be open, and offers a way out (IN-448).
+    expect(tree.getByText('LateStep.WaitingSince')).toBeTruthy()
+    expect(tree.getByText('LateStep.StopExchange')).toBeTruthy()
+    // At the largest text sizes the card is taller than the page: its way out has to stay reachable by scrolling.
+    let parent = tree.getByText('LateStep.StopExchange').parent
+    while (parent && String(parent.type) !== 'RCTScrollView') parent = parent.parent
+    expect(parent).toBeTruthy()
+    // "Wait in the background" hides the dialog without ending the flow, as Dismiss did.
+    fireEvent.press(tree.getByText('LateStep.WaitInBackground'))
     expect(tree.queryByText('Relationship.WaitingForAnswer')).toBeNull()
     expect(vrcFlowStore.getStatus('1')).toBe('proposed')
   })

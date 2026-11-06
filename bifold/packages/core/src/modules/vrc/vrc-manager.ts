@@ -9,6 +9,7 @@ import {
   DidCommCredentialRole,
   DidCommCredentialState,
   DidCommDidExchangeState,
+  DidCommEventTypes,
   DidCommOutOfBandRole,
 } from '@credo-ts/didcomm'
 import type {
@@ -41,6 +42,19 @@ import { createEvidenceBuilder } from './services/EvidenceBuilder'
 import type { WitnessSession, WitnessConnectionState } from './context/WitnessConnectionProvider'
 import { WitnessedVRCManager } from './witnessed-vrc-manager'
 import { witnessStatusStore, vrcFlowStore, type VrcFlowErrorType } from './witnessStatusStore'
+import {
+  handleLateStepMessage,
+  isLiveHold,
+  keepHold,
+  type KeptHold,
+  LATE_HOLD_METADATA_KEY,
+  LATE_STEP_MS,
+  lateStepMessageOf,
+  lateStepStore,
+  minutesOf,
+  noteQueueStatus,
+  queueWaitMs,
+} from './lateStep'
 
 const WITNESS_BACKGROUND_TIMEOUT_MS = 15000 // 15 seconds — if no session-challenge arrives, counterparty is not on the witness
 
@@ -1422,6 +1436,107 @@ async function handleSessionChallenge(
 }
 
 /**
+ * A VRC connection completed: set the overlay going, pre-warm the signing key, and send the counterparty our
+ * relationship DID (the announcement that opens the exchange). Run at once, or later from a hold released when
+ * both people are here (lateStep.ts).
+ */
+async function announceRelationshipDid(
+  agent: Agent,
+  connectionRecord: DidCommConnectionRecord,
+  logger: ReturnType<typeof createVrcLogger>
+): Promise<void> {
+  // Ensure flow status is set for overlay - connection is complete, now exchanging DIDs
+  // This maintains the overlay during the DID exchange phase before credential issuance
+  const currentStatus = vrcFlowStore.getStatus(connectionRecord.id)
+  if (currentStatus === 'idle' || currentStatus === 'connecting') {
+    logger.info(`Setting 'connecting' status for completed connection (DID exchange phase)`)
+    vrcFlowStore.setStatus(connectionRecord.id, 'connecting', false)
+  }
+
+  // Pre-warm hardware key and attestation cache while connection completes.
+  // This front-loads the heavy Apple/Google server calls so that when VRC
+  // signing happens, only the biometric prompt is needed (~2-5s vs 20-45s).
+  prepareHardwareKeyForSigning(agent).catch((err) => {
+    logger.warn(`Hardware key pre-warm failed (non-blocking): ${(err as Error).message}`)
+  })
+
+  // SECURITY: Only use theirDid as counterparty identifier - must be present
+  if (!connectionRecord.theirDid) {
+    logger.warn(
+      `Connection ${connectionRecord.id} has no theirDid - cannot create relationship DID. This is a security requirement.`
+    )
+    return
+  }
+
+  const counterpartyConnectionDid = connectionRecord.theirDid
+  logger.debug(`Counterparty DID: ${counterpartyConnectionDid}`)
+
+  // Get or create relationship DID for this counterparty
+  const relationshipDid = await getOrCreateRelationshipDid(
+    agent,
+    counterpartyConnectionDid,
+    connectionRecord.id || undefined
+  )
+
+  // Store in local metadata for our own reference
+  await setRelationshipDidOnConnection(agent, connectionRecord.id, relationshipDid)
+
+  // Send relationshipDid to counterparty via basic message with retry.
+  // The HTTP outbound transport can be temporarily inactive (especially on
+  // slow devices or during dev hot-reload), so we retry with backoff.
+  const maxRetries = 3
+  // The rceVersion marker announces our RCE protocol version so the peer
+  // can issue us a VC 2.0 credential; old peers simply ignore the suffix.
+  const message = `This is my relationship DID: vrc:relationshipDid:${relationshipDid} vrc:rceVersion:${RCE_PROTOCOL_VERSION}`
+  let sent = false
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, message)
+      sent = true
+      break
+    } catch (sendError) {
+      logger.warn(`Relationship DID send attempt ${attempt}/${maxRetries} failed: ${(sendError as Error).message}`)
+      if (attempt < maxRetries) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 2000 * attempt))
+      }
+    }
+  }
+
+  if (sent) {
+    logger.info(`✓ RelationshipDid set and sent: ${relationshipDid} | Connection: ${connectionRecord.id}`)
+  } else {
+    logger.error(`✗ RelationshipDid stored locally but failed to send after ${maxRetries} attempts`)
+  }
+
+  logger.debug(`RelationshipDid stored for counterparty: ${counterpartyConnectionDid}`)
+}
+
+/** Holds kept on connections across a restart (lateStep.ts): held again, with the announcement still to send. */
+async function restoreLateHolds(agent: Agent): Promise<void> {
+  const connections = await agent.modules.didcomm.connections.getAll()
+  for (const connection of connections) {
+    const kept = connection.metadata.get(LATE_HOLD_METADATA_KEY) as KeptHold | null
+    if (!isLiveHold(kept)) continue
+    const logger = createVrcLogger(agent, { module: 'vrc', side: 'INVITER', component: 'ConnectionHandler' })
+    const reason = kept.reason ?? 'connected'
+    lateStepStore.hold({ connectionId: connection.id, reason, waitedMs: kept.waitedMs ?? LATE_STEP_MS })
+    if (reason === 'accepted' && kept.exchangeId) {
+      const exchangeId = kept.exchangeId
+      const { deliverAfterAcceptance } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+        require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+      lateStepStore.defer(connection.id, async () =>
+        deliverAfterAcceptance(agent, connection.id, exchangeId, Boolean(kept.upgrade))
+      )
+    } else {
+      lateStepStore.defer(connection.id, () => announceRelationshipDid(agent, connection, logger))
+    }
+    logger.info(`Restored a held exchange on ${connection.id} (${reason}): waiting for both people`)
+  }
+}
+
+/**
  * Set up automatic relationship DID creation and communication for VRC connections
  * This should be called during wallet initialization
  *
@@ -1431,6 +1546,18 @@ async function handleSessionChallenge(
  */
 export function setupVrcConnectionHandler(agent: Agent) {
   agent.config.logger.info('[VRC] Setting up automatic VRC connection handler')
+
+  // How long the message being processed waited on the mediator: each pickup
+  // status names when its oldest queued message arrived (lateStep.ts, IN-448).
+  agent.events.on(DidCommEventTypes.DidCommMessageProcessed, ({ payload }: any) => {
+    const message = payload?.message as { type?: string; oldestReceivedTime?: Date } | undefined
+    if (message?.type?.endsWith('/messagepickup/2.0/status')) noteQueueStatus(message.oldestReceivedTime)
+  })
+
+  // A step held for both people survives a restart: hold it again, with the relationship DID still to send.
+  restoreLateHolds(agent).catch((e: Error) =>
+    agent.config.logger.warn(`[VRC:LateStep] restoring holds failed: ${e.message}`)
+  )
 
   // Re-drive any Trust Task exchange interrupted by a restart. The messages
   // that drive the ceremony are consumed exactly once, so a kill mid-exchange
@@ -1465,6 +1592,12 @@ export function setupVrcConnectionHandler(agent: Agent) {
 
       // Handle witness protocol messages
       if (parsed.type) {
+        // A ready-check, its answer, or a stop from the other phone (lateStep.ts): handled, never shown in chat.
+        const lateStep = lateStepMessageOf(parsed)
+        if (lateStep) {
+          if (record.connectionId) await handleLateStepMessage(agent, record.connectionId, lateStep)
+          return
+        }
         const witnessLogger = createVrcLogger(agent, {
           module: 'witness',
           component: 'BasicMessageHandler',
@@ -1735,12 +1868,15 @@ export function setupVrcConnectionHandler(agent: Agent) {
       const { maybeOpenRelationshipExchange } =
         // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
         require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
-      maybeOpenRelationshipExchange(
-        agent,
-        record.connectionId as string,
-        counterpartyRceVersion,
-        RCE_PROTOCOL_VERSION
-      ).catch((e: Error) => logger.warn(`Trust-task exchange open failed: ${e.message}`))
+      const open = () =>
+        maybeOpenRelationshipExchange(
+          agent,
+          record.connectionId as string,
+          counterpartyRceVersion,
+          RCE_PROTOCOL_VERSION
+        ).catch((e: Error) => logger.warn(`Trust-task exchange open failed: ${e.message}`))
+      // Held for both people (lateStep.ts): the ceremony opens once they are, not into an empty room.
+      if (!lateStepStore.defer(record.connectionId as string, open)) void open()
     }
 
     // Store in persistent repository using counterpartyConnectionDid as key
@@ -2608,73 +2744,20 @@ export function setupVrcConnectionHandler(agent: Agent) {
         logger.info(`Connection completed: ${connectionRecord.id}`)
         logger.debug(`Connection OOB ID: ${connectionRecord.outOfBandId}, goalCode: ${goalCode}`)
 
-        // Ensure flow status is set for overlay - connection is complete, now exchanging DIDs
-        // This maintains the overlay during the DID exchange phase before credential issuance
-        const currentStatus = vrcFlowStore.getStatus(connectionRecord.id)
-        if (currentStatus === 'idle' || currentStatus === 'connecting') {
-          logger.info(`Setting 'connecting' status for completed connection (DID exchange phase)`)
-          vrcFlowStore.setStatus(connectionRecord.id, 'connecting', false)
-        }
-
-        // Pre-warm hardware key and attestation cache while connection completes.
-        // This front-loads the heavy Apple/Google server calls so that when VRC
-        // signing happens, only the biometric prompt is needed (~2-5s vs 20-45s).
-        prepareHardwareKeyForSigning(agent).catch((err) => {
-          logger.warn(`Hardware key pre-warm failed (non-blocking): ${(err as Error).message}`)
-        })
-
-        // SECURITY: Only use theirDid as counterparty identifier - must be present
-        if (!connectionRecord.theirDid) {
-          logger.warn(
-            `Connection ${connectionRecord.id} has no theirDid - cannot create relationship DID. This is a security requirement.`
+        // Found late (the other phone acted LATE_STEP_MS or more ago): nothing goes out until both people are
+        // here, or the ceremony runs on into a step the other person left long ago (IN-448, lateStep.ts).
+        const waited = queueWaitMs()
+        if (waited >= LATE_STEP_MS) {
+          logger.info(`Connection completed ${minutesOf(waited)} min after the other phone acted: held for both people`)
+          lateStepStore.hold({ connectionId: connectionRecord.id, reason: 'connected', waitedMs: waited })
+          lateStepStore.defer(connectionRecord.id, () => announceRelationshipDid(agent, connectionRecord, logger))
+          await keepHold(agent, connectionRecord.id, waited).catch((e: Error) =>
+            logger.warn(`Could not keep the hold across a restart: ${e.message}`)
           )
           return
         }
 
-        const counterpartyConnectionDid = connectionRecord.theirDid
-        logger.debug(`Counterparty DID: ${counterpartyConnectionDid}`)
-
-        // Get or create relationship DID for this counterparty
-        const relationshipDid = await getOrCreateRelationshipDid(
-          agent,
-          counterpartyConnectionDid,
-          connectionRecord.id || undefined
-        )
-
-        // Store in local metadata for our own reference
-        await setRelationshipDidOnConnection(agent, connectionRecord.id, relationshipDid)
-
-        // Send relationshipDid to counterparty via basic message with retry.
-        // The HTTP outbound transport can be temporarily inactive (especially on
-        // slow devices or during dev hot-reload), so we retry with backoff.
-        const maxRetries = 3
-        // The rceVersion marker announces our RCE protocol version so the peer
-        // can issue us a VC 2.0 credential; old peers simply ignore the suffix.
-        const message = `This is my relationship DID: vrc:relationshipDid:${relationshipDid} vrc:rceVersion:${RCE_PROTOCOL_VERSION}`
-        let sent = false
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            await agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, message)
-            sent = true
-            break
-          } catch (sendError) {
-            logger.warn(
-              `Relationship DID send attempt ${attempt}/${maxRetries} failed: ${(sendError as Error).message}`
-            )
-            if (attempt < maxRetries) {
-              await new Promise<void>((resolve) => setTimeout(resolve, 2000 * attempt))
-            }
-          }
-        }
-
-        if (sent) {
-          logger.info(`✓ RelationshipDid set and sent: ${relationshipDid} | Connection: ${connectionRecord.id}`)
-        } else {
-          logger.error(`✗ RelationshipDid stored locally but failed to send after ${maxRetries} attempts`)
-        }
-
-        logger.debug(`RelationshipDid stored for counterparty: ${counterpartyConnectionDid}`)
+        await announceRelationshipDid(agent, connectionRecord, logger)
         logger.debug(`Connection handler complete - credential issuance will be triggered by message handler`)
       } catch (error) {
         const side = 'RECEIVER'

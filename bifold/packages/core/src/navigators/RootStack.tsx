@@ -11,6 +11,7 @@ import { TOKENS, useServices } from '../container-api'
 import { ActivityProvider } from '../contexts/activity'
 import { BiometricConfirmationProvider } from '../contexts/biometric-confirmation'
 import RelationshipProposalModal from '../modules/vrc/components/RelationshipProposalModal'
+import LateStepReadyModal from '../modules/vrc/components/LateStepReadyModal'
 import ContinuityCheckModal from '../modules/vrc/components/ContinuityCheckModal'
 import LocalityPreflightModal from '../modules/vrc/components/LocalityPreflightModal'
 import CredentialExchangeQueryModal from '../modules/trust-tasks/components/CredentialExchangeQueryModal'
@@ -102,6 +103,7 @@ const RootStack: React.FC = () => {
                 <ActivityProvider>
                   <MainStack />
                   <RelationshipProposalModal />
+                  <LateStepReadyModal />
                   <ContinuityCheckModal />
                   <LocalityPreflightModal />
                   <CredentialExchangeQueryModal />
