@@ -78,9 +78,16 @@ export interface TextSenderCountOptions {
   whenIdle?: () => Promise<void>
 }
 
+/**
+ * React Native's `InteractionManager`, read once as this module loads. Its export is a getter that requires the module
+ * on first use, and the first use here comes from a timer (`START_DELAY_MS`): read then, a timer that outlived its
+ * caller required a module after the environment was gone, which a test run reports as an error and exits 1 on.
+ */
+const interactions = InteractionManager
+
 const afterInteractions = () =>
   new Promise<void>((done) => {
-    InteractionManager.runAfterInteractions(() => done())
+    interactions.runAfterInteractions(() => done())
   })
 
 export class TextSenderCount {
