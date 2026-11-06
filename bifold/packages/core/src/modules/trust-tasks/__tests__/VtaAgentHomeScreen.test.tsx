@@ -470,9 +470,17 @@ describe('Your agent — after linking', () => {
     })
     expect(tree.getByTestId(testIdWithKey('AgentSeat'))).not.toHaveTextContent('VtaLink.SeatMember')
     const key = communityCardKey(communityDid)
-    // The community stays on screen, saying what happened.
-    expect(tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`))).toHaveTextContent(/Join\.StandingRemoved/)
+    // The community stays on screen as history, collapsed: one line saying the person was a member,
+    // until when, who removed them, and that they can ask again; what they held behind a tap.
+    expect(tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`))).toHaveTextContent(/VtaLink\.CardWasMember/)
     expect(tree.queryByTestId(testIdWithKey(`AgentMemberSince_${key}`))).toBeNull()
+    for (const hidden of [`AgentMembershipEnded_${key}`, `AgentCard_membership_${key}`, 'AgentShareIdentity'])
+      expect(tree.queryByTestId(testIdWithKey(hidden))).toBeNull()
+    const history = tree.getByTestId(testIdWithKey(`AgentCommunityHistory_${key}`))
+    expect(history).toHaveTextContent(/VtaLink\.CardHistoryShow/)
+    await act(async () => fireEvent.press(history))
+    expect(history).toHaveTextContent(/VtaLink\.CardHistoryHide/)
+    expect(tree.getByTestId(testIdWithKey('AgentShareIdentity'))).toBeTruthy()
     const ended = tree.getByTestId(testIdWithKey(`AgentMembershipEnded_${key}`))
     expect(ended).toHaveTextContent(/VtaLink\.CardMembershipEnded/)
     expect(ended).toHaveTextContent(/Community\.RemovedReason/)
@@ -481,6 +489,9 @@ describe('Your agent — after linking', () => {
       /VtaLink\.CardMembershipEnded/
     )
     expect(tree.queryByTestId(testIdWithKey(`AgentCardKept_membership_${key}`))).toBeNull()
+    // And folded away again.
+    await act(async () => fireEvent.press(history))
+    expect(tree.queryByTestId(testIdWithKey(`AgentMembershipEnded_${key}`))).toBeNull()
   })
 
   // 219: every tab unmounts when it loses focus, so a return to My Agent
@@ -632,6 +643,8 @@ describe('Your agent — after linking', () => {
     const key = communityCardKey(communityDid)
     expect(tree.getByTestId(testIdWithKey(`AgentCommunityCard_${key}`))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`))).toHaveTextContent('Join.StandingMember')
+    // A current membership is not history: nothing folded away (control for the removed one).
+    expect(tree.queryByTestId(testIdWithKey(`AgentCommunityHistory_${key}`))).toBeNull()
     expect(tree.getByTestId(testIdWithKey('AgentMembershipRow'))).toBeTruthy()
     expect(tree.queryByTestId(testIdWithKey(`AgentCommunityPrimary_${key}`))).toBeNull()
   })

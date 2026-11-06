@@ -97,6 +97,9 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   const [checking, setChecking] = useState(false)
   // A membership the community removed says so from the start (#166).
   const removal = membership && !isCurrentMembership(membership) ? membership.removal : undefined
+  // Kept as history, collapsed: one line saying the person was a member, and what they held behind
+  // a tap. The records stay; only what is shown first changes.
+  const [historyShown, setHistoryShown] = useState(false)
   // Until the journey is read, or when its read failed, the held membership stands in for it, never "none".
   const join = cardJoinOf(journey, membership)
   const model = communityCardModel({ join, hasIdentity: !!persona, invited, vetter })
@@ -108,11 +111,19 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   // "You're a member of X (not confirmed by the community)" read as if the
   // membership were unconfirmed; the community issued it, so the status line
   // names it plainly. The heading above still says where the name came from.
-  const status = t(model.statusKey, {
-    community:
-      model.statusKey === 'Join.StandingMember' ? communityHeadingOf(communityDid, t, { claim: 'plain' }) : community,
-    interpolation: { escapeValue: false },
-  })
+  const status = removal
+    ? t('VtaLink.CardWasMember', {
+        community,
+        date: localDate(removal.decidedAt),
+        interpolation: { escapeValue: false },
+      })
+    : t(model.statusKey, {
+        community:
+          model.statusKey === 'Join.StandingMember'
+            ? communityHeadingOf(communityDid, t, { claim: 'plain' })
+            : community,
+        interpolation: { escapeValue: false },
+      })
   // A membership the agent held before this phone was linked to it came with
   // the agent, not from anything done on this phone.
   const heldBeforeLink = !!membership && !!linkedAt && Date.parse(membership.grantedAt) < Date.parse(linkedAt)
@@ -168,92 +179,112 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         </Pressable>
       ) : null}
 
-      {/* What the agent holds for this community, under it. */}
-      {membership ? (
-        <View style={styles.row}>
-          <Icon name="card-account-details-outline" size={20} color={TextTheme.normal.color} />
-          <View style={{ flex: 1 }}>
-            {removal ? (
-              // Ended by the community: when, and its reason when it gave one.
-              <ThemedText testID={testIdWithKey(`AgentMembershipEnded_${key}`)}>
-                {t('VtaLink.CardMembershipEnded', { date: localDate(removal.decidedAt) })}
-                {removal.reason
-                  ? ` ${t('Community.RemovedReason', { reason: removal.reason, interpolation: { escapeValue: false } })}`
-                  : ''}
-              </ThemedText>
-            ) : (
-              <ThemedText testID={testIdWithKey(`AgentMemberSince_${key}`)}>
-                {t('MyAgent.MemberSince', { date: localDate(membership.grantedAt) })}
-              </ThemedText>
-            )}
-            {heldBeforeLink && !removal ? (
-              <ThemedText style={styles.muted} testID={testIdWithKey(`AgentMemberBeforeLink_${key}`)}>
-                {t('MyAgent.MemberBeforeLink')}
-              </ThemedText>
-            ) : null}
-          </View>
-        </View>
-      ) : null}
-      {/* The cards themselves, and whether the agent keeps them (226). */}
-      {membership?.vmc ? (
-        <CardKeptRow
-          card={membership.vmc}
-          kind="membership"
-          handle={key}
-          community={community}
-          endedAt={removal?.decidedAt}
-        />
-      ) : null}
-      {membership?.roleVec ? (
-        <CardKeptRow
-          card={membership.roleVec}
-          kind="role"
-          handle={key}
-          community={community}
-          endedAt={removal?.decidedAt}
-        />
-      ) : null}
-      {persona ? (
-        <View style={styles.row}>
-          <Icon name="account-circle-outline" size={20} color={TextTheme.normal.color} />
-          {/* The status line may already say "Your identity for X"; then this
-              row says what the identity is for rather than saying it twice. */}
-          <ThemedText style={{ flex: 1 }}>
-            {model.statusKey === 'VtaLink.IdentityFor' ? t('VtaLink.IdentityShareRow') : words('VtaLink.IdentityFor')}
+      {removal ? (
+        <Pressable
+          style={styles.row}
+          onPress={() => setHistoryShown((shown) => !shown)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: historyShown }}
+          testID={testIdWithKey(`AgentCommunityHistory_${key}`)}
+        >
+          <Icon name={historyShown ? 'chevron-up' : 'chevron-down'} size={20} color={ColorPalette.brand.link} />
+          <ThemedText style={{ color: ColorPalette.brand.link }}>
+            {t(historyShown ? 'VtaLink.CardHistoryHide' : 'VtaLink.CardHistoryShow')}
           </ThemedText>
-          {/* The admin needs this identity to invite it (TestFlight report #3). */}
-          <Pressable
-            onPress={() => void shareIdentity(t, communityDid, persona.did)}
-            accessibilityRole="button"
-            accessibilityLabel={words('VtaLink.ShareIdentity')}
-            hitSlop={12}
-            testID={testIdWithKey('AgentShareIdentity')}
-          >
-            <Icon name="share-variant" size={22} color={ColorPalette.brand.link} />
-          </Pressable>
-        </View>
+        </Pressable>
       ) : null}
-      {persona && sharedWith.length > 0 ? (
-        <ThemedText style={styles.muted} testID={testIdWithKey(`AgentIdentityShared_${key}`)}>
-          {t('MyAgent.IdentitySharedWith', {
-            other: communityHeadingOf(sharedWith[0], t),
-            interpolation: { escapeValue: false },
-          })}
-        </ThemedText>
-      ) : null}
-      {/* The identifier the community and its admins see for this person, to
+      {removal && !historyShown ? null : (
+        <>
+          {/* What the agent holds for this community, under it. */}
+          {membership ? (
+            <View style={styles.row}>
+              <Icon name="card-account-details-outline" size={20} color={TextTheme.normal.color} />
+              <View style={{ flex: 1 }}>
+                {removal ? (
+                  // Ended by the community: when, and its reason when it gave one.
+                  <ThemedText testID={testIdWithKey(`AgentMembershipEnded_${key}`)}>
+                    {t('VtaLink.CardMembershipEnded', { date: localDate(removal.decidedAt) })}
+                    {removal.reason
+                      ? ` ${t('Community.RemovedReason', { reason: removal.reason, interpolation: { escapeValue: false } })}`
+                      : ''}
+                  </ThemedText>
+                ) : (
+                  <ThemedText testID={testIdWithKey(`AgentMemberSince_${key}`)}>
+                    {t('MyAgent.MemberSince', { date: localDate(membership.grantedAt) })}
+                  </ThemedText>
+                )}
+                {heldBeforeLink && !removal ? (
+                  <ThemedText style={styles.muted} testID={testIdWithKey(`AgentMemberBeforeLink_${key}`)}>
+                    {t('MyAgent.MemberBeforeLink')}
+                  </ThemedText>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+          {/* The cards themselves, and whether the agent keeps them (226). */}
+          {membership?.vmc ? (
+            <CardKeptRow
+              card={membership.vmc}
+              kind="membership"
+              handle={key}
+              community={community}
+              endedAt={removal?.decidedAt}
+            />
+          ) : null}
+          {membership?.roleVec ? (
+            <CardKeptRow
+              card={membership.roleVec}
+              kind="role"
+              handle={key}
+              community={community}
+              endedAt={removal?.decidedAt}
+            />
+          ) : null}
+          {persona ? (
+            <View style={styles.row}>
+              <Icon name="account-circle-outline" size={20} color={TextTheme.normal.color} />
+              {/* The status line may already say "Your identity for X"; then this
+              row says what the identity is for rather than saying it twice. */}
+              <ThemedText style={{ flex: 1 }}>
+                {model.statusKey === 'VtaLink.IdentityFor'
+                  ? t('VtaLink.IdentityShareRow')
+                  : words('VtaLink.IdentityFor')}
+              </ThemedText>
+              {/* The admin needs this identity to invite it (TestFlight report #3). */}
+              <Pressable
+                onPress={() => void shareIdentity(t, communityDid, persona.did)}
+                accessibilityRole="button"
+                accessibilityLabel={words('VtaLink.ShareIdentity')}
+                hitSlop={12}
+                testID={testIdWithKey('AgentShareIdentity')}
+              >
+                <Icon name="share-variant" size={22} color={ColorPalette.brand.link} />
+              </Pressable>
+            </View>
+          ) : null}
+          {persona && sharedWith.length > 0 ? (
+            <ThemedText style={styles.muted} testID={testIdWithKey(`AgentIdentityShared_${key}`)}>
+              {t('MyAgent.IdentitySharedWith', {
+                other: communityHeadingOf(sharedWith[0], t),
+                interpolation: { escapeValue: false },
+              })}
+            </ThemedText>
+          ) : null}
+          {/* The identifier the community and its admins see for this person, to
           compare or give to an admin (IN-120: the admin saw a persona DID the
           person had never been shown). This agent's identity: identities are
           kept per agent. */}
-      {persona ? (
-        <DidDetails
-          did={persona.did}
-          label={t('VtaLink.ShowIdentityCode')}
-          hint={words('VtaLink.ShowIdentityCodeHint')}
-          copy
-          testIdStem={`AgentCommunityIdentity_${key}`}
-        />
-      ) : null}
+          {persona ? (
+            <DidDetails
+              did={persona.did}
+              label={t('VtaLink.ShowIdentityCode')}
+              hint={words('VtaLink.ShowIdentityCodeHint')}
+              copy
+              testIdStem={`AgentCommunityIdentity_${key}`}
+            />
+          ) : null}
+        </>
+      )}
 
       {shownPrimary ? (
         <Button
