@@ -115,8 +115,8 @@ const developerState: Developer = {
   // turns it on for a review build with no code change. A value saved from
   // Developer options wins over this at startup (container-imp.ts).
   enableLivePickup: Config.LIVE_MESSAGE_PICKUP === 'true',
-  // Off until the flow is turned on for everyone. A saved choice, off included, wins on load (container-imp.ts).
-  enableSharedConnect: false,
+  // On for everyone. A saved choice, off included, wins on load (container-imp.ts).
+  enableSharedConnect: true,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {

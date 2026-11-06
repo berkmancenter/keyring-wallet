@@ -61,14 +61,16 @@ beforeEach(() => {
     .mockImplementation(async (key: string) => saved.get(key) as never)
 })
 
+const DEFAULT = initialState.developer.enableSharedConnect
+
 afterEach(() => {
   jest.restoreAllMocks()
-  initialState.developer.enableSharedConnect = false
+  initialState.developer.enableSharedConnect = DEFAULT
 })
 
 describe('shared-connect switch', () => {
-  it('is off by default', () => {
-    expect(initialState.developer.enableSharedConnect).toBe(false)
+  it('is on by default', () => {
+    expect(initialState.developer.enableSharedConnect).toBe(true)
   })
 
   it('the Developer toggle sets it and saves it', () => {
@@ -84,7 +86,7 @@ describe('shared-connect switch', () => {
   })
 
   it('on load, with nothing saved, bifold is told the default', async () => {
-    expect(await load()).toEqual({ stored: false, told: false })
+    expect(await load()).toEqual({ stored: true, told: true })
   })
 
   it('on load, a saved "on" turns it on', async () => {
