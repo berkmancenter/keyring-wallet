@@ -995,6 +995,7 @@
     "ImportWalletPasswordLabel": "Backup Password",
     "ImportWalletSelectFile": "Select Backup File",
     "ImportWalletNoFileSelected": "No file selected",
+    "ImportWalletPickerNotOpened": "No file list opened? Close Keyring completely (swipe it away in the app switcher), open it again and come straight back here. Your backup files stay where they are.",
     "WalletBackup": "Wallet Backup",
     "ExportWalletWarning": "This will create an encrypted backup of your wallet. Store it safely.",
     "ExportWalletInfo": "You will need this password to restore your wallet later.",

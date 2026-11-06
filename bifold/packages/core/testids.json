@@ -659,6 +659,7 @@
     "IAgree": ["src/screens/Preface.tsx", "src/screens/Terms.tsx"],
     "ImportButton": ["src/screens/ImportWallet.tsx"],
     "ImportPassword": ["src/screens/ImportWallet.tsx"],
+    "ImportPickerNotOpened": ["src/screens/ImportWallet.tsx"],
     "ImportWallet": ["src/screens/Settings.tsx"],
     "InlineErrorText": ["src/components/inputs/InlineErrorText.tsx"],
     "InvitationUrl": ["src/components/misc/QRScanner.tsx"],

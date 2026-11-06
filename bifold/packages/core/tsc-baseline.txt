@@ -18,7 +18,6 @@
 6	__tests__/modules/vrc/vrc-witness-reporting-flow.test.ts	TS2304
 1	__tests__/modules/vrc/vrcSignedContentKeyOrder.test.ts	TS7006
 3	__tests__/screens/ExportWallet.test.tsx	TS2741
-3	__tests__/screens/ImportWallet.test.tsx	TS2741
 2	__tests__/screens/ProofChangeCredential.test.tsx	TS2578
 12	__tests__/screens/ProofRequest.test.tsx	TS2578
 1	__tests__/screens/Scan.test.tsx	TS2578

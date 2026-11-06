@@ -3,6 +3,7 @@ import React from 'react'
 
 import ImportWallet from '../../src/screens/ImportWallet'
 import { testIdWithKey } from '../../src/utils/testable'
+import { BasicAppContext } from '../helpers/app'
 
 jest.mock('react-native-document-picker', () => ({
   pick: jest.fn().mockResolvedValue([]),
@@ -34,19 +35,31 @@ describe('ImportWallet Screen', () => {
   })
 
   test('screen renders correctly', () => {
-    const tree = render(<ImportWallet />)
+    const tree = render(
+      <BasicAppContext>
+        <ImportWallet navigation={{}} />
+      </BasicAppContext>
+    )
     expect(tree).toMatchSnapshot()
   })
 
   test('password input exists', async () => {
-    const { findByTestId } = render(<ImportWallet />)
+    const { findByTestId } = render(
+      <BasicAppContext>
+        <ImportWallet navigation={{}} />
+      </BasicAppContext>
+    )
 
     const passwordInput = await findByTestId(testIdWithKey('ImportPassword'))
     expect(passwordInput).not.toBe(null)
   })
 
   test('import button exists', async () => {
-    const { findByTestId } = render(<ImportWallet />)
+    const { findByTestId } = render(
+      <BasicAppContext>
+        <ImportWallet navigation={{}} />
+      </BasicAppContext>
+    )
 
     const importButton = await findByTestId(testIdWithKey('ImportButton'))
     expect(importButton).not.toBe(null)
