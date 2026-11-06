@@ -35,7 +35,9 @@ describe('sharedConnectCredential', () => {
   it('verifies a JCS credential under its issuer, not through Credo', async () => {
     mockVerifyDocumentProof.mockResolvedValue(true)
     await expect(verifySharedConnectVrc(agent, jcsVc)).resolves.toBe(true)
-    expect(mockVerifyDocumentProof).toHaveBeenCalledWith(agent, jcsVc, 'did:peer:0abc')
+    expect(mockVerifyDocumentProof).toHaveBeenCalledWith(agent, jcsVc, 'did:peer:0abc', {
+      proofPurpose: 'assertionMethod',
+    })
     expect(verifyCredential).not.toHaveBeenCalled()
   })
 

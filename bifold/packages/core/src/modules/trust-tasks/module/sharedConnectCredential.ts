@@ -70,7 +70,9 @@ export async function verifySharedConnectVrc(agent: Agent, vc: Record<string, un
   try {
     const issuer = vcIssuerId(vc)
     if (!issuer) return false
-    if (hasJcsProof(vc)) return await verifyDocumentProof(agent, vc, issuer)
+    // The named key must be one the issuer lists under assertionMethod. Without the purpose, a proof naming
+    // `<issuer>#anything` that matched no key fell back to the issuer's first signing key.
+    if (hasJcsProof(vc)) return await verifyDocumentProof(agent, vc, issuer, { proofPurpose: 'assertionMethod' })
     const instance = JsonTransformer.fromJSON(vc, W3cJsonLdVerifiableCredential)
     return (await agent.w3cCredentials.verifyCredential({ credential: instance })).isValid
   } catch {

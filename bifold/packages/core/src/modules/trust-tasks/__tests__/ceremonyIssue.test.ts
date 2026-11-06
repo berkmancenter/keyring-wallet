@@ -449,7 +449,11 @@ describe('the inbound issue leg (verify, store, receipt)', () => {
       const { doc, vrc } = jcsIssue()
       mockedVerify.mockClear()
       await deliver(fake.capturedHandlerRef, doc, connection)
-      expect(mockedVerify).not.toHaveBeenCalledWith(fake.agent, vrc, 'did:peer:0zPeerRel')
+      // With the purpose argument the real call has four arguments: a three-argument shape here would match nothing
+      // and pass whatever happened.
+      expect(mockedVerify).not.toHaveBeenCalledWith(fake.agent, vrc, 'did:peer:0zPeerRel', {
+        proofPurpose: 'assertionMethod',
+      })
       expect(fake.w3c.verifyCredential).toHaveBeenCalled()
     })
 
@@ -459,7 +463,9 @@ describe('the inbound issue leg (verify, store, receipt)', () => {
       const { doc, vrc } = jcsIssue()
       mockedVerify.mockClear()
       await deliver(fake.capturedHandlerRef, doc, connection)
-      expect(mockedVerify).toHaveBeenCalledWith(fake.agent, vrc, 'did:peer:0zPeerRel')
+      expect(mockedVerify).toHaveBeenCalledWith(fake.agent, vrc, 'did:peer:0zPeerRel', {
+        proofPurpose: 'assertionMethod',
+      })
       expect(fake.w3c.verifyCredential).not.toHaveBeenCalled()
       expect(fake.storedCredentials).toHaveLength(1)
       expect((fake.sentMessages[0].document as { type: string }).type).toBe(`${issue.TYPE_URI}#response`)
