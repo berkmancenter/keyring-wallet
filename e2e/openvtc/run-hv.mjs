@@ -32,7 +32,7 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { byTestId, ensureAppium, stopAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId } from '../lib/driver.js';
+import { byTestId, dumpSource, ensureAppium, stopAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId, tapTestIdByCoordinates } from '../lib/driver.js';
 import { applicant as applicantRole, textOf, unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
 import { createHvAdmin, soleMemberSince } from './hvAdmin.js';
@@ -95,7 +95,8 @@ try {
   await unlockToHome(app);
   clearDeviceLog(appDev);
   await join.openCommunity(app, { did: a['community-did'], name: '' });
-  const badge = await existsTestId(app, `JoinWayPrivate_${crit}`, 15000);
+  // The ways load through the agent and the community: over a minute when either is slow (11-03: still loading at 15 s).
+  const badge = await existsTestId(app, `JoinWayPrivate_${crit}`, 120000);
   await screenshot(app, 'hv-ways').catch(() => undefined);
   mark('hv-private-badge', badge ? 'PASS' : 'FAIL', badge ? `the ${crit} way is badged Private vetting` : `no JoinWayPrivate_${crit} on the ways in`);
   if (!badge) throw new Error('no private way');
@@ -103,13 +104,51 @@ try {
   // The way's own start button is the screen's JoinStart ("Meet a vetter"); JoinWayStart_<id> is its caption.
   if (!(await scrollToTestId(app, 'JoinStart', 6, { from: 0.6 }).catch(() => undefined))) throw new Error('JoinStart (Meet a vetter) not reachable');
   await tapTestId(app, 'JoinStart', 10000);
+  // The persona step waits on the agent too (11-03: over 25 s), so wait for it, or for the vetting screen if a community has no such step.
+  const tapped = Date.now();
+  let retapped = false;
+  let refusedText = '';
+  const keepRefusal = async (el) => {
+    refusedText = (await el.getText().catch(() => '')) || '(no text read)';
+    await dumpSource(app, 'hv-private-refused').catch(() => undefined);
+    await screenshot(app, 'hv-private-refused').catch(() => undefined);
+  };
+  for (let until = tapped + 120000; Date.now() < until; ) {
+    // Each pass, without scrolling: a refusal on screen is kept even if the next step comes before the retap would look.
+    if (!refusedText && (await existsTestId(app, 'JoinPrivateVettingRefused', 500))) await keepRefusal(byTestId(app, 'JoinPrivateVettingRefused'));
+    if ((await existsTestId(app, 'JoinMakeIdentity', 3000)) || (await existsTestId(app, 'VettingPrivate', 1000))) break;
+    // 11-04: one tap left the ways showing for over 3 min while the agent's sign-in was timing out. One more tap, never a loop;
+    // the RETRY line is counted in the report, and the row says so, so a retry never hides a tap the app ignored.
+    if (!retapped && Date.now() - tapped > 45000 && (await existsTestId(app, 'JoinStart', 1000))) {
+      retapped = true;
+      // The refusal line renders below the fold, so a tap that was answered can look like one that was ignored. Scrolled
+      // to only here: on every pass it would swipe the button away.
+      if (!refusedText) {
+        const refused = await scrollToTestId(app, 'JoinPrivateVettingRefused', 4).catch(() => undefined);
+        if (refused) await keepRefusal(refused);
+      }
+      console.log(`RETRY hv-start ${new Date().toISOString().slice(11, 19)}Z — "Meet a vetter" tapped, still on the ways after 45 s${refusedText ? `; refused: ${refusedText}` : '; no refusal line'}`);
+      await scrollToTestId(app, 'JoinStart', 6, { from: 0.6 }).catch(() => undefined);
+      await tapTestId(app, 'JoinStart', 10000).catch(() => undefined);
+    }
+    // A dead session makes existsTestId return at once: this keeps the wait from hammering the driver.
+    await sleep(1000);
+  }
+  // A refusal that was on screen and then passed still says so.
+  if (refusedText) console.log(`[hv] JoinPrivateVettingRefused seen: ${refusedText}`);
   // Below the fold on a community with a member directory: its preview sits above Continue (join.js ask).
-  await sleep(2000);
-  await scrollToTestId(app, 'JoinAsContinue', 8).catch(() => undefined);
-  if (await existsTestId(app, 'JoinAsContinue', 15000)) await tapTestId(app, 'JoinAsContinue', 10000);
+  if (await existsTestId(app, 'JoinMakeIdentity', 1000)) {
+    await scrollToTestId(app, 'JoinAsContinue', 8).catch(() => undefined);
+    if (await existsTestId(app, 'JoinAsContinue', 15000)) await tapTestId(app, 'JoinAsContinue', 10000);
+    else {
+      // As keyringRoles.js taps this same button: by its coordinates, with the screen recorded.
+      await dumpSource(app, 'hv-persona-step').catch(() => undefined);
+      await tapTestIdByCoordinates(app, 'JoinAsContinue', 10000).catch((e) => console.log(`[e2e] JoinAsContinue by coordinates: ${e.message}`));
+    }
+  }
   const shown = await existsTestId(app, 'VettingPrivate', 90000);
   await screenshot(app, 'hv-vetting').catch(() => undefined);
-  mark('hv-vetting-private-shown', shown ? 'PASS' : 'FAIL', shown ? 'Meet a vetter → persona → the vetting screen, badged Private vetting' : 'the vetting screen (VettingPrivate) did not come');
+  mark('hv-vetting-private-shown', shown ? 'PASS' : 'FAIL', shown ? `${retapped ? `passed after retry (Meet a vetter tapped twice${refusedText ? `; first refused: ${refusedText}` : ''}); ` : ''}Meet a vetter → persona → the vetting screen, badged Private vetting` : `the vetting screen (VettingPrivate) did not come${refusedText ? `; refused: ${refusedText}` : ''}`);
   if (!shown) throw new Error('no private vetting screen');
 
   if (!(await scrollToTestId(app, 'VettingStartButton', 6, { from: 0.6 }).catch(() => undefined))) throw new Error('VettingStartButton not reachable');

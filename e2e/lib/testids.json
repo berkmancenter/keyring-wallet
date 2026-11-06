@@ -1,5 +1,4 @@
 {
-  "generatedFrom": "8071589355de4c0ee55be6e1b1055a7e3068ee45",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -225,6 +224,7 @@
     "BackToList": ["src/screens/ProofDetails.tsx"],
     "BackToProofList": ["src/screens/MobileVerifierLoading.tsx"],
     "BiometricChangedEnterPIN": ["src/screens/PINVerify.tsx"],
+    "BiometricConfirmationScroll": ["src/components/modals/BiometricConfirmationModal.tsx"],
     "Biometrics": ["src/screens/Settings.tsx"],
     "BiometricsUnlock": ["src/screens/PINEnter.tsx"],
     "BiometryRecommended": ["src/components/inputs/BiometryControl.tsx"],
@@ -278,6 +278,17 @@
     "ChatMessageActionsBackdrop": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageImage": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageReactions": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhoto": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoBackdrop": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoDelete": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoFailed": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoNotNow": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoRetry": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoSheet": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoSheetScroll": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoStatus": ["src/components/chat/Chat.ids.ts"],
+    "ChatPendingPhotoStop": ["src/components/chat/Chat.ids.ts"],
+    "ChatPhotoSent": ["src/components/chat/Chat.ids.ts"],
     "ChatReaction": ["src/components/chat/Chat.ids.ts"],
     "ChatReactionBar": ["src/components/chat/Chat.ids.ts"],
     "ChatReactionBarMore": ["src/components/chat/Chat.ids.ts"],
@@ -332,8 +343,11 @@
     "CommunityPassTechnicalRows": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "CommunityPassTitle": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
     "CommunityPollRow": ["src/modules/polls/components/Polls.ids.ts"],
+    "CommunityPollRowChip": ["src/modules/polls/components/Polls.ids.ts"],
     "CommunityPollRowStatus": ["src/modules/polls/components/Polls.ids.ts"],
+    "CommunityPollRowTimeBar": ["src/modules/polls/components/Polls.ids.ts"],
     "CommunityPolls": ["src/modules/polls/components/Polls.ids.ts"],
+    "CommunityPollsWaiting": ["src/modules/polls/components/Polls.ids.ts"],
     "CommunityReadAgain": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityReadFailed": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityReading": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
@@ -347,6 +361,8 @@
     "CommunityScroll": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityUseHolderAgent": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityVouchPrivately": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "ConfirmActionEnterPIN": ["src/screens/PINVerify.tsx"],
+    "ConfirmActionWithPIN": ["src/screens/PINVerify.tsx"],
     "ConfirmBiometric": ["src/components/modals/BiometricConfirmationModal.tsx"],
     "ConfirmButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmDeclineButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -759,6 +775,18 @@
     "KeysMovedDevices": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedOk": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "Language": ["src/screens/Settings.tsx"],
+    "LateStepAsking": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepCheckReady": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepFinishBar": ["src/screens/Chat.tsx"],
+    "LateStepHeld": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepImReady": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepNotNow": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepPeerAsked": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepPeerNotNow": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepStopExchange": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepStopForNow": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepWaitInBackground": ["src/modules/vrc/components/LateStepCards.tsx"],
+    "LateStepWaiting": ["src/modules/vrc/components/LateStepCards.tsx"],
     "LeaveCommunityButton": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "LeaveCommunityConfirm": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "LeaveCommunityConfirmCard": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
@@ -805,6 +833,8 @@
     "MessagesEmptyNewMessage": ["src/screens/Messages.tsx"],
     "MessagesFetchingNew": ["src/screens/Messages.tsx"],
     "MessagesGestureRoot": ["src/screens/Messages.tsx"],
+    "MessagesHiddenRooms": ["src/screens/Messages.tsx"],
+    "MessagesHiddenRoomsShow": ["src/screens/Messages.tsx"],
     "MessagesListDelete": ["src/components/listItems/ContactListItem.tsx"],
     "MessagesListTimer": ["src/components/listItems/ContactListItem.tsx"],
     "MessagesListUnread": [
@@ -817,6 +847,8 @@
     "MessagesRoomsTryAgain": ["src/screens/Messages.tsx"],
     "MessagesSearch": ["src/screens/Messages.tsx"],
     "MessagesSearchClear": ["src/screens/Messages.tsx"],
+    "MessagesWaitingForYou": ["src/modules/polls/components/Polls.ids.ts"],
+    "MessagesWaitingForYouMore": ["src/modules/polls/components/Polls.ids.ts"],
     "MyAgent": ["src/navigators/TabStack.tsx"],
     "MyAgentActivity": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentApprovalCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -852,6 +884,7 @@
     "MyQRIdentity": ["src/components/misc/QRScanner.tsx"],
     "MyQRShareLink": ["src/components/misc/QRScanner.tsx"],
     "MyQRShareLinkError": ["src/components/misc/QRScanner.tsx"],
+    "MyQRShareLinkKeepOpen": ["src/components/misc/QRScanner.tsx"],
     "MyQRShareLinkNote": ["src/components/misc/QRScanner.tsx"],
     "NameInput": ["src/components/forms/WalletNameForm.tsx", "src/screens/RenameContact.tsx"],
     "NewMessageAddContact": ["src/screens/NewMessage.tsx"],
@@ -906,46 +939,66 @@
     "PhotoRemoveBody": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
     "PhotoRemoveConfirm": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
     "PhotoRemoveNotNow": ["src/modules/directory/components/PhotoRemoveSheet.tsx"],
+    "PollAppBehind": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollBackToCommunity": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotBack": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotBeforeItGoes": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotBoardLine": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCantShow": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCast": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCastFailed": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollBallotCastStep": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCasting": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotCheck": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotDetails": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotFirstHour": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotOption": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollBallotPauseBar": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotQuestion": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotScreen": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotSeenLine": ["src/modules/polls/components/Polls.ids.ts"],
     "PollBallotTextAnswer": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollCertifiedLine": ["src/modules/polls/components/Polls.ids.ts"],
     "PollClosed": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollClosedEarly": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollCredentialRoll": ["src/modules/polls/components/Polls.ids.ts"],
     "PollGetTicket": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollHead": ["src/modules/polls/components/Polls.ids.ts"],
     "PollHostedAgent": ["src/modules/polls/components/Polls.ids.ts"],
     "PollLimited": ["src/modules/polls/components/Polls.ids.ts"],
     "PollNeedsUpdate": ["src/modules/polls/components/Polls.ids.ts"],
     "PollNoAgent": ["src/modules/polls/components/Polls.ids.ts"],
     "PollNotOpenYet": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollParties": ["src/modules/polls/components/Polls.ids.ts"],
     "PollReadFailed": ["src/modules/polls/components/Polls.ids.ts"],
     "PollReading": ["src/modules/polls/components/Polls.ids.ts"],
     "PollRefused": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollResultOption": ["src/modules/polls/components/Polls.ids.ts"],
     "PollResults": ["src/modules/polls/components/Polls.ids.ts"],
     "PollResultsNotReady": ["src/modules/polls/components/Polls.ids.ts"],
     "PollSameOperator": ["src/modules/polls/components/Polls.ids.ts"],
     "PollScreen": ["src/modules/polls/components/Polls.ids.ts"],
     "PollSending": ["src/modules/polls/components/Polls.ids.ts"],
     "PollSendingStopped": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollStepBar": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollTextReleaseEarly": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTicketHeld": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollTicketTimeline": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTitle": ["src/modules/polls/components/Polls.ids.ts"],
     "PollTryAgain": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteIn": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteLater": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteLaterAdvice": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollVoteLaterKeeps": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteNow": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollVotesCounted": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollWaitingCard": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollWaitingCardNotNow": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollWaitingCardOpen": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollWaitingCardTitle": ["src/modules/polls/components/Polls.ids.ts"],
     "PollWhoRunsIt": ["src/modules/polls/components/Polls.ids.ts"],
     "PollWhoSeesWhat": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollYourPart": ["src/modules/polls/components/Polls.ids.ts"],
     "PredicateInput": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateName": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateValue": ["src/components/misc/VerifierCredentialCard.tsx"],
@@ -970,6 +1023,7 @@
     "PushNotificationContinue": ["src/screens/PushNotifications.tsx"],
     "PushNotificationImage": ["src/components/views/PushNotificationsContent.tsx"],
     "PushNotificationNotNow": ["src/screens/PushNotifications.tsx"],
+    "PushNotificationNotSetUp": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationSettings": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationSwitch": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationWhatItSays": ["src/components/views/PushNotificationsContent.tsx"],
@@ -1014,6 +1068,9 @@
     "RelationshipUpgradeSend": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeWaiting": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RelationshipUpgradeWitness": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RemoteVrcNotificationsAsk": ["src/modules/vrc/components/RemoteVrcNotificationsAsk.tsx"],
+    "RemoteVrcNotificationsNotNow": ["src/modules/vrc/components/RemoteVrcNotificationsAsk.tsx"],
+    "RemoteVrcNotificationsTurnOn": ["src/modules/vrc/components/RemoteVrcNotificationsAsk.tsx"],
     "RemoveFromWallet": ["src/components/record/RecordRemove.tsx"],
     "RemovedPhone": ["src/modules/trust-tasks/screens/RemovedPhoneCard.tsx"],
     "RequestAsks": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
@@ -1095,6 +1152,7 @@
     "RoomInfoHide": ["src/modules/rooms/screens/RoomInfo.tsx"],
     "RoomInfoMembers": ["src/modules/rooms/screens/RoomInfo.tsx"],
     "RoomInfoNotes": ["src/modules/rooms/screens/RoomInfo.tsx"],
+    "RoomInfoShow": ["src/modules/rooms/screens/RoomInfo.tsx"],
     "RoomInfoYou": ["src/modules/rooms/screens/RoomInfo.tsx"],
     "RoomLoadingOlder": ["src/modules/rooms/screens/Room.tsx"],
     "RoomMembers": ["src/modules/rooms/components/RoomMembersTab.tsx"],
@@ -1109,6 +1167,8 @@
     "RoomMessageRow": ["src/modules/rooms/components/RoomMessageRow.tsx"],
     "RoomMessageRowHide": ["src/modules/rooms/components/RoomMessageRow.tsx"],
     "RoomMonogram": ["src/modules/rooms/components/RoomHeader.tsx"],
+    "RoomNotJoined": ["src/modules/rooms/components/RoomNotJoined.tsx"],
+    "RoomNotJoinedOffer": ["src/modules/rooms/components/RoomNotJoined.tsx"],
     "RoomNoteBack": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteBodyInput": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteCancel": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
@@ -1116,11 +1176,15 @@
     "RoomNoteEdit": ["src/modules/rooms/components/RoomNoteCard.tsx"],
     "RoomNoteEditor": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteFailed": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
+    "RoomNoteMarker": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
+    "RoomNoteMarkerOpen": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
+    "RoomNoteMarkerWords": ["src/modules/rooms/components/RoomNoteMarker.tsx"],
     "RoomNoteNew": ["src/modules/rooms/components/RoomNotesTab.tsx"],
     "RoomNotePinned": ["src/modules/rooms/components/RoomNoteCard.tsx"],
     "RoomNotePost": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNotePostingAs": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNotePreview": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
+    "RoomNoteReactions": ["src/modules/rooms/screens/Room.tsx"],
     "RoomNoteRemoved": ["src/modules/rooms/components/RoomNoteCard.tsx"],
     "RoomNoteReread": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
     "RoomNoteReview": ["src/modules/rooms/components/RoomNoteEditor.tsx"],
@@ -1136,6 +1200,8 @@
     "RoomNotesNone": ["src/modules/rooms/components/RoomNotesTab.tsx"],
     "RoomNotesReading": ["src/modules/rooms/components/RoomNotesTab.tsx"],
     "RoomNotesUnavailable": ["src/modules/rooms/components/RoomNotesTab.tsx"],
+    "RoomNotesWaiting": ["src/modules/rooms/components/RoomNotesWaiting.tsx"],
+    "RoomNotesWaitingNewest": ["src/modules/rooms/components/RoomNotesWaiting.tsx"],
     "RoomOfferAccept": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferAccess": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferActingAs": ["src/modules/rooms/screens/RoomOffer.tsx"],
@@ -1154,23 +1220,40 @@
     "RoomOfferUnavailable": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOfferUntil": ["src/modules/rooms/screens/RoomOffer.tsx"],
     "RoomOffers": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomOffersFailed": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomPart": ["src/modules/rooms/screens/RoomPart.tsx"],
     "RoomPollFailed": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPollTryAgain": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostAgent": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostAuthor": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostBubble": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostCancel": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostLate": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostNotSent": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostReactions": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostRemoved": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostRetry": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostRewrote": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostSending": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostTime": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostUnread": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostWithdrawn": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPosts": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsFailed": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsIncomplete": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsNone": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsReading": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsUnavailable": ["src/modules/rooms/screens/Room.tsx"],
+    "RoomQuote": ["src/modules/rooms/components/RoomQuote.tsx"],
+    "RoomQuoteChanged": ["src/modules/rooms/components/RoomQuote.tsx"],
+    "RoomQuoteName": ["src/modules/rooms/components/RoomQuote.tsx"],
+    "RoomQuoteText": ["src/modules/rooms/components/RoomQuote.tsx"],
+    "RoomReactionsBackdrop": ["src/modules/rooms/components/RoomReactionsSheet.tsx"],
+    "RoomReactionsClose": ["src/modules/rooms/components/RoomReactionsSheet.tsx"],
+    "RoomReactionsLayout": ["src/modules/rooms/components/RoomReactionsSheet.tsx"],
+    "RoomReactionsList": ["src/modules/rooms/components/RoomReactionsSheet.tsx"],
+    "RoomReactionsSheet": ["src/modules/rooms/components/RoomReactionsSheet.tsx"],
+    "RoomReactionsValue": ["src/modules/rooms/components/RoomReactionsSheet.tsx"],
     "RoomReadFailed": [
       "src/modules/rooms/screens/Room.tsx",
       "src/modules/rooms/screens/RoomInfo.tsx",
@@ -1204,6 +1287,7 @@
       "src/modules/rooms/screens/RoomsHome.tsx"
     ],
     "RoomsReadFailed": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomsReadFailedCard": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomsReading": [
       "src/modules/rooms/components/CommunityRoomsSection.tsx",
       "src/modules/rooms/components/RoomsListBody.tsx"
@@ -1211,6 +1295,7 @@
     "RoomsSampleDataBanner": ["src/modules/rooms/components/SampleDataBanner.tsx"],
     "RoomsStale": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomsTryAgain": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomsTryingAgain": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "RoomsUnavailable": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "Save": [
       "src/components/forms/WalletNameForm.tsx",
@@ -1441,6 +1526,7 @@
     "VettingVouchTokens": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingWithdrawButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingYouVetFor": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VrcFlowKeepOpen": ["src/screens/Chat.tsx"],
     "VtaClaim": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
     "VtaClaimCancel": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
     "VtaClaimClaiming": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
@@ -1569,6 +1655,7 @@
     "AgentDeviceUntil_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDevice_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentGetCardsRefused_": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
+    "AgentIdentityShared_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentJourney": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
     "AgentJourneyStop_": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
     "AgentMemberBeforeLink_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
@@ -1624,6 +1711,7 @@
     "RoomPost_": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomRow_": ["src/modules/rooms/components/RoomRow.tsx"],
     "RoomsGroup_": ["src/modules/rooms/components/RoomsListBody.tsx"],
+    "RoomsStillLoading_": ["src/modules/rooms/components/RoomsListBody.tsx"],
     "SetActiveProfile-": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "SwitchProfile-": ["src/components/misc/QRScanner.tsx"],
     "SwitchProfileAvatar-": ["src/components/misc/QRScanner.tsx"],
@@ -1669,6 +1757,9 @@
       "src/components/chat/ChatMessage.tsx": "ChatIds.image"
     },
     {
+      "src/components/chat/ChatMessage.tsx": "ChatIds.photoSent"
+    },
+    {
       "src/components/chat/ChatMessage.tsx": "ChatIds.reactions"
     },
     {
@@ -1708,6 +1799,36 @@
       "src/components/chat/MessageInput.tsx": "ChatIds.composerField"
     },
     {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhoto"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoBackdrop"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoDelete"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoFailed"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoNotNow"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoRetry"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoSheet"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoSheetScroll"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoStatus"
+    },
+    {
+      "src/components/chat/PendingPhotoBubble.tsx": "ChatIds.pendingPhotoStop"
+    },
+    {
       "src/components/chat/ReactionBar.tsx": "ChatIds.reactionBar"
     },
     {
@@ -1715,6 +1836,12 @@
     },
     {
       "src/components/chat/ReactionBar.tsx": "`${ChatIds.reaction}-${index}`"
+    },
+    {
+      "src/components/messages/WaitingForYou.tsx": "PollsIds.waitingFold"
+    },
+    {
+      "src/components/messages/WaitingForYou.tsx": "PollsIds.waitingStack"
     },
     {
       "src/components/misc/CredentialCard11ActionFooter.tsx": "testID"
@@ -1774,19 +1901,67 @@
       "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.row"
     },
     {
+      "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.rowChip"
+    },
+    {
       "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.rowStatus"
+    },
+    {
+      "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.rowTimeBar"
     },
     {
       "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.section"
     },
     {
+      "src/modules/polls/components/CommunityPollsSection.tsx": "PollsIds.waiting"
+    },
+    {
+      "src/modules/polls/components/PollParts.tsx": "PollsIds.stepBar"
+    },
+    {
+      "src/modules/polls/components/PollResults.tsx": "PollsIds.certifiedLine"
+    },
+    {
+      "src/modules/polls/components/PollResults.tsx": "PollsIds.resultOption"
+    },
+    {
       "src/modules/polls/components/PollResults.tsx": "PollsIds.results"
+    },
+    {
+      "src/modules/polls/components/PollResults.tsx": "PollsIds.votesCounted"
+    },
+    {
+      "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCard"
+    },
+    {
+      "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCardNotNow"
+    },
+    {
+      "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCardOpen"
+    },
+    {
+      "src/modules/polls/components/PollWaitingCard.tsx": "PollsIds.waitingCardTitle"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.appBehind"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.backToCommunity"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.closed"
     },
     {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.closedEarly"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.credentialRoll"
+    },
+    {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.getTicket"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.head"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.hostedAgent"
@@ -1802,6 +1977,9 @@
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.notOpenYet"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.parties"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.readFailed"
@@ -1828,7 +2006,13 @@
       "src/modules/polls/screens/Poll.tsx": "PollsIds.sendingStopped"
     },
     {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.textReleaseEarly"
+    },
+    {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.ticketHeld"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.ticketTimeline"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.title"
@@ -1846,6 +2030,9 @@
       "src/modules/polls/screens/Poll.tsx": "PollsIds.voteLaterAdvice"
     },
     {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.voteLaterKeeps"
+    },
+    {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.voteNow"
     },
     {
@@ -1853,6 +2040,9 @@
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.whoSeesWhat"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.yourPart"
     },
     {
       "src/modules/polls/screens/PollBallot.tsx": "PollsIds.back"
@@ -1891,6 +2081,9 @@
       "src/modules/polls/screens/PollBallot.tsx": "PollsIds.option"
     },
     {
+      "src/modules/polls/screens/PollBallot.tsx": "PollsIds.pauseBar"
+    },
+    {
       "src/modules/polls/screens/PollBallot.tsx": "PollsIds.question"
     },
     {
@@ -1904,6 +2097,9 @@
     },
     {
       "src/modules/polls/screens/PollBallot.tsx": "PollsIds.textAnswer"
+    },
+    {
+      "src/modules/polls/screens/PollBallot.tsx": "`${PollsIds.castStep}_${state}`"
     },
     {
       "src/modules/rooms/components/RoomMembersTab.tsx": "testID"
