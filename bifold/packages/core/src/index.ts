@@ -280,6 +280,7 @@ export type {
 export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,
+  setSharedConnectEnabled,
   setDidCommV2Enabled,
   setPeerLegCarriage,
   getPeerLegCarriage,

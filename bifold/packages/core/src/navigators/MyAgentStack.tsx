@@ -23,6 +23,7 @@ import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiHiddenVetter from '../modules/trust-tasks/screens/VtiHiddenVetter'
 import VtiHiddenVetting from '../modules/trust-tasks/screens/VtiHiddenVetting'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
+import SharedConnect from '../modules/trust-tasks/screens/SharedConnect'
 import SignIn from '../modules/trust-tasks/screens/SignIn'
 import VtaClaim from '../modules/trust-tasks/screens/VtaClaim'
 import RoomsHome from '../modules/rooms/screens/RoomsHome'
@@ -202,6 +203,13 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         // Each scan is its own screen, as for sign-in.
         getId={({ params }) => params?.scanId}
         options={{ title: t('Screens.VtaClaim'), ...ScreenOptionsDictionary[Screens.VtaClaim] }}
+      />
+      {/* A shared-connect link (relationship over TSP), scanned or pasted; reached only with its developer flag on. */}
+      <Stack.Screen
+        name={Screens.SharedConnect}
+        component={SharedConnect as React.FC}
+        getId={({ params }) => params?.scanId}
+        options={{ title: t('Screens.SharedConnect'), ...ScreenOptionsDictionary[Screens.SharedConnect] }}
       />
       {/* Rooms: reached only from the entry points the rooms flag shows. */}
       <Stack.Screen

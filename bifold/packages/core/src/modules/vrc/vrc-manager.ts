@@ -305,6 +305,22 @@ export async function validateRelationshipCredential(
 const connectionCredentialOffers = new Map<string, 'pending' | 'offered' | 'failed'>()
 
 /**
+ * The shape of a VRC chosen by the path that issues it rather than by the
+ * peer's RCE announcement (relationship-over-TSP plan, WP8/decision 4).
+ * `suite` is informational for the builder (the signature is made by the
+ * caller); it is kept here so one object describes the credential end to end.
+ */
+export interface VrcProfile {
+  vc20: boolean
+  dataIntegrity: boolean
+  suite: 'eddsa-jcs-2022' | 'eddsa-rdfc-2022'
+  /** Whether the credential expires (`validUntil`); false leaves the member out. */
+  validUntil: boolean
+  /** Whether the hardware-attestation evidence context is declared. */
+  evidence: boolean
+}
+
+/**
  * Build VRC credential.
  *
  * Per the DTG spec, `issuer` is a bare DID string — the human-readable contact
@@ -319,7 +335,8 @@ const connectionCredentialOffers = new Map<string, 'pending' | 'offered' | 'fail
 export async function buildVrcCredential(
   agent: Agent,
   myRelationshipDid: string,
-  counterpartyRelationshipDid: string
+  counterpartyRelationshipDid: string,
+  profile?: VrcProfile
 ): Promise<{ credential: any }> {
   // Backdate issuance to tolerate clock skew between issuer and holder devices —
   // the holder rejects credentials whose issuanceDate is in its future.
@@ -332,11 +349,16 @@ export async function buildVrcCredential(
   // no suite context at all (credentials/v2 already defines the
   // DataIntegrityProof terms, nothing is appended during signing —
   // docs/CRYPTO_SUITE_FOLLOWUP.md, Level 0 spike check 4).
-  const useVc20 = await counterpartySpeaksVc20(agent, counterpartyRelationshipDid)
-  const useDi = useVc20
+  // An explicit profile (the shared-connect path) selects the shape by path,
+  // not by the RCE version a peer announced: peers outside Keyring never announce one.
+  const useVc20 = profile ? profile.vc20 : await counterpartySpeaksVc20(agent, counterpartyRelationshipDid)
+  const useDi = profile ? profile.dataIntegrity : useVc20
 
-  const useHardwareEvidenceContext =
-    useVc20 && (await counterpartySpeaksHardwareEvidenceContext(agent, counterpartyRelationshipDid))
+  const useHardwareEvidenceContext = profile
+    ? profile.evidence && useVc20
+    : useVc20 && (await counterpartySpeaksHardwareEvidenceContext(agent, counterpartyRelationshipDid))
+  // Without evidence (profile.evidence false) the credential names no evidence terms, so no third context is needed.
+  const evidenceContexts = profile && !profile.evidence ? [] : [selectVrcEvidenceContextUrl(useHardwareEvidenceContext)]
 
   const credential: any = useVc20
     ? {
@@ -363,10 +385,7 @@ export async function buildVrcCredential(
         // extractSignedContent only strips evidence/proof, so the context
         // can't be appended after signing without invalidating the
         // hardware signature.
-        '@context': selectCredentialContexts({ useVc20, useDi }, [
-          REGISTRY_DTG_CONTEXT_URL,
-          selectVrcEvidenceContextUrl(useHardwareEvidenceContext),
-        ]),
+        '@context': selectCredentialContexts({ useVc20, useDi }, [REGISTRY_DTG_CONTEXT_URL, ...evidenceContexts]),
         type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
         // Bare DID string per DTG spec — contact info rides in the RCard instead
         issuer: myRelationshipDid,
@@ -381,7 +400,7 @@ export async function buildVrcCredential(
         // before hardware signing, so it is part of the hardware-signed bytes.
         issuerScope: 'pairwise',
         validFrom: issuanceTimestamp,
-        validUntil: expirationTimestamp,
+        ...(profile && !profile.validUntil ? {} : { validUntil: expirationTimestamp }),
         credentialSubject: {
           id: counterpartyRelationshipDid,
         },

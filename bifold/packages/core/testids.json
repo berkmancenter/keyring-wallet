@@ -1330,6 +1330,23 @@
     "Share": ["src/screens/JSONDetails.tsx", "src/screens/ProofRequest.tsx"],
     "ShareButton": ["src/screens/ProofRequesting.tsx"],
     "ShareableLinkSwitchElement": ["src/screens/Developer.tsx"],
+    "SharedConnect": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectCancel": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectConfirm": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectConnect": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectConnecting": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectContact": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectDone": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectExpires": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectName": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectReading": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectRelay": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectResult": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectRetry": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectStop": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectUnanswered": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectUnverified": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectWaiting": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
     "Show": ["src/components/inputs/PINInput.tsx"],
     "ShowCredentialDetails": [
       "src/components/misc/Card10Pure.tsx",
@@ -2257,6 +2274,9 @@
     },
     {
       "src/modules/trust-tasks/screens/SaidFailure.tsx": "testID"
+    },
+    {
+      "src/modules/trust-tasks/screens/SharedConnect.tsx": "key"
     },
     {
       "src/modules/trust-tasks/screens/SignIn.tsx": "key"

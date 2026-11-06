@@ -27,6 +27,7 @@ import { agentHomeScreen } from '../screens/agentHome'
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
 import { sameIdentity } from './didScid'
+import { isSharedConnectEnabled } from './sharedConnectFlag'
 import {
   readTrigger,
   TRIGGER_UI_MESSAGE_KEYS,
@@ -150,17 +151,32 @@ export function isTriggerLink(text: string): boolean {
 }
 
 /**
+ * A link as it may be logged. A trigger link (a sign-in, an agent claim, a
+ * shared-connect code) is never logged as text: its contact, its handle and
+ * a shared-connect `_label` are the sender's, and a label is whatever they
+ * typed. Only its kind and length are. Any other link is returned unchanged.
+ */
+export function linkForLog(text: string): string {
+  const trimmed = text.trim()
+  return isTriggerLink(trimmed) ? `trigger link (${[...trimmed].length} chars)` : text
+}
+
+/**
  * What the scanner says of a trigger link. With sign-in off (the default) it
  * is the words the trigger-link spec gives a reader for a flow it does not
  * implement (outcome `update`), whatever the link. With it on, the link is
  * read, and a code that cannot be used says why (expired, can't be used, …).
  * Either way nothing is sent and nothing is logged. A sign-in the reader
  * accepts goes to the sign-in screen instead (`signInToOpen`).
+ *
+ * The reads here claim no channel: this routing serves a scan, a paste and a
+ * deep link alike and is not told which, and the reader's result never
+ * depends on it.
  */
 function triggerLinkError(text: string): KeyringLinkError {
   let ui: Exclude<TriggerUi, 'pass-on'> = 'update'
   if (triggerLinkSignInEnabled()) {
-    const action = triggerAction(readTrigger(text, { channel: 'scan' }))
+    const action = triggerAction(readTrigger(text))
     if (action.kind === 'say' && action.ui !== 'pass-on') ui = action.ui
   }
   return new KeyringLinkError(TRIGGER_UI_MESSAGES[ui], undefined, TRIGGER_UI_MESSAGE_KEYS[ui])
@@ -173,7 +189,7 @@ function triggerLinkError(text: string): KeyringLinkError {
  */
 function signInToOpen(text: string): boolean {
   if (!triggerLinkSignInEnabled()) return false
-  const action = triggerAction(readTrigger(text, { channel: 'scan' }))
+  const action = triggerAction(readTrigger(text))
   return action.kind === 'proceed' && action.flow === 'sign-in'
 }
 
@@ -183,8 +199,20 @@ function signInToOpen(text: string): boolean {
  * sent until the person continues on that screen.
  */
 function vtaClaimToOpen(text: string): boolean {
-  const action = triggerAction(readTrigger(text, { channel: 'scan' }))
+  const action = triggerAction(readTrigger(text))
   return action.kind === 'proceed' && action.flow === 'vta-claim'
+}
+
+/**
+ * Whether a trigger link opens the shared-connect confirm screen: only with the
+ * developer flag on (the reader does not know the flow otherwise), and only for
+ * a link the reader accepts. Read offline; nothing is sent until the person
+ * taps Connect on that screen.
+ */
+function sharedConnectToOpen(text: string): boolean {
+  if (!isSharedConnectEnabled()) return false
+  const action = triggerAction(readTrigger(text))
+  return action.kind === 'proceed' && action.flow === 'shared-connect'
 }
 
 /** Why an invitation offer could not be taken, in the person's words. */
@@ -355,7 +383,7 @@ export type MyAgentScreenName =
  * route's id): a second code scanned while one is on screen opens a new one,
  * and never shows the first one's code or result.
  */
-export type ScannedCodeDestination = { screen: 'SignIn' | 'VtaClaim'; link: string; scanId: string }
+export type ScannedCodeDestination = { screen: 'SignIn' | 'VtaClaim' | 'SharedConnect'; link: string; scanId: string }
 
 /** Where a link lands, inside the My Agent stack. */
 export type MyAgentDestination = MyAgentScreenName | ScannedCodeDestination
@@ -373,6 +401,8 @@ export const MY_AGENT_SCREEN: Record<MyAgentScreenName | ScannedCodeDestination[
   SignIn: Screens.SignIn,
   // An agent host's one-scan setup code, read and accepted.
   VtaClaim: Screens.VtaClaim,
+  // A shared-connect link (relationship over TSP), read and accepted behind the developer flag.
+  SharedConnect: Screens.SharedConnect,
 }
 
 /**
@@ -584,6 +614,10 @@ export async function routeKeyringAgentLink(
       }
       if (vtaClaimToOpen(trimmed)) {
         navigate({ screen: 'VtaClaim', link: trimmed, scanId: newScanId() })
+        return
+      }
+      if (sharedConnectToOpen(trimmed)) {
+        navigate({ screen: 'SharedConnect', link: trimmed, scanId: newScanId() })
         return
       }
       throw triggerLinkError(trimmed)

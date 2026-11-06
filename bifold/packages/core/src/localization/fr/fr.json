@@ -1146,7 +1146,8 @@
     "VtaAgentSettings": "Paramètres de l'agent",
     "Invited": "Rejoindre sur invitation",
     "Join": "Rejoindre une communauté",
-    "VtaClaim": "Configurer votre agent"
+    "VtaClaim": "Configurer votre agent",
+    "SharedConnect": "Se connecter avec quelqu'un"
   },
   "Loading": {
     "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
@@ -2844,6 +2845,33 @@
       "contextMismatch": "Le service n'a pas accepté l'approbation de cette connexion. Actualisez la page de connexion et réessayez.",
       "unknown": "Un problème est survenu, rien n'a été connecté. Actualisez la page de connexion et réessayez."
     }
+  },
+  "SharedConnect": {
+    "ConfirmTitle": "Se connecter avec cette personne ?",
+    "ConfirmBody": "Quelqu'un a partagé un code pour se connecter avec vous. Rien n'est envoyé tant que vous n'appuyez pas sur Se connecter.",
+    "Name": "Le nom donné",
+    "Unverified": "Non vérifié",
+    "NoName": "Aucun nom donné",
+    "Contact": "Son adresse",
+    "Relay": "Relais de messages",
+    "NoRelay": "Aucun nom de relais à afficher",
+    "Expires": "Ce code expire {{time}}",
+    "Connect": "Se connecter",
+    "Cancel": "Annuler",
+    "Reading": "Lecture du code…",
+    "Connecting": "Mise en place de la connexion…",
+    "Ready": "Votre demande a été envoyée.",
+    "Waiting": "En attente de sa réponse…",
+    "Unanswered": "Pas encore de réponse. Cette personne est peut-être hors ligne. Vous pouvez redemander ou arrêter.",
+    "Retry": "Redemander",
+    "Stop": "Arrêter",
+    "Expired": "Ce code a expiré. Demandez-en un nouveau.",
+    "Declined": "Cette personne a refusé la connexion.",
+    "Refused": "Cette personne n'a pas pu accepter la connexion.",
+    "Completed": "Connecté.",
+    "Cancelled": "Vous avez arrêté la connexion.",
+    "Failed": "La connexion n'a pas pu être mise en place. Réessayez.",
+    "Done": "Terminé"
   },
   "VtaClaim": {
     "ConfirmTitle": "Ajouter ce téléphone à votre nouvel agent ?",

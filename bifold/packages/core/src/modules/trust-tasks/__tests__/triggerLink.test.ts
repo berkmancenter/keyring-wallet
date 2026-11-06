@@ -16,6 +16,7 @@ import {
   TRIGGER_UI_MESSAGES,
   readTrigger,
   selectService,
+  SHARED_CONNECT_SELECTION,
   serviceEndpointOfType,
   triggerAction,
   triggerLinkSignInEnabled,
@@ -124,5 +125,48 @@ describe('an endpoint by service type, as sign-in takes TrustTaskHTTPS and SignI
 
   it('finds nothing for a type the document does not publish', () => {
     expect(serviceEndpointOfType(doc, 'DIDCommMessaging')).toBeUndefined()
+  })
+})
+
+describe('an array endpoint, read only where shared-connect selects a transport', () => {
+  const ARRAY_DOC = {
+    service: [{ type: 'TrustTaskHTTPS', serviceEndpoint: ['https://community.example.org/tt'] }],
+  }
+
+  it('reads as no endpoint for serviceEndpointOfType: sign-in, the rooms door and the polls ballot box are unchanged', () => {
+    expect(serviceEndpointOfType(ARRAY_DOC, 'TrustTaskHTTPS')).toBeUndefined()
+    expect(
+      serviceEndpointOfType(
+        { service: [{ type: 'SignInPortal', serviceEndpoint: [{ uri: 'https://p.example.org' }] }] },
+        'SignInPortal'
+      )
+    ).toBeUndefined()
+    // A plain string and a {uri} endpoint still read as before.
+    expect(
+      serviceEndpointOfType(
+        { service: [{ type: 'TrustTaskHTTPS', serviceEndpoint: 'https://community.example.org/tt' }] },
+        'TrustTaskHTTPS'
+      )
+    ).toBe('https://community.example.org/tt')
+    expect(
+      serviceEndpointOfType(
+        { service: [{ type: 'TrustTaskHTTPS', serviceEndpoint: { uri: 'https://c.example.org/tt' } }] },
+        'TrustTaskHTTPS'
+      )
+    ).toBe('https://c.example.org/tt')
+  })
+
+  it("is read by selectService, entry by entry, skipping one that isn't usable", () => {
+    const document: SelectionDocument = {
+      verified: true,
+      services: [
+        { type: 'TSPTransport', serviceEndpoint: [{ uri: 'http://relay.example.org' }, 'did:web:relay.example.org'] },
+      ],
+    }
+    expect(selectService(document, SHARED_CONNECT_SELECTION)).toMatchObject({
+      outcome: 'select',
+      binding: 'tsp',
+      endpoint: 'did:web:relay.example.org',
+    })
   })
 })

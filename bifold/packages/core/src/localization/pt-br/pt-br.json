@@ -1076,7 +1076,8 @@
     "VtaAgentSettings": "Configurações do agente",
     "Invited": "Entrar por convite",
     "Join": "Entrar em uma comunidade",
-    "VtaClaim": "Configurar seu agente"
+    "VtaClaim": "Configurar seu agente",
+    "SharedConnect": "Conectar com alguém"
   },
   "Loading": {
     "TakingTooLong": "Isso esta demorando mais que o normal. Você pode voltar para a home ou continuar esperando.",
@@ -2757,6 +2758,33 @@
       "contextMismatch": "O serviço não aceitou a aprovação deste login. Atualize a página de login e tente novamente.",
       "unknown": "Algo deu errado, então nada foi conectado. Atualize a página de login e tente novamente."
     }
+  },
+  "SharedConnect": {
+    "ConfirmTitle": "Conectar com esta pessoa?",
+    "ConfirmBody": "Alguém compartilhou um código para se conectar com você. Nada é enviado até você tocar em Conectar.",
+    "Name": "O nome informado",
+    "Unverified": "Não verificado",
+    "NoName": "Nenhum nome informado",
+    "Contact": "Endereço da pessoa",
+    "Relay": "Relé de mensagens",
+    "NoRelay": "Nenhum nome de relé para mostrar",
+    "Expires": "Este código expira {{time}}",
+    "Connect": "Conectar",
+    "Cancel": "Cancelar",
+    "Reading": "Lendo o código…",
+    "Connecting": "Preparando a conexão…",
+    "Ready": "Seu pedido foi enviado.",
+    "Waiting": "Aguardando a resposta da pessoa…",
+    "Unanswered": "Ainda sem resposta. A pessoa pode estar offline. Você pode perguntar de novo ou parar.",
+    "Retry": "Perguntar de novo",
+    "Stop": "Parar",
+    "Expired": "Este código expirou. Peça um novo.",
+    "Declined": "A pessoa recusou a conexão.",
+    "Refused": "A pessoa não pôde aceitar a conexão.",
+    "Completed": "Conectado.",
+    "Cancelled": "Você interrompeu a conexão.",
+    "Failed": "Não foi possível preparar a conexão. Tente novamente.",
+    "Done": "Concluído"
   },
   "VtaClaim": {
     "ConfirmTitle": "Adicionar este telefone ao seu novo agente?",

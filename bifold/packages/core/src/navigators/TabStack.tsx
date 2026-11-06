@@ -32,7 +32,12 @@ import { myAgentTabBadge, useWaitingRequestsCount } from '../modules/trust-tasks
 import { SiblingNoticeHost } from '../modules/trust-tasks/screens/SiblingNoticeHost'
 import { StepUpAskHost } from '../modules/trust-tasks/screens/StepUpAskHost'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
-import { isMessagesLink, keyringAgentLinkKind, myAgentLinkParams } from '../modules/trust-tasks/module/vtiLinks'
+import {
+  isMessagesLink,
+  keyringAgentLinkKind,
+  linkForLog,
+  myAgentLinkParams,
+} from '../modules/trust-tasks/module/vtiLinks'
 import { linkNoticeToast, openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
 import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
@@ -175,7 +180,7 @@ const TabStack: React.FC = () => {
 
   const handleDeepLink = useCallback(
     async (deepLink: string) => {
-      logger.info(`Handling deeplink: ${deepLink}`)
+      logger.info(`Handling deeplink: ${linkForLog(deepLink)}`)
 
       // A tapped message notification (MESSAGES_LINK): the Messages tab,
       // through the main stack so it comes above any open modal.

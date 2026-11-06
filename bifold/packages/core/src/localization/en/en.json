@@ -1226,7 +1226,8 @@
     "VtaDevices": "My devices",
     "VtaNewPhoneOffer": "Your other devices",
     "SignIn": "Sign in",
-    "VtaClaim": "Set up your agent"
+    "VtaClaim": "Set up your agent",
+    "SharedConnect": "Connect with someone"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -2907,6 +2908,33 @@
       "contextMismatch": "The service didn't accept the approval for this sign-in. Refresh the sign-in page and try again.",
       "unknown": "Something went wrong, so nothing was signed in. Refresh the sign-in page and try again."
     }
+  },
+  "SharedConnect": {
+    "ConfirmTitle": "Connect with this person?",
+    "ConfirmBody": "Someone shared a code to connect with you. Nothing is sent until you tap Connect.",
+    "Name": "The name they gave",
+    "Unverified": "Unverified",
+    "NoName": "No name given",
+    "Contact": "Their address",
+    "Relay": "Message relay",
+    "NoRelay": "No relay name to show",
+    "Expires": "This code expires {{time}}",
+    "Connect": "Connect",
+    "Cancel": "Cancel",
+    "Reading": "Reading the code…",
+    "Connecting": "Setting up the connection…",
+    "Ready": "Your request was sent.",
+    "Waiting": "Waiting for them to answer…",
+    "Unanswered": "No answer yet. They may be offline. You can ask again, or stop.",
+    "Retry": "Ask again",
+    "Stop": "Stop",
+    "Expired": "This code has expired. Ask them for a new one.",
+    "Declined": "They declined the connection.",
+    "Refused": "They could not accept the connection.",
+    "Completed": "Connected.",
+    "Cancelled": "You stopped the connection.",
+    "Failed": "The connection could not be set up. Try again.",
+    "Done": "Done"
   },
   "VtaClaim": {
     "ConfirmTitle": "Add this phone to your new agent?",
