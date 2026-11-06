@@ -128,7 +128,7 @@ Built, scanner side, behind the shared-connect developer flag (code under `trust
 | WP11, WP12 | Built. en, fr and pt-br; the logging test asserts no label, reason or link text. |
 | WP14 | Built as a carriage, tested against fakes only. |
 | WP9 | Cut (see §7). |
-| WP13 | Offline only: `sharedConnectInterop` runs real TSP Rev 3 frames and real keys against a fake inviter. The Node rung `tsp-reference/ref-2x-shared-connect` and the live run do not exist. |
+| WP13 | Offline only: `sharedConnectInterop` runs real TSP 1.0 frames and real keys against a fake inviter. The Node rung `tsp-reference/ref-2x-shared-connect` and the live run do not exist. |
 
 Verified by tests, with what the test runs:
 
@@ -144,6 +144,42 @@ Remaining:
 - **Restart recovery.** A live session is held in memory and is gone if the app is killed; the `EncounterRecord` survives but nothing resumes it.
 - **Keyring as inviter** (WP9), cut.
 - **Review.** The decisions in §8 stand as assumptions (the pull request body lists them); the bifold pull request is not opened.
+
+### 4.2 Review feedback applied
+
+Alberto's review of this plan (PR #853, three comments) decided the points below; the code on `feat/relationship-over-tsp` follows them.
+
+**Decisions as made.**
+
+1. `propose/0.1` and `issue/0.1` unchanged, with a document proof on every step: yes.
+2. TSP revision on this path: 1.0. `SHARED_CONNECT_TSP_REVISION` is `'1.0'`, and the carriage passes `'v1'` to `greetPeerOverTsp` and `packTrustTaskForPeer` on every send; inbound 1.0 frames are read.
+3. Signing key: the encounter VID, either key accepted inbound for now.
+4. Credential profile toward RLTP: first be able to read theirs (no `validUntil`, JCS). Changing what Keyring issues toward other peers is a separate decision. Witnessing (the VSC `witnessed/1` statement) and hardware-attestation evidence stay out of this ceremony; if added, an optional step reusing the existing VSC.
+5. Ownership end to end: core, behind the flag, until confirmed.
+
+**What the code check found and changed.**
+
+- TSP revision: `packTrustTaskForPeer` and `greetPeerOverTsp` pack Rev 3 unless given `'v1'`; the decision constant was `rev3`. Now `1.0`, tested on both calls and on real frames (the interop test peeks each scanner frame's revision).
+- `ceremony` member: we sent `{enactment, step, definition}`, which fails the envelope schema. Now `{enactment, step}`. No other document we build carries a `ceremony` member with a `definition` (checked across `trust-tasks/module`). The `{ceremony, challenges}` binding is not sent in `ceremony`.
+- Inbound `ceremony` shape: `encounterMismatch` now refuses (`ceremony`) a member that is not an object, has a key outside the schema's set, lacks `enactment` or `step`, or names a `definition` without a `definitionDigest`. This is on the shared-connect session only; the framework runtime's leniency (`TrustTasksService.consume`) is unchanged.
+- Credential format: `buildVrcCredential` with an explicit profile never consults the legacy `vrc:rceVersion` announcement (a test fails if the dependency container is touched); a control test shows the no-profile path still gives VC 1.1 to a peer that never announced. The legacy connection path keeps its rule.
+- Inbound JCS: re-read. `ceremony.ts` binds the credential issuer to the counterparty relationship DID first, then verifies an `eddsa-jcs-2022` proof through `verifyDocumentProof` under that issuer (verification method must belong to the issuer; proof set handled); other suites take the Credo path unchanged. Kept. Two limits for the PR: a proof set whose first member is not JCS goes to the Credo path and is refused, and the JCS branch does not check `validFrom`/`validUntil`.
+- Trigger-link reader: the did:peer syntax step runs only when a flow in the active config takes `did:peer` (the flag), before `from-not-allowed`. With the flag on, a sign-in link carrying a did:peer now reads `from-not-allowed` (`invalid`) where it read `unsupported-vid` (`update`); with the flag off it is unchanged. Kept as is, tested.
+- Logging: the app's deep-link handler (`TabStack.handleDeepLink`) logged the whole link. It now logs kind and length (`describeLinkForLog`). Nothing else on this path logs a link or `_label`.
+- Label: it was cut and cleaned, and a repeated `_label` refused the link. Now it is dropped whole when over 64 code points or when it carries a control, format, bidirectional, private-use or tag character, and dropped (link still read) when repeated.
+- Connect: it had no guard; a second tap or scan ran the exchange twice. Now once per `_id`: concurrent calls share one start, a kept encounter is joined (live session) or refused as spent, and a start that failed before proposing is marked `failed` so the code can be retried.
+- Size budget: a link over 1,000 code points (long-form `did:peer:4` with TSP and DIDComm measured 1,033 to 1,216) is refused by the reader as `too-long` (`invalid`) before anything is resolved; the screen shows the generic invalid text. Tested on preview and on Connect (nothing minted or kept). Whether the budget grows, or that form carries one service, is #86's call.
+
+**Spec points Alberto raised for #1034 and #86** (nothing sent; for discussion).
+
+1. SPEC §4.11.2 scopes `threadId` to one step's request and response; this path uses `propose.id` as the `threadId` of all six documents.
+2. The enactment is the link's `_id`, so anyone who sees the code learns it; `mutual-attestation/0.1` chose `enactmentPrivacy: blinded` for a similar in-person flow.
+3. `bindings/tsp/0.1` still cites TSP Implementers Draft Rev 2 while all three apps send 1.0.
+4. The TSP service spelling is not agreed: the reference implementation reads `tsp` with `{uri}`, the VTA and Keyring read `TSPTransport` with a mediator DID.
+5. First contact: affinidi-tsp gates application messages on a formed relationship; the ceremony should say whether an inviter accepts an `XRFI` from a VID it has never seen, bounded to a live, unexpired `_id`.
+6. Mutual-attestation overlap: `mutual-attestation/0.1` issues mutual credentials with `credential-exchange/issue`; should it use `vrc/relationships/issue` so a VRC is issued one way everywhere?
+
+**Open on our side.** The envelope's `ceremony.step` is typed as a string in the installed `@openvtc/trust-tasks` (0.27.8); we send the numbers 1 to 6. Alberto's rungs passed with ours, but the schema text was not re-read; confirm, and if it is a string, send step names or numeric strings.
 
 ### WP1: trigger-link reader
 - **Gap.** No `shared-connect` flow; `did:peer` refused; no expiry caps for this flow; `_label` not read.
@@ -171,7 +207,7 @@ Remaining:
 - **Risk.** Relay access control; background or killed app (no push wake for encounter DIDs in the demo).
 
 ### WP5: connectionless TSP and relationship forming
-- **Change.** A `TspEncounterCarriage` whose `send(doc)` calls `greetPeerOverTsp(session, myVid, theirVid, [relayDid, myVid], revision)` once, then `packTrustTaskForPeer(…, revision)`, then `sendTspFrame`. Inbound: `unpackTrustTaskFromPeer` (identity checks included), then registry dispatch with an encounter context. The revision (1.0 or Rev 3) is chosen by peer evidence or configuration; the default needs the counterparts' answer (§9, Q2). Leave `preferDidcommForUpstream` alone: this path does not go through `chooseCarriage`. Answering an inbound `XRFI` with `XRFA` is needed only for WP9.
+- **Change.** A `TspEncounterCarriage` whose `send(doc)` calls `greetPeerOverTsp(session, myVid, theirVid, [relayDid, myVid], revision)` once, then `packTrustTaskForPeer(…, revision)`, then `sendTspFrame`. Inbound: `unpackTrustTaskFromPeer` (identity checks included), then registry dispatch with an encounter context. The revision is TSP 1.0 (`'v1'`), passed on every send including the `XRFI` (decided in review, §4.2); the codec packs Rev 3 unless told `'v1'`. Leave `preferDidcommForUpstream` alone: this path does not go through `chooseCarriage`. Answering an inbound `XRFI` with `XRFA` is needed only for WP9.
 - **Done when.** A fake-peer test (patterns: `vtiTsp.test.ts`, `tspInvite.test.ts`) packs an invite then a document and unpacks both; the live rung against the reference inviter returns a `propose#response`.
 - **Risk.** Silent drops (no relationship, wrong revision, crossing mediators); no accept returned; long-form frames above 12,285 bytes. Leave `evidence` out toward RLTP to stay small.
 
@@ -195,7 +231,7 @@ Remaining:
   | 5 | `issue` | responder | inviter |
   | 6 | `issue#response` (receipt) | inviter | responder |
 
-- **Change.** `propose.id` is a 22-character base64url value and `threadId` equals it on every document. `ceremony: {enactment: _id, step, definition: https://trusttasks.org/ceremony/shared-connect/0.1}`; `definitionDigest` is left out until the definition is published, because the specification makes it a MUST when `definition` is present. `issuer` and `recipient` are the encounter VIDs, in band on every document. Every document gets a proof. For the demo, sign with the issuer VID (it matches the TSP sender) and accept either key inbound.
+- **Change.** `propose.id` is a 22-character base64url value and `threadId` equals it on every document. `ceremony: {enactment: _id, step}` and nothing else: `definition` is not sent until the definition is published and a `definitionDigest` is available, because the envelope schema requires the digest whenever `definition` is present (SPEC §4.11.1). The `{ceremony, challenges}` binding of #1034 belongs in the credential, not in `ceremony`, which is closed. `issuer` and `recipient` are the encounter VIDs, in band on every document. Every document gets a proof. For the demo, sign with the issuer VID (it matches the TSP sender) and accept either key inbound.
 - **Done when.** A schema test feeds a document with `ceremony` through `TrustTasksService.consume`. The pinned `@openvtc/trust-tasks` framework accepts the member (verified, §4.1).
 - **Risk.** Validator strictness; a proof-key mismatch yielding `proofInvalid` on either side.
 
@@ -292,10 +328,10 @@ Needed by Friday 6 November for the TSP demo to be more than a coin toss, becaus
 
 ## 8. Decisions that belong to Alberto
 
-Alberto is the author of `vrc/relationships/propose/0.1` and `issue/0.1` and the Keyring reviewer. None of these is taken.
+Alberto is the author of `vrc/relationships/propose/0.1` and `issue/0.1` and the Keyring reviewer. Review decisions are recorded in §4.2; where §4.2 gives one, it replaces the open question below.
 
 1. Whether `shared-connect` uses `propose/0.1` and `issue/0.1` unchanged (the #1034 revision), with proofs required by the ceremony definition while the task says optional for `propose`, and with the `ceremony` member on every step.
-2. The binding: TSP primary with DIDComm v2 fallback. Which TSP revision Keyring packs toward ecosystem peers (Rev 3 or 1.0), and whether `bindings/tsp/0.1` should move from Implementers Draft Rev 2 to TSP 1.0 (a change in the trust-tasks task force's repository).
+2. The binding: TSP primary with DIDComm v2 fallback. Which TSP revision Keyring packs toward ecosystem peers (decided in review: 1.0, §4.2), and whether `bindings/tsp/0.1` should move from Implementers Draft Rev 2 to TSP 1.0 (a change in the trust-tasks task force's repository).
 3. The document-proof key: the issuer VID, or the relationship DID as the ceremony signs today (`ceremony.ts:1405`).
 4. The credential profile toward non-Keyring peers: no `validUntil`, `eddsa-jcs-2022`, `evidence` dropped or kept. Per counterpart, or a new default?
 5. Ownership of the flow on Keyring's reader side (VTI-LNK-046 needs an owner per reader), and whether `shared-connect` handling lives in core or in a demo profile registered through `registerTrustTask`.
