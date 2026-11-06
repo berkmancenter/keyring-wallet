@@ -1,6 +1,6 @@
 # Keyring relationship path over TSP via VTI trigger links — Plan
 
-**Status:** Draft - for review by Alberto Leon; do not merge before his review. Nothing is built. This plan changes no code.
+**Status:** Draft - for review by Alberto Leon; do not merge before his review. The scanner side is built behind a developer flag on the `feat/relationship-over-tsp` branches (draft pull request 854; the bifold branch has no pull request yet) and verified offline; no live run has happened. §4.1 says what is built, what is verified and what remains.
 **Scope:** Moving Keyring's peer-to-peer relationship ceremony (`vrc/relationships/propose/0.1` and `issue/0.1`) onto the design discussed with RLTP and Consensual: a shared-connect trigger link carries the inviter's peer DID, the scanner proposes, five documents follow, every one with a proof, over the Trust Spanning Protocol (TSP) binding with DIDComm v2 as an allowed carriage. Deadline for a first demonstration: the Interop Builder Weekend, 7 to 10 November 2026.
 **Companion:** [`relationship-over-tsp-plan/2026-11-05-bam.md`](./relationship-over-tsp-plan/2026-11-05-bam.md) — the evidence behind this plan, what was checked and what was not, the registry binding facts, the decision log and the questions for the counterparts.
 **Related plans:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) (TSP as the envelope, Trust Tasks as the operation layer), [`keyring-on-the-vta-farm/tsp_rev3_subtask.md`](./keyring-on-the-vta-farm/tsp_rev3_subtask.md) (the TSP revision cutover, and the 12,285-byte ingress limit in its §3.3), [`nearby-vrc-exchange-plan.md`](./nearby-vrc-exchange-plan.md) (the same ceremony over Bluetooth instead of a code).
@@ -115,6 +115,72 @@ Sizes assume one developer who knows the codebase. S = 0.5 to 1 day, M = 1 to 2 
 
 The critical path is WP6, WP7, then WP5 or WP14, then WP13. WP13's Node rung can start on the first day, because it answers the questions that block WP5. WP1 to WP4 and WP8 are independent of WP6 and can run in parallel with it.
 
+### 4.1 Built, verified, remaining
+
+Built, scanner side, behind the shared-connect developer flag (code under `trust-tasks/module/sharedConnect*.ts` and `screens/SharedConnect.tsx`):
+
+| WP | State |
+|---|---|
+| WP1, WP2, WP3, WP4 | Built. Reader, inviter resolution and service choice, confirm screen, encounter DID and persisted `EncounterRecord`. |
+| WP5, WP6, WP7 | Built as the parallel module: `SharedConnectSession` (scanner proposes first, six documents, receipts, idempotent by document id, keyed by `encounterKey(enactment)`), with TSP and DIDComm v2 carriages on a `VtiMediatorSession` as the encounter DID. |
+| WP8 | Built. `VrcProfile` on `buildVrcCredential` (no `validUntil`, no evidence context, `eddsa-jcs-2022`); JCS verification by the suite the proof names, on the shared-connect path and on the connection-based inbound `issue` handler in `ceremony.ts` (only a JCS proof takes the new branch; every other suite takes the Credo path as before). |
+| WP10 | Built. Two minutes per attempt, two attempts, then `unanswered` (never `failed`); expiry is `_exp` plus a five-minute grace; the screen shows waiting, unanswered (Ask again or Stop), expired, declined, refused, connected and stopped, from the live session. |
+| WP11, WP12 | Built. en, fr and pt-br; the logging test asserts no label, reason or link text. |
+| WP14 | Built as a carriage, tested against fakes only. |
+| WP9 | Cut (see §7). |
+| WP13 | Offline only: `sharedConnectInterop` runs real TSP 1.0 frames and real keys against a fake inviter. The Node rung `tsp-reference/ref-2x-shared-connect` and the live run do not exist. |
+
+Verified by tests, with what the test runs:
+
+- **Framework consume accepts the `ceremony` member.** `TrustTasksService.consume` takes a document carrying `ceremony` (`sharedConnectConsume`). This closes the UNVERIFIED in WP7.
+- **Credo's real numalgo-2 resolver keeps `TSPTransport`.** `didToNumAlgo2DidDocument` leaves the `TSPTransport` type and its mediator-DID endpoint, and the reference spelling `tsp` with a `{uri}` endpoint, intact; only `DIDCommMessaging` is abbreviated (`sharedConnectRealResolver`). This closes the UNVERIFIED in WP2.
+- **Real KMS.** On an in-memory Askar agent and a `did:peer:0` relationship DID made as `getOrCreateRelationshipDid` makes it, `signDocumentProof` and `verifyDocumentProof` round-trip, fail under another DID and fail on a tampered document; the profiled VRC carries an `eddsa-jcs-2022` proof, no `validUntil` and no `evidence`, and verifies by suite; stored as a `W3cCredentialRecord` it reads back with the same digest and a redelivery stores nothing (`__tests__/modules/trust-tasks/sharedConnectRealKms`). Two conditions apply. Storing needs the app's `createVrcDocumentLoader` on the `w3cCredentials` module, because Credo expands every JSON-LD credential when it stores one and the DTG context is not fetchable; the app configures it already. And under jest the tree holds two copies of `@credo-ts/core`, which fails the KMS lookup in `documentProof` ("TypeInfo not known"), so that suite maps one copy onto the other; the app bundle has one copy.
+- **Inbound JCS on the connection ceremony.** A JCS-proofed `issue` is verified under the bound issuer, stored and receipted; a failing JCS proof is refused `notAccepted` and nothing is stored (`ceremonyIssue`).
+- **Screen states.** Each session state maps to its text, Ask again calls `retry`, Stop calls `cancel`, and the screen stops listening when it closes (`SharedConnectScreen`, `sharedConnectSession`).
+
+Remaining:
+
+- **Live run and Node rung** (WP13). They need a counterpart inviter's real link (§9, Q3) and a relay that accepts a login from an unknown `did:peer:2` (§9, Q1). No such relay or link is known to this repository.
+- **Restart recovery.** A live session is held in memory and is gone if the app is killed; the `EncounterRecord` survives but nothing resumes it.
+- **Keyring as inviter** (WP9), cut.
+- **Review.** The decisions in §8 stand as assumptions (the pull request body lists them); the bifold pull request is not opened.
+
+### 4.2 Review feedback applied
+
+Alberto's review of this plan (PR #853, three comments) decided the points below; the code on `feat/relationship-over-tsp` follows them.
+
+**Decisions as made.**
+
+1. `propose/0.1` and `issue/0.1` unchanged, with a document proof on every step: yes.
+2. TSP revision on this path: 1.0. `SHARED_CONNECT_TSP_REVISION` is `'1.0'`, and the carriage passes `'v1'` to `greetPeerOverTsp` and `packTrustTaskForPeer` on every send; inbound 1.0 frames are read.
+3. Signing key: the encounter VID, either key accepted inbound for now.
+4. Credential profile toward RLTP: first be able to read theirs (no `validUntil`, JCS). Changing what Keyring issues toward other peers is a separate decision. Witnessing (the VSC `witnessed/1` statement) and hardware-attestation evidence stay out of this ceremony; if added, an optional step reusing the existing VSC.
+5. Ownership end to end: core, behind the flag, until confirmed.
+
+**What the code check found and changed.**
+
+- TSP revision: `packTrustTaskForPeer` and `greetPeerOverTsp` pack Rev 3 unless given `'v1'`; the decision constant was `rev3`. Now `1.0`, tested on both calls and on real frames (the interop test peeks each scanner frame's revision).
+- `ceremony` member: we sent `{enactment, step, definition}`, which fails the envelope schema. Now `{enactment, step}`. No other document we build carries a `ceremony` member with a `definition` (checked across `trust-tasks/module`). The `{ceremony, challenges}` binding is not sent in `ceremony`.
+- Inbound `ceremony` shape: `encounterMismatch` now refuses (`ceremony`) a member that is not an object, has a key outside the schema's set, lacks `enactment` or `step`, or names a `definition` without a `definitionDigest`. This is on the shared-connect session only; the framework runtime's leniency (`TrustTasksService.consume`) is unchanged.
+- Credential format: `buildVrcCredential` with an explicit profile never consults the legacy `vrc:rceVersion` announcement (a test fails if the dependency container is touched); a control test shows the no-profile path still gives VC 1.1 to a peer that never announced. The legacy connection path keeps its rule.
+- Inbound JCS: re-read. `ceremony.ts` binds the credential issuer to the counterparty relationship DID first, then verifies an `eddsa-jcs-2022` proof through `verifyDocumentProof` under that issuer (verification method must belong to the issuer; proof set handled); other suites take the Credo path unchanged. Kept. Two limits for the PR: a proof set whose first member is not JCS goes to the Credo path and is refused, and the JCS branch does not check `validFrom`/`validUntil`.
+- Trigger-link reader: the did:peer syntax step runs only when a flow in the active config takes `did:peer` (the flag), before `from-not-allowed`. With the flag on, a sign-in link carrying a did:peer now reads `from-not-allowed` (`invalid`) where it read `unsupported-vid` (`update`); with the flag off it is unchanged. Kept as is, tested.
+- Logging: the app's deep-link handler (`TabStack.handleDeepLink`) logged the whole link. It now logs kind and length (`describeLinkForLog`). Nothing else on this path logs a link or `_label`.
+- Label: it was cut and cleaned, and a repeated `_label` refused the link. Now it is dropped whole when over 64 code points or when it carries a control, format, bidirectional, private-use or tag character, and dropped (link still read) when repeated.
+- Connect: it had no guard; a second tap or scan ran the exchange twice. Now once per `_id`: concurrent calls share one start, a kept encounter is joined (live session) or refused as spent, and a start that failed before proposing is marked `failed` so the code can be retried.
+- Size budget: a link over 1,000 code points (long-form `did:peer:4` with TSP and DIDComm measured 1,033 to 1,216) is refused by the reader as `too-long` (`invalid`) before anything is resolved; the screen shows the generic invalid text. Tested on preview and on Connect (nothing minted or kept). Whether the budget grows, or that form carries one service, is #86's call.
+
+**Spec points Alberto raised for #1034 and #86** (nothing sent; for discussion).
+
+1. SPEC §4.11.2 scopes `threadId` to one step's request and response; this path uses `propose.id` as the `threadId` of all six documents.
+2. The enactment is the link's `_id`, so anyone who sees the code learns it; `mutual-attestation/0.1` chose `enactmentPrivacy: blinded` for a similar in-person flow.
+3. `bindings/tsp/0.1` still cites TSP Implementers Draft Rev 2 while all three apps send 1.0.
+4. The TSP service spelling is not agreed: the reference implementation reads `tsp` with `{uri}`, the VTA and Keyring read `TSPTransport` with a mediator DID.
+5. First contact: affinidi-tsp gates application messages on a formed relationship; the ceremony should say whether an inviter accepts an `XRFI` from a VID it has never seen, bounded to a live, unexpired `_id`.
+6. Mutual-attestation overlap: `mutual-attestation/0.1` issues mutual credentials with `credential-exchange/issue`; should it use `vrc/relationships/issue` so a VRC is issued one way everywhere?
+
+**Open on our side.** The envelope's `ceremony.step` is typed as a string in the installed `@openvtc/trust-tasks` (0.27.8); we send the numbers 1 to 6. Alberto's rungs passed with ours, but the schema text was not re-read; confirm, and if it is a string, send step names or numeric strings.
+
 ### WP1: trigger-link reader
 - **Gap.** No `shared-connect` flow; `did:peer` refused; no expiry caps for this flow; `_label` not read.
 - **Change.** Add a flow to `triggerLink.ts:99-123`: `typeBase` `https://link.trustoverip.org/vti/flow/shared-connect`, `status: 'draft'`, expiry required, `allowedVidTypes: ['did:peer']` restricted to numalgo 2 and long-form 4, behind a developer flag. Check length against the proposed 1,000-character flow budget while keeping the 1,536 reader cap (`:101`). Route it in `vtiLinks.ts` and `MY_AGENT_SCREEN`. Read `_label` only behind a flag and show it as unverified.
@@ -126,7 +192,7 @@ The critical path is WP6, WP7, then WP5 or WP14, then WP13. WP13's Node rung can
 - **Gap.** `selectService` knows only `TrustTaskHTTPS` and does not read array endpoints.
 - **Change.** A selection map `{TSPTransport: 'tsp', DIDCommMessaging: 'didcomm'}` with preference `['tsp','didcomm']` (flippable); fix `endpointText` for arrays of `{uri}`; resolve the endpoint's mediator with `resolveVtiMediator` (`VtiMediatorTransport.ts:266`); record the relay host for WP3.
 - **Done when.** Unit tests on `selectService` with captured documents, and a resolver test on real `did:peer:2` and `did:peer:4` strings (pattern: `packages/credo-tsp-adapter/__tests__/identityFromDid.test.ts`).
-- **Risk.** Whether Credo's numalgo-2 expansion leaves the `TSPTransport` type intact is **UNVERIFIED**; the numalgo-2 abbreviation table in Credo abbreviates only `DIDCommMessaging`. The `TSP` service spelling is not agreed across stacks (the companion's §2.1): the TSP reference reads type `tsp` with a `{uri}` endpoint, the VTA and Keyring read `TSPTransport` with a mediator DID, so a counterpart vector decides the form. An endpoint naming a mediator that is itself a `did:peer` has no host, so the host rules cannot apply; decide whether to show "none".
+- **Risk.** Credo's numalgo-2 expansion leaves the `TSPTransport` type intact (verified, §4.1); its abbreviation table abbreviates only `DIDCommMessaging`. The `TSP` service spelling is not agreed across stacks (the companion's §2.1): the TSP reference reads type `tsp` with a `{uri}` endpoint, the VTA and Keyring read `TSPTransport` with a mediator DID, so a counterpart vector decides the form. An endpoint naming a mediator that is itself a `did:peer` has no host, so the host rules cannot apply; decide whether to show "none".
 
 ### WP3: confirm screen
 - **Shows.** "Connect with …"; the `_label` marked **unverified**, or "No name given"; the inviter DID as a short prefix; the relay host; the expiry countdown; Connect and Cancel. **Nothing is sent before Connect.**
@@ -141,7 +207,7 @@ The critical path is WP6, WP7, then WP5 or WP14, then WP13. WP13's Node rung can
 - **Risk.** Relay access control; background or killed app (no push wake for encounter DIDs in the demo).
 
 ### WP5: connectionless TSP and relationship forming
-- **Change.** A `TspEncounterCarriage` whose `send(doc)` calls `greetPeerOverTsp(session, myVid, theirVid, [relayDid, myVid], revision)` once, then `packTrustTaskForPeer(…, revision)`, then `sendTspFrame`. Inbound: `unpackTrustTaskFromPeer` (identity checks included), then registry dispatch with an encounter context. The revision (1.0 or Rev 3) is chosen by peer evidence or configuration; the default needs the counterparts' answer (§9, Q2). Leave `preferDidcommForUpstream` alone: this path does not go through `chooseCarriage`. Answering an inbound `XRFI` with `XRFA` is needed only for WP9.
+- **Change.** A `TspEncounterCarriage` whose `send(doc)` calls `greetPeerOverTsp(session, myVid, theirVid, [relayDid, myVid], revision)` once, then `packTrustTaskForPeer(…, revision)`, then `sendTspFrame`. Inbound: `unpackTrustTaskFromPeer` (identity checks included), then registry dispatch with an encounter context. The revision is TSP 1.0 (`'v1'`), passed on every send including the `XRFI` (decided in review, §4.2); the codec packs Rev 3 unless told `'v1'`. Leave `preferDidcommForUpstream` alone: this path does not go through `chooseCarriage`. Answering an inbound `XRFI` with `XRFA` is needed only for WP9.
 - **Done when.** A fake-peer test (patterns: `vtiTsp.test.ts`, `tspInvite.test.ts`) packs an invite then a document and unpacks both; the live rung against the reference inviter returns a `propose#response`.
 - **Risk.** Silent drops (no relationship, wrong revision, crossing mediators); no accept returned; long-form frames above 12,285 bytes. Leave `evidence` out toward RLTP to stay small.
 
@@ -165,16 +231,16 @@ The critical path is WP6, WP7, then WP5 or WP14, then WP13. WP13's Node rung can
   | 5 | `issue` | responder | inviter |
   | 6 | `issue#response` (receipt) | inviter | responder |
 
-- **Change.** `propose.id` is a 22-character base64url value and `threadId` equals it on every document. `ceremony: {enactment: _id, step, definition: https://trusttasks.org/ceremony/shared-connect/0.1}`; `definitionDigest` is left out until the definition is published, because the specification makes it a MUST when `definition` is present. `issuer` and `recipient` are the encounter VIDs, in band on every document. Every document gets a proof. For the demo, sign with the issuer VID (it matches the TSP sender) and accept either key inbound.
-- **Done when.** A schema test feeds a document with `ceremony` through `TrustTasksService.consume`. Whether the pinned `@openvtc/trust-tasks` framework schema tolerates unknown members is **UNVERIFIED**.
+- **Change.** `propose.id` is a 22-character base64url value and `threadId` equals it on every document. `ceremony: {enactment: _id, step}` and nothing else: `definition` is not sent until the definition is published and a `definitionDigest` is available, because the envelope schema requires the digest whenever `definition` is present (SPEC §4.11.1). The `{ceremony, challenges}` binding of #1034 belongs in the credential, not in `ceremony`, which is closed. `issuer` and `recipient` are the encounter VIDs, in band on every document. Every document gets a proof. For the demo, sign with the issuer VID (it matches the TSP sender) and accept either key inbound.
+- **Done when.** A schema test feeds a document with `ceremony` through `TrustTasksService.consume`. The pinned `@openvtc/trust-tasks` framework accepts the member (verified, §4.1).
 - **Risk.** Validator strictness; a proof-key mismatch yielding `proofInvalid` on either side.
 
 ### WP8: credential changes
 - **Gap.** `validUntil` is fixed at 7 days; the proof is rdfc only; the shape depends on the RCE announcement (§3.5); inbound JCS is not verified. dtgwg-trust-tasks-tf#1034 mentions a binding "computed over `{ceremony, challenges: [_id, propose.id]}`" that each side writes into its credential. Keyring has nothing like it.
-- **Change.** An explicit `VrcProfile` parameter for `buildVrcCredential` and `getVrcJsonLdProofOptions`: `{vc20, di, validUntil, suite: 'eddsa-jcs-2022' | 'eddsa-rdfc-2022', evidence}`, selected by path rather than by RCE. JCS signing through `signDocumentProof` (the membership-credential precedent); rdfc stays for Keyring to Keyring. Inbound: if the proof is `eddsa-jcs-2022`, verify with `verifyDocumentProof`, otherwise Credo. Call `buildVrcCredential` directly rather than `prepareVrcCredentialWithEvidence`. Hold the challenge-binding field until the counterparts answer (§9, Q5).
+- **Change.** An explicit `VrcProfile` parameter for `buildVrcCredential` and `getVrcJsonLdProofOptions`: `{vc20, di, validUntil, suite: 'eddsa-jcs-2022' | 'eddsa-rdfc-2022', evidence}`, selected by path rather than by RCE. JCS signing through `signDocumentProof` (the membership-credential precedent); rdfc stays for Keyring to Keyring. Inbound: if the proof is `eddsa-jcs-2022`, verify with `verifyDocumentProof` under the credential's issuer, otherwise Credo; the `ceremony.ts` handler takes this branch only for a JCS proof. Call `buildVrcCredential` directly rather than `prepareVrcCredentialWithEvidence`. Hold the challenge-binding field until the counterparts answer (§9, Q5).
 - **Files.** `vrc/vrc-manager.ts`, the new module, the inbound verify branch in `ceremony.ts` (`:1449-1560`).
 - **Done when.** The profile matrix passes (pattern: `__tests__/modules/vrc/vc20IssuanceFlip.test.ts`, `diIssuanceFlip.test.ts`), a JCS round trip passes (`documentProof.test.ts`), and a counterpart-produced VRC fixture verifies once one exists.
-- **Risk.** RLTP rejecting Keyring's contexts or the `evidence` block; JCS byte compatibility for VRCs is **UNVERIFIED** (the membership-credential precedent suggests it works).
+- **Risk.** RLTP rejecting Keyring's contexts or the `evidence` block; JCS signing and verification of a VRC round-trip on a real KMS (§4.1); byte compatibility with a counterpart's implementation is **UNVERIFIED** until a counterpart-produced VRC exists.
 
 ### WP9: Keyring as inviter (cut for the deadline)
 Mint the encounter DID and session (WP4), build `#_from=…&_id=<16B>&_exp=<≤10 min>&_type=…/shared-connect/0.1`, show a QR, apply the standing rule of §2.8, answer `XRFI` with `XRFA`, and ask consent with `RelationshipProposalModal`. **Done when** the unsolicited-`propose` rule is tested (patterns: `ceremonyRestoreProposals.test.ts`, `RelationshipProposalModal.test.tsx`). **Risk:** spam and denial of service on the relay queue; app lifetime while the code is shown.
@@ -262,10 +328,10 @@ Needed by Friday 6 November for the TSP demo to be more than a coin toss, becaus
 
 ## 8. Decisions that belong to Alberto
 
-Alberto is the author of `vrc/relationships/propose/0.1` and `issue/0.1` and the Keyring reviewer. None of these is taken.
+Alberto is the author of `vrc/relationships/propose/0.1` and `issue/0.1` and the Keyring reviewer. Review decisions are recorded in §4.2; where §4.2 gives one, it replaces the open question below.
 
 1. Whether `shared-connect` uses `propose/0.1` and `issue/0.1` unchanged (the #1034 revision), with proofs required by the ceremony definition while the task says optional for `propose`, and with the `ceremony` member on every step.
-2. The binding: TSP primary with DIDComm v2 fallback. Which TSP revision Keyring packs toward ecosystem peers (Rev 3 or 1.0), and whether `bindings/tsp/0.1` should move from Implementers Draft Rev 2 to TSP 1.0 (a change in the trust-tasks task force's repository).
+2. The binding: TSP primary with DIDComm v2 fallback. Which TSP revision Keyring packs toward ecosystem peers (decided in review: 1.0, §4.2), and whether `bindings/tsp/0.1` should move from Implementers Draft Rev 2 to TSP 1.0 (a change in the trust-tasks task force's repository).
 3. The document-proof key: the issuer VID, or the relationship DID as the ceremony signs today (`ceremony.ts:1405`).
 4. The credential profile toward non-Keyring peers: no `validUntil`, `eddsa-jcs-2022`, `evidence` dropped or kept. Per counterpart, or a new default?
 5. Ownership of the flow on Keyring's reader side (VTI-LNK-046 needs an owner per reader), and whether `shared-connect` handling lives in core or in a demo profile registered through `registerTrustTask`.
@@ -292,7 +358,7 @@ Those marked "counterparts" go to RLTP and Consensual by Friday 6 November.
 1. **Silent TSP failure.** A missing `XRFI`, a version mismatch or crossing mediators all produce silence. Mitigations: the Node rung first, the same relay, the DIDComm v2 fallback.
 2. **Version skew.** The registry binding cites Rev 2; Keyring packs Rev 3 by default, with 1.0 present but unproven upstream and the `preferDidcommForUpstream` stopgap still on; the TSP specification is at Release 1.0.
 3. **Regressing the production VRC path.** The ceremony is wired through Credo connection records. Mitigation: the parallel module of WP6 and no deep refactor before the event.
-4. **Credential and proof interop at the last step.** RCE gating defaults to VCDM 1.1 for unknown peers, inbound JCS is not verified, and the `evidence` contexts and the proof-key choice are unsettled. Any of these ends in `notAccepted` after everything else works.
+4. **Credential and proof interop at the last step.** RCE gating defaults to VCDM 1.1 for unknown peers on the connection path (the shared-connect path selects its profile by path instead), and the `evidence` contexts and the proof-key choice are unsettled. Any of these ends in `notAccepted` after everything else works.
 5. **Schedule and process.** About 2.5 days remain. Merges wait on review. Phone builds are heavy on a shared machine. The app lives in the foreground only (no push wake for encounter DIDs). Frames with attestation evidence can exceed 12,285 bytes.
 
 ---

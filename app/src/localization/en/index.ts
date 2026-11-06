@@ -199,6 +199,7 @@ const translation = {
     "EnableProxy": "Enable proxy",
     "EnableAppToAppPersonFlow": "App-to-app Person flow",
     "EnableTspCarriage": "Enable TSP envelope carriage",
+    "EnableSharedConnect": "Enable shared-connect links (relationship over TSP, draft)",
     "EnableDidCommV2": "Enable DIDComm v2 (experimental)",
     "EnableLivePickup": "Live message pickup (WebSocket)",
     "Mediator": "Mediator",
