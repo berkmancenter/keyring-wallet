@@ -132,6 +132,18 @@ beforeEach(async () => {
   for (const k of Object.keys(mockTspVia)) delete mockTspVia[k]
 })
 
+// A community's answer names the request's thread where trust-tasks-rs `respond_with` writes it: the response
+// document's `threadId`, the request's `threadId` or `id` (SPEC §4.9). Over DIDComm that document is the message body
+// (binding §5), over TSP it is what the frame carries. A reply naming none answers only by its type, and not in the
+// first VTI_BACKLOG_GRACE_MS after a sign-in (#942): the threadless case is vtiAgentAnswers.test.ts's.
+const threadOf = (doc: { threadId?: string; id?: string } | undefined) => doc?.threadId ?? doc?.id
+const lastDidcommThread = (session: { didcomm: unknown[] }) =>
+  threadOf(
+    (session.didcomm[session.didcomm.length - 1] as { body?: { threadId?: string; id?: string } } | undefined)?.body
+  )
+const lastTspThread = () =>
+  threadOf(mockPacked[mockPacked.length - 1] as { threadId?: string; id?: string } | undefined)
+
 describe('the community leg', () => {
   it('greets a community again as a new persona', async () => {
     const community = 'did:webvh:c:greets'
@@ -141,7 +153,7 @@ describe('the community leg', () => {
       const timer = setInterval(() => {
         if (session.tsp.length >= 2) {
           clearInterval(timer)
-          session.onMessage({ type: 'https://t/ask/0.1#response', body: {} })
+          session.onMessage({ type: 'https://t/ask/0.1#response', body: { threadId: lastTspThread() } })
         }
       }, 5)
     }
@@ -239,7 +251,10 @@ describe('the community leg', () => {
     const reply = setInterval(() => {
       if (session.didcomm.length) {
         clearInterval(reply)
-        session.onMessage({ type: `${MANIFEST}#response`, body: { payload: { criteria: [] } } })
+        session.onMessage({
+          type: `${MANIFEST}#response`,
+          body: { threadId: lastDidcommThread(session), payload: { criteria: [] } },
+        })
       }
     }, 5)
     const answer = await asked
@@ -262,7 +277,7 @@ describe('the community leg', () => {
     const timer = setInterval(() => {
       if (session.didcomm.length) {
         clearInterval(timer)
-        session.onMessage({ type: 'https://t/manifest/0.2#response', body: {} })
+        session.onMessage({ type: 'https://t/manifest/0.2#response', body: { threadId: lastDidcommThread(session) } })
       }
     }, 5)
     const answer = await vtiAgent.ask(community, 'https://t/manifest/0.2', {}, 2000)
@@ -313,7 +328,13 @@ describe('what a community is asked, and how', () => {
     const timer = setInterval(() => {
       if (session.didcomm.length) {
         clearInterval(timer)
-        session.onMessage(reply(session.didcomm[0] as { thid?: string }))
+        const sent = session.didcomm[0] as { thid?: string }
+        const answer = reply(sent) as { body?: Record<string, unknown> } & Record<string, unknown>
+        session.onMessage(
+          answer.thid || answer.body?.threadId
+            ? answer
+            : { ...answer, body: { ...answer.body, threadId: lastDidcommThread(session) } }
+        )
       }
     }, 5)
     const answer = await vtiAgent.ask(community, type, { hello: 'world' }, 2000)
