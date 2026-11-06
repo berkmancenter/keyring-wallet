@@ -995,6 +995,12 @@
     "CopiedSuccess": "Copied to clipboard (PT-BR)",
     "CopiedError": "Unable to copy to clipboard (PT-BR)"
   },
+  "RemoteVrcNotify": {
+    "Ask": "Ative as notificações para que as etapas da outra pessoa cheguem até você com o Keyring fechado.",
+    "TurnOn": "Ativar",
+    "NotNow": "Agora não",
+    "Denied": "As notificações estão desativadas para o Keyring. Você pode ativá-las nos Ajustes do telefone. Até lá, mantenha o Keyring aberto nos dois telefones até a troca terminar."
+  },
   "Record": {
     "Hide": "Esconder",
     "Show": "Mostrar",

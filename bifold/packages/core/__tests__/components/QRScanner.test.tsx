@@ -14,6 +14,18 @@ import * as vrcManager from '../../src/modules/vrc/vrc-manager'
 import * as rCardCredentialService from '../../src/modules/vrc/services/rCardCredential'
 import * as shortLink from '../../src/utils/shortInvitationLink'
 
+const mockAskFirst = jest.fn(async () => false)
+jest.mock('../../src/modules/vrc/components/RemoteVrcNotificationsAsk', () => {
+  const { Pressable } = jest.requireActual('react-native')
+  const { createElement } = jest.requireActual('react')
+  return {
+    __esModule: true,
+    default: ({ onDone }: { onDone: () => void }) =>
+      createElement(Pressable, { testID: 'AskedFirst', onPress: onDone }),
+    useRemoteVrcNotificationsGate: () => mockAskFirst,
+  }
+})
+
 jest.mock('react-native-orientation-locker', () => {
   return require('../../__mocks__/custom/react-native-orientation-locker')
 })
@@ -623,6 +635,18 @@ describe('QRScanner — the invitation as a link', () => {
     expect(tree.UNSAFE_getByProps({ value: 'https://wallet.example/invite?oob=1' })).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('MyQRShareLink'))).toHaveTextContent(/Scan\.ShareLink$/)
     expect(tree.getByTestId(testIdWithKey('MyQRShareLinkNote'))).toHaveTextContent('Scan.ShareLinkNote')
+  })
+
+  test('where the ask applies, the share waits for it, and then carries on (IN-448)', async () => {
+    mockAskFirst.mockResolvedValueOnce(true)
+    const tree = await renderInvite()
+    expect(tree.queryByTestId('AskedFirst')).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
+    expect(tree.getByTestId('AskedFirst')).toBeTruthy()
+    expect(share).not.toHaveBeenCalled()
+    await act(async () => fireEvent.press(tree.getByTestId('AskedFirst')))
+    expect(tree.queryByTestId('AskedFirst')).toBeNull()
+    expect(share).toHaveBeenCalledTimes(1)
   })
 
   test('the link shared is a new invitation; the code on screen stays as it was', async () => {

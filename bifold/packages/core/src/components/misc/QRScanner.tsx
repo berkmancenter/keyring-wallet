@@ -1,7 +1,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { StackScreenProps } from '@react-navigation/stack'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Image,
@@ -45,6 +45,9 @@ import QRScannerTorch from './QRScannerTorch'
 import ScanCamera from './ScanCamera'
 import ScanTab from './ScanTab'
 import SVGOverlay, { MaskType } from './SVGOverlay'
+import RemoteVrcNotificationsAsk, {
+  useRemoteVrcNotificationsGate,
+} from '../../modules/vrc/components/RemoteVrcNotificationsAsk'
 
 type ConnectProps = StackScreenProps<ConnectStackParams>
 interface Props extends ConnectProps {
@@ -265,6 +268,25 @@ const QRScanner: React.FC<Props> = ({
       setSharingLink(false)
     }
   }, [mintInvitation, t])
+
+  // A link is the remote case: ask about notifications first where turning them on makes this phone wakeable (IN-448).
+  const askFirst = useRemoteVrcNotificationsGate()
+  const [askingFirst, setAskingFirst] = useState(false)
+  const checkingFirst = useRef(false)
+  const onShareLink = useCallback(async () => {
+    if (checkingFirst.current) return
+    checkingFirst.current = true
+    try {
+      if (await askFirst()) setAskingFirst(true)
+      else await shareLink()
+    } finally {
+      checkingFirst.current = false
+    }
+  }, [askFirst, shareLink])
+  const onAskedFirst = useCallback(() => {
+    setAskingFirst(false)
+    void shareLink()
+  }, [shareLink])
 
   useEffect(() => {
     if (!showTabs && defaultToConnect && showingQRCodeView) {
@@ -554,12 +576,13 @@ const QRScanner: React.FC<Props> = ({
             <ThemedText style={styles.instruction} testID={testIdWithKey('MyQRCodeInstruction')}>
               {identityShown ? t('Scan.YourIdentityInstruction') : t('Scan.YourQRCodeInstruction')}
             </ThemedText>
+            {askingFirst ? <RemoteVrcNotificationsAsk onDone={onAskedFirst} /> : null}
             {!identityShown && invitation ? (
               <View style={styles.shareLink}>
                 <Pressable
                   style={styleForState}
-                  onPress={() => void shareLink()}
-                  disabled={sharingLink}
+                  onPress={() => void onShareLink()}
+                  disabled={sharingLink || askingFirst}
                   accessibilityRole="button"
                   accessibilityState={{ busy: sharingLink }}
                   testID={testIdWithKey('MyQRShareLink')}

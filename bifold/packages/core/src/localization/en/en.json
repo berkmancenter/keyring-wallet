@@ -1134,6 +1134,12 @@
     "CopiedSuccess": "Copied to clipboard",
     "CopiedError": "Unable to copy to clipboard"
   },
+  "RemoteVrcNotify": {
+    "Ask": "Turn on notifications so the other person's steps reach you while Keyring is closed.",
+    "TurnOn": "Turn on",
+    "NotNow": "Not now",
+    "Denied": "Notifications are off for Keyring. You can turn them on in your phone's Settings. Until then, keep Keyring open on both phones until the exchange finishes."
+  },
   "Record": {
     "Hide": "Hide",
     "Show": "Show",
