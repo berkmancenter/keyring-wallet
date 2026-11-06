@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { PIN } from "./config.js";
 import { answerConfirmSheet } from "./confirmSheet.js";
-import { handleBiometricConfirmIfPresent } from "./flows.js";
-import { fakeDriver } from "./pages/testing/fakeDriver.mjs";
 
 // From bifold #937 on, the confirm sheet a signing act asks shows on every emulator and simulator (no biometrics
 // there), and Confirm opens a Keyring PIN entry. Before, the confirm was skipped there and this helper never saw
@@ -13,46 +10,8 @@ import { fakeDriver } from "./pages/testing/fakeDriver.mjs";
 /** The sheet as the app shows it: Confirm and Cancel. */
 const SHEET = { ConfirmBiometric: {}, CancelBiometric: {} };
 
-/** Confirm opens the PIN entry; its Confirm closes it only for the run's PIN. */
-function pinSheet(d) {
-  d.onTap.ConfirmBiometric = () => {
-    d.hide("ConfirmBiometric", "CancelBiometric");
-    d.show("ConfirmActionEnterPIN");
-    d.show("ConfirmActionWithPIN");
-  };
-  d.onTap.ConfirmActionWithPIN = () => {
-    if (d.values.ConfirmActionEnterPIN === PIN) d.hide("ConfirmActionEnterPIN", "ConfirmActionWithPIN");
-  };
-}
-
-test("no sheet: nothing is tapped, as before", async () => {
-  const d = fakeDriver({ platform: "ios", screen: {} });
-  assert.equal(await handleBiometricConfirmIfPresent(d), false);
-  assert.deepEqual(d.taps, []);
-});
-
-for (const platform of ["android", "ios"]) {
-  test(`the sheet asks for the Keyring PIN (${platform}): the run's PIN is typed and the entry closes`, async () => {
-    const d = fakeDriver({ platform, screen: { ...SHEET } });
-    pinSheet(d);
-    assert.equal(await handleBiometricConfirmIfPresent(d), true);
-    // The field is tapped to focus it, as unlockIfLocked does.
-    assert.deepEqual(d.taps, ["ConfirmBiometric", "ConfirmActionEnterPIN", "ConfirmActionWithPIN"]);
-    assert.equal(d.values.ConfirmActionEnterPIN, PIN);
-    assert.equal(d.has("ConfirmActionEnterPIN"), false);
-  });
-}
-
-test("the sheet asks for the phone's biometrics (a real device): Confirm only, the OS prompt is the operator's", async () => {
-  const d = fakeDriver({ platform: "ios", screen: { ...SHEET } });
-  // While the OS prompt is up the sheet shows a spinner: neither button.
-  d.onTap.ConfirmBiometric = () => d.hide("ConfirmBiometric", "CancelBiometric");
-  assert.equal(await handleBiometricConfirmIfPresent(d), true);
-  assert.deepEqual(d.taps, ["ConfirmBiometric"]);
-  assert.equal(d.values.ConfirmActionEnterPIN, undefined);
-});
-
-// The rest drive the sheet logic directly, with a scripted screen and no waiting.
+// The sheet logic, driven directly with a scripted screen and no waiting. No driver and no webdriverio, so these run in
+// CI without e2e's node_modules; the cases through handleBiometricConfirmIfPresent are in confirmSheetFlows.test.mjs.
 function io(screen, onTap = {}) {
   const shown = new Set(Object.keys(screen));
   const taps = [];
@@ -72,6 +31,24 @@ function io(screen, onTap = {}) {
     now: () => t,
   };
 }
+
+test("the sheet asks for the Keyring PIN: Confirm, the PIN typed, its Confirm, and the entry closes", async () => {
+  const s = io(SHEET, {
+    ConfirmBiometric: (shown) => {
+      shown.delete("ConfirmBiometric");
+      shown.delete("CancelBiometric");
+      shown.add("ConfirmActionEnterPIN");
+      shown.add("ConfirmActionWithPIN");
+    },
+    ConfirmActionWithPIN: (shown) => {
+      shown.delete("ConfirmActionEnterPIN");
+      shown.delete("ConfirmActionWithPIN");
+    },
+  });
+  assert.equal(await answerConfirmSheet(s, { pin: "135790" }), "pin");
+  assert.deepEqual(s.taps, ["ConfirmBiometric", "ConfirmActionWithPIN"]);
+  assert.deepEqual(s.typed, [["ConfirmActionEnterPIN", "135790"]]);
+});
 
 test("the biometric key not there: the first Confirm leaves the sheet up offering the PIN, the second opens it", async () => {
   let first = true;
