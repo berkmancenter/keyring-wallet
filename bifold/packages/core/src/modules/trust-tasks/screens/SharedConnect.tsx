@@ -5,7 +5,7 @@
  *
  *  1. Reading — the link and the inviter's DID document, offline. Nothing is sent.
  *  2. Confirm — who is asking, as far as the code can say: the name they gave
- *     (marked unverified, or "No name given"), a short prefix of their DID and
+ *     (or "No name given"; a name has a row of its own saying it isn't checked), a short prefix of their DID and
  *     the host of their message relay. Nothing else from the code is shown,
  *     and the code itself is never displayed. Connect and Cancel; **nothing is
  *     sent before Connect** (VTI-LNK-052).
@@ -198,14 +198,19 @@ export const SharedConnectFlow: React.FC<{
             <View style={styles.card}>
               <View style={styles.row}>
                 <ThemedText variant="labelSubtitle">{t('SharedConnect.Name')}</ThemedText>
-                {/* Text the sender wrote: sanitised by the reader, shown with its unverified marker, never trusted. */}
+                {/* Text the sender wrote: sanitised by the reader, never trusted. */}
                 <ThemedText testID={id(SharedConnectIds.name)}>
                   {step.preview.label ?? t('SharedConnect.NoName')}
                 </ThemedText>
-                {step.preview.label ? (
-                  <ThemedText testID={id(SharedConnectIds.unverified)}>{t('SharedConnect.Unverified')}</ThemedText>
-                ) : null}
               </View>
+              {/* Keyring's own word on that name, in a row of its own under its own label, so a name
+                  that reads like a marker ("Verified") can't pass for one. */}
+              {step.preview.label ? (
+                <View style={styles.row}>
+                  <ThemedText variant="labelSubtitle">{t('SharedConnect.NameChecked')}</ThemedText>
+                  <ThemedText testID={id(SharedConnectIds.unverified)}>{t('SharedConnect.Unverified')}</ThemedText>
+                </View>
+              ) : null}
               <View style={styles.row}>
                 <ThemedText variant="labelSubtitle">{t('SharedConnect.Contact')}</ThemedText>
                 <ThemedText style={styles.mono} testID={id(SharedConnectIds.contact)}>

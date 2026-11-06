@@ -2,8 +2,9 @@
  * The shared-connect confirm screen (plan WP3): what is shown, what is not,
  * and that nothing is sent before Connect — against fake steps.
  */
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
+import type { ReactTestInstance } from 'react-test-renderer'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
@@ -61,6 +62,27 @@ describe('the confirm step', () => {
     expect(tree.getByTestId(id(SharedConnectIds.expires)).props.children).toBeDefined()
   })
 
+  // The name is the sender's own text, so it can say "Verified". Keyring's word on it sits in a row of its
+  // own under its own label: nothing inside the name's row is Keyring's, and the marker never shares it.
+  it('puts the unverified marker in its own row, under its own label, apart from the name', async () => {
+    const tree = await show(steps())
+    const rowOf = (node: ReactTestInstance) => {
+      let at = node.parent
+      // `type` is declared ElementType, which TypeScript says can't equal 'View'; a host View carries the string
+      // 'View' at runtime. The throw below keeps the row honest if no View is found.
+      while (at && (at.type as unknown) !== 'View') at = at.parent
+      if (!at) throw new Error('no row')
+      return at
+    }
+    const markerRow = rowOf(tree.getByTestId(id(SharedConnectIds.unverified)))
+    const nameRow = rowOf(tree.getByTestId(id(SharedConnectIds.name)))
+    expect(markerRow).not.toBe(nameRow)
+    expect(within(markerRow).getByText('SharedConnect.NameChecked')).toBeTruthy()
+    expect(within(markerRow).queryByTestId(id(SharedConnectIds.name))).toBeNull()
+    expect(within(nameRow).queryByTestId(id(SharedConnectIds.unverified))).toBeNull()
+    expect(within(nameRow).queryByText('SharedConnect.NameChecked')).toBeNull()
+  })
+
   it('shows "No name given" and no unverified marker without a label, and "No relay name" without a host', async () => {
     const s = steps({
       preview: jest.fn(async () => ({
@@ -72,6 +94,7 @@ describe('the confirm step', () => {
     const tree = await show(s)
     expect(tree.getByTestId(id(SharedConnectIds.name)).props.children).toBe('SharedConnect.NoName')
     expect(tree.queryByTestId(id(SharedConnectIds.unverified))).toBeNull()
+    expect(tree.queryByText('SharedConnect.NameChecked')).toBeNull()
     expect(tree.getByTestId(id(SharedConnectIds.relay)).props.children).toBe('SharedConnect.NoRelay')
   })
 
