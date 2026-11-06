@@ -1,6 +1,7 @@
 import {
   DispatchAction,
   E2EClockRows,
+  HiddenApplicationProbes,
   SafeAreaModal,
   Screens,
   testIdWithKey,
@@ -1200,6 +1201,8 @@ const Developer: React.FC = () => {
         {/* The clocks in force, for the gate's linkwait rows (bifold E2EClockRows): in a test build only, since a store
             build never sets E2E_CLOCKS. This screen replaces bifold's, so it renders them itself. */}
         <E2EClockRows />
+        {/* bifold #924's device run only (test/924-probe-875353c, never merged): renders nothing without E2E_CLOCKS. */}
+        <HiddenApplicationProbes />
       </ScrollView>
     </SafeAreaView>
   )
