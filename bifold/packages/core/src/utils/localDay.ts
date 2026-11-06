@@ -9,10 +9,12 @@
  *   (`useUses24HourClock`); and a date with its time (`dateTime`).
  * - The words and the clock where no hook can be used (`appDateWords`, `phoneUses24HourClock`).
  *
- * The words come from our own locale files (`Chat.Dates`), never from the JS engine's Intl. Hermes in a release build
- * honours toLocaleDateString's OPTIONS but IGNORES its LOCALE, the one passed and the device's alike, so French and
- * Portuguese screens printed English weekdays and months (simulator check on #606, 2026-10-26). Jest, on Node's full
- * ICU, could not see it. Hermes has Intl; it is not a polyfill that is missing.
+ * The words come from our own locale files (`Chat.Dates`), never from the JS engine's Intl. On phones, French and
+ * Portuguese screens printed English weekdays and months, with toLocaleDateString's options honoured and its locale
+ * not: first seen on an iOS simulator in a release build (#606, 2026-10-26). On Android the cause is known: the app's
+ * @formatjs polyfills replace the engine's Intl and carried English data only (probe on an emulator, 2026-11-06:
+ * Intl.DateTimeFormat.polyfilled true, no French or Portuguese locales supported). The cause on iOS is not
+ * established. Jest, on Node's full ICU, sees neither.
  *
  * One rule for every place a day is named, so no two places say the same day differently (272 showed "15 October"
  * over "October 15, 2026 4:01 PM").
