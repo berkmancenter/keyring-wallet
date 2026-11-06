@@ -14,6 +14,9 @@ const mockSetSharedConnectEnabled = jest.fn()
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
   setSharedConnectEnabled: (enabled: boolean) => mockSetSharedConnectEnabled(enabled),
+  // The loader also reads the login attempts from the keychain, whose native module isn't in jest; not what this
+  // test is about.
+  loadLoginAttempt: async () => undefined,
 }))
 // The same stubs containerComposition.test.ts uses to build the app container under jest:
 // - react-native-webview: a registered screen imports it, and its native module isn't in jest;
