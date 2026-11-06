@@ -30,6 +30,8 @@ export interface Developer {
   enableDidCommV2: boolean
   /** Mediator pickup over a live WebSocket instead of polling (utils/livePickup.ts). */
   enableLivePickup: boolean
+  /** Connecting from a code someone shared (shared-connect, keyring-wallet #853): bifold's setSharedConnectEnabled. */
+  enableSharedConnect: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -48,6 +50,7 @@ enum DeveloperDispatchAction {
   TOGGLE_TSP_CARRIAGE = 'developer/toggleTspCarriage',
   TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
   TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
+  TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -112,6 +115,8 @@ const developerState: Developer = {
   // turns it on for a review build with no code change. A value saved from
   // Developer options wins over this at startup (container-imp.ts).
   enableLivePickup: Config.LIVE_MESSAGE_PICKUP === 'true',
+  // Off until the flow is turned on for everyone. A saved choice, off included, wins on load (container-imp.ts).
+  enableSharedConnect: false,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -128,6 +133,7 @@ export enum BCLocalStorageKeys {
   EnableTspCarriage = 'EnableTspCarriage',
   EnableDidCommV2 = 'EnableDidCommV2',
   EnableLivePickup = 'EnableLivePickup',
+  EnableSharedConnect = 'EnableSharedConnect',
 }
 
 export const initialState: BCState = {
@@ -210,6 +216,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableLivePickup }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableLivePickup, developer.enableLivePickup)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_SHARED_CONNECT: {
+      const enableSharedConnect: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableSharedConnect }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableSharedConnect, developer.enableSharedConnect)
 
       return { ...state, developer }
     }
