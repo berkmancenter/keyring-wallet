@@ -1887,6 +1887,8 @@
     "YouCanVetBody": "Its admin made you a vetter. Hand out a ticket when you meet someone.",
     "YouCanVetToast": "You can now vet people for {{community}}.",
     "YouCanVetToastHint": "Open the vetting desk from Your agent.",
+    "VetterEndedToast": "{{community}} has ended your vetter role.",
+    "VetterEndedToastHint": "You can no longer vet people for it.",
     "OpenDesk": "Open the vetting desk",
     "ShareKeyHint": "Long and easy to mistype — send it rather than reading it out.",
     "Unlink": "Unlink this agent",

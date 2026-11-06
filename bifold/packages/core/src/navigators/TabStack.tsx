@@ -45,7 +45,7 @@ import { useVtiIdentityListeners } from '../modules/trust-tasks/module/vtiIdenti
 import { useLookAtOtherAgents } from '../modules/trust-tasks/module/lookAtOtherAgents'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
 import { useVtiJoinedNotice } from '../modules/trust-tasks/screens/joinedNotice'
-import { useVtiVetterGrantedNotice } from '../modules/trust-tasks/screens/vetterNotice'
+import { useVtiVetterEndedNotice, useVtiVetterGrantedNotice } from '../modules/trust-tasks/screens/vetterNotice'
 import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { useVtiTurnedDownNotice } from '../modules/trust-tasks/screens/turnedDownNotice'
@@ -134,6 +134,7 @@ const TabStack: React.FC = () => {
   useVtiJoinedNotice()
   // …and a community making this phone a vetter.
   useVtiVetterGrantedNotice()
+  useVtiVetterEndedNotice()
   // …and a community turning a request down, once, when the app first learns it.
   useVtiTurnedDownNotice()
   // …and the member's rooms: a new offer, an admission, a post that didn't send. Runs the offers poll, so a new
