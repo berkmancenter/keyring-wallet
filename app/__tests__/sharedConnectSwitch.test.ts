@@ -5,6 +5,7 @@
  * default on later cannot override someone who switched it off.
  */
 import { PersistentStorage, TOKENS } from '@bifold/core'
+import path from 'path'
 
 import { composeContainers } from '../container-compose'
 import { BCDispatchAction, BCLocalStorageKeys, initialState, reducer } from '../src/store'
@@ -14,6 +15,25 @@ jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
   setSharedConnectEnabled: (enabled: boolean) => mockSetSharedConnectEnabled(enabled),
 }))
+// The same stubs containerComposition.test.ts uses to build the app container under jest:
+// - react-native-webview: a registered screen imports it, and its native module isn't in jest;
+// - the app logger: AppContainer.init() starts its event listeners, which jest's logger mock lacks;
+// - i18next's addResourceBundle (below): the VRC module registers its translations into a bare mock.
+jest.mock('react-native-webview', () => ({ WebView: () => null }))
+jest.mock('../src/utils/logger', () => {
+  const log = jest.fn()
+  return {
+    __esModule: true,
+    default: { startEventListeners: jest.fn(), info: log, warn: log, error: log, debug: log, trace: log },
+  }
+})
+const bifoldCoreDir = path.resolve(__dirname, '../../bifold/packages/core')
+for (const from of [__dirname, bifoldCoreDir]) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires -- the copy that directory resolves
+  const i18nModule = require(require.resolve('i18next', { paths: [from] }))
+  const i18n = i18nModule.default ?? i18nModule
+  i18n.addResourceBundle ??= jest.fn()
+}
 
 const saved = new Map<string, unknown>()
 
