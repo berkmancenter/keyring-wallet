@@ -6,7 +6,16 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Platform, ScrollView, StyleSheet, TouchableOpacity, View, ActivityIndicator } from 'react-native'
+import {
+  Platform,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+  ActivityIndicator,
+} from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons'
 
@@ -25,12 +34,24 @@ import VerifyPINModal from './VerifyPINModal'
 
 const LOG_PREFIX = '[VRC:Biometric]'
 
+// The sheet's top padding, read inside SafeAreaModal's own SafeAreaProvider.
+// It cannot be read in BiometricConfirmationModal's body: that component is
+// mounted by BiometricConfirmationProvider in RootStack, above the navigators
+// that supply React Navigation's SafeAreaProviderCompat, so no safe-area
+// provider is in scope there and useSafeAreaInsets() throws on every render --
+// before the early return, because hooks always run. A Modal is its own native
+// view hierarchy, which is why SafeAreaModal carries a provider of its own, and
+// why reading the inset here, as a child of it, is the reading that works.
+const SheetOverlay: React.FC<{ style: StyleProp<ViewStyle>; children: React.ReactNode }> = ({ style, children }) => {
+  const insets = useSafeAreaInsets()
+  return <View style={[style, { paddingTop: insets.top }]}>{children}</View>
+}
+
 const BiometricConfirmationModal: React.FC = () => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const { isModalVisible, pendingRequest, onConfirm, onCancel, onError } = useBiometricConfirmation()
   const [isAuthenticating, setIsAuthenticating] = useState(false)
-  const insets = useSafeAreaInsets()
   // Outside an AuthProvider (a test, a host that mounts none) there is no PIN to check.
   const walletSecret = useAuth()?.walletSecret
   const [logger] = useServices([TOKENS.UTIL_LOGGER])
@@ -254,7 +275,7 @@ const BiometricConfirmationModal: React.FC = () => {
     <SafeAreaModal transparent={true} visible={isModalVisible} animationType="slide">
       {/* At a large text size the sheet is taller than the screen: it stops below the status bar and
           scrolls, so the title is never pushed off the top, and the buttons are reached past the words. */}
-      <View style={[styles.overlay, { paddingTop: insets.top }]}>
+      <SheetOverlay style={styles.overlay}>
         <SafeAreaView edges={['left', 'right', 'bottom']} style={[styles.safeAreaView, { maxHeight: '100%' }]}>
           <ScrollView bounces={false} testID={testIdWithKey('BiometricConfirmationScroll')}>
             {/* Close button */}
@@ -339,7 +360,7 @@ const BiometricConfirmationModal: React.FC = () => {
             </View>
           </ScrollView>
         </SafeAreaView>
-      </View>
+      </SheetOverlay>
       {/* Inside the sheet's own modal: iOS will not present a second modal while this one is up. */}
       <VerifyPINModal
         title={pendingRequest.copy?.title ?? String(t('Biometry.ConfirmRelationship') || 'Confirm Relationship')}
