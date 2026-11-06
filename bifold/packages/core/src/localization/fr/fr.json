@@ -2857,6 +2857,7 @@
     "Relay": "Relais de messages",
     "NoRelay": "Aucun nom de relais à afficher",
     "Expires": "Ce code expire {{time}}",
+    "ExpiresOn": "Ce code expire le {{when}}",
     "Connect": "Se connecter",
     "Cancel": "Annuler",
     "Reading": "Lecture du code…",

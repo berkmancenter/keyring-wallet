@@ -2770,6 +2770,7 @@
     "Relay": "Relé de mensagens",
     "NoRelay": "Nenhum nome de relé para mostrar",
     "Expires": "Este código expira {{time}}",
+    "ExpiresOn": "Este código expira em {{when}}",
     "Connect": "Conectar",
     "Cancel": "Cancelar",
     "Reading": "Lendo o código…",

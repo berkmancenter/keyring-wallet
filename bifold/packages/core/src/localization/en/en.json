@@ -2921,6 +2921,7 @@
     "Relay": "Message relay",
     "NoRelay": "No relay name to show",
     "Expires": "This code expires {{time}}",
+    "ExpiresOn": "This code expires on {{when}}",
     "Connect": "Connect",
     "Cancel": "Cancel",
     "Reading": "Reading the code…",

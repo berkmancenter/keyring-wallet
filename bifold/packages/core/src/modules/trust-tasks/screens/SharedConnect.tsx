@@ -22,6 +22,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
+import type { TFunction } from 'i18next'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native'
@@ -31,6 +32,7 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import type { MyAgentStackParams } from '../../../types/navigators'
+import { appDateWords, dateTime, localDayKey, phoneUses24HourClock, timeLabel } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import type { SessionState } from '../module/sharedConnect'
 import {
@@ -86,16 +88,28 @@ type Step =
   | { kind: 'unanswered'; handle: SharedConnectHandle }
   | { kind: 'ended'; messageKey: string }
 
-/** The time left as the person's clock reads it, e.g. a local time; never a raw timestamp. */
-export const expiryText = (exp: number, locale?: string): string =>
-  new Date(exp * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+/**
+ * When the code stops working, as the person reads it: the time alone when that is today, otherwise its date and time.
+ * A link may run up to seven days (SHARED_CONNECT_MAX_LIFETIME_SECONDS), and a time alone on another day reads as
+ * already past once that hour has gone by today. The words are the app's language and the clock is the phone's
+ * 12/24-hour setting (utils/localDay.ts), as `whenShown` on the vetting desk does; never the JS engine's
+ * toLocaleTimeString, which on a phone came out in English whatever the language.
+ */
+export const expiryText = (exp: number, t: TFunction, now: Date = new Date()): string => {
+  const at = new Date(exp * 1000)
+  const words = appDateWords()
+  const use24h = phoneUses24HourClock()
+  return localDayKey(at) === localDayKey(now)
+    ? t('SharedConnect.Expires', { time: timeLabel(at, words, use24h) })
+    : t('SharedConnect.ExpiresOn', { when: dateTime(at, words, use24h, 'auto', now) })
+}
 
 export const SharedConnectFlow: React.FC<{
   link?: string
   steps: SharedConnectSteps
   onClose: () => void
 }> = ({ link, steps, onClose }) => {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const [step, setStep] = useState<Step>({ kind: 'reading' })
 
@@ -223,9 +237,7 @@ export const SharedConnectFlow: React.FC<{
                   {step.preview.relayHost ?? t('SharedConnect.NoRelay')}
                 </ThemedText>
               </View>
-              <ThemedText testID={id(SharedConnectIds.expires)}>
-                {t('SharedConnect.Expires', { time: expiryText(step.preview.exp, i18n.language) })}
-              </ThemedText>
+              <ThemedText testID={id(SharedConnectIds.expires)}>{expiryText(step.preview.exp, t)}</ThemedText>
             </View>
             <View style={styles.buttons}>
               <Button
