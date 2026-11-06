@@ -15,7 +15,17 @@ import BiometricConfirmationModal from '../components/modals/BiometricConfirmati
 
 export type BiometricConfirmationStatus = 'confirmed' | 'cancelled' | 'error' | 'not_available'
 
-export type AuthMode = 'biometric' | 'passcode'
+/** How the hardware key's own prompt authenticates. */
+export type HardwareAuthMode = 'biometric' | 'passcode'
+
+/**
+ * How the person confirms: the hardware key's prompt, or, with Biometric Unlock
+ * off in Keyring, their Keyring PIN (`keyringPin`): the app removes its
+ * biometric copy of the wallet key then, so there is nothing for Face ID or a
+ * fingerprint to open (IN-452). On a phone with no biometrics set up at all, the Keyring PIN too
+ * (`keyringPinNoBiometrics`): the step always confirms, never goes ahead unasked.
+ */
+export type AuthMode = HardwareAuthMode | 'keyringPin' | 'keyringPinNoBiometrics'
 
 export interface BiometricConfirmationRequest {
   counterpartyName: string
@@ -116,8 +126,10 @@ export async function requestBiometricConfirmationUI(
   copy?: BiometricConfirmationCopy
 ): Promise<BiometricConfirmationResponse> {
   if (!globalRequestConfirmation) {
+    // Nothing can ask the person: 'not_available', which the confirm step reads as a stop and says so, never as a
+    // pass (IN-452; it used to read it as success, so the action went ahead unasked).
     // eslint-disable-next-line no-console
-    console.warn('[BiometricConfirmation] Provider not mounted, falling back to allow')
+    console.warn('[BiometricConfirmation] Provider not mounted: nothing can ask, so the step stops')
     return {
       status: 'not_available',
       timestamp: new Date().toISOString(),

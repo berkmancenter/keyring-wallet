@@ -29,6 +29,8 @@ export enum PINEntryUsage {
   ChangeBiometrics,
   ChangePIN,
   ChangeHardwareAttestation,
+  /** Confirming a signing act with the Keyring PIN while Biometric Unlock is off (IN-452). */
+  ConfirmAction,
 }
 
 const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntryUsage.PINCheck, onCancelAuth }) => {
@@ -80,6 +82,7 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
     [PINEntryUsage.ChangeHardwareAttestation]: t('PINEnter.ChangeHardwareAttestationInputLabel'),
     [PINEntryUsage.PINCheck]: t('PINEnter.AppSettingChangedEnterPIN'),
     [PINEntryUsage.ChangePIN]: t('PINChange.EnterOldPIN'),
+    [PINEntryUsage.ConfirmAction]: t('PINEnter.ConfirmActionEnterPIN'),
   }
 
   const inputTestId = {
@@ -87,6 +90,7 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
     [PINEntryUsage.ChangeHardwareAttestation]: 'HardwareAttestationChangedEnterPIN',
     [PINEntryUsage.PINCheck]: 'AppSettingChangedEnterPIN',
     [PINEntryUsage.ChangePIN]: 'EnterOldPIN',
+    [PINEntryUsage.ConfirmAction]: 'ConfirmActionEnterPIN',
   }
 
   const primaryButtonText = {
@@ -94,6 +98,7 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
     [PINEntryUsage.ChangeHardwareAttestation]: t('Global.Continue'),
     [PINEntryUsage.PINCheck]: t('PINEnter.AppSettingSave'),
     [PINEntryUsage.ChangePIN]: t('Global.Continue'),
+    [PINEntryUsage.ConfirmAction]: t('Global.Confirm'),
   }
 
   const primaryButtonTestId = {
@@ -101,6 +106,7 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
     [PINEntryUsage.ChangeHardwareAttestation]: 'Continue',
     [PINEntryUsage.PINCheck]: 'AppSettingSave',
     [PINEntryUsage.ChangePIN]: 'Continue',
+    [PINEntryUsage.ConfirmAction]: 'ConfirmActionWithPIN',
   }
 
   const helpText = {
@@ -108,6 +114,7 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
     [PINEntryUsage.ChangeHardwareAttestation]: t('PINEnter.ChangeHardwareAttestationSubtext'),
     [PINEntryUsage.PINCheck]: t('PINEnter.AppSettingChanged'),
     [PINEntryUsage.ChangePIN]: '',
+    [PINEntryUsage.ConfirmAction]: '',
   }
 
   const isContinueDisabled = continueDisabled || PIN.length < minPINLength
@@ -160,7 +167,9 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
               {t('PINEnter.ChangeHardwareAttestationHeader')}
             </ThemedText>
           )}
-          {usage !== PINEntryUsage.ChangePIN && <ThemedText style={style.helpText}>{helpText[usage]}</ThemedText>}
+          {usage !== PINEntryUsage.ChangePIN && helpText[usage] !== '' && (
+            <ThemedText style={style.helpText}>{helpText[usage]}</ThemedText>
+          )}
           <ThemedText variant="bold" style={style.inputLabelText}>
             {inputLabelText[usage]}
             {(usage === PINEntryUsage.ChangeBiometrics || usage === PINEntryUsage.ChangeHardwareAttestation) && (
@@ -210,7 +219,7 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
             </Button>
           </View>
         )}
-        {usage === PINEntryUsage.PINCheck && (
+        {(usage === PINEntryUsage.PINCheck || usage === PINEntryUsage.ConfirmAction) && (
           <View style={[style.buttonContainer, { marginTop: 10 }]}>
             <Button
               title={t('PINEnter.AppSettingCancel')}

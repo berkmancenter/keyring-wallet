@@ -16,14 +16,16 @@
  */
 
 import { Agent } from '@credo-ts/core'
+import i18next from 'i18next'
 import { AppState, AppStateStatus } from 'react-native'
+import Toast from 'react-native-toast-message'
 
 import { LocalStorageKeys } from '../../constants'
 import {
   requestBiometricConfirmationUI,
   BiometricConfirmationResponse,
   type BiometricConfirmationCopy,
-  type AuthMode,
+  type HardwareAuthMode,
 } from '../../contexts/biometric-confirmation'
 import { isBiometricsActive } from '../../services/keychain'
 import { PersistentStorage } from '../../services/storage'
@@ -44,7 +46,7 @@ const FOREGROUND_WAIT_TIMEOUT_MS = 15000
  *   show biometrics first; the user can tap "Enter Passcode". Evidence records DevicePasscode
  *   to reflect app policy (user opted out of biometrics), not necessarily what the OS showed first.
  */
-export async function resolveHardwareSigningAuthMode(): Promise<AuthMode> {
+export async function resolveHardwareSigningAuthMode(): Promise<HardwareAuthMode> {
   const [biometricsAvailable, preferences] = await Promise.all([
     isBiometricsActive(),
     PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences),
@@ -132,15 +134,31 @@ export async function requestBiometricConfirmationWithUI(
   const logger = agent.config.logger
 
   try {
-    if (!(await isBiometricsActive())) {
-      return { success: true, reason: 'not_available', timestamp: new Date().toISOString() }
+    // A phone with no Face ID or fingerprint set up confirms with the Keyring PIN too: the step
+    // always confirms, it never goes ahead unasked.
+    const biometricsOnPhone = await isBiometricsActive()
+
+    // Keyring's own setting, not the phone's: with Biometric Unlock off the app
+    // has removed the key Face ID or a fingerprint would open, so the sheet asks
+    // for the Keyring PIN. An unread setting tries biometrics, and the sheet
+    // offers the PIN if the key is not there (IN-452).
+    let useBiometry: boolean | undefined
+    try {
+      useBiometry = (await PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences))?.useBiometry
+    } catch {
+      useBiometry = undefined
+    }
+    const authMode = !biometricsOnPhone ? 'keyringPinNoBiometrics' : useBiometry === false ? 'keyringPin' : 'biometric'
+    if (authMode === 'keyringPin') logger.info(`${LOG_PREFIX} confirm with the Keyring PIN: Biometric Unlock is off`)
+    if (authMode === 'keyringPinNoBiometrics') {
+      logger.info(`${LOG_PREFIX} confirm with the Keyring PIN: no biometrics set up on the phone`)
     }
 
     const response: BiometricConfirmationResponse = await requestBiometricConfirmationUI(
       counterpartyName,
       connectionId,
       false,
-      'biometric',
+      authMode,
       copy
     )
 
@@ -162,8 +180,16 @@ export async function requestBiometricConfirmationWithUI(
           timestamp: response.timestamp,
         }
 
+      // Nothing asked the person: the action does not go ahead, and the person is told, since every caller
+      // returns quietly on a failed confirm and no one cancelled anything here (IN-452).
       case 'not_available':
-        return { success: true, reason: 'not_available', timestamp: response.timestamp }
+        logger.info(`${LOG_PREFIX} confirm: nothing could ask, so the action stops`)
+        Toast.show({
+          // ToastType.Error: its module pulls in the theme, which this one must not load.
+          type: 'error',
+          text1: i18next.t('Biometry.ConfirmNobodyAsked'),
+        })
+        return { success: false, reason: 'not_available', timestamp: response.timestamp }
 
       default:
         return {

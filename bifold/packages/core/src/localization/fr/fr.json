@@ -341,7 +341,8 @@
     "ForgotPINModalTitle": "Forgot your PIN? (FR)",
     "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (FR)",
     "Loading": "Logging in (FR)",
-    "DeveloperMenuTrigger": "Informations sur l'application"
+    "DeveloperMenuTrigger": "Informations sur l'application",
+    "ConfirmActionEnterPIN": "Saisissez votre NIP Keyring pour confirmer."
   },
   "AttemptLockout": {
     "Title": "Votre portefeuille est temporairement verrouillé",
@@ -370,7 +371,14 @@
     "AllowBiometricsDesc": "Pour déverrouiller Keyring avec votre biométrie, permettrez la biométrie dans les paramètres de votre appareil.",
     "SetupBiometricsTitle": "La biométrie n'est pas activée",
     "SetupBiometricsDesc": "Pour déverrouiller Keyring avec votre biométrie, configurez votre biométrie dans les paramètres de votre appareil.",
-    "OpenSettings": "Ouvrir les paramètres"
+    "OpenSettings": "Ouvrir les paramètres",
+    "ConfirmWithKeyringPIN": "Confirmer avec le NIP Keyring",
+    "ConfirmPinNote": "La Biométrie est désactivée dans le Menu de Keyring : confirmez avec votre NIP Keyring.",
+    "ConfirmPinAfterMissingKey": "La Biométrie n'a pas pu être utilisée ici. Confirmez plutôt avec votre NIP Keyring.",
+    "ConfirmPinUnavailable": "La Biométrie est désactivée dans le Menu de Keyring, et Keyring ne peut pas vérifier votre NIP sur cet écran. Fermez Keyring, rouvrez-le avec votre NIP, puis réessayez.",
+    "ConfirmPinNoBiometricsNote": "Ce téléphone n'a ni empreinte digitale ni déverrouillage par le visage configuré : confirmez avec votre NIP Keyring.",
+    "ConfirmPinUnavailableNoBiometrics": "Ce téléphone n'a ni empreinte digitale ni déverrouillage par le visage configuré, et Keyring ne peut pas vérifier votre NIP sur cet écran. Fermez Keyring, rouvrez-le avec votre NIP, puis réessayez.",
+    "ConfirmNobodyAsked": "Keyring n'a pas pu vous demander de confirmer, donc rien n'a été fait. Fermez Keyring, rouvrez-le, puis réessayez."
   },
   "ActivityHistory": {
     "Header": "Activity history(fr)",

@@ -18,8 +18,11 @@ import { testIdWithKey } from '../../utils/testable'
 import { ThemedText } from '../texts/ThemedText'
 import InlineErrorText, { InlineMessageProps } from './InlineErrorText'
 
-// adjusting for the spaces between numbers
-const cellCount = minPINLength * 2 - 1
+// adjusting for the spaces between numbers. Read when the field renders, not when this module loads:
+// constants.ts reaches this file again through its own imports, so at load time minPINLength can still be
+// undefined, and a NaN cell count throws "Invalid array length" from CodeField (seen with the PIN entry
+// the confirm sheet opens).
+const cellCountOf = () => minPINLength * 2 - 1
 const separatedPINCellCount = 6
 
 interface PINInputProps {
@@ -155,7 +158,7 @@ const PINInput = ({
           value={PINScreensConfig.useNewPINDesign ? PIN : displayValue}
           rootStyle={theme.codeFieldRoot}
           onChangeText={onChangeText}
-          cellCount={PINScreensConfig.useNewPINDesign ? separatedPINCellCount : cellCount}
+          cellCount={PINScreensConfig.useNewPINDesign ? separatedPINCellCount : cellCountOf()}
           keyboardType="number-pad"
           textContentType="password"
           renderCell={({ index, symbol, isFocused }) => {

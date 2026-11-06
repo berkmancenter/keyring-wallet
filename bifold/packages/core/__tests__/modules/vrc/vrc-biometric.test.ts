@@ -59,6 +59,11 @@ Object.defineProperty(AppState, 'currentState', {
 })
 AppState.addEventListener = ((...args: unknown[]) => mockAddEventListener(...args)) as typeof AppState.addEventListener
 
+import Toast from 'react-native-toast-message'
+
+jest.mock('i18next', () => ({ t: (key: string) => key }))
+jest.spyOn(Toast, 'show').mockImplementation(() => undefined)
+
 import {
   requestBiometricWithHardwareSigning,
   sendBiometricStatusNotification,
@@ -82,7 +87,7 @@ const createMockAgent = () =>
         },
       },
     },
-  } as any)
+  }) as any
 
 describe('VRC Biometric Confirmation', () => {
   let mockAgent: ReturnType<typeof createMockAgent>
@@ -416,14 +421,87 @@ describe('VRC Biometric Confirmation', () => {
   })
 
   describe('requestBiometricConfirmationWithUI', () => {
-    it('should return not_available when biometrics not active', async () => {
-      mockIsBiometricsActive.mockResolvedValue(false)
+    // IN-452: with Biometric Unlock off in Keyring the app has removed the key Face ID would open.
+    it.each([
+      ['Biometric Unlock off in Keyring', { useBiometry: false }, 'keyringPin'],
+      ['Biometric Unlock on', { useBiometry: true }, 'biometric'],
+      ['no setting stored', undefined, 'biometric'],
+    ])('asks the sheet for the right way to confirm with %s', async (_label, prefs, mode) => {
+      mockIsBiometricsActive.mockResolvedValue(true)
+      mockFetchPreferences.mockResolvedValue(prefs)
+      mockRequestBiometricConfirmationUI.mockResolvedValue({ status: 'confirmed', timestamp: 't' })
 
       const result = await requestBiometricConfirmationWithUI(mockAgent, counterpartyName, connectionId)
 
-      expect(result.success).toBe(true)
-      expect(result.reason).toBe('not_available')
-      expect(mockRequestBiometricConfirmationUI).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ success: true, reason: 'confirmed' })
+      expect(mockRequestBiometricConfirmationUI.mock.calls[0][3]).toBe(mode)
+    })
+
+    it('tries biometrics when the setting cannot be read', async () => {
+      mockIsBiometricsActive.mockResolvedValue(true)
+      mockFetchPreferences.mockRejectedValue(new Error('storage'))
+      mockRequestBiometricConfirmationUI.mockResolvedValue({ status: 'confirmed', timestamp: 't' })
+
+      await requestBiometricConfirmationWithUI(mockAgent, counterpartyName, connectionId)
+
+      expect(mockRequestBiometricConfirmationUI.mock.calls[0][3]).toBe('biometric')
+    })
+
+    it('logs the way only, never who it is with', async () => {
+      mockIsBiometricsActive.mockResolvedValue(true)
+      mockFetchPreferences.mockResolvedValue({ useBiometry: false })
+      mockRequestBiometricConfirmationUI.mockResolvedValue({ status: 'confirmed', timestamp: 't' })
+
+      await requestBiometricConfirmationWithUI(mockAgent, counterpartyName, connectionId)
+
+      const lines = JSON.stringify(mockAgent.config.logger.info.mock.calls)
+      expect(lines).toContain('Keyring PIN')
+      expect(lines).not.toContain(counterpartyName)
+      expect(lines).not.toContain(connectionId)
+    })
+
+    // A phone with no biometrics set up used to go ahead with no confirm at all: it asks for the Keyring PIN now.
+    it('a phone with no biometrics set up still confirms, with the Keyring PIN', async () => {
+      mockIsBiometricsActive.mockResolvedValue(false)
+      mockFetchPreferences.mockResolvedValue({ useBiometry: true })
+      mockRequestBiometricConfirmationUI.mockResolvedValue({ status: 'confirmed', timestamp: 't' })
+
+      const result = await requestBiometricConfirmationWithUI(mockAgent, counterpartyName, connectionId)
+
+      expect(mockRequestBiometricConfirmationUI).toHaveBeenCalledTimes(1)
+      expect(mockRequestBiometricConfirmationUI.mock.calls[0][3]).toBe('keyringPinNoBiometrics')
+      expect(result).toMatchObject({ success: true, reason: 'confirmed' })
+    })
+
+    it('an answer that nothing asked the person never reads as a confirm', async () => {
+      mockIsBiometricsActive.mockResolvedValue(true)
+      mockRequestBiometricConfirmationUI.mockResolvedValue({ status: 'not_available', timestamp: 't' })
+
+      const result = await requestBiometricConfirmationWithUI(mockAgent, counterpartyName, connectionId)
+
+      expect(result).toMatchObject({ success: false, reason: 'not_available' })
+      // Every caller returns quietly on a failed confirm, and no one cancelled: the person is told.
+      expect(Toast.show).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error', text1: 'Biometry.ConfirmNobodyAsked' })
+      )
+    })
+
+    it('a cancel says nothing more: the person knows why nothing happened', async () => {
+      mockIsBiometricsActive.mockResolvedValue(true)
+      mockRequestBiometricConfirmationUI.mockResolvedValue({ status: 'cancelled', timestamp: 't' })
+
+      await requestBiometricConfirmationWithUI(mockAgent, counterpartyName, connectionId)
+
+      expect(Toast.show).not.toHaveBeenCalled()
+    })
+
+    it('on a phone with no biometrics, Cancel stops the action: it never goes ahead unasked', async () => {
+      mockIsBiometricsActive.mockResolvedValue(false)
+      mockRequestBiometricConfirmationUI.mockResolvedValue({ status: 'cancelled', timestamp: 't' })
+
+      const result = await requestBiometricConfirmationWithUI(mockAgent, counterpartyName, connectionId)
+
+      expect(result).toMatchObject({ success: false, reason: 'cancelled' })
     })
 
     it('should return error without sending DIDComm notification when UI returns error status', async () => {

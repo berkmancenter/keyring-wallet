@@ -295,7 +295,8 @@
     "ChangeHardwareAttestationInputLabel": "Enter your wallet PIN (PT-BR)",
     "ForgotPINLink": "Forgot your PIN? (PT-BR)",
     "ForgotPINModalTitle": "Forgot your PIN? (PT-BR)",
-    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (PT-BR)"
+    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (PT-BR)",
+    "ConfirmActionEnterPIN": "Digite o seu PIN do Keyring para confirmar."
   },
   "AttemptLockout": {
     "Title": "Your wallet is temporarily locked (PT-BR)",
@@ -322,7 +323,14 @@
     "NoBiometricsErrorMessage": "Você não tem biometria habilitada neste dispositivo.",
     "NoBiometricsErrorDetails": "Para arrumar isso, habilite a biometria nas configurações do seu dispositivo.",
     "UnlockPromptTitle": "Destravar carteira",
-    "UnlockPromptDescription": "Utilize a biometria para destravar sua carteira"
+    "UnlockPromptDescription": "Utilize a biometria para destravar sua carteira",
+    "ConfirmWithKeyringPIN": "Confirmar com o PIN do Keyring",
+    "ConfirmPinNote": "A Biometria está desativada no Menu do Keyring, então confirme com o seu PIN do Keyring.",
+    "ConfirmPinAfterMissingKey": "Não foi possível usar a Biometria aqui. Confirme com o seu PIN do Keyring.",
+    "ConfirmPinUnavailable": "A Biometria está desativada no Menu do Keyring, e o Keyring não consegue verificar o seu PIN nesta tela. Feche o Keyring, abra de novo com o seu PIN e tente outra vez.",
+    "ConfirmPinNoBiometricsNote": "Este telefone não tem impressão digital nem desbloqueio facial configurados, então confirme com o seu PIN do Keyring.",
+    "ConfirmPinUnavailableNoBiometrics": "Este telefone não tem impressão digital nem desbloqueio facial configurados, e o Keyring não consegue verificar o seu PIN nesta tela. Feche o Keyring, abra de novo com o seu PIN e tente outra vez.",
+    "ConfirmNobodyAsked": "O Keyring não conseguiu pedir a sua confirmação, então nada foi feito. Feche o Keyring, abra de novo e tente outra vez."
   },
   "ActivityHistory": {
     "Header": "Activity history",

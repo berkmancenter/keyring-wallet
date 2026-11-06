@@ -313,7 +313,8 @@
     "ChangeHardwareAttestationInputLabel": "Enter your wallet PIN",
     "ForgotPINLink": "Forgot your PIN?",
     "ForgotPINModalTitle": "Forgot your PIN?",
-    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again."
+    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again.",
+    "ConfirmActionEnterPIN": "Enter your Keyring PIN to confirm."
   },
   "AttemptLockout": {
     "Title": "Your wallet is temporarily locked",
@@ -348,7 +349,14 @@
     "VrcConfirmationDescription": "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection.",
     "SecurityNote": "Your biometric data never leaves your device. Only you can authorize this signature.",
     "ConfirmWithBiometrics": "Confirm with Biometrics",
-    "Authenticating": "Authenticating..."
+    "Authenticating": "Authenticating...",
+    "ConfirmWithKeyringPIN": "Confirm with Keyring PIN",
+    "ConfirmPinNote": "Biometric Unlock is off in Keyring's Menu, so confirm with your Keyring PIN.",
+    "ConfirmPinAfterMissingKey": "Biometric Unlock couldn't be used here. Confirm with your Keyring PIN instead.",
+    "ConfirmPinUnavailable": "Biometric Unlock is off in Keyring's Menu, and Keyring can't check your PIN on this screen. Close Keyring, open it again with your PIN, then try again.",
+    "ConfirmPinNoBiometricsNote": "This phone has no fingerprint or face unlock set up, so confirm with your Keyring PIN.",
+    "ConfirmPinUnavailableNoBiometrics": "This phone has no fingerprint or face unlock set up, and Keyring can't check your PIN on this screen. Close Keyring, open it again with your PIN, then try again.",
+    "ConfirmNobodyAsked": "Keyring couldn't ask you to confirm this, so nothing was done. Close Keyring, open it again, then try again."
   },
   "VrcBiometric": {
     "StatusNotVerified": "Contact did not complete identity verification for this relationship.",
