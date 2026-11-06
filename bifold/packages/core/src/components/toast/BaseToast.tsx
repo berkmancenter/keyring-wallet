@@ -38,11 +38,17 @@ const BaseToast: React.FC<BaseToastProps> = ({ title, body, toastType, onPress =
   let iconColor = ''
   let textColor = ''
   const styles = StyleSheet.create({
+    // A toast floats over the screen, so whatever is behind it must not show through, even where a theme's
+    // notification colour is a translucent tint (Keyring's warn is): the tint sits on an opaque base.
+    base: {
+      marginTop: 25,
+      borderRadius,
+      backgroundColor: ColorPalette.grayscale.white,
+    },
     container: {
       flex: 1,
       alignItems: 'flex-start',
       flexDirection: 'row',
-      marginTop: 25,
       borderWidth,
       borderRadius,
     },
@@ -107,32 +113,34 @@ const BaseToast: React.FC<BaseToastProps> = ({ title, body, toastType, onPress =
       accessibilityRole="alert"
       testID={testIdWithKey('Toast')}
     >
-      <View style={[styles.container, { backgroundColor, borderColor, width: width - width * 0.1 }]}>
-        <View style={{ flex: 1, flexDirection: 'row' }}>
-          <Icon style={styles.icon} name={iconName} color={iconColor} size={iconSize} />
-          <View style={styles.textContainer}>
-            <ThemedText style={[styles.title, { color: textColor }]} testID={testIdWithKey('ToastTitle')}>
-              {title}
-            </ThemedText>
-            {body && (
-              <ThemedText style={[styles.body, { color: textColor }]} testID={testIdWithKey('ToastBody')}>
-                {body}
+      <View style={styles.base}>
+        <View style={[styles.container, { backgroundColor, borderColor, width: width - width * 0.1 }]}>
+          <View style={{ flex: 1, flexDirection: 'row' }}>
+            <Icon style={styles.icon} name={iconName} color={iconColor} size={iconSize} />
+            <View style={styles.textContainer}>
+              <ThemedText style={[styles.title, { color: textColor }]} testID={testIdWithKey('ToastTitle')}>
+                {title}
               </ThemedText>
-            )}
+              {body && (
+                <ThemedText style={[styles.body, { color: textColor }]} testID={testIdWithKey('ToastBody')}>
+                  {body}
+                </ThemedText>
+              )}
+            </View>
           </View>
-        </View>
-        <View>
-          <TouchableOpacity
-            onPress={() => {
-              Toast.hide()
-            }}
-            accessibilityLabel={t('Global.CloseNotification')}
-            accessibilityRole="button"
-            testID={testIdWithKey('ToastClose')}
-            hitSlop={hitSlop}
-          >
-            <Icon style={styles.icon} name={'close'} color={iconColor} size={iconSize} />
-          </TouchableOpacity>
+          <View>
+            <TouchableOpacity
+              onPress={() => {
+                Toast.hide()
+              }}
+              accessibilityLabel={t('Global.CloseNotification')}
+              accessibilityRole="button"
+              testID={testIdWithKey('ToastClose')}
+              hitSlop={hitSlop}
+            >
+              <Icon style={styles.icon} name={'close'} color={iconColor} size={iconSize} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
