@@ -1641,6 +1641,7 @@
     "AgentCard_": ["src/modules/trust-tasks/screens/CardKeptRow.tsx"],
     "AgentCommunityCard_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCommunityCheck_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
+    "AgentCommunityHistory_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCommunityName_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCommunityOpen_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCommunityPrimary_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
