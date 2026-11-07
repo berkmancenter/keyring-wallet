@@ -1117,11 +1117,23 @@ export async function restorePendingProposals(agent: Agent): Promise<number> {
  * `trust-task-error` with `vrc/relationships/propose:declined` — the spec is
  * explicit that a decline is never a response with `accept: false`.
  */
+/**
+ * The answer to a proposal that came to a shared-connect code this phone showed: there is no connection, and the
+ * key is the encounter key (`enc:` + the code's `_id`). Registered by the inviter ceremony when it loads, so this
+ * module does not import it.
+ */
+type EncounterConsentHandler = (agent: Agent, key: string, accept: boolean) => Promise<void>
+let encounterConsent: EncounterConsentHandler | undefined
+export function setEncounterConsentHandler(handler: EncounterConsentHandler | undefined): void {
+  encounterConsent = handler
+}
+
 export async function respondToRelationshipProposal(
   agent: Agent,
   connectionId: string,
   accept: boolean
 ): Promise<void> {
+  if (connectionId.startsWith('enc:') && encounterConsent) return encounterConsent(agent, connectionId, accept)
   const logger = agent.config.logger
   const pending = pendingProposals.get(connectionId)
   pendingProposals.delete(connectionId)

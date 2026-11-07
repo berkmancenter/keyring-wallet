@@ -91,6 +91,7 @@ function rig(options: { record?: Partial<InviteRecord>; deps?: Partial<InviterDe
     open: jest.fn(async () => frames.shift() ?? { kind: 'none' as const }),
     sendAccept: jest.fn(async (vid: string) => void events.push(`xrfa:${vid}`)),
     verifyProof: jest.fn(async (d: Record<string, unknown>) => !(d as { badProof?: boolean }).badProof),
+    sendDocument: jest.fn(async () => undefined),
     stopRelay: jest.fn(async () => void events.push('stopRelay')),
     ...options.deps,
   }
@@ -144,6 +145,13 @@ function rig(options: { record?: Partial<InviteRecord>; deps?: Partial<InviterDe
     flush: () => new Promise((r) => setImmediate(r)),
   }
 }
+
+/** The inverse ceremony is the next layer's: these tests stop at the choke point. */
+const noCeremony = () => ({
+  onProposal: async () => undefined,
+  onProposalAgain: async () => undefined,
+  onDocument: async () => undefined,
+})
 
 /**
  * Nothing went out and nothing moved: the shape of every silent drop. The one write a dropped frame causes is its own
@@ -764,7 +772,7 @@ describe('making a code', () => {
   test('mints, writes, opens the relay, and shows the link; then cancels cleanly', async () => {
     const r = relay()
     const deps = baseDeps(r)
-    const made = await createSharedConnectInvite(agent, { now: () => T0, deps })
+    const made = await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps })
     expect(made.kind).toBe('showing')
     if (made.kind !== 'showing') return
     expect(made.exp).toBe(EXP)
@@ -778,7 +786,7 @@ describe('making a code', () => {
   test('a relay that will not open is `failed: relay`, with the code ended and nothing registered', async () => {
     const r = relay()
     r.start.mockRejectedValue(new Error('socket'))
-    const made = await createSharedConnectInvite(agent, { now: () => T0, deps: baseDeps(r) })
+    const made = await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: baseDeps(r) })
     expect(made).toEqual({ kind: 'failed', failure: 'relay' })
     const stored = [...mockKeyed.values()][0] as unknown as InviteRecord
     expect(stored.state).toBe('failed')
@@ -789,18 +797,26 @@ describe('making a code', () => {
   test('a mediator that cannot be resolved is `failed: relay`, before anything is written', async () => {
     const deps = baseDeps()
     deps.resolveMediator.mockRejectedValue(new Error('dns'))
-    expect(await createSharedConnectInvite(agent, { deps })).toEqual({ kind: 'failed', failure: 'relay' })
+    expect(await createSharedConnectInvite(agent, { ceremony: noCeremony, deps })).toEqual({
+      kind: 'failed',
+      failure: 'relay',
+    })
     expect(deps.persist).not.toHaveBeenCalled()
   })
 
   test('asks for at most ten minutes, whatever the screen asks', async () => {
-    const made = await createSharedConnectInvite(agent, { now: () => T0, ttlSeconds: 3600, deps: baseDeps() })
+    const made = await createSharedConnectInvite(agent, {
+      ceremony: noCeremony,
+      now: () => T0,
+      ttlSeconds: 3600,
+      deps: baseDeps(),
+    })
     expect(made.kind === 'showing' && made.exp).toBe(EXP)
     if (made.kind === 'showing') await made.inviter.cancel()
   })
 
   test("a code left 'waiting' by a closed app is swept to cancelled; a live one is not", async () => {
-    const made = await createSharedConnectInvite(agent, { now: () => T0, deps: baseDeps() })
+    const made = await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: baseDeps() })
     mockKeyed.set('orphan', { enactment: 'orphan', state: 'waiting', invited: [] })
     mockKeyed.set('done', { enactment: 'done', state: 'connected', invited: [] })
     expect(await sweepStaleInvites(agent)).toBe(1)
@@ -831,7 +847,7 @@ describe('the switch governs the function, not only the button', () => {
 
   test('on: a code starts (control)', async () => {
     const d = deps()
-    const made = await createSharedConnectInvite(agent, { now: () => T0, deps: d })
+    const made = await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: d })
     expect(made.kind).toBe('showing')
     expect(d.openRelay).toHaveBeenCalledTimes(1)
     if (made.kind === 'showing') await made.inviter.cancel()
@@ -843,7 +859,9 @@ describe('the switch governs the function, not only the button', () => {
   ])('%s: nothing starts: no DID minted, no relay login, nothing written', async (_why, off) => {
     off()
     const d = deps()
-    expect(await createSharedConnectInvite(agent, { now: () => T0, deps: d })).toEqual({ kind: 'off' })
+    expect(await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: d })).toEqual({
+      kind: 'off',
+    })
     expect(d.resolveMediator).not.toHaveBeenCalled()
     expect(d.createDid).not.toHaveBeenCalled()
     expect(d.openRelay).not.toHaveBeenCalled()
@@ -893,8 +911,8 @@ describe('the switch governs the function, not only the button', () => {
   ])('turning %s off mid-session ends every live code at once: relay stopped, timers cleared', async (_why, off) => {
     const r1 = relay()
     const r2 = relay()
-    const a = await createSharedConnectInvite(agent, { now: () => T0, deps: deps(r1) })
-    const b = await createSharedConnectInvite(agent, { now: () => T0, deps: deps(r2) })
+    const a = await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: deps(r1) })
+    const b = await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: deps(r2) })
     if (a.kind !== 'showing' || b.kind !== 'showing') throw new Error('codes did not start')
     off()
     await new Promise((resolve) => setImmediate(resolve))
@@ -904,7 +922,7 @@ describe('the switch governs the function, not only the button', () => {
   })
 
   test('control: setting the switch on again, or on while on, ends nothing', async () => {
-    const made = await createSharedConnectInvite(agent, { now: () => T0, deps: deps() })
+    const made = await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: deps() })
     if (made.kind !== 'showing') throw new Error('code did not start')
     setSharedConnectInviteEnabled(true)
     setSharedConnectEnabled(true)
@@ -918,7 +936,9 @@ describe('the switch governs the function, not only the button', () => {
     r.start.mockImplementation(async () => {
       setSharedConnectInviteEnabled(false) // the person flips the switch while the socket connects
     })
-    expect(await createSharedConnectInvite(agent, { now: () => T0, deps: deps(r) })).toEqual({ kind: 'off' })
+    expect(await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: deps(r) })).toEqual({
+      kind: 'off',
+    })
     expect(r.stop).toHaveBeenCalledTimes(1)
   })
 
@@ -929,7 +949,9 @@ describe('the switch governs the function, not only the button', () => {
       setSharedConnectInviteEnabled(false) // the code ends while openRelay is still running: no handle to stop yet
       return r
     })
-    expect(await createSharedConnectInvite(agent, { now: () => T0, deps: d })).toEqual({ kind: 'off' })
+    expect(await createSharedConnectInvite(agent, { ceremony: noCeremony, now: () => T0, deps: d })).toEqual({
+      kind: 'off',
+    })
     expect(r.stop).toHaveBeenCalledTimes(1)
   })
 })

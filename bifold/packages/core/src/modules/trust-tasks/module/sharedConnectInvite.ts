@@ -57,10 +57,17 @@ import {
 } from './sharedConnectDecisions'
 import { createEncounterDid, ENCOUNTER_LOG_PREFIX } from './sharedConnectEncounter'
 import { isSharedConnectInviteEnabled, onSharedConnectInviteTurnedOff } from './sharedConnectFlag'
+import { SharedConnectInviterCeremony } from './sharedConnectInviterCeremony'
 import type { SharedConnectInviteFailure, SharedConnectInviteState } from './sharedConnectInviteTypes'
 import { SHARED_CONNECT_FLOW, TRIGGER_LINK_HOST } from './triggerLink'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
-import { answerInviteOverTsp, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
+import {
+  answerInviteOverTsp,
+  packTrustTaskForPeer,
+  tspSessionForManager,
+  unpackTrustTaskFromPeer,
+  type TspSessionIdentity,
+} from './vtiTsp'
 import {
   resolveVtiMediator,
   VtiMediatorSession,
@@ -241,6 +248,8 @@ export interface InviterDeps {
   open(bytes: Uint8Array): Promise<InboundFrame>
   sendAccept(theirVid: string, inviteDigest: Uint8Array, revision?: tsp.TspRevision): Promise<void>
   verifyProof(document: Record<string, unknown>, signer: string): Promise<boolean>
+  /** Send a Trust Task document to a scanner, sealed in the given TSP version. */
+  sendDocument(theirVid: string, document: Record<string, unknown>, revision?: tsp.TspRevision): Promise<void>
   /** Close the relay session. Called once, at the end. */
   stopRelay(): Promise<void>
 }
@@ -327,6 +336,29 @@ export class SharedConnectInviter {
     const handled = this.inbound.then(() => this.admitOne(bytes))
     this.inbound = handled.catch(() => undefined)
     return handled
+  }
+
+  /** The accepted scanner and its propose, once there is one. */
+  get acceptedPeer(): InviteRecord['accepted'] {
+    return this.record.accepted ? { ...this.record.accepted } : undefined
+  }
+
+  get myVid(): string {
+    return this.record.myVid
+  }
+
+  get exp(): number {
+    return this.record.exp
+  }
+
+  /**
+   * Send a document to the accepted scanner, in the TSP version its propose came in. Nothing goes out after the end
+   * or before an acceptance: the ceremony has no one else to write to.
+   */
+  async send(document: Record<string, unknown>): Promise<void> {
+    const peer = this.record.accepted
+    if (this.ended || !peer) throw new Error(`${ENCOUNTER_LOG_PREFIX} inviter has no live scanner to send to`)
+    await this.deps.sendDocument(peer.theirVid, document, peer.revision)
   }
 
   /** The ceremony moved the code on (`connecting`, `connected`), or ended it. */
@@ -602,6 +634,8 @@ export async function createSharedConnectInvite(
     now?: () => number
     deps?: Partial<CreateInviteDeps>
     inviterDeps?: Partial<InviterDeps>
+    /** The ceremony an accepted propose is handed to; the inverse ceremony by default. */
+    ceremony?: (inviter: SharedConnectInviter) => InviterCeremony
   } = {}
 ): Promise<CreateInviteResult> {
   if (!isSharedConnectInviteEnabled()) return { kind: 'off' }
@@ -646,12 +680,18 @@ export async function createSharedConnectInvite(
       await relayRef.current?.sendTspFrame(packed.bytes)
     },
     verifyProof: (document, signer) => verifyDocumentProof(agent, document, signer),
+    sendDocument: async (theirVid, document, revision) => {
+      const packed = await packTrustTaskForPeer(identity, myVid, theirVid, document, revision)
+      if (!relayRef.current) throw new Error(`${ENCOUNTER_LOG_PREFIX} inviter relay is closed`)
+      await relayRef.current.sendTspFrame(packed.bytes)
+    },
     stopRelay: async () => {
       await relayRef.current?.stop()
       relayRef.current = undefined
     },
     ...options.inviterDeps,
   })
+  inviter.attach((options.ceremony ?? ((i) => new SharedConnectInviterCeremony(agent, i)))(inviter))
   try {
     await inviter.start()
     // Switched off while the DID was minted: end here, before any relay login.
