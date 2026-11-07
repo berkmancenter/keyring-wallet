@@ -110,7 +110,7 @@ describe('ImportWallet: a picker that does not settle', () => {
     fireEvent.press(getByText(ROW))
 
     await waitFor(() => expect(alertSpy).toHaveBeenCalledTimes(1))
-    expect(alertSpy.mock.calls[0][0]).toBe('Error')
+    expect(alertSpy.mock.calls[0][0]).toBe('Settings.ImportWalletPickErrorTitle')
     await new Promise((r) => setTimeout(r, 150))
     expect(queryByTestId(NOTE)).toBeNull()
   })

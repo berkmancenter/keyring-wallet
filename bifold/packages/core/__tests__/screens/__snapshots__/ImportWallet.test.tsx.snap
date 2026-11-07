@@ -205,7 +205,7 @@ exports[`ImportWallet Screen screen renders correctly 1`] = `
             ]
           }
         >
-          Select all 3 backup files: .db, .db-shm, and .db-wal (hold to multi-select)
+          Settings.ImportWalletFileHelp
         </Text>
         <Text
           maxFontSizeMultiplier={2}
@@ -312,7 +312,7 @@ exports[`ImportWallet Screen screen renders correctly 1`] = `
               ]
             }
           >
-            Warning: Importing will replace ALL current wallet data with the backup. This action cannot be undone.
+            Settings.ImportWalletReplaceWarning
           </Text>
         </View>
         <View
@@ -466,7 +466,7 @@ exports[`ImportWallet Screen screen renders correctly 1`] = `
               ]
             }
           >
-            You will need the password that was used when creating the backup.
+            Settings.ImportWalletPasswordHint
           </Text>
         </View>
       </View>

@@ -93,12 +93,12 @@ const ExportWallet: React.FC<ExportWalletProps> = () => {
     }
 
     if (!agent) {
-      Alert.alert(String(t('Error.Problem')), 'Agent is not available. Please restart the app.')
+      Alert.alert(String(t('Error.Problem')), String(t('Settings.WalletBackupAgentUnavailable')))
       return
     }
 
     if (!agent.isInitialized) {
-      Alert.alert(String(t('Error.Problem')), 'Agent is still initializing. Please wait and try again.')
+      Alert.alert(String(t('Error.Problem')), String(t('Settings.WalletBackupAgentInitializing')))
       return
     }
 
@@ -142,22 +142,22 @@ const ExportWallet: React.FC<ExportWalletProps> = () => {
         const { action } = await Share.share({ url, title: String(t('Settings.ExportWalletShareTitle')) })
         if (action === Share.sharedAction) {
           shared = true
-          Alert.alert(String(t('Global.Success')), String(t('Settings.ExportWalletShared')), [{ text: 'OK' }])
+          Alert.alert(String(t('Global.Success')), String(t('Settings.ExportWalletShared')), [
+            { text: String(t('Settings.WalletBackupOK')) },
+          ])
           setPassword('')
           setConfirmPassword('')
         } else {
           Alert.alert(String(t('Settings.ExportWalletNotSavedTitle')), String(t('Settings.ExportWalletNotSaved')), [
-            { text: 'OK' },
+            { text: String(t('Settings.WalletBackupOK')) },
           ])
         }
         return
       }
 
-      Alert.alert(
-        String(t('Global.Success')),
-        `Wallet exported successfully!\n\nYou can find your ${fileCount} backup files in your Downloads folder.\n\nKeep all files together — you'll need them to restore.`,
-        [{ text: 'OK' }]
-      )
+      Alert.alert(String(t('Global.Success')), String(t('Settings.ExportWalletSavedToDownloads', { fileCount })), [
+        { text: String(t('Settings.WalletBackupOK')) },
+      ])
       setPassword('')
       setConfirmPassword('')
     } catch (error: any) {

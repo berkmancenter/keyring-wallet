@@ -148,7 +148,11 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
         })
 
         if (!mainDbFile) {
-          Alert.alert('Invalid File', 'Please select a wallet backup file (.db extension).', [{ text: 'OK' }])
+          Alert.alert(
+            String(t('Settings.ImportWalletInvalidFileTitle')),
+            String(t('Settings.ImportWalletInvalidFile')),
+            [{ text: String(t('Settings.WalletBackupOK')) }]
+          )
           return
         }
 
@@ -173,14 +177,10 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
         }
 
         if (result.length === 1) {
-          Alert.alert(
-            'WAL Files Missing',
-            'You only selected the .db file. For a complete backup, please also select the .db-shm and .db-wal files if they exist.\n\nDo you want to continue with just the .db file?',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Continue Anyway', onPress: () => setSelectedFile(targetDbPath) },
-            ]
-          )
+          Alert.alert(String(t('Settings.ImportWalletWalMissingTitle')), String(t('Settings.ImportWalletWalMissing')), [
+            { text: String(t('Global.Cancel')), style: 'cancel' },
+            { text: String(t('Settings.ImportWalletContinueAnyway')), onPress: () => setSelectedFile(targetDbPath) },
+          ])
           return
         }
 
@@ -192,24 +192,22 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
       if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
         // eslint-disable-next-line no-console
         console.error('Document picker error:', err)
-        Alert.alert('Error', 'Failed to select file. Please try again.', [{ text: 'OK' }])
+        Alert.alert(String(t('Settings.ImportWalletPickErrorTitle')), String(t('Settings.ImportWalletPickError')), [
+          { text: String(t('Settings.WalletBackupOK')) },
+        ])
       }
     }
   }
 
   const confirmImport = async () => {
-    Alert.alert(
-      'Confirm Import',
-      'Importing a wallet backup will replace ALL current wallet data with the backup. This action cannot be undone.\n\nAfter import, you must fully close the app and reopen it.\n\nAre you sure you want to continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Import',
-          style: 'destructive',
-          onPress: () => performImport(),
-        },
-      ]
-    )
+    Alert.alert(String(t('Settings.ImportWalletConfirmTitle')), String(t('Settings.ImportWalletConfirmMessage')), [
+      { text: String(t('Global.Cancel')), style: 'cancel' },
+      {
+        text: String(t('Settings.ImportWalletConfirm')),
+        style: 'destructive',
+        onPress: () => performImport(),
+      },
+    ])
   }
 
   const performImport = async () => {
@@ -224,12 +222,12 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
     }
 
     if (!agent) {
-      Alert.alert(String(t('Error.Problem')), 'Agent is not available. Please restart the app.')
+      Alert.alert(String(t('Error.Problem')), String(t('Settings.WalletBackupAgentUnavailable')))
       return
     }
 
     if (!agent.isInitialized) {
-      Alert.alert(String(t('Error.Problem')), 'Agent is still initializing. Please wait and try again.')
+      Alert.alert(String(t('Error.Problem')), String(t('Settings.WalletBackupAgentInitializing')))
       return
     }
 
@@ -259,12 +257,12 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
 
       const successMsg =
         Platform.OS === 'ios'
-          ? 'Wallet imported successfully!\n\nPlease swipe this app closed from the App Switcher and reopen it to use your imported wallet.'
-          : 'Wallet imported successfully!\n\nThe app will close now. Please reopen it to use your imported wallet.'
+          ? String(t('Settings.ImportWalletImportedIos'))
+          : String(t('Settings.ImportWalletImportedAndroid'))
 
       Alert.alert(String(t('Global.Success')), successMsg, [
         {
-          text: 'OK',
+          text: String(t('Settings.WalletBackupOK')),
           onPress: () => exitApp(),
         },
       ])
@@ -275,27 +273,26 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
       let errorMessage = error?.message || String(t('Settings.ImportWalletError'))
 
       if (errorMessage.includes('wallet already exists') || errorMessage.includes('WalletDuplicateError')) {
-        errorMessage = 'A wallet already exists. Please delete the current wallet before importing.'
+        errorMessage = String(t('Settings.ImportWalletErrorExists'))
       } else if (errorMessage.includes('database path was not found') || errorMessage.includes('WalletNotFoundError')) {
-        errorMessage =
-          'Backup file not found or could not be accessed. Please ensure you selected all 3 backup files (.db, .db-shm, .db-wal).'
+        errorMessage = String(t('Settings.ImportWalletErrorNotFound'))
       } else if (errorMessage.includes('invalid key') || errorMessage.includes('WalletInvalidKeyError')) {
-        errorMessage = 'Invalid password. Please enter the correct backup password.'
+        errorMessage = String(t('Settings.ImportWalletErrorBadPassword'))
       } else if (errorMessage.includes('Permission denied') || errorMessage.includes('EACCES')) {
-        errorMessage = 'Cannot access the backup file. Please ensure you have the necessary permissions.'
+        errorMessage = String(t('Settings.ImportWalletErrorNoAccess'))
       } else if (errorMessage.includes('no such table')) {
-        errorMessage =
-          'The backup file appears incomplete. Please ensure you selected all 3 backup files (.db, .db-shm, .db-wal).'
+        errorMessage = String(t('Settings.ImportWalletErrorIncomplete'))
       }
 
-      const restartMsg =
-        Platform.OS === 'ios'
-          ? `${errorMessage}\n\nPlease swipe this app closed from the App Switcher and reopen it to try again.`
-          : `${errorMessage}\n\nThe app will close now. Please reopen it to try again.`
+      // Joined here rather than interpolated: the error text can be anything, and
+      // i18next escapes interpolated values by default.
+      const restartMsg = `${errorMessage}\n\n${String(
+        t(Platform.OS === 'ios' ? 'Settings.WalletBackupRestartIos' : 'Settings.WalletBackupRestartAndroid')
+      )}`
 
       Alert.alert(String(t('Error.Problem')), restartMsg, [
         {
-          text: 'OK',
+          text: String(t('Settings.WalletBackupOK')),
           onPress: () => exitApp(),
         },
       ])
@@ -325,9 +322,7 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
             </ThemedText>
             <Icon name="folder-open" size={22} color={ColorPalette.brand.primary} />
           </TouchableOpacity>
-          <ThemedText style={styles.fileHelp}>
-            Select all 3 backup files: .db, .db-shm, and .db-wal (hold to multi-select)
-          </ThemedText>
+          <ThemedText style={styles.fileHelp}>{String(t('Settings.ImportWalletFileHelp'))}</ThemedText>
           {pickerSlow && (
             <View
               style={styles.infoCard}
@@ -359,13 +354,15 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
           <View style={styles.warningCard}>
             <Icon name="warning" size={22} color={ColorPalette.notification.errorIcon} style={styles.cardIcon} />
             <ThemedText style={[styles.cardText, { color: ColorPalette.notification.errorText }]}>
-              Warning: Importing will replace ALL current wallet data with the backup. This action cannot be undone.
+              {String(t('Settings.ImportWalletReplaceWarning'))}
             </ThemedText>
           </View>
 
           <View style={styles.buttonContainer}>
             <Button
-              title={isImporting ? 'Importing...' : String(t('Settings.ImportWalletConfirm'))}
+              title={
+                isImporting ? String(t('Settings.ImportWalletImporting')) : String(t('Settings.ImportWalletConfirm'))
+              }
               buttonType={ButtonType.Primary}
               accessibilityLabel={String(t('Settings.ImportWalletConfirm'))}
               testID={testIdWithKey('ImportButton')}
@@ -377,7 +374,7 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
           <View style={[styles.infoCard, { marginBottom: Spacing.xl }]}>
             <Icon name="info-outline" size={22} color={ColorPalette.notification.infoIcon} style={styles.cardIcon} />
             <ThemedText style={[styles.cardText, { color: ColorPalette.notification.infoText }]}>
-              You will need the password that was used when creating the backup.
+              {String(t('Settings.ImportWalletPasswordHint'))}
             </ThemedText>
           </View>
         </ScrollView>
