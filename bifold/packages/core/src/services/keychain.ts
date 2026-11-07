@@ -186,6 +186,72 @@ export const loadWalletSecret = async (title?: string, description?: string): Pr
   return secret
 }
 
+const biometryProbeFauxUserName = 'WalletFauxBiometryProbeUserName'
+export const BIOMETRY_PROBE_TIMEOUT_MS = 60_000
+
+const removeBiometryProbe = async (): Promise<void> => {
+  try {
+    await Keychain.resetGenericPassword({ service: KeychainServices.BiometryProbe })
+  } catch {
+    // Nothing to remove, or nothing we can do: the item never holds a secret.
+  }
+}
+
+/**
+ * Confirms that Face ID / Touch ID can open a keychain item protected the same
+ * way as the wallet key (BIOMETRY_ANY, this device only), before Biometric
+ * Unlock is turned on. It writes a throwaway value under its own service,
+ * reads it back (this is what shows iOS's Face ID permission alert the first
+ * time, then a scan), and deletes it. It never touches the wallet key's items.
+ *
+ * Resolves true only when the read returns the value it wrote. A decline, a
+ * cancel, a failed scan, a keychain error, or no answer within `timeoutMs`
+ * resolves false: the wallet key must never be stored behind biometrics that
+ * cannot open it, because a PIN path reads that key too (checkWalletPIN's
+ * onboarding fallback). The timeout matters because the bug this replaces was
+ * a permission request that never resolved.
+ */
+export const confirmBiometricKeychainAccess = async (
+  title: string,
+  description: string,
+  timeoutMs: number = BIOMETRY_PROBE_TIMEOUT_MS
+): Promise<boolean> => {
+  const service = KeychainServices.BiometryProbe
+  const value = String(uuid.v4())
+
+  // A probe left behind by an attempt the app was killed during.
+  await removeBiometryProbe()
+
+  const probe = async (): Promise<boolean> => {
+    try {
+      const stored = await Keychain.setGenericPassword(
+        biometryProbeFauxUserName,
+        value,
+        optionsForKeychainAccess(service, true)
+      )
+      if (!stored) {
+        return false
+      }
+      const result = await Keychain.getGenericPassword({ service, authenticationPrompt: { title, description } })
+      return result !== false && result.password === value
+    } catch {
+      return false
+    } finally {
+      await removeBiometryProbe()
+    }
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), timeoutMs)
+  })
+  try {
+    return await Promise.race([probe(), timedOut])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // This function checks if the biometrics on a device have been configured
 // If fingerprints or a face scan is setup, this will return true
 // If the device supports biometrics but they have not been configured, it will return false

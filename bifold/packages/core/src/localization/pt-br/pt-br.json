@@ -324,6 +324,8 @@
     "NoBiometricsErrorDetails": "Para arrumar isso, habilite a biometria nas configurações do seu dispositivo.",
     "UnlockPromptTitle": "Destravar carteira",
     "UnlockPromptDescription": "Utilize a biometria para destravar sua carteira",
+    "NotConfirmedTitle": "O desbloqueio biométrico continua desativado",
+    "NotConfirmedDesc": "O Face ID não confirmou, então o desbloqueio biométrico não foi ativado. Tente novamente.",
     "ConfirmWithKeyringPIN": "Confirmar com o PIN do Keyring",
     "ConfirmPinNote": "A Biometria está desativada no Menu do Keyring, então confirme com o seu PIN do Keyring.",
     "ConfirmPinAfterMissingKey": "Não foi possível usar a Biometria aqui. Confirme com o seu PIN do Keyring.",

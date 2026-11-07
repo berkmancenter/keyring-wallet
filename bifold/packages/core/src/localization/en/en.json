@@ -339,6 +339,8 @@
     "Recommended": "Recommended. It's quicker than your PIN, and you type your PIN less often where others might see it.",
     "UnlockPromptTitle": "Wallet Unlock",
     "UnlockPromptDescription": "Use biometrics to unlock your wallet",
+    "NotConfirmedTitle": "Biometric Unlock is still off",
+    "NotConfirmedDesc": "Face ID didn't confirm, so Biometric Unlock wasn't turned on. Try again.",
     "AllowBiometricsTitle": "Enable biometrics",
     "AllowBiometricsDesc": "To unlock Keyring with your biometrics, please allow biometrics use within your device's settings.",
     "SetupBiometricsTitle": "Biometrics is not enabled",

@@ -75,7 +75,7 @@ import ImportWallet from './screens/ImportWallet'
 import { AbstractBifoldLogger } from './services/AbstractBifoldLogger'
 import { AgentBridge } from './services/AgentBridge'
 import { bifoldLoggerInstance } from './services/bifoldLogger'
-import { isBiometricsActive, loadLoginAttempt } from './services/keychain'
+import { confirmBiometricKeychainAccess, isBiometricsActive, loadLoginAttempt } from './services/keychain'
 import { BifoldLogger } from './services/logger'
 import { MockLogger } from './testing/MockLogger'
 import { DeepPartial, ThemeBuilder } from './theme-builder'
@@ -522,6 +522,7 @@ export {
   InfoBoxType,
   InfoTextBox,
   isBiometricsActive,
+  confirmBiometricKeychainAccess,
   KeyboardView,
   LimitedTextInput,
   Link,

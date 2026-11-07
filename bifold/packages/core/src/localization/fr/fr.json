@@ -367,6 +367,8 @@
     "Recommended": "Recommandé. C'est plus rapide que votre code PIN, et vous le saisissez moins souvent là où d'autres pourraient le voir.",
     "UnlockPromptTitle": "Déverrouillage du portefeuille",
     "UnlockPromptDescription": "Utilisez la biométrie pour déverrouiller votre portefeuille",
+    "NotConfirmedTitle": "Le déverrouillage biométrique est toujours désactivé",
+    "NotConfirmedDesc": "Face ID n'a pas confirmé, donc le déverrouillage biométrique n'a pas été activé. Réessayez.",
     "AllowBiometricsTitle": "Activer la biométrie",
     "AllowBiometricsDesc": "Pour déverrouiller Keyring avec votre biométrie, permettrez la biométrie dans les paramètres de votre appareil.",
     "SetupBiometricsTitle": "La biométrie n'est pas activée",
