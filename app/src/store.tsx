@@ -124,6 +124,8 @@ const developerState: Developer = {
   // On for everyone. A saved choice, off included, wins on load (container-imp.ts).
   enableSharedConnect: true,
   // Off until the live run passes; turned on then by changing this default. A saved choice wins on load.
+  // Before turning it on for testers: the screen's French and Brazilian Portuguese are machine-drafted and must have
+  // had a native read first (Alberto, 2026-11-07; bifold SharedConnectInvite.tsx).
   enableSharedConnectInvite: false,
 }
 
