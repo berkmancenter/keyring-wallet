@@ -24,6 +24,7 @@ import {
   testIdWithKey,
   initializeVrcModule,
   setPeerLegCarriage,
+  setSharedConnectEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -361,6 +362,14 @@ export class AppContainer implements Container {
           updateVal(data)
         }
       }
+      // A saved switch, read when it is false too: loadState skips a falsy value, so a saved "off" would lose to a
+      // default that is on.
+      const loadSwitch = async (key: BCLocalStorageKeys, updateVal: (val: boolean) => void) => {
+        const data = await this.storage.getValueForKey(key)
+        if (typeof data === 'boolean') {
+          updateVal(data)
+        }
+      }
 
       let loginAttempt = initialState.loginAttempt
       let preferences = initialState.preferences
@@ -376,6 +385,7 @@ export class AppContainer implements Container {
         enableTspCarriage,
         enableDidCommV2,
         enableLivePickup,
+        enableSharedConnect,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -400,6 +410,7 @@ export class AppContainer implements Container {
         loadState<boolean>(BCLocalStorageKeys.EnableTspCarriage, (val) => (enableTspCarriage = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableLivePickup, (val) => (enableLivePickup = val)),
+        loadSwitch(BCLocalStorageKeys.EnableSharedConnect, (val) => (enableSharedConnect = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -425,11 +436,14 @@ export class AppContainer implements Container {
           enableTspCarriage,
           enableDidCommV2,
           enableLivePickup,
+          enableSharedConnect,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
       // Before any agent starts: configureMessagePickup reads it.
       setLivePickupEnabled(state.developer.enableLivePickup)
+      // Before the first link is routed: the scanner, a pasted code and a deep link all read it.
+      setSharedConnectEnabled(state.developer.enableSharedConnect)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {

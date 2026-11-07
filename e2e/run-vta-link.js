@@ -58,7 +58,7 @@ import os from "node:os";
 import { buildLacks } from "./lib/buildHas.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
-import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { deleteAcl, fromGrant, grantAfter, grantEntries, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
@@ -1254,7 +1254,7 @@ async function testerJourney(driver) {
   // it must hold exactly one more DID — one persona, even after a retry.
   const heldBefore = vtaInventory({ slug: VTA_SLUG, pnmHome: PNM_HOME });
   await tapTestId(driver, "JoinAsContinue", 15000);
-  await handleBiometricConfirmIfPresent(driver);
+  await handleBiometricConfirmIfPresent(driver, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   // One retry, the app's own. On the current Farm the agent's answer to the
   // first "make my identity" can be lost, and the app says "Tap Continue to
   // try again" (fixed upstream in VTI-39; 217 known issue until the Farm
@@ -1286,7 +1286,7 @@ async function testerJourney(driver) {
     console.log(`[e2e] journey: ⚠️  FIRST-TRY MISS making the identity — "${why}" — tapping Continue once, as the app asks`);
     await screenshot(driver, "journey-identity-first-miss");
     await tapTestId(driver, "JoinAsContinue", 15000);
-    await handleBiometricConfirmIfPresent(driver);
+    await handleBiometricConfirmIfPresent(driver, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
     // The failed attempt's message must clear, or the next look reads it as a second miss.
     for (let i = 0; i < 10 && (await existsTestId(driver, "JoinError", 500)); i++) await sleep(500);
     return true;

@@ -197,6 +197,7 @@ const translation = {
     "EnableAppToAppPersonFlow": "Parcours Personne d'application à application",
     "EnableTspCarriage": "Activer le transport en enveloppe TSP",
     "EnableDidCommV2": "Activer DIDComm v2 (expérimental)",
+    "EnableSharedConnect": "Se connecter avec un code partagé (expérimental)",
     "EnableLivePickup": "Réception des messages en direct (WebSocket)",
     "Mediator": "Médiateur",
     "CopyValue": "Copier",
