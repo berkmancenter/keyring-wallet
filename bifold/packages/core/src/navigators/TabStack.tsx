@@ -41,6 +41,7 @@ import {
 import { linkNoticeToast, openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
 import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
+import { useVtiCardRenewal } from '../modules/trust-tasks/module/vtiCardRenewal'
 import { useCardAgentNames } from '../modules/trust-tasks/screens/cardAgentNames'
 // How a community's card reads in the Wallet (registers itself on import).
 import '../modules/trust-tasks/screens/communityCardDisplay'
@@ -114,6 +115,8 @@ const TabStack: React.FC = () => {
   useVtiCardVault(agent)
   // …and shown in the Wallet while they stand, copied from the community store.
   useVtiWalletCards(agent)
+  // …and renewed before they lapse, as the community asks the member to (IN-501).
+  useVtiCardRenewal(agent, vti?.mediatorDid)
   // …each saying which agent holds it, when there are several.
   useCardAgentNames(agent)
   // A delivered card the inbox did not keep is said in plain words.

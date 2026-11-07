@@ -16,6 +16,7 @@ import {
   membershipCard,
   PERSONA_DID,
   roleCard,
+  roleVac,
   vetterGrantProofSet,
 } from '../../../../__tests__/helpers/cardVault'
 
@@ -233,16 +234,43 @@ describe('only while the card still stands', () => {
     expect(cardStandingOf(membershipCard, NOW)).toBe(revoked)
   })
 
-  it('an expired card leaves the Wallet, and a renewed one comes back', async () => {
+  // IN-501: inside the community the ACL, not the card, says who is a member. A membership's own cards past their
+  // end stay in the Wallet (they say they need renewing) until the renewed ones replace them.
+  it('a lapsed membership card and its role card stay in the Wallet while the membership stands; renewed, they are replaced', async () => {
     const { agent, ids } = walletAgent()
     const expired = { ...membershipCard, validUntil: '2026-09-27T08:00:00Z' }
-    const held = fakeCommunityStore({ memberships: [{ ...membership, vmc: expired, roleVec: undefined }] })
+    const expiredRole = { ...roleVac, validUntil: '2026-09-27T08:00:00Z' }
+    const held = fakeCommunityStore({ memberships: [{ ...membership, vmc: expired, roleVec: expiredRole }] })
     await syncCardsToWallet(agent, held.store, { now: NOW })
-    expect(ids()).toEqual([])
     expect(cardStandingOf(expired, NOW)).toEqual({ state: 'expired', at: '2026-09-27T08:00:00Z' })
-    held.memberships.set(COMMUNITY, { ...membership, roleVec: undefined })
+    expect(ids()).toEqual([membershipCard.id, roleVac.id].sort())
+    const renewed = { ...membershipCard, id: 'urn:uuid:renewed', validUntil: '2026-10-27T09:00:00Z' }
+    held.memberships.set(COMMUNITY, { ...membership, vmc: renewed, roleVec: roleVac })
     await syncCardsToWallet(agent, held.store, { now: NOW })
-    expect(ids()).toEqual([membershipCard.id])
+    expect(ids()).toEqual([roleVac.id, 'urn:uuid:renewed'].sort())
+  })
+
+  it('a lapsed card leaves the Wallet once the membership is ended, and so does any other card past its end', async () => {
+    const { agent, ids } = walletAgent()
+    const expired = { ...membershipCard, validUntil: '2026-09-27T08:00:00Z' }
+    const removal = {
+      code: 'adminRemoved' as const,
+      decidedBy: COMMUNITY,
+      decidedAt: '2026-09-27T08:30:00Z',
+      disposition: 'purge' as const,
+      noticeId: 'n1',
+    }
+    const lapsedGrant = { ...grantHeld, credential: { ...vetterGrantProofSet, validUntil: '2026-09-27T08:00:00Z' } }
+    const ended = fakeCommunityStore({
+      memberships: [{ ...membership, vmc: expired, roleVec: undefined, removal }],
+      held: [lapsedGrant],
+    })
+    await syncCardsToWallet(agent, ended.store, { now: NOW })
+    expect(ids()).toEqual([])
+    // Control: the same grant before its end is shown.
+    const current = fakeCommunityStore({ held: [grantHeld] })
+    await syncCardsToWallet(agent, current.store, { now: NOW })
+    expect(ids()).toEqual([vetterGrantProofSet.id])
   })
 
   it('a card its community withdrew leaves the Wallet, and comes back when its status clears', async () => {

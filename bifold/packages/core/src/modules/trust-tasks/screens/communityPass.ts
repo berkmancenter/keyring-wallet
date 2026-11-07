@@ -35,7 +35,10 @@ export interface PassFace {
   field?: { label: string; value: string }
   /** A second date, for the front pass only. */
   secondField?: { label: string; value: string }
-  /** "19 days left", when the card lapses within {@link LAPSING_WITHIN_DAYS} days. */
+  /**
+   * "19 days left", when the card lapses within {@link LAPSING_WITHIN_DAYS} days; "Needs renewing" once a membership
+   * card or role card has lapsed (the Wallet keeps those, vtiWalletCards; IN-501).
+   */
   lapsing?: string
   /** The agent holding this card's identity, when the phone has several: whose card it is. */
   agent?: string
@@ -95,7 +98,9 @@ export function passFace(
   const lapsing =
     daysLeft !== undefined && daysLeft > 0 && daysLeft <= LAPSING_WITHIN_DAYS
       ? words('Community.PassDaysLeft', { count: daysLeft })
-      : undefined
+      : daysLeft !== undefined && daysLeft <= 0 && (kind === 'membership' || kind === 'role')
+        ? words('Community.PassNeedsRenewing')
+        : undefined
 
   const name = published?.trim() || undefined
   const title = name ?? unnamedRef(communityDid)

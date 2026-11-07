@@ -11,9 +11,13 @@
  *   deletes a copy, and it reconciles the whole set under one lock;
  * - a copy exists exactly while the store holds the card, the membership is
  *   not marked removed (a removal notice), and the card still stands
- *   (`cardStandingOf`): past its `validUntil`, or withdrawn as its status list
- *   last said, it leaves the Wallet and stays in the store, as history on the
- *   community card; renewed, or its status cleared, it comes back;
+ *   (`cardStandingOf`): withdrawn as its status list last said, it leaves the
+ *   Wallet and stays in the store, as history on the community card; its
+ *   status cleared, it comes back. Past its `validUntil`, a membership's own
+ *   cards (the membership card and its role card) stay: inside the community
+ *   the ACL, not the card, says who is a member, so the membership stands and
+ *   the card says it needs renewing until it is renewed (IN-501,
+ *   vtiCardRenewal). Any other card past its end date leaves;
  * - it runs at start and after every change to the store
  *   (`COMMUNITY_CHANGED_EVENT`, which every store write announces), so a crash
  *   between a store write and its copy heals at the next run;
@@ -147,32 +151,34 @@ async function heldCards(
   hidden: (personaDid: string | undefined) => boolean = () => false
 ): Promise<Map<string, Json>> {
   const held = new Map<string, Json>()
-  const add = (vc: Json | undefined) => {
+  /** `lapsedStays`: a card of a membership that stands, kept past its end date (see the module comment). */
+  const add = (vc: Json | undefined, lapsedStays = false) => {
     const key = vc ? walletCardKey(vc) : undefined
-    if (vc && key && isCommunityCard(vc) && cardStandingOf(vc, now).state === 'held') {
+    const standing = vc ? cardStandingOf(vc, now).state : undefined
+    if (vc && key && isCommunityCard(vc) && (standing === 'held' || (lapsedStays && standing === 'expired'))) {
       held.set(key, vc)
       return true
     }
     return false
   }
-  const roleCards: { vc: Json; communityDid: string }[] = []
+  const roleCards: { vc: Json; communityDid: string; ofMembership: boolean }[] = []
   const withMembershipCard = new Set<string>()
   for (const m of await store.listMemberships()) {
     // A membership the community removed is not a card the person holds.
     if ((m as { removal?: unknown }).removal) continue
     // Nor is one held through an agent no longer linked to this phone.
     if (hidden(m.personaDid)) continue
-    if (add(m.vmc)) withMembershipCard.add(m.communityDid)
-    if (m.roleVec) roleCards.push({ vc: m.roleVec, communityDid: m.communityDid })
+    if (add(m.vmc, true)) withMembershipCard.add(m.communityDid)
+    if (m.roleVec) roleCards.push({ vc: m.roleVec, communityDid: m.communityDid, ofMembership: true })
   }
   for (const h of await store.listHeldCredentials()) {
     if (hidden(h.subjectDid)) continue
-    if (h.kind === 'role') roleCards.push({ vc: h.credential, communityDid: h.communityDid })
+    if (h.kind === 'role') roleCards.push({ vc: h.credential, communityDid: h.communityDid, ofMembership: false })
     else if (h.kind === 'vetter-grant' || h.kind === 'identity-check') add(h.credential)
   }
-  for (const { vc, communityDid } of roleCards) {
+  for (const { vc, communityDid, ofMembership } of roleCards) {
     if (withMembershipCard.has(communityDid) && isPlainMemberRole(vc)) continue
-    add(vc)
+    add(vc, ofMembership)
   }
   return held
 }

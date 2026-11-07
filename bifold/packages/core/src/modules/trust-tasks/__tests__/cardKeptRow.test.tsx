@@ -68,6 +68,32 @@ describe('where a card is kept', () => {
   })
 })
 
+// IN-501: a lapsed card of a membership that stands needs renewing; the community ending the membership is history.
+describe('a card past its end date', () => {
+  beforeEach(() => resetCardVaultCache())
+  const lapsedRole = { ...roleCard, validUntil: '2023-06-01T00:00:00Z' }
+  const rowOf = (endedAt?: string) =>
+    render(
+      <BasicAppContext>
+        <CardKeptRow card={lapsedRole} kind="role" handle={key} endedAt={endedAt} />
+      </BasicAppContext>
+    )
+
+  it('a role card needs renewing while the membership stands', () => {
+    const tree = rowOf()
+    expect(tree.getByTestId(testIdWithKey(`AgentCardRenew_role_${key}`))).toHaveTextContent(
+      'VtaLink.CardRoleNeedsRenewing'
+    )
+    expect(tree.queryByTestId(testIdWithKey(`AgentCardHistory_role_${key}`))).toBeNull()
+  })
+
+  it('ended by the community, it is history (control)', () => {
+    const tree = rowOf('2023-05-01T00:00:00Z')
+    expect(tree.getByTestId(testIdWithKey(`AgentCardHistory_role_${key}`))).toHaveTextContent('VtaLink.CardRoleEnded')
+    expect(tree.queryByTestId(testIdWithKey(`AgentCardRenew_role_${key}`))).toBeNull()
+  })
+})
+
 describe("the community's card on Your agent", () => {
   beforeEach(() => resetCardVaultCache())
 

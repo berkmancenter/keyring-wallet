@@ -75,9 +75,18 @@ describe('a community card’s pass', () => {
     const t = await words('en')
     expect(passFace(membershipCard, t, 'Guild', NOW)!.lapsing).toBe('25 days left')
     expect(passFace(membershipCard, t, 'Guild', Date.parse('2026-10-25T10:00:00Z'))!.lapsing).toBe('1 day left')
-    // Positive control above; neither too early nor once lapsed.
+    // Positive control above; not too early.
     expect(passFace(membershipCard, t, 'Guild', NOW - 10 * DAY)!.lapsing).toBeUndefined()
-    expect(passFace(membershipCard, t, 'Guild', Date.parse('2026-10-27T09:00:00Z'))!.lapsing).toBeUndefined()
+  })
+
+  // IN-501: a membership's own cards stay in the Wallet once lapsed (the ACL, not the card, says who is a member),
+  // and say they need renewing; any other card past its end says nothing more, as before.
+  test('once lapsed, a membership card or role card needs renewing; a vetter grant says nothing more', async () => {
+    const t = await words('en')
+    const lapsed = Date.parse('2026-10-27T09:00:00Z')
+    expect(passFace(membershipCard, t, 'Guild', lapsed)!.lapsing).toBe('Needs renewing')
+    expect(passFace(roleCard, t, 'Guild', lapsed)!.lapsing).toBe('Needs renewing')
+    expect(passFace(vetterGrant, t, 'Guild', lapsed)!.lapsing).toBeUndefined()
   })
 
   test('one sentence for a screen reader: name, kind, date, time left', async () => {

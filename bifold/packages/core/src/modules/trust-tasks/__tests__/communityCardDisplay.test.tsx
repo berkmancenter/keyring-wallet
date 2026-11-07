@@ -265,12 +265,33 @@ describe('what happened to a card that no longer stands, on the community card',
     expect(tree.getByTestId(testIdWithKey(`AgentCardKept_membership_${key}`))).toBeTruthy()
   })
 
-  it('expired: "Your membership ended on <date>"', () => {
-    const ended = { ...membershipCard, id: 'urn:uuid:ended', validUntil: '2023-06-01T00:00:00Z' }
-    const tree = renderCard({ ...membership, vmc: ended, roleVec: undefined })
+  // IN-501: only the card's dates ran out; the membership stands (the community's ACL says so), so it is not "ended".
+  it('lapsed: "Your card needs renewing", not "Your membership ended"', () => {
+    const lapsed = { ...membershipCard, id: 'urn:uuid:lapsed', validUntil: '2023-06-01T00:00:00Z' }
+    const tree = renderCard({ ...membership, vmc: lapsed, roleVec: undefined })
+    expect(tree.getByTestId(testIdWithKey(`AgentCardRenew_membership_${key}`))).toHaveTextContent(
+      /VtaLink\.CardMembershipNeedsRenewing/
+    )
+    expect(tree.queryByTestId(testIdWithKey(`AgentCardHistory_membership_${key}`))).toBeNull()
+  })
+
+  it('ended by the community, lapsed or not: "Your membership ended on <date>"', async () => {
+    const lapsed = { ...membershipCard, id: 'urn:uuid:lapsed', validUntil: '2023-06-01T00:00:00Z' }
+    const removal = {
+      code: 'adminRemoved' as const,
+      decidedBy: COMMUNITY,
+      decidedAt: '2023-05-01T00:00:00Z',
+      disposition: 'purge' as const,
+      noticeId: 'n1',
+    }
+    const tree = renderCard({ ...membership, vmc: lapsed, roleVec: undefined, removal })
+    // A removed membership reads as history, folded (cc24cf18b): its cards show behind "Show the ended cards".
+    expect(tree.queryByTestId(testIdWithKey(`AgentCardRenew_membership_${key}`))).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey(`AgentCommunityHistory_${key}`))))
     expect(tree.getByTestId(testIdWithKey(`AgentCardHistory_membership_${key}`))).toHaveTextContent(
       /VtaLink\.CardMembershipEnded/
     )
+    expect(tree.queryByTestId(testIdWithKey(`AgentCardRenew_membership_${key}`))).toBeNull()
   })
 })
 

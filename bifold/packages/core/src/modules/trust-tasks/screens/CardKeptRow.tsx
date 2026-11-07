@@ -31,7 +31,7 @@ export function useCardKept(credentialId: string): CardKeptKey {
   return useSyncExternalStore(subscribeCardVault, () => cardKeptKeyOf(credentialId))
 }
 
-/** Whether the card still stands: held, or ended (expired) or withdrawn (revoked), as last known. */
+/** Whether the card still stands: held, past its end date (expired), or withdrawn (revoked), as last known. */
 export function useCardStanding(card: Record<string, unknown>): CardStanding {
   return useSyncExternalStore(subscribeCardStanding, () => cardStandingOf(card))
 }
@@ -65,13 +65,32 @@ export interface CardKeptRowProps {
   endedAt?: string
 }
 
+/**
+ * What the row says of a card, from its standing and whether the membership ended:
+ * - `kept`: the card stands; the line says where it is kept.
+ * - `renew`: only the card's dates have run out (IN-501). The community's ACL, not the card, says who is a member,
+ *   so the membership stands and the card is renewed (vtiCardRenewal): it needs renewing, it has not ended.
+ * - `ended` / `withdrawn`: history — the community ended the membership, or withdrew the card.
+ */
+export type CardRowState =
+  | { show: 'kept' }
+  | { show: 'renew'; at: string }
+  | { show: 'ended'; at: string }
+  | { show: 'withdrawn' }
+
+export function cardRowState(standing: CardStanding, endedAt?: string): CardRowState {
+  if (endedAt) return { show: 'ended', at: endedAt }
+  if (standing.state === 'revoked') return { show: 'withdrawn' }
+  if (standing.state === 'expired') return { show: 'renew', at: standing.at }
+  return { show: 'kept' }
+}
+
 export const CardKeptRow: React.FC<CardKeptRowProps> = ({ card, kind, handle, community, endedAt }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const id = typeof card.id === 'string' ? card.id : ''
   const kept = useCardKept(id)
-  const read = useCardStanding(card)
-  const standing = endedAt ? { state: 'expired' as const, at: endedAt } : read
+  const row = cardRowState(useCardStanding(card), endedAt)
   const styles = StyleSheet.create({
     row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
@@ -81,20 +100,31 @@ export const CardKeptRow: React.FC<CardKeptRowProps> = ({ card, kind, handle, co
   if (!id) return null
   return (
     <View style={styles.row} testID={testIdWithKey(`AgentCard_${kind}_${handle}`)}>
-      <Icon name={standing.state === 'held' ? ICON[kept] : 'history'} size={20} color={TextTheme.normal.color} />
+      <Icon
+        name={row.show === 'kept' ? ICON[kept] : row.show === 'renew' ? 'autorenew' : 'history'}
+        size={20}
+        color={TextTheme.normal.color}
+      />
       <View style={{ flex: 1 }}>
         <ThemedText>{t(kind === 'membership' ? 'VtaLink.YourMembershipCard' : 'VtaLink.YourRoleCard')}</ThemedText>
-        {standing.state === 'held' ? (
+        {row.show === 'kept' ? (
           <ThemedText style={styles.muted} testID={testIdWithKey(`AgentCardKept_${kind}_${handle}`)}>
             {t(CARD_KEPT_WORDS[kept])}
+          </ThemedText>
+        ) : row.show === 'renew' ? (
+          // Still in the Wallet (vtiWalletCards keeps a lapsed card of a membership that stands).
+          <ThemedText testID={testIdWithKey(`AgentCardRenew_${kind}_${handle}`)}>
+            {t(kind === 'membership' ? 'VtaLink.CardMembershipNeedsRenewing' : 'VtaLink.CardRoleNeedsRenewing', {
+              date: localDate(row.at),
+            })}
           </ThemedText>
         ) : (
           // No longer in the Wallet (vtiWalletCards shows only cards that
           // stand), so here is where the person sees what happened to it.
           <ThemedText testID={testIdWithKey(`AgentCardHistory_${kind}_${handle}`)}>
-            {standing.state === 'expired'
+            {row.show === 'ended'
               ? t(kind === 'membership' ? 'VtaLink.CardMembershipEnded' : 'VtaLink.CardRoleEnded', {
-                  date: localDate(standing.at),
+                  date: localDate(row.at),
                 })
               : t('VtaLink.CardWithdrawn', {
                   community: community ?? t('Community.Unnamed'),
