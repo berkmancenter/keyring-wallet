@@ -32,6 +32,11 @@ export interface Developer {
   enableLivePickup: boolean
   /** Connecting from a code someone shared (shared-connect, keyring-wallet #853): bifold's setSharedConnectEnabled. */
   enableSharedConnect: boolean
+  /**
+   * Showing a shared-connect code for someone else to scan ("Show a code", plan WP9): bifold's
+   * setSharedConnectInviteEnabled. Only takes effect while enableSharedConnect is on too.
+   */
+  enableSharedConnectInvite: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -51,6 +56,7 @@ enum DeveloperDispatchAction {
   TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
   TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
   TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
+  TOGGLE_SHARED_CONNECT_INVITE = 'developer/toggleSharedConnectInvite',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -117,6 +123,10 @@ const developerState: Developer = {
   enableLivePickup: Config.LIVE_MESSAGE_PICKUP === 'true',
   // On for everyone. A saved choice, off included, wins on load (container-imp.ts).
   enableSharedConnect: true,
+  // On for everyone from 278.6 (WP9's live run passed on 2026-11-07). This default is the one place it is turned on.
+  // A saved choice wins on load, so someone who switched it off keeps it off. To turn it off for everyone, use
+  // bifold's SHARED_CONNECT_REMOTE_OFF.invite, which beats a saved "on"; changing this default cannot.
+  enableSharedConnectInvite: true,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -134,6 +144,7 @@ export enum BCLocalStorageKeys {
   EnableDidCommV2 = 'EnableDidCommV2',
   EnableLivePickup = 'EnableLivePickup',
   EnableSharedConnect = 'EnableSharedConnect',
+  EnableSharedConnectInvite = 'EnableSharedConnectInvite',
 }
 
 export const initialState: BCState = {
@@ -224,6 +235,17 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableSharedConnect }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableSharedConnect, developer.enableSharedConnect)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_SHARED_CONNECT_INVITE: {
+      const enableSharedConnectInvite: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableSharedConnectInvite }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableSharedConnectInvite,
+        developer.enableSharedConnectInvite
+      )
 
       return { ...state, developer }
     }

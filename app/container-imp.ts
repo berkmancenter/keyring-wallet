@@ -25,6 +25,7 @@ import {
   initializeVrcModule,
   setPeerLegCarriage,
   setSharedConnectEnabled,
+  setSharedConnectInviteEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -386,6 +387,7 @@ export class AppContainer implements Container {
         enableDidCommV2,
         enableLivePickup,
         enableSharedConnect,
+        enableSharedConnectInvite,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -411,6 +413,9 @@ export class AppContainer implements Container {
         loadState<boolean>(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableLivePickup, (val) => (enableLivePickup = val)),
         loadSwitch(BCLocalStorageKeys.EnableSharedConnect, (val) => (enableSharedConnect = val)),
+        // A saved "on" outlives any default, so bifold's isSharedConnectInviteEnabled() (with its remote off) is this
+        // flag's only kill path: keep the read going through it, never inline the saved value.
+        loadSwitch(BCLocalStorageKeys.EnableSharedConnectInvite, (val) => (enableSharedConnectInvite = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -437,6 +442,7 @@ export class AppContainer implements Container {
           enableDidCommV2,
           enableLivePickup,
           enableSharedConnect,
+          enableSharedConnectInvite,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -444,6 +450,8 @@ export class AppContainer implements Container {
       setLivePickupEnabled(state.developer.enableLivePickup)
       // Before the first link is routed: the scanner, a pasted code and a deep link all read it.
       setSharedConnectEnabled(state.developer.enableSharedConnect)
+      // Before the QR sheet first opens: it offers "Show a code" only while this is on.
+      setSharedConnectInviteEnabled(state.developer.enableSharedConnectInvite)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {

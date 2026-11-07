@@ -13,6 +13,7 @@ import {
   setTspCarriageEnabled,
   setDidCommV2Enabled,
   setSharedConnectEnabled,
+  setSharedConnectInviteEnabled,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -80,6 +81,9 @@ const Developer: React.FC = () => {
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
   const [enableLivePickup, setEnableLivePickup] = useState(!!store.developer.enableLivePickup)
   const [enableSharedConnect, setEnableSharedConnect] = useState(!!store.developer.enableSharedConnect)
+  const [enableSharedConnectInvite, setEnableSharedConnectInvite] = useState(
+    !!store.developer.enableSharedConnectInvite
+  )
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -379,6 +383,17 @@ const Developer: React.FC = () => {
     // Read live: the next code scanned, pasted or opened is routed by it, no restart.
     setSharedConnectEnabled(next)
     setEnableSharedConnect(next)
+  }
+
+  const toggleEnableSharedConnectInviteSwitch = () => {
+    const next = !enableSharedConnectInvite
+    dispatch({
+      type: BCDispatchAction.TOGGLE_SHARED_CONNECT_INVITE,
+      payload: [next],
+    })
+    // Read live: the QR sheet offers "Show a code" from the next time it opens, no restart.
+    setSharedConnectInviteEnabled(next)
+    setEnableSharedConnectInvite(next)
   }
 
   const toggleEnableLivePickupSwitch = () => {
@@ -887,6 +902,7 @@ const Developer: React.FC = () => {
           title={t('Developer.EnableSharedConnect')}
           accessibilityLabel={t('Developer.EnableSharedConnect')}
           testID={testIdWithKey('ToggleEnableSharedConnect')}
+          showRowSeparator
           // The row toggles too: iOS hides the Switch behind the accessible row
           // from automation (same fix as the DIDComm v2 row, 2026-09-14).
           onPress={toggleEnableSharedConnectSwitch}
@@ -897,6 +913,21 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableSharedConnectSwitch}
             value={enableSharedConnect}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableSharedConnectInvite')}
+          accessibilityLabel={t('Developer.EnableSharedConnectInvite')}
+          testID={testIdWithKey('ToggleEnableSharedConnectInvite')}
+          // The row toggles too, as the shared-connect row above (iOS hides the Switch from automation).
+          onPress={toggleEnableSharedConnectInviteSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableSharedConnectInvite ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableSharedConnectInviteSwitch}
+            value={enableSharedConnectInvite}
           />
         </SectionRow>
         <View style={styles.sectionSeparator}></View>
