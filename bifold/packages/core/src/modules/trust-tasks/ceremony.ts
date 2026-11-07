@@ -1534,12 +1534,14 @@ async function handleInboundIssue(
       // Spec conformance (receiving party item 2): verify the credential's
       // OWN proof before storing it or returning a receipt. A credential that
       // does not even parse as a verifiable credential is the same refusal.
-      if (hasJcsProof(vc) && isSharedConnectEnabled()) {
+      if (hasJcsProof(vc)) {
         // eddsa-jcs-2022 (the shared-connect credential profile): Credo's JSON-LD verifier has no such suite, so the
         // proof is checked through the document-proof verifier under the issuer already bound above. Every other
         // suite takes the Credo path below, unchanged. Only with the shared-connect switch on: this handler serves
-        // every connection peer, and the proof's own `cryptosuite`, which the sender sets, picks the verifier, so
-        // with the switch off a JCS credential takes main's path (Credo, which refuses it).
+        // every connection peer, and the proof's own `cryptosuite`, which the sender sets, picks the verifier.
+        // With the switch off, or turned off remotely, a JCS credential is refused here rather than handed to Credo:
+        // the switch's "off" must not rest on a second verifier refusing a suite it does not know today.
+        if (!isSharedConnectEnabled()) return notAccepted('a JCS-proofed credential while shared-connect is off')
         if (!(await verifySharedConnectVrc(agent, vc))) return notAccepted('credential proof did not verify')
       } else {
         let credentialInstance: W3cJsonLdVerifiableCredential

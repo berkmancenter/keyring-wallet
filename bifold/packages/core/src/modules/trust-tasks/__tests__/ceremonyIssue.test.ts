@@ -29,6 +29,7 @@ import {
 import { digestMultibase } from '../documentProof'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { setSharedConnectEnabled } from '../module/sharedConnectFlag'
+import { SHARED_CONNECT_REMOTE_OFF } from '../module/sharedConnectRemoteOff'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../../vrc/witnessStatusStore'
 import { readOneClock } from '../../../../__tests__/helpers/oneClock'
@@ -442,19 +443,33 @@ describe('the inbound issue leg (verify, store, receipt)', () => {
     beforeEach(() => setSharedConnectEnabled(true))
     afterEach(() => setSharedConnectEnabled(false))
 
-    test('with the shared-connect switch off, takes the Credo path as main does', async () => {
-      setSharedConnectEnabled(false)
+    // Off, a JCS credential is refused before any verifier, so the refusal does not rest on Credo lacking the suite:
+    // the fake Credo here accepts by default, which is what a Credo that gained the suite (or skipped an unknown one)
+    // would do. Handed to it, the credential would be stored and receipted.
+    test.each([
+      ['the shared-connect switch off', () => setSharedConnectEnabled(false)],
+      ['the remote off set over a saved "on"', () => (SHARED_CONNECT_REMOTE_OFF.connect = true)],
+    ])('with %s, is refused (notAccepted) before any verifier, and nothing is stored', async (_, turnOff) => {
+      turnOff()
       const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
       setupTrustTasksInbound(fake.agent)
       const { doc, vrc } = jcsIssue()
       mockedVerify.mockClear()
-      await deliver(fake.capturedHandlerRef, doc, connection)
+      try {
+        await deliver(fake.capturedHandlerRef, doc, connection)
+      } finally {
+        SHARED_CONNECT_REMOTE_OFF.connect = false
+      }
       // With the purpose argument the real call has four arguments: a three-argument shape here would match nothing
       // and pass whatever happened.
       expect(mockedVerify).not.toHaveBeenCalledWith(fake.agent, vrc, 'did:peer:0zPeerRel', {
         proofPurpose: 'assertionMethod',
       })
-      expect(fake.w3c.verifyCredential).toHaveBeenCalled()
+      expect(fake.w3c.verifyCredential).not.toHaveBeenCalled()
+      expect(fake.storedCredentials).toHaveLength(0)
+      expect((fake.sentMessages[0].document as { payload: { code: string } }).payload.code).toBe(
+        'vrc/relationships/issue:notAccepted'
+      )
     })
 
     test('is verified by the document-proof verifier under the issuer, not Credo, stored and receipted', async () => {

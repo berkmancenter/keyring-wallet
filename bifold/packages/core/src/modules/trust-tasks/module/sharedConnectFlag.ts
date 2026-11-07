@@ -9,8 +9,13 @@
  * A module-level pair of switches, like `setTspCarriageEnabled` in
  * `ceremony.ts`: the app sets them from its developer settings at start-up.
  *
+ * A release can turn the flows off for everyone with SHARED_CONNECT_REMOTE_OFF
+ * (sharedConnectRemoteOff.ts), whatever was saved; it never turns them on.
+ *
  * @module trust-tasks/module/sharedConnectFlag
  */
+
+import { SHARED_CONNECT_REMOTE_OFF } from './sharedConnectRemoteOff'
 
 let sharedConnectEnabled = false
 let sharedConnectLabelEnabled = false
@@ -23,9 +28,9 @@ export function setSharedConnectEnabled(enabled: boolean): void {
   if (before && !isSharedConnectInviteEnabled()) inviteTurnedOff()
 }
 
-/** Whether a shared-connect link is read and carried to its confirm screen. */
+/** Whether a shared-connect link is read and carried to its confirm screen: switched on, and not turned off remotely. */
 export function isSharedConnectEnabled(): boolean {
-  return sharedConnectEnabled
+  return sharedConnectEnabled && !SHARED_CONNECT_REMOTE_OFF.connect
 }
 
 /**
@@ -75,8 +80,9 @@ function inviteTurnedOff() {
 
 /**
  * Whether "Show a code" is offered. Needs the shared-connect flow itself on too, read through
- * {@link isSharedConnectEnabled} so that whatever turns the flow off (its switch, or a remote off) turns this off.
+ * {@link isSharedConnectEnabled} so that whatever turns the flow off (its switch, or a remote off) turns this off;
+ * and it has a remote off of its own (`SHARED_CONNECT_REMOTE_OFF.invite`), which leaves the scanner as it is.
  */
 export function isSharedConnectInviteEnabled(): boolean {
-  return isSharedConnectEnabled() && sharedConnectInviteEnabled
+  return isSharedConnectEnabled() && !SHARED_CONNECT_REMOTE_OFF.invite && sharedConnectInviteEnabled
 }
