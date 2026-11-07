@@ -8,9 +8,10 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { createWriteStream, existsSync } from "node:fs";
 
-import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
+import { APP_ID, APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 import { isEmulatorPid, pinToRunningEmulator } from "./emulator.js";
 import { runPath } from "./runDir.js";
+import { warmMetroBundle } from "./metroWarm.js";
 
 // The host port this worktree's Metro serves on; a second worktree runs its
 // own on another port (Android reaches it via debug_http_host, see below).
@@ -217,6 +218,9 @@ export async function createSession(platform, capsOverride) {
   assertCapsSafe(platform, requested);
   // Attach to a running emulator by udid; never let Appium launch one (emulator.js).
   const capabilities = pinToRunningEmulator(requested);
+  // A debug build's first request for its bundle must not meet a cold Metro (metroWarm.js). Before remote(): an
+  // iOS session launches the app as it starts.
+  await warmMetroBundle(platform, { port: METRO_PORT, appId: APP_ID, metroUp: () => portInUse(METRO_PORT) });
   console.log(
     `[e2e] creating ${platform} session${realDevice ? " (real device)" : ""}…`
   );
