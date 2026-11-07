@@ -7,6 +7,7 @@ import { Screens, Stacks, TabStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import SafeAreaModal from '../../../components/modals/SafeAreaModal'
+import { isSharedConnectInviteEnabled } from '../../trust-tasks/module/sharedConnectFlag'
 
 const BG_COLOR = '#010B13'
 const PURPLE = '#A349A4'
@@ -65,6 +66,13 @@ const QRCodeExchangeSlider: React.FC<QRCodeExchangeSliderProps> = ({ visible, on
     })
   }, [navigation, dismissThenNavigate])
 
+  // A shared-connect code any wallet app can scan (WP9): only while the inviter switch is on.
+  const goToShowSharedConnectCode = useCallback(() => {
+    dismissThenNavigate(() => {
+      navigation.navigate(Stacks.ConnectStack as any, { screen: Screens.SharedConnectInvite })
+    })
+  }, [navigation, dismissThenNavigate])
+
   return (
     <SafeAreaModal
       animationType="slide"
@@ -110,6 +118,20 @@ const QRCodeExchangeSlider: React.FC<QRCodeExchangeSliderProps> = ({ visible, on
               {t('VRCQRCodeExchange.GenerateRelationshipInvitation')}
             </ThemedText>
           </TouchableOpacity>
+          {isSharedConnectInviteEnabled() ? (
+            <TouchableOpacity
+              style={[styles.purpleButton, styles.experimentalButton]}
+              onPress={goToShowSharedConnectCode}
+              testID={testIdWithKey('ShowSharedConnectCode')}
+              accessibilityLabel={`${t('SharedConnectInvite.Button')}, ${t('SharedConnectInvite.ButtonNote')}`}
+              accessibilityRole="button"
+            >
+              <ThemedText variant="bold" style={styles.purpleButtonText}>
+                {t('SharedConnectInvite.Button')}
+              </ThemedText>
+              <ThemedText style={styles.purpleButtonNote}>{t('SharedConnectInvite.ButtonNote')}</ThemedText>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     </SafeAreaModal>
@@ -171,6 +193,16 @@ const styles = StyleSheet.create({
   purpleButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+  },
+  // Dashed: experimental, beside the two settled ways to connect.
+  experimentalButton: {
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(163, 73, 164, 0.15)',
+  },
+  purpleButtonNote: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    textAlign: 'center',
   },
 })
 

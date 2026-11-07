@@ -95,6 +95,7 @@ export enum Screens {
   SignIn = 'Sign in to a community',
   VtaClaim = 'Set up your agent',
   SharedConnect = 'Connect with someone',
+  SharedConnectInvite = 'Show a code',
   RoomsHome = 'Rooms',
   Room = 'Room',
   RoomOffer = 'Room offer',
@@ -300,6 +301,7 @@ export type ConnectStackParams = {
   [Screens.RenameWallet]: undefined
   [Screens.ScanHelp]: undefined
   [Screens.PasteUrl]: undefined
+  [Screens.SharedConnectInvite]: undefined
 }
 
 export type SettingStackParams = {

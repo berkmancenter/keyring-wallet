@@ -42,4 +42,5 @@ export const SharedConnectInviteIds = {
   failed: 'SharedConnectInviteFailed',
   cancelled: 'SharedConnectInviteCancelled',
   done: 'SharedConnectInviteDone',
+  off: 'SharedConnectInviteOff',
 } as const

@@ -92,6 +92,17 @@ const RelationshipProposalModal: React.FC = () => {
     buttonSpacer: {
       height: 12,
     },
+    card: {
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      borderRadius: 12,
+      padding: 14,
+      gap: 10,
+      marginBottom: 12,
+    },
+    row: { gap: 2 },
+    mono: { fontFamily: 'Menlo', fontSize: 13 },
+    hint: { textAlign: 'center', marginBottom: 16, color: ColorPalette.grayscale.mediumGrey },
   })
 
   return (
@@ -99,7 +110,32 @@ const RelationshipProposalModal: React.FC = () => {
       <SafeAreaView style={styles.overlay} edges={['top']}>
         <SafeAreaView style={styles.safeAreaView} edges={['bottom']}>
           <ScrollView bounces={false} contentContainerStyle={styles.container}>
-            {prompt.upgrade ? (
+            {prompt.sharedConnect ? (
+              // Someone scanned this phone's shared-connect code (WP9). The request carries no name, so the sheet
+              // says plainly that Keyring can't tell who this is: the same honesty as the scanner's "Is this name
+              // checked?". Only the address prefix is shown; nothing the other side wrote (WP12).
+              <View testID={testIdWithKey('ProposalSharedConnect')}>
+                <ThemedText variant="headingThree" style={styles.title}>
+                  {t('SharedConnectInvite.ConsentTitle')}
+                </ThemedText>
+                <ThemedText style={styles.body}>{t('SharedConnectInvite.ConsentBody')}</ThemedText>
+                <View style={styles.card}>
+                  <View style={styles.row}>
+                    <ThemedText variant="labelSubtitle">{t('SharedConnectInvite.ConsentWho')}</ThemedText>
+                    <ThemedText testID={testIdWithKey('ProposalWho')}>
+                      {t('SharedConnectInvite.ConsentWhoUnknown')}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.row}>
+                    <ThemedText variant="labelSubtitle">{t('SharedConnectInvite.ConsentAddress')}</ThemedText>
+                    <ThemedText style={styles.mono} testID={testIdWithKey('ProposalAddress')}>
+                      {prompt.sharedConnect.didShort}
+                    </ThemedText>
+                  </View>
+                </View>
+                <ThemedText style={styles.hint}>{t('SharedConnectInvite.ConsentHint')}</ThemedText>
+              </View>
+            ) : prompt.upgrade ? (
               // An existing relationship asking to sign again: says what it adds, and nothing more.
               <>
                 <ThemedText variant="headingThree" style={styles.title}>
@@ -124,8 +160,8 @@ const RelationshipProposalModal: React.FC = () => {
               </>
             )}
             <Button
-              title="Accept"
-              accessibilityLabel="Accept"
+              title={prompt.sharedConnect ? t('Global.Accept') : 'Accept'}
+              accessibilityLabel={prompt.sharedConnect ? t('Global.Accept') : 'Accept'}
               testID={testIdWithKey('ProposalAccept')}
               buttonType={ButtonType.Primary}
               onPress={() => respond(true)}
@@ -133,8 +169,8 @@ const RelationshipProposalModal: React.FC = () => {
             />
             <View style={styles.buttonSpacer} />
             <Button
-              title="Decline"
-              accessibilityLabel="Decline"
+              title={prompt.sharedConnect ? t('Global.Decline') : 'Decline'}
+              accessibilityLabel={prompt.sharedConnect ? t('Global.Decline') : 'Decline'}
               testID={testIdWithKey('ProposalDecline')}
               buttonType={ButtonType.Secondary}
               onPress={() => respond(false)}

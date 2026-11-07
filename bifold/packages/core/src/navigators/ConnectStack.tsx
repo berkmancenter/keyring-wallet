@@ -6,11 +6,16 @@ import { useTheme } from '../contexts/theme'
 import RenameWallet from '../screens/RenameWallet'
 import PasteUrl from '../screens/PasteUrl'
 import ScanHelp from '../screens/ScanHelp'
+import { makeSharedConnectInviteScreen } from '../modules/trust-tasks/screens/SharedConnectInvite'
+import { useSharedConnectInvite } from '../modules/trust-tasks/module/useSharedConnectInvite'
 import { ConnectStackParams, Screens } from '../types/navigators'
 import { testIdWithKey } from '../utils/testable'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
 import { TOKENS, useServices } from '../container-api'
+
+// "Show a code" (shared-connect as the inviter, plan WP9): the screen runs the invite hook only while its switch is on.
+const SharedConnectInvite = makeSharedConnectInviteScreen(useSharedConnectInvite)
 
 const ConnectStack: React.FC = () => {
   const Stack = createStackNavigator<ConnectStackParams>()
@@ -49,6 +54,16 @@ const ConnectStack: React.FC = () => {
         options={{
           title: t('Screens.ScanHelp'),
           ...ScreenOptionsDictionary[Screens.ScanHelp],
+        }}
+      />
+
+      <Stack.Screen
+        name={Screens.SharedConnectInvite}
+        component={SharedConnectInvite}
+        options={{
+          title: t('SharedConnectInvite.Title'),
+          headerBackTestID: testIdWithKey('Back'),
+          ...ScreenOptionsDictionary[Screens.SharedConnectInvite],
         }}
       />
 

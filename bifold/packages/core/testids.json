@@ -1018,7 +1018,10 @@
     "ProofRequests": ["src/screens/Settings.tsx"],
     "ProofRequestsCard": ["src/screens/ListProofRequests.tsx"],
     "ProposalAccept": ["src/modules/vrc/components/RelationshipProposalModal.tsx"],
+    "ProposalAddress": ["src/modules/vrc/components/RelationshipProposalModal.tsx"],
     "ProposalDecline": ["src/modules/vrc/components/RelationshipProposalModal.tsx"],
+    "ProposalSharedConnect": ["src/modules/vrc/components/RelationshipProposalModal.tsx"],
+    "ProposalWho": ["src/modules/vrc/components/RelationshipProposalModal.tsx"],
     "PushNotificationBlockedByRule": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationChangeLater": ["src/screens/PushNotifications.tsx"],
     "PushNotificationContinue": ["src/screens/PushNotifications.tsx"],
@@ -1352,6 +1355,7 @@
     "SharedConnectInviteFailed": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
     "SharedConnectInviteLink": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
     "SharedConnectInviteMinting": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
+    "SharedConnectInviteOff": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
     "SharedConnectInviteProposed": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
     "SharedConnectInviteQR": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
     "SharedConnectInviteRenew": ["src/modules/trust-tasks/screens/SharedConnect.ids.ts"],
@@ -1375,6 +1379,7 @@
     ],
     "ShowDetails": ["src/components/misc/InfoBox.tsx", "src/components/misc/QRScanner.tsx"],
     "ShowHide": ["src/components/record/RecordField.tsx"],
+    "ShowSharedConnectCode": ["src/modules/vrc/components/QRCodeExchangeSlider.tsx"],
     "ShowTemplateUsageHistory": ["src/screens/ProofRequestDetails.tsx"],
     "SiblingNotice": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
     "SiblingNoticeDismiss": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
@@ -2296,6 +2301,9 @@
     },
     {
       "src/modules/trust-tasks/screens/SharedConnect.tsx": "key"
+    },
+    {
+      "src/modules/trust-tasks/screens/SharedConnectInvite.tsx": "key"
     },
     {
       "src/modules/trust-tasks/screens/SignIn.tsx": "key"
