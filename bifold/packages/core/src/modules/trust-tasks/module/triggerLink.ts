@@ -222,9 +222,9 @@ const parseForm = (text: string): [string, string][] => [...new URLSearchParams(
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
 /**
- * The host rules, for a host already through WHATWG host parsing (so
- * lowercased, and any IPv4 spelling turned into dotted decimal): a public DNS
- * name of two or more labels, never an IP address or a local name.
+ * The host rules, for a host already lower-cased and with any address
+ * spelling refused (`readHost`): a public DNS name of two or more labels,
+ * never an IP address or a local name.
  */
 export function hostMeetsRules(host: string): boolean {
   if (!host || host.length > 253 || host.endsWith('.')) return false
@@ -239,16 +239,25 @@ export function hostMeetsRules(host: string): boolean {
   return true
 }
 
+/**
+ * The host of a raw authority (no userinfo, no port), read off the string, never through the platform's `URL`:
+ * React Native's `hostname` (0.81, Libraries/Blob/URL.js:134-136) is a bare capture of the text, not lower-cased,
+ * not percent-decoded, `\` left in, so on a phone `LINK.TRUSTOVERIP.ORG` was refused and `1.2.3.0x4` passed as a
+ * name, while Node's WHATWG `URL` decoded `%`, mapped Unicode and read `\` as `/`. Only printable ASCII is read
+ * (what WHATWG would decode or map first is refused); it is lower-cased; a last label WHATWG would read as a number
+ * (digits, or `0x` hex) makes it an IPv4 address and is refused. Undefined when the host does not meet the host rules.
+ */
+export function readHost(authority: string): string | undefined {
+  if (!/^[\x21-\x7e]*$/.test(authority)) return undefined
+  const host = authority.toLowerCase()
+  if (/^(?:0x[0-9a-f]*|[0-9]+)$/.test(host.slice(host.lastIndexOf('.') + 1))) return undefined
+  return hostMeetsRules(host) ? host : undefined
+}
+
 /** The parsed host of a raw authority, or undefined when it has userinfo, a port, or fails the host rules. */
 function parseAuthority(authority: string): string | undefined {
   if (authority.includes('@') || authority.startsWith('[') || authority.includes(':')) return undefined
-  let host: string
-  try {
-    host = new URL(`https://${authority}/`).hostname
-  } catch {
-    return undefined
-  }
-  return hostMeetsRules(host) ? host : undefined
+  return readHost(authority)
 }
 
 const IDCHAR = '(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})'
@@ -393,7 +402,8 @@ type ParsedType = { uri: string; base: string; path: string; host: string; major
  *
  * For Keyring's own flow URIs (a flow's `typeBase`, always lower-case, no userinfo, no port), where it reads what
  * Node's `URL` reads (`host`, `pathname`). The `_type` a link carries is not read here but by `parseType`, with
- * its own grammar.
+ * its own grammar. Not Node's exact reading: for a URI with no path Node's `pathname` is `/` and this gives `''`
+ * (which `parseType`, whose paths all begin with `/`, never equals: the safe side).
  */
 export function uriHostAndPath(uri: string): { host: string; path: string } | undefined {
   const m = /^([A-Za-z]+:\/\/)([^/]+)(\/.*)?$/.exec(uri)
@@ -629,11 +639,7 @@ export function isCandidateEndpoint(endpoint: unknown): endpoint is string {
   // Read from the raw text: WHATWG drops a default `:443`, and the rules forbid any port.
   const authority = endpoint.slice('https://'.length).split(/[/?#]/)[0]
   if (authority.includes('@') || authority.includes(':') || authority.startsWith('[')) return false
-  try {
-    return hostMeetsRules(new URL(endpoint).hostname)
-  } catch {
-    return false
-  }
+  return readHost(authority) !== undefined
 }
 
 /** One endpoint value as text: a plain string, or the `uri` of an object endpoint. */

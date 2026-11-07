@@ -12,11 +12,15 @@ import file from './fixtures/trigger-link-vectors.json'
 import { buildSharedConnectLink } from '../module/sharedConnectInvite'
 import { setSharedConnectEnabled } from '../module/sharedConnectFlag'
 import {
+  isCandidateEndpoint,
   readTrigger,
+  selectService,
   SHARED_CONNECT_FLOW,
   SIGN_IN_FLOW,
   uriHostAndPath,
   VTA_CLAIM_FLOW,
+  type SelectionConfig,
+  type SelectionDocument,
   type TriggerChannel,
   type TriggerConfig,
 } from '../module/triggerLink'
@@ -71,25 +75,79 @@ describe('the code Keyring shows, built on a phone', () => {
   })
 })
 
-/**
- * A second fault on the phone, in the link's own authority, not in `_type`: React Native's `hostname` is not
- * lower-cased, so `parseAuthority` refuses `LINK.TRUSTOVERIP.ORG` (the host rules take lower-case labels) where Node's
- * URL lower-cases it and the vector accepts. Its own fix and control follow this change; until then these rows pin
- * what the phone reads, so that fix has to flip them.
- */
-const DEVICE_AUTHORITY_CASE = ['valid-uppercase-scheme-and-host', 'valid-sign-in-alias-uppercase-host']
-
 describe('reading a trigger link on a phone: every conformance vector', () => {
   const config = file.config as unknown as TriggerConfig
-  it.each(file.vectors.map((v) => [v.id, v] as const))('%s', (id, vector) => {
+  it.each(file.vectors.map((v) => [v.id, v] as const))('%s', (_, vector) => {
     onDevice()
-    const read = readTrigger(vector.input, { channel: vector.channel as TriggerChannel, config })
-    if (DEVICE_AUTHORITY_CASE.includes(id)) {
-      expect(vector.expect).toMatchObject({ outcome: 'accept' })
-      expect(read).toEqual({ outcome: 'reject', reason: 'bad-authority', ui: 'invalid' })
-    } else {
-      expect(read).toEqual(vector.expect)
-    }
+    expect(readTrigger(vector.input, { channel: vector.channel as TriggerChannel, config })).toEqual(vector.expect)
+  })
+})
+
+describe('choosing how to reach the sender on a phone: every selection vector', () => {
+  const selection = file.config.selection as SelectionConfig
+  it.each(file.selectionVectors.map((v) => [v.id, v] as const))('%s', (_, vector) => {
+    onDevice()
+    expect(selectService(vector.input as SelectionDocument, selection)).toEqual(vector.expect)
+  })
+})
+
+/**
+ * The link's own host, and a service endpoint's, read the same under both URLs. React Native's `hostname` (0.81,
+ * Libraries/Blob/URL.js:134-136) is a bare capture of the text: not lower-cased, not percent-decoded, `\` left in, a
+ * numeric last label not read as an address, and nothing at all for an upper-case `HTTPS://`. Node's is WHATWG's,
+ * which lower-cases, decodes `%`, maps Unicode to punycode, reads `\` as `/` and a numeric last label (digits or `0x`
+ * hex) as IPv4. So on a phone an upper-case host was refused and `1.2.3.0x4` passed as a name; under jest the reverse
+ * held for `%`, `\` and Unicode, which the phone refuses and jest let through. Exact reasons under both.
+ */
+describe("a link's own host, the same under both URLs", () => {
+  const base = file.vectors.find((v) => v.id === 'valid-uppercase-scheme-and-host') as (typeof file.vectors)[number]
+  const config = file.config as unknown as TriggerConfig
+  const withHost = (host: string) => base.input.replace('LINK.TRUSTOVERIP.ORG', host)
+  const accepted = ['LINK.TRUSTOVERIP.ORG', 'Link.TrustOverIP.org', 'link.trustoverip.org']
+  const refused: [string, string][] = [
+    ['a hex last label (WHATWG reads it as IPv4)', '1.2.3.0x4'],
+    ['a bare 0x last label', 'link.0x'],
+    ['an upper-case hex last label', 'link.0X1F'],
+    ['a percent-encoded dot', 'link.trustoverip%2Eorg'],
+    ['a backslash (WHATWG reads it as /, leaving our host before it)', 'link.trustoverip.org\\evil.example'],
+    ['a non-ASCII host', 'bücher.example'],
+    ['a Kelvin sign that WHATWG maps to k', 'linK.trustoverip.org'],
+  ]
+  const runtimes: [string, () => void][] = [
+    ['Node', () => undefined],
+    ['React Native', onDevice],
+  ]
+
+  describe.each(runtimes)('under %s', (_, install) => {
+    test.each(accepted)('%s is read as link.trustoverip.org', (host) => {
+      install()
+      expect(readTrigger(withHost(host), { channel: base.channel as TriggerChannel, config })).toEqual(base.expect)
+    })
+
+    test.each(refused)('%s: %s is bad-authority', (_label, host) => {
+      install()
+      expect(readTrigger(withHost(host), { channel: base.channel as TriggerChannel, config })).toEqual({
+        outcome: 'reject',
+        reason: 'bad-authority',
+        ui: 'invalid',
+      })
+    })
+  })
+
+  const endpoints: [string, boolean][] = [
+    ['https://MEDIATOR.example.com/didcomm', true],
+    ['HTTPS://mediator.example.com/didcomm', true],
+    ['https://mediator.example.com/didcomm', true],
+    ['https://1.2.3.0x4/tt', false],
+    ['https://api.example%2Ecom/tt', false],
+    ['https://api.example.com\\evil.example/tt', false],
+    ['https://bücher.example/tt', false],
+  ]
+  describe.each(runtimes)('a service endpoint under %s', (_, install) => {
+    test.each(endpoints)('%s is a candidate: %s', (endpoint, candidate) => {
+      install()
+      expect(isCandidateEndpoint(endpoint)).toBe(candidate)
+    })
   })
 })
 

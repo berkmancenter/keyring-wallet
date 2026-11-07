@@ -91,7 +91,9 @@ export function buildSharedConnectLink(fields: { from: string; id: string; exp: 
   if (!LINK_SAFE.test(fields.from) || !isChallengeShaped(fields.id) || !Number.isInteger(fields.exp)) {
     throw new Error(`${ENCOUNTER_LOG_PREFIX} refusing to build a link from malformed fields`)
   }
-  const type = `${uriHostAndPath(SHARED_CONNECT_FLOW)?.path}/${SHARED_CONNECT_FLOW_VERSION}`
+  const flow = uriHostAndPath(SHARED_CONNECT_FLOW)
+  if (!flow?.path) throw new Error(`${ENCOUNTER_LOG_PREFIX} refusing to build a link: the flow URI has no path`)
+  const type = `${flow.path}/${SHARED_CONNECT_FLOW_VERSION}`
   return `https://${TRIGGER_LINK_HOST}/t#_from=${fields.from}&_id=${fields.id}&_exp=${fields.exp}&_type=${type}`
 }
 
