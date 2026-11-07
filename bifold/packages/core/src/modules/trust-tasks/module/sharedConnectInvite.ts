@@ -59,7 +59,7 @@ import { createEncounterDid, ENCOUNTER_LOG_PREFIX } from './sharedConnectEncount
 import { isSharedConnectInviteEnabled, onSharedConnectInviteTurnedOff } from './sharedConnectFlag'
 import { SharedConnectInviterCeremony } from './sharedConnectInviterCeremony'
 import type { SharedConnectInviteFailure, SharedConnectInviteState } from './sharedConnectInviteTypes'
-import { SHARED_CONNECT_FLOW, TRIGGER_LINK_HOST } from './triggerLink'
+import { SHARED_CONNECT_FLOW, TRIGGER_LINK_HOST, uriHostAndPath } from './triggerLink'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
 import {
   answerInviteOverTsp,
@@ -91,7 +91,7 @@ export function buildSharedConnectLink(fields: { from: string; id: string; exp: 
   if (!LINK_SAFE.test(fields.from) || !isChallengeShaped(fields.id) || !Number.isInteger(fields.exp)) {
     throw new Error(`${ENCOUNTER_LOG_PREFIX} refusing to build a link from malformed fields`)
   }
-  const type = `${new URL(SHARED_CONNECT_FLOW).pathname}/${SHARED_CONNECT_FLOW_VERSION}`
+  const type = `${uriHostAndPath(SHARED_CONNECT_FLOW)?.path}/${SHARED_CONNECT_FLOW_VERSION}`
   return `https://${TRIGGER_LINK_HOST}/t#_from=${fields.from}&_id=${fields.id}&_exp=${fields.exp}&_type=${type}`
 }
 

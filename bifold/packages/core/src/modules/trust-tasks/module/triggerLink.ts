@@ -385,6 +385,21 @@ const VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
 
 type ParsedType = { uri: string; base: string; path: string; host: string; major: number; minor: number }
 
+/**
+ * The host and path of an absolute `scheme://host/path` URI, read off the string. Never `new URL(...).pathname`:
+ * React Native's URL (0.81, Libraries/Blob/URL.js) appends `/` to a URL with no `?` or `#`, so on a phone the
+ * pathname of `https://host/vti/flow/shared-connect` is `/vti/flow/shared-connect/` while jest's (Node's) has no
+ * trailing `/`. The WP9 live run (2026-11-07) caught a link built that way carrying `_type=…/shared-connect//0.1`.
+ *
+ * For Keyring's own flow URIs (a flow's `typeBase`, always lower-case, no userinfo, no port), where it reads what
+ * Node's `URL` reads (`host`, `pathname`). The `_type` a link carries is not read here but by `parseType`, with
+ * its own grammar.
+ */
+export function uriHostAndPath(uri: string): { host: string; path: string } | undefined {
+  const m = /^([A-Za-z]+:\/\/)([^/]+)(\/.*)?$/.exec(uri)
+  return m ? { host: m[2], path: m[3] ?? '' } : undefined
+}
+
 /** `_type`: an absolute https URI, or a path resolved against the link's host. The last segment is MAJOR.MINOR. */
 function parseType(value: string, linkHost: string): ParsedType | undefined {
   let uri: string
@@ -522,8 +537,8 @@ export function readTrigger(
       // A flow Keyring knows, served from another host: "update the app" would
       // be wrong, as no version of it reads that.
       const samePath = flows.some((f) => {
-        const base = new URL(f.typeBase)
-        return base.pathname === type.path && base.host !== type.host
+        const base = uriHostAndPath(f.typeBase)
+        return base !== undefined && base.path === type.path && base.host !== type.host
       })
       return reject(samePath ? 'wrong-host' : 'unknown-flow')
     }
