@@ -12,12 +12,13 @@
 import Clipboard from '@react-native-clipboard/clipboard'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import SafeAreaModal from '../../../components/modals/SafeAreaModal'
+import { KeyboardSpace } from '../../../components/views/KeyboardPaddedView'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { initialsOf } from '../../../utils/initials'
@@ -168,7 +169,7 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
     error: { color: ColorPalette.semantic.error },
   })
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardSpace style={{ flex: 1 }}>
       <Pressable
         style={styles.backdrop}
         onPress={onClose}
@@ -304,7 +305,7 @@ const SheetBody: React.FC<Omit<RoomIdentitySheetProps, 'identity'> & { identity:
           testID={testIdWithKey('RoomIdentityClose')}
         />
       </SafeAreaView>
-    </KeyboardAvoidingView>
+    </KeyboardSpace>
   )
 }
 

@@ -33,6 +33,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Dimensions,
   Keyboard,
+  KeyboardAvoidingView,
+  type KeyboardAvoidingViewProps,
   type KeyboardEvent,
   type KeyboardMetrics,
   LayoutAnimation,
@@ -147,5 +149,20 @@ const KeyboardPaddedView: React.FC<KeyboardPaddedViewProps> = ({
     </View>
   )
 }
+
+/**
+ * Room for the keyboard on a screen or sheet: KeyboardPaddedView on iOS, and
+ * on Android React Native's KeyboardAvoidingView with the `android` props it
+ * had (none: a plain view). Android keeps what it had because nothing has
+ * shown the bug there, not because the padding rule differs.
+ */
+export const KeyboardSpace: React.FC<
+  KeyboardPaddedViewProps & { android?: Pick<KeyboardAvoidingViewProps, 'behavior' | 'keyboardVerticalOffset'> }
+> = ({ android, keepVisible, ...props }) =>
+  Platform.OS === 'ios' ? (
+    <KeyboardPaddedView keepVisible={keepVisible} {...props} />
+  ) : (
+    <KeyboardAvoidingView {...props} {...android} />
+  )
 
 export default KeyboardPaddedView

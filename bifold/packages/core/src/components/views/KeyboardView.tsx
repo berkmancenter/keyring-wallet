@@ -1,7 +1,9 @@
 import { useHeaderHeight } from '@react-navigation/elements'
 import React, { RefObject } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, ScrollViewProps } from 'react-native'
+import { ScrollView, ScrollViewProps } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
+
+import { KeyboardSpace } from './KeyboardPaddedView'
 
 const useSafeHeaderHeight = (): number => {
   try {
@@ -29,11 +31,9 @@ const KeyboardView: React.FC<{
   const safeHeaderHeight = useSafeHeaderHeight()
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={safeHeaderHeight}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    // On iOS the padding is capped at what the keyboard covers (KeyboardPaddedView): React Native's own
+    // KeyboardAvoidingView here can pad the PIN screens' content out of sight on a keyboard report like IN-525's.
+    <KeyboardSpace style={{ flex: 1 }} android={{ keyboardVerticalOffset: safeHeaderHeight }}>
       <KeyboardAwareScrollView
         keyboardShouldPersistTaps={'handled'}
         contentContainerStyle={[{ flexGrow: 1 }, scrollViewProps?.contentContainerStyle]}
@@ -43,7 +43,7 @@ const KeyboardView: React.FC<{
       >
         {children}
       </KeyboardAwareScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardSpace>
   )
 }
 

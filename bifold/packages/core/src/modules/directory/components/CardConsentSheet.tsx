@@ -7,11 +7,12 @@
  */
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import SafeAreaModal from '../../../components/modals/SafeAreaModal'
+import { KeyboardSpace } from '../../../components/views/KeyboardPaddedView'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
@@ -63,7 +64,7 @@ export const CardConsentSheet: React.FC<CardConsentSheetProps> = ({
   })
   return (
     <SafeAreaModal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardSpace style={{ flex: 1 }}>
         <Pressable
           style={styles.backdrop}
           onPress={saving ? undefined : onClose}
@@ -102,7 +103,7 @@ export const CardConsentSheet: React.FC<CardConsentSheetProps> = ({
             testID={testIdWithKey('CardConsentNotNow')}
           />
         </SafeAreaView>
-      </KeyboardAvoidingView>
+      </KeyboardSpace>
     </SafeAreaModal>
   )
 }
