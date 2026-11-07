@@ -27,6 +27,8 @@ if (typeof global.self === 'undefined') {
 // Keep recent console output for "Report this problem" (app/src/utils/problemReport.ts).
 // First, so it sees everything that logs after it.
 require('./src/utils/logBuffer').installLogBuffer()
+// And the end of it across a kill: nothing waits for this (utils/logPersist).
+require('./src/utils/logPersist').logPersist.start()
 
 // =============================================================================
 // Step 1: Set up crypto.getRandomValues using react-native-get-random-values

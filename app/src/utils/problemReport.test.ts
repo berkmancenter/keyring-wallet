@@ -15,6 +15,10 @@ import {
 import { buildProblemReport, errorChain, ReportEnvironment, shareReport } from './problemReport'
 
 jest.mock('react-native-fs', () => ({ CachesDirectoryPath: '/cache', writeFile: jest.fn(async () => undefined) }))
+const mockPreviousRun = jest.fn(async (): Promise<string | undefined> => undefined)
+jest.mock('./logPersist', () => ({
+  logPersist: { previousRun: () => mockPreviousRun(), slowestJsMs: () => 7 },
+}))
 jest.mock('expo-sharing', () => ({
   isAvailableAsync: jest.fn(async () => true),
   shareAsync: jest.fn(async () => undefined),
@@ -169,6 +173,44 @@ describe('opaque token shortening', () => {
 
     expect(line).toContain('more chars')
     expect(line.length).toBeLessThan(LOG_LINE_MAX_LENGTH + 100)
+  })
+})
+
+describe('the end of the run before this one', () => {
+  const env: ReportEnvironment = {
+    app: 'Keyring',
+    version: '1',
+    build: '2',
+    system: 'iOS 17',
+    device: 'iPhone',
+    time: 'now',
+  }
+
+  it('comes after this run, marked as the run before', () => {
+    const report = buildProblemReport({ referenceCode: 'X' }, env, ['this run'], undefined, {
+      log: 'last line before the kill',
+      slowestJsMs: 3,
+    })
+    expect(report.indexOf('this run')).toBeLessThan(report.indexOf('last line before the kill'))
+    expect(report).toContain('The end of the run before this one')
+    expect(report).toContain('slowest write 3 ms')
+  })
+
+  it('says nothing about a run before when there was none', () => {
+    const report = buildProblemReport({ referenceCode: 'X' }, env, ['this run'], undefined, { log: '', slowestJsMs: 0 })
+    expect(report).not.toContain('The end of the run before this one')
+    expect(report).toContain('slowest write 0 ms')
+  })
+
+  it('is not in the shortened report that email carries', () => {
+    expect(buildProblemReport({ referenceCode: 'X' }, env, ['a'], 150)).not.toContain('Log file')
+  })
+
+  it('goes in the shared file', async () => {
+    mockPreviousRun.mockResolvedValueOnce('last line before the kill')
+    jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction } as never)
+    await shareReport({ referenceCode: 'X' }, env)
+    expect(jest.mocked(writeFile).mock.calls.at(-1)?.[1]).toContain('last line before the kill')
   })
 })
 
