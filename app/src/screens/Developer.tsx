@@ -902,6 +902,7 @@ const Developer: React.FC = () => {
           title={t('Developer.EnableSharedConnect')}
           accessibilityLabel={t('Developer.EnableSharedConnect')}
           testID={testIdWithKey('ToggleEnableSharedConnect')}
+          showRowSeparator
           // The row toggles too: iOS hides the Switch behind the accessible row
           // from automation (same fix as the DIDComm v2 row, 2026-09-14).
           onPress={toggleEnableSharedConnectSwitch}
