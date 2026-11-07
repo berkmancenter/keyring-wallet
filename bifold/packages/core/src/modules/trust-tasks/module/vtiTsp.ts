@@ -202,6 +202,22 @@ export async function greetPeerOverTsp(
 }
 
 /**
+ * Answer a peer's invite (`XRFA`, §7.2): the accept names the invite's own digest, and goes out in the version the
+ * invite was written in. Sent as the inviter of a shared-connect code, whose scanner opens with `XRFI` and whose
+ * reference implementation holds application frames until the accept is back.
+ */
+export async function answerInviteOverTsp(
+  session: TspSessionIdentity,
+  fromDid: string,
+  toDid: string,
+  inviteDigest: Uint8Array,
+  revision?: tsp.TspRevision
+): Promise<tsp.PackedMessage> {
+  if (revision === 'v1') return tsp.packAcceptV1(inviteDigest, fromDid, toDid, session.identity, session.resolver)
+  return tsp.packAcceptRev3(inviteDigest, fromDid, toDid, session.identity, session.resolver)
+}
+
+/**
  * The shape the rest of the module reads — `vtiVetting` and the inbox handle
  * a DIDComm v2 plaintext, reading `type`, `id`, `thid`, `from` and `body`. A
  * Trust Task document that arrived over TSP is presented the same way: the
@@ -244,7 +260,14 @@ type OpenStage = 'reading' | 'resolving' | 'keyUsed' | 'keyUnavailable'
 export async function unpackTrustTaskFromPeer(
   session: TspSessionIdentity,
   bytes: Uint8Array,
-  expectedReceiver: string
+  expectedReceiver: string,
+  options: {
+    /**
+     * Told of a relationship-forming control frame addressed to `expectedReceiver`, once it opened and verified
+     * (`tsp.isTspControlFrame`): what an inviter needs to answer an invite. The frame is still "no Trust Task here".
+     */
+    onControl?: (frame: tsp.TspControlFrameReceived & { control: tsp.TspControlMessage; sender: string }) => void
+  } = {}
 ): Promise<{ plaintext: DidCommV2PlaintextMessage; unpacked: tsp.UnpackedMessage } | undefined> {
   let unpacked: tsp.UnpackedMessage
   // Two constraints this relies on, both true of rev2 and rev3 today and worth keeping so:
@@ -292,7 +315,10 @@ export async function unpackTrustTaskFromPeer(
     // acknowledged like any other. Thrown instead, it skipped the
     // acknowledgement and stayed queued against the peer that sent it — one
     // stranded accept per applicant, charged to the community.
-    if (String((error as Error)?.message ?? '').startsWith(tsp.CONTROL_FRAME_RECEIVED)) return undefined
+    if (String((error as Error)?.message ?? '').startsWith(tsp.CONTROL_FRAME_RECEIVED)) {
+      if (tsp.isTspControlFrame(error) && error.receiver === expectedReceiver) options.onControl?.(error)
+      return undefined
+    }
     const detail = String((error as Error)?.message ?? error).slice(0, 160)
     // A version marker this build cannot read (the peek's `E_TSP_REVISION`): named,
     // so the log says "a TSP version this build does not read" rather than

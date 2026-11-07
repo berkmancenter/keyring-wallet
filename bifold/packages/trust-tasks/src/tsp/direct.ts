@@ -46,6 +46,8 @@ import { readTspVersion, TSP_REV2, TSP_REV3, TSP_V1 } from './version'
 export { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
 export {
   CONTROL_FRAME_RECEIVED,
+  TspControlFrameReceived,
+  isTspControlFrame,
   packAcceptRev3,
   packCancelRev3,
   packInviteRev3,
@@ -69,6 +71,7 @@ export {
 } from './rev3'
 export { decodeUtf8Strict, makeStrictUtf8Decode } from './shared'
 export type { ApplicationKind, MessageType, PackedMessage, TspRevision, UnpackedMessage } from './shared'
+export type { TspControlMessage } from './rev3'
 export { sha256 }
 
 /** What the version marker at the head of a frame says, read without keys. */

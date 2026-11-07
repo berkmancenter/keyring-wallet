@@ -18,3 +18,28 @@ export const SharedConnectIds = {
   result: 'SharedConnectResult',
   done: 'SharedConnectDone',
 } as const
+
+/**
+ * The testIDs of the "Show a code" screen (Keyring as the inviter, plan WP9), held here so one file owns every
+ * shared-connect id. `link` carries the full trigger link as text, for the e2e harness. Add, never rename.
+ */
+export const SharedConnectInviteIds = {
+  screen: 'SharedConnectInvite',
+  qr: 'SharedConnectInviteQR',
+  link: 'SharedConnectInviteLink',
+  countdown: 'SharedConnectInviteCountdown',
+  expiresAt: 'SharedConnectInviteExpiresAt',
+  copyLink: 'SharedConnectInviteCopyLink',
+  shareLink: 'SharedConnectInviteShareLink',
+  cancel: 'SharedConnectInviteCancel',
+  renew: 'SharedConnectInviteRenew',
+  minting: 'SharedConnectInviteMinting',
+  waiting: 'SharedConnectInviteWaiting',
+  proposed: 'SharedConnectInviteProposed',
+  connecting: 'SharedConnectInviteConnecting',
+  connected: 'SharedConnectInviteConnected',
+  expired: 'SharedConnectInviteExpired',
+  failed: 'SharedConnectInviteFailed',
+  cancelled: 'SharedConnectInviteCancelled',
+  done: 'SharedConnectInviteDone',
+} as const

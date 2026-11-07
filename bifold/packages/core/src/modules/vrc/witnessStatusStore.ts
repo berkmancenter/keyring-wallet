@@ -130,6 +130,12 @@ export interface RelationshipProposalPrompt {
    * the relationship cards again (`resign`), or again with a witness (`witness`).
    */
   upgrade?: 'resign' | 'witness'
+  /**
+   * Set when the proposal came to a code this phone showed (shared-connect, Keyring as the inviter): there is no
+   * connection and no name, only the scanner's encounter DID, shortened. `connectionId` is the encounter key
+   * (`enc:` + the code's `_id`), and `counterpartyLabel` is empty.
+   */
+  sharedConnect?: { didShort: string }
 }
 
 class VrcFlowStore extends EventEmitter {

@@ -299,8 +299,10 @@ export function decodePayloadFrameRev3(
   const typeCode = frame.slice(cur.pos, cur.pos + 3)
   cur.pos += 3
 
+  const senderStart = cur.pos
   const senderBytes = cesr.decodeVariableData(cesr.TSP_VID, frame, cur)
   if (senderBytes === undefined) throw new Error('tsp: missing ESSR sender VID field')
+  const senderField = frame.slice(senderStart, cur.pos)
   let senderVid: string
   try {
     senderVid = decodeUtf8Strict(senderBytes)
@@ -337,12 +339,81 @@ export function decodePayloadFrameRev3(
   }
 
   if (bytesEqual(typeCode, cesr.XRFI) || bytesEqual(typeCode, cesr.XRFA) || bytesEqual(typeCode, cesr.XRFD)) {
-    throw new Error(`${CONTROL_FRAME_RECEIVED}: an invite, accept or cancel is not an application message`)
+    throw decodeControlFrameRev3(frame, cur, frameEnd, typeCode, senderField)
   }
   if (bytesEqual(typeCode, cesr.XCTL) || bytesEqual(typeCode, cesr.XPAD)) {
     throw new Error('tsp: control or padding payload; not an application message')
   }
   throw new Error('tsp: unsupported payload type marker')
+}
+
+/**
+ * Read a control frame's fields after its type code (§9.3), in the layout the
+ * packers below write, and return the error {@link unpackRev3} completes and
+ * throws. The self-addressing digest is checked there, where the envelope
+ * fields it covers are at hand.
+ *
+ * ```text
+ *   XRFI  sndr  Digest  Nonce  Reply_Path  Referral  pad
+ *   XRFA  sndr  Reply_Digest  Digest  pad
+ *   XRFD  sndr  Digest  pad
+ * ```
+ */
+function decodeControlFrameRev3(
+  frame: Uint8Array,
+  cur: cesr.Cursor,
+  frameEnd: number,
+  typeCode: Uint8Array,
+  senderField: Uint8Array
+): TspControlFrameReceived {
+  const fixed = (identifier: number, length: number, what: string) => {
+    const value = cesr.decodeFixedData(identifier, length, frame, cur)
+    if (value === undefined) throw new Error(`tsp: control frame is missing its ${what}`)
+    return value
+  }
+  const end = () => {
+    decodePadding(frame, cur)
+    if (cur.pos !== frameEnd) throw new Error('tsp: control frame has trailing fields')
+  }
+  if (bytesEqual(typeCode, cesr.XRFI)) {
+    const digest = fixed(cesr.TSP_SHA256, DIGEST_LEN, 'digest')
+    const nonce = fixed(cesr.TSP_NONCE, NONCE_LEN, 'nonce')
+    const route = decodeVidList(frame, cur)
+    const referrals = cesr.decodeCount(cesr.TSP_HOP_LIST, frame, cur)
+    if (referrals === undefined) throw new Error('tsp: invite is missing its referral list')
+    if (referrals !== 0) {
+      // The packer writes no referrals, and the derivation below rebuilds an empty list: an invite introducing
+      // someone is still refused as a control frame, but reported with no verified message (nothing answers it).
+      cur.pos += referrals * 3
+      end()
+      return new TspControlFrameReceived({ kind: 'invite', digest, nonce, route }, undefined)
+    }
+    end()
+    const after = concat(
+      bytesOf((out) => cesr.encodeFixedData(cesr.TSP_NONCE, nonce, out)),
+      bytesOf((out) => encodeVidList(route, out)),
+      bytesOf((out) => cesr.encodeCount(cesr.TSP_HOP_LIST, 0, out))
+    )
+    return new TspControlFrameReceived(
+      { kind: 'invite', digest, nonce, route },
+      { typeCode, before: senderField, after }
+    )
+  }
+  if (bytesEqual(typeCode, cesr.XRFA)) {
+    const replyStart = cur.pos
+    const replyDigest = fixed(cesr.TSP_SHA256, DIGEST_LEN, 'reply digest')
+    const before = concat(senderField, frame.slice(replyStart, cur.pos))
+    const digest = fixed(cesr.TSP_SHA256, DIGEST_LEN, 'digest')
+    end()
+    return new TspControlFrameReceived(
+      { kind: 'accept', digest, replyDigest },
+      { typeCode, before, after: new Uint8Array(0) }
+    )
+  }
+  // XRFD: the digest names the relationship it ends; it is echoed, not derived, so there is nothing to recompute.
+  const digest = fixed(cesr.TSP_SHA256, DIGEST_LEN, 'digest')
+  end()
+  return new TspControlFrameReceived({ kind: 'cancel', digest }, 'echoed')
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +525,62 @@ function refuseNullSenderUnder(version: TspVersion, unsafe?: UnsafeDeterministic
  * acknowledges stays queued against the peer that sent it.
  */
 export const CONTROL_FRAME_RECEIVED = 'tsp: relationship-forming control frame received'
+
+/** A relationship-forming control message read from a frame (§7.2, §9.3). */
+export interface TspControlMessage {
+  kind: 'invite' | 'accept' | 'cancel'
+  /**
+   * The frame's `TSP_Digest`. For an invite or an accept, its own self-addressing digest, checked against the
+   * frame by {@link unpackRev3} before the message is reported; for a cancel, the relationship it names.
+   */
+  digest: Uint8Array
+  /** An accept only: the invite digest it answers. */
+  replyDigest?: Uint8Array
+  /** An invite only: its 128-bit nonce. */
+  nonce?: Uint8Array
+  /** An invite only: the `Reply_Path` its accept travels back over (§7.2.4). */
+  route?: string[]
+}
+
+/**
+ * What {@link unpackRev3} throws for a control frame: still a refusal as an
+ * application message (its message starts with {@link CONTROL_FRAME_RECEIVED},
+ * so every caller that matches on that keeps working), but carrying what the
+ * frame said. `control` is present only once the frame was opened, its
+ * signature verified and, for an invite or an accept, its self-addressing
+ * digest recomputed and matched: a frame that fails any of those throws a
+ * plain error instead. Checked by {@link isTspControlFrame}, on the code, not
+ * the class, which may come from another bundle copy.
+ */
+export class TspControlFrameReceived extends Error {
+  readonly code = 'E_TSP_CONTROL_FRAME'
+  /** Set by {@link unpackRev3} once verified; absent while only decoded. */
+  control?: TspControlMessage
+  sender?: string
+  receiver?: string
+  revision?: TspRevision
+  constructor(
+    /** What was decoded, before the digest check. */
+    readonly decoded: TspControlMessage,
+    /**
+     * The derivation input either side of the digest slot (§7.2.1), rebuilt as the packer builds it; `'echoed'`
+     * for a cancel, whose digest names another message; `undefined` when it cannot be rebuilt (an invite with
+     * referrals), which leaves the frame unverified: refused, with no `control`.
+     */
+    readonly saidInput: { typeCode: Uint8Array; before: Uint8Array; after: Uint8Array } | 'echoed' | undefined
+  ) {
+    super(`${CONTROL_FRAME_RECEIVED}: an invite, accept or cancel is not an application message`)
+    this.name = 'TspControlFrameReceived'
+  }
+}
+
+/** A verified control frame (see {@link TspControlFrameReceived}). */
+export function isTspControlFrame(
+  error: unknown
+): error is TspControlFrameReceived & { control: TspControlMessage; sender: string; receiver: string } {
+  const e = error as { code?: unknown; control?: unknown } | undefined
+  return e?.code === 'E_TSP_CONTROL_FRAME' && e.control !== undefined
+}
 
 /** §9.2 (D9) fixes the relationship nonce at 128 bits. */
 export const NONCE_LEN = 16
@@ -731,9 +858,30 @@ export async function unpackRev3(
   )
   // Every message this codec opens is confidential (HPKE-Base), so 1.0's
   // mandatory sender applies to all of them.
-  const frame = decodePayloadFrameRev3(payloadFrame, envelope.sender, {
-    requireSender: version.major === TSP_V1.major,
-  })
+  let frame: ReturnType<typeof decodePayloadFrameRev3>
+  try {
+    frame = decodePayloadFrameRev3(payloadFrame, envelope.sender, {
+      requireSender: version.major === TSP_V1.major,
+    })
+  } catch (error) {
+    if (error instanceof TspControlFrameReceived) {
+      // §7.2.1: the receiver recomputes the self-addressing digest over the envelope fields it arrived under
+      // (the HPKE associated data) and refuses the message on a mismatch.
+      const said = error.saidInput
+      if (said === undefined) throw error // unverifiable: refused as a control frame, reported with no message
+      if (
+        said !== 'echoed' &&
+        !bytesEqual(deriveSaid(aad, said.typeCode, said.before, said.after), error.decoded.digest)
+      ) {
+        throw new Error('tsp: control message digest does not match its frame')
+      }
+      error.control = error.decoded
+      error.sender = envelope.sender
+      error.receiver = envelope.receiver
+      error.revision = revisionOf(version)
+    }
+    throw error
+  }
 
   return {
     payload: frame.body,
