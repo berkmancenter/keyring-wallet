@@ -61,6 +61,9 @@ import { SharedConnectInviteIds as Ids } from './SharedConnect.ids'
 
 const id = (key: string) => testIdWithKey(key)
 
+/** QRRenderer's own margin above and below the code (its container's marginVertical), in points. */
+export const QR_MARGIN = 20
+
 /** The states in which the code can still be scanned, so the time left runs. */
 const LIVE = new Set(['waiting', 'proposed'])
 
@@ -135,18 +138,22 @@ export const SharedConnectInviteView: React.FC<{
         content: { padding: 20, gap: 14, flexGrow: 1 },
         center: { textAlign: 'center' },
         quiet: { textAlign: 'center', color: ColorPalette.grayscale.mediumGrey },
+        // The box's height is fixed: QRRenderer grows to fill whatever room it is given (flexGrow: 1, plus a
+        // margin of QR_MARGIN above and below), and inside this screen's scroll that was the screen's whole height,
+        // which pushed the time left, Copy link and Share out of sight on Android (WP9 live run, 11-07).
         qr: {
           alignSelf: 'center',
           backgroundColor: ColorPalette.grayscale.white,
           borderRadius: 12,
-          padding: 12,
+          paddingHorizontal: 12,
+          height: qrSize + 2 * QR_MARGIN,
         },
         clock: { textAlign: 'center', fontVariant: ['tabular-nums'] },
         links: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
         link: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12 },
         footer: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, gap: 12 },
       }),
-    [ColorPalette]
+    [ColorPalette, qrSize]
   )
 
   const linkColor = ColorPalette.brand.link
