@@ -1679,6 +1679,7 @@
     "AgentApprovalDecided_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "AgentCardHistory_": ["src/modules/trust-tasks/screens/CardKeptRow.tsx"],
     "AgentCardKept_": ["src/modules/trust-tasks/screens/CardKeptRow.tsx"],
+    "AgentCardRenew_": ["src/modules/trust-tasks/screens/CardKeptRow.tsx"],
     "AgentCard_": ["src/modules/trust-tasks/screens/CardKeptRow.tsx"],
     "AgentCommunityCard_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCommunityCheck_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
