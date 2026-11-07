@@ -413,6 +413,8 @@ export class AppContainer implements Container {
         loadState<boolean>(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableLivePickup, (val) => (enableLivePickup = val)),
         loadSwitch(BCLocalStorageKeys.EnableSharedConnect, (val) => (enableSharedConnect = val)),
+        // A saved "on" outlives any default, so bifold's isSharedConnectInviteEnabled() (with its remote off) is this
+        // flag's only kill path: keep the read going through it, never inline the saved value.
         loadSwitch(BCLocalStorageKeys.EnableSharedConnectInvite, (val) => (enableSharedConnectInvite = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))

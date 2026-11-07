@@ -1,9 +1,10 @@
 /**
  * The "Show a code" switch (shared-connect as the inviter, plan WP9):
  * Developer settings turns on showing a shared-connect code for someone else
- * to scan. It is off by default until the live run passes, a toggle saves it,
- * and on load the saved choice wins — "off" included, so that turning the
- * default on later cannot override someone who switched it off.
+ * to scan. It is on by default from 278.6, a toggle saves it, and on load the
+ * saved choice wins — "off" included, so the default cannot override someone
+ * who switched it off. Turning it off for everyone is bifold's remote off,
+ * whose rows are in bifold's sharedConnectRemoteOff.test.ts.
  */
 import { PersistentStorage, TOKENS } from '@bifold/core'
 import path from 'path'
@@ -71,8 +72,8 @@ afterEach(() => {
 })
 
 describe('the Show a code switch', () => {
-  it('is off by default', () => {
-    expect(initialState.developer.enableSharedConnectInvite).toBe(false)
+  it('is on by default (from 278.6)', () => {
+    expect(initialState.developer.enableSharedConnectInvite).toBe(true)
   })
 
   it('the Developer toggle sets it and saves it, under its own key', () => {
@@ -88,8 +89,8 @@ describe('the Show a code switch', () => {
     expect(save).toHaveBeenLastCalledWith(BCLocalStorageKeys.EnableSharedConnectInvite, false)
   })
 
-  it('on load, with nothing saved, bifold is told the default (off)', async () => {
-    expect(await load()).toEqual({ stored: false, told: false })
+  it('on load, with nothing saved, bifold is told the default (on)', async () => {
+    expect(await load()).toEqual({ stored: true, told: true })
   })
 
   it('on load, a saved "on" turns it on', async () => {
@@ -104,8 +105,8 @@ describe('the Show a code switch', () => {
     expect(await load()).toEqual({ stored: false, told: false })
   })
 
-  it('on load, with nothing saved, a default that is on reaches bifold', async () => {
-    initialState.developer.enableSharedConnectInvite = true
-    expect(await load()).toEqual({ stored: true, told: true })
+  it('on load, with nothing saved, a default that is off reaches bifold too', async () => {
+    initialState.developer.enableSharedConnectInvite = false
+    expect(await load()).toEqual({ stored: false, told: false })
   })
 })

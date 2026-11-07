@@ -123,10 +123,10 @@ const developerState: Developer = {
   enableLivePickup: Config.LIVE_MESSAGE_PICKUP === 'true',
   // On for everyone. A saved choice, off included, wins on load (container-imp.ts).
   enableSharedConnect: true,
-  // Off until the live run passes; turned on then by changing this default. A saved choice wins on load.
-  // Before turning it on for testers: the screen's French and Brazilian Portuguese are machine-drafted and must have
-  // had a native read first (Alberto, 2026-11-07; bifold SharedConnectInvite.tsx).
-  enableSharedConnectInvite: false,
+  // On for everyone from 278.6 (WP9's live run passed on 2026-11-07). This default is the one place it is turned on.
+  // A saved choice wins on load, so someone who switched it off keeps it off. To turn it off for everyone, use
+  // bifold's SHARED_CONNECT_REMOTE_OFF.invite, which beats a saved "on"; changing this default cannot.
+  enableSharedConnectInvite: true,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
