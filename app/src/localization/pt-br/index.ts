@@ -174,6 +174,7 @@ const translation = {
     "EnableTspCarriage": "Ativar o transporte em envelope TSP",
     "EnableDidCommV2": "Ativar DIDComm v2 (experimental)",
     "EnableSharedConnect": "Conectar com um código compartilhado (experimental)",
+    "EnableSharedConnectInvite": "Mostrar um código para outras pessoas escanearem (experimental; precisa da opção acima)",
     "EnableLivePickup": "Recebimento de mensagens ao vivo (WebSocket)",
     "Mediator": "Mediador",
     "CopyValue": "Copiar",
