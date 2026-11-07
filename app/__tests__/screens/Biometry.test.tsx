@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { Alert } from 'react-native'
 import { check, request, RESULTS } from 'react-native-permissions'
@@ -114,6 +114,42 @@ describe('onboarding Biometry screen, turning the switch on', () => {
     expect(Alert.alert).toHaveBeenCalledTimes(1)
     expect(getByTestId(TOGGLE).props.value).toBe(false)
     expect(mockedRequest).not.toHaveBeenCalled()
+  })
+
+  test('while Face ID is being confirmed the switch is disabled, then turns on when the probe opens', async () => {
+    let finishProbe: (opened: boolean) => void = () => undefined
+    mockConfirmBiometricKeychainAccess.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishProbe = resolve
+        })
+    )
+    const { getByTestId } = render(<Biometry />)
+
+    fireEvent(getByTestId(TOGGLE), 'valueChange', true)
+
+    await waitFor(() => expect(getByTestId(TOGGLE).props.disabled).toBe(true))
+    expect(mockConfirmBiometricKeychainAccess).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      finishProbe(true)
+    })
+    await waitFor(() => expect(getByTestId(TOGGLE).props.value).toBe(true))
+    expect(getByTestId(TOGGLE).props.disabled).toBe(false)
+  })
+
+  test('turning the switch off never asks Face ID', async () => {
+    const { getByTestId } = render(<Biometry />)
+    fireEvent(getByTestId(TOGGLE), 'valueChange', true)
+    await waitFor(() => expect(getByTestId(TOGGLE).props.value).toBe(true))
+    mockConfirmBiometricKeychainAccess.mockClear()
+    mockedCheck.mockClear()
+
+    fireEvent(getByTestId(TOGGLE), 'valueChange', false)
+
+    await waitFor(() => expect(getByTestId(TOGGLE).props.value).toBe(false))
+    expect(mockConfirmBiometricKeychainAccess).not.toHaveBeenCalled()
+    expect(mockedCheck).not.toHaveBeenCalled()
   })
 
   // Controls: without a Face ID biometry type, DENIED still goes through request().
