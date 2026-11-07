@@ -105,7 +105,18 @@ const Biometry: React.FC = () => {
         showSettingsAlert(t('Biometry.AllowBiometricsTitle'), t('Biometry.AllowBiometricsDesc'))
         break
       case RESULTS.DENIED:
-        await onRequestSystemBiometrics(newValue)
+        // On iOS, react-native-permissions reports DENIED for Face ID when the
+        // OS says Face ID is usable but the library's own "already requested"
+        // flag is missing. A reinstall wipes that flag while iOS keeps the
+        // app's Face ID grant, and then request() never resolves: it waits for
+        // the app to become active again after an alert that iOS never shows.
+        // Face ID being usable is all this switch needs. If Face ID was never
+        // granted, iOS asks the first time the app unlocks with it.
+        if (Platform.OS === 'ios' && supported_type === BIOMETRY_TYPE.FACE_ID) {
+          setBiometryEnabled(newValue)
+        } else {
+          await onRequestSystemBiometrics(newValue)
+        }
         break
       default:
         break
