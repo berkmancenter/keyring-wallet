@@ -9,6 +9,7 @@ import {
   useStore,
   DispatchAction,
   useAnimatedComponents,
+  confirmBiometricKeychainAccess,
 } from '@bifold/core'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -110,10 +111,24 @@ const Biometry: React.FC = () => {
         // flag is missing. A reinstall wipes that flag while iOS keeps the
         // app's Face ID grant, and then request() never resolves: it waits for
         // the app to become active again after an alert that iOS never shows.
-        // Face ID being usable is all this switch needs. If Face ID was never
-        // granted, iOS asks the first time the app unlocks with it.
+        // So instead of request(), read back a throwaway Face ID-protected
+        // keychain item: iOS asks for permission if it never has, then scans.
+        // Turn on only if Face ID really opened it, so Continue never stores
+        // the wallet key behind Face ID that cannot open it.
         if (Platform.OS === 'ios' && supported_type === BIOMETRY_TYPE.FACE_ID) {
-          setBiometryEnabled(newValue)
+          const opened = await confirmBiometricKeychainAccess(
+            t('Biometry.UnlockPromptTitle'),
+            t('Biometry.UnlockPromptDescription')
+          )
+          if (opened) {
+            setBiometryEnabled(newValue)
+          } else if ((await check(BIOMETRY_PERMISSION)) === RESULTS.BLOCKED) {
+            // Declined just now: say where to allow it, as for an earlier decline.
+            showSettingsAlert(t('Biometry.AllowBiometricsTitle'), t('Biometry.AllowBiometricsDesc'))
+          } else {
+            // Cancelled, a failed scan, locked out, or no answer: still off, say so.
+            Alert.alert(t('Biometry.NotConfirmedTitle'), t('Biometry.NotConfirmedDesc'))
+          }
         } else {
           await onRequestSystemBiometrics(newValue)
         }

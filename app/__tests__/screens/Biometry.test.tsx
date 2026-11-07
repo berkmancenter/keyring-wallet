@@ -1,5 +1,6 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { Alert } from 'react-native'
 import { check, request, RESULTS } from 'react-native-permissions'
 import { getSupportedBiometryType } from 'react-native-keychain'
 
@@ -7,6 +8,7 @@ import Biometry from '../../src/screens/Biometry'
 
 const mockCommitWalletToKeychain = jest.fn().mockResolvedValue(undefined)
 const mockDispatch = jest.fn()
+const mockConfirmBiometricKeychainAccess = jest.fn()
 
 // Minimal fakes for the few @bifold/core pieces this screen uses, so the test
 // pins this screen's switch logic and nothing else.
@@ -27,6 +29,7 @@ jest.mock('@bifold/core', () => {
     useStore: () => [{ preferences: { useBiometry: false } }, mockDispatch],
     DispatchAction: { USE_BIOMETRY: 'preferences/useBiometry' },
     useAnimatedComponents: () => ({ ButtonLoading: () => null }),
+    confirmBiometricKeychainAccess: (...args: unknown[]) => mockConfirmBiometricKeychainAccess(...args),
   }
 })
 
@@ -50,18 +53,24 @@ describe('onboarding Biometry screen, turning the switch on', () => {
     mockedCheck.mockResolvedValue(RESULTS.DENIED)
     mockedRequest.mockResolvedValue(RESULTS.BLOCKED)
     mockedSupportedType.mockResolvedValue('FaceID' as never)
+    mockConfirmBiometricKeychainAccess.mockResolvedValue(true)
+    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
   })
 
   // IN-551: after a reinstall, iOS keeps the app's Face ID grant but
   // react-native-permissions loses its "requested" flag, so check() says DENIED
   // and request() never resolves (it waits for an alert iOS never shows).
-  test('iOS Face ID with permission DENIED turns on without calling request(), even when request() would never resolve', async () => {
+  test('iOS Face ID with permission DENIED turns on once Face ID opens the probe item, without calling request(), even when request() would never resolve', async () => {
     mockedRequest.mockImplementation(() => new Promise(() => {}))
     const { getByTestId } = render(<Biometry />)
 
     fireEvent(getByTestId(TOGGLE), 'valueChange', true)
 
     await waitFor(() => expect(getByTestId(TOGGLE).props.value).toBe(true))
+    expect(mockConfirmBiometricKeychainAccess).toHaveBeenCalledWith(
+      'Biometry.UnlockPromptTitle',
+      'Biometry.UnlockPromptDescription'
+    )
     expect(mockedCheck).toHaveBeenCalledTimes(1)
     expect(mockedRequest).not.toHaveBeenCalled()
 
@@ -69,6 +78,42 @@ describe('onboarding Biometry screen, turning the switch on', () => {
     fireEvent.press(getByTestId(CONTINUE))
     await waitFor(() => expect(mockCommitWalletToKeychain).toHaveBeenCalledWith(true))
     await waitFor(() => expect(mockDispatch).toHaveBeenCalledWith({ type: 'preferences/useBiometry', payload: [true] }))
+  })
+
+  test('iOS Face ID with permission DENIED stays off and says where to allow it when the probe fails and Face ID now reads BLOCKED', async () => {
+    mockConfirmBiometricKeychainAccess.mockResolvedValue(false)
+    mockedCheck.mockResolvedValueOnce(RESULTS.DENIED).mockResolvedValueOnce(RESULTS.BLOCKED)
+    const { getByTestId } = render(<Biometry />)
+
+    fireEvent(getByTestId(TOGGLE), 'valueChange', true)
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Biometry.AllowBiometricsTitle',
+        'Biometry.AllowBiometricsDesc',
+        expect.any(Array)
+      )
+    )
+    expect(getByTestId(TOGGLE).props.value).toBe(false)
+    expect(mockedRequest).not.toHaveBeenCalled()
+
+    // Continue then leaves Biometric Unlock off.
+    fireEvent.press(getByTestId(CONTINUE))
+    await waitFor(() => expect(mockCommitWalletToKeychain).toHaveBeenCalledWith(false))
+  })
+
+  test('iOS Face ID with permission DENIED stays off and says it was not turned on when the probe fails for another reason', async () => {
+    mockConfirmBiometricKeychainAccess.mockResolvedValue(false)
+    const { getByTestId } = render(<Biometry />)
+
+    fireEvent(getByTestId(TOGGLE), 'valueChange', true)
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Biometry.NotConfirmedTitle', 'Biometry.NotConfirmedDesc')
+    )
+    expect(Alert.alert).toHaveBeenCalledTimes(1)
+    expect(getByTestId(TOGGLE).props.value).toBe(false)
+    expect(mockedRequest).not.toHaveBeenCalled()
   })
 
   // Controls: without a Face ID biometry type, DENIED still goes through request().
@@ -81,6 +126,7 @@ describe('onboarding Biometry screen, turning the switch on', () => {
 
     await waitFor(() => expect(mockedRequest).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(getByTestId(TOGGLE).props.value).toBe(true))
+    expect(mockConfirmBiometricKeychainAccess).not.toHaveBeenCalled()
   })
 
   test('DENIED with no Face ID type asks request(), and stays off when it answers BLOCKED', async () => {
@@ -91,6 +137,7 @@ describe('onboarding Biometry screen, turning the switch on', () => {
 
     await waitFor(() => expect(mockedRequest).toHaveBeenCalledTimes(1))
     expect(getByTestId(TOGGLE).props.value).toBe(false)
+    expect(mockConfirmBiometricKeychainAccess).not.toHaveBeenCalled()
   })
 
   test('GRANTED turns on without calling request()', async () => {
