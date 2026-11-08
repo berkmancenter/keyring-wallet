@@ -61,6 +61,7 @@ import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/confi
 import { completeOnboarding, dismissTourIfPresent, CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
+import { netAtFailure } from "./lib/netAtFailure.js";
 import { deleteAcl, fromGrant, grantAfter, grantEntries, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
@@ -1739,6 +1740,14 @@ try {
     if (driver) {
       await screenshot(driver, "link-failure").catch(() => undefined);
       await dumpSource(driver, "link-failure").catch(() => undefined);
+    }
+    // The network at the failure itself (lib/netAtFailure.js): "couldn't reach its message service" twice with nothing
+    // reaching our mediator (11-07, 11-08). Logged only.
+    try {
+      const serial = process.env.ANDROID_SERIAL || process.env.ANDROID_UDID;
+      for (const l of netAtFailure({ host: process.env.GATE_NET_PROBE_HOST || process.env.RUNNER_MEDIATOR_HOST, serial, platform: process.env.PLATFORM })) console.log(l);
+    } catch (e) {
+      console.log(`[net] at failure: the probe itself failed: ${e instanceof Error ? e.message : e}`);
     }
     printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
     process.exitCode = 1;
