@@ -101,8 +101,50 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The tier, before the approval gate, so the run the approver looks at already carries it. A tier-exempt line can turn
+  # a store verdict into ota (scripts/release/tier.mjs), so every exemption is raised as a warning and in the run summary
+  # here, where it is seen before the click, not only scrolled past later. A non-OTA tier fails this job, and the gate
+  # never opens. The publish job's own dry-run check stays as it is.
+  tier:
+    if: ${{ inputs.channel != 'device-test' && inputs.action == 'publish' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+      - name: Tier, and every tier exemption, before the approval
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          BUILD="${RELEASE%%.*}"
+          tag=$(git tag --list "staging-v*-$BUILD")
+          if [ "$(printf '%s\n' "$tag" | grep -c .)" != 1 ]; then
+            echo "::error::expected one staging-v*-$BUILD tag, found: ${tag:-none}"
+            exit 1
+          fi
+          code=0
+          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json > "$RUNNER_TEMP/tier.json" || code=$?
+          cat "$RUNNER_TEMP/tier.json"
+          node -e '
+            const fs = require("fs");
+            let r; try { r = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
+            const sum = process.env.GITHUB_STEP_SUMMARY;
+            if (sum) fs.appendFileSync(sum, `### OTA tier: ${r.tier}\n`);
+            for (const e of r.exempted || []) {
+              const msg = `${e.flag} in ${e.file}: ${e.reason} -- ${e.line}`;
+              console.log(`::warning title=tier exemption::${msg}`);
+              if (sum) fs.appendFileSync(sum, `- tier exemption: ${msg}\n`);
+            }' "$RUNNER_TEMP/tier.json"
+          case "$code" in
+            0|5) ;;
+            *) echo "::error::tier.mjs exit $code: not publishable over the air"; exit 1 ;;
+          esac
+
   approve:
-    if: ${{ !inputs.dry_run }}
+    needs: [tier]
+    # After the tier job (or with it skipped, for a promote or a device-test); a failed tier never opens the gate.
+    if: ${{ !inputs.dry_run && !cancelled() && (needs.tier.result == 'success' || needs.tier.result == 'skipped') }}
     runs-on: ubuntu-22.04
     environment: ota-approval
     steps:
@@ -511,18 +553,7 @@ jobs:
             exit 1
           fi
           code=0
-          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json > "$RUNNER_TEMP/tier.json" || code=$?
-          cat "$RUNNER_TEMP/tier.json"
-          # A tier-exempt line can turn a store verdict into ota, so every exemption is raised as a warning and written
-          # to the run summary: it must be seen at publish time, not only scrolled past in the log.
-          node -e '
-            const fs = require("fs");
-            let r; try { r = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
-            for (const e of r.exempted || []) {
-              const msg = `${e.flag} in ${e.file}: ${e.reason} -- ${e.line}`;
-              console.log(`::warning title=tier exemption::${msg}`);
-              if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `- tier exemption: ${msg}\n`);
-            }' "$RUNNER_TEMP/tier.json"
+          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json || code=$?
           case "$code" in
             0) ;;
             # ota-strict: a label since 10-29 (sign-in / keys / the VTI protocol line), published like ota.
