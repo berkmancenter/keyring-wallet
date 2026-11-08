@@ -619,14 +619,16 @@ cmd_nightly_legs() {
   echo "$legs" | tr ' ' ,
 }
 # link_record <run dir>: at a nightly run's end, the pin and fingerprint its Android part was checked against, once it
-# ran: with no trigger, as soon as that part ran (smoke-android in the run); with one, only when linkfail ran too
-# (not broken, not unstarted), so a night that never got to the link legs tries them again the next night.
+# ran: with no trigger, as soon as that part ran (smoke-android in the run); with one, only when linkfail finished with
+# rc 0, so a night that never got through the link legs tries them again the next night.
 link_record() {
   local rd=$1 pin trig a args=()
   [ -f "$GATE_HOME/link-pending" ] || return 0
   IFS=$'\t' read -r pin trig < "$GATE_HOME/link-pending"
   awk -F'\t' '$1 == "smoke-android"' "$rd/legs.tsv" 2>/dev/null | grep -q . || return 0
-  if [ "$trig" = 1 ] && ! awk -F'\t' '$1 == "linkfail" && $2 != 1 && $2 != 4 && $2 != 143' "$rd/legs.tsv" | grep -q .; then
+  # Only a linkfail that finished green (rc 0) counts: an allowlist, so a kill (137, SIGKILL), a crash (134, 139), a
+  # missing tool (127) or a usage error (2) never records the pin and skips the next night unverified (ac on #874).
+  if [ "$trig" = 1 ] && ! awk -F'\t' '$1 == "linkfail" && $2 == 0' "$rd/legs.tsv" | grep -q .; then
     say "link legs: due tonight but linkfail did not run; tried again next night"; rm -f "$GATE_HOME/link-pending"; return 0
   fi
   while IFS= read -r a; do args+=("$a"); done < <(link_trigger_args)

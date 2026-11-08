@@ -7,6 +7,8 @@
 //       each pnm file the gate's wrapper can run;
 //   (c) always, on the store-build gate (gate.sh run --kind gate: not this file's business).
 // With no recorded fingerprint, or no last nightly, it says run: never skip on what it cannot compare.
+// A rollback range (tonight's pin behind the recorded one) reads its file changes like any range, which can read as none;
+// the fingerprint axis (a runner or pnm moving) still covers what a rollback changes on the Farm side.
 //
 //   linkTrigger.mjs --range <last-pin>..<pin> [--fingerprint-file F] [--runner slug=url …] [--pnm file …] [--json]
 //   exit 0: run the link legs; 1: no trigger.
@@ -25,6 +27,10 @@ export const LINK_PATHS = [
   /^bifold\/packages\/core\/src\/modules\/trust-tasks\/screens\/linkFailureWords\.ts$/,
   /^bifold\/packages\/core\/src\/modules\/trust-tasks\/module\/(VtaClient|vtaAgent|VtaLinkStore)\.ts$/,
   /^bifold\/packages\/core\/src\/navigators\/MyAgentStack\.tsx$/,
+  // The whole trust-tasks package: VtaClient.ts signs the whoAmI probe and every sendTask document with it
+  // (signDocumentProof, signCompactJws, tsp), so a change there changes what every link sends. #974 changed
+  // documentProof.ts inside the 278.7 pin bump, which this rule first read as NO (ac on #874).
+  /^bifold\/packages\/trust-tasks\/src\//,
   /^e2e\/run-vta-link\.js$/,
   /^e2e\/lib\/aclCleanup\.js$/,
   /^e2e\/lib\/pages\/link\.js$/,

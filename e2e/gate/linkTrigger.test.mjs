@@ -36,6 +36,18 @@ test('(a) the link rule: link screens, clients and harness count; tests and othe
   ]), []);
 });
 
+test('regression (ac on #874): #974\'s own files, inside the 278.7 pin bump, trigger through the trust-tasks package', () => {
+  const pr974 = [
+    'bifold/packages/core/__tests__/modules/trust-tasks/sharedConnectRealKms.test.ts',
+    'bifold/packages/core/src/modules/trust-tasks/module/sharedConnect.ts',
+    'bifold/packages/core/src/modules/trust-tasks/module/sharedConnectCeremony.ts',
+    'bifold/packages/core/src/modules/trust-tasks/module/sharedConnectStore.ts',
+    'bifold/packages/trust-tasks/src/documentProof.ts',
+  ];
+  assert.deepEqual(linkFiles(pr974), ['bifold/packages/trust-tasks/src/documentProof.ts']);
+  assert.equal(decide({ files: pr974, prevFingerprint: FP, fingerprint: FP }).run, true);
+});
+
 test('the decision: nothing moved → no; a link file, a VTA version, a pnm file, no record, an unknown range → run', () => {
   assert.equal(decide({ files: ['app/src/x.ts'], prevFingerprint: FP, fingerprint: FP }).run, false);
   assert.equal(decide({ files: ['e2e/run-vta-link.js'], prevFingerprint: FP, fingerprint: FP }).run, true);
@@ -131,8 +143,14 @@ test('link_record: a due night records only once linkfail ran; a quiet night rec
   const notRun = gateRun(`mkdir -p "$GATE_HOME/r"; printf 'abc\\t1\\n' > "$GATE_HOME/link-pending"; printf '%s\\n' '${tsv([['smoke-android', 0, 1, 2]])}' > "$GATE_HOME/r/legs.tsv"; link_record "$GATE_HOME/r"`);
   assert.equal(notRun.fp, null);
   assert.match(notRun.out, /did not run; tried again next night/);
-  const ran = gateRun(`mkdir -p "$GATE_HOME/r"; printf 'abc\\t1\\n' > "$GATE_HOME/link-pending"; printf '%s\\n' '${tsv([['smoke-android', 0, 1, 2], ['linkfail', 2, 3, 4]])}' > "$GATE_HOME/r/legs.tsv"; link_record "$GATE_HOME/r"`);
+  const ran = gateRun(`mkdir -p "$GATE_HOME/r"; printf 'abc\\t1\\n' > "$GATE_HOME/link-pending"; printf '%s\\n' '${tsv([['smoke-android', 0, 1, 2], ['linkfail', 0, 3, 4]])}' > "$GATE_HOME/r/legs.tsv"; link_record "$GATE_HOME/r"`);
   assert.equal(ran.fp?.pin, 'abc');
+  const killed = gateRun(`mkdir -p "$GATE_HOME/r"; printf 'abc\\t1\\n' > "$GATE_HOME/link-pending"; printf '%s\\n' '${tsv([['smoke-android', 0, 1, 2], ['linkfail', 137, 3, 4]])}' > "$GATE_HOME/r/legs.tsv"; link_record "$GATE_HOME/r"`);
+  assert.equal(killed.fp, null, 'a linkfail killed (137) never records the pin (ac on #874)');
+  for (const rc of [134, 139, 127, 2]) {
+    const r = gateRun(`mkdir -p "$GATE_HOME/r"; printf 'abc\\t1\\n' > "$GATE_HOME/link-pending"; printf '%s\\n' '${tsv([['smoke-android', 0, 1, 2], ['linkfail', rc, 3, 4]])}' > "$GATE_HOME/r/legs.tsv"; link_record "$GATE_HOME/r"`);
+    assert.equal(r.fp, null, `rc ${rc} records nothing`);
+  }
   const quiet = gateRun(`mkdir -p "$GATE_HOME/r"; printf 'abc\\t0\\n' > "$GATE_HOME/link-pending"; printf '%s\\n' '${tsv([['smoke-android', 0, 1, 2]])}' > "$GATE_HOME/r/legs.tsv"; link_record "$GATE_HOME/r"`);
   assert.equal(quiet.fp?.pin, 'abc');
   const iosOnly = gateRun(`mkdir -p "$GATE_HOME/r"; printf 'abc\\t0\\n' > "$GATE_HOME/link-pending"; printf '%s\\n' '${tsv([['kk', 0, 1, 2]])}' > "$GATE_HOME/r/legs.tsv"; link_record "$GATE_HOME/r"`);
