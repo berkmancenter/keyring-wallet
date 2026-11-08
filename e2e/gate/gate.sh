@@ -605,10 +605,17 @@ link_trigger_args() {
     done
   done
   [ -n "${PNM_BIN:-}" ] || return 0
-  printf '%s\n' --pnm "$PNM_BIN"
-  # A wrapper (gate-pnm3) picks among pnm builds by its GATE_PNM_* defaults: each of those files counts too.
-  for f in $(grep -oE '\$\{GATE_PNM_[A-Z0-9]+:-[^}]+\}' "$PNM_BIN" 2>/dev/null | sed -E 's/^\$\{GATE_PNM_[A-Z0-9]+:-//; s/\}$//' | sed "s#\\\$HOME#$HOME#g" | sort -u); do
-    [ -f "$f" ] && printf '%s\n' --pnm "$f"
+  # A wrapper (gate-pnm3) picks among pnm builds by its GATE_PNM_* defaults: each of those files counts too. The REST
+  # wrapper (pnm-rest.sh, #877) names no build itself and runs PNM_INNER, so PNM_INNER is followed the same way: else a
+  # pnm pin moved inside gate-pnm3 never reaches the fingerprint and the link legs stay off (a6, 11-08).
+  local w
+  for w in "$PNM_BIN" ${PNM_INNER:+"$PNM_INNER"}; do
+    [[ "$seen" != *" $w "* ]] || continue
+    seen="$seen$w "; printf '%s\n' --pnm "$w"
+    for f in $(grep -oE '\$\{GATE_PNM_[A-Z0-9]+:-[^}]+\}' "$w" 2>/dev/null | sed -E 's/^\$\{GATE_PNM_[A-Z0-9]+:-//; s/\}$//' | sed "s#\\\$HOME#$HOME#g" | sort -u); do
+      [ -f "$f" ] && [[ "$seen" != *" $f "* ]] || continue
+      seen="$seen$f "; printf '%s\n' --pnm "$f"
+    done
   done
   return 0
 }
