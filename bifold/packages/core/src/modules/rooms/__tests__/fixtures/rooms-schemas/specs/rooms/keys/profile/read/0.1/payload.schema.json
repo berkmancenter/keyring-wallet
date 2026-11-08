@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/keys/profile/read/0.1",
+  "title": "Rooms Keys Profile Read — payload",
+  "description": "A member asks their own key holder for the room's profile: what the room is called and what it is for, as its members wrote it inside the room. The key holder computes where the profile is, fetches it from the room's host as the member, opens it, checks its author was entitled to write it, and answers with the newest one it accepts. The outer document members are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "roomId",
+    "host"
+  ],
+  "properties": {
+    "roomId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "The room whose profile to read. The recipient MUST hold its principal's membership of it."
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^did:",
+      "description": "The host to read from, as a DID. Named by the caller for the reason `rooms/keys/read` gives: nothing maps a room to its host, and a room may be registered with more than one."
+    },
+    "ext": {
+      "$ref": "../../../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Rooms Keys Profile Read — response payload",
+      "description": "Success response to rooms/keys/profile/read. Type https://trusttasks.org/spec/rooms/keys/profile/read/0.1#response. Whether the room has a profile its member can read and, if so, the newest one the recipient accepted, with what it rejected on the way.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "status"
+      ],
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "found",
+            "absent",
+            "cleared"
+          ],
+          "description": "`found`: `profile` is the room's profile. `absent`: no record the recipient could read at a profile location was one it accepted — the room has never been given a profile, it was written before every epoch this member can read, or every one found was refused (see `rejected`). `cleared`: the newest profile location holds a retracted record, so somebody holding `curate` removed the room's profile on purpose. Three values because a surface owes the member three different sentences."
+        },
+        "profile": {
+          "$ref": "../../../../_shared/0.1/room.schema.json#/$defs/RoomProfile",
+          "description": "Present exactly when `status` is `found`."
+        },
+        "author": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^did:",
+          "description": "Who wrote the profile returned: the signed body's `author`, whose authority chain the recipient verified. Present with `profile`."
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When its author made the statement. Present with `profile`."
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The epoch the returned profile, or the retraction, was found under. Absent on an `open` room."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The record's version at the host. Present with `profile`, and on `cleared`."
+        },
+        "stale": {
+          "type": "boolean",
+          "description": "`true` when the profile returned was found below the epoch the recipient is at: written before the room's latest epoch advance and not re-written since. Absent on an `open` room, and when `status` is not `found`."
+        },
+        "searched": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "fromEpoch",
+            "toEpoch"
+          ],
+          "description": "The epochs whose profile location the recipient looked at, newest first. Absent on an `open` room, which has one location. Stated so that `absent` can be read for what it is: a room whose profile is older than `toEpoch` is not a room without one.",
+          "properties": {
+            "fromEpoch": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "toEpoch": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "rejected": {
+          "type": "array",
+          "maxItems": 8,
+          "description": "Records at a profile location that the recipient refused, newest first, up to eight. Present when there was at least one. A profile refused at a newer epoch than the one returned is somebody writing what the room is called without the standing to — which is why it is reported rather than dropped.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "reason"
+            ],
+            "properties": {
+              "epoch": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The epoch whose location held it. Absent on an `open` room."
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "malformed",
+                  "notProfile",
+                  "signature",
+                  "location",
+                  "authorMismatch",
+                  "epochMismatch",
+                  "noAuthority",
+                  "timing",
+                  "revoked"
+                ],
+                "description": "Which check it failed, in `RoomProfileStatement`'s terms. `malformed`: not a `SealedRecordBody`, or one carrying an unknown member. `notProfile`: a body with no `roomProfile`, or one carrying record content beside it. `signature`: `proof` does not verify for `author`. `location`: `roomId`, `key` or `version` is not where it was read from. `authorMismatch`: on an `attributed` or `open` room, `author` is not who the host recorded. `epochMismatch`: sealed under an epoch other than the one whose key located it. `noAuthority`: `authority` does not verify, or does not confer `curate` or `admin` on `author` at `issuedAt`. `timing`: `issuedAt` is outside the window around the host's `updatedAt`. `revoked`: a link was revoked at or before `issuedAt` by a list the recipient holds."
+              },
+              "author": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^did:",
+                "description": "The body's `author`, when the record opened and parsed far enough to name one. The caller is a member of the room, who could read the same body; nothing here reaches anybody who could not."
+              }
+            }
+          }
+        },
+        "verification": {
+          "$ref": "../../../../_shared/0.1/room.schema.json#/$defs/ReadVerification",
+          "description": "What the recipient checked of the host's assertions about the record it returned, exactly as `rooms/keys/read` reports it. Present with `profile`, and on `cleared`."
+        },
+        "ext": {
+          "$ref": "../../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

@@ -8,12 +8,12 @@ schemas. That way the fake cannot quietly accept or give a shape the agent
 never would; the `acl-schemas` README next door describes how that once
 happened.
 
-|                   |                                                                                                                                                                                                                |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Specification** | Trust Tasks: `rooms/keys/list` 0.2, `rooms/keys/browse` 0.3, `rooms/keys/read` 0.1, `rooms/keys/seal` 0.2 and 0.3, `vtc/rooms/memberships/list` 0.1, and the `_shared` and `_framework` schemas they reference |
-| **Source**        | https://github.com/trustoverip/dtgwg-trust-tasks-tf                                                                                                                                                            |
-| **Commit**        | `3ef8d4907aa0da40c4eb5c46ffb211581dd93870` (also in `PROVENANCE.sha`)                                                                                                                                          |
-| **Copied**        | 2026-11-08                                                                                                                                                                                                     |
+|                   |                                                                                                                                                                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Specification** | Trust Tasks: `rooms/keys/list` 0.2, `rooms/keys/browse` 0.3, `rooms/keys/read` 0.1, `rooms/keys/seal` 0.2 and 0.3, `rooms/keys/profile/read` 0.1, `rooms/keys/act` 0.9, `rooms/records/put` 0.3, `vtc/rooms/memberships/list` 0.1, and the `_shared` and `_framework` schemas they reference |
+| **Source**        | https://github.com/trustoverip/dtgwg-trust-tasks-tf                                                                                                                                                                                                                                          |
+| **Commit**        | `3ef8d4907aa0da40c4eb5c46ffb211581dd93870` (also in `PROVENANCE.sha`)                                                                                                                                                                                                                        |
+| **Copied**        | 2026-11-08                                                                                                                                                                                                                                                                                   |
 
 These are knowingly **ahead of the shared pin** (`scripts/openvtc/PINS.json`).
 `rooms/keys/seal/0.3` and the record members of `SealedRecordBody`

@@ -9,7 +9,10 @@
  * 1. the member's rooms are listed across two communities, each room under its own community, and a community whose
  *    session another identity's step is keeping is named as held back rather than as unreachable;
  * 2. a room's records read into what the room shows: a message, a reply to it, two reactions to it, an edited
- *    message and a withdrawn one.
+ *    message and a withdrawn one;
+ * 3. with sending on (only ever in a test or a test build), a message, a reply to it and a reaction are written
+ *    through the real writer (profile, seal, the agent's completion, the host's put) and read back as the room shows
+ *    them; and what the writer must refuse, it refuses before anything is sealed or sent.
  *
  * Communities and rooms are values here, as in the app: nothing below is any particular community.
  */
@@ -20,6 +23,7 @@ import Ajv from 'ajv/dist/2020'
 
 import { expectNoDrift, registryPath } from '../../trust-tasks/__tests__/fixtures/registryDrift'
 import { AgentRoomsService, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
+import { RecordMembersNotPermitted, RecordSendingOff } from '../real/recordWrites'
 import { ROOMS_TASK } from '../real/wire'
 import { placeOf, postOf, type RoomPost, withRepliesToReactions } from '../roomPosts'
 import { foldRoomRecords } from '../roomThread'
@@ -76,6 +80,11 @@ const TASK_SCHEMA: Record<string, string> = {
   [ROOMS_TASK.keysBrowse03]: 'specs/rooms/keys/browse/0.3/payload.schema.json',
   [ROOMS_TASK.keysRead]: 'specs/rooms/keys/read/0.1/payload.schema.json',
   [ROOMS_TASK.membershipsList]: 'specs/vtc/rooms/memberships/list/0.1/payload.schema.json',
+  [ROOMS_TASK.keysProfileRead]: 'specs/rooms/keys/profile/read/0.1/payload.schema.json',
+  [ROOMS_TASK.keysSeal02]: 'specs/rooms/keys/seal/0.2/payload.schema.json',
+  [ROOMS_TASK.keysSeal03]: 'specs/rooms/keys/seal/0.3/payload.schema.json',
+  [ROOMS_TASK.keysAct09]: 'specs/rooms/keys/act/0.9/payload.schema.json',
+  [ROOMS_TASK.recordsPut03]: 'specs/rooms/records/put/0.3/payload.schema.json',
 }
 const SEALED_BODY = ['specs/rooms/_shared/0.2/room.schema.json', '/$defs/SealedRecordBody'] as const
 
@@ -116,8 +125,17 @@ const b64url = (s: string) => Buffer.from(s, 'utf8').toString('base64url')
 const VERIFIED = { priorRoots: 'agree', trace: 'verified', count: 'agrees' }
 
 /** The member's agent and the communities, answering only in upstream's shapes, and checking what they are sent. */
-function world(rooms: FakeRoom[], options: { held?: string[] } = {}) {
+function world(
+  rooms: FakeRoom[],
+  options: {
+    held?: string[]
+    /** Sending on, as only a test or a test build sets it, and what each room's profile lists. */
+    sending?: { listed: string[] }
+  } = {}
+) {
   const sent: { type: string; payload: unknown }[] = []
+  let clock = 10
+  let ids = 0
   const room = (roomId: unknown) => {
     const r = rooms.find((x) => x.roomId === roomId)
     if (!r) throw new Error(`no such room ${String(roomId)}`)
@@ -188,9 +206,65 @@ function world(rooms: FakeRoom[], options: { held?: string[] } = {}) {
           verification: VERIFIED,
         })
       }
+      case ROOMS_TASK.keysProfileRead: {
+        const r = room(payload.roomId)
+        return answer(type, payload, {
+          roomId: r.roomId,
+          status: 'found',
+          profile: { name: r.label, recordMembers: options.sending?.listed ?? [] },
+        })
+      }
+      case ROOMS_TASK.keysSeal02:
+      case ROOMS_TASK.keysSeal03: {
+        // The agent signs the member's body as the member; the signed body is what any reader opens.
+        const unsigned = JSON.parse(Buffer.from(String(payload.plaintext), 'base64url').toString('utf8'))
+        const signed = { ...unsigned, proof: { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022' } }
+        mustMatch(`the body sealed by ${type}`, SEALED_BODY[0], SEALED_BODY[1], signed)
+        return answer(type, payload, {
+          sealed: { ciphertext: `fake-seal:${b64url(JSON.stringify(signed))}`, nonce: 'nonce', epoch: 2 },
+        })
+      }
+      case ROOMS_TASK.keysAct09: {
+        // The agent completes the request as the member: it adds the presentation a host requires, and signs.
+        const document = payload.document as Record<string, unknown>
+        return answer(type, payload, {
+          principal: document.issuer,
+          document: {
+            ...document,
+            payload: {
+              ...(document.payload as Record<string, unknown>),
+              presentation: { membership: 'membership-credential', authority: ['room-authority'] },
+            },
+            proof: { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022' },
+          },
+        })
+      }
       default:
         throw new Error(`unexpected agent task ${type}`)
     }
+  })
+
+  /** The host: takes a completed put only in its spec's shape, stores what was sealed, at the room's next version. */
+  const sendCompleted = jest.fn(async (_communityDid: string, recipient: string, document: Record<string, unknown>) => {
+    const type = String(document.type)
+    if (type !== ROOMS_TASK.recordsPut03) throw new Error(`unexpected request to the host: ${type}`)
+    const put = document.payload as Record<string, unknown>
+    mustMatch('the completed put the host is sent', TASK_SCHEMA[type], '', put)
+    sent.push({ type, payload: put })
+    const r = room(put.roomId)
+    expect(recipient).toBe(r.community.did)
+    const sealed = put.sealed as { ciphertext: string }
+    const signed = JSON.parse(Buffer.from(sealed.ciphertext.replace(/^fake-seal:/, ''), 'base64url').toString('utf8'))
+    const version = Math.max(0, ...r.records.map((x) => x.version)) + 1
+    const { roomId: _r, key: _k, version: _v, author, proof: _p, ...members } = signed
+    const at = AT(clock++)
+    r.records = [
+      ...r.records.filter((x) => x.key !== put.key),
+      { key: String(put.key), version, author, updatedAt: at, members },
+    ]
+    const body = { key: String(put.key), version, epoch: 2 }
+    mustMatch(`the answer to ${type}`, TASK_SCHEMA[type], '/$defs/Response', body)
+    return body
   })
 
   const communityTask = jest.fn(async (communityDid: string, type: string, payload: Record<string, unknown>) => {
@@ -219,14 +293,20 @@ function world(rooms: FakeRoom[], options: { held?: string[] } = {}) {
 
   const backend: RoomsBackend = {
     agentLinked: () => true,
-    agentServedTypes: async () => [ROOMS_TASK.keysList02, ROOMS_TASK.keysBrowse03, ROOMS_TASK.keysRead],
+    agentServedTypes: async () => [
+      ROOMS_TASK.keysList02,
+      ROOMS_TASK.keysBrowse03,
+      ROOMS_TASK.keysRead,
+      ...(options.sending
+        ? [ROOMS_TASK.keysProfileRead, ROOMS_TASK.keysSeal02, ROOMS_TASK.keysSeal03, ROOMS_TASK.keysAct09]
+        : []),
+    ],
     agentTask,
     communities: async () => [A, B],
     communityTask,
-    sendCompleted: jest.fn(async () => {
-      throw new Error('nothing is written on this path')
-    }),
-    newId: () => 'id-1',
+    sendCompleted,
+    newId: () => `id-${++ids}`,
+    recordSending: !!options.sending,
     leaveCommunity: jest.fn(async () => undefined),
     decodeBase64Url: (s) => Buffer.from(s, 'base64url').toString('utf8'),
     encodeBase64Url: (s) => Buffer.from(s, 'utf8').toString('base64url'),
@@ -237,7 +317,7 @@ function world(rooms: FakeRoom[], options: { held?: string[] } = {}) {
     // Free only when the test says: nothing here waits on it.
     sessionFree: () => new Promise<void>(() => undefined),
   } as RoomsBackend
-  return { backend, sent, agentTask, communityTask }
+  return { backend, sent, agentTask, communityTask, sendCompleted }
 }
 
 // ---- The records of one room, as #1027 writes them. ----
@@ -381,5 +461,102 @@ describe('the rooms data path, against upstream schemas', () => {
   const maybe = registryPath() ? test : test.skip
   maybe('the vendored schemas are byte-identical to the registry at their provenance commit', () => {
     expectNoDrift(SCHEMA_DIR, Object.fromEntries(VENDORED.map((path) => [path, path])))
+  })
+})
+
+describe('with sending on: written through the real writer, then read back', () => {
+  const ALL = ['kind', 'inReplyTo', 'writtenAt']
+  const WRITE_TASKS: string[] = [
+    ROOMS_TASK.keysSeal02,
+    ROOMS_TASK.keysSeal03,
+    ROOMS_TASK.keysAct09,
+    ROOMS_TASK.recordsPut03,
+  ]
+  const sends = (sent: { type: string }[]) => sent.filter((s) => WRITE_TASKS.includes(s.type))
+
+  test('a message, a reply to it and a reaction, each sealed at 0.3 and put at 0.3, read back as the room shows them', async () => {
+    const rooms = twoCommunities()
+    const { backend, sent } = world(rooms, { sending: { listed: ALL } })
+    const writer = new AgentRoomsService(backend)
+    await writer.listMyRooms()
+
+    const asked = await writer.sendRecord(ROOM_A, { type: 'message', body: 'Agenda for Tuesday?' })
+    const reply = await writer.sendRecord(ROOM_A, {
+      type: 'message',
+      body: 'Seed swap first',
+      inReplyTo: { key: asked.key, version: asked.version },
+    })
+    const reaction = await writer.sendRecord(ROOM_A, { type: 'reaction', value: '👍', target: { key: asked.key } })
+    // The host's versions, each the room's newest plus one, as the writer predicts and seals them.
+    const head = Math.max(...conversation().map((r) => r.version))
+    expect([asked.version, reply.version, reaction.version]).toEqual([head + 1, head + 2, head + 3])
+
+    // Every record governed by #1027 goes at seal 0.3, completed by the agent at act 0.9, and put at 0.3.
+    const types = sent.map((s) => s.type)
+    expect(types.filter((t) => t === ROOMS_TASK.keysSeal03)).toHaveLength(3)
+    expect(types).not.toContain(ROOMS_TASK.keysSeal02)
+    expect(types.filter((t) => t === ROOMS_TASK.keysAct09)).toHaveLength(3)
+    expect(types.filter((t) => t === ROOMS_TASK.recordsPut03)).toHaveLength(3)
+
+    // Read back by a reader that saw none of it written: the records come from the host, not from memory.
+    const reader = new AgentRoomsService(world(rooms).backend)
+    await reader.listMyRooms()
+    const me = (await reader.getRoom(ROOM_A)).actingAs
+    const { byKey, thread } = await readRoom(reader, ROOM_A, me)
+
+    const message = byKey.get(asked.key)!
+    expect(placeOf(message)).toBe('chat')
+    expect([String(message.text), message.kind, message.mine]).toEqual(['Agenda for Tuesday?', 'message', true])
+    const answer = byKey.get(reply.key)!
+    expect(placeOf(answer)).toBe('chat')
+    expect(answer.inReplyTo).toEqual({ key: asked.key, version: asked.version })
+    expect(placeOf(byKey.get(reaction.key)!)).toBe('nowhere')
+    expect(thread.reactions.get(asked.key)).toEqual([expect.objectContaining({ value: '👍', count: 1, mine: true })])
+  })
+
+  test('refused: the put the writer hands its agent is not one a host takes until the agent completes it', async () => {
+    const { backend, agentTask } = world(twoCommunities(), { sending: { listed: ALL } })
+    const writer = new AgentRoomsService(backend)
+    await writer.listMyRooms()
+    await writer.sendRecord(ROOM_A, { type: 'message', body: 'hello' })
+    const act = agentTask.mock.calls.find(([t]) => t === ROOMS_TASK.keysAct09)!
+    const unfinished = (act[1] as { document: { payload: unknown } }).document.payload
+    // No presentation yet: only the member's agent can add it, and a host refuses the put without one.
+    expect(schemaErrors(TASK_SCHEMA[ROOMS_TASK.recordsPut03], '', unfinished)).toMatch(/presentation/)
+  })
+
+  test('refused: a reply where the room’s profile does not list inReplyTo, before anything is sealed or sent', async () => {
+    const { backend, sent } = world(twoCommunities(), { sending: { listed: ['kind', 'writtenAt'] } })
+    const writer = new AgentRoomsService(backend)
+    await writer.listMyRooms()
+    await expect(
+      writer.sendRecord(ROOM_A, { type: 'message', body: 'Yes', inReplyTo: { key: 'm-hello' } })
+    ).rejects.toBeInstanceOf(RecordMembersNotPermitted)
+    expect(sends(sent)).toEqual([])
+  })
+
+  test('refused: a reaction a reader would not show (a line break in it), before anything is sealed or sent', async () => {
+    const { backend, sent } = world(twoCommunities(), { sending: { listed: ALL } })
+    const writer = new AgentRoomsService(backend)
+    await writer.listMyRooms()
+    await expect(
+      writer.sendRecord(ROOM_A, { type: 'reaction', value: 'ok\nfine', target: { key: 'm-hello' } })
+    ).rejects.toBeInstanceOf(RangeError)
+    expect(sends(sent)).toEqual([])
+  })
+
+  test('refused: sending off, as in every build but a test, sends nothing at all (control: on, it sends)', async () => {
+    const off = world(twoCommunities())
+    const writer = new AgentRoomsService(off.backend)
+    await writer.listMyRooms()
+    await expect(writer.sendRecord(ROOM_A, { type: 'message', body: 'hello' })).rejects.toBeInstanceOf(RecordSendingOff)
+    expect(sends(off.sent)).toEqual([])
+    expect(off.sendCompleted).not.toHaveBeenCalled()
+
+    const on = world(twoCommunities(), { sending: { listed: ALL } })
+    const sender = new AgentRoomsService(on.backend)
+    await sender.listMyRooms()
+    await sender.sendRecord(ROOM_A, { type: 'message', body: 'hello' })
+    expect(on.sendCompleted).toHaveBeenCalledTimes(1)
   })
 })
