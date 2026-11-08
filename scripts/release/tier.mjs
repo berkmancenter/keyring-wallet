@@ -112,14 +112,40 @@ export const FLAGS = [
 
 const POLICIES = ['store', 'strict', 'advisory'];
 
+/**
+ * A content flag reads names, not behaviour, so it can fire on a line that is not what it means: an in-memory Map whose
+ * name starts with "record" (`this.recordMembers.delete(k)`, bifold #933) reads as a stored-record delete. Such a line
+ * may carry `// tier-exempt(<flag>): <reason>`, naming the exact flag and at least ten characters of reason, written in
+ * the PR where a reviewer reads it. It exempts only that line, only from that flag, and only from content flags: a path
+ * flag cannot be exempted. Every exemption is printed with the verdict ("exempt"), so it is never silent.
+ */
+const EXEMPT = /\/\/\s*tier-exempt\(([^)]+)\):\s*(\S.{9,})$/;
+export const exemptionOf = (line, flag) => {
+  const m = EXEMPT.exec(line);
+  return m && m[1].trim() === flag ? m[2].trim() : null;
+};
+
 /** Which flags a change raises: [{ flag, policy, files }], from paths and, when given, each file's added lines. An
  * unknown policy throws (the error path: store, exit 3), so a typo can never let a change through as plain ota. */
 export function flagsOf(files, added = {}, flags = FLAGS) {
   const out = [];
   for (const { flag, policy = 'advisory', path: p, added: a } of flags) {
     if (!POLICIES.includes(policy)) throw new Error(`flag "${flag}": policy must be ${POLICIES.join(', ')}, not "${policy}"`);
-    const hit = files.filter((f) => ships(f) && ((p && p.test(f)) || (a && (added[f] || []).some((l) => a.test(l)))));
+    const hit = files.filter((f) => ships(f) && ((p && p.test(f)) || (a && (added[f] || []).some((l) => a.test(l) && !exemptionOf(l, flag)))));
     if (hit.length) out.push({ flag, policy, files: hit });
+  }
+  return out;
+}
+
+/** The lines a content flag would have read but an exemption kept out: [{ flag, file, line, reason }]. */
+export function exemptionsOf(files, added = {}, flags = FLAGS) {
+  const out = [];
+  for (const { flag, added: a } of flags) {
+    if (!a) continue;
+    for (const f of files.filter(ships)) for (const l of added[f] || []) {
+      const reason = a.test(l) ? exemptionOf(l, flag) : null;
+      if (reason) out.push({ flag, file: f, line: l.trim(), reason });
+    }
   }
   return out;
 }
@@ -142,7 +168,7 @@ export function applyHolds({ tier, ...rest }, flags) {
  */
 export function verdict(files, { added, flags: set = FLAGS } = {}) {
   const flags = flagsOf(files, added || {}, set);
-  const r = { ...applyHolds(classify(files), flags), flags, unchecked: [] };
+  const r = { ...applyHolds(classify(files), flags), flags, exempted: exemptionsOf(files, added || {}, set), unchecked: [] };
   if (!added && (r.tier === 'ota' || r.tier === 'ota-strict')) {
     const unchecked = set.filter((f) => f.policy === 'store' && f.added).map((f) => f.flag);
     if (unchecked.length) Object.assign(r, { tier: 'unchecked', unchecked });
@@ -230,6 +256,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
     else {
       for (const [f, why] of Object.entries(r.reasons)) if (!why.startsWith('none')) console.log(`${why.split(':')[0].padEnd(5)} ${f} (${why.split(': ')[1]})`);
+      for (const e of r.exempted) console.log(`exempt ${e.flag}: ${e.file} (${e.reason})`);
       for (const f of r.flags) console.log(`${{ store: 'hold  ', strict: 'strict' }[f.policy] || 'flag  '} ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
       const why = r.held.length ? ` (held back from OTA: ${r.held.join('; ')})`
         : r.unchecked.length ? ` (ota by its paths; not checked without --range: ${r.unchecked.join('; ')})`
@@ -240,7 +267,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exitCode = { ota: 0, none: 1, store: 2, unchecked: 4, 'ota-strict': 5 }[r.tier];
   } catch (e) {
     // Never "none" by accident: an error routes the change to a store build, with its own exit code.
-    if (process.argv.includes('--json')) console.log(JSON.stringify({ tier: 'store', error: e.message, reasons: {}, flags: [], held: [], strict: [], unchecked: [] }));
+    if (process.argv.includes('--json')) console.log(JSON.stringify({ tier: 'store', error: e.message, reasons: {}, flags: [], exempted: [], held: [], strict: [], unchecked: [] }));
     else console.log(`tier=store (error: ${e.message.split('\n')[0]})`);
     process.exitCode = 3;
   }
