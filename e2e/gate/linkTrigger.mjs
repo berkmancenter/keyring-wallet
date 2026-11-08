@@ -98,7 +98,8 @@ function main(argv) {
   }
   let prev;
   try { prev = opt.file ? JSON.parse(fs.readFileSync(opt.file, 'utf8')) : undefined; } catch { prev = undefined; }
-  let files = [], rangeKnown = Boolean(opt.range && !opt.range.startsWith('..')), rangeWhy;
+  // A range is known only as <a>..<b> with both sides: no range, a bare pin or a half range is "no last nightly pin".
+  let files = [], rangeKnown = /^[^.\s]+\.\.[^.\s]+$/.test(opt.range ?? ''), rangeWhy;
   if (rangeKnown) {
     try { files = changedFiles(opt.range); } catch (e) {
       rangeKnown = false;
