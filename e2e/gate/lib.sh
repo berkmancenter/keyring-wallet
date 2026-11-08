@@ -228,6 +228,29 @@ pnm() {
 
 # The community's admin calls (decide join requests, list and remove members).
 c_admin() { galarm 90 node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
+# c_members_remove <why> <driver output>…: take off C every member the leg's drivers named (`JOIN_MEMBER <did>` lines),
+# as the other joining legs do. Side by side (GATE_DEFER_KEYS=1, a gate's iOS and Android groups) a leg's member can be
+# another leg's that is still running (p1 knows its applicant only by join time), so they are deferred to the run's
+# end, after both groups (c_members_deferred). IN-560, W5 of docs/plans/farm-test-footprint-plan.md.
+c_members_remove() {
+  local why=$1 m; shift
+  for m in $(grep -hoE '^JOIN_MEMBER did:[^ ]+' "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
+    if [ "${GATE_DEFER_KEYS:-}" = 1 ] && [ -n "${RUN_DIR:-}" ]; then
+      printf '%s\t%s\n' "$m" "$why" >> "$RUN_DIR/defer-members"; echo "  C member …${m: -24}: deferred to the run's end"; continue
+    fi
+    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+  done
+}
+# c_members_deferred <run dir>: the members legs deferred, removed once no leg runs; the list is emptied after.
+c_members_deferred() {
+  local f=$1/defer-members m why
+  [ -s "$f" ] || return 0
+  while IFS=$'\t' read -r m why; do
+    [ -n "$m" ] || continue
+    say "cleanup C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+  done < <(sort -u -t$'\t' -k1,1 "$f")
+  : > "$f"
+}
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 

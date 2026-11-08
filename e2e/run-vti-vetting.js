@@ -473,6 +473,9 @@ try {
       if (!request) throw new Error("the community lists no pending join request to approve");
       if ((admin("members").items ?? []).some((m) => m.did === request.applicantDid)) throw new Error("the applicant is a member before any approval");
       console.log(`[e2e] community: request ${request.id} pending, applicant …${String(request.applicantDid).slice(-22)}`);
+      // For the leg's cleanup (kk.sh, lib.sh c_members_remove): named before the approval, so a member a later failure
+      // leaves behind is still removed; removing one never admitted is harmless.
+      console.log(`JOIN_MEMBER ${request.applicantDid}`);
       const approvedAt = Date.now();
       admin("join-decide", request.id, "approved");
       console.log("[e2e] the administrator approved it");

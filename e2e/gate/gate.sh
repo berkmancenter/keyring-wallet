@@ -137,6 +137,7 @@ run_legs() {
       wait $pa $pb
       local sl; for sl in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $sl (phone grants since $tb)"; keys_since "$sl" "$tb"; done
       : > "$rd/defer-keys" 2>/dev/null
+      c_members_deferred "$rd"
       android=(${arest[@]+"${arest[@]}"})
     else
       [ ${#alone[@]} -eq 0 ] || { say "first, alone: ${alone[*]}"; run_group "$rd" "${alone[@]}"; }
@@ -152,6 +153,7 @@ run_legs() {
     ( export GATE_DEFER_KEYS=1; run_group "$rd" "${android[@]}" ) & local p2=$!
     wait $p1 $p2
     local slug; for slug in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $slug (phone grants since $t0)"; keys_since "$slug" "$t0"; done
+    c_members_deferred "$rd"
   else
     [ "$serial" = 1 ] || [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ] || say "one platform at a time: ${free} GB free, under GATE_PARALLEL_MIN_GB=$GATE_PARALLEL_MIN_GB"
     run_group "$rd" ${ios[@]+"${ios[@]}"} ${android[@]+"${android[@]}"}

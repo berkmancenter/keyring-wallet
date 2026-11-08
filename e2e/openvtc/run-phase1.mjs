@@ -158,6 +158,13 @@ try {
   report.failedAt = e.record ? `${e.record.role}.${e.record.step}` : e.message.split('\n')[0];
   report.error = e.message.split('\n')[0];
 } finally {
+  // For the leg's cleanup (p1.sh, lib.sh c_members_remove): the members the community added since this run started,
+  // the same test communityListsMember passes on. Side by side, the gate removes them only at the run's end.
+  try {
+    for (const m of allMembers(memberSource)) if (m.did && Date.parse(m.joinedAt ?? 0) >= Date.parse(startedAt)) console.log(`JOIN_MEMBER ${m.did}`);
+  } catch (e) {
+    say(`the community's members could not be read for the cleanup: ${e.message.split('\n')[0]}`);
+  }
   report.openvtcLog = tuiRoles.vettingLogLines(a['fixture-dir'], a.profile, startedAt);
   await tui.stop();
   await d.deleteSession().catch(() => undefined);
