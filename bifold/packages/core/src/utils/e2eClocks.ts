@@ -36,3 +36,14 @@ export const SHORT_EXPIRY_DIVISOR = 60
 /** A disappearing message's `expiresIn` (seconds, as sent and stored) as the time this build waits, in ms. */
 export const effectiveExpiresInMs = (expiresInSeconds: number): number =>
   shortClocks() ? (expiresInSeconds * 1000) / SHORT_EXPIRY_DIVISOR : expiresInSeconds * 1000
+
+/**
+ * Twenty seconds: a gate row that holds a task for consent no approver will give (linkfail's held swap) re-asks the
+ * agent three times instead of about twenty-two, so a night's held rows write a handful of requests to the runner, not
+ * dozens (IN-560). Kept off the short auto-lock (30 s) on purpose: the refusal is on screen before the phone locks, so
+ * the two never race. The gate's own approvals are given by pnm, whose requests never wait here.
+ */
+export const SHORT_CONSENT_WAIT_MS = 20 * 1000
+
+/** How long a task held for consent waits for an approver in this build. */
+export const effectiveConsentWaitMs = (realMs: number): number => (shortClocks() ? SHORT_CONSENT_WAIT_MS : realMs)

@@ -115,6 +115,8 @@ import {
 } from './approvalsPolicy'
 import { EMPTY_APPROVALS, modelFromExt, ruleForWire, withKeySwapped, type ApprovalsModel } from './approvalRules'
 import { registerOtaApplyBlocker } from '../../../utils/otaApply'
+import { effectiveConsentWaitMs } from '../../../utils/e2eClocks'
+import { CONSENT_WAIT_MS } from '../clocks'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 
@@ -1157,7 +1159,7 @@ export class VtaClient {
       onInbound?: (plaintext: DidCommV2PlaintextMessage) => void
       /** A task was held for an approver's consent; the wait is on. */
       onConsentPending?: (info: { taskType: string; payloadDigest?: string }) => void
-      /** How long to wait for approvers before giving up on a held task. */
+      /** How long to wait for approvers before giving up on a held task. Unset: `CONSENT_WAIT_MS`, shorter in a short-clock test build. */
       consentWaitMs?: number
       /**
        * The agent asks for a step-up on a task: ask the person, showing the
@@ -1409,7 +1411,7 @@ export class VtaClient {
       // approvers were sent (policy_gate.rs). The grant that consent produces
       // is single-use and consumed by re-submitting the same payload.
       const pending = consentPendingOf(error)
-      const waitMs = this.options.consentWaitMs ?? 180000
+      const waitMs = this.options.consentWaitMs ?? effectiveConsentWaitMs(CONSENT_WAIT_MS)
       if (!pending || waitMs <= 0 || sendOptions.waitForConsent === false) throw error
       this.options.onConsentPending?.({ taskType: type, payloadDigest: pending.payloadDigest })
       if (pending.omitted) {
