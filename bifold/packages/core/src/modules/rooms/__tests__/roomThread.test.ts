@@ -110,6 +110,36 @@ describe('foldRoomRecords: reactions', () => {
   })
 })
 
+describe("foldRoomRecords: the member's own reactions, to change or take back", () => {
+  test('every record of theirs, newest first, by what it answers; a chip still counts them once', () => {
+    const { mine, reactions } = foldRoomRecords([
+      reaction('r4', 'm', '❤️', { author: me, mine: true }),
+      reaction('r3', 'm', '👍', { author: me, mine: true }),
+      reaction('r2', 'm', '👍', { author: me, mine: true }),
+      reaction('r1', 'm', '👍', { author: noor }),
+      post('m'),
+    ])
+    expect(mine.get('m')).toEqual([
+      { key: 'r4', value: '❤' },
+      { key: 'r3', value: '👍' },
+      { key: 'r2', value: '👍' },
+    ])
+    expect(reactions.get('m')?.find((t) => t.value === '👍')?.count).toBe(2)
+  })
+
+  test("another member's, a withdrawn one, and one on what can't be shown are not the member's to change", () => {
+    const { mine } = foldRoomRecords([
+      reaction('r3', 'gone', '👍', { author: me, mine: true }),
+      reaction('r2', 'm', '', { author: me, mine: true }),
+      reaction('r1', 'm', '👍', { author: noor }),
+      post('m'),
+      post('gone', { retracted: true }),
+    ])
+    expect(mine.get('m')).toBeUndefined()
+    expect(mine.get('gone')).toBeUndefined()
+  })
+})
+
 describe('foldRoomRecords: a new version may not change what a record is', () => {
   test('a message rewritten as a reaction is refused and not counted, the others stay', () => {
     const held = new Map([['m', { author: noor, kind: 'message' }]])
@@ -149,7 +179,7 @@ describe('foldRoomRecords: a new version may not change what a record is', () =>
 describe('quoteOf', () => {
   const none = new Map<string, RoomPost>()
   const noneMissing = new Set<string>()
-  const thread = { reactions: new Map(), refused: new Set<string>() }
+  const thread = { reactions: new Map(), refused: new Set<string>(), mine: new Map() }
   const reply = (over: Partial<RoomPost> = {}) => post('reply', { inReplyTo: { key: 't' }, ...over })
 
   test('a post that answers nothing has no quote', () => {
@@ -180,7 +210,7 @@ describe('quoteOf', () => {
   })
 
   test('a refused target is not available', () => {
-    const refused = { reactions: new Map(), refused: new Set(['t']) }
+    const refused = { reactions: new Map(), refused: new Set(['t']), mine: new Map() }
     expect(quoteOf(reply(), [post('t')], none, noneMissing, refused)).toEqual({ available: false })
   })
 

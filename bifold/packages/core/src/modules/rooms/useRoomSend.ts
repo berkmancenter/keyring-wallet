@@ -61,13 +61,23 @@ export interface PendingPost {
   progress?: RoomsTransferProgress
   /** Failed in a way no retry passes (postRefusal): said, and never sent again. */
   refused?: PostRefusal
+  /** What it answers: a reply, sent as a record (`RoomsService.sendRecord`). */
+  inReplyTo?: { key: string; version?: number }
+  /** Sent as a record that says what it is (`sendRecord`), not as a note: only where the room takes that. */
+  asRecord?: boolean
+}
+
+/** How a post goes, beyond its words and file: decided by the screen from what the room takes (useRecordSending). */
+export interface PostOptions {
+  inReplyTo?: { key: string; version?: number }
+  asRecord?: boolean
 }
 
 export interface RoomSend {
   /** Newest first. */
   pending: PendingPost[]
   /** Sends `text` (trimmed) and `file`, either or both; false when there is nothing to send. */
-  send: (text: string, file?: RoomsAttachment) => boolean
+  send: (text: string, file?: RoomsAttachment, options?: PostOptions) => boolean
   /** Stops a post's upload: nothing is written, and the post is gone. */
   cancel: (localId: string) => void
   /** Sends a failed post again, as the same event. */
@@ -120,6 +130,14 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
   // A locked wallet stops a file's upload, and the file's copy goes with the lock.
   const letGo = post.file ? holdRoomFileTransfer(abort) : undefined
   const write = async () => {
+    // A record that says it's a message, a reply if it names one: its own id keeps a retry one record, as a note's does.
+    if (post.asRecord && !post.file && service.sendRecord)
+      return service.sendRecord(roomId, {
+        type: 'message',
+        body: post.body,
+        idempotencyKey: post.localId,
+        ...(post.inReplyTo ? { inReplyTo: post.inReplyTo } : {}),
+      })
     const preview = await service.prepareWrite(roomId, {
       title: '',
       body: post.body,
@@ -233,7 +251,7 @@ export function useRoomSend(
   }, [service, roomId, roomName])
 
   const send = useCallback(
-    (text: string, file?: RoomsAttachment) => {
+    (text: string, file?: RoomsAttachment, options: PostOptions = {}) => {
       const trimmed = text.trim().slice(0, MAX_POST_LENGTH)
       if ((!trimmed && !file) || !service) return false
       const localId = newEventId()
@@ -249,6 +267,10 @@ export function useRoomSend(
         at,
         state: 'sending',
         ...(file ? { file } : {}),
+        // A reply goes only as a record; a file goes only as a note, so the two never meet (the composer offers no "+"
+        // while replying).
+        ...(!file && (options.asRecord || options.inReplyTo) ? { asRecord: true } : {}),
+        ...(!file && options.inReplyTo ? { inReplyTo: options.inReplyTo } : {}),
       }
       change(outboxOf(service, roomId), (all) => [post, ...all])
       void deliver(service, roomId, post)

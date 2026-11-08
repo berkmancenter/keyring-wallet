@@ -13,6 +13,10 @@
  * may not post, the composer gives the reason instead. A post's files show as chips; a tap opens the attachment sheet
  * (download, then share), and "+" posts one.
  *
+ * A long press on a post offers Copy. Where sending is on and the room takes them (useRecordSending), it also offers a
+ * reaction, a reply, and on the member's own message an edit or a withdrawal; where sending is on and the room takes
+ * neither, the sheet says they aren't on in this room yet. A reaction or a change shows once the room has stored it.
+ *
  * The screen is the chat alone (rooms in Messages, R2, chat B). The header opens the room's details (RoomInfo), and
  * from there its files, its notes (titled records and the markers of removed ones, which the chat leaves out) and its
  * members, each a screen of its own. The files' "Add a file" comes back here with `attach`, and the composer's "+"
@@ -43,7 +47,8 @@ import { Screens } from '../../../types/navigators'
 import { useMeasuredKeyboardOffset } from '../../trust-tasks/screens/keyboardOffset'
 import { localDayKey } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
-import { RoomComposer } from '../components/RoomComposer'
+import EmojiPickerSheet from '../../chat/emoji/EmojiPickerSheet'
+import { type ComposerContext, RoomComposer } from '../components/RoomComposer'
 import { RoomFileSheet } from '../components/RoomFileSheet'
 import { useFloatingDay } from '../components/useFloatingDay'
 import { isComingSoon, RoomFeatureCard } from '../components/RoomFeatureCard'
@@ -55,14 +60,17 @@ import { PetnamesProvider } from '../components/memberWords'
 import { RoomNoteMarker } from '../components/RoomNoteMarker'
 import { RoomNotesWaiting } from '../components/RoomNotesWaiting'
 import { RoomThreadPost, RoomThreadReactions } from '../components/RoomThreadPost'
+import { RoomWithdrawSheet } from '../components/RoomWithdrawSheet'
+import { memberText } from '../components/roomWords'
 import { roomTitle } from '../components/RoomRow'
 import { roomsStatusText } from '../components/roomsStatusText'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import { type InertText, toInertText } from '../inertText'
-import { isChatPost, isNoteMarker, type RoomPost } from '../roomPosts'
-import { byArrival, drawnInChat, type RoomReactionTally } from '../roomThread'
+import { permanentRefusal, postRefusalWhy } from '../postRefusal'
+import { isChatPost, isNoteMarker, reactionValueOfBody, type RoomPost } from '../roomPosts'
+import { byArrival, drawnInChat, quotedWords, type RoomReactionTally } from '../roomThread'
 import { openInMyAgent } from '../roomLinks'
-import type { Identity, RoomFile } from '../types'
+import type { Identity, RecordFeatures, RoomFile } from '../types'
 import { useMyName } from '../useMyName'
 import { usePetnames } from '../usePetname'
 import { useInViewAndActive } from '../useInViewAndActive'
@@ -73,6 +81,7 @@ import { useRoomDraft } from '../useRoomDraft'
 import { type PendingPost, useRoomSend } from '../useRoomSend'
 import { useRoomsService } from '../useRoomsService'
 import { useRoomThread } from '../useRoomThread'
+import { useRecordSending } from '../useRecordSending'
 
 const NO_LISTINGS: readonly RoomListing[] = []
 
@@ -108,6 +117,7 @@ export const pendingAsPost = (pending: PendingPost, actingAs: RoomPost['author']
   at: pending.at,
   text: toInertText(pending.text),
   isChatMessage: true,
+  ...(pending.inReplyTo ? { inReplyTo: pending.inReplyTo } : {}),
   retracted: false,
   pinned: false,
   unread: false,
@@ -188,6 +198,13 @@ const Room: React.FC = () => {
   // The post a long press is on, and the post whose chips were tapped.
   const [actionFor, setActionFor] = useState<RoomPost>()
   const [reactionsFor, setReactionsFor] = useState<readonly RoomReactionTally[]>()
+  // What else the sheet may offer: replies, reactions, and changing the member's own message. Off in every build.
+  const records = useRecordSending(service, state.room)
+  // What the next Send answers, the message it rewrites, the one being withdrawn, and the one the full picker is for.
+  const [replyTo, setReplyTo] = useState<RoomPost>()
+  const [editing, setEditing] = useState<RoomPost>()
+  const [withdrawing, setWithdrawing] = useState<RoomPost>()
+  const [pickerFor, setPickerFor] = useState<RoomPost>()
   // On screen, a post that fails is marked in the list; away from it, a notice says so (useRoomNotices).
   const outbox = useRoomSend(service, roomId, feed.refresh, {
     onScreen: inView,
@@ -253,13 +270,89 @@ const Room: React.FC = () => {
   // The day of the posts at the top of the screen, floated while the member scrolls (as the person-to-person chat's).
   const floating = useFloatingDay()
   const { send: outboxSend } = outbox
+  const { send: sendRecord, learn, typedMessages } = records
+  const { refresh } = feed
+  // A write refused or failed: said in the words a post uses. A room that no longer takes it is read again.
+  const notSent = useCallback(
+    (e: unknown, words: string) => {
+      if (e instanceof Error && e.name === 'RecordMembersNotPermitted') {
+        // The refusal says what the room takes now (`RecordMembersNotPermitted.features`): the sheet follows it.
+        learn((e as Error & { features?: RecordFeatures }).features)
+        Toast.show({ type: ToastType.Error, text1: t('Rooms.RecordsNotOn') as string })
+        return
+      }
+      const refusal = permanentRefusal(e)
+      Toast.show({
+        type: ToastType.Error,
+        text1: t(words) as string,
+        ...(refusal ? { text2: postRefusalWhy(t, refusal) } : {}),
+      })
+    },
+    [learn, t]
+  )
   const send = useCallback(
-    (text: string, file?: Parameters<typeof outboxSend>[1]) => {
-      const sending = outboxSend(text, file)
-      if (sending) list.current?.scrollToOffset({ offset: 0, animated: true })
+    (text: string, file?: Parameters<typeof outboxSend>[1]): boolean | Promise<boolean> => {
+      if (editing) {
+        const target = editing
+        const body = text.trim()
+        if (!body) return false
+        return sendRecord({ type: 'edit', key: target.key, body }).then(
+          () => {
+            setEditing(undefined)
+            refresh()
+            return true
+          },
+          (e: unknown) => {
+            notSent(e, 'Rooms.EditNotSent')
+            return false
+          }
+        )
+      }
+      const sending = outboxSend(text, file, {
+        ...(replyTo && !file ? { inReplyTo: { key: replyTo.key, version: replyTo.version } } : {}),
+        ...(typedMessages && !file ? { asRecord: true } : {}),
+      })
+      if (sending) {
+        setReplyTo(undefined)
+        list.current?.scrollToOffset({ offset: 0, animated: true })
+      }
       return sending
     },
-    [outboxSend]
+    [outboxSend, editing, replyTo, typedMessages, sendRecord, refresh, notSent]
+  )
+  /**
+   * One reaction per person, as in chat: a new value rewrites the member's reaction to this post, the value they already
+   * chose takes it back, and a first one is a new record. Another app may have left several: each holding the value
+   * goes, and a new value rewrites the newest.
+   */
+  const react = useCallback(
+    async (target: RoomPost, emoji: string) => {
+      const value = reactionValueOfBody(emoji)
+      if (!value) return
+      const held = thread.mine.get(target.key) ?? []
+      const same = held.filter((r) => r.value === value)
+      try {
+        if (same.length > 0) for (const r of same) await sendRecord({ type: 'withdraw', key: r.key })
+        else if (held.length > 0) await sendRecord({ type: 'changeReaction', key: held[0].key, value: emoji })
+        else await sendRecord({ type: 'reaction', value: emoji, target: { key: target.key, version: target.version } })
+        refresh()
+      } catch (e) {
+        notSent(e, 'Chat.ReactionNotSent')
+      }
+    },
+    [thread.mine, sendRecord, refresh, notSent]
+  )
+  const withdraw = useCallback(
+    async (target: RoomPost) => {
+      setWithdrawing(undefined)
+      try {
+        await sendRecord({ type: 'withdraw', key: target.key })
+        refresh()
+      } catch (e) {
+        notSent(e, 'Rooms.WithdrawNotSent')
+      }
+    },
+    [sendRecord, refresh, notSent]
   )
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -315,6 +408,26 @@ const Room: React.FC = () => {
       </SafeAreaView>
     )
 
+  // The member's value on the post the sheet is for, in the form the quick reactions are written in.
+  const myValue = actionFor ? thread.mine.get(actionFor.key)?.[0]?.value : undefined
+  const selectedReaction = myValue
+    ? (thread.reactions.get(actionFor?.key ?? '')?.find((tally) => tally.value === myValue)?.shown ?? myValue)
+    : undefined
+  const composerContext: ComposerContext | undefined = editing
+    ? { kind: 'edit', text: String(editing.text), onCancel: () => setEditing(undefined) }
+    : replyTo
+      ? {
+          kind: 'reply',
+          name: replyTo.mine
+            ? (t('Rooms.You') as string)
+            : replyTo.author
+              ? memberText(t, replyTo.author, petnames.get(replyTo.author.did), directoryNames.get(replyTo.author.did))
+              : (t('Rooms.QuoteNoAuthor') as string),
+          text: quotedWords(replyTo),
+          onCancel: () => setReplyTo(undefined),
+        }
+      : undefined
+  const changing = actionFor && records.canChange(actionFor) ? actionFor : undefined
   const unavailable = roomsStatusText(t, roomCapabilities.listNotes, 'listNotes')
   const cannotPost = roomsStatusText(t, roomCapabilities.write, 'write')
   // A file is posted from the composer, so "Add a file" is offered only where the room takes one (`uploadFile`) and
@@ -507,6 +620,7 @@ const Room: React.FC = () => {
                 // starts its field afresh: the last room's words never sit in this one's, or are saved as its draft.
                 key={roomId}
                 onSend={send}
+                context={composerContext}
                 unavailable={cannotPost}
                 postingAs={
                   me.name
@@ -525,15 +639,73 @@ const Room: React.FC = () => {
           </KeyboardAvoidingView>
         )}
         <RoomFileSheet service={service} roomId={roomId} file={openedFile} onClose={() => setOpenedFile(undefined)} />
-        {/* Nothing sends a reaction or a reply until a room turns them on and an agent can seal them. */}
+        {/* Copy only, until sending is on and the room takes replies and reactions (useRecordSending). */}
         <MessageActions
           visible={!!actionFor}
           onClose={() => setActionFor(undefined)}
+          onReact={
+            actionFor && records.reactions
+              ? (emoji) => {
+                  setActionFor(undefined)
+                  void react(actionFor, emoji)
+                }
+              : undefined
+          }
+          selectedReaction={selectedReaction}
+          onMoreReactions={
+            actionFor && records.reactions
+              ? () => {
+                  setActionFor(undefined)
+                  setPickerFor(actionFor)
+                }
+              : undefined
+          }
+          onReply={
+            actionFor && records.replies
+              ? () => {
+                  setActionFor(undefined)
+                  setEditing(undefined)
+                  setReplyTo(actionFor)
+                }
+              : undefined
+          }
           onCopy={() => {
             Clipboard.setString(String(actionFor?.text ?? ''))
             setActionFor(undefined)
             Toast.show({ type: ToastType.Success, text1: t('Chat.Copied') as string })
           }}
+          onEdit={
+            changing
+              ? () => {
+                  setActionFor(undefined)
+                  setReplyTo(undefined)
+                  setEditing(changing)
+                }
+              : undefined
+          }
+          onWithdraw={
+            changing
+              ? () => {
+                  setActionFor(undefined)
+                  setWithdrawing(changing)
+                }
+              : undefined
+          }
+          notice={records.notOn ? (t('Rooms.RecordsNotOn') as string) : undefined}
+        />
+        <EmojiPickerSheet
+          visible={!!pickerFor}
+          onSelect={(emoji) => {
+            const target = pickerFor
+            setPickerFor(undefined)
+            if (target) void react(target, emoji)
+          }}
+          onClose={() => setPickerFor(undefined)}
+        />
+        <RoomWithdrawSheet
+          visible={!!withdrawing}
+          onWithdraw={() => withdrawing && void withdraw(withdrawing)}
+          onKeep={() => setWithdrawing(undefined)}
         />
         <RoomThreadReactions tallies={reactionsFor} onClose={() => setReactionsFor(undefined)} />
         <RoomIdentitySheet

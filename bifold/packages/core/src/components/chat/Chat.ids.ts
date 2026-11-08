@@ -12,6 +12,11 @@ export const ChatIds = {
   reply: 'ChatActionReply',
   copy: 'ChatActionCopy',
   deleteForMe: 'ChatActionDeleteForMe',
+  // A room's own message: new words, or an empty version in its place.
+  edit: 'ChatActionEdit',
+  withdraw: 'ChatActionWithdraw',
+  // A line in the sheet saying why it offers less, above its entries.
+  actionsNotice: 'ChatMessageActionsNotice',
   // The reactions shown under a message.
   reactions: 'ChatMessageReactions',
   // The emoji button beside the composer.

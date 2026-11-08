@@ -260,7 +260,9 @@
     "ChangePIN": ["src/screens/PINChange.tsx"],
     "ChatActionCopy": ["src/components/chat/Chat.ids.ts"],
     "ChatActionDeleteForMe": ["src/components/chat/Chat.ids.ts"],
+    "ChatActionEdit": ["src/components/chat/Chat.ids.ts"],
     "ChatActionReply": ["src/components/chat/Chat.ids.ts"],
+    "ChatActionWithdraw": ["src/components/chat/Chat.ids.ts"],
     "ChatActionsButton": ["src/components/chat/Chat.ids.ts"],
     "ChatAttachCamera": ["src/components/chat/Chat.ids.ts"],
     "ChatAttachLibrary": ["src/components/chat/Chat.ids.ts"],
@@ -276,6 +278,7 @@
     "ChatHeaderTitle": ["src/modules/vrc/components/ChatHeaderTitle.tsx"],
     "ChatMessageActions": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageActionsBackdrop": ["src/components/chat/Chat.ids.ts"],
+    "ChatMessageActionsNotice": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageImage": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageReactions": ["src/components/chat/Chat.ids.ts"],
     "ChatPendingPhoto": ["src/components/chat/Chat.ids.ts"],
@@ -1100,12 +1103,17 @@
     "RevokedOrNotAvailable": ["src/components/misc/Card11Pure.tsx"],
     "RoomComposer": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerAttach": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerContextCancel": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerContextName": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerContextText": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerEditing": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerFile": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerFileRefused": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerFileRemove": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerInput": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerPostingAs": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerPostingAsButton": ["src/modules/rooms/components/RoomComposer.tsx"],
+    "RoomComposerReplying": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerSend": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerUnavailable": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomDetailsOpen": ["src/modules/rooms/components/RoomHeader.tsx"],
@@ -1277,6 +1285,11 @@
       "src/modules/rooms/screens/RoomPart.tsx"
     ],
     "RoomWhere": ["src/modules/rooms/components/RoomHeader.tsx"],
+    "RoomWithdrawBackdrop": ["src/modules/rooms/components/RoomWithdrawSheet.tsx"],
+    "RoomWithdrawConfirm": ["src/modules/rooms/components/RoomWithdrawSheet.tsx"],
+    "RoomWithdrawKeep": ["src/modules/rooms/components/RoomWithdrawSheet.tsx"],
+    "RoomWithdrawLayout": ["src/modules/rooms/components/RoomWithdrawSheet.tsx"],
+    "RoomWithdrawSheet": ["src/modules/rooms/components/RoomWithdrawSheet.tsx"],
     "RoomsCard": ["src/modules/rooms/components/RoomsCard.tsx"],
     "RoomsCardBadge": ["src/modules/rooms/components/RoomsCard.tsx"],
     "RoomsCardDetail": ["src/modules/rooms/components/RoomsCard.tsx"],
@@ -1828,6 +1841,9 @@
     },
     {
       "src/components/chat/MessageActions.tsx": "ChatIds.actionsBackdrop"
+    },
+    {
+      "src/components/chat/MessageActions.tsx": "ChatIds.actionsNotice"
     },
     {
       "src/components/chat/MessageActions.tsx": "testID"

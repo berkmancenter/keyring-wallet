@@ -20,6 +20,12 @@ export interface MessageActionsProps {
   onReply?: () => void
   onCopy?: () => void
   onDeleteForMe?: () => void
+  /** A room's own message: new words. */
+  onEdit?: () => void
+  /** A room's own message: an empty version in its place. */
+  onWithdraw?: () => void
+  /** Why the sheet offers less than it might, said above its entries. */
+  notice?: string
 }
 
 /** What a long press on a message offers. Each entry is shown only when its handler is given. */
@@ -32,6 +38,9 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   onReply,
   onCopy,
   onDeleteForMe,
+  onEdit,
+  onWithdraw,
+  notice,
 }) => {
   const { t } = useTranslation()
   const entry = (label: string, testID: string, onPress: () => void, destructive = false) => (
@@ -68,8 +77,15 @@ const MessageActions: React.FC<MessageActionsProps> = ({
           <View style={styles.sheet} testID={testIdWithKey(ChatIds.actions)}>
             {onReact && <ReactionBar selected={selectedReaction} onReact={onReact} onMore={onMoreReactions} />}
             <View style={styles.entries}>
+              {notice ? (
+                <ThemedText style={styles.notice} testID={testIdWithKey(ChatIds.actionsNotice)}>
+                  {notice}
+                </ThemedText>
+              ) : null}
               {onReply && entry(t('Chat.Reply'), ChatIds.reply, onReply)}
               {onCopy && entry(t('Chat.Copy'), ChatIds.copy, onCopy)}
+              {onEdit && entry(t('Chat.Edit'), ChatIds.edit, onEdit)}
+              {onWithdraw && entry(t('Chat.Withdraw'), ChatIds.withdraw, onWithdraw, true)}
               {onDeleteForMe && entry(t('Chat.DeleteForMe'), ChatIds.deleteForMe, onDeleteForMe, true)}
             </View>
           </View>
@@ -85,6 +101,16 @@ const styles = StyleSheet.create({
   entries: { backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden' },
   entry: { minHeight: 52, justifyContent: 'center', paddingHorizontal: 20 },
   entryText: { fontSize: 17, color: '#222222' },
+  // The first line of the card, above its entries, and divided from them.
+  notice: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#555555',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#D3D3D3',
+  },
   destructive: { color: '#C62828' },
 })
 

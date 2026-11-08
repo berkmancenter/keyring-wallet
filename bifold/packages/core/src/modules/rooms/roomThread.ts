@@ -42,6 +42,18 @@ export interface RoomThread {
   reactions: ReadonlyMap<string, RoomReactionTally[]>
   /** New versions a reader must not show: they changed what the record is, or what a reaction responds to. */
   refused: ReadonlySet<string>
+  /**
+   * This member's own reactions, by the key of what they answer, newest first: each record's key and value, every
+   * one, where a chip counts a value once. Changing a reaction rewrites one of them; taking a value back empties each
+   * record that holds it. Another app may have written several.
+   */
+  mine: ReadonlyMap<string, MyReaction[]>
+}
+
+export interface MyReaction {
+  key: string
+  /** In its normal form, as `RoomReactionTally.value`. */
+  value: string
 }
 
 const authorId = (author: Identity): string => JSON.stringify(author)
@@ -79,6 +91,7 @@ export function foldRoomRecords(
   const byKey = new Map(posts.map((post) => [post.key, post]))
   const refused = new Set(posts.filter((post) => changesWhatItIs(post, held.get(post.key))).map((post) => post.key))
   const reactions = new Map<string, RoomReactionTally[]>()
+  const mine = new Map<string, MyReaction[]>()
   const seen = new Set<string>()
   // Oldest first, so chips keep the order they came in.
   for (const post of [...posts].reverse()) {
@@ -87,6 +100,7 @@ export function foldRoomRecords(
     // With no author to tell people apart a count means nothing: one member could fill it. Private rooms wait.
     if (value === undefined || !on || !post.author) continue
     if (refused.has(on) || !canBeShown(byKey.get(on) ?? targets.get(on))) continue
+    if (post.mine) mine.set(on, [{ key: post.key, value }, ...(mine.get(on) ?? [])])
     const once = `${on}\n${value}\n${authorId(post.author)}`
     if (seen.has(once)) continue
     seen.add(once)
@@ -103,7 +117,7 @@ export function foldRoomRecords(
     const isEmoji = (t: RoomReactionTally) => normalizeEmoji(t.value) !== undefined
     reactions.set(on, [...tallies.filter(isEmoji), ...tallies.filter((t) => !isEmoji(t))])
   }
-  return { reactions, refused }
+  return { reactions, refused, mine }
 }
 
 /** Whether a reply's target was edited after the reply: never because its version moved, which a curator's pin also does. */

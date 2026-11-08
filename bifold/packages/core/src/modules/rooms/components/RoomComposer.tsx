@@ -12,6 +12,11 @@
  * The text is kept as a draft by the screen (useRoomDraft): `onTextChange` hears every change, a send's emptied field
  * included, and `draft` is the kept text handed back, put in the field as it arrives.
  *
+ * Above "Posting as", what the next Send does when it isn't a plain post (frames 3 and 12): the words it answers, or
+ * "Editing your message" with the words being replaced, each with its own cancel, drawn as one-to-one chat's reply
+ * preview. An edit borrows the field: it holds the message's words, the draft is left alone, and the draft comes back
+ * when the edit ends, sent or not. No "+" while either is open: a reply and an edit are words only.
+ *
  * Where the member may not post, the composer is replaced by the reason, in the rooms screens' usual words
  * ("You can't post here", "Coming soon"), never by a field that would fail on Send.
  *
@@ -41,9 +46,19 @@ import { MAX_POST_LENGTH } from '../useRoomSend'
 import { fileSizeText } from './fileWords'
 import { initialsOf } from './RoomIdentitySheet'
 
+/** What the next Send does, when it isn't a plain post. */
+export type ComposerContext =
+  | { kind: 'reply'; name: string; text: string; onCancel: () => void }
+  | { kind: 'edit'; text: string; onCancel: () => void }
+
 export interface RoomComposerProps {
-  /** Sends the text and the picked file, either or both; false when nothing was sent (the composer then keeps them). */
-  onSend: (text: string, file?: RoomsAttachment) => boolean
+  /**
+   * Sends the text and the picked file, either or both; false when nothing was sent (the composer then keeps them).
+   * Waited for when it is a promise: Send is held meanwhile.
+   */
+  onSend: (text: string, file?: RoomsAttachment) => boolean | Promise<boolean>
+  /** A reply or an edit under way. */
+  context?: ComposerContext
   /** Offer "+" to post a file. */
   canAttach?: boolean
   /** The largest file this room takes, where that is less than the picker's own limit. */
@@ -66,6 +81,7 @@ export interface RoomComposerProps {
 
 export const RoomComposer: React.FC<RoomComposerProps> = ({
   onSend,
+  context,
   unavailable,
   postingAs,
   postingAsName,
@@ -79,13 +95,30 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   const { t, i18n } = useTranslation()
   const { ColorPalette } = useTheme()
   const [text, setText] = useState(draft ?? '')
+  const editing = context?.kind === 'edit'
+  // The draft's words while an edit has the field, given back when it ends.
+  const parked = useRef<string | undefined>(undefined)
   const change = (next: string) => {
     setText(next)
-    onTextChange?.(next)
+    if (!editing) onTextChange?.(next)
   }
   useEffect(() => {
-    if (draft !== undefined) setText(draft)
+    if (draft !== undefined && parked.current === undefined) setText(draft)
   }, [draft])
+  const textNow = useRef(text)
+  textNow.current = text
+  const editWords = context?.kind === 'edit' ? context.text : undefined
+  useEffect(() => {
+    if (editWords !== undefined) {
+      if (parked.current === undefined) parked.current = textNow.current
+      setText(editWords)
+    } else if (parked.current !== undefined) {
+      const back = parked.current
+      parked.current = undefined
+      setText(back)
+    }
+  }, [editWords])
+  const [sending, setSending] = useState(false)
   const [file, setFile] = useState<RoomsAttachment>()
   // The picked file's copy is the composer's until it is sent, so it goes when the file does, or the composer.
   const held = useRef<RoomsAttachment | undefined>(undefined)
@@ -106,7 +139,8 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
     }
   }, [])
   const [refused, setRefused] = useState<'tooLarge' | 'tooLargeHere' | 'unreadable'>()
-  const canSend = text.trim().length > 0 || !!file
+  const canSend = (text.trim().length > 0 || !!file) && !sending
+  const attachHere = canAttach && !context
   const styles = StyleSheet.create({
     bar: {
       flexDirection: 'row',
@@ -159,6 +193,21 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
       backgroundColor: ColorPalette.brand.primaryBackground,
     },
     refused: { paddingHorizontal: 22, paddingTop: 6, fontSize: 12, color: ColorPalette.semantic.error },
+    // One-to-one chat's reply preview (gifted-chat ReplyPreview), as the mocks measured it.
+    context: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      borderRadius: 8,
+      marginHorizontal: 10,
+      marginTop: 8,
+      backgroundColor: '#E9E9EB',
+      overflow: 'hidden',
+    },
+    contextBar: { width: 4, backgroundColor: '#0084FF' },
+    contextWords: { flex: 1, minWidth: 0, paddingVertical: 8, paddingHorizontal: 10 },
+    contextName: { fontSize: 13, lineHeight: 17, fontWeight: '600', marginBottom: 2, color: '#0084FF' },
+    contextText: { fontSize: 14, lineHeight: 18, color: ColorPalette.brand.text },
+    contextCancel: { width: 44, alignItems: 'center', justifyContent: 'center' },
     postingAsRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -199,8 +248,8 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   useEffect(() => {
     if (attachRequest <= handled.current) return
     handled.current = attachRequest
-    if (canAttach && !unavailable) void attachRef.current()
-  }, [attachRequest, canAttach, unavailable])
+    if (attachHere && !unavailable) void attachRef.current()
+  }, [attachRequest, attachHere, unavailable])
 
   if (unavailable)
     return (
@@ -214,9 +263,18 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   // Where the name sits in the line, in any language's word order; not found, the line is drawn as it is.
   const nameAt = postingAs && postingAsName ? postingAs.indexOf(postingAsName) : -1
 
-  const send = () => {
-    if (!onSend(text, file)) return
-    change('')
+  const send = async () => {
+    const sent = onSend(text, file)
+    let ok: boolean
+    if (typeof sent === 'boolean') ok = sent
+    else {
+      setSending(true)
+      ok = await sent.catch(() => false)
+      setSending(false)
+    }
+    if (!ok) return
+    // An edit's field goes back to the draft when the edit ends; a post's is emptied.
+    if (!editing) change('')
     // The outbox has the copy now, and removes it when the upload ends.
     held.current = undefined
     setFile(undefined)
@@ -224,6 +282,28 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
 
   return (
     <>
+      {context ? (
+        <View style={styles.context} testID={testIdWithKey(editing ? 'RoomComposerEditing' : 'RoomComposerReplying')}>
+          <View style={styles.contextBar} />
+          <View style={styles.contextWords}>
+            <ThemedText style={styles.contextName} numberOfLines={1} testID={testIdWithKey('RoomComposerContextName')}>
+              {context.kind === 'edit' ? t('Rooms.Editing') : context.name}
+            </ThemedText>
+            <ThemedText style={styles.contextText} numberOfLines={1} testID={testIdWithKey('RoomComposerContextText')}>
+              {context.text}
+            </ThemedText>
+          </View>
+          <Pressable
+            onPress={context.onCancel}
+            style={styles.contextCancel}
+            accessibilityRole="button"
+            accessibilityLabel={t(editing ? 'Rooms.EditCancel' : 'Rooms.ReplyCancel')}
+            testID={testIdWithKey('RoomComposerContextCancel')}
+          >
+            <Icon name="close" size={18} color={ColorPalette.grayscale.mediumGrey} />
+          </Pressable>
+        </View>
+      ) : null}
       {postingAs ? (
         <Pressable
           style={styles.postingAsRow}
@@ -284,7 +364,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
         </ThemedText>
       ) : null}
       <View style={styles.bar} testID={testIdWithKey('RoomComposer')}>
-        {canAttach ? (
+        {attachHere ? (
           <Pressable
             onPress={attach}
             style={TAP_TARGET}
