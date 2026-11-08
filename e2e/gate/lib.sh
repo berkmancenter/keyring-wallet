@@ -230,26 +230,31 @@ pnm() {
 c_admin() { galarm 90 node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
 # c_members_remove <why> <driver output>…: take off C every member the leg's drivers named (`JOIN_MEMBER <did>` lines),
 # as the other joining legs do. Side by side (GATE_DEFER_KEYS=1, a gate's iOS and Android groups) a leg's member can be
-# another leg's that is still running (p1 knows its applicant only by join time), so they are deferred to the run's
-# end, after both groups (c_members_deferred). IN-560, W5 of docs/plans/farm-test-footprint-plan.md.
+# another leg's that is still running, so they are deferred: written to $GATE_HOME/defer-members with the community
+# they belong to, which outlives the run, and drained by c_members_deferred after both groups and at the start of every
+# later run (under the run lock, beside gate_sweep), so a killed gate's members are still removed (ac on #873).
+# IN-560, W5 of docs/plans/farm-test-footprint-plan.md.
 c_members_remove() {
   local why=$1 m; shift
   for m in $(grep -hoE '^JOIN_MEMBER did:[^ ]+' "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
-    if [ "${GATE_DEFER_KEYS:-}" = 1 ] && [ -n "${RUN_DIR:-}" ]; then
-      printf '%s\t%s\n' "$m" "$why" >> "$RUN_DIR/defer-members"; echo "  C member …${m: -24}: deferred to the run's end"; continue
+    if [ "${GATE_DEFER_KEYS:-}" = 1 ]; then
+      printf '%s\t%s\t%s\n' "${C_DID:-}" "$m" "$why" >> "$GATE_HOME/defer-members"; echo "  C member …${m: -24}: deferred (gate.sh removes it once no leg runs)"; continue
     fi
     echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
   done
 }
-# c_members_deferred <run dir>: the members legs deferred, removed once no leg runs; the list is emptied after.
+# c_members_deferred: remove the deferred members of this env's community (C_DID), once each, and keep only the lines
+# of other communities (another env's), for a run that uses them.
 c_members_deferred() {
-  local f=$1/defer-members m why
-  [ -s "$f" ] || return 0
-  while IFS=$'\t' read -r m why; do
+  local f=$GATE_HOME/defer-members c m why keep
+  [ -s "$f" ] && [ -n "${C_DID:-}" ] && [ -n "${C_REST:-}" ] || return 0
+  keep=$(mktemp "$GATE_HOME/defer-members.XXXXXX") || return 0
+  while IFS=$'\t' read -r c m why; do
     [ -n "$m" ] || continue
+    if [ "$c" != "$C_DID" ]; then printf '%s\t%s\t%s\n' "$c" "$m" "$why" >> "$keep"; continue; fi
     say "cleanup C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
-  done < <(sort -u -t$'\t' -k1,1 "$f")
-  : > "$f"
+  done < <(sort -u -t$'\t' -k1,2 "$f" | awk -F'\t' '!seen[$1 FS $2]++')
+  mv "$keep" "$f"
 }
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----

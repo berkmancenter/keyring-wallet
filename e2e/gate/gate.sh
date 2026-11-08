@@ -137,7 +137,7 @@ run_legs() {
       wait $pa $pb
       local sl; for sl in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $sl (phone grants since $tb)"; keys_since "$sl" "$tb"; done
       : > "$rd/defer-keys" 2>/dev/null
-      c_members_deferred "$rd"
+      c_members_deferred
       android=(${arest[@]+"${arest[@]}"})
     else
       [ ${#alone[@]} -eq 0 ] || { say "first, alone: ${alone[*]}"; run_group "$rd" "${alone[@]}"; }
@@ -153,7 +153,7 @@ run_legs() {
     ( export GATE_DEFER_KEYS=1; run_group "$rd" "${android[@]}" ) & local p2=$!
     wait $p1 $p2
     local slug; for slug in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $slug (phone grants since $t0)"; keys_since "$slug" "$t0"; done
-    c_members_deferred "$rd"
+    c_members_deferred
   else
     [ "$serial" = 1 ] || [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ] || say "one platform at a time: ${free} GB free, under GATE_PARALLEL_MIN_GB=$GATE_PARALLEL_MIN_GB"
     run_group "$rd" ${ios[@]+"${ios[@]}"} ${android[@]+"${android[@]}"}
@@ -193,6 +193,7 @@ cmd_run() {
   # A nightly run marks its day only now, holding the lock: one that never got this far is tried again in the window.
   [ -z "${GATE_NIGHTLY_MARK:-}" ] || echo "started $(stamp)Z, pin ${pin:0:8}" > "$GATE_NIGHTLY_MARK"
   gate_sweep
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
@@ -223,6 +224,7 @@ cmd_rerun() {
   use_build "$pin"
   run_lock
   gate_sweep
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
@@ -281,6 +283,7 @@ cmd_changed() {
   use_build "$pin"
   run_lock
   gate_sweep
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   local rd; rd=$(new_run "$pin" "changed")
   printf '%s\n' "$json" > "$rd/changed.json"
   {

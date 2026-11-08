@@ -68,7 +68,8 @@ test('the CLI refuses to list without fixtures, and its output says it is a dry 
     const out = execFileSync('node', [cli, '--runs', path.join(dir, 'runs'), '--fixtures', path.join(dir, 'env'), '--now', new Date(NOW).toISOString()]).toString();
     assert.match(out, /^# DRY LIST — nothing is deleted/m);
     assert.match(out, new RegExp(`^${P_OLD}\\t\\?\\t2026-10-25\\t14\\t`, 'm'));
-    assert.doesNotMatch(out, /\bdelete\b(?! *is)/i.source ? /dids delete|acl delete/ : /x/);
+    // Only the header's "nothing is deleted" may say delete: no command, no other mention (ac on #873).
+    assert.deepEqual(out.split('\n').filter((l) => /delet/i.test(l)), ['# DRY LIST — nothing is deleted. Gate-minted personas, first seen in a gate run at least 7 days ago.']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -78,4 +79,37 @@ test('the script itself calls no agent and deletes nothing', () => {
   const src = readFileSync(path.join(here, 'personas-dry.mjs'), 'utf8');
   assert.doesNotMatch(src, /child_process|execFile|spawn|pnm-locked|fetch\(/);
   assert.doesNotMatch(src, /unlinkSync|rmSync|writeFileSync/);
+});
+
+// Every runner and community the harness uses, by its REAL DID (the env files on both Macs, 11-08: RUNNER_MAIN/A/B_DID,
+// COMMUNITY_AGENT_DID, C_DID, HV_C_DID, VP_DID). None may ever be listed as a persona (ac on #873, Alberto's
+// all-runners rule). A runner or community added to the envs belongs here too.
+const ROSTER = {
+  prague: 'did:webvh:Qme6u2xtNUiMDsbrfrXnEdCmBrmsf7hxu48F1k7xqiTrmU:dids.ic3.dev:keyring-runner-prague-vta',
+  uiux: 'did:webvh:Qmf5Rkjx3zf1EPBc65BduvvmbDVtXLneALMPXxm31eQyvg:dids.ic3.dev:keyring-runner-uiux-vta',
+  mini1: 'did:webvh:QmfZPuCQArcbC9qnmAsHfffi1dSXe8kYEkebNNB2Fd55H8:dids.ic3.dev:keyring-runner-mini1-vta',
+  openvtc: 'did:webvh:QmbcaD2dFWVzKLT5uZPJ8yHLwqACMAeLGxCuyJeyLkso7d:dids.ic3.dev:keyring-runner-openvtc-vta',
+  'runner C': 'did:webvh:QmZpbQaLzwwSWuhfS9MrmiNsLPtRX3ak6MGFHxRwD2hBFW:dids.ic3.dev:keyring-runner-c-vta',
+  'polls-p01': 'did:webvh:QmWy3ZADHeCmEMkr422WAJut5HVDhE1g7dC3pgDBUsAuYj:dids.ic3.dev:keyring-polls-p01-vta',
+  'keyring-test community VTA': 'did:webvh:Qmd6ptB4oJndrh1YwSuzK3JRkAJVLS8K7BjFMPM4WW7BaU:dids-keyring-test.ic3.dev:keyring-test-vta',
+  'C (lab community)': 'did:webvh:Qmf9RXcxdbXzEwDsTHuQZerCp8UBVe7CpnRAWZTveZBukK:dids-keyring-test.ic3.dev:keyring-lab-community-vtc',
+  'HV (hv-lab1)': 'did:webvh:QmWuySqDabSg7g3CpK2jWR6j6UmWkU5DcT8X7aHBY7iHEc:dids-keyring-hv-lab1.ic3.dev:keyring-hv-lab1-vtc',
+  'vtc-pass community': 'did:webvh:QmYELqAkeEpMEQyc2BjkTE2mthoWxbT6qGrTDit7tXo36P:dids-keyring-runner-vtc-pass.ic3.dev:keyring-runner-vtc-pass-vtc',
+};
+
+test('roster: every runner and community the harness uses is an agent DID, never a persona', () => {
+  const slipped = Object.entries(ROSTER).filter(([, did]) => !isAgentDid(did)).map(([name]) => name);
+  assert.deepEqual(slipped, []);
+});
+
+test('roster, end to end: named in a log and in no fixture, none of them is ever listed', () => {
+  const log = [{ file: 'runs/1001-x/leg.log', mtimeMs: NOW - 30 * day, text: Object.values(ROSTER).join('\n') }];
+  const { rows, counts } = dryList({ seen: log, fixtures: [''], now: NOW });
+  assert.deepEqual(rows, []);
+  assert.equal(counts.agent, Object.keys(ROSTER).length);
+});
+
+test('control: a check by host alone (keyring-test/keyring-stack) would let the dids.ic3.dev runners through', () => {
+  const byHost = (did) => /keyring-test|keyring-stack/.test(did.split(':')[3]);
+  assert.ok(Object.values(ROSTER).some((did) => !byHost(did)));
 });

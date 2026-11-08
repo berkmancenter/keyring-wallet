@@ -25,7 +25,7 @@ function withFake(files, body, env = {}) {
     const calls = path.join(dir, 'calls');
     const vars = Object.entries(env).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('; ');
     const out = execFileSync('bash', ['-c', `set -u
-      D=${JSON.stringify(dir)}; RUN_DIR=$D; ${vars}
+      D=${JSON.stringify(dir)}; RUN_DIR=$D; GATE_HOME=$D; C_DID=did:example:C; C_REST=https://c.example; ${vars}
       say() { echo "SAY $*"; }
       c_admin() { echo "$*" >> ${JSON.stringify(calls)}; echo "member-removed -> 3"; }
       ${remove}
@@ -51,14 +51,23 @@ test('a driver output with no JOIN_MEMBER line, or none at all, removes nothing 
   assert.deepEqual(withFake({ 'x.out': 'nothing here\n' }, 'c_members_remove why "$D/x.out" "$D/missing.out"').calls, []);
 });
 
-test('side by side the removal is deferred: no call now, then each member once at the run\'s end, and the list emptied', () => {
+test('side by side the removal is deferred to $GATE_HOME, tagged with the community: no call now', () => {
   const now = withFake(OUT, 'c_members_remove "gate: p1 applicant" "$D/p1.out" "$D/vetting.out"', { GATE_DEFER_KEYS: '1' });
   assert.deepEqual(now.calls, []);
-  assert.equal(now.defer.length, 2);
-  const later = withFake({ ...OUT, 'defer-members': `${A}\tgate: p1 applicant\n${A}\tgate: kk applicant\n${B}\tgate: kk applicant\n` },
-    'c_members_deferred "$D"; wc -c < "$D/defer-members" | tr -d " "');
-  assert.equal(later.calls.length, 2, later.calls.join('\n'));
-  assert.ok(later.out.trim().endsWith('0'), 'the defer list is emptied after');
+  assert.deepEqual(now.defer.map((l) => l.split('\t').slice(0, 2)).sort(), [['did:example:C', A], ['did:example:C', B]].sort());
+});
+
+test('the drain removes each of this community\'s members once and keeps another community\'s lines', () => {
+  const later = withFake({ ...OUT, 'defer-members': `did:example:C\t${A}\tgate: p1\ndid:example:C\t${A}\tgate: kk\ndid:example:C\t${B}\tgate: kk\ndid:example:OTHER\t${B}\tgate: other env\n` },
+    'c_members_deferred');
+  assert.deepEqual(later.calls.map((c) => c.split(' ')[1]).sort(), [A, B].sort(), later.calls.join('\n'));
+  assert.deepEqual(later.defer, [`did:example:OTHER\t${B}\tgate: other env`]);
+});
+
+test('with no community in the env the drain touches nothing and keeps the list', () => {
+  const r = withFake({ 'defer-members': `did:example:C\t${A}\tgate: p1\n` }, 'C_DID=; c_members_deferred');
+  assert.deepEqual(r.calls, []);
+  assert.equal(r.defer.length, 1);
 });
 
 test('kk and p1 remove their members at cleanup, from their own drivers\' output', () => {
@@ -74,11 +83,12 @@ test('the drivers name the member: kk\'s by the request\'s applicant, p1\'s by t
   const vetting = readFileSync(path.join(here, '..', 'run-vti-vetting.js'), 'utf8');
   const phase1 = readFileSync(path.join(here, '..', 'openvtc', 'run-phase1.mjs'), 'utf8');
   assert.match(vetting, /console\.log\(`JOIN_MEMBER \$\{request\.applicantDid\}`\)/);
-  assert.match(phase1, /Date\.parse\(m\.joinedAt \?\? 0\) >= Date\.parse\(startedAt\)\) console\.log\(`JOIN_MEMBER \$\{m\.did\}`\)/);
-  assert.match(phase1, /return allMembers\(memberSource\)\.some\(\(m\) => Date\.parse\(m\.joinedAt \?\? 0\) >= Date\.parse\(startedAt\)\)/);
+  assert.match(phase1, /const own = p1OwnMember\(\{ before: membersBefore, after: allMembers\(memberSource\), startedAt, fixtures, green: !failure && report\.communityHasMember \}\);\n\s+if \(own\.did\) console\.log\(`JOIN_MEMBER \$\{own\.did\}`\);/);
+  assert.doesNotMatch(phase1, /joinedAt[^\n]*console\.log\(`JOIN_MEMBER/, 'no pure time-window selection left');
 });
 
-test('gate.sh removes deferred members after each side-by-side pass, beside the deferred keys', () => {
+test('gate.sh drains deferred members after each side-by-side pass and at the start of run, rerun and changed', () => {
   const gate = readFileSync(path.join(here, 'gate.sh'), 'utf8');
-  assert.equal((gate.match(/c_members_deferred "\$rd"/g) || []).length, 2);
+  assert.equal((gate.match(/^\s+c_members_deferred\b/gm) || []).length, 5);
+  assert.equal((gate.match(/^  gate_sweep[^\n]*\n  c_members_deferred/gm) || []).length, 3, 'right after gate_sweep, under the run lock');
 });
