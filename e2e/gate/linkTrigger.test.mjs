@@ -174,6 +174,20 @@ test('link_trigger_args: runners by value from the link legs\' *_SLUG and *_URL;
   assert.deepEqual(r.out.trim().split('\n'), ['--runner', 'mini-prague=https://vta-prague.example']);
 });
 
+test('link_trigger_args: behind the REST wrapper, PNM_INNER and the builds it names are fingerprinted too', () => {
+  const setup = `printf '%s\\n' 'exec "\$PNM_INNER" "\$@"' > "$GATE_HOME/rest"
+    printf '%s\\n' "b=\\\${GATE_PNM_047:-$GATE_HOME/pnm047}" > "$GATE_HOME/inner"; : > "$GATE_HOME/pnm047"
+    PNM_BIN=$GATE_HOME/rest`;
+  const pnm = (out) => out.trim().split('\n').filter((l, i, a) => a[i - 1] === '--pnm').map((f) => path.basename(f));
+  const r = gateRun(`${setup}; PNM_INNER=$GATE_HOME/inner; link_trigger_args`);
+  assert.deepEqual(pnm(r.out), ['rest', 'inner', 'pnm047'], r.out + r.err);
+  // Control: without following PNM_INNER (the code before this fix), only the REST wrapper itself was fingerprinted.
+  assert.deepEqual(pnm(gateRun(`${setup}; unset PNM_INNER; link_trigger_args`).out), ['rest']);
+  // PNM_BIN the wrapper itself (no REST): its builds once, no duplicate when PNM_INNER names the same file.
+  const direct = gateRun(`printf '%s\\n' "b=\\\${GATE_PNM_047:-$GATE_HOME/pnm047}" > "$GATE_HOME/inner"; : > "$GATE_HOME/pnm047"; PNM_BIN=$GATE_HOME/inner; PNM_INNER=$GATE_HOME/inner; link_trigger_args`);
+  assert.deepEqual(pnm(direct.out), ['inner', 'pnm047'], direct.out + direct.err);
+});
+
 test('(c) the store gate still runs all three: linkwait is an Android leg and linkfail, pnmlink run alone after', () => {
   assert.ok(words(gate, 'LEGS_ANDROID').includes('linkwait'));
   assert.deepEqual(words(gate, 'LEGS_SOLO'), ['linkfail', 'pnmlink']);
