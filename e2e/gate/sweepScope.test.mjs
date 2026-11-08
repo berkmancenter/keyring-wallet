@@ -109,6 +109,16 @@ test('a runner named twice (A = MAIN, as on the mini) is swept once and never re
   assert.ok(!said.some((l) => l.includes('not swept')), said.join('\n'));
 });
 
+test('p2 reaches runners through its own *_SLUG variables: one set to the main slug sweeps main (ac on #871)', () => {
+  const env = { ...ENV, TUI_APPLICANT_SLUG: ENV.RUNNER_MAIN_SLUG, P2_VETTER_RUNNER_SLUG: 'farm3-runner-p2-vetter' };
+  assert.deepEqual(slugsCalled(sweepFor('p2', env).calls), ['farm3-runner-uiux']);
+});
+
+test('p2 with its own runners (none of MAIN, A or B) sweeps none of the three', () => {
+  const env = { ...ENV, TUI_APPLICANT_SLUG: 'farm3-runner-tui', P2_VETTER_RUNNER_SLUG: 'farm3-runner-p2-vetter' };
+  assert.deepEqual(sweepFor('p2', env).calls, []);
+});
+
 test('wanted_legs expands --legs as run_legs does: all, a list, and pair-ios alone', () => {
   const run = (spec) => execFileSync('bash', ['-c', `${pieces.legLists}\n${pieces.legWanted}\n${pieces.wantedLegs}\nwanted_legs ${JSON.stringify(spec)}`]).toString().trim().split('\n').filter(Boolean);
   assert.deepEqual(run('pair-ios'), ['pair-ios']);

@@ -461,18 +461,24 @@ gate_sweep() {
   local s out=""; for s in $skipped; do [[ "$seen" == *" $s "* ]] || out="$out $s"; done
   [ -z "$out" ] || say "sweep: not swept, no leg of this run uses them:$out"
 }
-# sweep_runners_for <leg>…: the runner variables (RUNNER_MAIN, RUNNER_A, RUNNER_B) whose _SLUG the legs' own scripts
-# name. Only the slug counts: pnm reaches a runner by its slug alone, so a leg naming only a runner's DID (linkfail's
-# approver, RUNNER_A_DID) writes nothing there. Every runner when no leg is named or a leg has no script.
+# sweep_runners_for <leg>…: the runner variables (RUNNER_MAIN, RUNNER_A, RUNNER_B) the legs' own scripts reach, by
+# slug. Only a slug counts: pnm reaches a runner by its slug alone, so a leg naming only a runner's DID (linkfail's
+# approver, RUNNER_A_DID) writes nothing there. Any *_SLUG a script names counts, by its value: p2 reaches runners
+# through TUI_APPLICANT_SLUG and P2_VETTER_RUNNER_SLUG, and a farm may set either to MAIN's, A's or B's slug (ac on
+# #871). Every runner when no leg is named or a leg has no script.
 sweep_runners_for() {
-  local leg f v out=" "
+  local leg f n v s vals=" " out=" "
   [ $# -gt 0 ] || { echo RUNNER_MAIN RUNNER_A RUNNER_B; return 0; }
   for leg in "$@"; do
     f=$GATE_SRC/legs/$leg.sh
     [ -f "$f" ] || { echo RUNNER_MAIN RUNNER_A RUNNER_B; return 0; }
-    for v in $(grep -o -E 'RUNNER_(MAIN|A|B)_SLUG' "$f" | sed 's/_SLUG$//' | sort -u); do
-      [[ "$out" == *" $v "* ]] || out="$out$v "
+    for n in $(grep -o -E '[A-Z][A-Z0-9_]*_SLUG' "$f" | sort -u); do
+      s=${!n:-}; [ -n "$s" ] && [[ "$vals" != *" $s "* ]] && vals="$vals$s "
     done
+  done
+  for v in RUNNER_MAIN RUNNER_A RUNNER_B; do
+    n=${v}_SLUG; s=${!n:-}
+    [ -n "$s" ] && [[ "$vals" == *" $s "* ]] && out="$out$v "
   done
   echo $out
 }
