@@ -62,7 +62,7 @@ import { completeOnboarding, dismissTourIfPresent, CONFIRM_APPEARS_WITHIN_MS, ha
 import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { netAtFailure } from "./lib/netAtFailure.js";
-import { deleteAcl, fromGrant, grantAfter, grantEntries, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { aclEndAction, deleteAcl, fromGrant, grantAfter, grantEntries, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
@@ -101,6 +101,11 @@ const JOURNEY = process.env.JOURNEY === "1";
 // phone's first key, because a consent rule holds acl/swap-key or a policy
 // denies it, and the phone must say why in words (bifold #325, VtaLink.SwapFailed).
 const EXPECT_REFUSAL = process.env.EXPECT_REFUSAL || "";
+// The slugs whose phone keys the gate leg's own cleanup removes (gate.sh run_leg, lib.sh leg_cleaned_slugs: its
+// keys_since lines). On one of them this run leaves its keys to that one list-and-delete pass at the leg's end rather
+// than listing the ACL again here (IN-560, W3 of docs/plans/farm-test-footprint-plan.md). Outside a gate leg it is
+// empty, and the run cleans after itself as before.
+const LEG_CLEANS = (process.env.E2E_ACL_LEG_SLUGS || "").split(/\s+/).includes(VTA_SLUG);
 const SWAP_FAILED = {
   swapHeld: { words: /holding this phone's link until someone approves it/, waitMs: 300000 },
   swapRefused: { words: /refused to finish linking this phone/, waitMs: 180000 },
@@ -1575,6 +1580,8 @@ function keepForNextStep({ before, tempDid, heirs = [] }) {
     const file = path.join(process.env.E2E_RUN_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts"), "last-link.json");
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, heirs, before: [...before], at: new Date().toISOString() }, null, 2));
+    // The leg's cleanup removes them, so the list below would only print them: one pnm call less per link.
+    if (LEG_CLEANS) { console.log(`[acl] keeping this run's keys: the phone stays linked for the next step (${file}); the leg's cleanup removes them`); return; }
     const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid, heirs);
     console.log(`[acl] keeping ${mine.length} entr${mine.length === 1 ? "y" : "ies"}: the phone stays linked for the next step (${file}). To remove them:`);
     for (const e of mine) console.log(`  ${PNM_HOME ? `PNM_HOME=${PNM_HOME} ` : ''}${PNM} --vta ${VTA_SLUG} acl delete '${e.subject}'`);
@@ -1762,7 +1769,13 @@ try {
   if (aclBefore) {
     const mode = process.env.E2E_ACL_CLEANUP || "";
     // A refused link ends its chain: its grant on the community's agent goes now.
-    if (runFailed || JOURNEY || EXPECT_REFUSAL || mode === "always" || mode === "never") {
+    // A gate leg that cleans this slug removes these keys in one pass at its end (LEG_CLEANS): a successful `always`
+    // run's keys need no list and delete of their own here. A failed run still removes them now (aclEndAction), as do a
+    // refused link (another agent's grant, which the leg may not clean), a JOURNEY and `never`.
+    const end = aclEndAction({ legCleans: LEG_CLEANS, journey: JOURNEY, expectRefusal: EXPECT_REFUSAL, mode, failed: runFailed });
+    if (end === "leg") {
+      console.log(`[acl] this run's keys on ${VTA_SLUG} are left to the leg's cleanup (keys_since), which lists and removes them once`);
+    } else if (end === "remove") {
       // Each link's chain by its own temporary key: an unlinked phone's key
       // stays on the agent's list (VTI-Q23), and the relink adds another.
       for (const [i, tempDid] of runTempDids.entries()) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid, heirs: i === runTempDids.length - 1 ? runHeirs : [], failed: runFailed });
