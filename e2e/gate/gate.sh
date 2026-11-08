@@ -11,6 +11,7 @@
 #   gate.sh report <run-id>                                   rows per leg, with wall-clock
 #   gate.sh summary <run-id>                                  write the run's summary.json (the board's feed) again
 #   gate.sh changed --pin <sha> (--range a..b | --files f,…)  only the legs a fix touches: a fast check, not the gate
+#   gate.sh nightly-legs --part macbook|ios|android --pin <sha>  the nightly full run's legs for that part (link legs if due)
 #   gate.sh pause [reason]                                    legs running finish; no further leg or gate starts
 #   gate.sh resume                                            lift a pause (then: rerun <run> --only-failed)
 # Lead our own process group, so a stop passed to "the group" (stop_forward's kill -TERM 0) reaches the gate and
@@ -61,8 +62,17 @@ LEGS_BESIDE_IOS_ALONE="linkwait"
 # clocks=real, APK_REAL) at night, so the clocks the store build has are proven too (gate efficiency §3).
 LEGS_NIGHTLY="p2 lostreq linkwait"
 LEGS_NIGHTLY_ONLY="p2"
+# The nightly FULL run's legs, by part (the gate lane's nightly-ota.sh, nightly-ios-mini.sh and nightly-android-mini.sh
+# ask `gate.sh nightly-legs` for them, so the list is reviewed here, not kept in those local scripts). Not the same as
+# $LEGS_NIGHTLY above, which is `gate.sh nightly`'s own short run. W1 of docs/plans/farm-test-footprint-plan.md
+# (IN-560): the link legs are not in the fixed list; nightly-legs adds them to the Android part when linkTrigger.mjs
+# finds a link change or a runner/pnm version change, and a gate (--kind gate, --legs all) always runs them.
+LEGS_NIGHTLY_MACBOOK="pair-ios"
+LEGS_NIGHTLY_IOS="kk smoke-ios update-ios signin-ios"
+LEGS_NIGHTLY_ANDROID="smoke-android devices testreq waiting lostreq agents update-android relaunch-android refused hv p1"
+LEGS_LINK="linkwait linkfail pnmlink"
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- one leg ----
 
@@ -97,6 +107,7 @@ run_leg() {
   # passes it on and waits for the leg's cleanup.
   # GATE_KIND (gate, nightly, dry, changed): a leg with a row that runs in one kind of run only reads it (lostreq).
   GATE_KIND=$(sed -n 's/^kind=//p' "$rd/meta" 2>/dev/null | head -1) \
+    E2E_ACL_LEG_SLUGS="$(leg_cleaned_slugs "$leg")" \
     E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1 &
   wait $!; rc=$?; e=$(date +%s)
   printf '%s\t%s\t%s\t%s\n' "$leg" "$rc" "$s" "$e" >> "$rd/legs.tsv"
@@ -116,6 +127,9 @@ leg_wanted() {
   [[ ",$2," == *",$1,"* ]] && return 0
   [ "$2" = all ] && [[ " ${LEGS_NIGHTLY_ONLY:-} ${LEGS_BY_NAME_ONLY:-} " != *" $1 "* ]]
 }
+
+# wanted_legs <legs>: the legs a --legs value ("all" or a comma list) names, one per line, as run_legs picks them.
+wanted_legs() { local l; for l in $LEGS_SOLO $LEGS_IOS $LEGS_ANDROID; do leg_wanted "$l" "$1" && echo "$l"; done; return 0; }
 
 # Split the wanted legs by platform, and run the two platforms side by side when the disk allows.
 run_legs() {
@@ -137,6 +151,7 @@ run_legs() {
       wait $pa $pb
       local sl; for sl in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $sl (phone grants since $tb)"; keys_since "$sl" "$tb"; done
       : > "$rd/defer-keys" 2>/dev/null
+      c_members_deferred
       android=(${arest[@]+"${arest[@]}"})
     else
       [ ${#alone[@]} -eq 0 ] || { say "first, alone: ${alone[*]}"; run_group "$rd" "${alone[@]}"; }
@@ -152,6 +167,7 @@ run_legs() {
     ( export GATE_DEFER_KEYS=1; run_group "$rd" "${android[@]}" ) & local p2=$!
     wait $p1 $p2
     local slug; for slug in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $slug (phone grants since $t0)"; keys_since "$slug" "$t0"; done
+    c_members_deferred
   else
     [ "$serial" = 1 ] || [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ] || say "one platform at a time: ${free} GB free, under GATE_PARALLEL_MIN_GB=$GATE_PARALLEL_MIN_GB"
     run_group "$rd" ${ios[@]+"${ios[@]}"} ${android[@]+"${android[@]}"}
@@ -190,7 +206,10 @@ cmd_run() {
   run_lock
   # A nightly run marks its day only now, holding the lock: one that never got this far is tried again in the window.
   [ -z "${GATE_NIGHTLY_MARK:-}" ] || echo "started $(stamp)Z, pin ${pin:0:8}" > "$GATE_NIGHTLY_MARK"
-  gate_sweep
+  # Only the runners these legs use (W9): wanted_legs prints nothing for a --legs naming no known leg, and gate_sweep
+  # with no legs sweeps every runner.
+  gate_sweep $(wanted_legs "$legs")
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
@@ -203,6 +222,7 @@ cmd_run() {
   say "run $(basename "$rd"): target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
   run_legs "$rd" "$legs" "$serial"
   echo "ended=$(stamp)Z" >> "$rd/meta"
+  [ "$kind" != nightly ] || link_record "$rd"
   write_summary "$rd"
   cmd_report "$(basename "$rd")"
 }
@@ -220,7 +240,9 @@ cmd_rerun() {
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
-  gate_sweep
+  # The legs of the run being rerun (a superset of what reruns); a run with no leg table sweeps every runner.
+  gate_sweep $(cut -f1 "$old/legs.tsv" 2>/dev/null | sort -u)
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
@@ -278,7 +300,8 @@ cmd_changed() {
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
-  gate_sweep
+  gate_sweep ${legs//,/ }
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   local rd; rd=$(new_run "$pin" "changed")
   printf '%s\n' "$json" > "$rd/changed.json"
   {
@@ -565,6 +588,67 @@ cmd_report() {
   node "$GATE_SRC/run-summary.mjs" "$rd" 2>/dev/null | tail -n +2
 }
 
+# The link legs' state ($GATE_HOME): link-fingerprint.json holds the pin and the runner/pnm versions the last nightly
+# that ran its Android part was checked against; link-pending, tonight's decision, recorded by that run's end.
+LINK_FP=link-fingerprint.json
+# link_trigger_args: the runners and pnm files the link legs depend on, as linkTrigger.mjs arguments, one per line.
+# Runners by value, never a roster: every *_SLUG the link legs' scripts name, resolved from this env, with the URL its
+# *_URL twin gives (RUNNER_MAIN_SLUG -> RUNNER_MAIN_URL). A slug with no URL has no served version to read, so only its
+# pnm counts (the coordinator's all-runners rule, 11-08).
+link_trigger_args() {
+  local s u f n l seen=" "
+  for l in $LEGS_LINK; do
+    for n in $(grep -o -E '[A-Z][A-Z0-9_]*_SLUG' "$GATE_SRC/legs/$l.sh" 2>/dev/null | sort -u); do
+      s=${!n:-}; u=${n%_SLUG}_URL; u=${!u:-}
+      [ -n "$s" ] && [ -n "$u" ] && [[ "$seen" != *" $s "* ]] || continue
+      seen="$seen$s "; printf '%s\n' --runner "$s=$u"
+    done
+  done
+  [ -n "${PNM_BIN:-}" ] || return 0
+  printf '%s\n' --pnm "$PNM_BIN"
+  # A wrapper (gate-pnm3) picks among pnm builds by its GATE_PNM_* defaults: each of those files counts too.
+  for f in $(grep -oE '\$\{GATE_PNM_[A-Z0-9]+:-[^}]+\}' "$PNM_BIN" 2>/dev/null | sed -E 's/^\$\{GATE_PNM_[A-Z0-9]+:-//; s/\}$//' | sed "s#\\\$HOME#$HOME#g" | sort -u); do
+    [ -f "$f" ] && printf '%s\n' --pnm "$f"
+  done
+  return 0
+}
+cmd_nightly_legs() {
+  local part="" pin=""
+  while [ $# -gt 0 ]; do case $1 in --part) part=$2; shift 2 ;; --pin) pin=$2; shift 2 ;; *) usage ;; esac; done
+  case $part in
+    macbook) echo "$LEGS_NIGHTLY_MACBOOK" | tr ' ' ,; return 0 ;;
+    ios) echo "$LEGS_NIGHTLY_IOS" | tr ' ' ,; return 0 ;;
+    android) [ -n "$pin" ] || usage ;;
+    *) usage ;;
+  esac
+  local last="" args=() a
+  last=$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).pin||"")}catch{}' "$GATE_HOME/$LINK_FP")
+  args=(--range "${last:+$last..}$pin" --fingerprint-file "$GATE_HOME/$LINK_FP")
+  while IFS= read -r a; do args+=("$a"); done < <(link_trigger_args)
+  local legs=$LEGS_NIGHTLY_ANDROID trig=0
+  if node "$GATE_SRC/linkTrigger.mjs" "${args[@]}" >&2; then legs="$legs $LEGS_LINK"; trig=1; fi
+  printf '%s\t%s\n' "$pin" "$trig" > "$GATE_HOME/link-pending"
+  echo "$legs" | tr ' ' ,
+}
+# link_record <run dir>: at a nightly run's end, the pin and fingerprint its Android part was checked against, once it
+# ran: with no trigger, as soon as that part ran (smoke-android in the run); with one, only when linkfail finished with
+# rc 0, so a night that never got through the link legs tries them again the next night.
+link_record() {
+  local rd=$1 pin trig a args=()
+  [ -f "$GATE_HOME/link-pending" ] || return 0
+  IFS=$'\t' read -r pin trig < "$GATE_HOME/link-pending"
+  awk -F'\t' '$1 == "smoke-android"' "$rd/legs.tsv" 2>/dev/null | grep -q . || return 0
+  # Only a linkfail that finished green (rc 0) counts: an allowlist, so a kill (137, SIGKILL), a crash (134, 139), a
+  # missing tool (127) or a usage error (2) never records the pin and skips the next night unverified (ac on #874).
+  if [ "$trig" = 1 ] && ! awk -F'\t' '$1 == "linkfail" && $2 == 0' "$rd/legs.tsv" | grep -q .; then
+    say "link legs: due tonight but linkfail did not run; tried again next night"; rm -f "$GATE_HOME/link-pending"; return 0
+  fi
+  while IFS= read -r a; do args+=("$a"); done < <(link_trigger_args)
+  node "$GATE_SRC/linkTrigger.mjs" --record --pin "$pin" --fingerprint-file "$GATE_HOME/$LINK_FP" "${args[@]}" >/dev/null \
+    && say "link legs: checked through ${pin:0:8} (recorded $LINK_FP)"
+  rm -f "$GATE_HOME/link-pending"
+}
+
 case ${1:-} in
   run) shift; cmd_run "$@" ;;
   rerun) shift; cmd_rerun "$@" ;;
@@ -574,6 +658,7 @@ case ${1:-} in
   report) shift; cmd_report "$@" ;;
   summary) shift; gate_env; cmd_summary "$@" ;;
   changed) shift; cmd_changed "$@" ;;
+  nightly-legs) shift; gate_env; cmd_nightly_legs "$@" ;;
   pause) shift; gate_env; echo "${*:-paused} ($(stamp)Z)" > "$GATE_HOME/$PAUSE_FILE_NAME"; say "paused: legs running finish, nothing else starts; gate.sh resume to lift it" ;;
   resume) gate_env; rm -f "$GATE_HOME/$PAUSE_FILE_NAME"; say "resumed"; paused_runs ;;
   *) usage ;;
