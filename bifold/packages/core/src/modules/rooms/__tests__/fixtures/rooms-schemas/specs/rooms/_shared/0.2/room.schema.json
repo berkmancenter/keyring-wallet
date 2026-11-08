@@ -1,0 +1,1124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/_shared/0.2/room.schema.json",
+  "title": "Rooms — shared types",
+  "description": "Types shared by the rooms/* family. A room is a DTG node with its own identifier that issues the credentials governing it; a host stores its records and verifies presentations against those credentials, and never maintains a member list of its own. 0.2 renames `RecordPrune.at` to `prunedAt`, the registry's `<event>At` convention, and changes nothing else; `blobs.schema.json` and `personal-label.schema.json` stay at 0.1.",
+  "$defs": {
+    "Visibility": {
+      "title": "Visibility",
+      "type": "string",
+      "enum": [
+        "open",
+        "attributed",
+        "private"
+      ],
+      "description": "How much of a room its host can see, fixed at creation and immutable thereafter. `open`: records are cleartext, searchable and fully audited. `attributed`: record content is sealed, and the host still learns which member acted. `private`: content is sealed and membership is presented in zero knowledge, so the host verifies that a member acted without learning which. Immutable because a downgrade cannot un-see cleartext and an upgrade would protect only what came after while presenting as though it protected everything."
+    },
+    "RetentionPolicy": {
+      "title": "RetentionPolicy",
+      "type": "string",
+      "enum": [
+        "chained",
+        "fromJoin"
+      ],
+      "description": "Whether a room keeps its history readable across a membership change, fixed at creation and immutable thereafter — like `Visibility`, and for the same reason: the rungs of an epoch key chain either exist for an epoch or they do not, and no later change of mind can seal key material that was never sealed or unseal what was already severed. `chained`: each advance produces an `EpochLink`, so every member reads the room's whole retained history however long they have been in it — what a **library** wants, at the cost of post-compromise security for record content, since a compromised current key then reaches every retained epoch. `fromJoin`: no rungs are produced, so a member reads only from the epoch their group state is at — what a **stream** wants, and what a room under a strict forward-secrecy obligation wants, at the cost that a joining member finds an empty-looking room and nobody can reread a record once their group state has moved past the epoch it was sealed under. Absent means `chained`; see the prose on why the absent case is the readable one.",
+      "$comment": "Deliberately no JSON Schema `default`. A declared default is materialised by the generated bindings — the member becomes non-optional with a serde default — so an absent value would reappear as an explicit one on re-serialisation and break round-trip idempotence for every document written before this member existed. The meaning of absence is stated in prose, where a binding cannot act on it."
+    },
+    "RecordRetention": {
+      "title": "RecordRetention",
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How long a room keeps its records, by age: the room's **record retention**. Records older than it states become **eligible** to be removed by `rooms/records/prune`; nothing is removed until a holder of `admin` asks for a prune, and nothing a prune removes can be brought back.\n\n**Not `retentionPolicy`, and not `retentionDays`.** Both names are taken in this family and mean other things. `retentionPolicy` (`RetentionPolicy`) is whether a room's *key chain* lets a member read epochs from before they joined, fixed at creation because key material either exists for an epoch or it does not. `retentionDays` (`rooms/create`) is how long a host keeps a whole room after it lapses unrenewed. This is a third question — how long the room keeps its *records* while it is live — and unlike the first it is a decision a room revisits, so it is changeable (`rooms/records/retention/set`). A name sharing either's would invite a reader to apply one's rules to the other.\n\n**Age is the host's to measure, so age is `updatedAt`.** On the sealed tiers a host can read nothing of a record but its key, version, status, pinning and when it last changed, so a policy the host applies can only be stated in those terms. That is also why it cannot use a record's own `validUntil`, which is sealed: expiry is a reader's rule, retention a host's. A curation is a change, so it restarts a record's age — a retraction starts a tombstone's.\n\n**Absent, or `{}`, means no record is ever eligible by age**, and that is the reading a host MUST apply whenever it cannot read a policy: removing data under a rule nobody stated is the failure this member exists to prevent. Every member can read the policy in force (`rooms/info`), so a record is never removed under a rule its readers could not have known.",
+      "properties": {
+        "tombstoneDays": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 36500,
+          "description": "Days a retracted record's tombstone is kept after its retraction. A tombstone whose `updatedAt` is more than this long ago is eligible. Tombstones exist so that a member syncing incrementally learns of a retraction (`rooms/records/curate`); this is how long a member may stay away and still learn of one that way rather than by rebuilding their copy of the room. Absent means tombstones are never eligible."
+        },
+        "recordDays": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 36500,
+          "description": "Days a record is kept after it last changed, whatever its standing. A record — `active`, `deprecated` or `retracted` — whose `updatedAt` is more than this long ago is eligible, **unless it is pinned**: pinning says what matters in the room, and a room that wants a pinned record gone unpins it first. Absent means records are never eligible by age."
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1. A host MUST NOT treat a member here as making more records eligible: a removal rule a member's reader cannot understand is one they were never told about."
+        }
+      }
+    },
+    "AuthorityPresentation": {
+      "title": "AuthorityPresentation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "membership",
+        "authority"
+      ],
+      "description": "What a party presents to act on a room. Carries the whole authority chain: a host MUST NOT dereference an authority credential's `parent` to fetch a link it was not given. Resolving over the network would make verification depend on availability, turn every identifier into a request the host can be induced to make against an address the holder chooses, and signal credential use to whoever hosts the identifier. A host MUST bind the presenter to the chain's leaf. A chain that verifies is evidence that authority was conferred on somebody; it is not evidence that the party presenting it is that somebody. The leaf's subject MUST equal the party the host authenticated for this request — an identity the transport established or a document `proof` proved, never one named in a payload. A host that omits this check authorizes every captured presentation, and the omission is silent, because the chain still verifies.\n\n**Every credential is its issuer's attestation, and only its issuer's.** For the membership credential and for every link of `authority`, a host MUST verify the credential's `proof` with a key that the credential's own `issuer` lists for `assertionMethod` in its DID document, and MUST refuse a credential whose proof names a verification method that is not its issuer's. A proof that verifies under some other party's key is that party's statement, not the issuer's, and confers nothing. The same binding holds for every other document a room signs, such as a `RevocationList`.\n\n**A chain that verifies may still be revoked.** A host that has accepted a `RevocationList` for the room (`rooms/revocations/put`) MUST, from the moment it accepted it, refuse every presentation in which the membership credential or any link of `authority` is revoked by that list, under every task and every version of every task it serves for the room. A chain from which any link is revoked is refused whole: a credential delegated from a revoked one confers nothing, however it was attenuated. The refusal is the same `permissionDenied` as any other failed presentation.",
+      "properties": {
+        "membership": {
+          "type": "string",
+          "description": "The presenter's membership credential for this room, or — on a `private` room — a zero-knowledge presentation of it. Serialized per the governing profile."
+        },
+        "authority": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          },
+          "description": "The authority chain, LEAF FIRST: the first element is the credential being relied on and the last MUST be one issued by the room itself. Every link the presenter relies on is present, because the host will not fetch one. Capped at 8: verification is linear in chain length and runs on every operation, so an unbounded chain is a denial-of-service surface against the host. The known uses need 2 to 3 — a person attenuating to an agent, and that agent to a sub-agent."
+        },
+        "subjectBinding": {
+          "type": "string",
+          "description": "REQUIRED on a `private` room, where the subject identifier is withheld: a proof that the membership credential and the authority chain's leaf describe the SAME subject. Without it two parties pool credentials — one contributes membership, the other authority — and the combination verifies as a single party holding both. A host MUST refuse a private-room presentation that omits this."
+        }
+      }
+    },
+    "SealedRecord": {
+      "title": "SealedRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ciphertext",
+        "nonce",
+        "epoch"
+      ],
+      "description": "A record as a host stores it on an `attributed` or `private` room. Title, description, body, author and tags are sealed together in one blob rather than separately: splitting them would let a host learn the shape of the material from ciphertext lengths, for no benefit, since a reader decrypts the whole record either way.",
+      "properties": {
+        "ciphertext": {
+          "type": "string",
+          "description": "The sealed record, base64url. Bound by AEAD associated data to `roomId`, `key`, the version it was sealed at, and `epoch`, so a host that relocates it to another key, version, epoch or room produces a mismatch and the open fails. The record cannot be moved undetected even though the host holds every byte of it. The version it was sealed at is `version` below where present, and the record's own `version` otherwise."
+        },
+        "nonce": {
+          "type": "string",
+          "description": "AEAD nonce, base64url."
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The key epoch this record was sealed under. Cleartext because the host must serve the right ciphertext, and bound into the associated data so that relabelling it fails authentication rather than causing a reader to try the wrong key."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The version this ciphertext was sealed at, where that is no longer the record's own `version`. A record's version moves when it is curated (`rooms/records/curate`, which MUST assign a new one so that every `sinceVersion` watermark sees the change), but a curation other than a retraction keeps the body — and the body is bound, by the AEAD and by its author's signature (`SealedRecordBody`), to the version it was written at. Without this member a curated record would be opened at a version it was never sealed for, and would not open for anyone.\n\nA host MUST record the version a body was sealed at when it stores it, MUST NOT change it while that body is kept — a curation alters a record's standing, never its sealed content — and MUST include it whenever it differs from the record's `version`. It is absent where the two are equal, which is every record that has not been curated since it was written, so the members a record carries are unchanged until a curation needs this one. It is part of `sealed`, and so of the record the data commitment covers (`CommittedRecord`): a host cannot change it without changing the root.\n\nA reader opens and verifies the body at this version, and MUST refuse a record whose `sealed.version` is greater than its own `version` — a body cannot have been sealed for a version the room had not reached. A host that pairs a newer version with an older body of the same key is rolling the record back; that is a change to the committed record like any other, visible to the comparisons `CommittedRecord` exists for."
+        }
+      }
+    },
+    "SealedRecordBody": {
+      "title": "SealedRecordBody",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "key",
+        "version",
+        "author",
+        "proof"
+      ],
+      "description": "The plaintext inside `SealedRecord.ciphertext` on an `attributed` or `private` room, as JSON, signed by its author. Client to client: no host task carries it, because a host receives only ciphertext. Defined so that every member's client writes and reads the same thing.\n\n**Producing.** A writer builds the object without `proof`, signs it with a W3C Data Integrity proof whose `verificationMethod` is a key of `author` and whose `proofPurpose` is `assertionMethod`, and seals the result (its UTF-8 JSON bytes) under the AEAD that binds the same `roomId`, `key`, `version` and epoch. A writer MUST support `eddsa-jcs-2022`; `ecdsa-jcs-2019` MAY be used for a hardware-backed signer.\n\n**Reading.** After opening a record a reader MUST, before showing any member of it or trusting its `file`: (1) parse it as this object and refuse an unknown member; (2) verify `proof` against `author`'s DID document, for `assertionMethod`, as that document stood when the host stored this version's body (*Which DID document*); (3) check that `roomId`, `key` and `version` equal the location the record was sealed at — the record's `roomId` and `key`, and `sealed.version` where present, else the record's `version` (`SealedRecord`); (4) on an `attributed` room, check that `author` equals the `author` the host recorded for the record. A reader MUST refuse a record that fails any of these, and MUST NOT show it with a warning instead; the exceptions, *Which DID document* and *An author whose DID does not resolve*, show a placeholder and none of the record.\n\n**Which DID document.** Rule (2) verifies the proof of the version the reader reads against `author`'s DID document **as it stood at the host's `bodyStoredAt`** for that version (`RecordMetadataV3`) — when the host stored the body that version carries, which an edit moves and a curation does not. Not at the proof's own `created`, which the author chose, and not only against the document as it is now. A key the author rotated away after `bodyStoredAt` still verifies the version; a key rotated away before it does not. Where the author's DID method keeps its history — `did:webvh`, resolved with `versionTime` — a reader resolves the document as of `bodyStoredAt`, and a proof that fails against it is refused like any other. Where the method keeps no history, a reader can only use the current document, and a proof that fails against it may be a forgery or may be a key rotated away since the version was written, which the reader cannot tell apart: it MUST show such a record as the placeholder below — its author cannot be verified, nothing of it shown — and MUST NOT drop it silently. Where the reader has no `bodyStoredAt` — a host that predates it, or a read that does not carry it — it uses the current document, and treats a proof that fails there the same way.\n\n**A record curated before `sealed.version` existed.** A host that predates `SealedRecord.version` moved such a record's version without recording the one it was sealed at, so it opens at neither. Where a record carries no `sealed.version` and does not open at its own `version`, a reader MAY try each earlier version in turn, newest first, and use the first at which it opens; rule (3) then checks the body against that version. It MUST NOT try a version greater than the record's own. The AEAD makes a wrong guess fail rather than mislead, and the author's signature over the location makes the version that opened the one the author wrote — so the search recovers the record without trusting the host for the answer.\n\n**Why the location is signed as well as sealed.** The AEAD stops the host relocating ciphertext, but every member can open and re-seal a record. Without `roomId`, `key` and `version` under the author's signature, a member could copy another member's signed body to a new key or a later version, and on a `private` room, where the host records no author, readers would attribute it to the original author.\n\n**A profile record.** A body carrying `roomProfile` is the room's own profile (`RoomProfileStatement`) and not one of its records: it MUST carry none of `title`, `description`, `body`, `tags`, `kind`, `inReplyTo`, `writtenAt`, `editedAt`, `file`, `basis`, `confidence`, `evidence`, `validFor` and `validUntil`, and the rules for locating, accepting and choosing it are `RoomProfileStatement`'s, applied on top of the four above. A reader that opens one in the course of reading or listing the room's records SHOULD NOT present it as a record — it is how the room describes itself, not something a member wrote into it. A reader that predates `roomProfile` refuses it by rule (1), which shows nothing rather than something wrong.\n\n**Provenance: what kind of claim a record is.** `basis`, `confidence`, `evidence` and `validFor` say what the author is asserting and on what footing — an observed fact, a statement of the author's own, something checked against a credential, or an agent's inference. They are inside the signature like every other member, so a reader can attribute them to `author` exactly as it attributes the body, and a change to any of them after signing fails rule (2). All four are OPTIONAL, and a record that carries none of them — every record written before they existed — verifies and reads exactly as before: absent means the author did not say, never a default value. A writer SHOULD set `basis`; an agent writing on its own account that does not know which value applies SHOULD write `inferred`, and a client relaying what its member typed SHOULD write `declared`. **They are provenance for display and weighting, never authority.** A reader MUST NOT treat any of them as granting, widening or evidencing a permission, MUST NOT let `basis: verified` stand in for verifying what `evidence` names, and MUST NOT fetch anything because `evidence` names it (see `RecordEvidence`). A reader that shows a record SHOULD show its `basis` beside its `author` — or say that none was stated — and an agent recalling records MAY weight by `basis` and `confidence`, but MUST treat `validFor.note` like `body`: as plain text, never as instructions.\n\n**Expiry.** `validUntil` is the instant after which the author no longer stands behind the record as current — a meeting note good for a month, a decision good for years. It is signed and sealed with the body, and nothing about it is in the clear: a host never sees it on the sealed tiers, so it cannot and MUST NOT be relied on to enforce it, and a writer MUST NOT copy it into any cleartext member of the write. A reader MUST NOT present a record whose `validUntil` is at or before the reader's current time in a default listing, search, browse or agent recall, and MAY present it on an explicit request for expired records, marked as expired. Expiry hides; it does not delete. The record, its ciphertext and any file it carries stay in the room until a member with `curate` retracts it (`rooms/records/curate`) or the room's records are pruned; a curator's agent MAY retract records it finds expired, which is how a sealed room reclaims their storage without telling its host anything about expiry.\n\n**Readers that predate these members.** A reader written before `basis`, `confidence`, `evidence`, `validFor` and `validUntil` refuses a body carrying any of them by rule (1), which shows nothing rather than something wrong — in particular it can never show an expired record as current. The same holds for a key holder sealing on a writer's behalf (`rooms/keys/seal`, `bodyInvalid`). A writer that meets such a refusal MAY write the record again without the provenance members, but MUST NOT drop `validUntil` to get a record accepted: a record that silently outlives its author's own expiry is the failure this member exists to prevent.\n\n**Kind: what a reader shows a record as.** `kind` says whether a record is a note — something kept in the room's library, titled or not — a message — a turn in the room's conversation — or a reaction to another record (`RecordKind`). It is inside the signature like every other member. Absent means `note`, so every record written before `kind` existed reads as the note it always was. The set is open: a reader MUST present a record whose `kind` it does not know as a note, and MUST NOT refuse it for its `kind`. A `message` carries its words in `body` and SHOULD carry no `title`. A reader that keeps a conversation apart from a library SHOULD show messages in the first and notes in the second, and MAY show both together. A reader MUST NOT treat `kind` as authority: it describes the record and confers nothing.\n\n**Untitled records.** A reader that keeps a conversation apart from a library MAY treat a record with no `kind` and no `title` as a message — it is how a writer that may not yet use `kind` writes one (*When a writer may use these members*) — and a reader that does so shows such records and records of `kind: message` in the same conversation, ordered together. Where it shows such a record as a message, it renders its `body` as plain text, as it renders a `message`'s; where it shows it as a note, it renders markdown (*What `body` is*).\n\n**What `body` is.** On a `message`, `body` is plain text: a reader MUST NOT render it as markup — not as markdown, not as HTML, not as a link it follows — and shows its characters as written. A reader never follows a URL in a record by itself; it MAY offer to open one only after the member explicitly asks to and confirms. On a `reaction` it is the reaction's value (*A reaction's value*), plain text likewise. On a `note`, and on a record of a kind the reader does not know, which it shows as a note, it is markdown, rendered inert. On a record with no `kind` and no `title` it follows how the reader shows it: plain text where it is shown as a message (*Untitled records*), markdown where it is shown as a note. On a record carrying `file` it is also the file's caption (*A file's caption*), plain text or markdown by the same rule; a `message` carrying `file` with an empty `body` is a photo or a file sent with no caption.\n\n**When it was written.** `writtenAt` is the instant the author wrote the record (`RecordWrittenAt`), in UTC, signed with the body. It is OPTIONAL on a note; a `message` or a `reaction` SHOULD carry it. **It does not move when the record is edited:** a writer rewriting a record MUST carry the `writtenAt` of the version it rewrites, unchanged; what marks an edit is `editedAt` (*Edits*). A reader orders a room's messages by `writtenAt`, then by `key` where two are equal; a message without one is ordered by the host's `createdAt` for it (`RecordMetadataV3`), which stands in for it, else by its `updatedAt`. A reader MAY instead order a conversation by `createdAt` throughout — the order in which the room received its records — rather than by `writtenAt`; the rules below about an implausible or backdated `writtenAt` still say what it shows. **The host's times.** `createdAt` is when the host stored the record's first version, and neither an edit nor a curation moves it; `updatedAt` is when the version the reader reads was stored, and both move it. So `writtenAt`, which is also kept across edits and curation, is compared with `createdAt`: against `updatedAt` an edit made a day later, or a pin, would read as a record claiming to be older than it is. Where the reader has no `createdAt` — a host that predates it, or a listing that does not carry it — it falls back to `updatedAt` as stated below. **It is the author's claim, not a time anyone attests.** A reader MUST treat as implausible a `writtenAt` later than the host's `createdAt` for the record, or, where it has none, later than the `updatedAt` for the version it reads, or, where it has neither, later than the instant it read the record — in each case by more than five minutes, for clock skew — and a rewrite whose `writtenAt` differs from the version it rewrote, where the reader holds that version. A reader orders an implausible record by `createdAt` (else by `updatedAt`, else by the instant it read it), and MUST NOT show the claimed time as when it was written. **Backdating.** A `writtenAt` more than 24 hours before the host's `createdAt` for the record claims to have been written well before the room received it. A reader MUST order such a record by `createdAt`, not by `writtenAt`, and MUST show that it arrived later than it claims — a record may be written offline and sent later, but a member must not be able to place a message silently in the room's past. Within 24 hours a reader MAY say how long after writing the room received it. Where the reader has no `createdAt`, a `writtenAt` long before `updatedAt` is not by itself implausible, since an edit or a curation moves `updatedAt`, and a reader MAY say how long after writing the room received it. Like every member, it confers nothing.\n\n**Replies.** `inReplyTo` names the record this one answers — another record of the same room, by `key`, and OPTIONALLY the `version` the author was answering (`RecordReference`). Any kind may carry it: a message may answer a note, and a note a message. It is signed, so a reader attributes the reply's target to `author` as it attributes the body. A reader resolves it only against records it can already list or read in this room with the authority it holds, and MUST NOT fetch anything else because of it. Where the target cannot be read — never written, withdrawn (*Withdrawing a message*), retracted, pruned, expired, sealed under an epoch the reader cannot open, or failing the reading rules above — the reader MUST still show the reply, marked as answering a record that is not available, and MUST NOT show anything of a target it could not verify.\n\n**Whether the target has changed.** Where `version` is present, a reader that shows the target SHOULD say that it has changed since only when the target's **content** differs from its content at that version — never because its `version` moved, which curation also does (`rooms/records/curate`). A record's content is every member of its body except `proof`, its location (`roomId`, `key` and `version`) and `editedAt`: on the sealed tiers the signed `SealedRecordBody`, on an `open` room the `cleartext` of `rooms/records/put`. Curation sets only a record's standing — its `status` and pinning, which are outside the body on every tier — so it never changes content. On a sealed tier a target whose body was written at the version the reply names — the body's own `version`, served as `sealed.version` once the record is curated — is unchanged, however far the record's own version has moved. Where the body was written at a later version, the reader compares the two contents if it holds the named version; if it does not, it MAY say the target was edited when the target carries an `editedAt` later than the reply's `writtenAt`, and otherwise says nothing.\n\n**Nothing answers a reaction.** A writer MUST NOT name a record of kind `reaction` in `inReplyTo`, whatever the kind of the record it writes: a reaction is not answered or reacted to. A reader that reads the target of an `inReplyTo` and finds a `reaction` MUST ignore the record naming it — show it nowhere, count it as no reaction — and refuses that record alone, never the room's others. This is a reader's rule. No host enforces it, and on the sealed tiers none could: a host never sees `kind`.\n\n**Reactions.** A record of kind `reaction` is a short response to another record: its target in `inReplyTo`, which it MUST carry, and its value in `body` — an emoji or a few words (*A reaction's value*). It SHOULD carry no `title`, `description`, `tags` or `file`. A reader MUST NOT show a reaction as a note or a message; it SHOULD show the values beside the target. A reader shows no reaction whose target is not available, and MUST NOT show a reaction that lacks `inReplyTo` or whose value is longer than 64 code points or holds a line terminator; it refuses that record alone, never the room's others. Like every record on a sealed tier, a reaction's key is opaque: a writer MUST NOT encode its target, its value or its `kind` in the key.\n\n**A reaction's value.** A reaction's value is its `body` normalised to Unicode Normalization Form C (NFC) with every U+FE0E and U+FE0F (variation selectors 15 and 16) then removed, so that `❤` and `❤️` are one value. A reader and a writer apply that normalisation before both the length check and any comparison. The value is at most 64 Unicode code points, counted after normalisation, and is one line: it holds no line terminator (U+000A, U+000B, U+000C, U+000D, U+0085, U+2028 or U+2029). A value that is empty, or holds only White_Space characters, is empty, and a version whose value is empty withdraws the reaction. Two values are the same when their normalised forms are equal code point for code point. The normal form is for measuring and comparing only: a reader MAY show a value in its fully qualified form, with U+FE0F where an emoji takes it.\n\n**Counting reactions.** One reaction per author, value and target: of the reactions whose `inReplyTo.key` names the same record, those with the same `author` and the same value count once, however many records carry them; one author's different values are different reactions. A new version of a reaction record with a different non-empty value changes that author's reaction: the earlier value no longer counts for the record, and the new one does. A writer reacting with a value it already holds a reaction record for, on the same target, SHOULD write a new version of that record — the same key — rather than a new one, so that a retry after a lost response leaves one record and not two. A reaction is withdrawn by its author writing a new version of the same reaction record with an empty value, and a reader counts nothing for a current version whose value is empty. **Only the reaction's author withdraws it:** an empty version counts as a withdrawal only when its `author` is the `author` of the version it replaces; a reader that holds an earlier version by another author MUST NOT count the empty one as withdrawing that author's reaction, and goes on counting the earlier version. Since every record carrying the same author, value and target counts, a writer withdrawing a reaction MUST withdraw every reaction record its author holds with that value and target.\n\n**Removed members.** A reaction counts for as long as its record is current, whether or not its author is still a member: a removed member's reactions keep counting until a member with `curate` retracts them (`rooms/records/curate`). A member who returns under a new DID is a different author, and their reactions count beside the ones their earlier DID left, not as the same person's.\n\n**Edits.** A record is rewritten by writing a new version under the same key (`rooms/records/put`), and that is how a message or a note is edited. The writer keeps `writtenAt` (*When it was written*) and, where the room's profile lists it, sets `editedAt` (`RecordEditedAt`) to the instant it made the edit; the first version of a record MUST NOT carry `editedAt`. A reader shows a record as edited when the version it shows carries `editedAt`, and MUST NOT infer an edit from `version`, which curation also moves. `editedAt` is the author's claim, as `writtenAt` is: a reader treats one earlier than the record's `writtenAt`, or later than the host's `updatedAt` for the version by more than five minutes, as implausible, and then shows that the record was edited but not when. The new version is a whole body, signed by whoever wrote it. A reader showing a version whose `author` differs from the version it last showed for that key MUST show the new author, and MUST NOT present it as an edit by the earlier one.\n\n**What a new version keeps.** A new version MUST keep the `kind` of the version it rewrites, absent included, and a new version of a reaction MUST keep its `inReplyTo`. A reader that holds an earlier version of a record and reads a later one that changes either MUST refuse that version: it MUST NOT show it as the record, nor count it as a reaction, and it refuses that version alone, never the room's others. Without this a member with `write` could rewrite another member's message as a reaction, and every reply to it would disappear (*Nothing answers a reaction*), or move another member's reaction to a record they never reacted to. A reader that has never read an earlier version has nothing to compare. On an `open` room a host MAY refuse a new version of a message or a reaction by anyone but its original author (`rooms/records/put`, Host item 15); on the sealed tiers no host can, since it never sees `kind`, and these reader rules are the only defence (`rooms/records/put`, *Security & Privacy*).\n\n**The record's original author.** Several rules turn on whether a new version comes from the record's own author. A reader that holds an earlier version compares with it. Where a listing or a read gives the host's `createdBy` (`RecordMetadataV3`) — the author of the record's first version, recorded by the host on `open` and `attributed` rooms — a reader that sees the record for the first time uses it as the record's author for those rules: a current version whose `author` is not `createdBy` is shown as a rewrite by that author and never as the original author's edit (*Edits*); an empty version of a message or a reaction by anyone but `createdBy` is not a withdrawal (*Withdrawing a message*, *Counting reactions*), and such a reaction is counted for its own author, not for `createdBy`. `createdBy` is the host's word: on `attributed` the host already attributes every version, so it tells a reader nothing the host could not have lied about before; it cannot tell a reader whether a rewrite kept `kind` or `inReplyTo`, which only an earlier version can. On `private` there is no `createdBy`, and a first-time reader has only the version in front of it.\n\n**Withdrawing a message.** The author of a `message` withdraws it by writing a new version of it — the same key, keeping its `kind` and any `inReplyTo` — with an empty `body` and no `file`. A reader shows a current version of a message with an empty `body` and no `file` as withdrawn, or not at all, and MUST NOT show any earlier version's content in its place; replies to it stay, as answering a record that is not available (*Replies*). It counts as a withdrawal only when its `author` is the `author` of the version it replaces; one by another member is that member's rewrite (*Edits*), never the author withdrawing their own message. Withdrawing needs only `write`. It is a rewrite, not a retraction: the record keeps its key and its place, and only a member with `curate` retracts it (`rooms/records/curate`).\n\n**Tombstones.** A retracted record keeps its key and version and nothing of its body (`rooms/records/curate`). On the sealed tiers `kind`, `inReplyTo`, `writtenAt` and `editedAt` were inside the sealed body and go with it. On an `open` room they were in `cleartext`, which is the body there, so an open room's tombstone keeps none of them either (`rooms/records/put`, *Retention*). A reader that held an earlier version of a retracted record uses the `kind` and the place in the conversation that version gave it — a retracted message shown as retracted where the message was, a retracted reaction counted as no reaction. A reader that held none shows the tombstone in no conversation and in no reaction count. Replies to a retracted record stay, as answering a record that is not available (*Replies*).\n\n**An author whose DID does not resolve.** Rule (2) fails in two ways, which a reader MUST tell apart: `author`'s DID does not resolve to a DID document — it no longer resolves, or its method reports it deactivated — or the proof does not verify against the document it resolves to. A record whose proof does not verify is refused, as above, except where *Which DID document* requires the placeholder instead. For a record whose author's DID does not resolve, a reader MAY, instead of refusing it, show a placeholder saying that the record's author cannot be verified, in the room's conversation, ordered by the host's `createdAt` for it, else its `updatedAt`, so that replies naming its key still anchor to it. It MUST NOT show or use any member of the body — not its `body`, `title`, `file`, `kind`, `inReplyTo` or `writtenAt` — MUST NOT count it as a reaction, and MUST NOT accept it as the room's profile (`RoomProfileStatement`). A placeholder is not a record shown with a warning: it shows none of the record.\n\n**A file's caption.** On a record carrying `file`, `body` is the file's caption. A reader that shows the file SHOULD show its `body` with it. A manifest's `width`, `height` and `preview` let a reader lay out and show an image before fetching it; they are advisory (`FileManifest`).\n\n**When a writer may use these members.** `kind`, `inReplyTo`, `writtenAt` and `editedAt`, and the `FileManifest` members `width`, `height` and `preview` inside `file`, are gated together. A conforming reader that predates them refuses a body carrying any of them by rule (1), as it refused provenance before it knew it: a message written with `kind` is invisible to it rather than shown wrong. **Not every reader conforms.** A reader that ignores the members it does not know shows a reaction as a post holding its value, and a withdrawn reaction as an empty post — which is why a room's readers move first, and the room says when its writers may follow. A writer MUST NOT write `kind`, `inReplyTo`, `writtenAt`, `editedAt`, `width`, `height` or `preview` into a room unless the room's current profile (`RoomProfileStatement`, as a reader resolves it) lists that member in `recordMembers` (`RoomProfile`). No profile, a profile without `recordMembers`, or one the writer cannot resolve means none of them may be written — the most restrictive reading. A writer MAY rely on a profile it resolved within the room's current epoch, without resolving it again for each write; once the room's epoch advances, it resolves the profile again before writing any of them. A writer that may not use them MAY write a message as a record with `body` and no `title`, which every reader shows (*Untitled records*). On the sealed tiers a writer whose key holder signs or seals for it needs one that accepts these members: `rooms/keys/seal/0.3` does, which `trust-task-discovery` tells it, and a key holder that predates them refuses them with `bodyInvalid`, as it refuses provenance.\n\n**Turning them on.** Whether a room's readers are ready is decided out of band by the room's owner or a curator: nothing in this family tells them which readers the room's members use. They list a member in `recordMembers` only once every reader they expect in the room accepts it — non-conforming readers included, which show the new records wrong rather than not at all — and in this order: (1) the readers, including every reader of the room's profile, since a reader that predates `recordMembers` refuses the profile carrying it; (2) the owner's key holder, which re-writes the profile under each new epoch after a removal (`RoomProfileStatement`, `rooms/keys/profile/write`) and MUST accept a profile carrying `recordMembers` before any profile carries it — one that refused it would re-write an older profile, or none, and the next removal would silently turn the members off; (3) on the sealed tiers, the key holders that seal for the room's writers (`rooms/keys/seal/0.3`); (4) then the profile. No room lists them by default. A room's profile lists them when its owner or a curator writes it with them — with `rooms/keys/profile/write` on an `attributed` or `private` room, or by writing the record at `room-profile` with `rooms/records/put` on an `open` one — both of which need `curate` or `admin`.",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The room the record was written in, exactly as on the wire."
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The record's key, as in `rooms/records/put`."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The version the writer intended the record to take, as sealed with `rooms/keys/seal`: the version the body is bound to. A record curated since keeps its body and moves to a new version, and carries this one as `sealed.version` (`SealedRecord`)."
+        },
+        "author": {
+          "type": "string",
+          "pattern": "^did:",
+          "description": "The DID of the party that wrote the record: the member, or the agent acting under an attenuated credential, whose key signed `proof`. On a `private` room this is the only attribution there is."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 1048576,
+          "description": "The record's text: plain text on a `message`, the value on a `reaction`, markdown on a note and on a kind the reader does not know (*What `body` is*). Human-readable, never a model-optimised blob, and rendered inert."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "maxItems": 32
+        },
+        "kind": {
+          "$ref": "#/$defs/RecordKind"
+        },
+        "inReplyTo": {
+          "$ref": "#/$defs/RecordReference",
+          "description": "The record this one answers or, on a `reaction`, responds to. See *Replies* and *Reactions*."
+        },
+        "writtenAt": {
+          "$ref": "#/$defs/RecordWrittenAt"
+        },
+        "editedAt": {
+          "$ref": "#/$defs/RecordEditedAt"
+        },
+        "basis": {
+          "$ref": "#/$defs/RecordBasis"
+        },
+        "confidence": {
+          "$ref": "#/$defs/RecordConfidence"
+        },
+        "evidence": {
+          "$ref": "#/$defs/RecordEvidenceList"
+        },
+        "validFor": {
+          "$ref": "#/$defs/PermittedUse"
+        },
+        "validUntil": {
+          "$ref": "#/$defs/RecordValidUntil"
+        },
+        "file": {
+          "$ref": "../0.1/blobs.schema.json#/$defs/FileManifest",
+          "description": "Present when the record carries a file. Its `blobRef` MUST be the one the record names in `blobs`."
+        },
+        "roomProfile": {
+          "$ref": "#/$defs/RoomProfileStatement",
+          "description": "Present only on the room's profile record, which then carries no `title`, `description`, `body`, `tags` or `file`. See `RoomProfileStatement`."
+        },
+        "proof": {
+          "type": "object",
+          "description": "The author's Data Integrity proof over every other member."
+        }
+      }
+    },
+    "RecordBasis": {
+      "title": "RecordBasis",
+      "type": "string",
+      "enum": [
+        "declared",
+        "observed",
+        "verified",
+        "inferred"
+      ],
+      "description": "What kind of claim a record is, as its author states it. OPTIONAL wherever it appears; absent means the author did not say, and a reader shows it as unstated rather than assuming any of these.\n\n  - `declared` — the author's own statement: a decision, a preference, an intention, a commitment. True because the author says so, and only as far as the author speaks for it.\n  - `observed` — something the author saw, measured or was told directly, recorded as found.\n  - `verified` — checked against evidence that somebody else can check again, such as a credential or another record. A record that says `verified` SHOULD name that evidence in `evidence`; one that does not is an unsupported claim to have checked, and a reader SHOULD present it so.\n  - `inferred` — derived by reasoning from other information: an agent's conclusion, a summary's generalisation, a model's guess. The value an agent writer uses when it does not know which of the others applies.\n\nThe values are the author's account of their own record, signed with it. They are not checked by anybody, confer nothing, and say nothing about whether the record is right — `inferred` can be correct and `observed` mistaken. Aligned with the provenance vocabulary of personal agent memory, so that a record moved between a member's memory and a room keeps its meaning."
+    },
+    "RecordConfidence": {
+      "title": "RecordConfidence",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "The author's own estimate, from 0 to 1, that what the record says is correct. OPTIONAL; absent means no estimate was given, never 1. Meaningful only beside the author who gave it: two writers' numbers are not on one scale, so a reader MUST NOT rank records by `confidence` across authors as though they were, and an agent that weights by it SHOULD weight within an author's own records. Never authority."
+    },
+    "RecordEvidenceList": {
+      "title": "RecordEvidenceList",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/RecordEvidence"
+      },
+      "description": "What the author offers in support of the record: other records and credentials, by reference. OPTIONAL; absent means none was named, and an empty array is not a permitted spelling of that. Order carries no meaning. Bounded so that a reader's cost of showing a record's support is bounded too."
+    },
+    "RecordEvidence": {
+      "title": "RecordEvidence",
+      "description": "One thing a record cites in its support, discriminated by `kind`.\n\n  - `record` names a record of a room by its key, and optionally the version cited and the room. Absent `roomId` means the record's own room.\n  - `credential` names a credential by its `id`, and optionally a digest of the credential as cited.\n\n**A reference, never a locator, and never proof.** A reader MUST NOT fetch, resolve or dereference a `credentialId` because a record names it, and MUST NOT read a record of another room on the strength of a citation: the rule that a room's identifiers are identifiers and not addresses (`AuthorityPresentation`) applies here for the same reasons — fetching would signal to whoever answers which member read which record, and when. A reader MAY show a cited record of the same room that it already holds or reads anyway, and MAY match a cited credential against ones its member already holds. What the citation proves is only that the author cited it; whether the evidence exists, says what the author claims, or supports the record is for whoever follows it up to judge.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RecordEvidenceRecord"
+        },
+        {
+          "$ref": "#/$defs/RecordEvidenceCredential"
+        }
+      ]
+    },
+    "RecordEvidenceRecord": {
+      "title": "RecordEvidenceRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "key"
+      ],
+      "description": "Cites a record of a room.",
+      "properties": {
+        "kind": {
+          "const": "record"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The cited record's key, as in `rooms/records/put`. Opaque on the sealed tiers, like every key there."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The version cited. OPTIONAL; present, it pins the citation to what the record said then, since a record can be rewritten under the same key. A reader that shows a later version SHOULD say that it is not the one cited."
+        },
+        "roomId": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The cited record's room. Absent means the citing record's own room. A citation into another room tells the reader that room's identifier, so a writer SHOULD NOT cite into a room the citing room's readers are not meant to learn of."
+        }
+      }
+    },
+    "RecordEvidenceCredential": {
+      "title": "RecordEvidenceCredential",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "credentialId"
+      ],
+      "description": "Cites a credential.",
+      "properties": {
+        "kind": {
+          "const": "credential"
+        },
+        "credentialId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The credential's `id`. An identifier: never fetched because a record names it."
+        },
+        "digest": {
+          "$ref": "../../../_framework/0.3/framework.schema.json#/$defs/DigestMultibase",
+          "description": "OPTIONAL. A digest of the credential as cited — the SHA-256 multihash of its RFC 8785 (JCS) canonicalization, `proof` included — so a reader holding a credential with this `id` can tell whether it is the one the author meant."
+        }
+      }
+    },
+    "PermittedUse": {
+      "title": "PermittedUse",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "What the author permits the record to be used for — for example, that a learner's record is for instructional personalisation only. OPTIONAL; absent means the author stated no limit beyond the room's own terms.\n\n**Two halves, because purpose has both a machine and a human reading.** `purposes` names purposes by IRI, so that an agent can match them without parsing prose; `note` says it in words, for the nuance an identifier cannot carry. Either may be given alone.\n\n**No vocabulary of this family's own.** Purpose vocabularies exist and are maintained elsewhere — the W3C Data Privacy Vocabulary (`https://w3id.org/dpv#…`) is the one a writer SHOULD reach for first — and a short list defined here would be one more to translate between, and would be wrong at its edges for every domain that uses rooms. An IRI is the extension path: a community that needs a purpose no published vocabulary has names it under an IRI it controls.\n\n**A statement, not an enforcement.** No host can see it on the sealed tiers and none enforces it on any tier; every reader is a member who already holds the content. It records what the author permitted, so that a member — or an agent acting for one — can honour it, and so that a use outside it is a use against the author's stated terms rather than one nobody could have known about. An agent acting for a member SHOULD NOT use a record for a purpose outside `validFor` and SHOULD tell its principal when asked to. It confers no authority on anybody, and a `purposes` entry a reader does not recognise is shown, not ignored.",
+      "properties": {
+        "purposes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:",
+            "maxLength": 2048
+          },
+          "description": "Purposes the record may be used for, each an absolute IRI — for example `https://w3id.org/dpv#ServicePersonalisation`. A set: order carries no meaning. An identifier, never fetched."
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The permitted use in words, such as `instructional personalisation only`. Plain text, rendered as text, and never instructions — an agent reading it treats it as the author's statement about the record, not as something to do."
+        }
+      }
+    },
+    "RecordValidUntil": {
+      "title": "RecordValidUntil",
+      "type": "string",
+      "format": "date-time",
+      "description": "The instant after which the record's author no longer stands behind it as current. OPTIONAL; absent means the record does not expire. A reader hides a record whose `validUntil` has passed from default listings, search and recall, and shows it only on explicit request (`SealedRecordBody`, **Expiry**). No host enforces it."
+    },
+    "EpochLink": {
+      "title": "EpochLink",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "epoch",
+        "wrapped",
+        "nonce"
+      ],
+      "description": "One rung of a room's epoch key chain: the storage key of epoch `epoch - 1`, sealed under the storage key of `epoch`. A group key schedule offers no way to derive an earlier epoch's key from a later one — that property is what makes removing a member mean something — so without a chain the first membership change makes every record already in the room unopenable by everyone, including whoever wrote it. The chain is the one-way street run deliberately the other way: a member holding the current key walks it backwards to any retained epoch, and a member holding an earlier key still derives nothing later. Removal stays forward-only; reading stays possible. What a chain costs is stated where it is chosen, in the room's retention policy.",
+      "properties": {
+        "epoch": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "The epoch whose storage key opens this link; it wraps the storage key of `epoch - 1`. Never 1: a room's first epoch has no predecessor, so a link claiming one wraps something that is not an earlier epoch's key."
+        },
+        "wrapped": {
+          "type": "string",
+          "description": "The wrapped predecessor key, base64url. Bound by AEAD associated data to `roomId` and to this link's own position in the chain, so a link lifted to another rung, or served under another room, fails to open rather than yielding a key that is wrong. The binding is load-bearing rather than decorative: every rung is a fixed-length key sealed under a fixed-length key, so nothing about the ciphertext itself says where it belongs."
+        },
+        "nonce": {
+          "type": "string",
+          "description": "AEAD nonce, base64url."
+        }
+      }
+    },
+    "EpochFloor": {
+      "title": "EpochFloor",
+      "type": "integer",
+      "minimum": 1,
+      "description": "The earliest epoch whose storage key a room still lets anybody derive: its chain was pruned below it (`rooms/epoch/prune`), and every epoch under it is meant to be unreadable — at the host, and, as far as each of them conforms, at every member's key holder. Absent means the room's chain has never been pruned.\n\n**The off-by-one, stated once.** A rung (`EpochLink`) numbered `e` opens with epoch `e`'s key and yields epoch `e − 1`'s. A prune with `beforeEpoch: N` drops the rungs numbered below `N`, so rung `N` survives and still yields epoch `N − 1`'s key; the floor after it is therefore `N − 1`, never `N`. A party applying a floor `F` discards the rungs numbered `F` and below — rung `F` would yield `F − 1` — and every key for an epoch below `F`.\n\n**Monotonic.** A floor only rises. A host raises the room's to the higher of the floor it held and `beforeEpoch − 1` at each prune it performs, and never lowers it; every other party keeps the highest it has learnt for the room, from any source, and never lowers it either. A lower floor learnt later — from a stale response, or a host that has not been pruned — changes nothing.\n\n**A host** that holds a floor for a room MUST NOT store, accept or serve a rung numbered at or below it, and MUST serve the floor wherever a response can carry it (`rooms/epoch/chain` 0.2, `rooms/epoch/prune` 0.2).\n\n**A member's key holder** — and any client of the member that keeps the room's rungs or keys itself — on learning a floor `F` above the one it held, by any means (`rooms/epoch/chain` 0.2 in its own reads, `rooms/keys/backfill` 0.2, `rooms/keys/chain` 0.2 from its principal):\n  1. MUST discard every rung it holds for the room numbered `F` or below, and every storage key, file key or other key material it holds or has cached for an epoch below `F` — including one it derived in passing while applying commits through those epochs (`rooms/keys/commit`, `rooms/epoch/commits`);\n  2. MUST NOT store such a rung or key again from any source — a delivery from its principal, a backfill, a repair, a catch-up, or a host that has not been pruned — and MUST NOT ask for one;\n  3. MUST refuse to derive or use a key for an epoch below `F`, answering exactly as it answers for an epoch its chain does not reach (`beyondChain`, with an earliest epoch at or above `F`), whatever it still holds;\n  4. MUST keep `F` itself for as long as it holds anything for the room, since it is what makes items 2 and 3 enforceable after the material is gone.\n\nA key holder SHOULD learn the floor whenever it fetches rungs or catches up, and SHOULD ask for it — a `rooms/epoch/chain` 0.2 read carries it whatever `fromEpoch` and `limit` it names — at least as often as it otherwise reads the room. One that never asks never learns, and keeps what it held.\n\n**What a floor does not do, stated plainly.** It is honoured by parties that conform; it does not reach into one that does not, and it recalls nothing. Plaintext a key holder already returned, records a member already opened, files already downloaded and decrypted, exports, and any key a member's own software extracted are beyond it. What it guarantees cryptographically is what the prune guarantees: a party that had not derived a key below the floor before the host erased its rungs can never derive it afterwards. What it adds is that every conforming key holder stops being able to — so that a restart, a new device or an agent's next recall reads nothing below the floor, rather than everything its holder happened to keep."
+    },
+    "RecordMetadata": {
+      "title": "RecordMetadata",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "version",
+        "updatedAt"
+      ],
+      "description": "What `rooms/records/list` returns. Never the body: ranking happens on the client, and a host that returned every body would make the caller pay for the whole room on every listing.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The record's key within the room. On `attributed` and `private` rooms this MUST be opaque — a random identifier, never a descriptive slug. A key reading `decision/acquire-northwind` defeats the encryption sitting beside it; structured naming belongs inside the sealed body."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Server-assigned, monotonic per room."
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The epoch the record was sealed under. Absent on an `open` room."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "deprecated",
+            "retracted"
+          ],
+          "description": "Curation state. `retracted` is a tombstone: the body is gone, the key and version remain so incremental sync converges and the audit chain stays intact."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Present only on an `open` room; sealed with the body otherwise."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Present only on an `open` room; sealed with the body otherwise."
+        },
+        "author": {
+          "type": "string",
+          "description": "The member who wrote it. Present on `open` and `attributed`; on `private` the author is inside the sealed body, where only members can read it."
+        }
+      }
+    },
+    "RecordMetadataV2": {
+      "title": "RecordMetadataV2",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "version",
+        "updatedAt"
+      ],
+      "description": "What `rooms/records/list/0.2` returns: `RecordMetadata` plus `blobs`. A separate definition, not a change to `RecordMetadata`, so that `rooms/records/list/0.1` keeps the exact shape it published. Never the body.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The record's key within the room. On `attributed` and `private` rooms this MUST be opaque — a random identifier, never a descriptive slug. A key reading `decision/acquire-northwind` defeats the encryption sitting beside it; structured naming belongs inside the sealed body."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Server-assigned, monotonic per room."
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The epoch the record was sealed under. Absent on an `open` room."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "deprecated",
+            "retracted"
+          ],
+          "description": "Curation state. `retracted` is a tombstone: the body is gone, the key and version remain so incremental sync converges and the audit chain stays intact."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Present only on an `open` room; sealed with the body otherwise."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Present only on an `open` room; sealed with the body otherwise."
+        },
+        "author": {
+          "type": "string",
+          "description": "The member who wrote it. Present on `open` and `attributed`; on `private` the author is inside the sealed body, where only members can read it."
+        },
+        "blobs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../0.1/blobs.schema.json#/$defs/BlobRef"
+          },
+          "description": "The stored blobs this record names, as rooms/records/put/0.2 wrote them. Absent when it names none, when it is retracted, and on records written by put 0.1. Cleartext on every tier, as on the write, so a listing discloses which records carry files, never anything about the files beyond the blobs' sizes."
+        }
+      }
+    },
+    "CommittedRecord": {
+      "title": "CommittedRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "version",
+        "status",
+        "updatedAt"
+      ],
+      "description": "**The leaf preimage of the record tree** — the exact JSON object a host hashes into a leaf, and the exact object a reader reassembles to check a `RecordTrace`.\n\nThis definition exists because a commitment nobody but its author can recompute is not a commitment. `DataCommitment` names the tree; this names what goes into it, member by member, so that a second implementation reaches the same root over the same room. An earlier revision described the leaf as \"this family's `RecordMetadata` plus its stored content\", which reads exact and is not: `RecordMetadata` is a *projection* a listing returns — it renders `updatedAt` as a timestamp, promotes `epoch` to the top level, carries `title` and `description` lifted out of an `open` room's body, and has no `pinned` at all. A host hashing its own stored representation and a reader hashing that projection commit to different roots, and neither of them is wrong; there was simply no statement of which one counted.\n\n**It is also the response payload of `rooms/records/get` with its verification members — `dataCommitment`, `recordCount`, `headVersion` and `trace` — and `ext` removed.** That is a design decision rather than a coincidence to be maintained by hand: the reader of a single record already holds every member, so reassembling the preimage is a *deletion* rather than a reconstruction, and no copy of the ciphertext is carried twice — to be paid for on every read, and to disagree with itself.\n\nMembers are hashed in the order JCS (RFC 8785) puts them in, so nothing here depends on the order they are written or served in.\n\nNothing on the wire `$ref`s this definition, so the generated libraries emit no type for it — deliberately. A consumer derives the preimage from the response it already has (`Omit<Response, \"dataCommitment\" | \"trace\" | \"ext\">` and its equivalents), which cannot drift from that response the way a second generated struct could. The definition is here to be *validated against* and to be read.\n\n**Absence carries meaning, so every presence rule is exact:**\n  - `pinned` is present **only** when true. `\"pinned\": false` is not a committed record: absent is how false is spelled here, and accepting both spellings would give one record two roots.\n  - `epoch` is **not** a member of this object. It lives inside `sealed`, where the AEAD binds it; a top-level copy would be a second place for it to disagree with itself.\n  - `sealed` is present on `attributed` and `private`, `cleartext` on `open`, and **neither** on a `retracted` tombstone, whose body is gone.\n  - `author` is present where the tier discloses one — `open` and `attributed` — and absent on `private`, where the author is inside the sealed body.\n  - `title` and `description` are **not** members. A listing lifts them out of an `open` room's body for display; committing to them *and* to the body they came from would commit to the same bytes twice and leave a host free to choose which copy to serve.\n\nA host that omits a member it holds, or serves one it does not, produces a leaf the reader cannot reach, and the trace fails. Every way of getting this wrong fails closed, which is what lets the rules be this strict.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The record's key within the room. Also the sort key of the tree — see `DataCommitment` step 1."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Server-assigned, monotonic per room."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "deprecated",
+            "retracted"
+          ],
+          "description": "Curation state. Committed rather than left out because a host that could flip `active` to `retracted` would retract a record without touching a byte of it."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339, as `RecordMetadata` renders it and as every other timestamp in this family is spelled. A host storing epoch seconds MUST render before hashing: the digest is over the wire form, not over the storage form."
+        },
+        "pinned": {
+          "type": "boolean",
+          "const": true,
+          "description": "Present only when the record is pinned; absent means it is not. See the presence rules above — `false` is not a permitted spelling."
+        },
+        "author": {
+          "type": "string",
+          "description": "The member who wrote it. Present on `open` and `attributed`; absent on `private`, where the author is sealed with the body. Committed because on an `attributed` room the author is part of what the record means."
+        },
+        "sealed": {
+          "$ref": "#/$defs/SealedRecord",
+          "description": "The record as the host stores it on `attributed` and `private`. The **plaintext is never involved** in the commitment: the host holds ciphertext, and commits to exactly what it holds."
+        },
+        "cleartext": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "The record body on an `open` room."
+        }
+      }
+    },
+    "DataCommitment": {
+      "title": "DataCommitment",
+      "$ref": "../../../_framework/0.3/framework.schema.json#/$defs/DigestMultibase",
+      "description": "The root of the room's record tree — a host's commitment to *which records the room holds*, as distinct from what any one of them says.\n\nA room's records are already signed and room-bound, so a host cannot forge, alter or relocate one. What it can do for free is stay silent: a listing that omits a record is indistinguishable from a room that never held it. This value is what makes that omission detectable, so it is only worth anything when the reader can compare it against a copy the host did not choose for them — one it gave another member, one it gave the same member earlier, or the witnessed anchor. A commitment read once, in isolation, proves nothing.\n\n**A root on its own is not comparable, and an earlier revision of this description said it was.** It claimed a host showing two members two different roots had been caught, which is false while a room can move between two reads: the host answers *there was a write*, and nothing contradicts it. Comparison needs the state each root describes, which is what `HeadVersion` names — and `RecordCount` is the other half of the same omission, since Certificate Transparency's signed tree head is a root *and a size* and this family shipped only the root. A reader that receives a `dataCommitment` **without** them can use it against a witnessed anchor, where the epoch pins the state, and **MUST NOT** compare it against another root.\n\n**The construction is normative**, because two hosts that compute different roots over the same room make every comparison meaningless:\n  1. Take every record the room holds — including tombstones, which are records — and order them by `key` using unsigned byte order.\n  2. Leaf: `SHA-256(0x00 || JCS(record))`, where the record is a `CommittedRecord` — that definition fixes the members exactly, and this step used to name a *projection* instead, which two implementations could read two ways — JCS is its RFC 8785 canonicalization, and `0x00` is RFC 6962's leaf-domain prefix.\n  3. Internal node: `SHA-256(0x01 || left || right)`.\n  4. A level with an odd number of nodes promotes the last one unchanged. It MUST NOT be duplicated: duplicating makes a tree of n leaves collide with one of n+1 whose last is repeated, so two different rooms commit to the same root.\n  5. A room holding no records commits to `SHA-256(\"\")`, a distinguished value rather than zeroes — a root of zeroes is what an uninitialised buffer looks like, and an empty room is a real state a host must be able to commit to honestly.\n\nThe leaf covers the whole record rather than its body, and that is deliberate: a host that could flip `status` from active to retracted, move `pinned`, or rewrite `author` on an `attributed` room would rewrite what the room means without touching a byte of ciphertext. The **plaintext is never involved** — on the sealed tiers the host holds ciphertext and commits to exactly what it stores.\n\nThe commitment is over the **whole room**, never over the page being returned. A page-scoped root is one a host satisfies by construction and could never fail.\n\nProving that a *particular* record sits under this root is a separate question, answered by `RecordTrace` on a single-record read. A commitment catches a host that equivocates; a trace binds one record to what the host committed to. Neither is the other, and a reader wanting completeness needs both plus a root it did not get from the host it is checking."
+    },
+    "RecordCount": {
+      "title": "RecordCount",
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many records the room held when `DataCommitment` was computed — the number of leaves in that tree, tombstones included, since a tombstone is a record.\n\n**Why a root needs this.** Certificate Transparency's signed tree head is a root *and a tree size*; this family shipped the root alone, and the half that was dropped is the half that makes a listing checkable. A reader holding a **complete, unfiltered** listing cannot recompute the root — a leaf commits to a whole record and a listing returns a projection without the body — but it can count. A host that omits a record from a listing while committing to a tree that holds it now contradicts itself in the same response, with no second party and no anchor involved.\n\nA host can of course understate both together. That is the point rather than a hole: the omission stops being silence and becomes a **specific claim about how many records the room holds**, which any other member's view, or any writer's signed put acknowledgement, contradicts. Making an omission attributable is the whole of what this machinery buys; it never claimed to make one impossible.\n\n**It counts the room, never the page.** The same rule `DataCommitment` states, and the same trap: a count scoped to what was returned is one a host satisfies by construction. So this is only comparable against a listing read to the end with **no** `prefix` and **no** `sinceVersion` — a filtered listing legitimately holds fewer, and a reader that compares one against this has found a discrepancy it created itself."
+    },
+    "HeadVersion": {
+      "title": "HeadVersion",
+      "type": "integer",
+      "minimum": 0,
+      "description": "The highest version among the records `DataCommitment` covers. `0` for a room that holds none.\n\n**Derived from the same set as the root, and not read from the room's own counter.** The two agree for any host that has never erased a record — versions are assigned strictly increasing and a retraction keeps its tombstone — but they are not interchangeable, because a root and a counter are *two reads*, and two reads are not a snapshot. A write landing between them yields a pair that is individually correct and jointly false: two members holding roots taken over different trees, labelled with one version. That reads as equivocation and is not, and a **false accusation discredits the mechanism rather than the host** — the worst outcome available here. Taken from the committed set, the version cannot disagree with the root it labels, whatever else is happening to the room.\n\n**A prune is the one mutation that removes leaves, and it takes a version too.** A host that **erases** records — as distinct from retracting them, which leaves a tombstone in the tree — moves the root, and taken from the records alone this value need not move with it: it would stay put, or even fall if the erased record held the highest version, and two members straddling the erasure would see one version over two roots, which reads as equivocation and is not. So on a room whose records have been pruned (`rooms/records/prune`), this value is the higher of the highest version among the records the tree covers and the `version` of the room's latest `RecordPrune`, computed from the same snapshot as the root. A prune takes the next version from the room's counter exactly as a put or a curation does, so the pair stays a snapshot: a root and a head that agree before a prune and a root and a head that agree after it, never one head over two roots. A room that has never been pruned is unaffected.\n\n**This is what makes two roots comparable at all**, and without it the comparison this family is built on cannot be performed. A room moves: every put, curate and retraction assigns a new version, so two roots taken at two moments differ legitimately and a reader learns nothing from the difference. Shown two different roots, a host that equivocated and a host that was merely written to are indistinguishable — the first can always answer *the room moved between your reads*, and nothing contradicts it.\n\nA version is assigned by exactly the mutations that change the tree — every put, curate and retraction takes the next one — so the highest of them names the **state** the root describes. Two roots carrying the same `headVersion` and differing is a host caught: there is no write to attribute the difference to. Two roots carrying different ones are simply two moments, and a reader should draw nothing from them.\n\nA host can lie about this number too, and it is then lying about the counter it also uses for optimistic concurrency (`expectedVersion`) and for incremental sync (`sinceVersion`) — so a member holding a signed acknowledgement of a write at version `V` contradicts any head below `V` directly.\n\n**Not a timestamp.** A time is host-asserted, unverifiable and useless for this: two roots a second apart are not evidence of anything, while two roots at one version are."
+    },
+    "RecordPrune": {
+      "title": "RecordPrune",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "prunedAt",
+        "removed"
+      ],
+      "description": "The mark a prune leaves: **that** records were removed, when, and how many — never which, and never anything they said.\n\nA prune removes records outright, tombstones included, so the room's record tree loses leaves and an incremental reader has nothing left to learn the removal from. This is what it learns from instead. A host keeps the latest one per room and serves it with every listing that can carry it (`rooms/records/list` 0.3, as `lastPrune`); a reader whose own copy of the room was synchronised to a version below `version` MUST rebuild that copy from a full listing — no `sinceVersion` — and drop every record the full listing no longer holds. Without that, a record the room removed lives on in every cache that synchronised before the prune, and a record retracted while the reader was away comes back as current.\n\n**What a host keeps and what it does not.** A host keeps this marker, and in its audit trail the prune's `reason`, its requester where the tier discloses one, and the retention it was made under. It MUST NOT keep anything a pruned record said — body, ciphertext, cleartext, title, description, file or blob — and SHOULD NOT keep pruned records' keys: the count is the audit, and a list of keys on an `open` room, where keys may be descriptive, is content by another name.",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The version the prune took from the room's counter, as a put or a curation would. No record carries it; it is what moves `HeadVersion` past the removal, so that a root taken before and a root taken after are never labelled with one version."
+        },
+        "prunedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the host performed it."
+        },
+        "removed": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many records were removed, tombstones included. A prune that removed nothing leaves no mark."
+        }
+      }
+    },
+    "EpochAnchor": {
+      "title": "EpochAnchor",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "epoch",
+        "epochAuthenticator",
+        "headVersion"
+      ],
+      "description": "What a room writes into its own witnessed log, so that a host serving a stale, forked or partial view of it becomes **evident rather than merely possible**.\n\n**Witnessed is the whole point.** Witnesses co-sign a `did:webvh` log entry, so a value that rides one is singular: the room cannot have told two members two different things about the same epoch without the log showing it. An anchor that did not ride a log entry would be a value the host could equally have made up, which is what every unanchored assertion in this family already is.\n\nIt goes in a **typed service entry** on the room's DID document, which is the only slot in a `did:webvh` log entry that carries an ecosystem-defined value today: `parameters` is a closed struct, `versionId` and `versionTime` are computed, and `proof` is the witnesses' signature over the rest — it secures the anchor and cannot be it.\n\n**Publishing one is not free.** A `did:webvh` update that supplies a document rotates the DID's update key and refreshes its pre-rotation commitments, so every anchor is a witnessed update *and* a rotation. That makes cadence an operational decision rather than only a freshness one: a room anchoring on every write would rotate its own DID's update key on every write.",
+      "properties": {
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The key epoch this anchor describes."
+        },
+        "epochAuthenticator": {
+          "$ref": "../../../_framework/0.3/framework.schema.json#/$defs/DigestMultibase",
+          "description": "The MLS epoch authenticator for `epoch` — a value every member of the group derives independently and no host can compute. A member whose own authenticator differs from the anchored one is in a **forked group**, which is the attack this exists to make visible."
+        },
+        "headVersion": {
+          "$ref": "#/$defs/HeadVersion",
+          "description": "The room's version watermark at the moment of anchoring, as the host reported it."
+        },
+        "dataCommitment": {
+          "$ref": "#/$defs/DataCommitment",
+          "description": "The room's record-tree root at the same moment. OPTIONAL for the same reason it is on a read: a host that maintains no tree asserts none, and an owner cannot anchor what it was not given. Where it is present it is the only comparison in this family that needs neither a gossip channel rooms deliberately lack nor durable state in a member's agent — every member reads the same anchored root."
+        },
+        "recordCount": {
+          "$ref": "#/$defs/RecordCount",
+          "description": "How many records the room held. Present with `dataCommitment` and absent without it: a root without the state it describes is not comparable to another root."
+        }
+      }
+    },
+    "AnchorCadence": {
+      "title": "AnchorCadence",
+      "type": "string",
+      "enum": [
+        "never",
+        "renewal",
+        "manual"
+      ],
+      "description": "How often this room intends to write an `EpochAnchor`. **A statement of intent, not a schedule anything enforces** — nothing in this family can make an owner anchor.\n\nIt is worth stating anyway, and the reason is the interesting part: it makes **silence legible**. A room that says `renewal` and has not anchored in ten epochs is telling a member something, and a member who did not know what to expect could not have noticed. A room that says `never` is telling them not to wait for one.\n\n  - `never` — no anchor is intended. Honest, and cheap: anchoring costs a witnessed update and a rotation of the room DID's update key each time.\n  - `renewal` — one anchor per epoch change, which is the cadence §9's lifecycle already moves at.\n  - `manual` — the owner anchors when they decide to. A member should draw no freshness expectation from this at all, which is exactly what it is for: it is the honest answer where there is no rule.\n\nDeliberately not a duration. A room that promised \"daily\" would be making a claim its owner's availability cannot keep, and a member comparing against a clock would read an owner's holiday as a host's misbehaviour."
+    },
+    "RecordTrace": {
+      "title": "RecordTrace",
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sibling",
+          "siblingIsLeft"
+        ],
+        "properties": {
+          "sibling": {
+            "$ref": "../../../_framework/0.3/framework.schema.json#/$defs/DigestMultibase",
+            "description": "The sibling node's hash — a leaf hash or an internal node hash of this room's record tree, encoded exactly as `DataCommitment` is. A digest over **bytes**, produced by one of the two prefixed constructions in `DataCommitment`, not over a JSON document."
+          },
+          "siblingIsLeft": {
+            "type": "boolean",
+            "description": "Whether the sibling is the **left** child of the parent; the node being proved is the other one. Concatenation order is the whole of what a Merkle proof asserts, so this bit is load-bearing — inverting it on a single step yields a different root, and a reader that infers it from the record's position has assumed a tree shape the host never stated."
+          }
+        }
+      },
+      "description": "The path from one record's leaf to the room's `DataCommitment` — a Merkle inclusion proof, in the vocabulary this work already uses for it.\n\n**It is not called `proof`** because in this framework that word is taken: `proof` is the document's data-integrity proof (SPEC §7.3), and a payload member of the same name in the same document invites reading one for the other. The two are not interchangeable and the confusion would be silent.\n\n**To verify**, given the `CommittedRecord` reassembled from the same response:\n  1. `h = SHA-256(0x00 || JCS(record))` — the leaf, by `DataCommitment` step 2.\n  2. For each step in order: `h = SHA-256(0x01 || sibling || h)` when `siblingIsLeft` is true, and `SHA-256(0x01 || h || sibling)` when it is false.\n  3. `h` **MUST** equal the `dataCommitment` **carried in the same response**. Not one from an earlier read, and not one from a listing: a room moves, and a trace is only ever a statement about the tree it was cut from. A host **MUST** compute the trace and the commitment from the same snapshot.\n\nAn **empty array is valid** and is not the same as an absent member. It says the room holds exactly one record, whose leaf is the root; absence of `trace` says the host offered no trace at all.\n\nA trace is **not** always `ceil(log2 n)` steps. A level that promotes an odd node unchanged (`DataCommitment` step 4) contributes no step for that node, so a reader must follow the steps it was given rather than count them against a tree size it assumed.\n\n`maxItems` bounds a tree of 2⁶⁴ records. Verification cost is the reader's and the array is the host's, so the ceiling is stated rather than left to whoever writes the loop.\n\n**What a trace does not prove.** It binds a record to a root. It says nothing about whether that root is the room's — only comparing the root against one the host did not choose does that, exactly as `DataCommitment` describes. A reader that verifies a trace against a root received in the same breath has checked the host's arithmetic and nothing else. The two mechanisms answer different questions and neither substitutes for the other."
+    },
+    "ReadVerification": {
+      "title": "ReadVerification",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "priorRoots"
+      ],
+      "description": "What the agent checked on the member's behalf, and what it found.\n\n**A verdict, never an error.** None of these values fails the task, including the ones that report a host caught out. A member's own agent refusing to hand over a record because the *host* misbehaved punishes the member for somebody else's act — and locks them out of the room holding the records that would show what happened, at the moment they most need them. The consequence belongs on the **write** path, where continuing to hand material to a party you have caught is what compounds the damage.\n\nSo a consumer **MUST NOT** treat any value here as a failed read, and **MUST** surface an adverse one rather than logging it. What that costs is words: a member shown a bare warning icon dismisses it, and a member later refused a write with no explanation blames their own agent. A detection the member attributes to the wrong party is worse than no detection.\n\nMembers are **absent where the task cannot produce them** rather than carrying a not-applicable value — a listing has no `trace` because there is no single record to trace, and a single read has no `count` because a count is only checkable against a listing read to its end.",
+      "properties": {
+        "trace": {
+          "type": "string",
+          "enum": [
+            "verified",
+            "failed",
+            "notOffered"
+          ],
+          "description": "Whether the record's `RecordTrace` reached the `dataCommitment` served beside it.\n\n`verified` says the record is under the root the host asserted — and **nothing about whether that root is the room's**, which is what `priorRoots` and an anchor are for. `notOffered` is a host that maintains no tree, which is legal and informative. `failed` is arithmetic that does not close: the host served a path that does not reach its own root, which is either a defect or a fabrication and is not distinguishable from here."
+        },
+        "priorRoots": {
+          "type": "string",
+          "enum": [
+            "agree",
+            "conflict",
+            "noneHeld",
+            "notChecked"
+          ],
+          "description": "Whether this root matches what the agent has seen from this host for this room **at this `headVersion`**.\n\nThis is the comparison a member cannot make for themselves. A tab does not outlive itself and a CLI holds nothing; the agent is the only party on the member's side of the boundary that saw both reads.\n\n  - `agree` — seen at this head before, same root.\n  - `conflict` — seen at this head before, **different root**. A host caught: there is no write to attribute the difference to, because a write would have moved the head.\n  - `noneHeld` — first read at this head. Not evidence of anything; a memory of one is not a comparison.\n  - `notChecked` — this agent keeps no root history. An honest answer for an agent that cannot make the comparison, and **not** a synonym for `noneHeld`: one says nothing was found, the other says nothing was looked for.\n\nREQUIRED, so that an agent which does not check has to say so rather than omit the question."
+        },
+        "anchor": {
+          "type": "string",
+          "enum": [
+            "agrees",
+            "ahead",
+            "behind",
+            "conflict",
+            "none",
+            "notChecked"
+          ],
+          "description": "How what the host served compares with the room's own **witnessed anchor** (`EpochAnchor`).\n\nThis is the comparison that needs neither a gossip channel rooms deliberately lack nor durable state in an agent: every member resolves the same room DID and reads the same entry, co-signed by witnesses. It is the only one of the three a first-time reader can make.\n\n  - `agrees` — the host served the anchored state, and its root matches.\n  - `ahead` — the room has moved past the anchor. The ordinary case; an anchor describes a moment, not the present, and says nothing about records written since.\n  - `behind` — **the host is serving a state older than the room's own witnessed statement.** A rollback, and a detection nothing else in this family can make: a member with no history, no peer and no prior read still catches it.\n  - `conflict` — same `headVersion` as the anchor, different root. The host has contradicted a value its own room published and witnesses co-signed.\n  - `none` — the room has published no anchor. Not a fault; anchoring costs a witnessed update and a key rotation, and a room may reasonably decline.\n  - `notChecked` — the consumer did not resolve the room. An honest answer, and **not** a synonym for `none`: one says the room published nothing, the other says nobody looked."
+        },
+        "count": {
+          "type": "string",
+          "enum": [
+            "agrees",
+            "short",
+            "notComparable",
+            "notOffered"
+          ],
+          "description": "Whether the number of records returned matches the `recordCount` the host committed to.\n\nOnly ever comparable against a listing with **no** `prefix`, **no** `sinceVersion` and read to its end — anything else legitimately holds fewer, and comparing it is a discrepancy the reader manufactured. `notComparable` is that case, and it is the common one.\n\n`short` is a host contradicting itself inside one exchange: it committed to a tree of N records and served fewer, with no filter to explain the difference. That is the omission the commitment exists to make detectable, caught without a second party and without an anchor."
+        },
+        "head": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dataCommitment",
+            "recordCount",
+            "headVersion"
+          ],
+          "description": "What the host asserted about the room, passed through unaltered so the member can compare it somewhere this agent cannot reach — with another member, or against a witnessed anchor. All three or none: a root without the state it describes is not comparable to another root, which is the whole of `HeadVersion`.",
+          "properties": {
+            "dataCommitment": {
+              "$ref": "#/$defs/DataCommitment"
+            },
+            "recordCount": {
+              "$ref": "#/$defs/RecordCount"
+            },
+            "headVersion": {
+              "$ref": "#/$defs/HeadVersion"
+            }
+          }
+        }
+      }
+    },
+    "RevocationList": {
+      "title": "RevocationList",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "sequence",
+        "issuedAt",
+        "entries",
+        "proof"
+      ],
+      "description": "The room's own statement of which credentials it has withdrawn before they expire — signed by the room, cumulative, and numbered, so that it means the same thing at every host it is delivered to.\n\n**Why the room signs it, and why it is cumulative.** A host authorizes from credentials the room issued and keeps no roster; a withdrawal kept only as a host's own state would make the room unmovable and the host part of the membership. A list the room signed is room state: it moves with the room, any host it is delivered to reaches the same decision, and nothing a host invents can be mistaken for it. It is cumulative — every list carries every entry still in force — so a host holding any one list holds the room's whole withdrawal state, and a host that missed a list loses nothing once it receives a later one.\n\n**Producing.** The room's key holder builds the object without `proof` and signs it with a W3C Data Integrity proof whose `verificationMethod` is a key the room's DID document lists for `assertionMethod` and whose `proofPurpose` is `assertionMethod`. A producer MUST support `eddsa-jcs-2022`. Each list's `sequence` is exactly one greater than the last list the room signed, and the producer MUST NOT sign two different lists at one `sequence`.\n\n**Accepting.** A host MUST refuse a list unless: (1) `roomId` is the room it is delivered for; (2) `proof` verifies with a key of `roomId` listed for `assertionMethod` — a list signed by any other key, however valid the signature, is not the room's; (3) `sequence` is greater than that of the list it holds, or equal with an identical list (a repeat, answered as accepted and changing nothing); (4) it is **append-only** against the list it holds: every entry of the held list appears in it unchanged, unless that entry's `until` has passed. A list that lowers the sequence is a rollback and one that drops a live entry is a reinstatement nobody signed for, and both are refused; two different lists at one `sequence` is the room's key equivocating, and the host keeps the list it holds.\n\n**Applying.** A credential is revoked by an accepted list when any entry matches it (see `RevocationEntry`). An entry whose `until` has passed MAY be discarded by a host and omitted from later lists; no other entry is ever dropped.\n\n**Size.** A list is bounded at 4096 entries. A room that would exceed it uses a `room` entry, which withdraws everything issued before it and lets the room re-issue to those who remain.",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The room whose credentials this list withdraws, exactly as on the wire. Signed, so a list cannot be replayed against another room."
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The list's position in the room's sequence: exactly one greater than the last list the room signed. A host accepts only a list whose sequence is above the one it holds, which is what stops a host, a relayer or an attacker holding an old list from rolling the room's withdrawals back."
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the room signed this list."
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/RevocationEntry"
+          },
+          "description": "Every withdrawal still in force, in the order the room made them. Empty is valid: a room that has revoked nothing, or whose every entry has lapsed, can still state its sequence."
+        },
+        "proof": {
+          "type": "object",
+          "description": "The room's Data Integrity proof over every other member, made with a key the room's DID document lists for `assertionMethod`."
+        }
+      }
+    },
+    "RevocationEntry": {
+      "title": "RevocationEntry",
+      "description": "One withdrawal in a `RevocationList`, discriminated by `kind`.\n\n  - `credential` withdraws one credential, named by its `id`. It matches the membership credential or any authority link whose `id` equals `credentialId`.\n  - `subject` withdraws a party: every credential the room's chain gave them **before** `revokedAt`. It matches the membership credential or any authority link whose `credentialSubject` id **or** `issuer` is `subject` and whose `validFrom` is earlier than `revokedAt`. Matching the issuer as well as the subject withdraws what the party delegated before their removal, which no re-admission revives. A credential carrying no `validFrom` is treated as issued before every entry.\n  - `room` withdraws every credential whose `validFrom` is earlier than `revokedAt`, whoever holds it. It is how a room resets access — after a compromise, or on a `private` room, where naming a party would disclose who was a member.\n\n**Keyed on time, so a party can come back.** A `subject` or `room` entry withdraws what was issued before it and nothing after, so a room that re-admits a removed party issues fresh credentials and they verify. A `credential` entry is permanent for that one credential, which nobody re-issues.\n\n**Tiers.** On a `private` room a host MUST refuse a list carrying a `credential` or `subject` entry: a presentation there withholds the credential and its subject, so such an entry is one the host cannot apply and a disclosure of who was in the room. Only `room` entries are permitted, and a host serving a `private` room MUST refuse any presentation for which it cannot establish that no credential in it has a `validFrom` earlier than the latest `room` entry's `revokedAt`.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CredentialRevocation"
+        },
+        {
+          "$ref": "#/$defs/SubjectRevocation"
+        },
+        {
+          "$ref": "#/$defs/RoomRevocation"
+        }
+      ]
+    },
+    "CredentialRevocation": {
+      "title": "CredentialRevocation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "credentialId",
+        "revokedAt"
+      ],
+      "description": "Withdraws one credential — a membership credential or any authority link — by its `id`.",
+      "properties": {
+        "kind": {
+          "const": "credential"
+        },
+        "credentialId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The `id` of the credential withdrawn, as `rooms/owner/issue-authority` and `rooms/owner/issue-membership` return it, or as an attenuated credential carries it."
+        },
+        "revokedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the room made this withdrawal."
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "OPTIONAL. After this instant every credential the entry matches has expired anyway, so a host MAY discard the entry and the room MAY omit it from later lists. Absent means the entry is kept for as long as the room keeps a list."
+        }
+      }
+    },
+    "SubjectRevocation": {
+      "title": "SubjectRevocation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "subject",
+        "revokedAt"
+      ],
+      "description": "Withdraws a party: every credential naming them as subject or issuer whose `validFrom` is earlier than `revokedAt`.",
+      "properties": {
+        "kind": {
+          "const": "subject"
+        },
+        "subject": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The party withdrawn. Never the room itself."
+        },
+        "revokedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the room made this withdrawal."
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "OPTIONAL. After this instant every credential the entry matches has expired anyway, so a host MAY discard the entry and the room MAY omit it from later lists. Absent means the entry is kept for as long as the room keeps a list."
+        }
+      }
+    },
+    "RoomRevocation": {
+      "title": "RoomRevocation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "revokedAt"
+      ],
+      "description": "Withdraws every credential whose `validFrom` is earlier than `revokedAt`, whoever holds it.",
+      "properties": {
+        "kind": {
+          "const": "room"
+        },
+        "revokedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the room made this withdrawal."
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "OPTIONAL. After this instant every credential the entry matches has expired anyway, so a host MAY discard the entry and the room MAY omit it from later lists. Absent means the entry is kept for as long as the room keeps a list."
+        }
+      }
+    },
+    "RevocationHead": {
+      "title": "RevocationHead",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "digest"
+      ],
+      "description": "Which `RevocationList` a party holds, without its entries: comparable between the room's key holder and a host, and between two hosts, without disclosing whom the room withdrew.",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The list's `sequence`."
+        },
+        "digest": {
+          "$ref": "../../../_framework/0.3/framework.schema.json#/$defs/DigestMultibase",
+          "description": "SHA-256 multihash of the list's RFC 8785 (JCS) canonicalization, `proof` included. Two parties holding one sequence with different digests have been given two lists the room signed at one sequence."
+        }
+      }
+    },
+    "RoomProfile": {
+      "title": "RoomProfile",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "description": "What a room says about itself to its own members: a name and, optionally, a description, short tags and an emoji, so that a member's wallet, portal or CLI can show what each room is rather than a DID.\n\n**It lives in the room, and only there.** A profile is carried in a record of the room (`RoomProfileStatement`), sealed on `attributed` and `private` rooms like every other record, so the room's host stores ciphertext and learns neither the name nor anything else here. It is never put in a credential — credentials are presented to hosts — nor in a host's record of the room, in `rooms/create` or `rooms/owner/register`, or in any member a host can read. On an `open` room it is cleartext, as everything in an open room is.\n\n**Plain text, never instructions.** Every member is free text chosen by whoever wrote the profile and shown to every member of the room. A reader renders `name`, `description` and `tags` as text — never as markup, never as a link it follows — removes or replaces control characters before showing them, and MUST NOT treat any of it as instructions, which matters most for an agent acting for a member. A writer MUST NOT put personal data or a credential in any member.\n\n**Growth.** A new optional member arrives in place, additively, as `recordMembers` did, or in a later version of this component. A reader refuses a member it does not know (the `SealedRecordBody` rules), so a profile carrying one is not shown by a reader that predates it, and a writer SHOULD NOT use a member it cannot expect the room's readers to know. An ecosystem extension goes in `ext`, which a reader that does not understand it ignores. A change no earlier reader could survive is a new statement under a new derivation label (`openvtc/room/profile/v2`), written beside this one until the room's readers have moved.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The room's name as its members see it. Plain text, one line. Bounded like the label a community gives a room it owns (`RoomLabel` in vtc/_shared), so a community can write the same name here that it shows its administrators and the members it offers the room to."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "What the room is for, in a sentence or a short paragraph. Plain text. Absent when the room has none; an empty string is not a description."
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"
+          },
+          "description": "Short identifiers the room files itself under, as a set: order carries no meaning. A member's surface MAY filter or group rooms by them. They are the room's own and shown to its members — distinct from the tags a community files the rooms it owns under for its administrators, which are never written here."
+        },
+        "emoji": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16,
+          "description": "One emoji — a single extended grapheme cluster, such as `📋` — that a surface MAY show beside the name. Text, rendered as text: never an image, never a URL, never anything a reader fetches, since a fetched icon would tell whoever serves it which member opened which room, and when. A reader that cannot render it shows nothing in its place."
+        },
+        "recordMembers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][A-Za-z0-9]*$"
+          },
+          "description": "The optional `SealedRecordBody` members — and on an `open` room the `cleartext` members of `rooms/records/put` — that the room's writers may use beyond the base set, as a set: order carries no meaning. Defined values: `kind`, `inReplyTo`, `writtenAt`, `editedAt`, and `width`, `height` and `preview`, which name the `FileManifest` members of those names inside a record's `file`. A writer MUST NOT write a member this governs unless the room's current profile lists it; absent means none (`SealedRecordBody`, *When a writer may use these members*). A writer MAY rely on a profile it resolved within the room's current epoch. The base set is every other member of `SealedRecordBody`, which a writer may always use. A value a writer does not know grants it nothing. Set by a member whose authority confers `curate` or `admin` (who may write the profile at all) — with `rooms/keys/profile/write` on a sealed tier, or `rooms/records/put` at `room-profile` on an `open` room — and never by default. Whether the room's readers are ready is the owner's or a curator's decision, made out of band; the order is readers (profile readers included, since a reader that predates this member refuses the profile carrying it), then the owner's key holder, which re-writes the profile after a removal and so MUST accept this member before any profile carries it, then on the sealed tiers the key holders that seal for writers, then the profile (`SealedRecordBody`, *Turning them on*). Listing a member never obliges a writer to use it, and removing one stops writers using it by the room's next epoch at the latest; records already written keep it."
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1. A reader ignores what it does not understand."
+        }
+      }
+    },
+    "RoomProfileStatement": {
+      "title": "RoomProfileStatement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "issuedAt",
+        "authority"
+      ],
+      "description": "The room's profile as a record carries it: the `roomProfile` member of a `SealedRecordBody`, signed by its author like every record body, with the evidence a reader needs to decide whether the author was entitled to say it.\n\n**Where it is: one record per epoch, at a key only members can compute.** On an `attributed` or `private` room the profile written under epoch `E` is stored at the record key\n\n    profile_key(E) = base64url-nopad(HKDF-SHA256(ikm = storage_key(E), salt = \"\", info = \"openvtc/room/profile/v1\" || roomId || u64be(E), L = 16))\n\nwhere `storage_key(E)` is the room's storage key for epoch `E` — the one records sealed under `E` are sealed with, as for a file key (`blobs.schema.json`) — `roomId` is its UTF-8 bytes exactly as on the wire, `u64be` is as `blobs.schema.json` defines it, and `salt` is the empty string. The result is 22 characters, the shape of any random record key, so to the host it is one more opaque record and the family's rule that a sealed room's keys are opaque (`RecordMetadata.key`) holds for it as for any other. A member finds it knowing nothing but the room and the epoch, which is all a member who has just joined has. Since `storage_key(E)` never leaves a member's key holder, it is the key holder that computes it (`rooms/keys/profile/read`, `rooms/keys/profile/write`).\n\nOn an `open` room, which has no storage key and hides nothing from its host, the profile is the record at the fixed key `room-profile`, and its `cleartext.body` is the UTF-8 JSON of the signed `SealedRecordBody` — the object the sealed tiers seal — so that a reader verifies one thing on every tier. A writer SHOULD also set `cleartext.title` to the profile's `name`.\n\nThe record is written with `rooms/records/put` like any other, so a host enforces only `write` on it and cannot tell it from any other record. Whether its author could say what the room is called is therefore decided by readers, from what the statement carries.\n\n**Who may write it.** The author's `authority` must confer `curate` or `admin` at the room's scope: `admin` because naming the room is part of governing it, `curate` because it is the standing to judge what the room's shared knowledge is, and a room's name and purpose are the first thing a member reads of it. `write` alone never suffices: every member able to add a record could otherwise rename the room for everyone.\n\n**Accepting one.** A reader resolving a room's profile MUST apply to the record at the profile's location the `SealedRecordBody` reading rules (1)–(4) — on an `open` room to the body parsed from `cleartext.body`, with rule (4) against the author the host recorded — and MUST also refuse it unless:\n  1. it carries `roomProfile` and none of `title`, `description`, `body`, `tags` and `file`;\n  2. on a sealed tier, the epoch it was sealed under is `E`, the epoch whose key located it;\n  3. `authority` verifies as a host verifies a chain (`AuthorityPresentation`): at most 8 links, leaf first; every link's `proof` made with a key its own `issuer` lists for `assertionMethod`; the last link issued by `roomId`; no link widening what its parent conferred, in actions, scope or validity; the whole conferring `curate` or `admin` at this room's scope; the leaf's subject equal to the body's `author`, which stands in for a host's presenter binding; and every link valid at `issuedAt` rather than at the moment of reading. The reader MUST NOT dereference a link it was not given;\n  4. `issuedAt` is no later than five minutes after, and no earlier than one hour before, the `updatedAt` the host reports for the record;\n  5. where the reader holds a `RevocationList` for the room, verified as a host verifies one, no link of `authority` is revoked by an entry whose `revokedAt` is at or before `issuedAt`.\nA reader MUST ignore a profile that fails any of these, as though it were absent — and, unlike an ordinary record, SHOULD say that it did, naming the author where the tier discloses one: a profile written by somebody without the standing to write it is somebody trying to rename the room.\n\n**Revocation is not retroactive.** A profile written while its author held the standing to write it stays valid after that author is removed, their grant lapses, or a `room` entry resets every credential. The statement was made with authority; withdrawing the authority withdraws what the author may do next, not what they already did, and the alternative — every member's view of the room's name going blank when whoever named it is removed — is something nobody asked for. It is not a back door. A removed party cannot write afterwards, because a host refuses every presentation a list it holds revokes; a statement back-dated into a grant its author no longer holds fails item 4 unless the host colludes; and removal advances the room's epoch, after which the owner's key holder re-writes the profile under the new epoch as the owner (`rooms/keys/profile/write`), so on the ordinary path the removed author's statement is superseded by the same act that removes them.\n\n**Choosing among several.** There is at most one profile per epoch, because there is one record per key. A reader at epoch `C` takes the profile at `profile_key(C)`; if there is none, or it fails the checks above, it tries `C - 1`, and so on down to the earliest epoch it can derive a storage key for, and takes the first one it accepts — the newest. It MUST NOT prefer an older profile to a newer one it accepts. A record at a profile location that is `retracted` is a profile deliberately cleared — retraction is `rooms/records/curate`, for which a host requires `curate` — and the walk stops there: the room has no profile. A profile accepted below `C` is **stale**: written before the room's latest epoch advance and not re-written since. A member of a `fromJoin` room cannot walk back at all, which is why the profile is re-written at every advance.\n\n**Size.** A writer SHOULD set `padding` so that the UTF-8 JSON of the signed body is a multiple of 1024 bytes, so that a host comparing ciphertext lengths learns nothing about how long the name or the description is. A reader ignores `padding`.",
+      "properties": {
+        "profile": {
+          "$ref": "#/$defs/RoomProfile"
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the author made this statement: signed with it, the instant `authority` is evaluated at, and bounded against the host's `updatedAt` for the record so that it cannot be back-dated into a grant the author no longer holds."
+        },
+        "authority": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          },
+          "description": "The author's authority chain, LEAF FIRST, ending with a credential the room issued, conferring `curate` or `admin` on `author` at this room's scope. The credentials themselves, never a zero-knowledge presentation: a reader is a member, who already sees `author`. Carried in the statement because readers, not the host, decide whether its author could say it, and a reader fetches no link it was not given. Capped at 8, as a presentation is."
+        },
+        "padding": {
+          "type": "string",
+          "maxLength": 8192,
+          "description": "Ignored by readers; see **Size**. A writer SHOULD use spaces."
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+        }
+      }
+    },
+    "RecordKind": {
+      "title": "RecordKind",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][A-Za-z0-9]*$",
+      "description": "What a reader shows a record as. Defined values: `note` — something kept in the room's library, titled or not, its `body` markdown; `message` — a turn in the room's conversation, its words in `body` as plain text; `reaction` — a short response to another record, its value in `body` (`SealedRecordBody`, *Reactions*). An open set, not an enumeration, so a new kind needs no new version of any schema: a reader MUST present a record whose kind it does not know as a note, and MUST NOT refuse a record for its kind. Absent means `note`, though a reader that keeps a conversation apart MAY show an untitled record without a kind as a message (*Untitled records*). A new version of a record MUST keep its kind. lowerCamelCase, at most 64 characters."
+    },
+    "RecordReference": {
+      "title": "RecordReference",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key"
+      ],
+      "description": "Names another record of the same room: the record a reply answers or a reaction responds to. Never a record of another room — a citation that crosses rooms is `RecordEvidenceRecord`. A reader resolves it only against records it can already list or read in this room, and MUST NOT fetch anything else because of it. It MUST NOT name a record of kind `reaction`.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The record's key, as in `rooms/records/put`. Opaque on the sealed tiers, like every key there."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The version of the record the author was answering. OPTIONAL. A reader SHOULD say that the target has changed since only when its content has, never because its version moved: curation moves a record's version without touching its content (`SealedRecordBody`, *Whether the target has changed*)."
+        }
+      }
+    },
+    "RecordWrittenAt": {
+      "title": "RecordWrittenAt",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$",
+      "description": "The instant the author wrote the record, RFC 3339 in UTC (`Z`). Set by the author and kept unchanged when the record is rewritten; an edit is marked by `editedAt`. OPTIONAL on a note; a `message` or `reaction` SHOULD carry it. The author's claim, not an attested time: a reader orders messages by it, compares it with the host's `createdAt`, and treats an implausible or backdated one as `SealedRecordBody` (*When it was written*) says. No host enforces or reads it."
+    },
+    "RecordEditedAt": {
+      "title": "RecordEditedAt",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$",
+      "description": "The instant the author made the edit that produced this version, RFC 3339 in UTC (`Z`). Set by the writer of every version after the first, and absent on the first, so that a reader seeing a record for the first time can tell whether it was ever edited — which `version` cannot say, since curation moves it too. Signed with the body on the sealed tiers. A reader shows a record carrying it as edited, and treats an implausible one as `SealedRecordBody` (*Edits*) says. Governed by `RoomProfile.recordMembers` like `writtenAt`. No host enforces or reads it."
+    },
+    "RecordMetadataV3": {
+      "title": "RecordMetadataV3",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "version",
+        "updatedAt"
+      ],
+      "description": "What `rooms/records/list/0.6` returns, and `rooms/keys/browse/0.4` passes through: `RecordMetadataV2` plus `kind` on an `open` room, `createdAt` and `bodyStoredAt` on every tier and `createdBy` on `open` and `attributed`. A separate definition, not a change to `RecordMetadataV2`, so that `rooms/records/list/0.2` to `0.5` keep the exact shape they published. Never the body.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The record's key within the room. On `attributed` and `private` rooms this MUST be opaque — a random identifier, never a descriptive slug. A key reading `decision/acquire-northwind` defeats the encryption sitting beside it; structured naming belongs inside the sealed body."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Server-assigned, monotonic per room."
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The epoch the record was sealed under. Absent on an `open` room."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "deprecated",
+            "retracted"
+          ],
+          "description": "Curation state. `retracted` is a tombstone: the body is gone, the key and version remain so incremental sync converges and the audit chain stays intact."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the host stored the record's first version: RFC 3339, set by the host, never by a writer. Host metadata, not body, so it is served on every tier. A host MUST set it when it stores a record's first version and MUST keep it unchanged for as long as it holds the record — across every later version, every curation, retraction included, and a member's withdrawal — so that it says when the room received the record, which `updatedAt` cannot once the record has been edited or curated. A host that stored a record before it kept `createdAt` MUST omit it for that record rather than supply a guess such as the earliest `updatedAt` it still holds; a reader then falls back to `updatedAt` (`SealedRecordBody`, *When it was written*). Readers order messages and judge `writtenAt` by it."
+        },
+        "createdBy": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The author of the record's first version, as the host recorded it when it stored that version: the DID it authenticated for the write on an `open` room, and on an `attributed` one the author it records for every write. Set by the host, never by a writer, and kept unchanged for as long as it holds the record — across every later version, every curation and a retraction — like `createdAt`. Served on `open` and `attributed` rooms only: a `private` room's host records no author, and MUST NOT serve this. Omitted for a record stored before the host kept it, rather than guessed. Readers use it to apply the rules about a rewrite by another member to a record they see for the first time (`SealedRecordBody`, *The record's original author*)."
+        },
+        "bodyStoredAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the host stored the body the record's current version carries: the time of the `rooms/records/put` that wrote that body. Set by the host, never by a writer. A curation (`rooms/records/curate`), and anything else that moves the version without writing a new author-signed body, leaves it unchanged; for the first version it equals `createdAt`. The host knows which task wrote each version, so it is served on every tier, `private` included, and says nothing about the body. Readers verify the current version's proof against the author's DID document as it stood at this time (`SealedRecordBody`, *Which DID document*). Omitted for a version stored before the host kept it, rather than guessed."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "Present only on an `open` room; sealed with the body otherwise."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Present only on an `open` room; sealed with the body otherwise."
+        },
+        "author": {
+          "type": "string",
+          "description": "The member who wrote it. Present on `open` and `attributed`; on `private` the author is inside the sealed body, where only members can read it."
+        },
+        "blobs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../0.1/blobs.schema.json#/$defs/BlobRef"
+          },
+          "description": "The stored blobs this record names, as rooms/records/put/0.2 wrote them. Absent when it names none, when it is retracted, and on records written by put 0.1. Cleartext on every tier, as on the write, so a listing discloses which records carry files, never anything about the files beyond the blobs' sizes."
+        },
+        "kind": {
+          "$ref": "#/$defs/RecordKind",
+          "description": "The record's `kind` as its current version's `cleartext` carries it. Present only on an `open` room, where the host reads the body anyway; on `attributed` and `private` rooms `kind` is sealed with the body and a host MUST NOT serve it, nor anything from which it could be inferred. Absent on a record that carries none — which a reader reads as `note` — and on a tombstone, which keeps nothing of its body."
+        }
+      }
+    }
+  }
+}

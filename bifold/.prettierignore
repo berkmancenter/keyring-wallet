@@ -13,6 +13,7 @@ packages/core/src/modules/trust-tasks/__tests__/fixtures/vtc-join-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/vetting-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-vetter-schemas/*.json
 packages/core/src/modules/polls/__tests__/fixtures/polls-schemas/*.json
+packages/core/src/modules/rooms/__tests__/fixtures/rooms-schemas/**/*.json
 
 # Generated emoji data (one entry per line, by scripts/emoji/generate-emoji-data.mjs)
 # and the vendored Unicode/CLDR inputs it is built from. Reformatting either would
