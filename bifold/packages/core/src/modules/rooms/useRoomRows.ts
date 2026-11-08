@@ -112,6 +112,8 @@ interface Feed {
   /** Every room read; `rows` leaves out the hidden ones. */
   all?: RoomRow[]
   rows?: RoomRow[]
+  /** The rows in `all` kept from a community the last listing skipped for now, by room ID: shown, never read. */
+  keptRooms: Set<string>
   failed: boolean
   asking: boolean
   /** A read was asked for while one was out: it runs when that one ends. */
@@ -122,7 +124,15 @@ interface Feed {
   listeners: Set<() => void>
 }
 
-const feed: Feed = { failed: false, asking: false, again: false, lastAsk: 0, inView: 0, listeners: new Set() }
+const feed: Feed = {
+  keptRooms: new Set(),
+  failed: false,
+  asking: false,
+  again: false,
+  lastAsk: 0,
+  inView: 0,
+  listeners: new Set(),
+}
 // The app's log, from the poll: one line per read, so a tester's report says when the rows came and why not.
 let log: ((line: string) => void) | undefined
 // Per service, so another agent (and its service) starts with none.
@@ -316,6 +326,12 @@ async function readAll(service: RoomsService): Promise<void> {
         }
       }
     const rooms = listed.filter(shown)
+    // A community this listing skipped for now (a step kept its session as another identity: `heldBack`) keeps the
+    // rows already read of it, as they were, until a listing reads it again. Without them its rooms and its chip went
+    // from Messages at every such listing, so two communities seldom showed together (1 listing in 12, 277.11). By the
+    // community's DID, whichever it is. Nothing more is asked for them: they are shown, not read.
+    const skipped = new Set((service.heldBack?.() ?? []).map((c) => c.communityDid))
+    const listedIds = new Set(rooms.map((room) => room.roomId))
     let byRoom = tracks.get(service)
     if (!byRoom) tracks.set(service, (byRoom = new Map()))
     const known = byRoom
@@ -323,7 +339,9 @@ async function readAll(service: RoomsService): Promise<void> {
     // Messages and the tab's badge re-render on each publish, so a room whose row reads the same publishes nothing. A
     // failure shown before still clears: the read's `finally` publishes once it ends.
     const show = () => {
-      const next = rooms.map((room) => rowOf(room, known.get(room.roomId)))
+      const kept = (feed.all ?? []).filter((row) => skipped.has(row.communityDid) && !listedIds.has(row.roomId))
+      feed.keptRooms = new Set(kept.map((row) => row.roomId))
+      const next = [...rooms.map((room) => rowOf(room, known.get(room.roomId))), ...kept]
       const before = feed.all
       feed.failed = false
       if (before && next.length === before.length && next.every((row, i) => sameRow(row, before[i]))) return
@@ -347,8 +365,10 @@ async function readAll(service: RoomsService): Promise<void> {
       if (feed.service !== service) return
       show()
     }
-    const reading = (feed.all ?? []).filter((row) => row.reading).length
-    log?.(`[Rooms:rows] ${rooms.length} rooms listed, ${reading} not read yet, in ${Date.now() - began} ms`)
+    // A kept row is not this listing's: it neither asks a retry nor counts as not read, as it did not when it went.
+    const reading = (feed.all ?? []).filter((row) => row.reading && !feed.keptRooms.has(row.roomId)).length
+    const keptLine = feed.keptRooms.size > 0 ? `, ${feed.keptRooms.size} kept as read before` : ''
+    log?.(`[Rooms:rows] ${rooms.length} rooms listed, ${reading} not read yet${keptLine}, in ${Date.now() - began} ms`)
     retrySoon(service, reading > 0)
   } catch {
     if (feed.service === service) {
@@ -424,7 +444,8 @@ const readInView = () => {
  */
 const readOnAgentBack = () => {
   if (AppState.currentState !== 'active') return
-  if (feed.asking || feed.failed || feed.all?.some((row) => row.reading)) refreshRoomRows()
+  if (feed.asking || feed.failed || feed.all?.some((row) => row.reading && !feed.keptRooms.has(row.roomId)))
+    refreshRoomRows()
 }
 
 /** Reads again, unless the last one is under `floor` old. With one out, again once it ends. */
@@ -530,6 +551,7 @@ export function resetRoomRows(): void {
   feed.service = undefined
   feed.all = undefined
   feed.rows = undefined
+  feed.keptRooms = new Set()
   feed.failed = false
   feed.asking = false
   feed.again = false
@@ -569,6 +591,7 @@ export function useRoomRowsPoll(
     stopRetrying()
     feed.all = undefined
     feed.rows = undefined
+    feed.keptRooms = new Set()
     feed.failed = false
     feed.lastAsk = 0
     publish()

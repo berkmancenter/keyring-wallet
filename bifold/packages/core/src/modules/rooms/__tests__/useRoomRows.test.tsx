@@ -810,3 +810,216 @@ describe('a slow agent (X5JN-PEWP: the posts came 30 s after the listing)', () =
     expect(notListed).not.toContain('unreachable')
   })
 })
+
+describe('a community a listing skipped for now (a step kept its session: heldBack)', () => {
+  // Two communities, by value: nothing below names a particular one.
+  const CHOIR = 'did:webvh:QmChoir:choir.example'
+  const both = () => [room('planning'), room('rehearsal', { communityDid: CHOIR, communityName: toInertText('Choir') })]
+  const notes = () => ({ planning: [note('p1', 1)], rehearsal: [note('r1', 1), note('r2', 2)] })
+  const withHeld = (s: ReturnType<typeof serviceWith>) => {
+    const held = { now: [] as { communityDid: string }[] }
+    Object.assign(s, { heldBack: jest.fn(() => held.now) })
+    return held
+  }
+  const ids = (rows: readonly { roomId: string }[]) => rows.map((r) => r.roomId).sort()
+
+  test('keeps its rows as read before, and so its chip, beside the community that was read', async () => {
+    const n = notes()
+    const s = serviceWith(both(), n)
+    const held = withHeld(s)
+    const { list } = mount(s)
+    await flush()
+    // Something new from someone else, so the kept row has an unread to keep.
+    n.rehearsal.push(note('r3', 3))
+    refreshRoomRows()
+    await flush()
+    expect(ids(list.result.current.rows.rows)).toEqual(['planning', 'rehearsal'])
+    expect(list.result.current.unread).toBe(1)
+    const before = list.result.current.rows.rows.find((r) => r.roomId === 'rehearsal')!
+
+    s.listMyRooms.mockResolvedValueOnce([room('planning')])
+    held.now = [{ communityDid: CHOIR }]
+    refreshRoomRows()
+    await flush()
+    const rows = list.result.current.rows.rows
+    expect(ids(rows)).toEqual(['planning', 'rehearsal'])
+    // As it was: its community, its newest post and its unread, so Messages' chip for it stays.
+    expect(rows.find((r) => r.roomId === 'rehearsal')).toEqual(before)
+    expect(new Set(rows.map((r) => r.communityDid))).toEqual(new Set([LAB, CHOIR]))
+    expect(before.lastPost?.text).toBe('r3')
+    expect(list.result.current.unread).toBe(1)
+  })
+
+  test('control: a community a listing leaves out without skipping it (left, or gone) loses its rows', async () => {
+    const s = serviceWith(both(), notes())
+    withHeld(s)
+    const { list } = mount(s)
+    await flush()
+    s.listMyRooms.mockResolvedValueOnce([room('planning')])
+    refreshRoomRows()
+    await flush()
+    expect(ids(list.result.current.rows.rows)).toEqual(['planning'])
+  })
+
+  test('control: only the skipped community keeps rows, not another one the listing left out', async () => {
+    const third = room('tenders', { communityDid: 'did:webvh:QmThird:third.example' })
+    const s = serviceWith([...both(), third], { ...notes(), tenders: [note('t1', 1)] })
+    const held = withHeld(s)
+    const { list } = mount(s)
+    await flush()
+    expect(ids(list.result.current.rows.rows)).toEqual(['planning', 'rehearsal', 'tenders'])
+    s.listMyRooms.mockResolvedValueOnce([room('planning')])
+    held.now = [{ communityDid: CHOIR }]
+    refreshRoomRows()
+    await flush()
+    expect(ids(list.result.current.rows.rows)).toEqual(['planning', 'rehearsal'])
+  })
+
+  test('a room listed anyway while its community is skipped shows once, as read now', async () => {
+    const n = notes()
+    const s = serviceWith(both(), n)
+    const held = withHeld(s)
+    const { list } = mount(s)
+    await flush()
+    n.rehearsal.push(note('r3', 3))
+    held.now = [{ communityDid: CHOIR }]
+    refreshRoomRows()
+    await flush()
+    const rows = list.result.current.rows.rows.filter((r) => r.roomId === 'rehearsal')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].lastPost?.text).toBe('r3')
+  })
+
+  test('nothing is asked for a kept row: it is shown, not read', async () => {
+    const s = serviceWith(both(), notes())
+    const held = withHeld(s)
+    mount(s)
+    await flush()
+    s.listNotes.mockClear()
+    s.getRoom.mockClear()
+    s.readNote.mockClear()
+    s.listMyRooms.mockResolvedValueOnce([room('planning')])
+    held.now = [{ communityDid: CHOIR }]
+    refreshRoomRows()
+    await flush()
+    expect(s.listNotes.mock.calls.map(([roomId]) => roomId)).toEqual(['planning'])
+    expect(s.getRoom).not.toHaveBeenCalledWith('rehearsal')
+    expect(s.readNote).not.toHaveBeenCalledWith('rehearsal', expect.anything())
+  })
+
+  test('a kept row still reading asks no retry, nor a read when the agent is back (control: listed, it does both)', async () => {
+    const s = serviceWith(both(), notes())
+    const held = withHeld(s)
+    // Its first read fails: the row stays reading.
+    s.listNotes.mockImplementation(async (roomId: string, options?: { sinceVersion?: number }) => {
+      if (roomId === 'rehearsal') throw new Error('not yet')
+      return {
+        notes: notes().planning.filter((n) => options?.sinceVersion === undefined || n.version > options.sinceVersion),
+        complete: true,
+        check: { verdict: 'consistent', detail: '' },
+      }
+    })
+    const { list } = mount(s)
+    await flush()
+    expect(list.result.current.rows.rows.find((r) => r.roomId === 'rehearsal')?.reading).toBe(true)
+    // Control: listed and reading, it is retried.
+    await step(ROWS_RETRY_MS[0])
+    expect(s.listMyRooms).toHaveBeenCalledTimes(2)
+
+    s.listMyRooms.mockResolvedValue([room('planning')])
+    held.now = [{ communityDid: CHOIR }]
+    await step(ROWS_RETRY_MS[1])
+    expect(s.listMyRooms).toHaveBeenCalledTimes(3)
+    expect(list.result.current.rows.rows.find((r) => r.roomId === 'rehearsal')?.reading).toBe(true)
+    // Kept, it asks nothing more: no retry, and the agent back reads nothing.
+    await step(ROWS_RETRY_MS[2] + ROWS_RETRY_MS[1])
+    await sessionOpens(5_000)
+    expect(s.listMyRooms).toHaveBeenCalledTimes(3)
+  })
+
+  test('read again once a listing reads it: the kept row gives way to what is read now', async () => {
+    const n = notes()
+    const s = serviceWith(both(), n)
+    const held = withHeld(s)
+    const { list } = mount(s)
+    await flush()
+    s.listMyRooms.mockResolvedValueOnce([room('planning')])
+    held.now = [{ communityDid: CHOIR }]
+    refreshRoomRows()
+    await flush()
+
+    n.rehearsal.push(note('r3', 3))
+    held.now = []
+    refreshRoomRows()
+    await flush()
+    const row = list.result.current.rows.rows.find((r) => r.roomId === 'rehearsal')!
+    expect(row.lastPost?.text).toBe('r3')
+    expect(row.unread).toBe(1)
+  })
+
+  test('Hide and seen still work on a kept row', async () => {
+    const n = notes()
+    const s = serviceWith(both(), n)
+    const held = withHeld(s)
+    const { list } = mount(s)
+    await flush()
+    n.rehearsal.push(note('r3', 3))
+    refreshRoomRows()
+    await flush()
+    s.listMyRooms.mockResolvedValue([room('planning')])
+    held.now = [{ communityDid: CHOIR }]
+    refreshRoomRows()
+    await flush()
+    expect(list.result.current.rows.rows.find((r) => r.roomId === 'rehearsal')?.unread).toBe(1)
+    act(() => markRoomSeen(s, 'rehearsal', 3))
+    expect(list.result.current.rows.rows.find((r) => r.roomId === 'rehearsal')?.unread).toBe(0)
+    // Still seen after another listing that skips it.
+    refreshRoomRows()
+    await flush()
+    expect(list.result.current.rows.rows.find((r) => r.roomId === 'rehearsal')?.unread).toBe(0)
+    expect(canHideRoom('rehearsal')).toBe(true)
+    act(() => void hideRoom('rehearsal'))
+    expect(ids(list.result.current.rows.rows)).toEqual(['planning'])
+  })
+
+  test('the known gap: a community skipped by every listing since launch has no rows to keep', async () => {
+    const s = serviceWith(both(), notes())
+    const held = withHeld(s)
+    s.listMyRooms.mockResolvedValueOnce([room('planning')])
+    held.now = [{ communityDid: CHOIR }]
+    const { list } = mount(s)
+    await flush()
+    expect(ids(list.result.current.rows.rows)).toEqual(['planning'])
+  })
+
+  test('another agent starts with nothing kept', async () => {
+    const s = serviceWith(both(), notes())
+    withHeld(s)
+    const other = serviceWith([room('planning')], { planning: [note('p1', 1)] })
+    Object.assign(other, { heldBack: jest.fn(() => [{ communityDid: CHOIR }]) })
+    const poll = renderHook(({ service }: { service: RoomsService }) => useRoomRowsPoll(service, true), {
+      initialProps: { service: s as RoomsService },
+    })
+    const list = renderHook(() => useRoomRows())
+    await flush()
+    expect(ids(list.result.current.rows)).toEqual(['planning', 'rehearsal'])
+    poll.rerender({ service: other })
+    await flush()
+    expect(ids(list.result.current.rows)).toEqual(['planning'])
+  })
+
+  test("the app's log says how many rows were kept, and never which community", async () => {
+    const s = serviceWith(both(), notes())
+    const held = withHeld(s)
+    const lines: string[] = []
+    renderHook(() => useRoomRowsPoll(s, true, (line) => lines.push(line)))
+    await flush()
+    s.listMyRooms.mockResolvedValueOnce([room('planning')])
+    held.now = [{ communityDid: CHOIR }]
+    refreshRoomRows()
+    await flush()
+    const last = lines[lines.length - 1]
+    expect(last).toMatch(/^\[Rooms:rows\] 1 rooms listed, 0 not read yet, 1 kept as read before, in \d+ ms$/)
+    expect(lines.join('\n')).not.toContain('Choir')
+  })
+})
