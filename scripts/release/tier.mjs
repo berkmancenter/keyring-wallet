@@ -117,7 +117,11 @@ const POLICIES = ['store', 'strict', 'advisory'];
  * name starts with "record" (`this.recordMembers.delete(k)`, bifold #933) reads as a stored-record delete. Such a line
  * may carry `// tier-exempt(<flag>): <reason>`, naming the exact flag and at least ten characters of reason, written in
  * the PR where a reviewer reads it. It exempts only that line, only from that flag, and only from content flags: a path
- * flag cannot be exempted. Every exemption is printed with the verdict ("exempt"), so it is never silent.
+ * flag cannot be exempted. Every exemption is printed with the verdict ("exempt"), and the OTA dry run raises each
+ * one as a warning in its run summary, so it is never silent.
+ * Keep the flag match EXACT (=== on the trimmed name): a prefix, case-insensitive or punctuation-tolerant match would
+ * make an exemption guessable. An exemption travels with its line's text, so a later edit to that line keeps it: the
+ * dry run's warning is what makes that visible at publish time.
  */
 const EXEMPT = /\/\/\s*tier-exempt\(([^)]+)\):\s*(\S.{9,})$/;
 export const exemptionOf = (line, flag) => {

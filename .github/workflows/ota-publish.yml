@@ -511,7 +511,18 @@ jobs:
             exit 1
           fi
           code=0
-          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json || code=$?
+          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json > "$RUNNER_TEMP/tier.json" || code=$?
+          cat "$RUNNER_TEMP/tier.json"
+          # A tier-exempt line can turn a store verdict into ota, so every exemption is raised as a warning and written
+          # to the run summary: it must be seen at publish time, not only scrolled past in the log.
+          node -e '
+            const fs = require("fs");
+            let r; try { r = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
+            for (const e of r.exempted || []) {
+              const msg = `${e.flag} in ${e.file}: ${e.reason} -- ${e.line}`;
+              console.log(`::warning title=tier exemption::${msg}`);
+              if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `- tier exemption: ${msg}\n`);
+            }' "$RUNNER_TEMP/tier.json"
           case "$code" in
             0) ;;
             # ota-strict: a label since 10-29 (sign-in / keys / the VTI protocol line), published like ota.
