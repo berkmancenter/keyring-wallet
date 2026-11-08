@@ -26,7 +26,7 @@ import {
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DeviceEventEmitter } from 'react-native'
 
-import { withKeyLock } from './keyedRecords'
+import { membershipLockKey, withKeyLock } from './keyedRecords'
 import { isCurrentMembership, type VtiCommunityStore, type VtiMembership } from './VtiCommunityStore'
 import type { VtiCardCheckRefusal, VtiDeliveredCardCheck } from './vtiDeliveredCheck'
 
@@ -283,7 +283,7 @@ export async function receiveIssue(
       // messages a few milliseconds apart, and each is kept as it arrives:
       // one at a time per membership, or one overwrote the other's work and
       // the role card was lost (241 gate, run 1014-2239).
-      await withKeyLock(`keyring/vti-membership:${item.communityDid}:${personaDid}`, () =>
+      await withKeyLock(membershipLockKey(item.communityDid, personaDid), () =>
         keepMembershipCard(store, personaDid, item, options.via)
       )
     } else {

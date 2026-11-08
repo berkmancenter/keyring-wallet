@@ -42,7 +42,7 @@ import { DeviceEventEmitter } from 'react-native'
 
 import { VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { sameIdentity } from './didScid'
-import { withKeyLock } from './keyedRecords'
+import { membershipLockKey, withKeyLock } from './keyedRecords'
 import { canSignAs } from './sharedIdentity'
 import { vtaAgent } from './vtaAgent'
 import { vtiAgent, VtiRefusal } from './vtiAgent'
@@ -68,8 +68,6 @@ export const RENEW_RETRY_MS = 6 * 60 * 60 * 1000
 export const RENEW_LOOK_EVERY_MS = 60 * 60 * 1000
 /** The first look after unlock waits this long, so it does not compete with the sign-ins of the first screens. */
 export const RENEW_FIRST_LOOK_MS = 20 * 1000
-
-const LOCK = (communityDid: string, personaDid: string) => `keyring/vti-membership:${communityDid}:${personaDid}`
 
 const timeOf = (value: unknown): number | undefined => {
   const t = typeof value === 'string' ? Date.parse(value) : NaN
@@ -167,7 +165,7 @@ export async function renewMembershipCards(deps: RenewDeps): Promise<RenewOutcom
     return 'cardRefused'
   }
 
-  const kept = await withKeyLock(LOCK(communityDid, persona.did), async () => {
+  const kept = await withKeyLock(membershipLockKey(communityDid, persona.did), async () => {
     const latest = await store.getMembership(communityDid, persona.did)
     // Ended while the renewal was asked: a removal notice stands over a renewed card.
     if (!latest || latest.personaDid !== persona.did || !isCurrentMembership(latest)) return false

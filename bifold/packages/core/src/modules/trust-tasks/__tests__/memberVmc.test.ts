@@ -63,7 +63,9 @@ jest.mock('../module/vtiAgent', () => {
   }
 })
 
+import { membershipLockKey } from '../module/keyedRecords'
 import { VtiRefusal } from '../module/vtiAgent'
+import { COMMUNITY_ROLE_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE, receiveIssue } from '../module/vtiInbox'
 import { joinCommunity } from '../module/vtiJoin'
 import {
   buildMemberVmc,
@@ -302,5 +304,104 @@ describe('the community asking again (vtc/members/request-vmc/0.1)', () => {
       'ignored'
     )
     expect(mockSend).not.toHaveBeenCalled()
+  })
+})
+
+describe('the acknowledgement and a role card, writing one membership', () => {
+  // Two writers of one membership record: the role card, filed under the membership's lock (vtiInbox), and the
+  // acknowledgement, which reads the record, waits for the community, and saves it again. Each test holds one writer
+  // between its read and its save while the other runs, the order a phone gets when the community issues the role
+  // card while the acknowledgement is on its way.
+  //
+  // The result is read as `roleVec`, not `role`: filing the membership card already sets `role: 'member'`, and this
+  // role card says 'member' too, so a lost role card leaves `role` unchanged and a `role` check passes either way.
+  const gate = () => {
+    let open: () => void = () => undefined
+    const shut = new Promise<void>((resolve) => (open = resolve))
+    return { shut, open }
+  }
+  const roleCard = {
+    '@context': ['https://www.w3.org/ns/credentials/v2'],
+    id: 'urn:uuid:role-1',
+    type: ['VerifiableCredential', 'EndorsementCredential'],
+    issuer: COMMUNITY,
+    validFrom: '2026-10-11T17:00:00Z',
+    credentialSubject: {
+      id: PERSONA,
+      endorsement: { type: COMMUNITY_ROLE_ENDORSEMENT_TYPE, role: 'member', communityDid: COMMUNITY },
+    },
+    proof: { type: 'DataIntegrityProof' },
+  }
+  const fileRoleCard = (s: ReturnType<typeof store>) =>
+    receiveIssue(
+      s as never,
+      PERSONA,
+      {
+        type: CREDENTIAL_EXCHANGE_ISSUE,
+        from: COMMUNITY,
+        body: { payload: { credential_response: { credential: roleCard } } },
+      } as never,
+      { checkCard: async () => undefined }
+    )
+  const whole = (s: ReturnType<typeof store>) => ({
+    roleVec: Boolean(s.current()?.roleVec),
+    memberVmc: Boolean(s.current()?.memberVmc),
+    acked: Boolean(s.current()?.memberVmcAckedAt),
+  })
+  /** Hold every save that `matches` until `release`, telling `reached` when the first arrives. */
+  const holdSaves = (s: ReturnType<typeof store>, matches: (m: Record<string, unknown>) => boolean) => {
+    const reached = gate()
+    const release = gate()
+    const save = s.saveMembership.getMockImplementation() as (m: Record<string, unknown>) => Promise<void>
+    s.saveMembership.mockImplementation(async (m: Record<string, unknown>) => {
+      if (matches(m)) {
+        reached.open()
+        await release.shut
+      }
+      return save(m)
+    })
+    return { reached, release }
+  }
+
+  it('the lock is the key the card, role and renewal writers took before it had one name', () => {
+    // The two tests below prove the role card and the acknowledgement share a key. Nothing else would show the renewal
+    // drifting off it, so the key itself is pinned, as vtiInbox and vtiCardRenewal each spelled it out before.
+    expect(membershipLockKey(COMMUNITY, PERSONA)).toBe(`keyring/vti-membership:${COMMUNITY}:${PERSONA}`)
+  })
+
+  it('a role card filed while the acknowledgement waits for the community: both are kept', async () => {
+    const s = store({ membership: membershipOf() })
+    const answer = gate()
+    mockSend.mockImplementationOnce(async (_c: string, vc: { id: string }) => {
+      await answer.shut
+      return { ...stored, vmcId: vc.id }
+    })
+    // The role card's save, held after it has read the record (the acknowledgement not yet recorded in it).
+    const role = holdSaves(s, (m) => Boolean(m.roleVec) && !m.memberVmcAckedAt)
+    const ack = reciprocateMembership({ agent, store: s as never, persona, communityDid: COMMUNITY, send: mockSend })
+    await settle()
+    const filing = fileRoleCard(s)
+    await role.reached.shut
+    // The community answers while the role card's save is held.
+    answer.open()
+    await settle()
+    await settle()
+    role.release.open()
+    await Promise.all([ack, filing])
+    expect(whole(s)).toEqual({ roleVec: true, memberVmc: true, acked: true })
+  })
+
+  it('the acknowledgement recorded while a role card is filed: both are kept', async () => {
+    const s = store({ membership: membershipOf() })
+    // The acknowledgement's last save, held after it has read the record (no role card in it yet).
+    const ackSave = holdSaves(s, (m) => Boolean(m.memberVmcAckedAt) && !m.roleVec)
+    const ack = reciprocateMembership({ agent, store: s as never, persona, communityDid: COMMUNITY, send: mockSend })
+    await ackSave.reached.shut
+    const filing = fileRoleCard(s)
+    await settle()
+    await settle()
+    ackSave.release.open()
+    await Promise.all([ack, filing])
+    expect(whole(s)).toEqual({ roleVec: true, memberVmc: true, acked: true })
   })
 })

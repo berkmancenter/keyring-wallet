@@ -33,6 +33,7 @@ import { utils } from '@credo-ts/core'
 
 import { signDocumentProof, taskDigestMultibase } from '../documentProof'
 
+import { membershipLockKey, withKeyLock } from './keyedRecords'
 import { isCurrentMembership, type VtiCommunityStore, type VtiMembership } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 
@@ -207,14 +208,22 @@ async function reciprocateOnce(deps: Parameters<typeof reciprocateMembership>[0]
       agent.config?.logger?.warn?.(`[VTI] ${e.message}; the community's half of the membership stands alone`)
       return 'notPossible'
     }
-    await store.saveMembership({ ...membership, memberVmc: vc, memberVmcAckedAt: undefined })
+    const unacked = vc
+    await withKeyLock(membershipLockKey(communityDid, persona.did), async () => {
+      const latest = (await store.getMembership(communityDid, persona.did)) ?? membership
+      await store.saveMembership({ ...latest, memberVmc: unacked, memberVmcAckedAt: undefined })
+    })
   }
 
   const receipt = await deps.send(communityDid, vc, deps.requestId)
   if (receipt.status !== 'stored')
     throw new Error(`vtiMemberVmc: the community answered "${String(receipt.status)}", not "stored"`)
-  const latest = (await store.getMembership(communityDid, persona.did)) ?? membership
-  await store.saveMembership({ ...latest, memberVmc: vc, memberVmcAckedAt: new Date().toISOString() })
+  // Both saves read the record again under the membership's lock, as the card and role writers do, so neither puts
+  // back a copy from before a role card or a renewal filed while this one signed or waited for the community.
+  await withKeyLock(membershipLockKey(communityDid, persona.did), async () => {
+    const latest = (await store.getMembership(communityDid, persona.did)) ?? membership
+    await store.saveMembership({ ...latest, memberVmc: vc, memberVmcAckedAt: new Date().toISOString() })
+  })
   agent.config?.logger?.info?.(
     `[VTI] the community stored this member's acknowledgement (${String(receipt.vmcId ?? vc.id)})`
   )

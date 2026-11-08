@@ -18,6 +18,14 @@ import type { Agent, GenericRecord } from '@credo-ts/core'
 
 const queues = new Map<string, Promise<unknown>>()
 
+/**
+ * The lock over one membership record (a community and one of this phone's identities). Every read-modify-write of
+ * that record takes it: keeping a membership or role card, a card renewal, and the member's acknowledgement. A writer
+ * outside it puts back a copy it read before another's write, and that write is lost.
+ */
+export const membershipLockKey = (communityDid: string, personaDid: string): string =>
+  `keyring/vti-membership:${communityDid}:${personaDid}`
+
 /** Run `work` after every earlier piece of work for the same `lockKey` has settled. */
 export function withKeyLock<T>(lockKey: string, work: () => Promise<T>): Promise<T> {
   const previous = queues.get(lockKey) ?? Promise.resolve()
