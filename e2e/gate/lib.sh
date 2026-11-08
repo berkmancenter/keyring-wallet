@@ -256,6 +256,17 @@ c_members_deferred() {
   done < <(sort -u -t$'\t' -k1,2 "$f" | awk -F'\t' '!seen[$1 FS $2]++')
   mv "$keep" "$f"
 }
+# link_trimmed: whether a link leg (linkwait, linkfail, pnmlink) runs its trimmed rows: on a nightly or changed run, with
+# no rows asked for by name (E2E_ONLY_ROWS) and LINK_FULL not 1. The store-build gate (kind gate), a dry run and anything
+# else run every row. W1 of docs/plans/farm-test-footprint-plan.md (IN-560): fewer links on runners short of memory.
+link_trimmed() {
+  case "${GATE_KIND:-}" in nightly | changed) [ -z "${E2E_ONLY_ROWS:-}" ] && [ "${LINK_FULL:-}" != 1 ] ;; *) return 1 ;; esac
+}
+# link_trim_skips <leg> <kept> <all>: a SKIP row for each case of <all> not in <kept> on a trimmed run.
+link_trim_skips() {
+  local c; link_trimmed || return 0
+  for c in $3; do [[ " $2 " == *" $c "* ]] || row "$c" SKIP "trimmed on a ${GATE_KIND} run (W1): the store-build gate runs it"; done
+}
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
@@ -468,14 +479,47 @@ sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 # named gate-* or e2e-approvals (or $APPROVER_SET), and policies whose id starts "gate-". Anything else is logged as
 # "foreign … left in place", visible but not destroyed. Called by run and rerun right after the run lock, so it never
 # sweeps under a running gate. A runner named twice is swept once.
+# gate_sweep <leg>…: only the runners those legs use (sweep_runners_for), so a run never calls pnm on a runner it does
+# not touch: the MacBook's pair-ios-only nightly swept mini1, uiux and openvtc every night (IN-560, W9 of
+# docs/plans/farm-test-footprint-plan.md). A runner no leg of this run names cannot have been left anything by it; one
+# a killed earlier run left something on is swept by the next run that uses it, before its first leg. With no legs
+# named, or a leg with no script, every runner (the old behaviour: never skip a runner it cannot rule out).
 GATE_RULE_TASKS="https://trusttasks.org/spec/acl/swap-key/0.1 https://trusttasks.org/spec/vta/contexts/get/1.0"
 gate_sweep() {
-  local slug seen=" "
+  local slug v n seen=" " vars skipped=""
   galarm_reap
-  for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
-    [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
+  vars=$(sweep_runners_for "$@")
+  for v in RUNNER_MAIN RUNNER_A RUNNER_B; do
+    n=${v}_SLUG; slug=${!n:-}
+    [ -n "$slug" ] || continue
+    [[ " $vars " == *" $v "* ]] || { [[ " $skipped " == *" $slug "* ]] || skipped="$skipped $slug"; continue; }
+    [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
     gate_sweep_runner "$slug"
   done
+  # A slug that is also a used runner (an env with A = MAIN) was swept above, so it is not "not swept".
+  local s out=""; for s in $skipped; do [[ "$seen" == *" $s "* ]] || out="$out $s"; done
+  [ -z "$out" ] || say "sweep: not swept, no leg of this run uses them:$out"
+}
+# sweep_runners_for <leg>…: the runner variables (RUNNER_MAIN, RUNNER_A, RUNNER_B) the legs' own scripts reach, by
+# slug. Only a slug counts: pnm reaches a runner by its slug alone, so a leg naming only a runner's DID (linkfail's
+# approver, RUNNER_A_DID) writes nothing there. Any *_SLUG a script names counts, by its value: p2 reaches runners
+# through TUI_APPLICANT_SLUG and P2_VETTER_RUNNER_SLUG, and a farm may set either to MAIN's, A's or B's slug (ac on
+# #871). Every runner when no leg is named or a leg has no script.
+sweep_runners_for() {
+  local leg f n v s vals=" " out=" "
+  [ $# -gt 0 ] || { echo RUNNER_MAIN RUNNER_A RUNNER_B; return 0; }
+  for leg in "$@"; do
+    f=$GATE_SRC/legs/$leg.sh
+    [ -f "$f" ] || { echo RUNNER_MAIN RUNNER_A RUNNER_B; return 0; }
+    for n in $(grep -o -E '[A-Z][A-Z0-9_]*_SLUG' "$f" | sort -u); do
+      s=${!n:-}; [ -n "$s" ] && [[ "$vals" != *" $s "* ]] && vals="$vals$s "
+    done
+  done
+  for v in RUNNER_MAIN RUNNER_A RUNNER_B; do
+    n=${v}_SLUG; s=${!n:-}
+    [ -n "$s" ] && [[ "$vals" == *" $s "* ]] && out="$out$v "
+  done
+  echo $out
 }
 # gate_sweep_runner <slug>: the sweep for one runner (also a leg's end-of-leg cleanup, e.g. agents.sh). A runner whose
 # approvals cannot be read (network, keychain) is said so, never taken for a clean one.
@@ -522,6 +566,18 @@ farm_drift() {
   echo "$line"
 }
 
+# leg_cleaned_slugs <leg>: the slugs whose phone keys the leg's own cleanup removes (its keys_since "$X" lines), by
+# value. run_leg hands them to the leg's drivers as E2E_ACL_LEG_SLUGS, so a link driver on one of them leaves its keys
+# to that one list-and-delete pass at the leg's end instead of listing the ACL again per link (IN-560, W3 of
+# docs/plans/farm-test-footprint-plan.md). A slug the leg does not clean is not named, and its driver cleans per link.
+leg_cleaned_slugs() {
+  local f=$GATE_SRC/legs/$1.sh n s out=" "
+  [ -f "$f" ] || return 0
+  for n in $(grep -o -E 'keys_since "\$[A-Z][A-Z0-9_]*"' "$f" | grep -o -E '[A-Z][A-Z0-9_]*' | sort -u); do
+    s=${!n:-}; [ -n "$s" ] && [[ "$out" != *" $s "* ]] && out="$out$s "
+  done
+  echo $out
+}
 keys_since() { local s0 rc; s0=$(date +%s); keys_since_run "$@"; rc=$?; step_rec "cleanup keys $1" "$s0" "$(( $(date +%s) - s0 ))"; return $rc; }
 keys_since_run() {
   local slug=$1 t0=$2 k r i
