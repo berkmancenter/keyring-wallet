@@ -36,7 +36,11 @@ if selected pnmqr-scan; then
   pnm "$RUNNER_MAIN_SLUG" vta qr --out "$LEG_DIR/pnm-qr.svg" > "$LEG_DIR/pnm-qr.out"
   echo "  pnm vta qr: $(tail -1 "$LEG_DIR/pnm-qr.out" | cut -c1-100)"
 fi
-for c in ${LINK_CASES:-pnmqr-scan scan-agent-no-rest link-again-rescan}; do
+# W1: a nightly or changed run makes one link (pnmqr-scan); "link again after removal" and the no-VTARest scan stay in
+# the store gate.
+PNM_CASES="pnmqr-scan scan-agent-no-rest link-again-rescan"
+link_trimmed && [ -z "${LINK_CASES:-}" ] && { link_trim_skips pnmlink pnmqr-scan "$PNM_CASES"; LINK_CASES=pnmqr-scan; }
+for c in ${LINK_CASES:-$PNM_CASES}; do
   selected "$c" || continue
   # The agent without VTARest is linked as itself, so the driver grants and cleans up on its own slug.
   slug=$RUNNER_MAIN_SLUG did=$RUNNER_MAIN_DID url=$RUNNER_MAIN_URL

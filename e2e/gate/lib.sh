@@ -228,6 +228,17 @@ pnm() {
 
 # The community's admin calls (decide join requests, list and remove members).
 c_admin() { galarm 90 node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
+# link_trimmed: whether a link leg (linkwait, linkfail, pnmlink) runs its trimmed rows: on a nightly or changed run, with
+# no rows asked for by name (E2E_ONLY_ROWS) and LINK_FULL not 1. The store-build gate (kind gate), a dry run and anything
+# else run every row. W1 of docs/plans/farm-test-footprint-plan.md (IN-560): fewer links on runners short of memory.
+link_trimmed() {
+  case "${GATE_KIND:-}" in nightly | changed) [ -z "${E2E_ONLY_ROWS:-}" ] && [ "${LINK_FULL:-}" != 1 ] ;; *) return 1 ;; esac
+}
+# link_trim_skips <leg> <kept> <all>: a SKIP row for each case of <all> not in <kept> on a trimmed run.
+link_trim_skips() {
+  local c; link_trimmed || return 0
+  for c in $3; do [[ " $2 " == *" $c "* ]] || row "$c" SKIP "trimmed on a ${GATE_KIND} run (W1): the store-build gate runs it"; done
+}
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
