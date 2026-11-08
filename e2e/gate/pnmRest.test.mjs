@@ -20,14 +20,14 @@ function call(args, { restAnswer = { rc: 0, err: '' }, env = {}, setup, wrapperP
     const inner = path.join(dir, 'inner');
     writeFileSync(inner, `#!/bin/bash
 echo "$*" >> "${dir}/calls"
-case " $* " in *" --transport rest "*) echo "rest-out"; printf '%s\\n' "$REST_ERR" >&2; exit "$REST_RC" ;; esac
+case " $* " in *" --transport rest "*) echo "rest-out"; [ -n "\${REST_OUT:-}" ] && printf '%s\\n' "$REST_OUT"; printf '%s\\n' "$REST_ERR" >&2; exit "$REST_RC" ;; esac
 echo "default-out"; exit 0
 `);
     chmodSync(inner, 0o755);
     setup?.(dir);
     const r = spawnSync('bash', [wrapperPath, ...args], {
       encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: dir, PNM_INNER: inner, GATE_PNM_TRANSPORT_DIR: path.join(dir, 'transport'), REST_RC: String(restAnswer.rc), REST_ERR: restAnswer.err, ...env },
+      env: { PATH: process.env.PATH, HOME: dir, PNM_INNER: inner, GATE_PNM_TRANSPORT_DIR: path.join(dir, 'transport'), REST_RC: String(restAnswer.rc), REST_ERR: restAnswer.err, REST_OUT: restAnswer.out ?? '', ...env },
     });
     const calls = existsSync(path.join(dir, 'calls')) ? readFileSync(path.join(dir, 'calls'), 'utf8').trim().split('\n') : [];
     const mark = path.join(dir, 'transport', 'mini-prague');
@@ -80,6 +80,19 @@ test('a timeout: a read is made again; a write is NOT (it may have landed), and 
   assert.deepEqual(write.calls, ['--vta mini-prague acl delete did:key:z6Mk --transport rest']);
   assert.equal(write.status, 1);
   assert.equal(write.marked, null);
+});
+
+test('trigger text in pnm\'s OUTPUT only (a record that says "certificate", "not resolve"): no fallback, no mark (ac on #877)', () => {
+  const r = call(ACL, { restAnswer: { rc: 1, out: 'note: certificate rotation; could not resolve the label', err: 'Error: Not found: no such entry' } });
+  assert.equal(r.calls.length, 1);
+  assert.equal(r.marked, null);
+  assert.equal(r.status, 1);
+});
+
+test('a 404 means the server answered: a write that gets one is returned as it is, no fallback (ac on #877)', () => {
+  const r = call(['--vta', 'mini-prague', 'acl', 'delete', 'did:key:z6Mk'], { restAnswer: { rc: 1, err: 'Error: HTTP 404 Not Found' } });
+  assert.equal(r.calls.length, 1);
+  assert.equal(r.marked, null);
 });
 
 test('pnm\'s own answer (not found, consent required) is returned as it is, never retried', () => {

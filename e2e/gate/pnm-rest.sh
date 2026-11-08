@@ -29,9 +29,12 @@ cmd=${3:-}; sub=${4:-}
 out=$(mktemp); err=$(mktemp); trap 'rm -f "$out" "$err"' EXIT
 "$INNER" "$@" --transport rest > "$out" 2> "$err"; rc=$?
 if [ $rc -eq 0 ]; then cat "$out"; cat "$err" >&2; exit 0; fi
-both=$(cat "$out" "$err")
-# Never reached the runner: safe to make again, write or read.
-pre='connection refused|Connection refused|error sending request|dns error|failed to lookup|not resolve|no REST|VTARest|does not advertise|REST (endpoint|transport) (is )?(not|un)|404 Not Found|certificate|tls handshake'
+# pnm's own error lines only (stderr), never its output: a record's content ("certificate", "not resolve") must not
+# switch REST off for the slug (ac on #877).
+both=$(cat "$err")
+# Never reached the runner: safe to make again, write or read. A 404 means the server answered, so it is not here: a
+# record pnm cannot find is its own "Not found", and a runner with no REST says so ("no REST", "does not advertise").
+pre='connection refused|Connection refused|error sending request|dns error|failed to lookup|not resolve|no REST|VTARest|does not advertise|REST (endpoint|transport) (is )?(not|un)|certificate|tls handshake'
 # Reached it or may have: only a read is made again.
 amb='timed out|deadline has elapsed|operation timed out'
 read_cmd=0; case "$cmd:$sub" in *:list | *:get | *:info | health:* | did-mgmt:dids) read_cmd=1 ;; esac
