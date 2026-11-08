@@ -25,9 +25,10 @@ echo "default-out"; exit 0
 `);
     chmodSync(inner, 0o755);
     setup?.(dir);
+    if (env.PATH_PREFIX === '__GNU__') env = { ...env, PATH_PREFIX: path.join(dir, 'gnu') };
     const r = spawnSync('bash', [wrapperPath, ...args], {
       encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: dir, PNM_INNER: inner, GATE_PNM_TRANSPORT_DIR: path.join(dir, 'transport'), REST_RC: String(restAnswer.rc), REST_ERR: restAnswer.err, REST_OUT: restAnswer.out ?? '', ...env },
+      env: { PATH: env.PATH_PREFIX ? `${env.PATH_PREFIX}:${process.env.PATH}` : process.env.PATH, HOME: dir, PNM_INNER: inner, GATE_PNM_TRANSPORT_DIR: path.join(dir, 'transport'), REST_RC: String(restAnswer.rc), REST_ERR: restAnswer.err, REST_OUT: restAnswer.out ?? '', ...env },
     });
     const calls = existsSync(path.join(dir, 'calls')) ? readFileSync(path.join(dir, 'calls'), 'utf8').trim().split('\n') : [];
     const mark = path.join(dir, 'transport', 'mini-prague');
@@ -71,6 +72,18 @@ test('a slug marked within the window goes straight to the default; an old mark 
   assert.deepEqual(fresh.calls, ['--vta mini-prague acl list --json']);
   const old = call(ACL, { env: { GATE_PNM_REST_RETRY_S: '0' }, setup: (d) => { spawnSync('mkdir', ['-p', path.join(d, 'transport')]); writeFileSync(path.join(d, 'transport', 'mini-prague'), 'x'); } });
   assert.deepEqual(old.calls, ['--vta mini-prague acl list --json --transport rest']);
+});
+
+test('GNU stat (the Linux runner): `stat -f %m` succeeds with junk, and a fresh mark still sends the call straight to the default (ac on #877)', () => {
+  const r = call(ACL, { setup: (d) => {
+    spawnSync('mkdir', ['-p', path.join(d, 'transport'), path.join(d, 'gnu')]);
+    writeFileSync(path.join(d, 'transport', 'mini-prague'), 'x');
+    // GNU stat: -c %Y is the mtime in epoch seconds; -f is --file-system and prints a filesystem report, exit 0.
+    writeFileSync(path.join(d, 'gnu', 'stat'), `#!/bin/bash\nif [ "$1" = -c ]; then date +%s; else echo "  File: \\"$3\\""; echo "    ID: 0 Namelen: 255"; fi\nexit 0\n`);
+    chmodSync(path.join(d, 'gnu', 'stat'), 0o755);
+  }, env: { PATH_PREFIX: '__GNU__' } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.calls, ['--vta mini-prague acl list --json']);
 });
 
 test('a timeout: a read is made again; a write is NOT (it may have landed), and returns pnm\'s own failure', () => {

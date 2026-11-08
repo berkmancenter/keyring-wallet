@@ -22,8 +22,13 @@ for a in "$@"; do case "$a" in --transport | --transport=*) exec "$INNER" "$@" ;
 [ "${PNM_TRANSPORT:-rest}" = rest ] || exec "$INNER" "$@"
 DIR=${GATE_PNM_TRANSPORT_DIR:-${GATE_HOME:-$HOME/.keyring-fleet/gate}/pnm-transport}
 mark=$DIR/$slug
-if [ -f "$mark" ] && [ $(( $(date +%s) - $(stat -f %m "$mark" 2>/dev/null || stat -c %Y "$mark") )) -lt "${GATE_PNM_REST_RETRY_S:-86400}" ]; then
-  exec "$INNER" "$@"
+# The mark's age from its mtime, by value, GNU first (as ci/pnm-ci.sh): on GNU `stat -f %m` succeeds (-f is
+# --file-system) and prints junk, so an exit-code fallback never fired and the arithmetic killed the script on the Linux
+# runner (ac on #877). An mtime that cannot be read counts as 0: "try REST".
+if [ -f "$mark" ]; then
+  age=$(stat -c %Y "$mark" 2>/dev/null); case ${age:-} in '' | *[!0-9]*) age=$(stat -f %m "$mark" 2>/dev/null) ;; esac
+  case ${age:-} in '' | *[!0-9]*) age=0 ;; esac
+  [ $(( $(date +%s) - age )) -lt "${GATE_PNM_REST_RETRY_S:-86400}" ] && exec "$INNER" "$@"
 fi
 cmd=${3:-}; sub=${4:-}
 out=$(mktemp); err=$(mktemp); trap 'rm -f "$out" "$err"' EXIT
