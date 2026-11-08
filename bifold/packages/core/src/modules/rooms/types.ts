@@ -453,6 +453,29 @@ export interface HeldBackCommunity {
   communityName?: InertText
 }
 
+/** One thing a member writes. A key is opaque: it never says what a record is, answers or holds. */
+export type RecordWrite =
+  /** A message, a reply if it names one. `idempotencyKey`: this send's own, so a retry after a lost answer is one record. */
+  | { type: 'message'; body: string; inReplyTo?: { key: string; version?: number }; idempotencyKey?: string }
+  /** A new reaction. A writer already holding one with this value and target reuses it: `changeReaction`. */
+  | { type: 'reaction'; value: string; target: { key: string; version?: number } }
+  /** A new value on this member's own reaction record, in one write. */
+  | { type: 'changeReaction'; key: string; value: string }
+  /** An empty version of this member's own reaction or message. Its replies stay. */
+  | { type: 'withdraw'; key: string }
+  /** New words on this member's own message. */
+  | { type: 'edit'; key: string; body: string }
+
+/** What a room lets this member write now. */
+export interface RecordFeatures {
+  /** What the room's profile lists. Empty when it can't be read: that permits none. */
+  listed: string[]
+  /** This member's agent will seal these members (`rooms/keys/seal/0.3`). */
+  canSeal: boolean
+  /** The profile could not be read, as opposed to listing nothing. */
+  unresolved: boolean
+}
+
 export interface RoomsService {
   /** True for the fixture service: every screen it feeds shows the "Sample data" banner. */
   readonly isSample: boolean
@@ -500,6 +523,15 @@ export interface RoomsService {
   listFiles(roomId: string): Promise<RoomFile[]>
   /** The largest file this room's host takes, in bytes, where that is less than the picker's own limit. */
   fileLimit?(roomId: string): Promise<number>
+  /**
+   * Whether `sendRecord` is switched on in this build, asked before anything else: off, a screen offers no write and
+   * reads no profile for one. Absent reads as off.
+   */
+  recordSendingOn?(): boolean
+  /** What this room lets its member write: `real/recordWrites.ts`. Absent: the sheet offers less. */
+  recordFeaturesIn?(roomId: string): Promise<RecordFeatures>
+  /** Writes a message, reply or reaction, by the writer's rule. Off in every build until a maintainer says otherwise. */
+  sendRecord?(roomId: string, write: RecordWrite): Promise<{ key: string; version: number }>
   openFile(roomId: string, fileId: string, options?: RoomsTransferOptions): Promise<OpenedFile>
   /**
    * Deletes the protected local copy a completed `openFile` made (a cancelled one keeps none). Call it when the viewer closes. The wallet

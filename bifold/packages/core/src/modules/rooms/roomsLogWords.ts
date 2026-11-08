@@ -167,6 +167,11 @@ const LOGGED_REFUSAL_CODES = new Set([
   'tooLarge',
   'tooLong',
   'welcomeMissing',
+  // A record a member may not rewrite or withdraw, and a tier its record writes aren't built for (`sendRecord`).
+  'notThatKind',
+  'notYours',
+  'retracted',
+  'tierNotYet',
 ])
 
 /**
