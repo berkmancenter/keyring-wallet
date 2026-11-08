@@ -42,6 +42,15 @@ test('no host configured: says so and probes nothing', () => {
   assert.equal(f.calls.length, 0);
 });
 
+test('a host that is not a plain hostname is not checked, and no call is made (ac on #875)', () => {
+  for (const host of ['mediator.example.org; echo oops', 'a.org && reboot', '$(id)', 'a b', 'https://a.org/']) {
+    const f = fake([]);
+    const lines = netAtFailure({ host, platform: 'android', serial: 'emulator-5572', exec: f.exec });
+    assert.equal(f.calls.length, 0, host);
+    assert.match(lines[0], /^\[net\] at failure: not checked \(the probe host looks wrong: /);
+  }
+});
+
 test('the link driver logs it on every failure, after the screenshot and page source, and a probe error cannot change the outcome', () => {
   const src = readFileSync(path.join(here, '..', 'run-vta-link.js'), 'utf8');
   const i = src.indexOf('await dumpSource(driver, "link-failure")'), j = src.indexOf('netAtFailure({ host: process.env.GATE_NET_PROBE_HOST || process.env.RUNNER_MEDIATOR_HOST'), k = src.indexOf('printFailure(LINK_MODE === "manual"');

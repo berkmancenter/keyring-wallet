@@ -9,7 +9,13 @@
  * both sides: inside the emulator (TCP 443 by nc, else the name by ping, and its DNS server) and on the Mac (the name,
  * and an HTTPS request's timing). Logged only; it never changes the run's outcome.
  *
- * The host is GATE_NET_PROBE_HOST (the envs set it to the app's own mediator), else RUNNER_MEDIATOR_HOST.
+ * The host is GATE_NET_PROBE_HOST (the envs set it to the app's own mediator), else RUNNER_MEDIATOR_HOST. It is checked
+ * against a plain hostname first, since it goes into a command string the emulator's shell parses and into a URL: anything
+ * else is logged as not checked, with no call made (ac on #875).
+ *
+ * Cost: up to ~75 s added to a failed Android run (three adb calls and dscacheutil at 15 s, curl at 10 s), ~30 s on iOS.
+ * execFileSync's timeout sends SIGTERM and does not escalate to SIGKILL, so a call that ignores SIGTERM can outlast it;
+ * noted, not coded around.
  */
 import { execFileSync } from "node:child_process";
 
@@ -24,6 +30,7 @@ const run = (cmd, args, timeout = 15000) => {
 /** The probe's lines, `[net]`-prefixed. `exec(cmd, args)` returns { ok, out } (injectable for tests). */
 export function netAtFailure({ host, serial, platform, exec = run, now = () => new Date().toISOString() } = {}) {
   if (!host) return ["[net] at failure: no probe host (GATE_NET_PROBE_HOST / RUNNER_MEDIATOR_HOST), not checked"];
+  if (!/^[A-Za-z0-9._-]+$/.test(host)) return [`[net] at failure: not checked (the probe host looks wrong: ${JSON.stringify(String(host).slice(0, 80))})`];
   const lines = [`[net] at failure ${now()}: probing ${host}`];
   if (platform === "android" && serial) {
     const tcp = exec("adb", ["-s", serial, "shell", `echo | nc -w 3 ${host} 443 >/dev/null 2>&1 && echo tcp || echo no-tcp`]);
