@@ -117,6 +117,9 @@ leg_wanted() {
   [ "$2" = all ] && [[ " ${LEGS_NIGHTLY_ONLY:-} ${LEGS_BY_NAME_ONLY:-} " != *" $1 "* ]]
 }
 
+# wanted_legs <legs>: the legs a --legs value ("all" or a comma list) names, one per line, as run_legs picks them.
+wanted_legs() { local l; for l in $LEGS_SOLO $LEGS_IOS $LEGS_ANDROID; do leg_wanted "$l" "$1" && echo "$l"; done; return 0; }
+
 # Split the wanted legs by platform, and run the two platforms side by side when the disk allows.
 run_legs() {
   local rd=$1 want=$2 serial=$3 ios=() android=() solo=() l return_solo=0
@@ -190,7 +193,9 @@ cmd_run() {
   run_lock
   # A nightly run marks its day only now, holding the lock: one that never got this far is tried again in the window.
   [ -z "${GATE_NIGHTLY_MARK:-}" ] || echo "started $(stamp)Z, pin ${pin:0:8}" > "$GATE_NIGHTLY_MARK"
-  gate_sweep
+  # Only the runners these legs use (W9): wanted_legs prints nothing for a --legs naming no known leg, and gate_sweep
+  # with no legs sweeps every runner.
+  gate_sweep $(wanted_legs "$legs")
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
@@ -220,7 +225,8 @@ cmd_rerun() {
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
-  gate_sweep
+  # The legs of the run being rerun (a superset of what reruns); a run with no leg table sweeps every runner.
+  gate_sweep $(cut -f1 "$old/legs.tsv" 2>/dev/null | sort -u)
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
@@ -278,7 +284,7 @@ cmd_changed() {
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
-  gate_sweep
+  gate_sweep ${legs//,/ }
   local rd; rd=$(new_run "$pin" "changed")
   printf '%s\n' "$json" > "$rd/changed.json"
   {
