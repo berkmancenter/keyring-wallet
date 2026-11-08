@@ -14,12 +14,11 @@
 //   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, policy, files}], held,
 //                                    strict, unchecked}
 // Exit: 0 ota, 1 none, 2 store (native, or a held flag), 3 an error (reported as store, never none), 4 unchecked (ota by
-// its paths, but --files cannot read the added lines a held flag looks at: run it with --range), 5 ota-strict (OTA
-// only under the strict conditions, listed under "strict": the full gate green on the bundle's commit, ring 0 soaked
-// 24 hours, both approvers). ONLY 0 permits an OTA publish as it stands; 5 permits one only when the publish step has
-// proof of those conditions; 1-4 mean do not publish OTA. "tier" is the verdict; "reasons" is the per-file input (a
+// its paths, but --files cannot read the added lines a held flag looks at: run it with --range), 5 ota-strict (OTA,
+// labelled: the change touches sign-in or keys, or the VTI protocol line, listed under "strict"; since 10-29 it publishes
+// like 0, and the label is for reviewers and the release's summary). 0 and 5 permit an OTA publish; 1-4 mean do not
+// publish OTA. "tier" is the verdict; "reasons" is the per-file input (a
 // file there can say ota while the tier is store, unchecked or ota-strict), so never recompute the tier from reasons.
-// tier.mjs names the strict conditions; the publish step proves them, and must fail closed when it cannot.
 // "held" and "strict" name the flags that moved an ota change; when the tier is store for its own reasons (native files)
 // they are empty even if flags were raised: read "flags" for every flag a change raises.
 // While a held flag reads added lines (deletes stored records does), --files can never say ota: a change that is ota
@@ -53,6 +52,10 @@ export const RULES = [
   ['store', 'install script (shapes node_modules)', /^scripts\/(ensure-bifold-ready|fix-portal-symlinks)\.js$/],
   // Folders the app never ships.
   ['none', 'e2e, CI and tooling', /^(e2e|\.github|scripts|tsp-reference|deploy|\.claude|\.husky|\.yarn\/releases|\.demo-local|docs)\//],
+  // The app's own tooling: the OTA publisher, the ledger refresh. Nothing the bundle imports. A hot fix branch carries
+  // the publisher it is published with, so a change here must never make the fix itself read store. Its script files
+  // only: a manifest there (package.json) still reads store, by the rule below.
+  ['none', "the app's tooling (app/scripts: the OTA publisher, the ledger refresh)", /^app\/scripts\/[^/]+\.(mjs|cjs|js)$/],
   ['none', 'server-side package (not in the app)', /^bifold\/packages\/(witness-server|mediator-server|vrc-reference|vrc-shared)\//],
   ['none', "bifold's sample app, tooling or CI", /^bifold\/(samples|scripts|\.github|\.githooks|docs)\//],
   // Store: compiled into the binary.
@@ -67,9 +70,13 @@ export const RULES = [
   // What the app never ships, by file type.
   ['none', 'docs', /\.(md|txt)$/],
   ['none', 'tests', /(^|\/)(__tests__|__mocks__)\/|\.(test|spec)\.[jt]sx?$/],
-  ['none', 'repository dotfile', /^\.(gitignore|gitattributes|editorconfig|nvmrc|prettierrc[^/]*|prettierignore|eslintrc[^/]*|eslintignore|commitlintrc[^/]*|lintstagedrc[^/]*)$/],
+  // At the wallet root and at bifold's (the submodule's own .prettierignore keeps vendored bundles byte-identical).
+  ['none', 'repository dotfile', /^(bifold\/)?\.(gitignore|gitattributes|editorconfig|nvmrc|prettierrc[^/]*|prettierignore|eslintrc[^/]*|eslintignore|commitlintrc[^/]*|lintstagedrc[^/]*)$/],
   ['none', 'the .env template (builds read their own .env)', /^app\/\.env\.sample$/],
   ['none', "a package's test or type-check config", /^bifold\/packages\/[^/]+\/(jest\.config\.[jt]s|tsconfig[^/]*\.json|\.eslintrc[^/]*|\.prettierrc[^/]*)$/],
+  // A package's dev-time generators (core: gen-testids, the emoji data). Their OUTPUT lands in src and grades there;
+  // nothing the app ships imports scripts/. The two native packages match the native rule above first.
+  ['none', "a package's dev-time scripts (generators and their tests; nothing shipped imports them)", /^bifold\/packages\/[^/]+\/scripts\//],
   ['none', "bifold's own lockfile (the app installs from the wallet's yarn.lock, which a new dependency changes)", /^bifold\/yarn\.lock$/],
   // The e2e test-id manifest, the same artefact the wallet's own e2e/lib/testids.json is, on the other side of
   // the submodule. Nothing the app ships reads it: testIdWithKey is `testIdPrefix + key`, no src imports the
@@ -87,16 +94,20 @@ export const RULES = [
 /**
  * Flags: classes of change that could travel OTA (the OTA lane's question 1 on board #29). The owner's policy (10-11,
  * revised the same day to let features travel OTA): deleting stored records stays store only, since a rollback cannot
- * undo data already changed; sign-in / key handling and the VTI protocol line travel OTA under the strict conditions.
+ * undo data already changed; sign-in / key handling and the VTI protocol line travel OTA, labelled as strict (since 10-29 a label, not a gate).
  * shown to the approver beside an "ota" tier. A flag matches a path, or (with --range, which reads the diff) a line
  * the change adds.
  */
 export const FLAGS = [
   // Storage deletes only: a Map's or Set's .delete() is not one. deleteById on any receiver (Credo's APIs), .delete or
-  // .remove on a receiver named for storage, and the record-removing helpers.
-  { flag: 'deletes stored records', policy: 'store', added: /\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
+  // .remove on a receiver named for storage, the record-removing helpers, and the four device-store deletes whose method
+  // names the receiver rule can't see (AsyncStorage.removeItem / .multiRemove / .clear, SecureStore.deleteItemAsync;
+  // a stopgap, 10-30: names, not behaviour).
+  { flag: 'deletes stored records', policy: 'store', added: /\bAsyncStorage\.(?:removeItem|multiRemove|clear)\s*\(|\bSecureStore\.deleteItemAsync\s*\(|\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
   { flag: 'sign-in / key handling', policy: 'strict', path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
-  { flag: 'VTI protocol line', policy: 'strict', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
+  // Case-insensitive: the protocol line's files are named both ways (vtiAgent.ts, VtiMediatorTransport.ts, TspCarriage.ts),
+  // and without /i the capitalised ones read plain ota (found 10-29).
+  { flag: 'VTI protocol line', policy: 'strict', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/i },
 ];
 
 const POLICIES = ['store', 'strict', 'advisory'];
@@ -222,7 +233,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       for (const f of r.flags) console.log(`${{ store: 'hold  ', strict: 'strict' }[f.policy] || 'flag  '} ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
       const why = r.held.length ? ` (held back from OTA: ${r.held.join('; ')})`
         : r.unchecked.length ? ` (ota by its paths; not checked without --range: ${r.unchecked.join('; ')})`
-        : r.strict.length ? ` (OTA only with the full gate green, 24 h on ring 0 and both approvers: ${r.strict.join('; ')})` : '';
+        : r.strict.length ? ` (OTA, labelled: touches ${r.strict.join('; ')})` : '';
       console.log(`tier=${r.tier}${why}`);
     }
     // exitCode, not exit(): a large --json written to a pipe must finish before the process ends.

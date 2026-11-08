@@ -1,5 +1,7 @@
 # Keyring on the VTA Farm — the phone at every level of the developer path
 
+**Roadmap epic:** [keyring-wallet#694](https://github.com/berkmancenter/keyring-wallet/issues/694)
+
 **Status:** Proposal for review. Not a commitment to implement.
 **Scope:** making Keyring a first-class client of a **Farm-hosted** Personal VTA, at every level of the developer path the ecosystem documents — provisioning, everyday operation, community membership — and making the React Native runtime a supported target of the ecosystem's own TypeScript libraries along the way. No change to the VRC/witness stack except where §6 says so.
 **Siblings:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) owns the transport and operation layers this plan stands on; its [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client itself. [`reference-app-sdk-packaging.md`](./reference-app-sdk-packaging.md) owns what we hand a third-party developer. This plan owns only what changes when the VTA is **somebody else's managed service** rather than one we run.

@@ -21,7 +21,7 @@ import { createSession, deviceTag, ensureAppium, stopAppium, screenshot, dumpSou
 import { MAY_FLIP_CRITERIA, criteriaNote } from "./lib/criteria.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
-import { handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
+import { CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { checkVettingStep } from "./lib/filledButtons.js";
 import * as roles from "./lib/keyringRoles.js";
@@ -390,7 +390,9 @@ try {
     // (E2E_ONE_FILLED=1; checkVettingStep is a no-op without it).
     const o = { log: process.env.E2E_STEP_LOG || path.join(here, "artifacts", `vetting-steps-${Date.now()}.jsonl`), check: checkVettingStep };
     console.log(`[e2e] step log: ${o.log}`);
-    await roles.vetter.openDesk(vetter, o);
+    // A vetter of several communities has one desk door each: open this community's (lib/vetterDoor.js).
+    const community = process.env.KEYRING_COMMUNITY_DID ? { did: process.env.KEYRING_COMMUNITY_DID, names: process.env.KEYRING_COMMUNITY_NAME ? [process.env.KEYRING_COMMUNITY_NAME] : [] } : undefined;
+    await roles.vetter.openDesk(vetter, { ...o, community });
     await checkVettingStep(vetter, "desk, before a ticket");
     const { value: ticket } = await roles.vetter.issueTicket(vetter, o);
     await screenshot(vetter, "vetting-01-ticket");
@@ -689,7 +691,7 @@ try {
     await (await waitForTestId(applicant, "JoinStart", 30000)).click();
     await waitForTestId(applicant, "JoinMakeIdentity", 30000);
     await tapTestIdByCoordinates(applicant, "JoinAsContinue");
-    await handleBiometricConfirmIfPresent(applicant);
+    await handleBiometricConfirmIfPresent(applicant, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
     console.log(`[e2e] ${applicant.e2ePlatform}: joining through the link — making the identity`);
   } else {
     await openVetting(applicant);
@@ -968,7 +970,7 @@ try {
   // device with biometrics on, tap Confirm and hand the OS prompt to the
   // operator; elsewhere the modal never appears and this is a no-op.
   await sleep(1500);
-  await handleBiometricConfirmIfPresent(applicant);
+  await handleBiometricConfirmIfPresent(applicant, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   console.log(`[e2e] ${applicant.e2ePlatform}: card sent`);
 
   // — vetter: the card, the human check, the statement
@@ -995,7 +997,7 @@ try {
   const attest = await scrollToTestId(vetter, "VettingAttestButton", 6);
   await tapElement(vetter, attest);
   await sleep(1500);
-  await handleBiometricConfirmIfPresent(vetter);
+  await handleBiometricConfirmIfPresent(vetter, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   await waitForTestId(vetter, "VettingStatementIssued", 60000);
   await checkVettingStep(vetter, "desk, statement issued");
   console.log(`[e2e] ${vetter.e2ePlatform}: statement issued`);
@@ -1025,7 +1027,7 @@ try {
     await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
     await tapTestIdByCoordinates(applicant, "VettingApplyButton");
     await sleep(1500);
-    await handleBiometricConfirmIfPresent(applicant);
+    await handleBiometricConfirmIfPresent(applicant, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
     await scrollToTestId(applicant, "VettingSubmissionState", 6, LOW).catch(() => undefined);
     const deferred = await waitText(applicant, "VettingSubmissionState", /asked for more/i, 120000);
     console.log(`[e2e] ${applicant.e2ePlatform}: ${deferred}`);
@@ -1050,7 +1052,7 @@ try {
       const tappedAt = new Date().toISOString();
       await tapTestIdByCoordinates(applicant, "VettingApplyButton");
       await sleep(1500);
-      await handleBiometricConfirmIfPresent(applicant);
+      await handleBiometricConfirmIfPresent(applicant, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
       // The community must take it as a supplement to the open request — not a
       // second application (which it would refuse as requestAlreadyOpen).
       let supplemented = process.env.KEYRING_COMMUNITY_REST ? "(a remote community: its log is not ours to read)" : "";
@@ -1085,7 +1087,7 @@ try {
   await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
   await tapTestIdByCoordinates(applicant, "VettingApplyButton");
     await sleep(1500);
-    await handleBiometricConfirmIfPresent(applicant);
+    await handleBiometricConfirmIfPresent(applicant, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   // The member line sits at the top of the screen; wait for the verdict, then scroll back up.
   await sleep(8000);
   await scrollToTestId(applicant, "VettingAlreadyMember", 8, { ...LOW, direction: "up" }).catch(() => undefined);

@@ -1,5 +1,7 @@
 # Nearby VRC exchange — two phones, Bluetooth, no witness
 
+**Roadmap epic:** [keyring-wallet#698](https://github.com/berkmancenter/keyring-wallet/issues/698)
+
 **Scope.** Two people standing together form a relationship by finding each
 other's phone over Bluetooth Low Energy instead of scanning a QR code. Each picks the
 short code shown on the other phone, then exchanges Verifiable Relationship Credentials

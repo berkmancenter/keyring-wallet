@@ -9,8 +9,9 @@ import { testIdWithKey, useTheme } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React, { useCallback, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { getBuildNumber } from 'react-native-device-info'
 
-import { readOtaStatus, OtaStatus } from './otaStatus'
+import { readOtaStatus, OtaStatus, releaseText } from './otaStatus'
 import { DEFAULT_RING, Ring, setRing } from './rings'
 
 const readSafely = (): OtaStatus | undefined => {
@@ -54,6 +55,7 @@ const OtaDeveloperSection: React.FC = () => {
   return (
     <View style={{ backgroundColor: SettingsTheme.groupBackground, padding: 24 }}>
       {line('State', status.enabled ? 'on' : 'off (this build names no update server)')}
+      {line('Release', releaseText(status, getBuildNumber()), testIdWithKey('OtaRelease'))}
       {line(
         'Running',
         status.embedded ? `embedded (${status.bundleId})` : status.bundleId,

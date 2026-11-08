@@ -445,7 +445,7 @@ jobs:
             exit 1
           fi
           echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
-          node scripts/ota/native-config.mjs
+          node scripts/ota/native-config.mjs --build-timestamp
           echo "- Over-the-air updates (Android): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
 
       # An OTA-off build must carry none of the loader's settings, or it could
@@ -634,6 +634,8 @@ jobs:
         run: |
           # Bundle React Native code
           cd ../ && npx react-native bundle --platform android --dev false --reset-cache --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
+          # Rooms' sample data never in a store build: the bundle itself, beside the refusal of ROOMS_SAMPLE.
+          bash ../scripts/ci/check-no-rooms-sample.sh android/app/src/main/assets/index.android.bundle "Android store bundle"
 
           # Clean up Metro cache after bundling (frees ~200-400MB)
           rm -rf node_modules/.cache/metro-* 2>/dev/null || true
@@ -686,6 +688,16 @@ jobs:
           find app/build/outputs -type f
           echo "---"
           echo "✅ Build verification complete"
+
+      # The binary must refuse over-the-air bundles older than itself: native-config.mjs --build-timestamp gave the
+      # Gradle build MIN_BUNDLE_ID, and this reads it back out of what ships.
+      - name: Check the build refuses older updates (OTA builds only)
+        if: ${{ vars.OTA_UPDATE_URL != '' }}
+        run: |
+          node scripts/ota/check-min-bundle-id.mjs android \
+            app/android/app/build/outputs/bundle/release/app-release.aab \
+            app/android/app/build/outputs/apk/release/app-release.apk \
+            "${OTA_MIN_BUNDLE_ID:?native-config.mjs --build-timestamp did not run}"
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
@@ -1009,7 +1021,7 @@ jobs:
             exit 1
           fi
           echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
-          node scripts/ota/native-config.mjs
+          node scripts/ota/native-config.mjs --build-timestamp
           echo "- Over-the-air updates (iOS): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
 
       # An OTA-off build must carry none of the loader's settings, or it could
@@ -1088,11 +1100,27 @@ jobs:
           -sdk iphoneos \
           archive
 
+      # Rooms' sample data never in a store build: the archived app's bundle itself, beside the refusal of
+      # ROOMS_SAMPLE before the build.
+      - name: Check the store bundle carries no rooms sample data
+        run: |
+          set -euo pipefail
+          bundle=$(find AriesBifold.xcarchive -name main.jsbundle -path '*.app/*' | head -1)
+          bash scripts/ci/check-no-rooms-sample.sh "${bundle:-AriesBifold.xcarchive/missing-main.jsbundle}" "iOS store bundle"
+
       - name: Export production archive
         uses: ./.github/workflows/actions/export-ios-archive
         with:
           export_options: "export-options-keyring.plist"
           ouput_artifact_ref: "ios-staging-artifact"
+
+      # The binary must refuse over-the-air bundles older than itself: native-config.mjs --build-timestamp wrote
+      # HOT_UPDATER_BUILD_TIMESTAMP into Info.plist, and this reads it back out of what ships.
+      - name: Check the build refuses older updates (OTA builds only)
+        if: ${{ vars.OTA_UPDATE_URL != '' }}
+        run: |
+          node scripts/ota/check-min-bundle-id.mjs ios export/KeyRing.ipa \
+            "${OTA_MIN_BUNDLE_ID:?native-config.mjs --build-timestamp did not run}"
 
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v4

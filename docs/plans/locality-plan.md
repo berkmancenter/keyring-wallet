@@ -1,5 +1,7 @@
 # Locality — co-presence evidence a third party can trust
 
+**Roadmap epic:** [keyring-wallet#691](https://github.com/berkmancenter/keyring-wallet/issues/691)
+
 **Status.** The reference ladder (`ref-06p` … `ref-06p5`) is built. §10
 items 1–13 are implemented and on `main` in both repositories — the witness
 server and both phone platforms (keyring-bifold#40, #47, #49, #51, #53;

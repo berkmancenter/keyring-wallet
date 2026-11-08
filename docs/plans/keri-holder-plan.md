@@ -1,5 +1,7 @@
 # KERI/ACDC holder support
 
+**Roadmap epic:** [keyring-wallet#705](https://github.com/berkmancenter/keyring-wallet/issues/705)
+
 Keyring receives, stores, verifies and presents ACDCs issued by a KERI
 identifier it does not control. It does not manage a KEL of its own.
 

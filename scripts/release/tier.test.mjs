@@ -54,6 +54,22 @@ test('what the app never ships is none, even a manifest there', () => {
     'ota'
   );
   assert.equal(tierOf('bifold/packages/core/src/__tests__/x.test.ts'), 'none');
+  // The same tooling dotfiles at bifold's root; any other dotfile there, or its babel config, still reads store.
+  assert.equal(tierOf('bifold/.prettierignore', 'bifold/.gitignore', 'bifold/.eslintrc.js'), 'none');
+  assert.equal(tierOf('bifold/.babelrc'), 'store');
+  assert.equal(tierOf('bifold/.env'), 'store');
+  assert.equal(tierOf('bifold/packages/core/.prettierignore'), 'store');
+  // The app's tooling: a hot fix branch carries its publisher, which must not make the fix read store.
+  assert.equal(tierOf('app/scripts/ota-deploy.mjs', 'app/scripts/refresh-ledgers.cjs'), 'none');
+  // A bifold package's dev-time generators are tooling; a native package's scripts and core's src still grade as before.
+  assert.equal(tierOf('bifold/packages/core/scripts/gen-testids.mjs', 'bifold/packages/core/scripts/emoji/generate-emoji-data.mjs'), 'none');
+  assert.equal(tierOf('bifold/packages/react-native-attestation/scripts/x.mjs'), 'store');
+  assert.equal(tierOf('bifold/packages/core/src/scripts/x.ts'), 'ota');
+  assert.equal(tierOf('bifold/packages/core/scripts/gen-testids.mjs', 'bifold/packages/core/src/screens/X.tsx'), 'ota');
+  assert.equal(tierOf('app/scripts/ota-deploy.mjs', 'app/src/screens/Home.tsx'), 'ota');
+  // Only its script files: a manifest or anything deeper there is not tooling by this rule.
+  assert.equal(tierOf('app/scripts/package.json'), 'store');
+  assert.equal(tierOf('app/scripts/lib/x.mjs'), 'store');
 });
 
 test('an unknown path is store, never OTA by default; an unread bifold range too', () => {
@@ -187,6 +203,21 @@ test('deletes stored records: storage deletes hold, a Map or Set delete does not
     'await walletStorage.remove(key)', 'await store.delete(id)', 'await deleteRecord(r)', 'forgetConnection(id)', 'wipeWallet()']) assert.equal(held(l), true, l);
 });
 
+test('deletes stored records: the device-store deletes hold; their reads and writes do not', () => {
+  const held = (line) => flagsOf(['app/src/screens/X.tsx'], { 'app/src/screens/X.tsx': [line] }).some((f) => f.flag === 'deletes stored records');
+  for (const l of ["await AsyncStorage.removeItem('draft:' + id)", 'await AsyncStorage.multiRemove(keys)', 'await AsyncStorage.clear()',
+    'await SecureStore.deleteItemAsync(KEY, { keychainService })']) assert.equal(held(l), true, l);
+  for (const l of ["await AsyncStorage.setItem('draft:' + id, text)", 'await AsyncStorage.getItem(key)', 'await AsyncStorage.multiGet(keys)',
+    'await SecureStore.setItemAsync(KEY, value)', 'await SecureStore.getItemAsync(KEY)']) assert.equal(held(l), false, l);
+  // The false-positive side, pinned: clear() is the commonest Map and Set method, so it holds only on AsyncStorage. A bare
+  // \bclear\( would grade in-memory bookkeeping as store and keep ordinary JS changes off OTAs.
+  for (const l of ['listeners.clear()', 'controllers.clear()', 'seen.clear()', 'map.clear()', 'this.cache.clear()', 'pending.removeItem(i)'])
+    assert.equal(held(l), false, l);
+  // A shipped file's added delete moves the range to store.
+  const f = 'bifold/packages/core/src/modules/chat/useChatDraft.ts';
+  assert.equal(verdict([f], { added: { [f]: ['    await AsyncStorage.removeItem(key)'] } }).tier, 'store');
+});
+
 test('verdict: --files never says ota (or ota-strict) while a store flag reads added lines; --range (added lines) can', () => {
   const f = ['app/src/screens/X.tsx'];
   const v = verdict(f);
@@ -257,3 +288,20 @@ test("flags read only what the app ships: the update server's own store.remove h
   // An unknown path is store, and still raises its flags, so the approver sees them.
   assert.equal(flagsOf(['somewhere/new.ts'], { 'somewhere/new.ts': added[server] }).length, 1);
 });
+
+test('the VTI protocol line reads strict whatever the case of its file names', () => {
+  const module = 'bifold/packages/core/src/modules/trust-tasks/module/'
+  // Every protocol-line file at bifold main on 10-29, both namings.
+  const files = ['TspCarriage.ts', 'VtiCommunityStore.ts', 'VtiIdentityStore.ts', 'VtiMediatorTransport.ts', 'joinManifest.ts',
+    'joinSubmission.ts', 'joinWire.ts', 'triggerLink.ts', 'tspCapability.ts', 'tspFrameUnopenable.ts', 'tspProbe.ts', 'vtcBusy.ts',
+    'vtiAdoptIdentities.ts', 'vtiAgent.ts', 'vtiCardStanding.ts', 'vtiCardStatusRetry.ts', 'vtiCardVault.ts', 'vtiCommunityLink.ts',
+    'vtiCommunityNotices.ts', 'vtiDeliveredCheck.ts', 'vtiEligibility.ts', 'vtiGrantState.ts', 'vtiIdentityListeners.ts', 'vtiInbox.ts',
+    'vtiInvitation.ts', 'vtiInvitationOffer.ts', 'vtiJoin.ts', 'vtiJoinSeed.ts', 'vtiLinks.ts', 'vtiMemberVmc.ts', 'vtiPersonaInbox.ts',
+    'vtiReciprocate.ts', 'vtiStatusList.ts', 'vtiTsp.ts', 'vtiVetting.ts', 'vtiWalletCards.ts']
+  for (const f of files) {
+    const v = verdict([module + f], { added: {} })
+    assert.deepEqual([f, v.tier, v.strict], [f, 'ota-strict', ['VTI protocol line']])
+  }
+  // A module file outside the line stays plain ota.
+  assert.equal(verdict([module + 'cardVault.ts'], { added: {} }).tier, 'ota')
+})

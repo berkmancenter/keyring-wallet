@@ -61,11 +61,12 @@ jobs:
       - name: Setup NodeJS
         uses: ./.github/workflows/actions/setup-node
 
-      - name: Cache app node_modules
-        uses: actions/cache@v3
+      # Restore only: a pull request's own save landed on refs/pull/<n>/merge, which no other PR can read, so every
+      # PR saved its own 176 MiB copy and filled the 10 GB cache. deps-cache.yml saves the one copy, on main.
+      - name: Restore the yarn cache (saved on main)
+        uses: actions/cache/restore@v4
         with:
           path: .yarn/cache
-          # Cache will be invalidated if yarn.lock changes
           key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
           restore-keys: ${{ runner.os }}-yarn-
 
@@ -147,11 +148,12 @@ jobs:
       - name: Setup NodeJS
         uses: ./.github/workflows/actions/setup-node
 
-      - name: Cache app node_modules
-        uses: actions/cache@v3
+      # Restore only: a pull request's own save landed on refs/pull/<n>/merge, which no other PR can read, so every
+      # PR saved its own 176 MiB copy and filled the 10 GB cache. deps-cache.yml saves the one copy, on main.
+      - name: Restore the yarn cache (saved on main)
+        uses: actions/cache/restore@v4
         with:
           path: .yarn/cache
-          # Cache will be invalidated if yarn.lock changes
           key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
           restore-keys: ${{ runner.os }}-yarn-
 

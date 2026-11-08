@@ -603,13 +603,16 @@ row() {
 }
 selected() { [ -z "${E2E_ONLY_ROWS:-}" ] || [[ ",$E2E_ONLY_ROWS," == *",$1,"* ]]; }
 broken() { LEG_BROKEN=$*; echo "LEG $LEG_NAME BROKEN — $*"; exit 1; }
-# Fold a driver's own ROW lines (rows.js, or the older drivers' ROW lines) into this leg's counts.
+# Fold a driver's own ROW lines (rows.js, or the older drivers' ROW lines) into this leg's counts. Its RETRY lines (a
+# step that retried once, as the screen asked: join.awaitSent) pass through with the leg and its agent (LEG_AGENT, set
+# by the leg), so the report can count retries per agent instead of a retry hiding an agent that answers on and off.
 take_rows() {
-  local st name detail
+  local st name detail l
   while IFS=$'\t' read -r st name detail; do
     case $st in PASS) LEG_PASS=$((LEG_PASS + 1)) ;; FAIL) LEG_FAILS=$((LEG_FAILS + 1)) ;; SKIP) LEG_SKIP=$((LEG_SKIP + 1)) ;; esac
     echo "ROW $name $st — $detail"
   done < <(leg_rows "$1")
+  while IFS= read -r l; do echo "RETRY leg=$LEG_NAME agent=${LEG_AGENT:-?} ${l#RETRY }"; done < <(grep -aE '^RETRY ' "$1")
 }
 leg_end() {
   local rc=$?
@@ -625,7 +628,9 @@ leg_end() {
   # Auto-unlocks (driver.js autoUnlockIfLocked: a test build locks after 30 s without a touch): counted, so a lock
   # nobody expected shows in the verdict rather than being papered over.
   local unlocks=0; [ -d "${LEG_DIR:-}" ] && unlocks=$(cat "$LEG_DIR"/*.out 2>/dev/null | grep -c '^AUTO-UNLOCK ' || true)
-  echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s auto-unlocks=${unlocks:-0}"
+  # Retries (take_rows' RETRY lines), counted the same way: a row that passed only after one says so in its detail.
+  local retries=0; [ -f "${LEG_DIR:-}/leg.log" ] && retries=$(grep -c '^RETRY ' "$LEG_DIR/leg.log" || true)
+  echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s auto-unlocks=${unlocks:-0} retries=${retries:-0}"
   exit $rc
 }
 

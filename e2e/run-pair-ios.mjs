@@ -9,6 +9,21 @@
  *   pair-share-link-connects  A leaves the code screen; B opens the link through iOS (simctl openurl, as a tapped link);
  *                             the relationship exchange completes and each lists the other (the VRC gate check)
  *
+ * Chat drafts (bifold #765, #763), on A with B as the other side:
+ *   draft-kept-after-restart  A types a draft in B's chat and leaves; reopened, the draft is there; A leaves without
+ *                             typing (the composer's first-layout '' must not clear it), restarts the app and unlocks:
+ *                             the draft is still there
+ *   draft-sent-not-back       A sends that kept draft (B gets it): the field is empty right after, after leaving and
+ *                             reopening the chat, and after a restart (the old draft is not read back)
+ *   draft-emoji-then-send     A types words, adds 😀 from the composer's picker and taps Send at once: the field ends up
+ *                             empty and Send goes (a Send handled in the render that hands text over used to put the
+ *                             sent words back), and B gets the message
+ * These rows read the fixes end to end; they are not the regression guard. That is the unit tests: #765's in
+ * modules/chat/__tests__/useChatDraft.test.ts, #763's "sent" block in __tests__/components/chat/useComposerText.test.tsx
+ * (with its own control: "without it, the sent words stay in the field"). No pre-fix build ran these rows, and
+ * draft-emoji-then-send closes the picker before Send, which may settle the hand-over and close #763's race window: its
+ * green says the send path works, not that the race cannot come back.
+ *
  * Emoji picker (bifold #574; rich messaging Step 2, W2). Each side reads the other's change from its own screen:
  *   pair-react-picker         B sends A a message; A long-presses it, opens the full picker from the reaction bar's
  *                             "+", searches "cat" and chooses 🐱: B's message shows "🐱 1" on B
@@ -55,7 +70,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { acceptSystemAlertIfPresent, byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
-import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, returnToContacts, unlockIfLocked } from "./lib/flows.js";
+import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, restartApp, returnToContacts, unlockIfLocked } from "./lib/flows.js";
 import { appLogged } from "./lib/appLog.js";
 import { exifConcerns } from "./lib/exifTags.mjs";
 import { jpegMetadata } from "./lib/jpegMetadata.mjs";
@@ -70,6 +85,9 @@ const rows = createRows({
   label: "pair-ios",
   needs: {
     "pair-share-link-connects": ["pair-share-link-made"],
+    "draft-kept-after-restart": ["pair-share-link-connects"],
+    "draft-sent-not-back": ["draft-kept-after-restart"],
+    "draft-emoji-then-send": ["pair-share-link-connects"],
     "pair-react-picker": ["pair-share-link-connects"],
     "pair-react-same": ["pair-react-picker"],
     "pair-react-remove": ["pair-react-same"],
@@ -162,6 +180,26 @@ async function sendChat(d, text) {
   await input.setValue(text);
   await tapSend(d);
   await sleep(2000);
+}
+
+/** The open chat's field as typed. An empty field has no value: RN draws its placeholder as a separate element. */
+async function fieldText(d) {
+  const input = await d.$("-ios class chain:**/XCUIElementTypeTextView");
+  if (!(await input.isExisting())) return "(no field)";
+  return ((await input.getAttribute("value").catch(() => "")) || "").trim();
+}
+
+/** Type `text` into the open chat's field and read it back: the simulator's keyboard can move a character. */
+async function typeDraft(d, text) {
+  const input = await d.$("-ios class chain:**/XCUIElementTypeTextView");
+  await input.waitForExist({ timeout: 15000 });
+  for (let i = 0; i < 3; i++) {
+    await input.clearValue().catch(() => undefined);
+    await input.setValue(text);
+    await sleep(800);
+    if ((await fieldText(d)) === text) return true;
+  }
+  return false;
 }
 
 /**
@@ -346,6 +384,68 @@ try {
       await acceptRelationshipProposalOnEitherSide(a, b);
       await Promise.all([assertVrcReceived(a, `${B.first} ${B.last}`), assertVrcReceived(b, `${A.first} ${A.last}`)]);
       return { ok: true, detail: `B opened A's shared link with A off the code screen; each lists the other (${A.first} ${A.last} ↔ ${B.first} ${B.last}) (iOS; Android unproven)` };
+    });
+
+    // Chat drafts (#765, #763). Before the emoji rows: they leave messages in this chat, which these rows don't read.
+    const DRAFT = "gate: kept draft";
+    await rows.row("draft-kept-after-restart", async () => {
+      await openChatWith(a, B);
+      if (!(await typeDraft(a, DRAFT))) return { ok: false, detail: "driver: the field would not take the draft" };
+      await sleep(1500);
+      await backOut(a);
+      await openChatWith(a, B);
+      await sleep(2500);
+      const shown = await fieldText(a);
+      await sleep(2000);
+      await backOut(a);
+      await restartApp(a);
+      await unlockIfLocked(a);
+      await openChatWith(a, B);
+      await sleep(3000);
+      const after = await fieldText(a);
+      await screenshot(a, "draft-kept-after-restart").catch(() => undefined);
+      return { ok: shown === DRAFT && after === DRAFT, detail: `reopened: "${shown}" · after leaving without typing, a restart and the PIN: "${after}" (want "${DRAFT}")` };
+    });
+    await rows.row("draft-sent-not-back", async () => {
+      // Opens the chat itself, not relying on where the row above ended (a draft kept over a reopen is that row's claim).
+      await openChatWith(a, B);
+      await sleep(3000);
+      const before = await fieldText(a);
+      await tapSend(a);
+      const onB = Boolean(await waitForText(b, DRAFT));
+      await sleep(1500);
+      const rightAfter = await fieldText(a);
+      await backOut(a);
+      await openChatWith(a, B);
+      await sleep(3000);
+      const reopened = await fieldText(a);
+      await backOut(a);
+      await restartApp(a);
+      await unlockIfLocked(a);
+      await openChatWith(a, B);
+      await sleep(3000);
+      const restarted = await fieldText(a);
+      await screenshot(a, "draft-sent-not-back").catch(() => undefined);
+      return {
+        ok: before === DRAFT && onB && rightAfter === "" && reopened === "" && restarted === "",
+        detail: `sent "${before}" · B got it ${onB} · the field after Send "${rightAfter}", after leaving and reopening "${reopened}", after a restart "${restarted}" (want all "")`,
+      };
+    });
+    await rows.row("draft-emoji-then-send", async () => {
+      const words = "gate: emoji then send";
+      await openChatWith(a, B);
+      if (!(await typeDraft(a, words))) return { ok: false, detail: "driver: the field would not take the words" };
+      await tapTestId(a, "ChatComposerEmojiButton", 10000);
+      if (!(await existsTestId(a, "EmojiPickerSheet", 10000))) return { ok: false, detail: "the composer's emoji button did not open the picker" };
+      await chooseEmoji(a, "grinning", "1F600");
+      await tapTestId(a, "EmojiPickerSheetClose", 5000);
+      await tapSend(a);
+      let field = "?";
+      for (const until = Date.now() + 5000; Date.now() < until; await sleep(500)) if ((field = await fieldText(a)) === "") break;
+      const sendStill = await a.$("~GC_SEND_TOUCHABLE").isExisting();
+      const onB = Boolean(await waitForText(b, words));
+      await screenshot(a, "draft-emoji-then-send").catch(() => undefined);
+      return { ok: field === "" && !sendStill && onB, detail: `the field after Send "${field}" · Send still shown ${sendStill} · B got the message ${onB}` };
     });
 
     // Emoji picker: reactions chosen from the full picker, and an emoji typed in from the composer's button. Each verdict

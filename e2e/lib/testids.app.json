@@ -1,5 +1,4 @@
 {
-  "generatedFrom": "c997830f20314baf63e375e95bc10d52064636bf",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "Accept": ["src/screens/Terms.tsx"],
@@ -40,6 +39,7 @@
     "OtaBundleId": ["src/ota/OtaDeveloperSection.tsx"],
     "OtaJoinRing0": ["src/ota/OtaDeveloperSection.tsx"],
     "OtaLeaveRing0": ["src/ota/OtaDeveloperSection.tsx"],
+    "OtaRelease": ["src/ota/OtaDeveloperSection.tsx"],
     "OtaRing": ["src/ota/OtaDeveloperSection.tsx"],
     "OtaRolledBack": ["src/ota/OtaDeveloperSection.tsx"],
     "ProbeVtaManagerButton": ["src/screens/Developer.tsx"],
@@ -64,7 +64,9 @@
     "ToggleEnableAppToAppPersonFlow": ["src/screens/Developer.tsx"],
     "ToggleEnableDidCommV2": ["src/screens/Developer.tsx"],
     "ToggleEnableLivePickup": ["src/screens/Developer.tsx"],
+    "ToggleEnableSharedConnect": ["src/screens/Developer.tsx"],
     "ToggleEnableTspCarriage": ["src/screens/Developer.tsx"],
+    "ToggleFeatureRooms": ["src/screens/Developer.tsx"],
     "ToggleRemoteLoggingSwitch": ["src/screens/Developer.tsx"],
     "ToggleUseShareableLink": ["src/screens/Developer.tsx"],
     "ToggleVerifierCapability": ["src/screens/Developer.tsx"],

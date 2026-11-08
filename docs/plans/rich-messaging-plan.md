@@ -1,5 +1,7 @@
 # Rich Messaging — Plan
 
+**Roadmap epic:** [keyring-wallet#703](https://github.com/berkmancenter/keyring-wallet/issues/703)
+
 **Status:** Steps 1–4 built and shipped, first in store build 272: the `chat/1.0` message, reactions and replies (keyring-bifold#525, #530, #556, #561, #564), the emoji picker (#552, #559, #574), inline photos (#577, #581, #584, #588, #591, #592), and message history with disappearing messages (#551, #560, #562, #570, #572, #573), with the two-phone run in keyring-wallet#639. Chat runs over DIDComm v1 only; chat over v2 (§4.1) is still to build. D2 is not recorded as decided.
 **Scope:** The smallest set of changes that makes one-to-one Keyring chat feel like a modern messenger:
 - **reactions;**
@@ -17,6 +19,7 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 - [`rich-messaging-plan/2026-10-27-al.md`](./rich-messaging-plan/2026-10-27-al.md) — D2 and Step 3: photos shipped in store build 272; what is on record about D2's acceptance and Step 0's measurements, and what is not.
 
 **Related plans:**
+- [`rooms-chat-plan.md`](./rooms-chat-plan.md) — a room's conversation on the shared record format, reusing this plan's reaction and reply components.
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
 - The mediator migration plan (wallet PR #530, in review) — moves Keyring↔Keyring mailboxes to the Affinidi mediator (M1 → M5, no date yet). It sets the 1 MiB message ceiling this plan designs against.
 - [`rcard-profile-picture-plan.md`](./rcard-profile-picture-plan.md) — the existing image-over-DIDComm precedent.
