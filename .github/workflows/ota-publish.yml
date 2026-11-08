@@ -540,6 +540,8 @@ jobs:
           node scripts/ota/check-fingerprint.mjs verify --platform "$PLATFORM" --expected "$EXPECTED" --recorded "${RECORDED:-none}"
 
       # The tier, as the publish will read it. The dry run passes on exit 0 or 5 (ota-strict, a label since 10-29).
+      # Not redundant with the tier job: a dry run reaches here even when that job failed (publish's if admits
+      # dry_run), so this check is what fails such a dry run.
       - name: Dry run
         if: ${{ inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
         env:
