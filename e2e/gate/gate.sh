@@ -151,6 +151,7 @@ run_legs() {
       wait $pa $pb
       local sl; for sl in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $sl (phone grants since $tb)"; keys_since "$sl" "$tb"; done
       : > "$rd/defer-keys" 2>/dev/null
+      c_members_deferred
       android=(${arest[@]+"${arest[@]}"})
     else
       [ ${#alone[@]} -eq 0 ] || { say "first, alone: ${alone[*]}"; run_group "$rd" "${alone[@]}"; }
@@ -166,6 +167,7 @@ run_legs() {
     ( export GATE_DEFER_KEYS=1; run_group "$rd" "${android[@]}" ) & local p2=$!
     wait $p1 $p2
     local slug; for slug in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $slug (phone grants since $t0)"; keys_since "$slug" "$t0"; done
+    c_members_deferred
   else
     [ "$serial" = 1 ] || [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ] || say "one platform at a time: ${free} GB free, under GATE_PARALLEL_MIN_GB=$GATE_PARALLEL_MIN_GB"
     run_group "$rd" ${ios[@]+"${ios[@]}"} ${android[@]+"${android[@]}"}
@@ -207,6 +209,7 @@ cmd_run() {
   # Only the runners these legs use (W9): wanted_legs prints nothing for a --legs naming no known leg, and gate_sweep
   # with no legs sweeps every runner.
   gate_sweep $(wanted_legs "$legs")
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
@@ -239,6 +242,7 @@ cmd_rerun() {
   run_lock
   # The legs of the run being rerun (a superset of what reruns); a run with no leg table sweeps every runner.
   gate_sweep $(cut -f1 "$old/legs.tsv" 2>/dev/null | sort -u)
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
@@ -297,6 +301,7 @@ cmd_changed() {
   use_build "$pin"
   run_lock
   gate_sweep ${legs//,/ }
+  c_members_deferred   # a killed earlier run's deferred members (W5)
   local rd; rd=$(new_run "$pin" "changed")
   printf '%s\n' "$json" > "$rd/changed.json"
   {
