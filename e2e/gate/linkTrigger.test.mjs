@@ -132,6 +132,18 @@ test('nightly-legs: the iOS and MacBook parts are the fixed lists, with no trigg
   assert.equal(r.args, '');
 });
 
+test('with no recorded pin nightly-legs passes no range, and the trigger runs saying so', () => {
+  const r = gateRun('cmd_nightly_legs --part android --pin new2', { STUB_RC: '0' });
+  assert.doesNotMatch(r.args, /--range/);
+  const cli = path.join(here, 'linkTrigger.mjs');
+  for (const range of [undefined, 'abc123', '..abc', 'abc..']) {
+    const out = spawnSync('node', [cli, ...(range === undefined ? [] : ['--range', range])], { encoding: 'utf8' });
+    assert.equal(out.status, 0, String(range));
+    assert.match(out.stdout, /no last nightly pin to compare with/, String(range));
+    assert.doesNotMatch(out.stderr, /invalid object name/, String(range));
+  }
+});
+
 test('nightly-legs passes the last recorded pin as the range start, and the runners by value', () => {
   const r = gateRun(`echo '{"pin":"old1"}' > "$GATE_HOME/link-fingerprint.json"; cmd_nightly_legs --part android --pin new2`, { STUB_RC: '1' });
   assert.match(r.args, /--range old1\.\.new2 /);

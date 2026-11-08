@@ -623,7 +623,9 @@ cmd_nightly_legs() {
   esac
   local last="" args=() a
   last=$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).pin||"")}catch{}' "$GATE_HOME/$LINK_FP")
-  args=(--range "${last:+$last..}$pin" --fingerprint-file "$GATE_HOME/$LINK_FP")
+  # No recorded pin: no range at all (the trigger then runs, "no last nightly pin"), never the bare pin, which git read
+  # as a diff against the working tree (a6's first dry run of #874 on the mini, 11-08).
+  args=(--fingerprint-file "$GATE_HOME/$LINK_FP"); [ -z "$last" ] || args+=(--range "$last..$pin")
   while IFS= read -r a; do args+=("$a"); done < <(link_trigger_args)
   local legs=$LEGS_NIGHTLY_ANDROID trig=0
   if node "$GATE_SRC/linkTrigger.mjs" "${args[@]}" >&2; then legs="$legs $LEGS_LINK"; trig=1; fi
