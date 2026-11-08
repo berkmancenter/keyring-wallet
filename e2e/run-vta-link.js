@@ -1760,9 +1760,9 @@ try {
   if (aclBefore) {
     const mode = process.env.E2E_ACL_CLEANUP || "";
     // A refused link ends its chain: its grant on the community's agent goes now.
-    // A gate leg that cleans this slug removes these keys in one pass at its end (LEG_CLEANS): a failed run's or an
-    // `always` run's keys need no list and delete of their own here. A refused link's grant (another agent's, which the
-    // leg may not clean), a JOURNEY and `never` keep their own handling.
+    // A gate leg that cleans this slug removes these keys in one pass at its end (LEG_CLEANS): a successful `always`
+    // run's keys need no list and delete of their own here. A failed run still removes them now (aclEndAction), as do a
+    // refused link (another agent's grant, which the leg may not clean), a JOURNEY and `never`.
     const end = aclEndAction({ legCleans: LEG_CLEANS, journey: JOURNEY, expectRefusal: EXPECT_REFUSAL, mode, failed: runFailed });
     if (end === "leg") {
       console.log(`[acl] this run's keys on ${VTA_SLUG} are left to the leg's cleanup (keys_since), which lists and removes them once`);

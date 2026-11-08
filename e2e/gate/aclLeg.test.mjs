@@ -28,10 +28,13 @@ test('outside a gate leg (legCleans false) every case does what it did before W3
   for (const c of cases) assert.equal(aclEndAction({ ...c, legCleans: false }), before(c), JSON.stringify(c));
 });
 
-test('in a leg that cleans the slug: a failed or `always` run leaves its keys to the leg', () => {
-  assert.equal(aclEndAction({ legCleans: true, failed: true }), 'leg');
+test('in a leg that cleans the slug: a successful `always` run leaves its keys to the leg', () => {
   assert.equal(aclEndAction({ legCleans: true, mode: 'always' }), 'leg');
-  assert.equal(aclEndAction({ legCleans: true, mode: 'always', failed: true }), 'leg');
+});
+
+test('a failed run removes its keys at once even when the leg cleans the slug (ac on #872)', () => {
+  assert.equal(aclEndAction({ legCleans: true, failed: true }), 'remove');
+  assert.equal(aclEndAction({ legCleans: true, mode: 'always', failed: true }), 'remove');
 });
 
 test('in such a leg a success still hands its keys on for the next step (last-link.json is read by p1, refused, devices)', () => {
@@ -46,7 +49,7 @@ test('a refused link, a JOURNEY and `never` keep their own handling even in such
 
 test('control: a decision that ignores legCleans fails the leg cases', () => {
   const ignoring = (c) => before(c);
-  assert.notEqual(ignoring({ legCleans: true, failed: true }), aclEndAction({ legCleans: true, failed: true }));
+  assert.notEqual(ignoring({ legCleans: true, mode: 'always' }), aclEndAction({ legCleans: true, mode: 'always' }));
 });
 
 /** leg_cleaned_slugs <leg> with the given env values, against the real leg scripts. */
