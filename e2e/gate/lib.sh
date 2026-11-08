@@ -494,6 +494,18 @@ farm_drift() {
   echo "$line"
 }
 
+# leg_cleaned_slugs <leg>: the slugs whose phone keys the leg's own cleanup removes (its keys_since "$X" lines), by
+# value. run_leg hands them to the leg's drivers as E2E_ACL_LEG_SLUGS, so a link driver on one of them leaves its keys
+# to that one list-and-delete pass at the leg's end instead of listing the ACL again per link (IN-560, W3 of
+# docs/plans/farm-test-footprint-plan.md). A slug the leg does not clean is not named, and its driver cleans per link.
+leg_cleaned_slugs() {
+  local f=$GATE_SRC/legs/$1.sh n s out=" "
+  [ -f "$f" ] || return 0
+  for n in $(grep -o -E 'keys_since "\$[A-Z][A-Z0-9_]*"' "$f" | grep -o -E '[A-Z][A-Z0-9_]*' | sort -u); do
+    s=${!n:-}; [ -n "$s" ] && [[ "$out" != *" $s "* ]] && out="$out$s "
+  done
+  echo $out
+}
 keys_since() { local s0 rc; s0=$(date +%s); keys_since_run "$@"; rc=$?; step_rec "cleanup keys $1" "$s0" "$(( $(date +%s) - s0 ))"; return $rc; }
 keys_since_run() {
   local slug=$1 t0=$2 k r i

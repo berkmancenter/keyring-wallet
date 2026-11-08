@@ -97,6 +97,7 @@ run_leg() {
   # passes it on and waits for the leg's cleanup.
   # GATE_KIND (gate, nightly, dry, changed): a leg with a row that runs in one kind of run only reads it (lostreq).
   GATE_KIND=$(sed -n 's/^kind=//p' "$rd/meta" 2>/dev/null | head -1) \
+    E2E_ACL_LEG_SLUGS="$(leg_cleaned_slugs "$leg")" \
     E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1 &
   wait $!; rc=$?; e=$(date +%s)
   printf '%s\t%s\t%s\t%s\n' "$leg" "$rc" "$s" "$e" >> "$rd/legs.tsv"
