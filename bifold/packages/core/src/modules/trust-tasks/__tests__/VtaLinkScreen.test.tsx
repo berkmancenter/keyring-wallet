@@ -7,7 +7,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { Share } from 'react-native'
+import { AppState, Share } from 'react-native'
 import QRCode from 'react-native-qrcode-svg'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -602,6 +602,22 @@ describe('Link your agent — this phone was removed', () => {
     expect(tree.getByTestId(testIdWithKey('VtaLinkErased'))).toHaveTextContent('VtaLink.RevokedErased')
   })
 
+  // pnmlink's link-again-rescan, the press: Link again forgets the removed agent's link and opens the scanner, so the
+  // same agent scanned again starts a new link (vtaAgentLink covers what relink leaves behind).
+  test('Link again forgets the removed link and opens the scanner', () => {
+    const relink = jest.spyOn(vtaAgent, 'relink').mockImplementation(() => undefined)
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const tree = removed('notInAcl')
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkScanAgain')))
+    expect(relink).toHaveBeenCalledTimes(1)
+    expect(navigation.navigate).toHaveBeenCalledWith(Stacks.ConnectStack, {
+      screen: Screens.Scan,
+      params: { defaultToConnect: false },
+    })
+    relink.mockRestore()
+  })
+
   test('Keep backs out of erasing, and nothing is sent', () => {
     const tree = removed('notInAcl')
     fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkErase')))
@@ -831,6 +847,63 @@ describe('picking a link back up', () => {
     const tree = render_()
     await act(async () => undefined)
     expect(Boolean(tree.queryByTestId(testIdWithKey('VtaLinkTryAgain')))).toBe(shown)
+  })
+
+  // linkfail's swap-held-try-again, the press itself: Try again on a held swap checks the same key with its agent.
+  test('a key swap held for an approval: Try again checks the same key with its agent', async () => {
+    jest.spyOn(vtaAgent, 'pendingLinkKey').mockResolvedValue({ vtaDid: 'did:webvh:example:vta', did: 'did:key:z6Mk' })
+    const resume = jest.spyOn(vtaAgent, 'resumeLink').mockResolvedValue(true)
+    ;(vtaAgent as unknown as Setter).set({
+      link: {
+        kind: 'notLinked',
+        lastError: { reason: 'failed', swap: 'held', vtaDid: 'did:webvh:example:vta', label: 'alice' },
+      },
+    })
+    const tree = render_()
+    await act(async () => undefined)
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkTryAgain')))
+    expect(resume).toHaveBeenCalledWith(expect.anything(), 'did:webvh:example:vta')
+  })
+
+  // linkfail's swap-held-no-retry and the refused row's no-retry half: away and back, the screen keeps its words and
+  // asks the agent nothing by itself. Each try would wait on the approver again; the person chooses Try again.
+  test.each([
+    ['held for an approval', 'held'],
+    ['refused', 'refused'],
+  ])('a key swap %s: back in the foreground, the words stay and nothing is asked', async (_what, swap) => {
+    jest.useFakeTimers()
+    try {
+      jest.spyOn(vtaAgent, 'pendingLinkKey').mockResolvedValue({ vtaDid: 'did:webvh:example:vta', did: 'did:key:z6Mk' })
+      const resume = jest.spyOn(vtaAgent, 'resumeLink').mockResolvedValue(true)
+      const check = jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+      const changes: ((next: string) => void)[] = []
+      jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, handler: (next: string) => void) => {
+        changes.push(handler)
+        return { remove: () => undefined }
+      }) as never)
+      ;(vtaAgent as unknown as Setter).set({
+        link: {
+          kind: 'notLinked',
+          lastError: { reason: 'failed', swap, vtaDid: 'did:webvh:example:vta', label: 'alice' },
+        },
+      })
+      const tree = render_()
+      await act(async () => undefined)
+      // The screen really listens: with no handler caught, the rows below would pass having delivered nothing.
+      expect(changes.length).toBeGreaterThan(0)
+      await act(async () => changes.forEach((c) => c('background')))
+      await act(async () => changes.forEach((c) => c('active')))
+      await act(async () => {
+        jest.advanceTimersByTime(30_000)
+      })
+      expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent(`VtaLink.SwapFailed.${swap}`)
+      expect(tree.queryByTestId(testIdWithKey('VtaLinkCheckGrant'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('VtaLinkWaitingForPhone'))).toBeNull()
+      expect(resume).not.toHaveBeenCalled()
+      expect(check).not.toHaveBeenCalled()
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   test('a dead host code, or a refusal, offers no Try again: it says to make a new code', async () => {

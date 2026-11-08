@@ -1249,6 +1249,49 @@ describe('a link whose swap onto the long-term key does not happen says why', ()
     expect(mockVta.acl.has(TEMPORARY)).toBe(true)
   })
 
+  // linkfail's swap-held-rescan, in one chain: held, the rule lifted, the same agent scanned again. It links with
+  // the key the agent already holds: no new key, nothing added to its ACL, the agent on the phone's list once.
+  it('held, then the rule lifted: scanning the same agent again links with the kept key, the ACL not grown', async () => {
+    mockClientOptions.consentWaitMs = 50
+    mockVta.consentFor.add(SWAP)
+    const clock = Date.now as jest.Mock
+    const pinned = Date.now()
+    let tick = pinned
+    clock.mockImplementation(() => (tick += 25))
+    let linked: Awaited<ReturnType<typeof linkByHand>>
+    try {
+      linked = await linkByHand()
+    } finally {
+      clock.mockImplementation(() => pinned)
+    }
+    const { vta } = linked
+    expect(failure(vta)).toMatchObject({ reason: 'failed', swap: 'held' })
+    const minted = mockMinted.length
+    const aclBefore = mockVta.acl.size
+
+    mockVta.consentFor.delete(SWAP)
+    await vta.startManualLink(agent, VTA, 'farm.example', { via: 'scan' })
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: VTA, did: TEMPORARY })
+    expect(mockMinted).toHaveLength(minted)
+
+    await vta.checkManualGrant(agent)
+    await until(() => vta.getState().link.kind === 'linked')
+    expect(mockVta.acl.size).toBe(aclBefore)
+    expect(mockVta.acl.has(TEMPORARY)).toBe(false)
+    expect((vta.getState().agents ?? []).filter((a) => a.vtaDid === VTA)).toHaveLength(1)
+  })
+
+  // linkfail's swap-refused-rescan: after a refused first-link swap the phone does not count the agent as one it
+  // has, so scanning it again starts a link rather than saying "This phone already has that agent".
+  it('refused, then the same agent scanned again: a link starts, not "already on this phone"', async () => {
+    mockVta.refuseNext.set(SWAP, { code: 'permissionDenied', message: 'forbidden: super admin role required' })
+    const { vta } = await linkByHand()
+    expect(failure(vta)).toMatchObject({ reason: 'failed', swap: 'refused' })
+    expect(vta.hasAgent(VTA)).toBe(false)
+    await expect(vta.startManualLink(agent, VTA, 'farm.example', { via: 'scan' })).resolves.toBeUndefined()
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: VTA, via: 'scan' })
+  })
+
   it('not answered, and the agent then confirms it kept the first key: the failure says no answer', async () => {
     mockClientOptions.swapTimeoutMs = 50
     mockVta.silentFor.add(SWAP)

@@ -128,6 +128,25 @@ describe('create my agent: a link that fails is said', () => {
     expect(tree.getByTestId(id('AgentCreateErrorDetail'))).toHaveTextContent('acl/update refused')
   })
 
+  // linkfail's swap-held, and the no-answer case the gate cannot time: the address screen says why in the same
+  // words as the link screen, never only the general sentence.
+  test.each([
+    ['held for an approval', 'held'],
+    ['not answered', 'noAnswer'],
+  ])('a key swap %s, back on the address, says so', async (_what, swap) => {
+    controller.set({
+      link: { kind: 'linking', vtaDid: VTA, label: VTA, step: 'rotating' },
+    })
+    const tree = show()
+    await act(async () => {
+      controller.set({
+        link: { kind: 'notLinked', lastError: { reason: 'failed', swap, detail: 'auth:consent_required' } },
+      })
+    })
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent(`VtaLink.SwapFailed.${swap}`)
+    expect(tree.getByTestId(id('AgentCreateAddressInput'))).toBeTruthy()
+  })
+
   test('an agent that refused the code says so', async () => {
     controller.set({
       link: { kind: 'showingKey', vtaDid: VTA, label: VTA, did: 'did:key:z6MkOwner', checking: false },
@@ -764,6 +783,42 @@ describe('the phone waits for the agent to admit the code, on its own', () => {
       jest.advanceTimersByTime(3 * 60 * 1000)
     })
     expect(tree.queryByTestId(id('AgentCreateWaiting'))).toBeNull()
+  })
+
+  // linkwait's link-no-answer: the agent never answers a check. The screen keeps saying it is waiting for the whole
+  // window, with no early failure; then it says the agent could not be reached and offers Check again, the key kept.
+  test('an agent that never answers: waiting for the whole window, then unreachable with Check again', async () => {
+    showingKey()
+    ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: true })
+    jest.spyOn(vtaAgent, 'checkManualGrant').mockImplementation(async () => {
+      controller.set({
+        link: {
+          kind: 'showingKey',
+          vtaDid: VTA,
+          label: 'a',
+          did: 'did:key:z6MkOwner',
+          checking: false,
+          noAnswer: true,
+        },
+      })
+    })
+    const tree = show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateCopyCode')))
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(GRANT_POLL_WINDOW_MS - 2 * GRANT_POLL_EVERY_MS)
+    })
+    expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
+    expect(tree.queryByTestId(id('AgentCreateError'))).toBeNull()
+    expect(tree.queryByTestId(id('AgentCreateCheckAgain'))).toBeNull()
+    await act(async () => {
+      jest.advanceTimersByTime(3 * GRANT_POLL_EVERY_MS)
+    })
+    expect(tree.queryByTestId(id('AgentCreateWaiting'))).toBeNull()
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('CreateAgent.Unreachable')
+    expect(tree.getByTestId(id('AgentCreateCheckAgain'))).toBeTruthy()
+    expect(vtaAgent.getState().link).toMatchObject({ kind: 'showingKey', did: 'did:key:z6MkOwner' })
   })
 
   test('after 10 minutes it stops and offers Check again, which waits another window', async () => {

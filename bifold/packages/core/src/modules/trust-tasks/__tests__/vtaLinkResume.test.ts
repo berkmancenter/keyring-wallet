@@ -96,6 +96,43 @@ describe('a link left part-way picks back up with the same key', () => {
     expect(mockMint).not.toHaveBeenCalled()
   })
 
+  // linkwait's link-address-resume-later: the app restarted before the agent added the phone. The one check at
+  // start answers "not yet": the same key stays shown, still marked as picked back up, and no new key is made.
+  it('after a restart, a check answered "not yet": the same key stays, marked as picked back up', async () => {
+    const { vta, saved } = controller([temporary(10 * 60 * 1000)])
+    mockClient.whoAmI.mockImplementationOnce(async () => {
+      throw new Error('permission denied: forbidden: DID not in ACL')
+    })
+    await vta.restore({} as never)
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().link).toMatchObject({
+      kind: 'showingKey',
+      vtaDid: VTA,
+      did: 'did:key:z6MkEarlier',
+      resumed: true,
+      notYet: true,
+    })
+    expect(saved).toHaveLength(0)
+    expect(mockMint).not.toHaveBeenCalled()
+  })
+
+  // linkwait's create-window-paused: the code is out, then Keyring locks and the unlock hands over a new agent. The
+  // key is still the one shown, with nothing failed: "Continue linking" picks it up, no Try again or error.
+  it('a key showing when Keyring locks: after the unlock the same key is still shown, nothing failed', async () => {
+    const { vta } = controller()
+    await vta.restore({ tag: 'A' } as never)
+    await vta.startManualLink({ tag: 'A' } as never, VTA, 'home')
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', did: 'did:key:z6MkFresh' })
+    mockClient.connect.mockClear()
+    await vta.restore({ tag: 'B' } as never)
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
+    const link = vta.getState().link
+    expect(link).toMatchObject({ kind: 'showingKey', vtaDid: VTA, did: 'did:key:z6MkFresh' })
+    expect('lastError' in link).toBe(false)
+    expect(mockMint).toHaveBeenCalledTimes(1)
+    expect(mockClient.connect).not.toHaveBeenCalled()
+  })
+
   it('a key older than its grant can last, or one in the middle of a swap, is not picked up', async () => {
     const stale = controller([temporary(TEMPORARY_KEY_REUSE_MS + 1)])
     expect(await stale.vta.pendingLinkKey({} as never)).toBeUndefined()
