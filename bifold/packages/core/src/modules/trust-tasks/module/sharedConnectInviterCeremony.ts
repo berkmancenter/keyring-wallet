@@ -12,7 +12,7 @@
  *   6 issue#response     inviter -> scanner   (receipt: the digest of document 5's VRC)
  *
  * Every document carries `threadId` = the propose id, the `ceremony` member with the code's `_id`, in-band
- * `issuer`/`recipient` equal to the encounter VIDs, and a proof by the issuer VID. The VRC is the scanner side's
+ * `issuer`/`recipient` equal to the encounter VIDs, and a proof by the issuer VID for `authentication`. The VRC is the scanner side's
  * profile (VC 2.0, `eddsa-jcs-2022`, no `validUntil`), signed by this phone's relationship DID, and a received one is
  * verified under its issuer's `assertionMethod` (the shared credential module).
  *

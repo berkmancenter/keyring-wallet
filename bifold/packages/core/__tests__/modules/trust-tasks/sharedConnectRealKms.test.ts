@@ -33,7 +33,8 @@ import {
   issueSharedConnectVrc,
   verifySharedConnectVrc,
 } from '../../../src/modules/trust-tasks/module/sharedConnectCredential'
-import { storeReceivedVrc } from '../../../src/modules/trust-tasks/module/sharedConnectStore'
+import { Inviter, signJcs, verifyJcs } from '../../../src/modules/trust-tasks/__tests__/fixtures/shared-connect/inviter'
+import { receivedVrcJson, storeReceivedVrc } from '../../../src/modules/trust-tasks/module/sharedConnectStore'
 
 async function relationshipDid(agent: Agent): Promise<string> {
   const result = await agent.dids.create({
@@ -103,10 +104,31 @@ describe('shared-connect VRC on a real KMS', () => {
     expect(await storeReceivedVrc(agent, vc)).toBe(true)
     const records = await agent.w3cCredentials.getAll()
     expect(records).toHaveLength(1)
-    const back = JsonTransformer.toJSON(records[0].firstCredential) as Record<string, unknown>
+    // Credo's own round trip is lossy (it drops the proof @context); the faithful copy is what we read back.
+    const viaCredo = JsonTransformer.toJSON(records[0].firstCredential) as { proof: Record<string, unknown> }
+    expect(viaCredo.proof['@context']).toBeUndefined()
+    const back = receivedVrcJson(records[0])
+    expect(back).toEqual(vc)
+    expect((back.proof as Record<string, unknown>)['@context']).toBeDefined()
     expect(digestMultibase(back)).toBe(digestMultibase(vc))
     expect(await verifySharedConnectVrc(agent, back)).toBe(true)
     expect(await storeReceivedVrc(agent, vc)).toBe(false)
     expect(await agent.w3cCredentials.getAll()).toHaveLength(1)
+  })
+
+  test('a VRC from the independent inviter, with a proof @context, is stored faithfully and re-verifies', async () => {
+    const vc = await issueSharedConnectVrc(agent, theirs, mine)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { proof: _own, ...unsecured } = vc
+    const inviter = new Inviter('did:web:relay.example.org')
+    const foreign = signJcs(unsecured, inviter.keys.edSk, `${inviter.vid}#key-2`, 'authentication')
+    expect((foreign.proof as Record<string, unknown>)['@context']).toEqual(unsecured['@context'])
+    expect(await storeReceivedVrc(agent, foreign)).toBe(true)
+    const kept = (await agent.w3cCredentials.getAll()).map(receivedVrcJson)
+    const back = kept.find((c) => digestMultibase(c) === digestMultibase(foreign)) as Record<string, unknown>
+    expect(back).toEqual(foreign)
+    expect(digestMultibase(back)).toBe(digestMultibase(foreign))
+    expect(verifyJcs(back, inviter.vid, 'authentication')).toBe(true)
+    expect(await storeReceivedVrc(agent, foreign)).toBe(false)
   })
 })

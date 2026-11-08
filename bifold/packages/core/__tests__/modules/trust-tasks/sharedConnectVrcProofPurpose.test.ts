@@ -71,11 +71,13 @@ describe('the JCS VRC verify names a key under the issuer assertionMethod', () =
   const ownKey = `${issuer.relDid}#${issuer.relDid.slice('did:peer:0'.length)}`
 
   it('verifies a credential whose proof names the key the issuer lists', async () => {
-    expect(await verifySharedConnectVrc(agent, signJcs(credential(), issuer.relSk, ownKey))).toBe(true)
+    expect(await verifySharedConnectVrc(agent, signJcs(credential(), issuer.relSk, ownKey, 'assertionMethod'))).toBe(
+      true
+    )
   })
 
   it('refuses a proof that names a key the issuer does not list, though the signature is by its own key', async () => {
-    const signed = signJcs(credential(), issuer.relSk, `${issuer.relDid}#does-not-exist`)
+    const signed = signJcs(credential(), issuer.relSk, `${issuer.relDid}#does-not-exist`, 'assertionMethod')
     expect(await verifySharedConnectVrc(agent, signed)).toBe(false)
   })
 })

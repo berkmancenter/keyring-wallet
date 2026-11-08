@@ -48,6 +48,7 @@ import {
   ceremonyMember,
   encounterMismatch,
   newProposeId,
+  SHARED_CONNECT_STEP_PROOF_PURPOSE,
   signSharedConnectDocument,
   type SharedConnectStep,
 } from './sharedConnectCeremony'
@@ -117,7 +118,12 @@ export function defaultSharedConnectDeps(agent: Agent): SharedConnectDeps {
     verifyVrc: (vc) => verifySharedConnectVrc(agent, vc),
     verifyProof: async (document, signers) => {
       for (const signer of signers) {
-        if (await verifyDocumentProof(agent, document, signer).catch(() => false)) return true
+        if (
+          await verifyDocumentProof(agent, document, signer, {
+            proofPurpose: SHARED_CONNECT_STEP_PROOF_PURPOSE,
+          }).catch(() => false)
+        )
+          return true
       }
       return false
     },

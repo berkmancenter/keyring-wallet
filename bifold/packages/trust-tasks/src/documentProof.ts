@@ -209,6 +209,16 @@ export async function signDocumentProof(
      * conforming verifier, so it is refused here, before anything is sent.
      */
     proofPurpose?: ProofPurpose
+    /**
+     * Copy the document's `@context` into the proof, as eddsa-jcs-2022 (W3C
+     * Data Integrity, "Proof Configuration") describes; the hashed proof
+     * configuration then includes it. Off by default, so every existing proof
+     * is signed exactly as before: the VTA and other verifiers of cards,
+     * statements and eligibility proofs have only been checked against proofs
+     * without it. Set by the shared-connect VRC, whose independent counterpart
+     * expects it. A document without an `@context` is unaffected either way.
+     */
+    carryContext?: boolean
   } = {}
 ): Promise<Record<string, unknown>> {
   const proofPurpose = options.proofPurpose ?? 'assertionMethod'
@@ -226,6 +236,10 @@ export async function signDocumentProof(
       : verificationMethod.id,
     proofPurpose,
   }
+  // eddsa-jcs-2022 (W3C Data Integrity, "Proof Configuration"): a document that has an @context carries it,
+  // unchanged, in its proof, and the proof configuration that is hashed includes it. Only on request
+  // (`carryContext`); a document without one (a Trust Task step) gets no @context key either way.
+  if (options.carryContext && document['@context'] !== undefined) proofConfig['@context'] = document['@context']
 
   const configHash = sha256(new TextEncoder().encode(jcsCanonicalize(proofConfig)))
   // Signed as sent: whole-second instants in the form a verifier rebuilds.

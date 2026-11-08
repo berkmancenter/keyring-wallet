@@ -40,7 +40,8 @@ export async function issueSharedConnectVrc(
   profile: VrcProfile = SHARED_CONNECT_VRC_PROFILE
 ): Promise<Record<string, unknown>> {
   const { credential } = await buildVrcCredential(agent, myRelationshipDid, theirRelationshipDid, profile)
-  if (profile.suite === JCS) return signDocumentProof(agent, credential, myRelationshipDid)
+  // The proof carries the credential's @context (eddsa-jcs-2022), which the independent counterpart expects.
+  if (profile.suite === JCS) return signDocumentProof(agent, credential, myRelationshipDid, { carryContext: true })
   const didDocument = await agent.dids.resolveDidDocument(myRelationshipDid)
   const verificationMethodId = didDocument.verificationMethod?.[0]?.id
   if (!verificationMethodId) throw new Error('no verification method on the relationship DID')

@@ -130,9 +130,16 @@ export function peer2(keys: PeerKeys, services: Array<Record<string, unknown>>):
   ].join('.')
 }
 
+export type ProofPurpose = 'authentication' | 'assertionMethod'
+
 export interface Resolved {
   id: string
+  /** Every Ed25519 key, whatever its purpose (the TSP sender key is read from here, not a proof key). */
   signing: Array<{ id: string; key: Uint8Array }>
+  /** Keys listed under `authentication`: a did:peer:2 `V` segment, or did:peer:0's one key. */
+  authentication: Array<{ id: string; key: Uint8Array }>
+  /** Keys listed under `assertionMethod`: a did:peer:2 `A` segment, or did:peer:0's one key. */
+  assertionMethod: Array<{ id: string; key: Uint8Array }>
   agreement: Array<{ id: string; key: Uint8Array }>
   services: Array<Record<string, unknown>>
 }
@@ -143,10 +150,11 @@ export function resolvePeer(did: string): Resolved {
     const mk = did.slice('did:peer:0'.length)
     const bytes = unbase58(mk.slice(1))
     if (bytes[0] !== 0xed || bytes[1] !== 0x01) throw new Error('did:peer:0 is not Ed25519')
-    return { id: did, signing: [{ id: `${did}#${mk}`, key: bytes.slice(2) }], agreement: [], services: [] }
+    const own = [{ id: `${did}#${mk}`, key: bytes.slice(2) }]
+    return { id: did, signing: own, authentication: own, assertionMethod: own, agreement: [], services: [] }
   }
   if (!did.startsWith('did:peer:2.')) throw new Error(`cannot resolve ${did.slice(0, 16)}`)
-  const out: Resolved = { id: did, signing: [], agreement: [], services: [] }
+  const out: Resolved = { id: did, signing: [], authentication: [], assertionMethod: [], agreement: [], services: [] }
   let n = 0
   for (const element of did.slice('did:peer:2.'.length).split('.')) {
     const purpose = element[0]
@@ -164,7 +172,12 @@ export function resolvePeer(did: string): Resolved {
     const bytes = unbase58(value.slice(1))
     n += 1
     const id = `${did}#key-${n}`
-    if (purpose === 'V' && bytes[0] === 0xed) out.signing.push({ id, key: bytes.slice(2) })
+    // DIF Peer DID method: V is authentication only, A is assertionMethod only. One does not imply the other.
+    if ((purpose === 'V' || purpose === 'A') && bytes[0] === 0xed) {
+      out.signing.push({ id, key: bytes.slice(2) })
+      if (purpose === 'V') out.authentication.push({ id, key: bytes.slice(2) })
+      else out.assertionMethod.push({ id, key: bytes.slice(2) })
+    }
     if (purpose === 'E' && bytes[0] === 0xec) out.agreement.push({ id, key: bytes.slice(2) })
   }
   return out
@@ -179,7 +192,12 @@ const jcs = (v: unknown) => {
 const hashInput = (proofConfig: Record<string, unknown>, unsecured: Record<string, unknown>) =>
   cat(sha256(utf8(jcs(proofConfig))), sha256(utf8(jcs(unsecured))))
 
-export function signJcs(doc: Record<string, unknown>, sk: Uint8Array, verificationMethod: string) {
+export function signJcs(
+  doc: Record<string, unknown>,
+  sk: Uint8Array,
+  verificationMethod: string,
+  proofPurpose: ProofPurpose
+) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { proof: _drop, ...unsecured } = doc
   const proofConfig: Record<string, unknown> = {
@@ -187,23 +205,29 @@ export function signJcs(doc: Record<string, unknown>, sk: Uint8Array, verificati
     cryptosuite: 'eddsa-jcs-2022',
     created: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
     verificationMethod,
-    proofPurpose: 'assertionMethod',
+    proofPurpose,
     ...(unsecured['@context'] ? { '@context': unsecured['@context'] } : {}),
   }
   const signature = ed25519.sign(hashInput(proofConfig, unsecured), sk)
   return { ...unsecured, proof: { ...proofConfig, proofValue: 'z' + base58(signature) } }
 }
 
-/** Verify under a controller we resolve ourselves: the method must be one of its assertion keys. */
-export function verifyJcs(doc: Record<string, unknown>, controller: string): boolean {
+/**
+ * Verify under a controller we resolve ourselves, as a conforming verifier does: the proof must state the
+ * `expected` purpose, and the method must be listed under that relationship (not merely be one of its keys).
+ */
+export function verifyJcs(doc: Record<string, unknown>, controller: string, expected: ProofPurpose): boolean {
   try {
-    const { proof, ...unsecured } = doc as { proof?: Record<string, unknown> }
+    const { proof, ...unsecured } = doc as { proof?: Record<string, unknown> } & Record<string, unknown>
     if (!proof || proof.type !== 'DataIntegrityProof' || proof.cryptosuite !== 'eddsa-jcs-2022') return false
     const { proofValue, ...config } = proof
     const vm = String(config.verificationMethod ?? '')
     const resolved = resolvePeer(controller)
     const absolute = vm.startsWith('#') ? `${controller}${vm}` : vm
-    const key = resolved.signing.find((k) => k.id === absolute)
+    if (config.proofPurpose !== expected) return false
+    // eddsa-jcs-2022 (W3C Data Integrity): a document that has an @context carries it, unchanged, in its proof.
+    if (unsecured['@context'] !== undefined && jcs(config['@context']) !== jcs(unsecured['@context'])) return false
+    const key = resolved[expected].find((k) => k.id === absolute)
     if (!key) return false
     return ed25519.verify(unbase58(String(proofValue).slice(1)), hashInput(config, unsecured), key.key)
   } catch {
@@ -302,7 +326,7 @@ export class Inviter {
   }
 
   private signAsVid(doc: Record<string, unknown>) {
-    return signJcs(doc, this.keys.edSk, `${this.vid}#key-2`)
+    return signJcs(doc, this.keys.edSk, `${this.vid}#key-2`, 'authentication')
   }
 
   private async packFor(theirVid: string, document: Record<string, unknown>): Promise<Uint8Array> {
@@ -376,8 +400,8 @@ export class Inviter {
     }
     const problems = schemaProblems(doc)
     if (problems.length) return drop(`schema:${problems.join(';')}`)
-    // A proof on every step (#1034), under the issuer VID.
-    if (!verifyJcs(doc, sender)) return drop('proof')
+    // A proof on every step (#1034), under the issuer VID, for authentication (a `.V`-only did:peer:2 lists its key there).
+    if (!verifyJcs(doc, sender, 'authentication')) return drop('proof')
     const enactmentId = (doc.ceremony as { enactment?: string } | undefined)?.enactment
     const e = enactmentId ? this.enactments.get(enactmentId) : undefined
     if (!e) return drop('unknown-enactment')
@@ -391,7 +415,7 @@ export class Inviter {
       e.theirRelationshipDid = (doc.payload as { relationshipDid: string }).relationshipDid
       this.events.push('propose:accepted')
       const response = this.faults.wrongKeyResponse
-        ? signJcs(this.responseFor(e), random(32), `${this.vid}#key-2`)
+        ? signJcs(this.responseFor(e), random(32), `${this.vid}#key-2`, 'authentication')
         : this.signAsVid(this.responseFor(e))
       const issue = this.issueFor(e)
       if (this.faults.holdIssue) {
@@ -413,7 +437,7 @@ export class Inviter {
       const subject = vc.credentialSubject as { id?: string }
       if (vc.issuer !== e.theirRelationshipDid) return drop('vc-issuer')
       if (subject?.id !== this.relDid) return drop('vc-subject')
-      if (!verifyJcs(vc, String(vc.issuer))) return drop('vc-proof')
+      if (!verifyJcs(vc, String(vc.issuer), 'assertionMethod')) return drop('vc-proof')
       e.theirVrc = vc
       this.events.push('issue:stored')
       const receipt = this.signAsVid({
@@ -455,7 +479,8 @@ export class Inviter {
         credentialSubject: { id: this.faults.vcSubjectWrong ? this.relDid : e.theirRelationshipDid },
       },
       this.relSk,
-      `${this.relDid}#${this.relDid.slice('did:peer:0'.length)}`
+      `${this.relDid}#${this.relDid.slice('did:peer:0'.length)}`,
+      'assertionMethod'
     )
     e.myVrcDigest = digestOf(vc)
     return this.signAsVid({

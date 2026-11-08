@@ -130,11 +130,22 @@ export function acceptableProofSigners(document: Record<string, unknown>, relati
   return [String(document.issuer), ...(relationshipDid ? [relationshipDid] : [])]
 }
 
-/** Sign a document (every step carries a proof, receipts included). Returns a new document with its `proof` (whole-second timestamps, as a verifier rebuilds them). */
+/**
+ * The purpose every shared-connect STEP proof is made for, signed and verified alike. The encounter VID is a
+ * did:peer:2 with a `.V` segment only, which lists its key under `authentication` and nowhere else, and a
+ * counterpart's verifier checks the method is listed under the proof's purpose; they sign their own steps this
+ * way. The VRC credential inside `issue` is a different proof (its issuer lists the key under `assertionMethod`)
+ * and keeps that purpose: sharedConnectCredential.ts.
+ */
+export const SHARED_CONNECT_STEP_PROOF_PURPOSE = 'authentication' as const
+
+/** Sign a document (every step carries a proof, receipts included) for `authentication`. Returns a new document with its `proof` (whole-second timestamps, as a verifier rebuilds them). */
 export async function signSharedConnectDocument(
   agent: Agent,
   document: Record<string, unknown>,
   relationshipDid?: string
 ): Promise<Record<string, unknown>> {
-  return signDocumentProof(agent, document, proofSignerFor(document, relationshipDid))
+  return signDocumentProof(agent, document, proofSignerFor(document, relationshipDid), {
+    proofPurpose: SHARED_CONNECT_STEP_PROOF_PURPOSE,
+  })
 }

@@ -132,7 +132,7 @@ describe('the proof', () => {
       ...doc,
       proof: { type: 'DataIntegrityProof' },
     })
-    expect(mockSign).toHaveBeenCalledWith(agent, doc, ME)
+    expect(mockSign).toHaveBeenCalledWith(agent, doc, ME, { proofPurpose: 'authentication' })
   })
 })
 

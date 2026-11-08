@@ -125,13 +125,15 @@ export class Scanner {
   }
 
   private signLater(doc: Record<string, unknown>) {
-    return this.faults.badProofLater ? signJcs(doc, random(32), `${this.vid}#key-2`) : this.signAsVid(doc)
+    return this.faults.badProofLater
+      ? signJcs(doc, random(32), `${this.vid}#key-2`, 'authentication')
+      : this.signAsVid(doc)
   }
 
   private signAsVid(doc: Record<string, unknown>) {
     return this.faults.badProof
-      ? signJcs(doc, random(32), `${this.vid}#key-2`)
-      : signJcs(doc, this.keys.edSk, `${this.vid}#key-2`)
+      ? signJcs(doc, random(32), `${this.vid}#key-2`, 'authentication')
+      : signJcs(doc, this.keys.edSk, `${this.vid}#key-2`, 'authentication')
   }
 
   /** Read the code. */
@@ -244,9 +246,11 @@ export class Scanner {
       if (problems.length) return drop(`schema:${problems.join(';')}`)
     }
     // A proof on every step (#1034), under the issuer VID (or the inviter's relationship DID, once known).
-    const underVid = verifyJcs(doc, sender)
+    const underVid = verifyJcs(doc, sender, 'authentication')
     const underRel =
-      !this.faults.strictVidProofs && !!this.theirRelationshipDid && verifyJcs(doc, this.theirRelationshipDid)
+      !this.faults.strictVidProofs &&
+      !!this.theirRelationshipDid &&
+      verifyJcs(doc, this.theirRelationshipDid, 'authentication')
     if (!underVid && !underRel) return drop('proof')
     this.received.push(doc)
     if (isError) {
@@ -277,7 +281,7 @@ export class Scanner {
       const subject = vc.credentialSubject as { id?: string }
       if (vc.issuer !== this.theirRelationshipDid) return drop('vc-issuer')
       if (subject?.id !== this.relDid) return drop('vc-subject')
-      if (!verifyJcs(vc, String(vc.issuer))) return drop('vc-proof')
+      if (!verifyJcs(vc, String(vc.issuer), 'assertionMethod')) return drop('vc-proof')
       if (vc.validUntil !== undefined) return drop('vc-validUntil')
       this.theirVrc = vc
       this.events.push('issue:stored')
@@ -312,7 +316,8 @@ export class Scanner {
         credentialSubject: { id: this.faults.vcSubjectWrong ? this.relDid : this.theirRelationshipDid },
       },
       this.faults.vcBadProof ? random(32) : this.relSk,
-      `${this.relDid}#${this.relDid.slice('did:peer:0'.length)}`
+      `${this.relDid}#${this.relDid.slice('did:peer:0'.length)}`,
+      'assertionMethod'
     )
     this.myVrcDigest = digestOf(vc)
     return this.signLater({

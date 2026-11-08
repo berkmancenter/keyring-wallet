@@ -47,7 +47,7 @@ import { verifyDocumentProof } from '../documentProof'
 
 import { didPrefix } from './didPrefix'
 import { getKeyed, listKeyed, putKeyed } from './keyedRecords'
-import { isChallengeShaped } from './sharedConnectCeremony'
+import { isChallengeShaped, SHARED_CONNECT_STEP_PROOF_PURPOSE } from './sharedConnectCeremony'
 import {
   SHARED_CONNECT_EXP_GRACE_MS,
   SHARED_CONNECT_INVITE_MAX_FRAMES,
@@ -681,7 +681,8 @@ export async function createSharedConnectInvite(
       const packed = await answerInviteOverTsp(identity, myVid, theirVid, digest, revision)
       await relayRef.current?.sendTspFrame(packed.bytes)
     },
-    verifyProof: (document, signer) => verifyDocumentProof(agent, document, signer),
+    verifyProof: (document, signer) =>
+      verifyDocumentProof(agent, document, signer, { proofPurpose: SHARED_CONNECT_STEP_PROOF_PURPOSE }),
     sendDocument: async (theirVid, document, revision) => {
       const packed = await packTrustTaskForPeer(identity, myVid, theirVid, document, revision)
       if (!relayRef.current) throw new Error(`${ENCOUNTER_LOG_PREFIX} inviter relay is closed`)
