@@ -39,9 +39,9 @@ describe('the PIN screen when the keyboard opens', () => {
   })
   afterEach(() => jest.restoreAllMocks())
 
-  it('a keyboard reported at the top of the screen leaves the PIN entry in sight', async () => {
+  const open = () => {
     const main = new MainContainer(container.createChildContainer()).init()
-    const tree = render(
+    return render(
       <ContainerProvider value={main}>
         <StoreProvider initialState={{ ...defaultState }}>
           <AuthContext.Provider value={authContext}>
@@ -50,6 +50,8 @@ describe('the PIN screen when the keyboard opens', () => {
         </StoreProvider>
       </ContainerProvider>
     )
+  }
+  const layOut = async (tree: ReturnType<typeof render>) => {
     const spacer = spacerOf(await tree.findByTestId(testIdWithKey('Enter')))
     await act(async () => {
       fireEvent(spacer, 'layout', {
@@ -57,6 +59,9 @@ describe('the PIN screen when the keyboard opens', () => {
         nativeEvent: { layout: { x: 0, y: 0, width: 430, height: VIEW_HEIGHT } },
       })
     })
+  }
+  // The keyboard as IN-525's and IN-551's phone reports it: its top edge at the top of the screen.
+  const reportKeyboardAtTop = async () => {
     const willShow = (Keyboard.addListener as jest.Mock).mock.calls
       .filter(([name]) => name === 'keyboardWillShow')
       .map(([, listener]) => listener)
@@ -71,10 +76,31 @@ describe('the PIN screen when the keyboard opens', () => {
           isEventFromThisApp: true,
         })
     })
+  }
+  const expectPinEntryInSight = (tree: ReturnType<typeof render>) => {
     const padding = (StyleSheet.flatten(spacerOf(tree.getByTestId(testIdWithKey('Enter'))).props.style) as ViewStyle)
       .paddingBottom as number
     expect(padding).toBeGreaterThan(0)
     expect(padding).toBeLessThanOrEqual(KEYBOARD_HEIGHT)
     expect(VIEW_HEIGHT - padding).toBeGreaterThanOrEqual(KEEP_VISIBLE)
+  }
+
+  it('a keyboard reported at the top of the screen leaves the PIN entry in sight', async () => {
+    const tree = open()
+    await layOut(tree)
+    await reportKeyboardAtTop()
+    expectPinEntryInSight(tree)
+  })
+
+  // IN-551: after the app has been closed a while, the PIN screen opened blank every time; a quick reopen usually
+  // didn't. A cold start can bring the keyboard's report before the screen has laid itself out.
+  it('and so it does when that report comes before the screen has laid itself out (a cold start)', async () => {
+    const tree = open()
+    // Keep this wait: until the screen has mounted, its keyboard listener isn't subscribed, so the report below would
+    // reach no one and the row would pass without testing the order.
+    await tree.findByTestId(testIdWithKey('Enter'))
+    await reportKeyboardAtTop()
+    await layOut(tree)
+    expectPinEntryInSight(tree)
   })
 })
