@@ -243,14 +243,17 @@ export function select(changed, { manifests, legsDir, root = e2eDir, top = repo,
   return { legs, ...owned };
 }
 
-function changedFiles(range) {
+/** The files a wallet range changes, plus bifold's own range as bifold/… when its pin moved (linkTrigger.mjs too). */
+export function changedFiles(range) {
   const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8' }).trim();
   const files = git('diff', '--name-only', range).split('\n').filter(Boolean);
   const [a, b] = range.split('..');
   const pin = (rev) => { try { return git('rev-parse', `${rev}:bifold`); } catch { return ''; } };
   const pa = pin(a), pb = pin(b);
   if (pa && pb && pa !== pb) {
-    const inner = execFileSync('git', ['-C', path.join(repo, 'bifold'), 'diff', '--name-only', `${pa}..${pb}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+    // A worktree's bifold/ is empty: BIFOLD_GIT names a bifold clone that has the pins (as pathExists reads it).
+    const bifold = process.env.BIFOLD_GIT || path.join(repo, 'bifold');
+    const inner = execFileSync('git', ['-C', bifold, 'diff', '--name-only', `${pa}..${pb}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
     files.push(...inner.map((f) => `bifold/${f}`));
   }
   return files.filter((f) => f !== 'bifold');
