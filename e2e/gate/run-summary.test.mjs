@@ -224,3 +224,44 @@ test("a leg's INFORMATIONAL line sets aside only the rows it names: its other FA
     assert.equal(s.overall, 'fail');
   } finally { r.done(); }
 });
+
+test('a core journey that names a row (hv@hv-admitted) is not proven while that row SKIPs, however many others pass', () => {
+  const CORE_ROW = 'core=vetting-named:kk vetting-hidden:hv@hv-admitted signin:signin-ios join:waiting\n';
+  const hv = (admitted) => pass('hv-link') + pass('hv-proof') + admitted;
+  const r = runs({
+    '1021-1000-cccc-gate': { meta: `kind=gate\n${CORE_ROW}`, legs: [['kk', 0, pass('kk-vetting')], ['hv', 0, hv('ROW hv-admitted SKIP — 2 members joined since the run began (read twice) on this shared community\n')], ['signin-ios', 0, pass('signin-approved')], ['waiting', 0, pass('join-sent')]] },
+    '1021-1100-cccc-gate': { meta: `kind=gate\n${CORE_ROW}`, legs: [['kk', 0, pass('kk-vetting')], ['hv', 0, hv(pass('hv-admitted'))], ['signin-ios', 0, pass('signin-approved')], ['waiting', 0, pass('join-sent')]] },
+  });
+  try {
+    const s = summarize(path.join(r.root, '1021-1000-cccc-gate'));
+    assert.equal(s.overall, 'incomplete');
+    assert.deepEqual(s.coreMissing.map((m) => [m.journey, m.why]), [['vetting-hidden', 'hv: hv-admitted did not PASS']]);
+    const ok = summarize(path.join(r.root, '1021-1100-cccc-gate'));
+    assert.equal(ok.overall, 'pass');
+    assert.deepEqual(ok.coreMissing, []);
+  } finally { r.done(); }
+});
+
+// Each core journey names the row that is the journey (gate.sh CORE_JOURNEYS): a missing or SKIPped verdict row leaves
+// the gate incomplete for that journey alone, however the leg's other rows did.
+const PINNED = { 'vetting-named': ['kk', 'kk-vetting'], 'vetting-hidden': ['hv', 'hv-admitted'], signin: ['signin-ios', 'signin-approved'], join: ['waiting', 'join-approved-listed'] };
+const PINNED_CORE = `core=${Object.entries(PINNED).map(([j, [leg, row]]) => `${j}:${leg}@${row}`).join(' ')}\n`;
+for (const [journey, [legName, verdictRow]] of Object.entries(PINNED)) {
+  for (const how of ['SKIP', 'missing']) {
+    test(`core journey ${journey}: its verdict row ${verdictRow} ${how} leaves the gate incomplete for it alone`, () => {
+      const legs = Object.values(PINNED).map(([leg, row]) => [leg, 0, pass(`${leg}-other`) + (leg !== legName ? pass(row) : how === 'SKIP' ? `ROW ${row} SKIP — not this run's to judge\n` : '')]);
+      const r = runs({ '1021-1200-cccc-gate': { meta: `kind=gate\n${PINNED_CORE}`, legs } });
+      try {
+        const s = summarize(path.join(r.root, '1021-1200-cccc-gate'));
+        assert.equal(s.overall, 'incomplete');
+        assert.deepEqual(s.coreMissing.map((m) => [m.journey, m.why]), [[journey, `${legName}: ${verdictRow} did not PASS`]]);
+      } finally { r.done(); }
+    });
+  }
+}
+
+test('the gate pins each core journey to its verdict row', async () => {
+  const { readFileSync } = await import('node:fs');
+  const gateSh = readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'gate.sh'), 'utf8');
+  assert.equal(gateSh.match(/^CORE_JOURNEYS="([^"]*)"/m)[1], PINNED_CORE.slice('core='.length).trim());
+});

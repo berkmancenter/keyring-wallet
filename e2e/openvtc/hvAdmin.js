@@ -33,6 +33,8 @@ export function createHvAdmin({ vtcBase, communityDid, adminCredential }) {
     },
     decide: (id, decision = 'approved') => run('join-decide', id, decision),
     grantVetter: (memberDid) => run('vetter-grant', memberDid),
+    /** vtc/vetting/vetters/grants/list/0.1: [{ memberDid, live, revoked, validUntil, … }] (as run-phase2.mjs reads it). */
+    vetters: () => run('vetters-list').body?.vetters ?? [],
     removeMember: (did, reason = 'hv leg cleanup') => run('member-remove', did, reason),
     /** vtc/vetting/hidden/show/0.1 for the criterion: { enabled, enrolledVetters: { label: n } }. */
     async hiddenShow(criterionId) {
@@ -41,6 +43,44 @@ export function createHvAdmin({ vtcBase, communityDid, adminCredential }) {
       return r.body ?? {};
     },
   };
+}
+
+/** Every join request made at or after `since` (ISO). More than one means another run asked meanwhile. */
+export function requestsSince(requests, since) {
+  return requests.filter((r) => String(r.createdAt ?? r.submittedAt ?? '') >= since);
+}
+
+/** Every member who joined at or after `since` (ISO). More than one means another run's applicant joined meanwhile. */
+export function membersSince(members, since) {
+  return members.filter((m) => String(m.joinedAt ?? m.createdAt ?? '') >= since);
+}
+
+/**
+ * The one item `pick` finds since `since`, read twice: wait for a first one (up to `tries` reads), then read again
+ * after `settleMs` and accept only the same single one (by `key`). A lone item seen once may be another run's that came
+ * before ours; the second read sees both. It narrows that window, it does not close it: one of ours that takes longer
+ * than `settleMs` to show still leaves another run's alone on both reads. Returns { item } or { count } (0: none came;
+ * 2+: another run's too). `read` and `wait` are injected, so it is testable without a community.
+ */
+export async function soleSince(read, since, pick, { key = (x) => x.id, tries = 24, everyMs = 5000, settleMs = 5000, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  let first = [];
+  for (let i = 0; i < tries && !first.length; i++) { first = pick(read(), since); if (!first.length) await wait(everyMs); }
+  if (first.length !== 1) return { count: first.length };
+  await wait(settleMs);
+  const again = pick(read(), since);
+  return again.length === 1 && key(again[0]) === key(first[0]) ? { item: again[0] } : { count: again.length };
+}
+
+/** The one join request since `since`, on two reads (soleSince). Returns { req } or { count }. */
+export async function soleRequestSince(read, since, options = {}) {
+  const { item, count } = await soleSince(read, since, requestsSince, options);
+  return item ? { req: item } : { count };
+}
+
+/** The one member who joined since `since`, on two reads (soleSince, keyed by DID). Returns { member } or { count }. */
+export async function soleMemberSince(read, since, options = {}) {
+  const { item, count } = await soleSince(read, since, membersSince, { key: (m) => m.did, ...options });
+  return item ? { member: item } : { count };
 }
 
 /** The newest pending join request made at or after `since` (ISO): the one this run's phone sent. */

@@ -1,0 +1,65 @@
+# Keyring over-the-air update server behind Caddy with automatic HTTPS.
+#
+#   cp .env.example .env   # then fill it in
+#   docker compose config  # static check
+#   docker compose up -d
+#
+# Only Caddy publishes ports. Neither container writes an access log: Caddy
+# logs requests only when a `log` directive asks it to, and the server keeps
+# no per-request record (README "Privacy").
+
+name: keyring-ota
+
+services:
+  ota:
+    build: .
+    # On a host the image is pulled from a registry and tagged with this name;
+    # locally `docker compose up --build` builds it under :local.
+    image: keyring-ota/server:${OTA_IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      HOT_UPDATER_AUTH_TOKEN: ${HOT_UPDATER_AUTH_TOKEN:?set HOT_UPDATER_AUTH_TOKEN in .env (openssl rand -hex 32)}
+      OTA_PUBLIC_URL: ${SITE_SCHEME:-https}://${OTA_HOST:?set OTA_HOST in .env}
+      PORT: "3080"
+    # Bind mounts under ./data (gitignored), so a host can keep them on its own
+    # backed-up disk by mounting that disk over ./data. The server runs as the
+    # image's `node` user (uid 1000): ./data/ota must be writable by it.
+    volumes:
+      - ./data/ota:/data
+
+  # Short invitation links for the wallet host (deploy/keyring-links). Its files
+  # live at LINKS_DATA_PATH, which on a host is a disk that is NOT snapshotted, so
+  # a backup never keeps an invitation past its 7 days (keyring-links README).
+  #
+  # NO `ports:`, on purpose. Caddy must be the only way in: its 8 KB body cap
+  # (Caddyfile) is the service's first size limit, and the rate limiter trusts the
+  # last X-Forwarded-For entry because Caddy sets it. Publishing a port, even for
+  # debugging, removes the cap and makes the rate limit spoofable.
+  links:
+    build: ../keyring-links
+    image: keyring-ota/links:${LINKS_IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${SITE_SCHEME:-https}://${WALLET_HOST:-wallet.localhost}
+      PORT: "3090"
+      LINKS_DATA_DIR: /data
+    volumes:
+      - ${LINKS_DATA_PATH:-./links-data}:/data
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [ota, links]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      OTA_HOST: ${OTA_HOST:?set OTA_HOST in .env}
+      WALLET_HOST: ${WALLET_HOST:-wallet.localhost}
+      SITE_SCHEME: ${SITE_SCHEME:-https}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The wallet host's static site: universal-link files and the install page.
+      - ../../app/universal-link-site:/srv/wallet-site:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config

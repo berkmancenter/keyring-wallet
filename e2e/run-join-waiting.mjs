@@ -41,6 +41,7 @@ import { buildLacks } from "./lib/buildHas.js";
 import { credVaultQuery } from "./lib/pnm.js";
 import { agents } from "./lib/pages/agents.js";
 import { community, join, readMemberState, readStanding } from "./lib/pages/join.js";
+import { walletCardKeys, walletCardSelector } from "./lib/walletCards.js";
 
 const C_DID = process.env.C_DID;
 const key = communityCardKey(C_DID || "");
@@ -70,9 +71,8 @@ async function walletCardsFrom(d, issuer) {
   const seen = new Set();
   const read = async () => {
     const src = await d.getPageSource().catch(() => "");
-    const texts = [...src.matchAll(/text="([^"]*)"[^>]*resource-id="com\.ariesbifold:id\/(CredentialIssuer|CredentialName)"/g)];
-    for (let i = 0; i + 1 < texts.length; i++)
-      if (texts[i][2] === "CredentialIssuer" && texts[i + 1][2] === "CredentialName" && texts[i][1].includes(issuer)) seen.add(`${texts[i][1]}|${texts[i + 1][1]}`);
+    // An older build's issuer|card-name pairs, or a pass build's pass descriptions (bifold #524): lib/walletCards.js.
+    for (const key of walletCardKeys(src, issuer)) seen.add(key);
   };
   const scroll = (direction) =>
     d.execute("mobile: scrollGesture", { left: 100, top: 500, width: 800, height: 1200, direction, percent: 0.8 }).catch(() => false);
@@ -279,7 +279,7 @@ async function approvedFlow(d, me) {
     await tapTestId(d, "Wallet", 10000).catch(() => undefined);
     await sleep(2000);
     for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
-    const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
+    const card = d.$(walletCardSelector(C_NAME));
     let shown = false;
     for (const until = Date.now() + 60000; Date.now() < until && !shown; await sleep(2000)) shown = await card.isExisting().catch(() => false);
     const words = shown ? String(await card.getAttribute("text").catch(() => "")) : "";
@@ -307,11 +307,14 @@ async function approvedFlow(d, me) {
       // on screen, and a second card from C below the fold would read as one (review on #467). The default "member"
       // role has no card of its own, so one.
       const walletCards = await walletCardsFrom(d, C_NAME);
-      const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
+      const card = d.$(walletCardSelector(C_NAME));
       const opened = (await card.isExisting().catch(() => false)) && (await card.click().then(() => true, () => false));
       const line = opened ? await scrollToTestId(d, "CommunityCardRole", 8).catch(() => undefined) : undefined;
       const said = line ? (await textOf(d, "CommunityCardRole").catch(() => "")).replace(/\s+/g, " ").trim() : "";
       await screenshot(d, "join-approved-role-card").catch(() => undefined);
+      // Android Back: on a pass build it closes the card opened in place in the Wallet (bifold #534), as it popped the
+      // Details screen before. This flow drives Android only (makeDriver platform "android"); iOS has no Back, and
+      // there the card's "All cards" (PassOpenClose) is the way out.
       if (opened) await d.back().catch(() => undefined);
       return {
         // UI/UX's decision (10-14) is about the Wallet: one card from C, its details naming the role. Your agent's

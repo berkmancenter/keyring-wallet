@@ -16,6 +16,7 @@ fin() {
   echo "ios logs: applicant $(ios_log_app_lines "$LEG_DIR/applicant-ios.log") app lines, vetter $(ios_log_app_lines "$LEG_DIR/vetter-ios.log")"
   wda_stop "$VETTER_SIM_UDID"; wda_stop "$APPLICANT_SIM_UDID"; sim_down "$VETTER_SIM_UDID"; sim_down "$APPLICANT_SIM_UDID"
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"
+  c_members_remove "gate: kk applicant, removed after the leg" "$LEG_DIR/vetting.out"
 }
 LEG_CLEANUP=fin
 export RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN ENROL_PORT=8186 E2E_RELEASE=1

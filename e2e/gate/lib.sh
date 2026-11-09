@@ -113,6 +113,87 @@ gate_env() {
   # line, so a local pass is never read as a Farm pass.
   : "${GATE_TARGET:=$(basename "$GATE_ENV" .env)}"
   export GATE_TARGET
+  # A phone grant must not outlive the identity that writes it: a VTA 0.60 refuses an expiring admin's permanent
+  # entry (VTI-ACL-053; the mini's run 1021-0258, testreq). An env file whose identity expires says so with
+  # GATE_GRANT_EXPIRES, and a lane's (E2E_LANE) defaults to 24h: a phone kept linked across a long serial run must
+  # outlive it (the CI lane's legs are short and use 6h, ci/gate-ci-leg.sh).
+  # enrol-manager.sh reads EXPIRES; the enrolment page already grants for 1h. An EXPIRES the caller set is kept.
+  [ -z "${E2E_LANE:-}" ] || : "${GATE_GRANT_EXPIRES:=24h}"
+  [ -z "${GATE_GRANT_EXPIRES:-}" ] || export EXPIRES="${EXPIRES:-$GATE_GRANT_EXPIRES}"
+}
+
+# Turns. Two machines on the same runners (the MacBook and the Mac mini on the farm3 runners and community C) must
+# never gate at once: each run's gate_sweep and keys_since would clean the other's state. GATE_TURN_HOST names the
+# machine holding the turn lock: "local" on that machine, its ssh alias on the other (the MacBook: mini). Unset, no
+# turn is taken: a machine on runners of its own (the mini's lane-mini.env, keyring-runner-mini1). The turn host
+# unreachable is a refusal, not a pass: another machine may be gating. An owner that is gone is taken over; an owner on
+# a machine this one cannot see is treated as live, and the refusal names the lock to remove by hand.
+turn_sh() {
+  if [ "$GATE_TURN_HOST" = local ]; then bash -c "$1"
+  else ${GATE_TURN_SSH:-ssh -o BatchMode=yes -o ConnectTimeout=15} "$GATE_TURN_HOST" "$1"; fi
+}
+turn_dir() { printf '%s' "${GATE_TURN_DIR:-\$HOME/.keyring-fleet/gate/turn.lock.d}"; }
+turn_owner_live() {
+  local oh=$1 op=$2
+  [ "$op" != "?" ] || return 0
+  if [ "$oh" = "$(hostname -s)" ]; then kill -0 "$op" 2>/dev/null; return; fi
+  if [ "$GATE_TURN_HOST" != local ] && [ "$oh" = "$(turn_sh 'hostname -s' 2>/dev/null)" ]; then
+    turn_sh "kill -0 $op" >/dev/null 2>&1; return
+  fi
+  return 0
+}
+turn_lock() {
+  [ -n "${GATE_TURN_HOST:-}" ] || return 0
+  local d me out rc oh op os try
+  d=$(turn_dir); me=$(hostname -s)
+  for try in 1 2; do
+    out=$(turn_sh "d=\"$d\"; mkdir -p \"\$(dirname \"\$d\")\" || exit 3
+      if mkdir \"\$d\" 2>/dev/null; then echo '$me $$ $(stamp)Z' > \"\$d/owner\"; echo TAKEN
+      else cat \"\$d/owner\" 2>/dev/null || echo '? ? ?'; fi" 2>&1); rc=$?
+    [ $rc = 0 ] || die "the turn host $GATE_TURN_HOST did not answer ($(printf '%s' "$out" | tail -1 | cut -c1-160)): not started, since another machine may be gating on the shared runners"
+    [ "$out" != TAKEN ] || { TURN_HELD=1; say "gate turn taken on $GATE_TURN_HOST"; return 0; }
+    read -r oh op os <<< "$out"
+    turn_owner_live "$oh" "$op" && die "another machine holds the gate turn ($oh, pid $op, since $os): not started. Remove $d on $GATE_TURN_HOST only if that run is gone"
+    say "stale gate turn ($oh, pid $op) taken over"
+    turn_sh "d=\"$d\"; mv \"\$d\" \"\$d.stale.$$\" 2>/dev/null && rm -rf \"\$d.stale.$$\"" >/dev/null 2>&1
+  done
+  die "could not take the gate turn on $GATE_TURN_HOST"
+}
+turn_release() {
+  [ "${TURN_HELD:-}" = 1 ] || return 0
+  local d; d=$(turn_dir)
+  turn_sh "d=\"$d\"; [ \"\$(cut -d' ' -f1-2 \"\$d/owner\" 2>/dev/null)\" = '$(hostname -s) $$' ] && rm -rf \"\$d\"" >/dev/null 2>&1
+  TURN_HELD=
+}
+# Rows of named legs (gate.sh run --rows). Row names may hold spaces and colons ("no lock: refusal shown") but no
+# comma, as E2E_ONLY_ROWS is a comma list: the list splits on commas only. "leg:row" names its leg only when the text
+# before the first colon is one of --legs; anything else is a plain row, accepted only when --legs names exactly one leg.
+# Prints the normalised "leg:row,…" list, so a row with the same name in another leg is never selected there. Fails
+# (the reason on stderr) on a plain row with several legs, an empty entry, or no rows.
+rows_spec() {
+  local legs=$1 rows=$2 out="" r leg row n
+  local -a items
+  n=$(printf '%s' "$legs" | tr ',' '\n' | grep -c .)
+  IFS=, read -ra items <<< "$rows"
+  for r in ${items[@]+"${items[@]}"}; do
+    [ -n "$r" ] || { echo "--rows: an empty entry" >&2; return 1; }
+    leg=${r%%:*}
+    if [[ $r == *:* ]] && [[ ",$legs," == *",$leg,"* ]]; then row=${r#*:}
+    elif [ "$n" = 1 ]; then leg=$legs; row=$r
+    else echo "--rows \"$r\": name its leg (leg:row, leg one of $legs) when --legs names several" >&2; return 1; fi
+    [ -n "$row" ] || { echo "--rows \"$r\": no row named" >&2; return 1; }
+    out="${out:+$out,}$leg:$row"
+  done
+  [ -n "$out" ] || { echo "--rows: no rows given" >&2; return 1; }
+  printf '%s' "$out"
+}
+# The rows of one leg from a rows_spec list, as the comma list E2E_ONLY_ROWS takes; empty: the whole leg.
+rows_for() {
+  local leg=$1 spec=$2 r out=""
+  local -a items
+  IFS=, read -ra items <<< "$spec"
+  for r in ${items[@]+"${items[@]}"}; do [ "${r%%:*}" = "$leg" ] && out="${out:+$out,}${r#*:}"; done
+  printf '%s' "$out"
 }
 need() { local v; for v in "$@"; do [ -n "${!v:-}" ] || die "$GATE_ENV: $v is empty"; done; }
 
@@ -147,6 +228,45 @@ pnm() {
 
 # The community's admin calls (decide join requests, list and remove members).
 c_admin() { galarm 90 node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
+# c_members_remove <why> <driver output>…: take off C every member the leg's drivers named (`JOIN_MEMBER <did>` lines),
+# as the other joining legs do. Side by side (GATE_DEFER_KEYS=1, a gate's iOS and Android groups) a leg's member can be
+# another leg's that is still running, so they are deferred: written to $GATE_HOME/defer-members with the community
+# they belong to, which outlives the run, and drained by c_members_deferred after both groups and at the start of every
+# later run (under the run lock, beside gate_sweep), so a killed gate's members are still removed (ac on #873).
+# IN-560, W5 of docs/plans/farm-test-footprint-plan.md.
+c_members_remove() {
+  local why=$1 m; shift
+  for m in $(grep -hoE '^JOIN_MEMBER did:[^ ]+' "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
+    if [ "${GATE_DEFER_KEYS:-}" = 1 ]; then
+      printf '%s\t%s\t%s\n' "${C_DID:-}" "$m" "$why" >> "$GATE_HOME/defer-members"; echo "  C member …${m: -24}: deferred (gate.sh removes it once no leg runs)"; continue
+    fi
+    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+  done
+}
+# c_members_deferred: remove the deferred members of this env's community (C_DID), once each, and keep only the lines
+# of other communities (another env's), for a run that uses them.
+c_members_deferred() {
+  local f=$GATE_HOME/defer-members c m why keep
+  [ -s "$f" ] && [ -n "${C_DID:-}" ] && [ -n "${C_REST:-}" ] || return 0
+  keep=$(mktemp "$GATE_HOME/defer-members.XXXXXX") || return 0
+  while IFS=$'\t' read -r c m why; do
+    [ -n "$m" ] || continue
+    if [ "$c" != "$C_DID" ]; then printf '%s\t%s\t%s\n' "$c" "$m" "$why" >> "$keep"; continue; fi
+    say "cleanup C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+  done < <(sort -u -t$'\t' -k1,2 "$f" | awk -F'\t' '!seen[$1 FS $2]++')
+  mv "$keep" "$f"
+}
+# link_trimmed: whether a link leg (linkwait, linkfail, pnmlink) runs its trimmed rows: on a nightly or changed run, with
+# no rows asked for by name (E2E_ONLY_ROWS) and LINK_FULL not 1. The store-build gate (kind gate), a dry run and anything
+# else run every row. W1 of docs/plans/farm-test-footprint-plan.md (IN-560): fewer links on runners short of memory.
+link_trimmed() {
+  case "${GATE_KIND:-}" in nightly | changed) [ -z "${E2E_ONLY_ROWS:-}" ] && [ "${LINK_FULL:-}" != 1 ] ;; *) return 1 ;; esac
+}
+# link_trim_skips <leg> <kept> <all>: a SKIP row for each case of <all> not in <kept> on a trimmed run.
+link_trim_skips() {
+  local c; link_trimmed || return 0
+  for c in $3; do [[ " $2 " == *" $c "* ]] || row "$c" SKIP "trimmed on a ${GATE_KIND} run (W1): the store-build gate runs it"; done
+}
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
@@ -193,18 +313,29 @@ build_runs() {
 # Download a run's artifacts into $2 once: a folder that already holds them is kept as it is.
 fetch_run() {
   local run=$1 dir=$2 try
-  if ls "$dir"/keyring-* >/dev/null 2>&1; then return 0; fi
-  mkdir -p "$dir"
-  # Five tries a minute apart: the 239 auto-start lost its gate to two "check your internet connection" failures.
-  for try in 1 2 3 4 5; do
-    gh run download "$run" -R $GH_REPO -D "$dir.part" >> "$dir.log" 2>&1 && { mv "$dir.part"/* "$dir"/ && rmdir "$dir.part"; break; }
-    say "download $run try $try failed: $(tail -1 "$dir.log" | cut -c1-100)"; rm -rf "${dir:?}.part"; sleep 60
-  done
+  if ! ls "$dir"/keyring-* >/dev/null 2>&1; then
+    mkdir -p "$dir"
+    # Five tries a minute apart: the 239 auto-start lost its gate to two "check your internet connection" failures.
+    for try in 1 2 3 4 5; do
+      gh run download "$run" -R $GH_REPO -D "$dir.part" >> "$dir.log" 2>&1 && { mv "$dir.part"/* "$dir"/ && rmdir "$dir.part"; break; }
+      say "download $run try $try failed: $(tail -1 "$dir.log" | cut -c1-100)"; rm -rf "${dir:?}.part"; sleep 60
+    done
+  fi
+  # The simulator app is unzipped whoever filled the directory: a build downloaded by another script (the Mac mini's
+  # first gate, 10-21) was left zipped, so the gate had no app and no manifest (wallet= and bifold= empty).
   local z; for z in "$dir"/keyring-ios-sim-*/keyring-sim.zip; do [ -f "$z" ] && (cd "$(dirname "$z")" && [ -d KeyRing.app ] || unzip -q -o keyring-sim.zip); done
   ls "$dir"/keyring-* >/dev/null 2>&1
 }
 
 # Resolve, download and export one candidate: CAND_WALLET, CAND_BIFOLD, CAND_APP (iOS sim), APK_OFF, APK_ON.
+# The manifest of a build: beside the iOS app if there is one, else beside the APK. Prints nothing when neither has one.
+build_manifest() {
+  local app=$1 apk=$2 f
+  for f in "${app:+$(dirname "$app")/manifest.txt}" "${apk:+$(dirname "$apk")/manifest.txt}"; do
+    [ -n "$f" ] && [ -f "$f" ] && { printf '%s' "$f"; return 0; }
+  done
+  return 1
+}
 use_build() {
   local sha=$1 runs off on dir
   runs=$(build_runs "$sha"); off=${runs% *}; on=${runs#* }
@@ -232,10 +363,21 @@ use_build() {
   APK_ON=$(ls "$dir"/on/keyring-android-*/*.apk 2>/dev/null | head -1)
   APK_REAL=; [ -z "$real" ] || APK_REAL=$(ls "$dir/real-${GATE_REAL_SHA:0:8}"/keyring-android-*/*.apk 2>/dev/null | head -1)
   REAL_NOTE=; [ -z "$APK_REAL" ] || REAL_NOTE="$real of ${GATE_REAL_SHA:0:8}"
-  local m; m=$(dirname "$CAND_APP")/manifest.txt
-  CAND_WALLET=$(grep '^wallet=' "$m" | cut -d= -f2); CAND_BIFOLD=$(grep '^bifold=' "$m" | cut -d= -f2)
-  local want got; want=$(grep '^main.jsbundle.sha256=' "$m" | cut -d= -f2); got=$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)
-  [ -z "$want" ] || [ "$want" = "$got" ] || die "iOS bundle $got does not match its manifest ($want)"
+  # The build's own record of what it is: the iOS app's manifest, else the APK's (both carry wallet= and bifold=).
+  local m got=none want
+  m=$(build_manifest "$CAND_APP" "$APK_OFF")
+  CAND_WALLET=$(grep '^wallet=' "$m" 2>/dev/null | cut -d= -f2); CAND_BIFOLD=$(grep '^bifold=' "$m" 2>/dev/null | cut -d= -f2)
+  # A release gate must name what it tested, and so must a rerun of one (it completes and counts toward that gate); other
+  # kinds (a dry run, changed legs) go on with a warning. $kind is the caller's local (cmd_run's, or cmd_rerun's from the
+  # rerun run's meta), which bash scoping lets this function read; unset elsewhere.
+  if [ -z "$CAND_WALLET" ]; then
+    case ${kind:-} in gate|rerun) die "no build manifest under $dir/off: a release gate must name the wallet and bifold commits it tested" ;; esac
+    say "no build manifest found under $dir/off: the report will not name the wallet and bifold commits"
+  fi
+  if [ -n "$CAND_APP" ]; then
+    want=$(grep '^main.jsbundle.sha256=' "$(dirname "$CAND_APP")/manifest.txt" 2>/dev/null | cut -d= -f2); got=$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)
+    [ -z "$want" ] || [ "$want" = "$got" ] || die "iOS bundle $got does not match its manifest ($want)"
+  else say "no iOS app in $dir/off: iOS legs have nothing to install"; fi
   export CAND_WALLET CAND_BIFOLD CAND_APP APK_OFF APK_ON APK_REAL REAL_NOTE PUSH_ON_NOTE BUILDS_NOTE
   say "build ${CAND_WALLET:0:8} / bifold ${CAND_BIFOLD:0:8}: app $got · APK off $(shasum -a 256 "$APK_OFF" | cut -c1-12) · APK on $([ -f "$APK_ON" ] && shasum -a 256 "$APK_ON" | cut -c1-12 || echo none)"
 }
@@ -246,13 +388,34 @@ use_build() {
 # exit. Piped through tail, that status was lost and the leg went on to wait for a device that never came
 # (1010-2354: smoke-android sat 17 min in adb wait-for-device after "swap used 9 GB > 8 GB"). Now the leg breaks at
 # once, with emu.sh's own reason: setup, not a verdict on the app, and --only-failed reruns the whole leg.
+# emu_net_ready <serial>: wait (60 s at most) until the emulator can reach the network, before a leg onboards. A fresh
+# userdata boots cold and its network can come up after the app starts: 1022-1709's link failed "couldn't reach its
+# message service" at onboarding on a just-reset AVD (inferred: a cold-boot network race). Probes GATE_NET_PROBE_HOST
+# (default RUNNER_MEDIATOR_HOST; set it to the app's own mediator) from inside the emulator: TCP 443 by nc until the
+# deadline, then the name alone as a weaker "dns only". Logged; a timeout is said and does not stop the leg.
+emu_net_ready() {
+  local serial=$1 host=${GATE_NET_PROBE_HOST:-${RUNNER_MEDIATOR_HOST:-}} t0 how dns=
+  [ -n "$host" ] || { echo "emulator network: no probe host (GATE_NET_PROBE_HOST / RUNNER_MEDIATOR_HOST), not checked"; return 0; }
+  # nc is the proof (the port, not only the name): say so when the image lacks it, so a DNS-only result is not mistaken.
+  adb -s "$serial" shell "command -v nc >/dev/null 2>&1" 2>/dev/null || echo "emulator network: no nc in the image: only the name can be checked"
+  t0=$(date +%s)
+  while [ $(( $(date +%s) - t0 )) -lt "${GATE_NET_WAIT_S:-60}" ]; do
+    how=$(adb -s "$serial" shell "echo | nc -w 3 $host 443 >/dev/null 2>&1 && echo tcp || { ping -c 1 -W 3 $host 2>&1 | grep -q '^PING $host (' && echo dns; }" 2>/dev/null | tr -d '\r')
+    [ "$how" = tcp ] && { echo "emulator network: $host reached (tcp 443) after $(( $(date +%s) - t0 )) s"; return 0; }
+    [ "$how" = dns ] && dns=1
+    sleep "${GATE_NET_STEP_S:-3}"
+  done
+  # TCP never answered: the name alone is a weaker sign, said as such; nothing at all is NOT reached.
+  if [ -n "$dns" ]; then echo "emulator network: $host resolved but tcp 443 not reached in ${GATE_NET_WAIT_S:-60} s (dns only; the leg goes on)"
+  else echo "emulator network: $host NOT reached in ${GATE_NET_WAIT_S:-60} s (the leg goes on; onboarding may fail on it)"; fi
+}
 emu_start() {
   local port=$1 out rc why t0; t0=$(date +%s)
   if is_ci; then
     # The workflow's emulator step boots one emulator on this leg's port (read from the leg's E=emulator-NNNN).
     # The wait is this leg's emulator_start step, not an "adb" step of its own (steps.tsv).
     GALARM_STEPS=0 galarm 120 adb -s "emulator-$port" wait-for-device 2>/dev/null \
-      && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"; echo "emulator-$port up (CI)"; return 0; }
+      && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"; emu_net_ready "emulator-$port"; echo "emulator-$port up (CI)"; return 0; }
     broken "no emulator on port $port (CI): the workflow's emulator step must use -port $port"
   fi
   "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
@@ -260,7 +423,7 @@ emu_start() {
   out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim ${EMU_EXTRA:-} 2>&1); rc=$?
   echo "$out" | tail -1
   step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"
-  [ "$rc" = 0 ] && { leg_logcat "emulator-$port"; return 0; }
+  [ "$rc" = 0 ] && { leg_logcat "emulator-$port"; emu_net_ready "emulator-$port"; return 0; }
   why=$(echo "$out" | grep -E '^emu\.sh: |not booted' | tail -1 | sed 's/^emu\.sh: //')
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
 }
@@ -296,13 +459,22 @@ avd_writable() {
   [ -f "$dir/keyring-verity-off" ] && return 0
   local s=emulator-$port
   AVD=$name EMU_EXTRA=-writable-system emu_start "$port" || return 1
-  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb -s "$s" wait-for-device
-  adb -s "$s" disable-verity 2>&1 | tail -1; adb -s "$s" reboot; sleep 10; adb -s "$s" wait-for-device
+  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb_wait "$s" || return 1
+  adb -s "$s" disable-verity 2>&1 | tail -1; adb -s "$s" reboot; sleep 10; adb_wait "$s" 300 || return 1
   local i; for i in $(seq 1 60); do [ "$(adb -s "$s" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 5; done
-  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb -s "$s" wait-for-device
+  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb_wait "$s" || return 1
   adb -s "$s" remount 2>&1 | tail -1
   emu_stop
   touch "$dir/keyring-verity-off"; echo "avd_writable: $name ready (verity off)"
+}
+# adb_wait <serial> [seconds]: `adb wait-for-device` with a deadline (default 120 s), through galarm. A bare wait has
+# none: on 11-09 emulator-5572 died mid-lostreq and its wait held the whole nightly 4 h 15 min (08:20Z-12:36Z). It
+# says which device did not come back and returns galarm's code (142 on the deadline); the caller decides what breaks.
+adb_wait() {
+  local s=$1 t=${2:-120} rc
+  GALARM_STEPS=0 galarm "$t" adb -s "$s" wait-for-device; rc=$?
+  [ "$rc" = 0 ] || echo "adb_wait: $s did not come back within ${t} s (rc $rc)" >&2
+  return "$rc"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { local t0 rc; t0=$(date +%s); xcrun simctl boot "$1" 2>/dev/null; GALARM_STEPS=0 galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; rc=$?; step_rec sim_boot "$t0" "$(( $(date +%s) - t0 ))"; return $rc; }
@@ -316,14 +488,47 @@ sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 # named gate-* or e2e-approvals (or $APPROVER_SET), and policies whose id starts "gate-". Anything else is logged as
 # "foreign … left in place", visible but not destroyed. Called by run and rerun right after the run lock, so it never
 # sweeps under a running gate. A runner named twice is swept once.
+# gate_sweep <leg>…: only the runners those legs use (sweep_runners_for), so a run never calls pnm on a runner it does
+# not touch: the MacBook's pair-ios-only nightly swept mini1, uiux and openvtc every night (IN-560, W9 of
+# docs/plans/farm-test-footprint-plan.md). A runner no leg of this run names cannot have been left anything by it; one
+# a killed earlier run left something on is swept by the next run that uses it, before its first leg. With no legs
+# named, or a leg with no script, every runner (the old behaviour: never skip a runner it cannot rule out).
 GATE_RULE_TASKS="https://trusttasks.org/spec/acl/swap-key/0.1 https://trusttasks.org/spec/vta/contexts/get/1.0"
 gate_sweep() {
-  local slug seen=" "
+  local slug v n seen=" " vars skipped=""
   galarm_reap
-  for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
-    [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
+  vars=$(sweep_runners_for "$@")
+  for v in RUNNER_MAIN RUNNER_A RUNNER_B; do
+    n=${v}_SLUG; slug=${!n:-}
+    [ -n "$slug" ] || continue
+    [[ " $vars " == *" $v "* ]] || { [[ " $skipped " == *" $slug "* ]] || skipped="$skipped $slug"; continue; }
+    [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
     gate_sweep_runner "$slug"
   done
+  # A slug that is also a used runner (an env with A = MAIN) was swept above, so it is not "not swept".
+  local s out=""; for s in $skipped; do [[ "$seen" == *" $s "* ]] || out="$out $s"; done
+  [ -z "$out" ] || say "sweep: not swept, no leg of this run uses them:$out"
+}
+# sweep_runners_for <leg>…: the runner variables (RUNNER_MAIN, RUNNER_A, RUNNER_B) the legs' own scripts reach, by
+# slug. Only a slug counts: pnm reaches a runner by its slug alone, so a leg naming only a runner's DID (linkfail's
+# approver, RUNNER_A_DID) writes nothing there. Any *_SLUG a script names counts, by its value: p2 reaches runners
+# through TUI_APPLICANT_SLUG and P2_VETTER_RUNNER_SLUG, and a farm may set either to MAIN's, A's or B's slug (ac on
+# #871). Every runner when no leg is named or a leg has no script.
+sweep_runners_for() {
+  local leg f n v s vals=" " out=" "
+  [ $# -gt 0 ] || { echo RUNNER_MAIN RUNNER_A RUNNER_B; return 0; }
+  for leg in "$@"; do
+    f=$GATE_SRC/legs/$leg.sh
+    [ -f "$f" ] || { echo RUNNER_MAIN RUNNER_A RUNNER_B; return 0; }
+    for n in $(grep -o -E '[A-Z][A-Z0-9_]*_SLUG' "$f" | sort -u); do
+      s=${!n:-}; [ -n "$s" ] && [[ "$vals" != *" $s "* ]] && vals="$vals$s "
+    done
+  done
+  for v in RUNNER_MAIN RUNNER_A RUNNER_B; do
+    n=${v}_SLUG; s=${!n:-}
+    [ -n "$s" ] && [[ "$vals" == *" $s "* ]] && out="$out$v "
+  done
+  echo $out
 }
 # gate_sweep_runner <slug>: the sweep for one runner (also a leg's end-of-leg cleanup, e.g. agents.sh). A runner whose
 # approvals cannot be read (network, keychain) is said so, never taken for a clean one.
@@ -370,6 +575,18 @@ farm_drift() {
   echo "$line"
 }
 
+# leg_cleaned_slugs <leg>: the slugs whose phone keys the leg's own cleanup removes (its keys_since "$X" lines), by
+# value. run_leg hands them to the leg's drivers as E2E_ACL_LEG_SLUGS, so a link driver on one of them leaves its keys
+# to that one list-and-delete pass at the leg's end instead of listing the ACL again per link (IN-560, W3 of
+# docs/plans/farm-test-footprint-plan.md). A slug the leg does not clean is not named, and its driver cleans per link.
+leg_cleaned_slugs() {
+  local f=$GATE_SRC/legs/$1.sh n s out=" "
+  [ -f "$f" ] || return 0
+  for n in $(grep -o -E 'keys_since "\$[A-Z][A-Z0-9_]*"' "$f" | grep -o -E '[A-Z][A-Z0-9_]*' | sort -u); do
+    s=${!n:-}; [ -n "$s" ] && [[ "$out" != *" $s "* ]] && out="$out$s "
+  done
+  echo $out
+}
 keys_since() { local s0 rc; s0=$(date +%s); keys_since_run "$@"; rc=$?; step_rec "cleanup keys $1" "$s0" "$(( $(date +%s) - s0 ))"; return $rc; }
 keys_since_run() {
   local slug=$1 t0=$2 k r i
@@ -479,13 +696,16 @@ row() {
 }
 selected() { [ -z "${E2E_ONLY_ROWS:-}" ] || [[ ",$E2E_ONLY_ROWS," == *",$1,"* ]]; }
 broken() { LEG_BROKEN=$*; echo "LEG $LEG_NAME BROKEN — $*"; exit 1; }
-# Fold a driver's own ROW lines (rows.js, or the older drivers' ROW lines) into this leg's counts.
+# Fold a driver's own ROW lines (rows.js, or the older drivers' ROW lines) into this leg's counts. Its RETRY lines (a
+# step that retried once, as the screen asked: join.awaitSent) pass through with the leg and its agent (LEG_AGENT, set
+# by the leg), so the report can count retries per agent instead of a retry hiding an agent that answers on and off.
 take_rows() {
-  local st name detail
+  local st name detail l
   while IFS=$'\t' read -r st name detail; do
     case $st in PASS) LEG_PASS=$((LEG_PASS + 1)) ;; FAIL) LEG_FAILS=$((LEG_FAILS + 1)) ;; SKIP) LEG_SKIP=$((LEG_SKIP + 1)) ;; esac
     echo "ROW $name $st — $detail"
   done < <(leg_rows "$1")
+  while IFS= read -r l; do echo "RETRY leg=$LEG_NAME agent=${LEG_AGENT:-?} ${l#RETRY }"; done < <(grep -aE '^RETRY ' "$1")
 }
 leg_end() {
   local rc=$?
@@ -501,7 +721,9 @@ leg_end() {
   # Auto-unlocks (driver.js autoUnlockIfLocked: a test build locks after 30 s without a touch): counted, so a lock
   # nobody expected shows in the verdict rather than being papered over.
   local unlocks=0; [ -d "${LEG_DIR:-}" ] && unlocks=$(cat "$LEG_DIR"/*.out 2>/dev/null | grep -c '^AUTO-UNLOCK ' || true)
-  echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s auto-unlocks=${unlocks:-0}"
+  # Retries (take_rows' RETRY lines), counted the same way: a row that passed only after one says so in its detail.
+  local retries=0; [ -f "${LEG_DIR:-}/leg.log" ] && retries=$(grep -c '^RETRY ' "$LEG_DIR/leg.log" || true)
+  echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s auto-unlocks=${unlocks:-0} retries=${retries:-0}"
   exit $rc
 }
 

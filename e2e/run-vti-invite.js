@@ -46,7 +46,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { MAY_FLIP_CRITERIA, criteriaNote } from "./lib/criteria.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";
-import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, pasteLinkOnScanScreen, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, pasteLinkOnScanScreen, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { assertDirectoryConsentOff, assertNoDidShown } from "./lib/gateChecks.js";
@@ -206,13 +206,11 @@ async function openMyAgentConnected(d, timeout = 180000) {
 async function openInvitedFlow(d) {
   await dismissTourIfPresent(d);
   await (await waitForTestId(d, "MyAgent", 30000)).click();
-  await sleep(1500);
-  if (!(await existsTestId(d, "AgentHome", 2000))) {
-    const open = await scrollToTestId(d, "OpenYourAgentButton", 4).catch(() => undefined);
-    if (!open) throw new Error('My Agent offers no way to "Open your agent" — is the phone linked?');
-    await open.click();
-    await waitForTestId(d, "AgentHome", 30000);
-  }
+  // A linked phone's My Agent hands over to the agent home before it paints
+  // (bifold #484); there is no panel and no "Open your agent" to fall back on.
+  await waitForTestId(d, "AgentHome", 30000).catch((e) => {
+    throw new Error(`My Agent did not hand over to the agent home in 30 s — is the phone linked? (${e.message})`);
+  });
   const door = await scrollToTestId(d, "AgentInvited", 4).catch(() => undefined);
   if (!door) throw new Error('the agent screen has no "I was invited"');
   await door.click();
@@ -255,7 +253,7 @@ async function inviteByDoor(d) {
   const heldBefore = EXPECT_INVITED_ERROR ? vtaInventory(runner) : undefined;
   if (await existsTestId(d, "InvitedContinue", 10000)) {
     await tapTestId(d, "InvitedContinue", 15000);
-    await handleBiometricConfirmIfPresent(d);
+    await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
     console.log(`[e2e] ${d.e2ePlatform}: I was invited → Continue (making the identity)`);
   }
   // EXPECT_INVITED_ERROR=NoDidHost: an agent with nowhere to publish an
@@ -311,7 +309,7 @@ async function inviteByDoor(d) {
     if (retry >= 2) throw new Error(`"I was invited" still says "${await textOf(d, "InvitedError").catch(() => "")}" after two retries`);
     console.log(`[e2e] ${d.e2ePlatform}: I was invited says "${(await textOf(d, "InvitedError").catch(() => "")).slice(0, 70)}" — Continue again (${retry + 1}/2)`);
     await tapTestId(d, "InvitedContinue", 15000);
-    await handleBiometricConfirmIfPresent(d);
+    await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   }
   await waitForTestId(d, "InvitedShare", 30000);
   await screenshot(d, "vti-invite-door-share");

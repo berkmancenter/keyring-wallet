@@ -20,8 +20,23 @@
 import { readdirSync, readFileSync, statSync } from 'fs'
 import { dirname, join, relative, resolve } from 'path'
 
-/** Strategies that cannot reliably receive from a queueing mediator. */
+/**
+ * Strategies no agent CONFIG may name. `Implicit` and `None` never receive from
+ * a queueing mediator. `PickUpV2LiveMode` does receive on the Postgres pickup
+ * queue, but only with the liveness backstop around it (a socket can die without
+ * a close event), so it is started only by the live-pickup owner below, never
+ * from config.
+ */
 const UNRECEIVABLE = new Set(['Implicit', 'PickUpV2LiveMode', 'None'])
+
+/**
+ * The one file that may start live pickup. It owns the WebSocket's liveness
+ * check and closes a dead socket before restarting; anything else starting
+ * live mode would run without that backstop, or stack a second reconnect
+ * monitor (credo starts one per initiateMessagePickup in live mode, and only
+ * stopMessagePickup ends it).
+ */
+const LIVE_PICKUP_OWNER = 'utils/livePickup.ts'
 
 /** The guard itself is allowed to name them. */
 const ALLOWED = ['utils/mediatorPickupStrategy.guard.test.ts']
@@ -101,6 +116,27 @@ function hasSecondArgument(args: string): boolean {
   return false
 }
 
+/**
+ * Live-mode starts in `source` not preceded by a stop: for each
+ * initiateMessagePickup naming PickUpV2LiveMode, a stopMessagePickup( must
+ * appear after the previous pickup start in the file (or the file's start).
+ */
+function liveStartsWithoutStop(source: string): string[] {
+  const offenders: string[] = []
+  const needle = 'initiateMessagePickup('
+  let previousStart = 0
+  let index = source.indexOf(needle)
+  while (index !== -1) {
+    const args = pickupCallArgs(source.slice(index))[0] ?? ''
+    if (args.includes('PickUpV2LiveMode') && !source.slice(previousStart, index).includes('stopMessagePickup(')) {
+      offenders.push(args.trim().slice(0, 60))
+    }
+    previousStart = index + needle.length
+    index = source.indexOf(needle, previousStart)
+  }
+  return offenders
+}
+
 describe('mediator pickup strategy (app guard)', () => {
   const files = scannedFiles()
 
@@ -162,6 +198,48 @@ describe('mediator pickup strategy (app guard)', () => {
     expect(explicitLoop).toBeGreaterThan(start)
     const stopBeforeLoop = api.slice(start, explicitLoop).includes('this.stopMessagePickup$.next(true)')
     expect(stopBeforeLoop).toBe(true)
+  })
+
+  it('only the live-pickup owner names PickUpV2LiveMode', () => {
+    const offenders = files
+      .filter(([rel, source]) => rel !== LIVE_PICKUP_OWNER && /\bPickUpV2LiveMode\b/.test(source))
+      .map(([rel]) => rel)
+    expect(offenders).toEqual([])
+  })
+
+  it('every live-mode start is preceded by a stop', () => {
+    const offenders: string[] = []
+    for (const [rel, source] of files) {
+      for (const call of liveStartsWithoutStop(source)) offenders.push(`${rel}: initiateMessagePickup(${call})`)
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('the stop-before-live check flags what it should (control)', () => {
+    // The two cases above pass vacuously while nothing starts live mode, so prove
+    // the checker on fixed sources.
+    const start = 'r.initiateMessagePickup(undefined, DidCommMediatorPickupStrategy.PickUpV2LiveMode)'
+    expect(liveStartsWithoutStop(`async () => { ${start} }`)).toHaveLength(1)
+    expect(liveStartsWithoutStop(`async () => { await r.stopMessagePickup(); ${start} }`)).toEqual([])
+    // A stop before an EARLIER start does not cover a later one.
+    expect(liveStartsWithoutStop(`a = () => { r.stopMessagePickup(); ${start} }\nb = () => { ${start} }`)).toHaveLength(
+      1
+    )
+    // Polling starts are not this check's business.
+    expect(liveStartsWithoutStop('r.initiateMessagePickup(undefined, DidCommMediatorPickupStrategy.PickUpV2)')).toEqual(
+      []
+    )
+  })
+
+  it('caps the live reconnect backoff', () => {
+    // credo's default ceiling is infinity: each failed reconnect doubles the wait
+    // from 100 ms, so a mediator down for minutes leaves a live phone deaf for hours.
+    const config = readFileSync(join(SRC_ROOT, 'utils/bc-agent-modules.ts'), 'utf8')
+    const match = /maximumMediatorReconnectionIntervalMs:\s*([\d_]+)/.exec(config)
+    expect(match).not.toBeNull()
+    const ms = Number((match as RegExpExecArray)[1].replace(/_/g, ''))
+    expect(ms).toBeGreaterThan(0)
+    expect(ms).toBeLessThanOrEqual(60_000)
   })
 
   it('an interrupted first mediation provisioning is discarded and retried on the next launch', () => {

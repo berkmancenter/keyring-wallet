@@ -17,6 +17,8 @@ import {
 } from 'react-native-device-info'
 import { CachesDirectoryPath, writeFile } from 'react-native-fs'
 
+import { currentOtaLabel } from '../ota/otaStatus'
+
 import { getRecentLogLines } from './logBuffer'
 import { generateReferenceCode } from './reference-code'
 
@@ -32,6 +34,8 @@ export interface ReportEnvironment {
   app: string
   version: string
   build: string
+  /** The over-the-air bundle running ('embedded' or an update id), when the build has OTA. */
+  update?: string
   system: string
   device: string
   time: string
@@ -61,6 +65,7 @@ export const currentEnvironment = (now: Date = new Date()): ReportEnvironment =>
   app: getApplicationName(),
   version: getVersion(),
   build: getBuildNumber(),
+  update: currentOtaLabel(),
   system: `${getSystemName()} ${getSystemVersion()}`,
   device: getModel(),
   time: now.toISOString(),
@@ -76,7 +81,9 @@ export const buildProblemReport = (
   const shownLines = maxLogLines !== undefined ? logLines.slice(-maxLogLines) : logLines
   const sections = [
     `Keyring problem report ${input.referenceCode}`,
-    `${env.app} ${env.version} (${env.build}) · ${env.system} · ${env.device} · ${env.time}`,
+    `${env.app} ${env.version} (${env.build})${env.update ? ` · update ${env.update}` : ''} · ${env.system} · ${
+      env.device
+    } · ${env.time}`,
     '',
     input.title ? `What failed: ${input.title}` : undefined,
     input.description ? `Shown to the user: ${input.description}` : undefined,

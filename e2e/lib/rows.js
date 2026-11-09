@@ -122,6 +122,9 @@ export function createRows({
      * `tracked` (a reason: the known bug or pending work it waits on) marks a
      * row whose check is expected to fail until that work lands: a failure is
      * reported as `SKIP — tracked (<why>): <detail>` and does not fail the leg;
+     * `fn` may also return `{ skip: "<why>" }`: no verdict on the app from this run (the harness could not tell, say,
+     * which of two new join requests on a shared community was its own); recorded as SKIP, and the rows that need it
+     * SKIP too.
      * a pass is a plain PASS, so the day the work lands shows in the report.
      */
     async row(name, fn, { needs = needsOf[name] ?? [], skip, tracked } = {}) {
@@ -138,6 +141,7 @@ export function createRows({
         const got = await fn();
         if (got === undefined || got === true) ok = true;
         else if (got === false) ok = false;
+        else if (got.skip) return record(name, "SKIP", String(got.skip)), "SKIP";
         else {
           ok = got.ok !== false;
           detail = got.detail;

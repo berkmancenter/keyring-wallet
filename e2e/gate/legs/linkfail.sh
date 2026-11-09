@@ -25,9 +25,15 @@ cd "$E2E"
 L() { adb -s $E uninstall $BID >/dev/null 2>&1
   E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
   LINK_MODE=manual RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN=$PNM_BIN "$@"; }
+# W1: a nightly or changed run keeps "refused" plus one "held" row (link_trimmed); the store gate runs every row. The
+# approver is unchanged: it is meant never to answer (the held design), F15 of the plan.
+FAIL_ROWS="swap-held swap-refused swap-held-try-again swap-held-no-retry swap-held-rescan swap-refused-no-try-again swap-refused-rescan"
+FAIL_TRIMMED="swap-held swap-refused"
+want() { selected "$1" && { ! link_trimmed || [[ " $FAIL_TRIMMED " == *" $1 "* ]]; }; }
+link_trim_skips linkfail "$FAIL_TRIMMED" "$FAIL_ROWS"
 said() { grep -oE 'swap failed as expected \([a-zA-Z]+\): ".*"' "$1" | head -1 | cut -c1-200; }
 
-if selected swap-held; then
+if want swap-held; then
   echo "  approver set: $(pnm "$RUNNER_MAIN_SLUG" approvals approvers add "$SET" "$RUNNER_A_DID" | tail -1 | cut -c1-80)"; sleep 3
   echo "  rule: $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
   L galarm 1200 env EXPECT_REFUSAL=swapHeld node run-vta-link.js > "$LEG_DIR/held.out" 2>&1; rc=$?
@@ -35,10 +41,13 @@ if selected swap-held; then
   echo "  rule off: $(pnm "$RUNNER_MAIN_SLUG" approvals remove "$TASK" | tail -1 | cut -c1-60)"; sleep 3
 fi
 
-if selected swap-refused; then
-  printf '%s\n' 'package vta.policy' 'import rego.v1' \
-    "decision := {\"decision\": \"deny\", \"explanation\": \"gate: acl/swap-key refused on purpose (#325 row)\"} if {" \
-    "  input.request.typeUri == \"$TASK\"" '}' > "$LEG_DIR/deny-swap.rego"
+# The deny module, written whichever rows run: swap-refused-no-try-again re-creates the policy from it when
+# swap-refused (which used to write it) is not selected, and a rerun of only the refused-scan rows found no file and
+# no policy, so the swap was accepted and both rows failed (1021-0328).
+printf '%s\n' 'package vta.policy' 'import rego.v1' \
+  "decision := {\"decision\": \"deny\", \"explanation\": \"gate: acl/swap-key refused on purpose (#325 row)\"} if {" \
+  "  input.request.typeUri == \"$TASK\"" '}' > "$LEG_DIR/deny-swap.rego"
+if want swap-refused; then
   echo "  policy: $(pnm "$RUNNER_MAIN_SLUG" policy upsert --id "$POL" --name "$POL" --priority 1000 --module "$LEG_DIR/deny-swap.rego" | tail -1 | cut -c1-80)"; sleep 3
   L galarm 1200 env EXPECT_REFUSAL=swapRefused node run-vta-link.js > "$LEG_DIR/refused.out" 2>&1; rc=$?
   if [ $rc -eq 0 ]; then row swap-refused PASS "$(said "$LEG_DIR/refused.out")"; else row swap-refused FAIL "rc=$rc $(grep -E '❌|Error:' "$LEG_DIR/refused.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
@@ -48,13 +57,13 @@ fi
 # by itself on foreground. A build without VtaLinkTryAgain skips these.
 if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryAgain; then
   line() { grep -m1 "^$2" "$1" | cut -c1-200; }
-  if selected swap-held-try-again || selected swap-held-no-retry || selected swap-held-rescan; then
+  if want swap-held-try-again || want swap-held-no-retry || want swap-held-rescan; then
     # swap-refused's deny policy outranks the consent rule: without removing it first the held swap is refused
     # instead (239 gate).
     echo "  policy off: $(pnm "$RUNNER_MAIN_SLUG" policy delete "$POL" | tail -1 | cut -c1-60)"; sleep 3
     echo "  approver set: $(pnm "$RUNNER_MAIN_SLUG" approvals approvers add "$SET" "$RUNNER_A_DID" | tail -1 | cut -c1-80)"; sleep 3
     echo "  rule: $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
-    if selected swap-held-try-again || selected swap-held-no-retry; then
+    if want swap-held-try-again || want swap-held-no-retry; then
     HOOK="PNM_BIN=$PNM_BIN $REPO/scripts/openvtc/pnm-locked --vta $RUNNER_MAIN_SLUG approvals remove $TASK | tail -1"
     L galarm 1500 env LINK_VIA=scan EXPECT_REFUSAL=swapHeld TRY_AGAIN_EXPECT=yes NO_RETRY_CHECK=1 TRY_AGAIN_HOOK="$HOOK" \
       node run-vta-link.js > "$LEG_DIR/held-scan.out" 2>&1; rc=$?
@@ -64,7 +73,7 @@ if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryA
     row swap-held-no-retry "$([[ $n == "NO-RETRY ok"* ]] && echo PASS || echo FAIL)" "${n:-no NO-RETRY line}"
     fi
     # 239 finding: after a held swap the agent must not stay listed; scanning it again starts a link.
-    if selected swap-held-rescan; then
+    if want swap-held-rescan; then
       # The held swap first, then the rule lifted, then the same agent scanned again: the phone keeps its granted key,
       # so the rescan goes back to the swap and must finish the link with it (no new key, the ACL not growing, the
       # agent listed once). With the rule left on, the agent holds the swap again for its ~181 s consent wait (239
@@ -89,7 +98,8 @@ if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryA
     fi
     echo "  rule off (again): $(pnm "$RUNNER_MAIN_SLUG" approvals remove "$TASK" | tail -1 | cut -c1-60)"; sleep 3
   fi
-  if selected swap-refused-no-try-again; then
+  # One refused-scan run gives both rows: either selected runs it.
+  if want swap-refused-no-try-again || want swap-refused-rescan; then
     pnm "$RUNNER_MAIN_SLUG" policy list | grep -q "$POL" || echo "  policy: $(pnm "$RUNNER_MAIN_SLUG" policy upsert --id "$POL" --name "$POL" --priority 1000 --module "$LEG_DIR/deny-swap.rego" | tail -1 | cut -c1-80)"
     L galarm 1200 env LINK_VIA=scan EXPECT_REFUSAL=swapRefused TRY_AGAIN_EXPECT=no NO_RETRY_CHECK=1 RESCAN_AFTER=1 \
       node run-vta-link.js > "$LEG_DIR/refused-scan.out" 2>&1; rc=$?

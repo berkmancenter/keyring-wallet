@@ -1,0 +1,24 @@
+{
+  "name": "keyring-ota-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keyring over-the-air update server (phase 1, spike): hot-updater's server with SQLite and bundles on disk",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20.19.2"
+  },
+  "scripts": {
+    "db:migrate": "hot-updater db migrate src/hotUpdater.mjs --yes",
+    "start": "node src/server.mjs",
+    "test": "node --test src/"
+  },
+  "dependencies": {
+    "@hot-updater/server": "0.36.18",
+    "better-sqlite3": "11.10.0",
+    "kysely": "0.28.7"
+  },
+  "devDependencies": {
+    "hot-updater": "0.36.18"
+  }
+}

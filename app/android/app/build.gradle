@@ -217,6 +217,11 @@ dependencies {
     implementation platform('com.google.firebase:firebase-bom:26.8.0')
     
     implementation 'com.google.mlkit:barcode-scanning:17.2.0'
+
+    // JVM unit tests (src/test): OtaTrialTest. org.json is the real library here,
+    // as android.jar only stubs it off a device.
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
     
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

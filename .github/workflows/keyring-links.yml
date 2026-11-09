@@ -1,0 +1,55 @@
+name: Short invitation links
+
+# deploy/keyring-links (the wallet host's /i service): its unit tests, and a Caddy
+# validation of deploy/keyring-ota/Caddyfile, which serves it next to the OTA
+# server along with the wallet host's static site.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/keyring-links.yml
+      - deploy/keyring-links/**
+      - deploy/keyring-ota/Caddyfile
+      - deploy/keyring-ota/docker-compose.yml
+      - app/universal-link-site/**
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/keyring-links.yml
+      - deploy/keyring-links/**
+      - deploy/keyring-ota/Caddyfile
+      - deploy/keyring-ota/docker-compose.yml
+      - app/universal-link-site/**
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.2
+      - name: Unit tests
+        working-directory: deploy/keyring-links
+        run: npm test
+      - name: AASA and assetlinks are valid JSON
+        run: |
+          set -euo pipefail
+          for f in app/universal-link-site/.well-known/apple-app-site-association app/universal-link-site/.well-known/assetlinks.json; do
+            node -e "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))" "$f"
+            echo "ok  $f"
+          done
+      - name: Caddyfile validates (OTA host and wallet host)
+        run: |
+          docker run --rm \
+            -e OTA_HOST=ota.localhost -e WALLET_HOST=wallet.localhost -e SITE_SCHEME=http \
+            -v "$PWD/deploy/keyring-ota/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Compose file is valid
+        working-directory: deploy/keyring-ota
+        run: OTA_HOST=ota.localhost HOT_UPDATER_AUTH_TOKEN=x docker compose config -q

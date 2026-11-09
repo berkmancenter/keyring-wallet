@@ -11,6 +11,11 @@ import {
   WalletSecret,
   setupVrcConnectionHandler,
   setupTrustTasksInbound,
+  registerRoomsService,
+  AgentRoomsService,
+  createAgentRoomsBackend,
+  useContainer,
+  type Container,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
   findV2MediationRecord,
@@ -27,13 +32,16 @@ import { IndyVdrPoolConfig, IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/react-native'
 import { GetCredentialDefinitionRequest, GetSchemaRequest } from '@hyperledger/indy-vdr-shared'
 import moment from 'moment'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
+import { disarmLivePickup, isLivePickupEnabled, livePickupFor, trackingWebSocketClass } from '@/utils/livePickup'
+import BCLogger from '@/utils/logger'
 import { chooseMediator } from '@/utils/mediatorPreference'
+import { singleFlight } from '@/utils/singleFlight'
 import { BCState, BCLocalStorageKeys } from '@/store'
 
 /**
@@ -75,15 +83,17 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
   }
 }
 
-// Pickup V2 periodic polling (1s, set in bc-agent-modules). Live mode held a
-// WebSocket open for mediator push, but a socket that dies silently (NAT/proxy
-// idle reaping) leaves the wallet deaf for minutes AND the mediator live-pushes
-// into the dead socket without requeueing — the message is lost outright
-// (measured 2026-08-18: mediator reported message_count:0 after such a window;
-// docs/spikes/e2e-vrc-connect-findings.md). Polling makes every delivery
-// request/ack'd against the mediator's queue and each poll self-heals a dead
-// socket. Revisit live mode once the mediator requeues unacked live deliveries.
-const configureMessagePickup = async (agent: Agent): Promise<void> => {
+// Mediator pickup, by the Developer option "Live message pickup"
+// (developer.enableLivePickup; LIVE_MESSAGE_PICKUP in app/.env sets the
+// build's default). Off: Pickup V2 polling, every 5 s with a 1 s window while
+// in use (utils/pickupBoost.ts); each poll is request/ack'd against the
+// mediator's queue. On: Pickup V2 live mode over a WebSocket, with a status
+// check every 60 s and on each return that closes a dead socket and starts
+// again (utils/livePickup.ts). Live mode was dropped on 2026-08-18 because
+// the mediator then lost pushes into a dead socket; its Postgres pickup queue
+// now requeues them when the live session ends (measured:
+// docs/plans/mediator-migration-plan/2026-10-25-al.md part 7).
+export const configureMessagePickup = async (agent: Agent): Promise<void> => {
   // Stop the pickup credo already started during agent.initialize() before
   // starting ours. Stock initiateMessagePickup SUBSCRIBES A NEW polling
   // interval on every call without replacing the previous one — two loops
@@ -94,14 +104,19 @@ const configureMessagePickup = async (agent: Agent): Promise<void> => {
   // belt to that suspender.
   await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
 
-  // Pass the strategy EXPLICITLY: credo otherwise resolves it as
-  // `mediationRecord.pickupStrategy ?? moduleConfig`, and a value persisted in
-  // the wallet outranks the config — which is how the same code ends up
-  // receiving messages on one wallet and deaf on another.
-  await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
-    undefined,
-    DidCommMediatorPickupStrategy.PickUpV2
-  )
+  if (isLivePickupEnabled()) {
+    await livePickupFor(agent, BCLogger).start()
+  } else {
+    disarmLivePickup()
+    // Pass the strategy EXPLICITLY: credo otherwise resolves it as
+    // `mediationRecord.pickupStrategy ?? moduleConfig`, and a value persisted in
+    // the wallet outranks the config — which is how the same code ends up
+    // receiving messages on one wallet and deaf on another.
+    await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
+      undefined,
+      DidCommMediatorPickupStrategy.PickUpV2
+    )
+  }
 
   // Second loop, Pickup 4.0 against the v2 mediator when one is provisioned
   // (didcomm_v2_subtask.md V2 step 4). AFTER the v1 start: that start stops
@@ -152,10 +167,29 @@ export const provisionV2MediationIfConfigured = async (agent: Agent, enabled: bo
   }
 }
 
+/**
+ * Rooms read and write through the person's own agent and communities (bifold rooms/register.ts): without
+ * this, `TOKENS.UTIL_ROOMS_SERVICE` stays empty and a store build, which carries no sample rooms, shows none.
+ *
+ * Called before every `setAgent` with a live agent, the restarted one included, so the service is never built
+ * on an agent other than the one the app runs. Screens resolve the service once (`useRoomsService` memoises on
+ * the container, not the agent). That is safe because `initializeAgent` is reachable only from the onboarding
+ * stack: RootStack renders the main stack only while an agent is set, and a lock-out sets none. So every rooms
+ * screen mounts after this registration.
+ *
+ * `container` is the app's container as `useContainer` gives it, bifold's wrapper: the registration goes into the
+ * tsyringe container it wraps, which is where `useRoomsService` resolves the service from.
+ */
+export function registerRealRooms(container: Container, agent: Agent): void {
+  const backend = createAgentRoomsBackend(agent, { mediatorDid: Config.VTI_MEDIATOR_DID || undefined })
+  registerRoomsService(container.container, new AgentRoomsService(backend))
+}
+
 const useBCAgentSetup = () => {
   const [agent, setAgent] = useState<Agent | null>(null)
   const agentInstanceRef = useRef<Agent | null>(null)
   const [store, dispatch] = useStore<BCState>()
+  const container = useContainer()
   const [logger, indyLedgers, credDefs, schemas] = useServices([
     TOKENS.UTIL_LOGGER,
     TOKENS.UTIL_LEDGERS,
@@ -191,7 +225,12 @@ const useBCAgentSetup = () => {
           // mediation + auto-accept live on the DidCommModule (see bc-agent-modules.ts)
           // Document loader is configured in W3cCredentialsModule (see bc-agent-modules.ts)
         },
-        dependencies: agentDependencies,
+        // The agent's sockets are remembered, so live pickup can close a dead
+        // one on purpose (utils/livePickup.ts). Only a list; harmless when polling.
+        dependencies: {
+          ...agentDependencies,
+          WebSocketClass: trackingWebSocketClass(agentDependencies.WebSocketClass),
+        },
         modules: getBCAgentModules({
           walletSecret,
           indyNetworks: ledgers,
@@ -280,7 +319,7 @@ const useBCAgentSetup = () => {
     [credDefs, schemas]
   )
 
-  const initializeAgent = useCallback(
+  const initializeAgentOnce = useCallback(
     async (walletSecret: WalletSecret): Promise<void> => {
       // The stored mediator outlives the build that chose it: one an older
       // build baked in can be retired, or unreadable to this Credo, and then
@@ -304,6 +343,7 @@ const useBCAgentSetup = () => {
         if (restartedAgent) {
           logger.info('Successfully restarted existing agent...')
           await configureMessagePickup(restartedAgent)
+          registerRealRooms(container, restartedAgent)
           agentInstanceRef.current = restartedAgent
           setAgent(restartedAgent)
           return
@@ -375,6 +415,8 @@ const useBCAgentSetup = () => {
         void runDataIntegritySelfTest(newAgent)
       }
 
+      registerRealRooms(container, newAgent)
+
       logger.info('Setting new agent...')
       agentInstanceRef.current = newAgent
       setAgent(newAgent)
@@ -391,8 +433,21 @@ const useBCAgentSetup = () => {
       migrateIfRequired,
       warmUpCache,
       restartExistingAgent,
+      container,
     ]
   )
+
+  // One agent start at a time. Resetting a stored mediator that can't be used
+  // (just above) changes the preferences this callback depends on, so it is
+  // rebuilt mid-start; the navigator then remounts Splash with the new one, and
+  // the fresh Splash starts the agent again while the first start still runs.
+  // Two or three starts opened the same Askar store at once, and one read it
+  // half-created ("no such table: config"). Every phone whose stored mediator
+  // is not the build's (a mediator move) takes that reset on its next start.
+  // The guard is kept in a ref here, outside the rebuilt callback: a call made
+  // while a start is in flight waits for that start instead of beginning one.
+  const initializeInFlight = useRef<Promise<void> | null>(null)
+  const initializeAgent = useMemo(() => singleFlight(initializeInFlight, initializeAgentOnce), [initializeAgentOnce])
 
   const shutdownAndClearAgentIfExists = useCallback(async () => {
     if (agent) {
@@ -416,11 +471,15 @@ const useBCAgentSetup = () => {
   // 24-minute stall that drained instantly on restart.
   //
   // stopMessagePickup() first so a resumed loop never stacks on a stale one.
-  // Note bifold core's ActivityProvider restarts pickup on the same transition
-  // (background → foreground); both handlers racing their stop→start once
-  // left a Galaxy A03s with two loops and 50 s of inbound lag (2026-09-13).
-  // The credo patch (initiateMessagePickup stops the running loop first) is
-  // what makes the pair safe — see configureMessagePickup.
+  // This is the ONLY foreground restart. bifold core's ActivityProvider used to
+  // restart pickup on the same transition, always as polling; both handlers
+  // racing their stop→start once left a Galaxy A03s with two loops and 50 s of
+  // inbound lag (2026-09-13), and its hard-coded PickUpV2 would undo live mode.
+  // It now hands the transition to TOKENS.UTIL_MESSAGE_PICKUP, which this app
+  // registers with background handling only (livePickup.ts,
+  // appMessagePickupLifecycle). In live mode this restart is also the check on
+  // return: it closes the socket, which may have died while suspended, and
+  // starts on a fresh one.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
       if (nextAppState !== 'active') return

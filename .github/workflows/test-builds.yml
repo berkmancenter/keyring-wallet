@@ -30,7 +30,7 @@ name: Test builds
 
 on:
   push:
-    # TEMPORARY for validating this workflow; removed before merge.
+    # Keep this: gate-smoke.yml, gate-ci.yml and gate.sh watch --main all take "the newest green push build of main".
     branches: [main]
     paths-ignore:
       - "docs/**"
@@ -38,6 +38,42 @@ on:
       - "e2e/**"
       - "tsp-reference/**"
       - "scripts/openvtc/**"
+      - "scripts/roadmap/**"
+  # A pull request that changes what the native compilers see gets both builds
+  # before it merges. No required check compiles Objective-C, Swift or Kotlin,
+  # and #562 reached main with an AppDelegate.mm that didn't compile (#568).
+  # These two jobs are not required checks (a path-filtered check would stay
+  # pending on every other PR), so the reviewer waits for them by name. A pull
+  # request from a fork skips them: they need the MEDIATOR_URL secret.
+  pull_request:
+    paths:
+      - "app/ios/**"
+      - "app/android/**"
+      - "app/package.json"
+      - "yarn.lock"
+      - "app/patches/**"
+      - ".yarn/patches/**"
+      # The submodule pin: a bifold bump can carry native code (react-native-attestation).
+      - "bifold"
+      - ".github/workflows/test-builds.yml"
+      # Below: files that decide what the bundle and the native build resolve, none of
+      # which any required check exercises. A wrong value here builds or boots a
+      # different app than the one that was reviewed, and `singletonPrefixes` has done
+      # exactly that once already (see the comment in app/metro.config.js: on
+      # 2026-08-26 every correct PIN was reported wrong on device, because askar
+      # registered its native binding on one copy and the store check read another).
+      # Which physical copy of each duplicated package the bundle gets.
+      - "app/metro.config.js"
+      # module-resolver aliases and the transforms; what every import resolves to.
+      - "app/babel.config.js"
+      # Assets linked into the native projects (fonts).
+      - "app/react-native.config.js"
+      # `preinstall` builds the bifold submodule and `postinstall` repairs the portal
+      # symlinks, so this file changes the install that every build starts from and
+      # yarn.lock does not record either hook.
+      - "package.json"
+      - "scripts/ensure-bifold-ready.js"
+      - "scripts/fix-portal-symlinks.js"
   workflow_dispatch:
     inputs:
       platform:
@@ -74,8 +110,9 @@ permissions:
 # commit is in the group so that a later merge to main cannot cancel a pinned
 # release's build (238 lost its build that way and had to be re-dispatched on
 # a cut branch). (inputs.push is empty on a push to main, a push-off build.)
+# A pull request is grouped by its number, so a new push replaces its older run.
 concurrency:
-  group: test-builds-${{ github.sha }}-push-${{ inputs.push || 'off' }}-clocks-${{ inputs.clocks || 'short' }}
+  group: test-builds-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.sha }}-push-${{ inputs.push || 'off' }}-clocks-${{ inputs.clocks || 'short' }}
   cancel-in-progress: true
 
 jobs:
@@ -107,7 +144,7 @@ jobs:
 
   ios-simulator:
     needs: heads
-    if: inputs.platform != 'android'
+    if: inputs.platform != 'android' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: macos-26
     environment: test-builds
     timeout-minutes: 90
@@ -142,8 +179,11 @@ jobs:
           sudo xcode-select --switch /Applications/Xcode_26.3.app
           xcodebuild -version
 
+      # Restore here, save after the pod install on main only: a pull request's save lands on its own ref, which no
+      # other PR can read (the wallet cache filled its 10 GB that way with yarn copies, 10-30).
       - name: Cache pod dependencies
-        uses: actions/cache@v4
+        id: pods
+        uses: actions/cache/restore@v4
         with:
           path: |
             app/ios/Pods
@@ -174,6 +214,17 @@ jobs:
         run: |
           export USE_HERMES=1
           yarn run ios:setup
+
+      - name: Save pod dependencies (main only)
+        # By ref, not event: many runs here are branch dispatches, and a save there lands on that branch alone.
+        if: github.ref == 'refs/heads/main' && steps.pods.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('app/ios/Podfile.lock') }}
 
       - name: Create environment settings (store configuration)
         working-directory: app
@@ -240,6 +291,8 @@ jobs:
             | xxd -r -p || true)
           echo "$ents" | grep -q application-identifier \
             || { echo "::error::the simulator app carries no application-identifier entitlement: its keychain would refuse every read"; exit 1; }
+          # Rooms' sample data never in a CI build (the metro stub; ROOMS_SAMPLE unset).
+          bash "$GITHUB_WORKSPACE/scripts/ci/check-no-rooms-sample.sh" "$app/main.jsbundle" "iOS simulator bundle"
           bundle_sha=$(shasum -a 256 "$app/main.jsbundle" | cut -c1-12)
           mkdir -p out
           (cd "$(dirname "$app")" && zip -qry "$GITHUB_WORKSPACE/out/keyring-sim.zip" "$(basename "$app")")
@@ -264,7 +317,7 @@ jobs:
 
   android-apk:
     needs: heads
-    if: inputs.platform != 'ios'
+    if: inputs.platform != 'ios' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-22.04
     environment: test-builds
     timeout-minutes: 90
@@ -385,11 +438,13 @@ jobs:
           set -euo pipefail
           npx react-native bundle --platform android --dev false --reset-cache \
             --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
+          # Rooms' sample data never in a CI build (the metro stub; ROOMS_SAMPLE unset).
+          bash ../scripts/ci/check-no-rooms-sample.sh android/app/src/main/assets/index.android.bundle "Android release bundle"
           # As the staging build does: no restored Gradle caches (a restored cache
           # left the libraries' codegen folders missing, so CMake failed), and the
           # same Gradle tasks.
           rm -rf ~/.gradle/caches ~/.gradle/daemon 2>/dev/null || true
-          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
+          cd android && ./gradlew bundleRelease assembleRelease :app:testReleaseUnitTest --stacktrace
 
       - name: Package the APK and its manifest
         run: |

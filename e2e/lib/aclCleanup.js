@@ -112,6 +112,34 @@ export function ownedBy(entries, tempDid, heirs = []) {
 }
 
 /**
+ * The entries a linked phone holds on its runner, from the link's own record (run-vta-link.js keepForNextStep,
+ * last-link.json: before, tempDid, heirs): new since `before`, and owned by the phone's temporary key or the key it
+ * rotated onto. The same selection the end-of-leg cleanup makes (removeRunKeys), so a step that removes them mid-run
+ * can only touch the harness's own phone grant, never another leg's or a person's entry. Pure.
+ */
+export function linkedPhoneEntries(entries, { before = [], tempDid, heirs = [] } = {}) {
+  if (!tempDid) return [];
+  const seen = new Set(before);
+  return ownedBy(entries.filter((e) => !seen.has(e.subject)), tempDid, heirs);
+}
+
+/**
+ * The entry this phone holds now, from its link record: the newest entry whose subject is one of the phone's OWN keys
+ * (a rotated heir, else the temporary key). Not linkedPhoneEntries' set, which also holds what the phone's key
+ * created (a device it added would then be "the phone"; review on #574). It needs the heirs a manual link records
+ * (LINK_MODE=manual): after the swap removed tempDid's entry, a link without them finds nothing, which is said. Pure.
+ */
+export function phoneOwnEntry(entries, { tempDid, heirs = [] } = {}) {
+  const own = new Set([...heirs, tempDid].filter(Boolean));
+  return entries.filter((e) => own.has(e.subject)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).at(-1);
+}
+
+/** A device the phone added expires with the phone: both permanent, or the same expiresAt. Pure. */
+export function expiresWith(device, phone) {
+  return Boolean(device && phone) && (device.expiresAt ?? null) === (phone.expiresAt ?? null);
+}
+
+/**
  * The entries that are one grant, wherever its subject has moved: the grant itself, or the key a phone rotated onto
  * from it. acl/swap-key clones the entry and changes only its subject (vta-service operations/acl.rs swap_acl at
  * 7adda796: `entry = old.clone(); entry.did = new_did`), so the rotated entry keeps the grant's createdAt, createdBy
@@ -121,6 +149,19 @@ export function ownedBy(entries, tempDid, heirs = []) {
 export function fromGrant(entries, grant) {
   if (!grant?.createdAt) return [];
   return entries.filter((e) => e.createdAt === grant.createdAt && e.createdBy === grant.createdBy && e.label === grant.label);
+}
+
+/**
+ * A case's own entries since its grant: the grant, wherever its subject has rotated (`fromGrant`), and whatever that
+ * key went on to create (`ownedBy`), so a second key the phone made still counts. Another leg's grant on the same
+ * runner in the same minutes (same admin, same label, its own createdAt) does not: the 1021-0158 RC gate's linkwait
+ * read smoke-ios's grant, 25 s into its window, as a second entry of its own. Pure.
+ */
+export function grantEntries(entries, grant) {
+  const own = fromGrant(entries, grant);
+  if (!own.length) return [];
+  const chain = ownedBy(entries.filter((e) => !own.includes(e)), own[0].subject, own.slice(1).map((e) => e.subject));
+  return [...own, ...chain];
 }
 
 /**
@@ -144,6 +185,26 @@ export function grantAfter(before, after, did, label = "keyring-admin") {
  * Remove this run's entries. Never throws: a cleanup that fails is logged, and
  * must not turn a passing run red or hide the real failure of a failing one.
  */
+/**
+ * What a link run does with its keys at the end, from what it knows then:
+ *  - "remove": list the ACL and remove this run's chain now (removeRunKeys);
+ *  - "leg" (a successful `always` run only): leave them to the gate leg's own cleanup, which lists and removes every phone key it made once at its end
+ *    (keys_since; `legCleans` = the slug is in E2E_ACL_LEG_SLUGS). No pnm call here (IN-560, W3 of
+ *    docs/plans/farm-test-footprint-plan.md);
+ *  - "keep": hand them on in last-link.json for the next step of the chain (keepForNextStep).
+ * A refused link's grant (another agent's, which the leg may not clean), a JOURNEY (the whole test) and `never` (keep
+ * them, say how to remove them) keep their own handling.
+ */
+export function aclEndAction({ legCleans = false, journey = false, expectRefusal = "", mode = "", failed = false } = {}) {
+  const removesNow = failed || journey || Boolean(expectRefusal) || mode === "always" || mode === "never";
+  if (!removesNow) return "keep";
+  // Only a successful `always` run: a failed run removes its keys here at once, as before. The leg's pass is weakest
+  // exactly then (keys_since refuses a start time that is not ISO; side by side it runs outside the leg's trap), and a
+  // key it misses is never picked up later, since keys_since takes only keys newer than its start (ac on #872).
+  if (legCleans && mode === "always" && !failed && !journey && !expectRefusal) return "leg";
+  return "remove";
+}
+
 export function removeRunKeys({ slug, pnmHome, before, tempDid, heirs = [], failed = false, log = console.log }) {
   try {
     if (!tempDid) {

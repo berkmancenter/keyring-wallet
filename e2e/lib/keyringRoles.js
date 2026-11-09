@@ -15,6 +15,9 @@
 // Record: { role, step, platform, device, ok, startedAt, endedAt,
 //           observed: { stepId, ... }, value?, error?, screenshot?, source? }
 
+import { awaitSeatStep as seatStep } from "./seatStep.js";
+import { requestTookEffect } from "./requestTap.js";
+import { vetterDoors } from "./vetterDoor.js";
 import { appendFileSync, copyFileSync, mkdirSync, readdirSync, statSync, openSync, closeSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
@@ -36,7 +39,7 @@ import {
   waitForTestId,
 } from "./driver.js";
 import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./config.js";
-import { handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
+import { CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
 import { cardPrimaryIds, VETTING_DOOR_WORDS } from "./testIdKeys.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +83,16 @@ function writeRecord(opts, record) {
  * vetting page is not showing. The testID is on the page root, which fills the
  * screen, so Android's UiAutomator reports it whatever the scroll position.
  */
+/** The vetting seat's first step for `role`, waited for past VettingSeatLoading (lib/seatStep.js). */
+export const awaitSeatStep = (d, role, timeoutMs = 30000) =>
+  seatStep({
+    platform: d.e2ePlatform,
+    role,
+    stepOf: () => stepIdOf(d, role),
+    loadingShown: () => existsTestId(d, "VettingSeatLoading", 1000),
+    timeoutMs,
+  });
+
 export async function stepIdOf(d, role) {
   const stem = `${TEST_ID_PREFIX}${role === "vetter" ? "VettingVetterStep_" : "VettingApplicantStep_"}`;
   try {
@@ -423,6 +436,8 @@ export function installedHash({ platform, udid, bundleId = "asml.bkc.harvard.wal
   if (platform === "android") {
     const p = execFileSync("adb", ["-s", udid, "shell", "pm", "path", bundleId], { encoding: "utf8" }).split("\n")[0].replace("package:", "").trim();
     const local = path.join(ARTIFACTS, `installed-${Date.now()}.apk`);
+    // A fresh checkout has no artifacts folder (gitignored): 269's p1 on a new worktree lost p1-tui-vets to the pull.
+    mkdirSync(ARTIFACTS, { recursive: true });
     execFileSync("adb", ["-s", udid, "pull", p, local], { stdio: "ignore" });
     return execFileSync("shasum", ["-a", "256", local], { encoding: "utf8" }).slice(0, 12);
   }
@@ -472,13 +487,16 @@ export async function tapCardVettingDoor(d) {
 }
 
 /** From anywhere after unlock, into Vetting. */
-async function openVetting(d) {
+async function openVetting(d, community) {
   await (await waitForTestId(d, "MyAgent", 30000)).click();
   const homeBy = Date.now() + 60000;
   while (Date.now() < homeBy) {
     // 236 (#316): the desk's door is AgentOpenDesk, or AgentOpenDesk_<community> for a vetter of several.
-    const desks = (await d.getPageSource().catch(() => "")).match(/AgentOpenDesk_[A-Za-z0-9_-]+/g) || [];
-    for (const door of ["AgentOpenDesk", ...new Set(desks), "AgentVetOthers", "AgentContinueVetting"]) {
+    // The vetter's card is at the top, and Android's page source stops at the fold: back up after a sweep for a door.
+    if (community) await scrollToTestId(d, "AgentSwitcher", 4, { direction: "up", both: false }).catch(() => undefined);
+    const page = await d.getPageSource().catch(() => "");
+    const desks = page.match(/AgentOpenDesk_[A-Za-z0-9_-]+/g) || [];
+    for (const door of vetterDoors(desks, community, page)) {
       const el = await scrollToTestId(d, door, 4).catch(() => undefined);
       if (el) {
         await el.click();
@@ -486,14 +504,16 @@ async function openVetting(d) {
         return door;
       }
     }
-    const card = await tapCardVettingDoor(d);
+    // The card's door has no community on it: with one named, keep waiting for its own door.
+    const card = community ? undefined : await tapCardVettingDoor(d);
     if (card) {
       await sleep(1500);
       return card;
     }
-    if ((await existsTestId(d, "AgentOpenCommunities", 1000)) || (await existsTestId(d, "MyAgentCard", 1000))) break;
+    if (!community && ((await existsTestId(d, "AgentOpenCommunities", 1000)) || (await existsTestId(d, "MyAgentCard", 1000)))) break;
     await sleep(2000);
   }
+  if (community) throw new Error(`no desk door for ${community.did} within 60 s`);
   await openMyAgentPanel(d);
   await sleep(1500);
   if (await byTestId(d, "ConnectMyAgentButton").isExisting().catch(() => false)) await byTestId(d, "ConnectMyAgentButton").click();
@@ -597,7 +617,7 @@ export const applicant = {
           await dumpSource(d, `join-identity-step-${process.env.JOIN_SCREEN_RECORD}`);
         }
         await tapTestIdByCoordinates(d, "JoinAsContinue");
-        await handleBiometricConfirmIfPresent(d);
+        await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
         // "Your agent didn't answer. Tap Continue to try again": do what the
         // screen tells a person, up to twice (a lost reply, VTI-43; 225 final).
         for (let retry = 1; retry <= 2; retry++) {
@@ -610,12 +630,14 @@ export const applicant = {
           const said = await textOf(d, "JoinError").catch(() => "");
           console.log(`[e2e] ${d.e2ePlatform}: Join says "${said.slice(0, 80)}" — Continue again (${retry}/2)`);
           await tapTestIdByCoordinates(d, "JoinAsContinue");
-          await handleBiometricConfirmIfPresent(d);
+          await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
         }
         observedAsks = asks.replace(/\s+/g, " ").slice(0, 200);
       } else {
         await openVetting(d);
       }
+      // The seat's reads first: before them neither the identity step nor any other is showing.
+      await awaitSeatStep(d, "applicant");
       if (await byTestId(d, "VettingCreateIdentityButton").isExisting().catch(() => false)) {
         await byTestId(d, "VettingCreateIdentityButton").click();
       }
@@ -691,17 +713,26 @@ export const applicant = {
       await byTestId(d, "VettingSeatBanner").click().catch(() => undefined);
       await sleep(800);
       await scrollToTestId(d, "VettingRequestButton", 4);
+      // After a refusal the card under the field pushes the button down, behind the tab bar: a tap there lands on the tab
+      // (iOS applicant, 1031: four taps opened Wallet and its Add credentials sheet, and the request never went).
+      const clear = await liftAboveTabBar(d, "VettingRequestButton", 6).catch(() => false);
+      if (!clear) console.log('[e2e] "Use this link" did not rise above the tab bar; tapping it where it is');
       const cardBefore = await byTestId(d, "VettingRequestCard").isExisting().catch(() => false);
       const statusBefore = await textOf(d, "VettingRequestStatus").catch(() => "");
+      const endedBefore = await byTestId(d, "VettingSessionEnded").isExisting().catch(() => false);
       await tapTestIdReliable(
         d,
         "VettingRequestButton",
-        async () => {
-          const card = await byTestId(d, "VettingRequestCard").isExisting().catch(() => false);
-          if (!cardBefore) return card;
-          return (await textOf(d, "VettingRequestStatus").catch(() => "")) !== statusBefore;
-        },
-        { attempts: 4, settleMs: 3000 }
+        async () =>
+          requestTookEffect(
+            { cardBefore, statusBefore, endedBefore },
+            {
+              card: await byTestId(d, "VettingRequestCard").isExisting().catch(() => false),
+              status: await textOf(d, "VettingRequestStatus").catch(() => null),
+              ended: await byTestId(d, "VettingSessionEnded").isExisting().catch(() => false),
+            }
+          ),
+        { attempts: 4, settleMs: 6000 }
       );
       const status = await textOf(d, "VettingRequestStatus").catch(() => "");
       return { observed: { requestStatus: status, via } };
@@ -773,7 +804,7 @@ export const applicant = {
       await tapTestIdByCoordinates(d, "VettingSendCardButton");
       const cardSentMs = Date.now();
       await sleep(1500);
-      await handleBiometricConfirmIfPresent(d);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
       await awaitStep(d, "applicant", ["checking", "apply"], 60000, () => applicantEvidence(d));
       const cardSentAt = await textOf(d, "VettingCardSentAt").catch(() => "");
       // The value is when the card went, for awaitStatement's cardSentMs.
@@ -836,7 +867,7 @@ export const applicant = {
       await scrollToTestId(d, "VettingApplyButton", 4, LOW);
       await tapTestIdByCoordinates(d, "VettingApplyButton");
       await sleep(1500);
-      await handleBiometricConfirmIfPresent(d);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
       const until = Date.now() + timeoutMs;
       while (Date.now() < until) {
         if ((await stepIdOf(d, "applicant")) === "member") {
@@ -909,6 +940,9 @@ export async function ticketIssued(d, before = "") {
 export async function readTicketLink(d) {
   // The toggle sits under the QR, below the fold. Bring it up by where it is, not by isDisplayed: on the
   // 236 rerun iOS kept the toggle "not displayed" through four swipes and the tap was never made.
+  // On Android the page source stops at the fold, so the toggle under the QR reads as absent until it is scrolled to, and a
+  // ticket the desk had cut looked like a build with no toggle (1031, Android vetter: code on screen, link "not found").
+  await scrollToTestId(d, "VettingTicketLinkDetailsToggle", 6, { both: false }).catch(() => undefined);
   if (await byTestId(d, "VettingTicketLinkDetailsToggle").isExisting().catch(() => false)) {
     const clear = await liftAboveTabBar(d, "VettingTicketLinkDetailsToggle", 6, { log: true });
     if (!clear) console.log("[e2e] the ticket's Details toggle did not rise above the tab bar; tapping it where it is");
@@ -931,6 +965,8 @@ export async function readTicketLink(d) {
       console.log(`[e2e] ticket Details tap ${i + 1}: label "${(await textOf(d, "VettingTicketLinkDetailsToggle").catch(() => "?")).trim()}"`);
       await screenshot(d, `ticket-details-tap-${i + 1}`).catch(() => undefined);
     }
+  } else {
+    console.log("[e2e] no Details toggle after the sweep: treating this as a build that shows the link directly");
   }
   // The link opens under the toggle: look down first, and only then back up.
   await scrollToTestId(d, "VettingTicketLink", 4, { both: false }).catch(() => scrollToTestId(d, "VettingTicketLink", 4, { direction: "up", both: false })).catch(() => undefined);
@@ -946,7 +982,12 @@ export const vetter = {
    */
   openDesk(d, opts = {}) {
     return runStep(d, "vetter", "openDesk", opts, async () => {
-      await openVetting(d);
+      const door = await openVetting(d, opts.community);
+      console.log(`[e2e] ${deviceTag(d)}: vetter desk door ${door}`);
+      // The desk's reads first: a session an earlier run left open shows its own step only once they finish, and the
+      // probes below would miss it and leave it open. (Until the desk draws a placeholder while it reads, its unread
+      // state already reads "ticket", so this returns at once there.)
+      await awaitSeatStep(d, "vetter");
       for (let i = 0; i < 3; i++) {
         let ended = false;
         for (const key of ["VettingCodesDiffer", "VettingEndSession"]) {
@@ -1057,7 +1098,7 @@ export const vetter = {
       const button = await scrollToTestId(d, "VettingAttestButton", 6);
       await tapElement(d, button);
       await sleep(1500);
-      await handleBiometricConfirmIfPresent(d);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
       await awaitStep(d, "vetter", "done", 60000, async () => ({ error: await textOf(d, "VettingError").catch(() => "") }));
       const issued = await textOf(d, "VettingStatementIssued").catch(() => "");
       return { observed: { statementIssued: issued } };
@@ -1076,11 +1117,9 @@ export const community = {
   leave(d, { keep = "purge" } = {}, opts = {}) {
     return runStep(d, "member", "leave", opts, async () => {
       await (await waitForTestId(d, "MyAgent", 30000)).click();
-      await sleep(1500);
-      if (!(await existsTestId(d, "AgentHome", 3000))) {
-        const open = await scrollToTestId(d, "OpenYourAgentButton", 4).catch(() => undefined);
-        if (open) await open.click();
-      }
+      // A linked phone's My Agent hands over to the agent home by itself (bifold #484, and on focus since 09-29);
+      // "Open your agent" is gone (bifold #485).
+      await waitForTestId(d, "AgentHome", 30000).catch(() => undefined);
       const row = await scrollToTestId(d, "AgentMembershipRow", 6).catch(() => undefined);
       if (!row) throw failWith("the agent screen lists no community membership", {});
       await row.click();

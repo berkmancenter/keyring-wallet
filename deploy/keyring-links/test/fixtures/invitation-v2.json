@@ -1,0 +1,6 @@
+{
+  "type": "https://didcomm.org/out-of-band/2.0/invitation",
+  "id": "5f0e3c8a-1b2d-4e6f-8a9b-7c6d5e4f3a21",
+  "from": "did:peer:2.Ez6LSbysY2xFMRpGMhb7tFTLMpeuPRaqaWM1yECx2AtzE3KCc.Vz6MkqRYqQiSgvZQdnBytw86Qbs2ZWUkGv22od935YF4s8M7V",
+  "body": { "goal_code": "keyring.connect", "goal": "Connect with Test Keyring", "accept": ["didcomm/v2"] }
+}

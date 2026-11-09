@@ -66,6 +66,18 @@ const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', '
 const stripDemoProfiles = !process.env.ACTIVE_DEMO_PROFILE || process.env.ACTIVE_DEMO_PROFILE === 'none'
 const demoProfilesStubPath = path.join(__dirname, 'metro', 'demoProfilesStub.ts')
 
+// Rooms' sample data (bifold modules/rooms/sample/sampleRooms) ships only in a build made with
+// ROOMS_SAMPLE=1: an internal install or a local development build. Unset, as on every store and CI
+// build, the module resolves to a stub, so none of it is bundled. One switch decides both the data
+// and the Developer switch that reveals it. The store workflow refuses ROOMS_SAMPLE outright, and
+// scripts/ci/check-no-rooms-sample.sh checks the bundle itself.
+const stripRoomsSample = process.env.ROOMS_SAMPLE !== '1'
+const roomsSampleStubPath = path.join(__dirname, 'metro', 'roomsSampleStub.ts')
+// `useRoomsService` is the only file that imports the sample, as `./sample/sampleRooms`, from inside
+// bifold's modules/rooms (source in development, lib/ in a release build).
+const isRoomsSampleImport = (moduleName, originModulePath) =>
+  /^\.\/sample\/sampleRooms(\.[jt]sx?)?$/.test(moduleName) && /[\\/]modules[\\/]rooms[\\/]/.test(originModulePath ?? '')
+
 const watchFolders = [...packageDirs, bifoldNodeModules]
 
 const extraExclusionlist = []
@@ -160,6 +172,9 @@ module.exports = (async () => {
         if (stripDemoProfiles && isDemoProfilesBarrelImport(moduleName)) {
           return { filePath: demoProfilesStubPath, type: 'sourceFile' }
         }
+        if (stripRoomsSample && isRoomsSampleImport(moduleName, context.originModulePath)) {
+          return { filePath: roomsSampleStubPath, type: 'sourceFile' }
+        }
         // Singleton packages: always resolve from the app's node_modules so
         // bifold sources never load a second copy (bifold/node_modules is on
         // nodeModulesPaths, which would otherwise win for react etc.)
@@ -187,7 +202,12 @@ module.exports = (async () => {
         // scripts/ensure-bifold-ready.js as preinstall). `resolutions` only
         // dedupes within a single tree, so pinning has to happen here. Keep
         // this list in sync when a new native-backed dependency reaches
-        // bifold/packages/*.
+        // bifold/packages/*. bifold core's jest has the same pin for its own
+        // tests (moduleNameMapper for askar-shared in
+        // bifold/packages/core/jest.config.js); a dependency added here may
+        // belong there too. Changing this file runs the android-apk and
+        // ios-simulator builds (paths in .github/workflows/test-builds.yml),
+        // so a resolution mistake here is caught before merge.
         const singletonPrefixes = [
           'react',
           'react-native',
@@ -246,7 +266,10 @@ module.exports = (async () => {
         // unstable_conditionNames does not help: the package declares no such
         // condition to match.
         if (moduleName.startsWith('@openvtc/trust-tasks/')) {
-          const subPath = moduleName.slice('@openvtc/trust-tasks/'.length)
+          // `./runtime` (from 0.27.8: the runtime without the prebuilt spec modules) is the one
+          // export whose file is not dist/<path>.js. dist/_runtime/index.js exists in 0.9 as well.
+          const requested = moduleName.slice('@openvtc/trust-tasks/'.length)
+          const subPath = requested === 'runtime' ? '_runtime/index' : requested
           const bases = [
             path.join(__dirname, 'node_modules'),
             path.join(__dirname, '..', 'bifold', 'packages', 'core', 'node_modules'),

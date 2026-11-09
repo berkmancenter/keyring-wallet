@@ -1,6 +1,12 @@
 // The hv leg's application verdict, read from the applicant's logcat (run-hv.mjs; pure, so it is tested).
 
-/** The application verdict from logcat, as the 257 check read it: created, refused (with the app's error), or not attempted. */
+/**
+ * The application verdict from logcat, as the 257 check read it: created, refused (with the app's error), or not
+ * attempted. Only a TSP ask is logged (`asked … over rev3`, VtaClient's TSP branch); over DIDComm, the carriage every
+ * agent call takes from 268 on (bifold #486/#487), the client logs no ask, only the verified reply. So a verified reply
+ * with no ask line at all is the DIDComm round; with an ask line, the reply must come after it (1022-2230: created over
+ * DIDComm, read as "not recognised" because the ask line never comes).
+ */
 export function applicationVerdict(log) {
   const lines = log.split('\n');
   const asked = lines.findIndex((l) => /\[TrustTasks:VtaClient\] asked its agent \S*\/vta\/pcs\/applications\/create\/0\.1/.test(l));
@@ -9,6 +15,7 @@ export function applicationVerdict(log) {
   if (refused) return { status: 'FAIL', detail: `no agent-side application: ${refused[1].trim()}` };
   if (asked >= 0 && verified > asked) return { status: 'PASS', detail: 'applications/create asked of its own agent, reply verified' };
   if (asked >= 0) return { status: 'FAIL', detail: 'applications/create asked, no verified reply' };
+  if (verified >= 0) return { status: 'PASS', detail: 'applications/create answered by its own agent, reply verified (over DIDComm, which logs no ask line)' };
   return { status: 'FAIL', detail: 'no applications/create and no [hidden-vetting] failure: the private way was not recognised (requirements digest?)' };
 }
 
@@ -21,6 +28,7 @@ export function lineSeconds(line) {
 /**
  * One Trust Task round the app's agent client logged: `asked … <task>` then `reply verified: <task>`, or the client's
  * no-answer line. Value: { asked, verified, seconds, noAnswer } (seconds from ask to verified reply, by the lines' clock).
+ * A DIDComm round logs no ask (see applicationVerdict): a verified reply with no ask line is verified, untimed.
  */
 export function taskRound(log, taskPath) {
   const lines = String(log).split('\n');
@@ -31,7 +39,7 @@ export function taskRound(log, taskPath) {
   const t0 = ai >= 0 ? lineSeconds(lines[ai]) : undefined;
   const t1 = vi >= 0 ? lineSeconds(lines[vi]) : undefined;
   const seconds = t0 !== undefined && t1 !== undefined ? Math.round(((t1 - t0 + 86400) % 86400) * 10) / 10 : undefined;
-  return { asked: ai >= 0, verified: ai >= 0 && vi > ai, seconds, noAnswer: na ? na.replace(/^.*?(\[|no answer)/, '$1').trim() : undefined };
+  return { asked: ai >= 0, verified: vi >= 0, seconds, noAnswer: na ? na.replace(/^.*?(\[|no answer)/, '$1').trim() : undefined };
 }
 
 /**
@@ -77,4 +85,30 @@ export function anonymityVerdict({ vetterDid, memberDid, shown, record }) {
   return leaks.length
     ? { ok: false, detail: `the vetter's DID appears in ${leaks.join(' and ')}` }
     : { ok: true, detail: "the vetter's DID is in neither the applicant's screens and log nor the community's record (both read: each names the applicant)" };
+}
+
+/**
+ * The hv refusal row's ticket: the vetter's own QR link (`vetting-ticket:?…&ticket=<id>&secret=<secret>`, unsigned, as
+ * @bifold/trust-tasks encodeTicketUri writes it) with one character of its secret changed, and nothing else. The
+ * vetter's app finds no ticket for that id and secret and refuses the request (vetting/request:invalidTicket, the real
+ * ticket left unspent); the link still parses, so the applicant's own check (checkTicketFor) lets it through.
+ */
+export function withWrongSecret(link) {
+  const m = String(link).match(/([?&]secret=)([^&#]*)/);
+  if (!m || !m[2]) throw new Error('not a QR ticket link: it has no secret to change');
+  const secret = m[2];
+  const i = secret.search(/[A-Za-z0-9]/);
+  if (i < 0) throw new Error('the ticket secret has no letter or digit to change');
+  const c = secret[i];
+  const swapped = c === 'A' ? 'B' : c === 'a' ? 'b' : c === '0' ? '1' : /[0-9]/.test(c) ? '0' : /[a-z]/.test(c) ? 'a' : 'A';
+  return link.slice(0, m.index) + m[1] + secret.slice(0, i) + swapped + secret.slice(i + 1) + link.slice(m.index + m[0].length);
+}
+
+/**
+ * The refusal codes the applicant's agent logged (`vtiAgent: <vetter…> refused a task: <code> — …`), in order. The hv
+ * refusal row requires `vetting/request:invalidTicket` here as well as "Refused" on screen: the screen says a refusal
+ * happened, this says it was the wrong secret's (1029-2358 and 1029-2326 logged it once; the control run, none).
+ */
+export function refusalCodes(log) {
+  return [...String(log).matchAll(/refused a task: ([A-Za-z0-9/_.:-]+)/g)].map((m) => m[1]);
 }

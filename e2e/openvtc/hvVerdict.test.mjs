@@ -1,7 +1,7 @@
 // node --test e2e/openvtc/hvVerdict.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { appLevelLines, applicationVerdict, lineSeconds, taskRound, withoutOwnRequestCard } from './hvVerdict.js';
+import { appLevelLines, applicationVerdict, lineSeconds, taskRound, withoutOwnRequestCard, withWrongSecret, refusalCodes } from './hvVerdict.js';
 
 const AGENT = 'did:webvh:QmWj8ssa:dids.ic3.dev:hidden-vet-vta';
 // The 257 check's lines (2026-10-16, mini), with the logcat prefix as Android prints it.
@@ -35,9 +35,44 @@ test('neither line: the private way was not recognised', () => {
   assert.match(v.detail, /not recognised/);
 });
 
-test('a verified reply before any ask does not count', () => {
-  const v = applicationVerdict(L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/applications/create/0.1'));
+test('a verified reply before the ask does not count', () => {
+  const v = applicationVerdict([
+    L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/applications/create/0.1'),
+    L('[TrustTasks:VtaClient] asked its agent https://trusttasks.org/spec/vta/pcs/applications/create/0.1 over rev3'),
+  ].join('\n'));
   assert.equal(v.status, 'FAIL');
+  assert.match(v.detail, /no verified reply/);
+});
+
+// 268's carriage (bifold #486): DIDComm to the agent, which logs no ask line. The applicant's line on 1022-2230 (mini).
+const DIDCOMM_CREATED = '10-22 17:58:42.534  5062  5098 I ReactNativeJS: [TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/applications/create/0.1  ';
+
+test('created over DIDComm: a verified reply with no ask line at all', () => {
+  const v = applicationVerdict(PASS_LOG.split('\n').slice(0, 2).join('\n') + '\n' + DIDCOMM_CREATED);
+  assert.equal(v.status, 'PASS');
+  assert.match(v.detail, /over DIDComm/);
+});
+
+test('over DIDComm too, no verified reply is still the FAIL it was', () => {
+  const v = applicationVerdict(PASS_LOG.split('\n').slice(0, 2).join('\n'));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.detail, /not recognised/);
+});
+
+test('the app\'s refusal still FAILs when a verified reply is in the log too', () => {
+  const v = applicationVerdict([DIDCOMM_CREATED, L('[hidden-vetting] no agent-side application for hv-vetted: agentTooOld')].join('\n'));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.detail, /agentTooOld/);
+});
+
+test('taskRound: a DIDComm round is verified with no ask line, untimed; no reply is not verified', () => {
+  const ok = taskRound(L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/prove/0.1'), '/vta/pcs/prove/0.1');
+  assert.deepEqual(ok, { asked: false, verified: true, seconds: undefined, noAnswer: undefined });
+  const none = taskRound(L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/applications/create/0.1'), '/vta/pcs/prove/0.1');
+  assert.equal(none.verified, false);
+  const dropped = taskRound(L('[TrustTasks:VtaClient] no answer to https://trusttasks.org/spec/vta/pcs/prove/0.1 after 90 s'), '/vta/pcs/prove/0.1');
+  assert.equal(dropped.verified, false);
+  assert.match(dropped.noAnswer, /no answer/);
 });
 
 test('lineSeconds reads the clock on Android and iOS lines', () => {
@@ -123,4 +158,42 @@ test('anonymityVerdict: both sources read, the vetter absent passes; present fai
   const leak = anonymityVerdict({ vetterDid, memberDid, shown: shown + ` [VTI] statement from ${vetterDid}`, record });
   assert.equal(leak.ok, false);
   assert.match(leak.detail, /appears in the applicant side/);
+});
+
+test('taskRound: a reply before its ask is not verified (the ordering is vi\'s own `i > ai`)', () => {
+  // Since #594 `verified` is `vi >= 0`; the ask-then-reply order rests only on vi's search starting after the ask.
+  // A tidy-up to a plain findIndex there would read as harmless and break this.
+  const r = taskRound([
+    L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/prove/0.1'),
+    L('[TrustTasks:VtaClient] asked its agent https://trusttasks.org/spec/vta/pcs/prove/0.1 over rev3'),
+  ].join('\n'), '/vta/pcs/prove/0.1');
+  assert.equal(r.asked, true);
+  assert.equal(r.verified, false);
+});
+
+test('the refusal row\'s ticket: one character of the secret changed, everything else as it was', () => {
+  const link = 'vetting-ticket:?v=1&community=did%3Awebvh%3Aq%3Ahv&vetter=did%3Awebvh%3Aq%3Av&ticket=t-123&secret=Zk9_x-Q';
+  const wrong = withWrongSecret(link);
+  assert.notEqual(wrong, link);
+  assert.equal(wrong.length, link.length);
+  const parts = (l) => Object.fromEntries(new URLSearchParams(l.slice(l.indexOf('?') + 1)));
+  const [a, b] = [parts(link), parts(wrong)];
+  assert.notEqual(b.secret, a.secret);
+  for (const k of ['v', 'community', 'vetter', 'ticket']) assert.equal(b[k], a[k], k);
+  // The secret in the middle of the query, and one that starts with a symbol.
+  assert.match(withWrongSecret('vetting-ticket:?v=1&secret=-_x&ticket=t'), /secret=-_a&ticket=t$/);
+  // A code ticket has no secret to change.
+  assert.throws(() => withWrongSecret('vetting-ticket:?v=1&community=c&vetter=v&code=ABCD-EFGH'), /no secret/);
+});
+
+test('the refusal codes the applicant logged: the wrong secret\'s, or none', () => {
+  // As 1029-2358 logged it (the vetter's DID shortened as the app shortens it).
+  const refused = [
+    '10-29 18:09:40.101  4948  4981 I ReactNativeJS: vtiAgent: inbound https://trusttasks.org/spec/trust-task-error/0.5 from did:webvh:QmbvV7otshbjHx… (session did:webvh:QmVF1Zd648TQ5h…)',
+    '10-29 18:09:43.313  4948  4981 W ReactNativeJS: vtiAgent: did:webvh:QmbvV7otshbjHx… refused a task: vetting/request:invalidTicket — vetting/request:invalidTicket  ',
+  ].join('\n');
+  assert.deepEqual(refusalCodes(refused), ['vetting/request:invalidTicket']);
+  // The control run (the real ticket, accepted): no refusal at all.
+  assert.deepEqual(refusalCodes('10-29 17:50:02.000  1 1 I ReactNativeJS: vtiAgent: inbound https://trusttasks.org/spec/vetting/accept/0.1'), []);
+  assert.deepEqual(refusalCodes('vtiAgent: did:x refused a task: vetting/request:notEligible — the grant was revoked'), ['vetting/request:notEligible']);
 });

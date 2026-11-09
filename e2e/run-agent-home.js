@@ -59,12 +59,11 @@ async function backFromRequests(driver) {
 
 async function openAgentHome(driver) {
   await (await waitForTestId(driver, "MyAgent", 30000)).click();
-  await sleep(1500);
-  if (await existsTestId(driver, "AgentHome", 2000)) return;
-  const open = await scrollToTestId(driver, "OpenYourAgentButton", 4).catch(() => undefined);
-  if (!open) throw new Error('My Agent offers no way to "Open your agent"');
-  await open.click();
-  await waitForTestId(driver, "AgentHome", 30000);
+  // A linked phone's My Agent hands over to the agent home before it paints
+  // (bifold #484); there is no panel and no "Open your agent" to fall back on.
+  await waitForTestId(driver, "AgentHome", 30000).catch((e) => {
+    throw new Error(`My Agent did not hand over to the agent home in 30 s — is the phone linked? (${e.message})`);
+  });
 }
 
 /** Drag the page up a fifth of the window: brings a button half under the tab bar above it. */

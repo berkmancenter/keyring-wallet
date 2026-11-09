@@ -26,6 +26,8 @@ module.exports = {
     // (reached through @bifold/core's portal source) — map to dist, as the
     // core package's own jest config does.
     '^@openvtc/trust-tasks$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/index.js',
+    '^@openvtc/trust-tasks/runtime$':
+      '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/_runtime/index.js',
     '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/$1.js',
     // Same reason as @openvtc/trust-tasks above: ESM-only, import-condition-only
     // exports map (reached through @bifold/trust-tasks, itself reached through
@@ -75,6 +77,11 @@ module.exports = {
     '^react-native-config$': require.resolve('react-native-config'),
     '^react-native-svg$': require.resolve('react-native-svg'),
     '^react-native-gesture-handler$': require.resolve('react-native-gesture-handler'),
+    // bifold's SwipeRow imports this subpath (bifold #788); without its own entry it resolves to bifold's nested
+    // copy, which jestSetup's gesture-handler mock never reaches ('RNGestureHandlerModule' could not be found).
+    '^react-native-gesture-handler/ReanimatedSwipeable$': require.resolve(
+      'react-native-gesture-handler/ReanimatedSwipeable'
+    ),
     '^react-native-keychain$': require.resolve('react-native-keychain'),
     '^react-native-fs$': require.resolve('react-native-fs'),
     '^react-native-vision-camera$': require.resolve('react-native-vision-camera'),
@@ -102,6 +109,7 @@ module.exports = {
     // nested under app/node_modules; modulePaths above only searches app's
     // own node_modules, so the mapping has to name the root path explicitly).
     '^@openvtc/trust-tasks$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/index.js',
+    '^@openvtc/trust-tasks/runtime$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/_runtime/index.js',
     '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/$1.js',
   },
   transform: {

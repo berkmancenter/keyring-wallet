@@ -429,6 +429,25 @@ try {
   if (d) {
     await screenshot(d, "vta-approvals-failure").catch(() => undefined);
     await dumpSource(d, "vta-approvals-failure").catch(() => undefined);
+    // Whether the card is missing or only out of view: the whole agent screen, one dump per scroll position from the
+    // top (1021-0158: the failure dump showed only the top of My Agent, under a leftover vetting card).
+    if (PLATFORM === "android") {
+      const swipe = (direction) => d.execute("mobile: scrollGesture", { left: 100, top: 400, width: 800, height: 1200, direction, percent: 0.8 }).catch(() => undefined);
+      for (let i = 0; i < 4; i++) await swipe("up");
+      for (let i = 0; i < 6; i++) {
+        await dumpSource(d, `vta-approvals-failure-scroll${i}`).catch(() => undefined);
+        await swipe("down");
+        await sleep(800);
+      }
+    }
+  }
+  // The phone's own log: did the consent request reach it ("[TrustTasks:VtaAgent] consent request … verified")?
+  if (PLATFORM === "android") {
+    try {
+      writeFileSync(path.join(process.env.E2E_RUN_DIR || "artifacts", "vta-approvals-failure-logcat.txt"), adb("logcat", "-d", "-v", "threadtime"));
+    } catch (e) {
+      log(`vta-approvals-failure-logcat.txt not saved: ${e.message}`);
+    }
   }
   process.exitCode = 1;
 } finally {

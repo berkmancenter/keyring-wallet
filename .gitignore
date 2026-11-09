@@ -79,6 +79,10 @@ app/android/app/.cxx/
 
 # Android keystore
 release.keystore
+# Over-the-air update signing keys (app/hot-updater.config.ts): never committed
+app/keys/
+# hot-updater CLI build output and cache
+app/.hot-updater/
 *.keystore.old
 
 # AI copilots

@@ -18,6 +18,7 @@ for s in "$RUNNER_MAIN_SLUG" "${NO_REST_AGENT_SLUG:-}"; do
 done
 T0=$(stamp); E=emulator-5572
 fin() {
+  { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"
   keys_since "$RUNNER_MAIN_SLUG" "$T0"
   if [ -n "${NO_REST_AGENT_SLUG:-}" ] && [ "$NO_REST_AGENT_SLUG" != "$RUNNER_MAIN_SLUG" ]; then keys_since "$NO_REST_AGENT_SLUG" "$T0"; fi
@@ -25,6 +26,9 @@ fin() {
 }
 LEG_CLEANUP=fin
 emu_start 5572
+# The app's own log for the whole leg (#591's pattern): both 270 links here stopped at onboarding on "Keyring couldn't
+# reach its message service" and the leg kept no app line to say why (10-24).
+adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!
 cd "$E2E"
 # What pnm draws, written once for the row; its output too: the "DID  <did>" line it prints, or why it drew nothing.
 if selected pnmqr-scan; then
@@ -32,7 +36,11 @@ if selected pnmqr-scan; then
   pnm "$RUNNER_MAIN_SLUG" vta qr --out "$LEG_DIR/pnm-qr.svg" > "$LEG_DIR/pnm-qr.out"
   echo "  pnm vta qr: $(tail -1 "$LEG_DIR/pnm-qr.out" | cut -c1-100)"
 fi
-for c in ${LINK_CASES:-pnmqr-scan scan-agent-no-rest link-again-rescan}; do
+# W1: a nightly or changed run makes one link (pnmqr-scan); "link again after removal" and the no-VTARest scan stay in
+# the store gate.
+PNM_CASES="pnmqr-scan scan-agent-no-rest link-again-rescan"
+link_trimmed && [ -z "${LINK_CASES:-}" ] && { link_trim_skips pnmlink pnmqr-scan "$PNM_CASES"; LINK_CASES=pnmqr-scan; }
+for c in ${LINK_CASES:-$PNM_CASES}; do
   selected "$c" || continue
   # The agent without VTARest is linked as itself, so the driver grants and cleans up on its own slug.
   slug=$RUNNER_MAIN_SLUG did=$RUNNER_MAIN_DID url=$RUNNER_MAIN_URL

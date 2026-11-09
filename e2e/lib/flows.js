@@ -20,6 +20,7 @@ import {
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
+import { answerConfirmSheet } from "./confirmSheet.js";
 import { REAL_CLOCKS, parseClocks, textInSource } from "./clocks.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -830,11 +831,17 @@ export async function openDeveloperScreen(driver, { keepAutoLock = false } = {})
     // ToggleDeveloper wait afterward times out. Fix: overshoot the tap
     // count and poll for the Developer screen after each one, so a few
     // dropped taps just cost a few extra clicks instead of failing the run.
-    const versionEl = await scrollToTestId(driver, "Version");
+    await scrollToTestId(driver, "Version");
     const maxTaps = 20;
     let reachedDeveloperScreen = false;
+    // Each tap looks the footer up again: a handle taken once can go stale when
+    // the counter re-renders Settings, and its clicks would then be accepted and
+    // land nowhere. A failed click is counted and reported, not swallowed.
+    const clickErrors = [];
     for (let i = 0; i < maxTaps; i++) {
-      await versionEl.click().catch(() => {});
+      await byTestId(driver, "Version")
+        .click()
+        .catch((err) => clickErrors.push(String(err?.message ?? err).split("\n")[0]));
       if (await existsTestId(driver, "ToggleDeveloper", 300)) {
         reachedDeveloperScreen = true;
         console.log(`[e2e] ${deviceTag(driver)}: reached Developer screen after ${i + 1} Version taps`);
@@ -846,9 +853,20 @@ export async function openDeveloperScreen(driver, { keepAutoLock = false } = {})
     // for a Developer-screen-only element, not a Settings row. The VTA probe
     // (VTI_PROBE_ON_START) fires as the screen mounts and reports with an
     // alert, which hides the toggle from a lookup until it is dismissed.
+    if (clickErrors.length) {
+      console.log(
+        `[e2e] ${deviceTag(driver)}: ${clickErrors.length} Version tap(s) failed: ${[...new Set(clickErrors)].slice(0, 3).join(" | ")}`
+      );
+    }
     if (!reachedDeveloperScreen) {
       for (let i = 0; i < 3; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;
-      await waitForTestId(driver, "ToggleDeveloper", 5000);
+      try {
+        await waitForTestId(driver, "ToggleDeveloper", 5000);
+      } catch (err) {
+        // What the screen showed decides it: something covering Settings, or not on Settings at all.
+        await screenshot(driver, "developer-trip-failed").catch(() => {});
+        throw err;
+      }
     }
   }
 }
@@ -1012,10 +1030,16 @@ export async function showRelationshipInvitation(driver) {
   await tapTestId(driver, "GenerateRelationshipQRCode", 15000);
 
   // QR view renders; the invitation URL is exposed via the __DEV__-only hidden text.
+  // A Release build (the CI test builds) has no such text (bifold QRScanner.tsx, `__DEV__ && invitation`): read the
+  // invitation the way a person shares it instead, the "Share as a link" sheet's Copy (shareLinkFromSheet).
+  if (process.env.E2E_RELEASE === "1" && (await existsTestId(driver, "MyQRShareLink", 20000))) return shareLinkFromSheet(driver);
   // The Scan screen occasionally comes up blank on iOS (camera-disclosure Modal
   // fails to present when mounted mid animation) — back out and re-enter.
   for (let attempt = 0; attempt < 3; attempt++) {
     if (await existsTestId(driver, "InvitationUrl", 20000)) break;
+    // No invitation text but the share link is there: a Release build run without E2E_RELEASE (269: "QR view blank"
+    // three times, then a 60 s failure, on a working screen).
+    if (await existsTestId(driver, "MyQRShareLink", 1000)) return shareLinkFromSheet(driver);
     if (await existsTestId(driver, "Continue", 3000)) {
       await tapTestId(driver, "Continue");
       continue;
@@ -1043,6 +1067,39 @@ export async function showRelationshipInvitation(driver) {
   console.log(
     `[e2e] ${driver.e2ePlatform}: invitation URL captured (${url.length} chars)`
   );
+  return url;
+}
+
+/**
+ * The invitation as a person shares it: "Share as a link" (MyQRShareLink), the share sheet's Copy, then the clipboard
+ * read through the driver (WebDriverAgent / UiAutomator2), not simctl pbpaste, which came back empty on the MacBook
+ * while WDA had the link (10-23). The copied message is words, then the link on its own line (QRScanner.tsx).
+ * iOS: the Copy cell is an XCUIElementTypeCell labelled "Copy" (iOS 26; run-pair-ios.mjs). Android: the chooser's
+ * copy button (android:id/chooser_copy_button), else a "Copy" text. The Android path is not yet proven on a device.
+ */
+export async function shareLinkFromSheet(driver) {
+  await scrollToTestId(driver, "MyQRShareLink", 4).catch(() => undefined);
+  // Emptied first: a Copy that copies nothing would otherwise pass the check below on an earlier run's link (review).
+  await driver.setClipboard("", "plaintext").catch(() => undefined);
+  await tapTestId(driver, "MyQRShareLink", 15000);
+  if (driver.e2ePlatform === "android") {
+    let copy = await driver.$('android=new UiSelector().resourceId("android:id/chooser_copy_button")');
+    if (!(await copy.waitForExist({ timeout: 10000 }).catch(() => false))) copy = await driver.$('android=new UiSelector().text("Copy")');
+    await copy.waitForExist({ timeout: 10000 });
+    await copy.click();
+  } else {
+    const copy = await driver.$('-ios predicate string:type == "XCUIElementTypeCell" AND label == "Copy"');
+    await copy.waitForExist({ timeout: 15000 });
+    await copy.click();
+  }
+  await sleep(1000);
+  const clip = Buffer.from((await driver.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
+  const url = clip.split(/\s+/).pop() || "";
+  if (!/^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(url)) {
+    await screenshot(driver, "share-link-missing").catch(() => undefined);
+    throw new Error(`the share sheet's Copy left no link on the clipboard (got: ${clip.slice(0, 80)})`);
+  }
+  console.log(`[e2e] ${driver.e2ePlatform}: invitation link copied from the share sheet (${url.length} chars)`);
   return url;
 }
 
@@ -1220,19 +1277,48 @@ async function dumpConnectStrategyError(driver) {
 }
 
 /**
- * Real devices only: the issuer side shows the in-app biometric confirmation
- * modal (hardware attestation) while the VRC is being issued in the background.
- * Tap Confirm, then hand off to the human operator for the OS biometric prompt
- * (fingerprint / Face ID / device PIN) — Appium cannot satisfy those.
- * No-op on emulators/simulators: hardware signing is unavailable there, so the
- * modal never appears.
+ * The confirm sheet a signing act asks before it goes ahead (join, invitation, vetting step, room offer). See
+ * lib/confirmSheet.js for what it can ask.
+ * - It asks for the Keyring PIN (every emulator and simulator from bifold #937 on, since they have no biometrics,
+ *   and a phone with Biometric Unlock off): the run's PIN is typed.
+ * - It asks for the phone's biometrics (a real device): Confirm is tapped and the OS prompt is handed to the operator.
+ * - With no sheet, nothing happens.
+ * `appearWithin` is how long to look for the sheet. Right after a tap that asks for a confirm, the callers pass
+ * CONFIRM_APPEARS_WITHIN_MS. In a waiting loop that only might meet one, the short default keeps each pass short.
  */
-export async function handleBiometricConfirmIfPresent(driver) {
-  if (!(await existsTestId(driver, "ConfirmBiometric", 1500))) return false;
+/**
+ * How long to look for the confirm sheet right after a tap that asks for one. Not measured on an emulator yet: the
+ * sheet's own work before it shows is a settings read and a short slide, and the helper logs how long it took
+ * ("confirm sheet up after N ms"), so a run can show it. Generous because the cost of missing it is a stalled leg.
+ */
+export const CONFIRM_APPEARS_WITHIN_MS = 6000;
+
+export async function handleBiometricConfirmIfPresent(driver, { appearWithin = 1500 } = {}) {
+  const io = {
+    exists: (key, ms) => existsTestId(driver, key, ms),
+    tap: (key) => tapTestId(driver, key),
+    // As unlockIfLocked types it: one setValue of the whole PIN can drop a keystroke on an iOS simulator.
+    typePin: async (key, pin) => {
+      const field = byTestId(driver, key);
+      await field.click();
+      if (driver.e2ePlatform === "ios") {
+        for (const digit of pin) {
+          await field.addValue(digit);
+          await sleep(200);
+        }
+      } else {
+        await field.setValue(pin);
+      }
+    },
+    sleep,
+    log: (line) => console.log(`[e2e] ${driver.e2ePlatform}: ${line}`),
+  };
+  const how = await answerConfirmSheet(io, { pin: PIN, appearWithin });
+  if (how === "none") return false;
+  if (how === "pin") return true;
   console.log(
-    `[e2e] ${driver.e2ePlatform}: biometric confirmation modal — tapping Confirm`
+    `[e2e] ${driver.e2ePlatform}: biometric confirmation modal — tapped Confirm`
   );
-  await tapTestId(driver, "ConfirmBiometric");
   const deviceLabel =
     driver.e2ePlatform === "android" ? "ANDROID PHONE" : "IPHONE";
   console.log(

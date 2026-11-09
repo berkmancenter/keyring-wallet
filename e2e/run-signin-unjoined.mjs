@@ -61,13 +61,30 @@ export function fromOf(link) {
 /** Whether a label shown as a community's name is really its DID (or holds it). */
 export const readsAsDid = (label, did) => /^\s*did:/i.test(String(label ?? "")) || Boolean(did && String(label ?? "").includes(did));
 
-/** Which form a community label took: its name, its handle said as unnamed, or something else. */
-export function labelForm(label, name) {
+/**
+ * Which form a community label took: its name, its handle said as unnamed, its address, or something else. A sender
+ * the phone has not joined and has no name for is shown by its address (bifold #848): host and path, as the confirm
+ * step's "Community's address" shows it, never the DID.
+ */
+export function labelForm(label, name, did) {
   const t = String(label ?? "").trim();
   if (!t) return "empty";
   if (name && t === name.trim()) return "its name";
   if (/\(no name published yet\)$/.test(t)) return "its handle, unnamed";
+  if (did && t === addressOf(did)) return "its address";
   return "other words";
+}
+
+/** A DID's host and path as the app shows them, as bifold's `didDomainPath`: did:webvh after its SCID, did:web whole. */
+export function addressOf(did) {
+  const parts = String(did ?? "").split(":");
+  const rest = parts[1] === "webvh" ? parts.slice(3) : parts[1] === "web" ? parts.slice(2) : [];
+  if (!rest[0]) return undefined;
+  try {
+    return rest.map((part) => decodeURIComponent(part)).join("/");
+  } catch {
+    return undefined;
+  }
 }
 
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
@@ -137,7 +154,7 @@ async function main() {
         if (step === "result") return { ok: false, detail: `SignIn ended at once (SignInResult), no community row` };
         if (!label) return { ok: false, detail: "the not-joined step shows no community row (SignInCommunity empty)" };
         if (readsAsDid(label, did)) return { ok: false, detail: `the community row is its DID: "${label.slice(0, 80)}"` };
-        return { ok: true, detail: `"${label}" (${labelForm(label, C_NAME)}); Details ${behind}` };
+        return { ok: true, detail: `"${label}" (${labelForm(label, C_NAME, did)}); Details ${behind}` };
       });
     }
     // Leave the sign-in: Done on the not-joined step, Cancel on the confirm step, else Back.

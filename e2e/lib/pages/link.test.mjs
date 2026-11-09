@@ -45,7 +45,10 @@ function fakePhone({ platform = "android" } = {}) {
     },
     getAttribute: async () => text[key] ?? "",
     getText: async () => text[key] ?? "",
-    setValue: async (v) => calls.push(`type ${key}=${v}`),
+    // A field: what is typed is what reads back (typeExact reads the value after typing).
+    setValue: async (v) => { text[key] = v; calls.push(`type ${key}=${v}`); },
+    addValue: async (v) => { text[key] = (text[key] ?? "") + v; calls.push(`add ${key}=${v}`); },
+    clearValue: async () => { text[key] = ""; },
     getLocation: async () => ({ x: 0, y: 0 }),
     getSize: async () => ({ width: 100, height: 100 }),
   });
@@ -420,7 +423,8 @@ test("typeAddressOnLink and showTheCode (240 and before): the address, the give-
   p.show("VtaLinkAgentAddress");
   const typed = await page(p).typeAddressOnLink("did:web:bob");
   assert.deepEqual(typed.value, { knewAgent: false });
-  assert.ok(p.calls.includes("type VtaLinkAgentAddress=did:web:bob\n"));
+  assert.ok(p.calls.includes("type VtaLinkAgentAddress=did:web:bob"));
+  assert.ok(p.calls.includes("add VtaLinkAgentAddress=\n"), "Return submits the address after it reads back");
   // The toggle is below the fold: one swipe brings it into the tree.
   p.onTap.swipe = () => p.show("VtaLinkShowTheCode", "VtaLinkGiveKeyHow");
   p.onTap.VtaLinkShowTheCode = () => p.say("VtaLinkManualDid", "did:peer:2.Ez6");

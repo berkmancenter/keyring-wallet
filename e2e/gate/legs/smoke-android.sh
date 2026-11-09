@@ -35,7 +35,9 @@ ic=$(grep -m1 '^INTRO-CENTRE' $LEG_DIR/android-link.out); if [ -n "$ic" ]; then 
 # IN-249 (bifold #385): a sign-in code from C, which this linked phone never joined, names C and not its DID. Then IN-257
 # (#384): a wrong PIN on the unlock screen empties the field and the right one unlocks. Each SKIPs on a build without its fix.
 (cd $E2E && PLATFORM=android UDID=$E APPIUM_PORT=4760 C_DID=${C_DID:-} C_NAME=${C_NAME:-} galarm 420 node run-signin-unjoined.mjs > $LEG_DIR/android-signin.out 2>&1; grc=$?; take_rows $LEG_DIR/android-signin.out; driver_rc android-signin-driver "$grc" $LEG_DIR/android-signin.out)
-(cd $E2E && PLATFORM=android UDID=$E APPIUM_PORT=4760 galarm 420 node run-wrong-pin.mjs > $LEG_DIR/android-wrong-pin.out 2>&1; wrc=$?; take_rows $LEG_DIR/android-wrong-pin.out; driver_rc android-wrong-pin-driver "$wrc" $LEG_DIR/android-wrong-pin.out)
+# The wrong-PIN row needs the lock screen it asks for: the driver's generic auto-unlock (driver.js, E2E_NO_AUTO_UNLOCK)
+# took it first on the Mac mini (1021-0353, "wallet locked — unlocking", then no EnterPIN); the driver unlocks itself at the end.
+(cd $E2E && PLATFORM=android UDID=$E APPIUM_PORT=4760 E2E_NO_AUTO_UNLOCK=1 galarm 420 node run-wrong-pin.mjs > $LEG_DIR/android-wrong-pin.out 2>&1; wrc=$?; take_rows $LEG_DIR/android-wrong-pin.out; driver_rc android-wrong-pin-driver "$wrc" $LEG_DIR/android-wrong-pin.out)
 sleep 2; kill $LC 2>/dev/null; node "$GATE_SRC/tokenlines.mjs" --log $LEG_DIR/android-logcat-all.txt --bid $BID --pid "$p1 $p2" > $LEG_DIR/android-token-lines-all.txt; P2=$(grep -c . $LEG_DIR/android-token-lines-all.txt)
 echo "ROW android-no-token-activity-through-onboarding $([ $P2 = 0 ] && echo PASS || echo FAIL) — the same lines through the plain launch, onboarding and the probe: $P2 of $(wc -l < $LEG_DIR/android-logcat-all.txt | tr -d ' ') logcat lines (android-token-lines-all.txt)"; grep -vE "$BID|^$" $LEG_DIR/android-token-lines-all.txt | head -0; sed -n '1,4p' $LEG_DIR/android-token-lines-all.txt
 emu_stop; echo "SMOKE Android done $(date -u +%T)Z";

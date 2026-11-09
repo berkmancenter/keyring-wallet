@@ -15,6 +15,10 @@
 //   hv-vetting-private-shown  "Meet a vetter" → the persona step → the vetting screen, badged (VettingPrivate)
 //   hv-application-created    "Start my application": the phone's own agent creates the PCS application
 //                             (`asked its agent …/vta/pcs/applications/create/0.1`, then `reply verified`)
+//   hv-refused-bad-ticket     (Keyring vetter) the applicant first presents the vetter's ticket with one character of
+//                             its secret changed: the vetter's app refuses it (vetting/request:invalidTicket, the real
+//                             ticket left unspent) and the request reads "Refused" (fr Refusée, pt-BR Recusado), never
+//                             stuck at "Request sent". Coverage of the refusal path, not of one trust-task-error version.
 //   hv-ticket                 the vetter's ticket taken by the applicant; the vetter's desk shows the request
 //   hv-card                   both show the same match code; the vetter receives the applicant's card
 //   hv-attestation-received   the vetter attests (hidden); the applicant's agent verifies it (vta/pcs/verify-attestation)
@@ -28,12 +32,12 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { byTestId, ensureAppium, stopAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId } from '../lib/driver.js';
+import { byTestId, dumpSource, ensureAppium, stopAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId, tapTestIdByCoordinates } from '../lib/driver.js';
 import { applicant as applicantRole, textOf, unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
-import { createHvAdmin, newestMemberSince, newestRequestSince } from './hvAdmin.js';
+import { createHvAdmin, soleMemberSince } from './hvAdmin.js';
 import { clearDeviceLog, deviceLog, keepAlive, openDevice } from './hvDevices.js';
-import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard } from './hvVerdict.js';
+import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard, withWrongSecret, refusalCodes } from './hvVerdict.js';
 
 const { values: a } = parseArgs({
   options: {
@@ -72,7 +76,7 @@ const logDir = a['log-dir'] || process.env.LEG_DIR || process.cwd();
 const admin = createHvAdmin({ vtcBase: a['vtc-base'], communityDid: a['community-did'], adminCredential: a['admin-credential'] });
 const appDev = { platform: a.platform, udid: a.udid };
 const vetDev = { platform: a['vetter-platform'] || a.platform, udid: a['vetter-udid'] };
-const ROWS = ['hv-private-badge', 'hv-vetting-private-shown', 'hv-application-created', 'hv-ticket', 'hv-card', 'hv-attestation-received', 'hv-proof', 'hv-admitted', 'hv-member-card', 'hv-vetter-anonymous'];
+const ROWS = ['hv-private-badge', 'hv-vetting-private-shown', 'hv-application-created', ...(a.vetter === 'keyring' ? ['hv-refused-bad-ticket'] : []), 'hv-ticket', 'hv-card', 'hv-attestation-received', 'hv-proof', 'hv-admitted', 'hv-member-card', 'hv-vetter-anonymous'];
 const done = new Set();
 // A FAIL row fails the run (try 4 on 261 printed five FAIL rows and exited 0).
 const mark = (name, status, detail) => { done.add(name); row(name, status, detail); if (status === 'FAIL') process.exitCode = 1; };
@@ -91,7 +95,8 @@ try {
   await unlockToHome(app);
   clearDeviceLog(appDev);
   await join.openCommunity(app, { did: a['community-did'], name: '' });
-  const badge = await existsTestId(app, `JoinWayPrivate_${crit}`, 15000);
+  // The ways load through the agent and the community: over a minute when either is slow (11-03: still loading at 15 s).
+  const badge = await existsTestId(app, `JoinWayPrivate_${crit}`, 120000);
   await screenshot(app, 'hv-ways').catch(() => undefined);
   mark('hv-private-badge', badge ? 'PASS' : 'FAIL', badge ? `the ${crit} way is badged Private vetting` : `no JoinWayPrivate_${crit} on the ways in`);
   if (!badge) throw new Error('no private way');
@@ -99,10 +104,51 @@ try {
   // The way's own start button is the screen's JoinStart ("Meet a vetter"); JoinWayStart_<id> is its caption.
   if (!(await scrollToTestId(app, 'JoinStart', 6, { from: 0.6 }).catch(() => undefined))) throw new Error('JoinStart (Meet a vetter) not reachable');
   await tapTestId(app, 'JoinStart', 10000);
-  if (await existsTestId(app, 'JoinAsContinue', 15000)) await tapTestId(app, 'JoinAsContinue', 10000);
+  // The persona step waits on the agent too (11-03: over 25 s), so wait for it, or for the vetting screen if a community has no such step.
+  const tapped = Date.now();
+  let retapped = false;
+  let refusedText = '';
+  const keepRefusal = async (el) => {
+    refusedText = (await el.getText().catch(() => '')) || '(no text read)';
+    await dumpSource(app, 'hv-private-refused').catch(() => undefined);
+    await screenshot(app, 'hv-private-refused').catch(() => undefined);
+  };
+  for (let until = tapped + 120000; Date.now() < until; ) {
+    // Each pass, without scrolling: a refusal on screen is kept even if the next step comes before the retap would look.
+    if (!refusedText && (await existsTestId(app, 'JoinPrivateVettingRefused', 500))) await keepRefusal(byTestId(app, 'JoinPrivateVettingRefused'));
+    if ((await existsTestId(app, 'JoinMakeIdentity', 3000)) || (await existsTestId(app, 'VettingPrivate', 1000))) break;
+    // 11-04: one tap left the ways showing for over 3 min while the agent's sign-in was timing out. One more tap, never a loop;
+    // the RETRY line is counted in the report, and the row says so, so a retry never hides a tap the app ignored.
+    if (!retapped && Date.now() - tapped > 45000 && (await existsTestId(app, 'JoinStart', 1000))) {
+      retapped = true;
+      // The refusal line renders below the fold, so a tap that was answered can look like one that was ignored. Scrolled
+      // to only here: on every pass it would swipe the button away.
+      if (!refusedText) {
+        const refused = await scrollToTestId(app, 'JoinPrivateVettingRefused', 4).catch(() => undefined);
+        if (refused) await keepRefusal(refused);
+      }
+      console.log(`RETRY hv-start ${new Date().toISOString().slice(11, 19)}Z — "Meet a vetter" tapped, still on the ways after 45 s${refusedText ? `; refused: ${refusedText}` : '; no refusal line'}`);
+      await scrollToTestId(app, 'JoinStart', 6, { from: 0.6 }).catch(() => undefined);
+      await tapTestId(app, 'JoinStart', 10000).catch(() => undefined);
+    }
+    // A dead session makes existsTestId return at once: this keeps the wait from hammering the driver.
+    await sleep(1000);
+  }
+  // A refusal that was on screen and then passed still says so.
+  if (refusedText) console.log(`[hv] JoinPrivateVettingRefused seen: ${refusedText}`);
+  // Below the fold on a community with a member directory: its preview sits above Continue (join.js ask).
+  if (await existsTestId(app, 'JoinMakeIdentity', 1000)) {
+    await scrollToTestId(app, 'JoinAsContinue', 8).catch(() => undefined);
+    if (await existsTestId(app, 'JoinAsContinue', 15000)) await tapTestId(app, 'JoinAsContinue', 10000);
+    else {
+      // As keyringRoles.js taps this same button: by its coordinates, with the screen recorded.
+      await dumpSource(app, 'hv-persona-step').catch(() => undefined);
+      await tapTestIdByCoordinates(app, 'JoinAsContinue', 10000).catch((e) => console.log(`[e2e] JoinAsContinue by coordinates: ${e.message}`));
+    }
+  }
   const shown = await existsTestId(app, 'VettingPrivate', 90000);
   await screenshot(app, 'hv-vetting').catch(() => undefined);
-  mark('hv-vetting-private-shown', shown ? 'PASS' : 'FAIL', shown ? 'Meet a vetter → persona → the vetting screen, badged Private vetting' : 'the vetting screen (VettingPrivate) did not come');
+  mark('hv-vetting-private-shown', shown ? 'PASS' : 'FAIL', shown ? `${retapped ? `passed after retry (Meet a vetter tapped twice${refusedText ? `; first refused: ${refusedText}` : ''}); ` : ''}Meet a vetter → persona → the vetting screen, badged Private vetting` : `the vetting screen (VettingPrivate) did not come${refusedText ? `; refused: ${refusedText}` : ''}`);
   if (!shown) throw new Error('no private vetting screen');
 
   if (!(await scrollToTestId(app, 'VettingStartButton', 6, { from: 0.6 }).catch(() => undefined))) throw new Error('VettingStartButton not reachable');
@@ -139,7 +185,9 @@ try {
     vet = await openDevice({ platform: vetDev.platform, udid: vetDev.udid, deviceName: a['vetter-device-name'], wdaPort: a['vetter-wda-port'], mjpegPort: a['vetter-mjpeg-port'] });
     stopKeep.push(keepAlive(vet));
     await unlockToHome(vet);
-    await vetterRole.openDesk(vet);
+    // A named community's heading carries its published name, not its DID's path (vetterDoor.plainDoorIsFor).
+    const published = await fetch(`${a['vtc-base']}/community/public-profile`).then((r) => r.json()).then((p) => p.name).catch(() => undefined);
+    await vetterRole.openDesk(vet, { community: { did: a['community-did'], names: published ? [published] : [] } });
     ticketUri = (await vetterRole.issueTicket(vet)).value;
   } else {
     const tuiRoles = await import('./tuiRoles.js');
@@ -149,6 +197,41 @@ try {
     tui.roles = tuiRoles;
   }
   say(`ticket ${String(ticketUri).slice(0, 60)}…`);
+  // The refusal first: the same ticket with a wrong secret. The vetter's app answers it with a refusal and leaves the real
+  // ticket unspent, so the request below still goes through. "Accepted" here would mean the vetter took a ticket it never
+  // cut; "Request sent" after the wait, that the refusal never reached the applicant or was not read.
+  // HV_BAD_TICKET_CONTROL=1 proves the row can fail: the REAL ticket goes in instead, the vetter accepts it, the row must
+  // read FAIL ("Accepted"), and the run stops there (its ticket is spent). Never set in a gate run. The stop lands in
+  // the catch below, so every later row also prints FAIL "not reached": in a control run only this row's FAIL counts.
+  const control = process.env.HV_BAD_TICKET_CONTROL === '1';
+  if (a.vetter === 'keyring') {
+    const asked = Date.now();
+    if (control) say('CONTROL: presenting the real ticket in the refusal row');
+    await applicantRole.request(app, { ticketUri: control ? ticketUri : withWrongSecret(ticketUri), via: 'field' });
+    let status = '';
+    // A refused request leaves the active step: the screen goes back to "Ask a vetter" and the refused card is drawn
+    // under the ticket field, below the fold, where Android's page source does not reach (1029-2326: the refusal landed
+    // at 23:39:17Z and the card read "Refused", but only once a later step scrolled to it). So scroll to it each time.
+    for (const until = Date.now() + 150000; Date.now() < until; await sleep(3000)) {
+      status = await textOf(app, 'VettingRequestStatus').catch(() => '');
+      if (!status) {
+        await scrollToTestId(app, 'VettingRequestStatus', 4).catch(() => undefined);
+        status = await textOf(app, 'VettingRequestStatus').catch(() => '');
+      }
+      if (/Refused|Refusée|Recusado|Accepted|Aceit|Declined|Recus/i.test(status)) break;
+    }
+    await screenshot(app, 'hv-refused').catch(() => undefined);
+    // The screen says a refusal happened; the code the applicant's agent logged says it was the wrong secret's (a vetter
+    // that refused for any other reason, or crashed on the link, would read "Refused" too). Both are required.
+    const shown = /Refused|Refusée|Recusado/i.test(status);
+    const codes = refusalCodes(deviceLog(appDev, asked));
+    const why = codes.includes('vetting/request:invalidTicket');
+    const secs = Math.round((Date.now() - asked) / 1000);
+    mark('hv-refused-bad-ticket', shown && why ? 'PASS' : 'FAIL', shown && why
+      ? `a wrong-secret ticket was refused: the request reads "${status}" ${secs} s after asking, and the applicant's agent logged vetting/request:invalidTicket`
+      : `the request reads "${status || 'nothing'}" ${secs} s after asking with a wrong-secret ticket (expected "Refused"); refusal codes logged: ${codes.length ? codes.join(', ') : 'none'} (expected vetting/request:invalidTicket)`);
+    if (control) throw new Error('HV_BAD_TICKET_CONTROL: stopping after the refusal row');
+  } else row('hv-refused-bad-ticket', 'SKIP', 'the openvtc TUI vetter: the refusal row is a Keyring vetter\'s');
   await applicantRole.request(app, { ticketUri, via: 'field' });
   await applicantRole.awaitAccepted(app, {});
   if (vet) await vetterRole.awaitRequest(vet, {}); else await tui.roles.awaitRequest(tui);
@@ -182,10 +265,11 @@ try {
     await sleep(5000);
     prove = taskRound(deviceLog(appDev, startedMs), '/vta/pcs/prove/0.1');
   }
-  mark('hv-proof', prove.verified ? 'PASS' : 'FAIL', prove.verified ? `vta/pcs/prove verified in ${prove.seconds} s` : prove.noAnswer ? `unanswered: "${prove.noAnswer}"` : `no verified vta/pcs/prove (asked: ${prove.asked})`);
-  let member;
-  for (let i = 0; i < 24 && !member; i++) { member = newestMemberSince(admin.members(), since); if (!member) await sleep(5000); }
-  mark('hv-admitted', member ? 'PASS' : 'FAIL', member ? `the community lists ${member.did} (joined ${member.joinedAt})` : 'no member listed since the run began');
+  mark('hv-proof', prove.verified ? 'PASS' : 'FAIL', prove.verified ? `vta/pcs/prove verified${prove.seconds !== undefined ? ` in ${prove.seconds} s` : ' (over DIDComm: no ask line to time it from)'}` : prove.noAnswer ? `unanswered: "${prove.noAnswer}"` : `no verified vta/pcs/prove (asked: ${prove.asked})`);
+  // The one member since the run began, on two reads: the community is shared with legs beside this one (signin's
+  // member joins keyring-hv-lab1 too), and "the newest member" could be theirs, a pass for an admission that is not ours.
+  const { member, count: members } = await soleMemberSince(() => admin.members(), since);
+  mark('hv-admitted', member ? 'PASS' : members ? 'SKIP' : 'FAIL', member ? `the community lists ${member.did} (joined ${member.joinedAt}), the one member since the run began` : members ? `${members} members joined since the run began (read twice) on this shared community: whose is not known, so this run cannot judge the admission` : 'no member listed since the run began');
   mark('hv-member-card', /member|joined|welcome|done/i.test(String(outcome)) ? 'PASS' : 'FAIL', `the app says "${String(outcome).slice(0, 120)}"`);
 
   // No vetter named where it would be a leak: in the app's own lines since the attestation and the page it ends on (the
@@ -195,7 +279,9 @@ try {
   // is the attestation and what the community keeps (hv-keyring on 262: all ten mentions were transport lines).
   const vetterDid = a.vetter === 'keyring' ? a['vetter-did'] : a['tui-persona'];
   const shownToApplicant = appLevelLines(deviceLog(appDev, attestMs)) + withoutOwnRequestCard(await app.getPageSource().catch(() => ''));
-  const req = newestRequestSince([...admin.joinRequests('approved'), ...admin.joinRequests('pending')], since);
+  // The record of this applicant's join: the request whose applicant is the member above, not the newest on a shared
+  // community (no member, no record: the verdict below says the source was not read).
+  const req = member ? [...admin.joinRequests('approved'), ...admin.joinRequests('pending')].find((r) => r.applicantDid === member.did) : undefined;
   const record = JSON.stringify(req ?? {}) + JSON.stringify(member ?? {});
   // Each source must show it was read (the applicant side names the applicant, the record names the member) before an
   // absent vetter DID counts: an empty page source or log read fails as "source empty" (review on #500).

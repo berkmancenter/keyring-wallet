@@ -58,10 +58,11 @@ import os from "node:os";
 import { buildLacks } from "./lib/buildHas.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
-import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { deleteAcl, fromGrant, grantAfter, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { netAtFailure } from "./lib/netAtFailure.js";
+import { aclEndAction, deleteAcl, fromGrant, grantAfter, grantEntries, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
@@ -100,6 +101,11 @@ const JOURNEY = process.env.JOURNEY === "1";
 // phone's first key, because a consent rule holds acl/swap-key or a policy
 // denies it, and the phone must say why in words (bifold #325, VtaLink.SwapFailed).
 const EXPECT_REFUSAL = process.env.EXPECT_REFUSAL || "";
+// The slugs whose phone keys the gate leg's own cleanup removes (gate.sh run_leg, lib.sh leg_cleaned_slugs: its
+// keys_since lines). On one of them this run leaves its keys to that one list-and-delete pass at the leg's end rather
+// than listing the ACL again here (IN-560, W3 of docs/plans/farm-test-footprint-plan.md). Outside a gate leg it is
+// empty, and the run cleans after itself as before.
+const LEG_CLEANS = (process.env.E2E_ACL_LEG_SLUGS || "").split(/\s+/).includes(VTA_SLUG);
 const SWAP_FAILED = {
   swapHeld: { words: /holding this phone's link until someone approves it/, waitMs: 300000 },
   swapRefused: { words: /refused to finish linking this phone/, waitMs: 180000 },
@@ -199,12 +205,11 @@ async function assertNoLinkedScreen(driver, when) {
 /** From wherever My Agent is, to the agent screen. */
 async function openAgentHome(driver) {
   await (await waitForTestId(driver, "MyAgent", 30000)).click();
-  await sleep(1500);
-  if (await existsTestId(driver, "AgentHome", 2000)) return;
-  const open = await scrollToTestId(driver, "OpenYourAgentButton", 4).catch(() => undefined);
-  if (!open) throw new Error('My Agent offers no way to "Open your agent"');
-  await open.click();
-  await waitForTestId(driver, "AgentHome", 30000);
+  // A linked phone's My Agent hands over to the agent home before it paints
+  // (bifold #484); there is no panel and no "Open your agent" to fall back on.
+  await waitForTestId(driver, "AgentHome", 30000).catch((e) => {
+    throw new Error(`My Agent did not hand over to the agent home in 30 s — is the phone linked? (${e.message})`);
+  });
 }
 
 /** After a link: the temporary key must be gone from the ACL (the rotation moved the grant). */
@@ -615,7 +620,8 @@ async function linkCase(driver, which, timing) {
     const did = await addressCode();
     grant(did);
     // The grant's own entry, by the VTA's clock: "since the grant" counts from here (review on #418).
-    const grantAt = (aclList() || []).find((e) => e.subject === did)?.createdAt;
+    const grantEntry = (aclList() || []).find((e) => e.subject === did);
+    const grantAt = grantEntry?.createdAt;
     block(true);
     // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
     // the driver's failure, not Create's, so it stops the case as broken rather than writing a FAIL row about the app.
@@ -689,13 +695,16 @@ async function linkCase(driver, which, timing) {
     // The case's own entries, counted from its grant: exactly one, the grant (a parallel leg, a sweep or a person on
     // the runner can move the total meanwhile). acl/swap-key keeps the entry but can move it to a new subject, so its
     // subject still being `did` is "same key"; otherwise it is "same grant, no second key" (review on #418).
-    const mine = aclSince(grantAt);
+    // Only this grant's entries: another leg linking to the same runner meanwhile is not this case's (1021-0158).
+    const sinceGrant = aclSince(grantAt);
+    const mine = sinceGrant && grantEntry ? grantEntries(sinceGrant, grantEntry) : null;
+    const others = Array.isArray(mine) ? sinceGrant.filter((e) => !mine.includes(e)) : [];
     const oneGrant = Array.isArray(mine) && mine.length === 1;
     const sameSubject = oneGrant && mine[0].subject === did;
     const keyHeld = sameKey === true || (sameKey === null && linked && oneGrant);
     const keySaid = sameKey !== null ? String(sameKey) : `no key text in this layout; judged by the link: ${linked && oneGrant ? (sameSubject ? "same key: yes" : "same grant, key rotated") : "not shown"}`;
     return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && oneGrant,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past ${t.noAnswer.windowS}) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant ${Array.isArray(mine) ? mine.length : "?"} · ${clocksSaid(t.clocks)}`);
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past ${t.noAnswer.windowS}) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant: this case's ${Array.isArray(mine) ? mine.length : "?"}, others' ${others.length}${others.length ? ` (${others.map((e) => e.subject.slice(0, 16)).join(", ")}: not counted)` : ""} · ${clocksSaid(t.clocks)}`);
   }
   if (which === "create-window-paused") {
     // UI/UX (10-08, from 59feae2f): two cases in one install. The absences are the real-clock ones (3 and 15 min)
@@ -1251,7 +1260,7 @@ async function testerJourney(driver) {
   // it must hold exactly one more DID — one persona, even after a retry.
   const heldBefore = vtaInventory({ slug: VTA_SLUG, pnmHome: PNM_HOME });
   await tapTestId(driver, "JoinAsContinue", 15000);
-  await handleBiometricConfirmIfPresent(driver);
+  await handleBiometricConfirmIfPresent(driver, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   // One retry, the app's own. On the current Farm the agent's answer to the
   // first "make my identity" can be lost, and the app says "Tap Continue to
   // try again" (fixed upstream in VTI-39; 217 known issue until the Farm
@@ -1283,7 +1292,7 @@ async function testerJourney(driver) {
     console.log(`[e2e] journey: ⚠️  FIRST-TRY MISS making the identity — "${why}" — tapping Continue once, as the app asks`);
     await screenshot(driver, "journey-identity-first-miss");
     await tapTestId(driver, "JoinAsContinue", 15000);
-    await handleBiometricConfirmIfPresent(driver);
+    await handleBiometricConfirmIfPresent(driver, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
     // The failed attempt's message must clear, or the next look reads it as a second miss.
     for (let i = 0; i < 10 && (await existsTestId(driver, "JoinError", 500)); i++) await sleep(500);
     return true;
@@ -1571,6 +1580,8 @@ function keepForNextStep({ before, tempDid, heirs = [] }) {
     const file = path.join(process.env.E2E_RUN_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts"), "last-link.json");
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, heirs, before: [...before], at: new Date().toISOString() }, null, 2));
+    // The leg's cleanup removes them, so the list below would only print them: one pnm call less per link.
+    if (LEG_CLEANS) { console.log(`[acl] keeping this run's keys: the phone stays linked for the next step (${file}); the leg's cleanup removes them`); return; }
     const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid, heirs);
     console.log(`[acl] keeping ${mine.length} entr${mine.length === 1 ? "y" : "ies"}: the phone stays linked for the next step (${file}). To remove them:`);
     for (const e of mine) console.log(`  ${PNM_HOME ? `PNM_HOME=${PNM_HOME} ` : ''}${PNM} --vta ${VTA_SLUG} acl delete '${e.subject}'`);
@@ -1737,6 +1748,14 @@ try {
       await screenshot(driver, "link-failure").catch(() => undefined);
       await dumpSource(driver, "link-failure").catch(() => undefined);
     }
+    // The network at the failure itself (lib/netAtFailure.js): "couldn't reach its message service" twice with nothing
+    // reaching our mediator (11-07, 11-08). Logged only.
+    try {
+      const serial = process.env.ANDROID_SERIAL || process.env.ANDROID_UDID;
+      for (const l of netAtFailure({ host: process.env.GATE_NET_PROBE_HOST || process.env.RUNNER_MEDIATOR_HOST, serial, platform: process.env.PLATFORM })) console.log(l);
+    } catch (e) {
+      console.log(`[net] at failure: the probe itself failed: ${e instanceof Error ? e.message : e}`);
+    }
     printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
     process.exitCode = 1;
   }
@@ -1750,7 +1769,13 @@ try {
   if (aclBefore) {
     const mode = process.env.E2E_ACL_CLEANUP || "";
     // A refused link ends its chain: its grant on the community's agent goes now.
-    if (runFailed || JOURNEY || EXPECT_REFUSAL || mode === "always" || mode === "never") {
+    // A gate leg that cleans this slug removes these keys in one pass at its end (LEG_CLEANS): a successful `always`
+    // run's keys need no list and delete of their own here. A failed run still removes them now (aclEndAction), as do a
+    // refused link (another agent's grant, which the leg may not clean), a JOURNEY and `never`.
+    const end = aclEndAction({ legCleans: LEG_CLEANS, journey: JOURNEY, expectRefusal: EXPECT_REFUSAL, mode, failed: runFailed });
+    if (end === "leg") {
+      console.log(`[acl] this run's keys on ${VTA_SLUG} are left to the leg's cleanup (keys_since), which lists and removes them once`);
+    } else if (end === "remove") {
       // Each link's chain by its own temporary key: an unlinked phone's key
       // stays on the agent's list (VTI-Q23), and the relink adds another.
       for (const [i, tempDid] of runTempDids.entries()) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid, heirs: i === runTempDids.length - 1 ? runHeirs : [], failed: runFailed });

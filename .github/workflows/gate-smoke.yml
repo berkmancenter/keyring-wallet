@@ -14,6 +14,24 @@ name: Gate smoke (CI runners)
 # file that is not yet on main is refused, so a PR is how a change to this workflow is tried). The job fails
 # only when a ROW says FAIL (or the leg broke before its rows).
 
+# A workflow_run run is attributed to the DEFAULT BRANCH HEAD at trigger time, not to the commit that
+# triggered it, so GitHub's own title for this run names whatever main's head was when "Test builds" finished
+# — a different commit whenever main moved during the build. run-name is evaluated before any job, so it can
+# only read the event and the inputs, not the artifact-derived sha the `builds` job resolves; it carries the
+# triggering commit, and the smoke jobs below carry the sha the artifacts were actually built from. When those
+# two disagree, that disagreement is itself worth seeing.
+# Read by strict-proof.mjs (a strict OTA needs a green smoke of its Test builds run) and post-release.mjs (the smoke
+# after a release): both find a run by "Test builds <id>" in this title. scripts/ota/gate-smoke-title.test.mjs renders
+# these formats against both; keep "Test builds <id>" in every title that names a Test builds run.
+run-name: >-
+  Gate smoke ·
+  ${{ github.event_name == 'workflow_run'
+  && format('{0} (Test builds {1})', github.event.workflow_run.head_sha, github.event.workflow_run.id)
+  || github.event_name == 'pull_request' && format('PR #{0}', github.event.number)
+  || inputs.run-id != '' && format('Test builds {0}', inputs.run-id)
+  || inputs.wallet-sha != '' && inputs.wallet-sha
+  || 'newest green push build of main' }}
+
 on:
   pull_request:
     branches: [main]
@@ -111,7 +129,7 @@ jobs:
           echo "test-builds run $run (wallet $wallet): iOS ${ios:-none}, Android ${android:-none}; platform $platform" >> "$GITHUB_STEP_SUMMARY"
 
   ios:
-    name: iOS smoke (macos-26)
+    name: iOS smoke (macos-26) · ${{ needs.builds.outputs.wallet }}
     needs: builds
     if: needs.builds.outputs.platform != 'android'
     runs-on: macos-26
@@ -198,12 +216,28 @@ jobs:
           echo "WDA cache hit: ${{ steps.wda.outputs.cache-hit || 'no' }}"
           echo "WDA cache hit: ${{ steps.wda.outputs.cache-hit || 'no' }}" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/download-artifact@v4
+      - id: download
+        uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: ${{ needs.builds.outputs.ios_artifact }}
           run-id: ${{ needs.builds.outputs.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/build
+
+      # A failed download is tried again with backoff, and an egress refusal is named as a github-egress-503 warning
+      # (10-30: GitHub's "Egress is over the account limit" 503; scripts/ci/download-artifact.mjs). Still failing
+      # after the waits, the job fails here as it did before. It runs on the Node that setup-node put in place above:
+      # keep this step after it.
+      - name: Download the build again, with backoff
+        if: ${{ steps.download.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ needs.builds.outputs.run_id }}
+          ARTIFACT: ${{ needs.builds.outputs.ios_artifact }}
+        run: |
+          echo "::warning title=artifact-download-retry::the first download of $ARTIFACT failed; trying again with backoff"
+          node scripts/ci/download-artifact.mjs --run "$RUN_ID" --name "$ARTIFACT" --dir "$RUNNER_TEMP/build" --where "gate-smoke ios"
 
       - name: Unzip the app
         working-directory: ${{ runner.temp }}/build
@@ -262,7 +296,7 @@ jobs:
           [ "$OK" = true ] || { echo "::error::a ROW failed or the leg broke (see the summary)"; exit 1; }
 
   android:
-    name: Android smoke (ubuntu-latest, KVM)
+    name: Android smoke (ubuntu-latest, KVM) · ${{ needs.builds.outputs.wallet }}
     needs: builds
     if: needs.builds.outputs.platform != 'ios'
     runs-on: ubuntu-latest
@@ -322,12 +356,28 @@ jobs:
       - name: Mark the download
         run: e2e/gate/ci/mark.sh download-build
 
-      - uses: actions/download-artifact@v4
+      - id: download
+        uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: ${{ needs.builds.outputs.android_artifact }}
           run-id: ${{ needs.builds.outputs.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/build
+
+      # A failed download is tried again with backoff, and an egress refusal is named as a github-egress-503 warning
+      # (10-30: GitHub's "Egress is over the account limit" 503; scripts/ci/download-artifact.mjs). Still failing
+      # after the waits, the job fails here as it did before. It runs on the Node that setup-node put in place above:
+      # keep this step after it.
+      - name: Download the build again, with backoff
+        if: ${{ steps.download.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ needs.builds.outputs.run_id }}
+          ARTIFACT: ${{ needs.builds.outputs.android_artifact }}
+        run: |
+          echo "::warning title=artifact-download-retry::the first download of $ARTIFACT failed; trying again with backoff"
+          node scripts/ci/download-artifact.mjs --run "$RUN_ID" --name "$ARTIFACT" --dir "$RUNNER_TEMP/build" --where "gate-smoke android"
 
       - name: The build
         working-directory: ${{ runner.temp }}/build

@@ -42,6 +42,7 @@ import { contextSnapshot, personaContextCheck } from "./lib/pnm.js";
 import { agents, answerOwnerCheck, readCommunityCard, readHomeName, readOwnerCode, readScanKey, readSwitcherRows, splitRows } from "./lib/pages/agents.js";
 import { community, join, readEntry } from "./lib/pages/join.js";
 import { idsWithPrefix, rowText, said, shot } from "./lib/pages/step.js";
+import { walletCardSelector } from "./lib/walletCards.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
@@ -137,12 +138,15 @@ const myAgent = async () => (await agents.open(d)).value.name;
 /** Back on agent `name` whatever the group before left; a miss is logged, never fatal. */
 const resync = (name) => attempt(`switch to ${name}`, () => agents.switchTo(d, { name, owner }));
 
-/** How many Wallet cards name C (CredentialName), after closing the Wallet's first-visit tour. */
+/** How many Wallet cards name C (a pass's title, or an older build's CredentialName), after closing the Wallet's first-visit tour. */
 async function walletCardsForC(d) {
   await tapTestId(d, "Wallet", 10000).catch(() => undefined);
   await sleep(2000);
   for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
-  return (await d.$$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${E.C_NAME}")`)).length;
+  // A pass's title is the community's published name, which can arrive after the card does (CredentialName was the
+  // card's own text): give the first card a few seconds before counting, so a late name is not read as no card.
+  await d.$(walletCardSelector(E.C_NAME)).waitForExist({ timeout: 6000 }).catch(() => undefined);
+  return (await d.$$(walletCardSelector(E.C_NAME))).length;
 }
 let walletBefore = -1;
 
@@ -447,7 +451,7 @@ try {
       let steadySince = 0;
       for (const until = Date.now() + 20000; Date.now() < until; await sleep(200)) {
         const empty = (await existsTestId(d, "NoCredentials", 100).catch(() => false)) || (await existsTestId(d, "AddFirstCredential", 100).catch(() => false));
-        const card = await d.$('android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("Keyring Lab Community")').isExisting().catch(() => false);
+        const card = await d.$(walletCardSelector("Keyring Lab Community")).isExisting().catch(() => false);
         if (empty) emptySeen = true;
         if (card && !empty) {
           steadySince ||= Date.now();
@@ -464,9 +468,9 @@ try {
         await sleep(1000);
       }
       log(`R7: Wallet open; first-visit tour was up: ${tour}`);
-      // The card by its name line (CredentialName), not by any text naming C: the first text match can be
+      // The card by its name line (a pass's title, or an older build's CredentialName), not by any text naming C: the first text match can be
       // something else on the page (236 gate, 05:27Z: the run ended on Wallet behind "Add credentials").
-      const cardEl = await d.$('android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("Keyring Lab Community")');
+      const cardEl = await d.$(walletCardSelector("Keyring Lab Community"));
       if (!(await cardEl.isExisting().catch(() => false))) {
         await dumpSource(d, "agents-r7-wallet").catch(() => undefined);
         throw new Error("R7: no Wallet card for C (R2 makes A a member first)");

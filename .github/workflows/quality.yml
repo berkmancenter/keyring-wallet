@@ -61,11 +61,12 @@ jobs:
       - name: Setup NodeJS
         uses: ./.github/workflows/actions/setup-node
 
-      - name: Cache app node_modules
-        uses: actions/cache@v3
+      # Restore only: a pull request's own save landed on refs/pull/<n>/merge, which no other PR can read, so every
+      # PR saved its own 176 MiB copy and filled the 10 GB cache. deps-cache.yml saves the one copy, on main.
+      - name: Restore the yarn cache (saved on main)
+        uses: actions/cache/restore@v4
         with:
           path: .yarn/cache
-          # Cache will be invalidated if yarn.lock changes
           key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
           restore-keys: ${{ runner.os }}-yarn-
 
@@ -107,15 +108,28 @@ jobs:
               || { echo "::error file=$f::$f is not valid ES module JavaScript"; fail=1; }
           done < <(find e2e -name '*.js' -not -path 'e2e/node_modules/*' -not -path 'e2e/artifacts/*')
           # Every testID the drivers name must exist in the app (e2e/lib/testids*.json,
-          # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate.
+          # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate. And e2e/lib/testids.json must be
+          # bifold's packages/core/testids.json at the pinned submodule, both ways: a pin bump carries its resync
+          # (e2e/scripts/sync-testids.sh bifold), and a check that cannot read the pin fails here (CI is set).
           node e2e/scripts/check-testids.mjs || fail=1
-          # The leg cleanup (lib.sh keys_since) finds and deletes this leg's phone keys through the CI guard, and says
-          # so loudly when the runner's ACL cannot be read (a fake VTA; no secrets, no network).
-          bash e2e/gate/ci/keys-since.test.sh || { echo "::error file=e2e/gate/ci/keys-since.test.sh::the leg cleanup test failed"; fail=1; }
-          # pnm-locked caps a pnm call once it holds the slug lock (PNM_CALL_TIMEOUT), so a dead transport cannot hold a leg.
-          bash e2e/gate/ci/pnm-locked.test.sh || { echo "::error file=e2e/gate/ci/pnm-locked.test.sh::the pnm call cap test failed"; fail=1; }
-          # The CI lane's configuration must name one runner, linkfail's approver DID and no admin credential (item 11).
-          bash e2e/gate/ci/ci-env-check.test.sh || { echo "::error file=e2e/gate/ci/ci-env-check.test.sh::the CI configuration check test failed"; fail=1; }
+          # The harness's and the scripts' own tests (node built-ins and bash only, no install), found rather than named
+          # (scripts/ci/find-tests.mjs): every *.test.mjs and *.test.sh under e2e/ and scripts/, so a new one runs here
+          # without anyone adding it. Named lists left 21 of them running nowhere, check-testids.test.mjs among them,
+          # until 2026-10-22; #518 and #522 had merged green while breaking two gate tests the same way. Those needing
+          # a package this job does not install (webdriverio, node-pty, qrcode) are listed with why in
+          # scripts/ci/tests-need-install.json; a listed file that is gone fails here. Among what they cover: the leg
+          # cleanup through the CI guard (keys-since), the pnm call cap, the CI lane's configuration, phone-grant expiry
+          # and the gate turn lock, gate.sh --rows, the release tier check, the openvtc helpers, fetch-binaries' refusal
+          # of an unpinned moving build, and the testid manifest's drift from the pinned bifold.
+          tests=$(node scripts/ci/find-tests.mjs) || { echo "::error file=scripts/ci/tests-need-install.json::a listed test no longer exists"; fail=1; }
+          while IFS= read -r t; do
+            [ -n "$t" ] || continue
+            # stdin from /dev/null: a test reading stdin would otherwise eat the rest of this list.
+            case $t in
+              *.sh) bash "$t" < /dev/null ;;
+              *) node --test "$t" < /dev/null ;;
+            esac || { echo "::error file=$t::$t failed"; fail=1; }
+          done <<< "$tests"
           exit $fail
 
   test:
@@ -134,11 +148,12 @@ jobs:
       - name: Setup NodeJS
         uses: ./.github/workflows/actions/setup-node
 
-      - name: Cache app node_modules
-        uses: actions/cache@v3
+      # Restore only: a pull request's own save landed on refs/pull/<n>/merge, which no other PR can read, so every
+      # PR saved its own 176 MiB copy and filled the 10 GB cache. deps-cache.yml saves the one copy, on main.
+      - name: Restore the yarn cache (saved on main)
+        uses: actions/cache/restore@v4
         with:
           path: .yarn/cache
-          # Cache will be invalidated if yarn.lock changes
           key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
           restore-keys: ${{ runner.os }}-yarn-
 
@@ -148,3 +163,8 @@ jobs:
 
       - name: Automated testing
         run: yarn test
+
+      # The OTA publishing scripts' own tests (node:test, Node built-ins only):
+      # among them, which key each channel signs with (scripts/ota/signing-key.mjs).
+      - name: OTA script tests
+        run: node --test scripts/ota/
