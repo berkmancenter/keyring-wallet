@@ -1,8 +1,9 @@
 /**
- * A long press on a file or photo post opens the same sheet a text post does. A file with no words has nothing to copy,
- * edit or withdraw: with sending off, or in a room that takes neither, the sheet says replies and reactions aren't on
- * here yet and offers nothing else; with them on, it offers a reaction and a reply. A post on its way, withdrawn, or
- * one that could not be read still opens nothing, and a text post's sheet is as it was.
+ * A long press on a file or photo post opens the same sheet a text post does. A file with no words has nothing to copy
+ * or edit: with sending off, or in a room that takes neither, the sheet says replies and reactions aren't on here yet
+ * and offers nothing else; with them on, it offers a reaction and a reply, and on the member's own message a
+ * withdrawal. A post that carries a file is never edited. A post on its way, withdrawn, or one that could not be read
+ * still opens nothing, and a text post's sheet is as it was.
  */
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
@@ -168,6 +169,13 @@ describe('with sending off (every room today)', () => {
     expect(tree.queryByTestId(id('ChatReactionBar'))).toBeNull()
   })
 
+  test('your own file with no words, sending off: the notice alone, no Withdraw', async () => {
+    const s = service([filePost('f1', AGENDA, { kind: 'message', author: ME })], { on: false })
+    const tree = open(s)
+    await longPress(tree, 'f1')
+    expectNoticeOnly(tree)
+  })
+
   test('a file with words under it is a text post: Copy, and no notice', async () => {
     const tree = open(service([post('f1', 'The agenda', { files: [AGENDA] })], { on: false }))
     await longPress(tree, 'f1')
@@ -186,16 +194,40 @@ describe('with sending on', () => {
     expect(tree.getByTestId(id('ChatActionReply'))).toBeTruthy()
     expect(tree.queryByTestId(id('ChatActionCopy'))).toBeNull()
     expect(tree.queryByTestId(id('ChatMessageActionsNotice'))).toBeNull()
+    // Not yours: nothing to take back.
+    expect(tree.queryByTestId(id('ChatActionWithdraw'))).toBeNull()
   })
 
-  test('your own file that says it is a message: Reply and reactions, never Edit or Withdraw', async () => {
+  test('your own file with no words: Reply, reactions and Withdraw, never Edit or Copy', async () => {
     const s = service([filePost('f1', PHOTO, { kind: 'message', author: ME })])
     const tree = open(s)
     await waitFor(() => expect(s.recordFeaturesIn).toHaveBeenCalled())
     await longPress(tree, 'f1')
     await waitFor(() => expect(tree.getByTestId(id('ChatActionReply'))).toBeTruthy())
     expect(tree.getByTestId(id('ChatReactionBar'))).toBeTruthy()
+    expect(tree.getByTestId(id('ChatActionWithdraw'))).toBeTruthy()
     expect(tree.queryByTestId(id('ChatActionEdit'))).toBeNull()
+    expect(tree.queryByTestId(id('ChatActionCopy'))).toBeNull()
+  })
+
+  test('withdrawing your own file with no words asks first, then takes the record back', async () => {
+    const s = service([filePost('f1', AGENDA, { kind: 'message', author: ME })])
+    const tree = open(s)
+    await waitFor(() => expect(s.recordFeaturesIn).toHaveBeenCalled())
+    await longPress(tree, 'f1')
+    await waitFor(() => expect(tree.getByTestId(id('ChatActionWithdraw'))).toBeTruthy())
+    await press(tree, 'ChatActionWithdraw')
+    expect(s.sendRecord).not.toHaveBeenCalled()
+    await press(tree, 'RoomWithdrawConfirm')
+    await waitFor(() => expect(s.sendRecord).toHaveBeenCalledWith(ROOM, { type: 'withdraw', key: 'f1' }))
+  })
+
+  test('control: your own file that does not say it is a message offers no Withdraw', async () => {
+    const s = service([filePost('f1', AGENDA, { author: ME })])
+    const tree = open(s)
+    await waitFor(() => expect(s.recordFeaturesIn).toHaveBeenCalled())
+    await longPress(tree, 'f1')
+    await waitFor(() => expect(tree.getByTestId(id('ChatActionReply'))).toBeTruthy())
     expect(tree.queryByTestId(id('ChatActionWithdraw'))).toBeNull()
   })
 
