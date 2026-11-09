@@ -227,6 +227,8 @@
     "BiometricConfirmationScroll": ["src/components/modals/BiometricConfirmationModal.tsx"],
     "Biometrics": ["src/screens/Settings.tsx"],
     "BiometricsUnlock": ["src/screens/PINEnter.tsx"],
+    "BiometryNotAllowed": ["src/components/inputs/BiometryControl.tsx"],
+    "BiometryOpenSettings": ["src/components/inputs/BiometryControl.tsx"],
     "BiometryRecommended": ["src/components/inputs/BiometryControl.tsx"],
     "BodyText": [
       "src/components/listItems/NotificationListItem.tsx",

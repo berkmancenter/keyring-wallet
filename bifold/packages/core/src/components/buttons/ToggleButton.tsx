@@ -35,9 +35,12 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
     }).start()
   }, [isEnabled, toggleAnim])
 
+  // Off is a mid grey, not a light one: a light-grey track on a white or very light card all but vanished, so people
+  // could not tell there was a switch to turn on (IN-550). Mid grey is about 5:1 against either; on stays the brand
+  // colour, and the thumb's cross or tick says which it is without relying on colour.
   const backgroundColor = toggleAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [ColorPalette.grayscale.lightGrey, ColorPalette.brand.primary],
+    outputRange: [ColorPalette.grayscale.mediumGrey, ColorPalette.brand.primary],
   })
 
   const translateX = toggleAnim.interpolate({

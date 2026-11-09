@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Linking, Platform, ScrollView, StyleSheet, View, AppState, DeviceEventEmitter } from 'react-native'
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, View, AppState, DeviceEventEmitter } from 'react-native'
 import { check, PERMISSIONS, PermissionStatus, request, RESULTS } from 'react-native-permissions'
 import Keychain, { getSupportedBiometryType, BIOMETRY_TYPE } from 'react-native-keychain'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -16,6 +16,21 @@ import { EventTypes } from '../../constants'
 import { confirmBiometricKeychainAccess } from '../../services/keychain'
 
 const BIOMETRY_PERMISSION = PERMISSIONS.IOS.FACE_ID
+
+/**
+ * Whether the phone has Face ID but Keyring is not allowed to use it. react-native-permissions reads BLOCKED exactly
+ * then: the device reports Face ID as its biometry, and evaluating it fails with "biometry not available" (the app's
+ * permission is off). A phone with no Face ID, or none enrolled, reads UNAVAILABLE. iOS only: Android has no
+ * per-app biometrics permission. Read only when biometrics read as unavailable, to explain why.
+ */
+export const readFaceIdNotAllowed = async (): Promise<boolean> => {
+  if (Platform.OS !== 'ios') return false
+  try {
+    return (await check(BIOMETRY_PERMISSION)) === RESULTS.BLOCKED
+  } catch {
+    return false
+  }
+}
 
 export interface BiometryControlProps {
   biometryEnabled: boolean
@@ -34,7 +49,16 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
   const { t } = useTranslation()
   const { isBiometricsActive } = useAuth()
   const [biometryAvailable, setBiometryAvailable] = useState(false)
-  const [settingsPopupConfig, setSettingsPopupConfig] = useState<null | { title: string; description: string }>(null)
+  // The phone has Face ID, but Keyring is not allowed to use it (iOS Settings › Keyring › Face ID is off). Without
+  // this the screen said biometrics were not set up on the device, which sent people to the wrong setting (IN-550).
+  const [faceIdNotAllowed, setFaceIdNotAllowed] = useState(false)
+  // action: the popup's button. The "allow Face ID" popups are iOS-only and name iOS's Settings app; the "set up
+  // biometrics" one is reached on Android too, so it keeps the platform-neutral label.
+  const [settingsPopupConfig, setSettingsPopupConfig] = useState<null | {
+    title: string
+    description: string
+    action: string
+  }>(null)
   const [notConfirmedPopup, setNotConfirmedPopup] = useState(false)
   // While Face ID is being confirmed the switch is dimmed and ignores taps: it
   // shows the check is running, and a second tap would start a second probe on
@@ -57,12 +81,18 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
     biometryAvailableRowGap: {
       rowGap: Spacing.md,
     },
+    settingsLink: {
+      minHeight: 44,
+      justifyContent: 'center',
+      alignSelf: 'flex-start',
+    },
   })
 
   useEffect(() => {
     isBiometricsActive()
-      .then((res) => {
+      .then(async (res) => {
         setBiometryAvailable(res)
+        setFaceIdNotAllowed(res ? false : await readFaceIdNotAllowed())
       })
       .catch((err) => {
         const error = new BifoldError(
@@ -80,6 +110,7 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
       try {
         const active = await Keychain.getSupportedBiometryType()
         setBiometryAvailable(Boolean(active))
+        setFaceIdNotAllowed(active ? false : await readFaceIdNotAllowed())
       } catch (err) {
         const error = new BifoldError(
           t('Error.Title1050'),
@@ -170,6 +201,7 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
           setSettingsPopupConfig({
             title: t('Biometry.SetupBiometricsTitle'),
             description: t('Biometry.SetupBiometricsDesc'),
+            action: t('Biometry.OpenSettings'),
           })
         }
         break
@@ -178,6 +210,7 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
         setSettingsPopupConfig({
           title: t('Biometry.AllowBiometricsTitle'),
           description: t('Biometry.AllowBiometricsDesc'),
+          action: t('Biometry.OpenSettingsIos'),
         })
         break
       case RESULTS.DENIED:
@@ -213,6 +246,7 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
             setSettingsPopupConfig({
               title: t('Biometry.AllowBiometricsTitle'),
               description: t('Biometry.AllowBiometricsDesc'),
+              action: t('Biometry.OpenSettingsIos'),
             })
           } else {
             // Cancelled, a failed scan, locked out, or no answer: still off, say so.
@@ -240,7 +274,7 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
         <DismissiblePopupModal
           title={settingsPopupConfig.title}
           description={settingsPopupConfig.description}
-          onCallToActionLabel={t('Biometry.OpenSettings')}
+          onCallToActionLabel={settingsPopupConfig.action}
           onCallToActionPressed={onOpenSettingsTouched}
           onDismissPressed={onOpenSettingsDismissed}
         />
@@ -256,6 +290,19 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
               {t('Biometry.EnabledText2')}
               <ThemedText variant="bold"> {t('Biometry.Warning')}</ThemedText>
             </ThemedText>
+          </View>
+        ) : faceIdNotAllowed ? (
+          <View style={styles.biometryAvailableRowGap} testID={testIdWithKey('BiometryNotAllowed')}>
+            <ThemedText>{t('Biometry.NotAllowedText1')}</ThemedText>
+            <ThemedText>{t('Biometry.NotAllowedText2')}</ThemedText>
+            <Pressable
+              onPress={() => Linking.openSettings()}
+              accessibilityRole="link"
+              testID={testIdWithKey('BiometryOpenSettings')}
+              style={styles.settingsLink}
+            >
+              <ThemedText style={{ color: ColorPalette.brand.link }}>{t('Biometry.OpenSettingsIos')}</ThemedText>
+            </Pressable>
           </View>
         ) : (
           <View style={styles.biometryAvailableRowGap}>
