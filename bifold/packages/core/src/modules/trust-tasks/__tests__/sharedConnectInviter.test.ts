@@ -1,9 +1,12 @@
 /** Resolving the inviter's `_from` and choosing a carriage (plan WP2), against fake documents and a fake agent. */
-import type { Agent } from '@credo-ts/core'
+import { didToNumAlgo4DidDocument, type Agent } from '@credo-ts/core'
+import { ed25519, x25519 } from '@noble/curves/ed25519.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 
 import { chooseInviterService, resolveInviter } from '../module/sharedConnectInviter'
 
 import { KEYRING_STYLE_DID, MEDIATOR_DID } from './fixtures/sharedConnectFixtures'
+import { base58, multikey, unbase58 } from './fixtures/shared-connect/inviter'
 
 const logger = { debug: jest.fn() }
 const agentResolving = (resolve: jest.Mock) =>
@@ -85,5 +88,48 @@ describe('resolveInviter', () => {
     const logged = JSON.stringify(logger.debug.mock.calls)
     expect(logged).not.toContain('secret-endpoint-sentinel')
     expect(logged).not.toContain(KEYRING_STYLE_DID)
+  })
+})
+
+// A long-form did:peer:4 carries its document and the hash of it, and resolveInviter treats what resolves as verified
+// ("a peer DID is its own verification"). That holds only because Credo's expansion refuses a document that does not
+// match the hash: these rows run Credo's own expansion, not a stand-in, so a resolver that stopped checking fails here.
+describe('resolveInviter, a did:peer:4 whose document has been swapped', () => {
+  const utf8 = (text: string) => new TextEncoder().encode(text)
+  const ed = ed25519.getPublicKey(new Uint8Array(32).fill(7))
+  const x = x25519.getPublicKey(new Uint8Array(32).fill(9))
+  /** The encoded document part of a long-form did:peer:4 reaching its relay at `relay`. */
+  const encodedDocument = (relay: string): string => {
+    const doc = {
+      '@context': ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/multikey/v1'],
+      verificationMethod: [
+        { id: '#key-1', type: 'Multikey', publicKeyMultibase: multikey(Uint8Array.from([0xed, 0x01]), ed) },
+        { id: '#key-2', type: 'Multikey', publicKeyMultibase: multikey(Uint8Array.from([0xec, 0x01]), x) },
+      ],
+      authentication: ['#key-1'],
+      assertionMethod: ['#key-1'],
+      keyAgreement: ['#key-2'],
+      service: [{ id: '#tsp', type: 'TSPTransport', serviceEndpoint: relay }],
+    }
+    return 'z' + base58(Uint8Array.from([0x80, 0x04, ...utf8(JSON.stringify(doc))]))
+  }
+  const hashOf = (encoded: string) => 'z' + base58(Uint8Array.from([0x12, 0x20, ...sha256(utf8(encoded))]))
+  const OTHER_RELAY = 'did:peer:2.Vz6MkSomeoneElsesRelay.Ez6LSSomeoneElsesRelay'
+  const genuine = `did:peer:4${hashOf(encodedDocument(MEDIATOR_DID))}:${encodedDocument(MEDIATOR_DID)}`
+  const swapped = `did:peer:4${hashOf(encodedDocument(MEDIATOR_DID))}:${encodedDocument(OTHER_RELAY)}`
+  const credo = () => agentResolving(jest.fn(async (did: string) => didToNumAlgo4DidDocument(did)))
+
+  it('resolves a genuine one through Credo and reaches the relay its document names', async () => {
+    await expect(resolveInviter(credo(), genuine)).resolves.toMatchObject({ outcome: 'select', endpoint: MEDIATOR_DID })
+  })
+
+  it('is unresolved when the document no longer matches its hash, so the swapped relay is never chosen', async () => {
+    await expect(resolveInviter(credo(), swapped)).resolves.toEqual({ outcome: 'unresolved', did: swapped })
+  })
+
+  it('(control) read without the hash check, the swapped document would have sent the code to the other relay', () => {
+    const bytes = unbase58((swapped.split(':').pop() as string).slice(1))
+    const document = JSON.parse(new TextDecoder().decode(bytes.slice(2)))
+    expect(chooseInviterService(swapped, document)).toMatchObject({ outcome: 'select', endpoint: OTHER_RELAY })
   })
 })
