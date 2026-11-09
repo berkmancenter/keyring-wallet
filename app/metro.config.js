@@ -66,6 +66,18 @@ const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', '
 const stripDemoProfiles = !process.env.ACTIVE_DEMO_PROFILE || process.env.ACTIVE_DEMO_PROFILE === 'none'
 const demoProfilesStubPath = path.join(__dirname, 'metro', 'demoProfilesStub.ts')
 
+// Rooms' sample data (bifold modules/rooms/sample/sampleRooms) ships only in a build made with
+// ROOMS_SAMPLE=1: an internal install or a local development build. Unset, as on every store and CI
+// build, the module resolves to a stub, so none of it is bundled. One switch decides both the data
+// and the Developer switch that reveals it. The store workflow refuses ROOMS_SAMPLE outright, and
+// scripts/ci/check-no-rooms-sample.sh checks the bundle itself.
+const stripRoomsSample = process.env.ROOMS_SAMPLE !== '1'
+const roomsSampleStubPath = path.join(__dirname, 'metro', 'roomsSampleStub.ts')
+// `useRoomsService` is the only file that imports the sample, as `./sample/sampleRooms`, from inside
+// bifold's modules/rooms (source in development, lib/ in a release build).
+const isRoomsSampleImport = (moduleName, originModulePath) =>
+  /^\.\/sample\/sampleRooms(\.[jt]sx?)?$/.test(moduleName) && /[\\/]modules[\\/]rooms[\\/]/.test(originModulePath ?? '')
+
 const watchFolders = [...packageDirs, bifoldNodeModules]
 
 const extraExclusionlist = []
@@ -159,6 +171,9 @@ module.exports = (async () => {
         // already worked before this rule existed.
         if (stripDemoProfiles && isDemoProfilesBarrelImport(moduleName)) {
           return { filePath: demoProfilesStubPath, type: 'sourceFile' }
+        }
+        if (stripRoomsSample && isRoomsSampleImport(moduleName, context.originModulePath)) {
+          return { filePath: roomsSampleStubPath, type: 'sourceFile' }
         }
         // Singleton packages: always resolve from the app's node_modules so
         // bifold sources never load a second copy (bifold/node_modules is on

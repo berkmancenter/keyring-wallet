@@ -51,4 +51,4 @@ body:
   - type: markdown
     attributes:
       value: |
-        By filing, you agree to follow our [contributing guide](https://github.com/berkmancenter/keyring-wallet/blob/main/CONTRIBUTING.md).
+        By filing, you agree to follow our [Code of Conduct](https://github.com/berkmancenter/keyring-wallet/blob/main/CODE_OF_CONDUCT.md) and [contributing guide](https://github.com/berkmancenter/keyring-wallet/blob/main/CONTRIBUTING.md).

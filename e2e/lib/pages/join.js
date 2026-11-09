@@ -19,7 +19,11 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsTestId, scrollToTestId, tapTestId, waitForTestId } from "../driver.js";
-import { handleBiometricConfirmIfPresent, pasteLinkFromHome } from "../flows.js";
+import { CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, pasteLinkFromHome } from "../flows.js";
+
+// The confirm sheet's own failure ("offers only Cancel", a PIN entry that stays open) is not thrown here, as before,
+// but it is said: otherwise the leg stalls on the sheet and the next step's timeout is all a run shows.
+const confirmSaid = (e) => console.log(`[e2e] confirm sheet: ${e?.message ?? e}`);
 import { APP_ID } from "../config.js";
 import { awaitSwitched } from "./agents.js";
 import { awaitScreen, clockOf, elog, failWith, rowText, runStep, said, shot, textOf } from "./step.js";
@@ -186,8 +190,11 @@ export const join = {
       if (beforeTap) await beforeTap();
       await tapTestId(d, askId, 15000);
       await waitForTestId(d, "JoinMakeIdentity", 30000).catch(() => undefined);
+      // A community with a member directory (VTC 0.17) shows its preview above Continue, so the button starts below the
+      // fold; Android has no element for it until it scrolls in, and the check alone would skip it without a word.
+      await scrollToTestId(d, "JoinAsContinue", 8).catch(() => undefined);
       if (await existsTestId(d, "JoinAsContinue", 3000)) await tapTestId(d, "JoinAsContinue", 10000);
-      await handleBiometricConfirmIfPresent(d).catch(() => undefined);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS }).catch(confirmSaid);
       await owner(`${tag} identity`);
       await settled(d, `${tag} ask`, { clock });
       return { value: { askId, again } };
@@ -207,7 +214,7 @@ export const join = {
       const start = await scrollToTestId(d, `JoinWayStart_${way}`, 6, { from: 0.6 }).catch(() => undefined);
       if (!start) throw failWith(`no Start for the way "${way}" (JoinWayStart_${way})`, { way });
       await start.click();
-      await handleBiometricConfirmIfPresent(d).catch(() => undefined);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS }).catch(confirmSaid);
       await owner(`way ${way}`);
       const landed = await awaitScreen(d, ["JoinMakeIdentity", "JoinStanding", "JoinRequestSent", "VettingApplicantStep_", "JoinError"], { page: PAGE, markers: JOIN_MARKERS, timeoutMs: 60000, clock });
       return { value: { landed } };
@@ -218,16 +225,53 @@ export const join = {
    * The request on its way: the waiting screen (JoinStanding) within
    * `timeoutMs`. With `required` false a late answer is reported, not failed
    * (run-join-waiting carries on to read what shows). Value: { shown }.
+   *
+   * With `retryNoAnswer`, "Your agent didn't answer. Tap Continue to try
+   * again" gets Continue once, as the screen asks, and never a second time
+   * (277.3's Keyring Lab 0.17 signin-ios: an agent that answered on and off).
+   * The retry is said on a `RETRY join <time> — <the error>` line, which the
+   * leg forwards with its agent and counts (lib.sh take_rows, leg_end), and the
+   * value's `retry` ({ at, error }, else null) lets the row say it passed only
+   * after one. Value: { shown, retry }.
    */
-  awaitSent(d, { timeoutMs = 240000, required = true } = {}, opts = {}) {
+  awaitSent(d, { timeoutMs = 240000, required = true, retryNoAnswer = false, owner = noOwner } = {}, opts = {}) {
     return step(d, "awaitSent", opts, async () => {
       const clock = clockOf(opts);
-      try {
-        await awaitScreen(d, "JoinStanding", { page: PAGE, markers: JOIN_MARKERS, timeoutMs, clock, extra: async () => ({ error: await said(d, "JoinError") }) });
-        return { value: { shown: "standing" } };
-      } catch (err) {
-        if (required) throw err;
-        return { value: { shown: `no standing in ${Math.round(timeoutMs / 1000)} s` }, observed: err.observed };
+      const extra = async () => ({ error: await said(d, "JoinError") });
+      if (!retryNoAnswer) {
+        try {
+          await awaitScreen(d, "JoinStanding", { page: PAGE, markers: JOIN_MARKERS, timeoutMs, clock, extra });
+          return { value: { shown: "standing" } };
+        } catch (err) {
+          if (required) throw err;
+          return { value: { shown: `no standing in ${Math.round(timeoutMs / 1000)} s` }, observed: err.observed };
+        }
+      }
+      // The identity step stays on screen under the error (JoinMakeIdentity outranks JoinError), so the wait is cut
+      // into 10 s slices and the error's words read between them; `retry` alone keeps it to one Continue.
+      const t0 = clock.now();
+      const until = t0 + timeoutMs;
+      let retry = null;
+      for (;;) {
+        try {
+          await awaitScreen(d, "JoinStanding", { page: PAGE, markers: JOIN_MARKERS, timeoutMs: Math.min(10000, until - clock.now()), clock, extra });
+          return { value: { shown: "standing", retry } };
+        } catch (err) {
+          const error = err.observed?.error ?? "";
+          if (clock.now() < until && !retry && /didn.t answer/i.test(error) && (await existsTestId(d, "JoinAsContinue", 1500))) {
+            retry = { at: `${new Date(clock.now()).toISOString().slice(11, 19)}Z`, error };
+            console.log(`RETRY join ${retry.at} — ${error.slice(0, 160)}`);
+            await tapTestId(d, "JoinAsContinue", 10000);
+            await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS }).catch(confirmSaid);
+            await owner("retry identity");
+            continue;
+          }
+          if (clock.now() < until) continue;
+          const waited = Math.round((clock.now() - t0) / 1000);
+          const after = retry ? `, after one retry at ${retry.at}` : "";
+          if (required) throw failWith(`no JoinStanding in ${waited} s (last on "${err.observed?.screen ?? "none"}"${after})`, { ...err.observed, retry });
+          return { value: { shown: `no standing in ${waited} s${after}`, retry }, observed: err.observed };
+        }
       }
     });
   },
@@ -272,7 +316,7 @@ export const join = {
       await waitForTestId(d, "JoinAsContinue", 30000).catch(() => undefined);
       const continued = await existsTestId(d, "JoinAsContinue", 3000);
       if (continued) await tapTestId(d, "JoinAsContinue", 10000);
-      await handleBiometricConfirmIfPresent(d).catch(() => undefined);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS }).catch(confirmSaid);
       await owner("send again identity");
       await settled(d, "send again", { clock: clockOf(opts) });
       return { value: { continued } };

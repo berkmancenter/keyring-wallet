@@ -7,8 +7,10 @@
 # path), or the openvtc TUI seated there by choice (VETTER=tui, HV_TUI_*), which goes red at hv-attestation-received
 # until openvtc sends the published vetting/attestation/0.1 shape (its storage shape has no suite and a flat token).
 # Without HV_C_* configured, every row is SKIP and nothing starts.
+# hv-refused-bad-ticket (Keyring vetter only): the applicant first presents the vetter's ticket with a wrong secret and
+# must read "Refused"; the real ticket, left unspent by the refusal, then runs the accept path (run-hv.mjs).
 . "$(dirname "$0")/../lib.sh"; gate_env
-HV_ROWS="hv-private-badge hv-vetting-private-shown hv-application-created hv-ticket hv-card hv-attestation-received hv-proof hv-admitted hv-member-card hv-vetter-anonymous"
+HV_ROWS="hv-private-badge hv-vetting-private-shown hv-application-created hv-refused-bad-ticket hv-ticket hv-card hv-attestation-received hv-proof hv-admitted hv-member-card hv-vetter-anonymous"
 APK=$APK_OFF
 leg_begin hv "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 # The openvtc TUI as vetter is informational: its attestation is not the published vetting/attestation/0.1 shape, so

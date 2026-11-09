@@ -128,7 +128,7 @@ exports[`RemoteLogWarning Screen screen renders correctly 1`] = `
           focusable={true}
           hitSlop={
             {
-              "bottom": 44,
+              "bottom": 12,
               "left": 44,
               "right": 44,
               "top": 44,

@@ -77,6 +77,11 @@ module.exports = {
     '^react-native-config$': require.resolve('react-native-config'),
     '^react-native-svg$': require.resolve('react-native-svg'),
     '^react-native-gesture-handler$': require.resolve('react-native-gesture-handler'),
+    // bifold's SwipeRow imports this subpath (bifold #788); without its own entry it resolves to bifold's nested
+    // copy, which jestSetup's gesture-handler mock never reaches ('RNGestureHandlerModule' could not be found).
+    '^react-native-gesture-handler/ReanimatedSwipeable$': require.resolve(
+      'react-native-gesture-handler/ReanimatedSwipeable'
+    ),
     '^react-native-keychain$': require.resolve('react-native-keychain'),
     '^react-native-fs$': require.resolve('react-native-fs'),
     '^react-native-vision-camera$': require.resolve('react-native-vision-camera'),

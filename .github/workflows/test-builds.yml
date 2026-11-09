@@ -30,7 +30,7 @@ name: Test builds
 
 on:
   push:
-    # TEMPORARY for validating this workflow; removed before merge.
+    # Keep this: gate-smoke.yml, gate-ci.yml and gate.sh watch --main all take "the newest green push build of main".
     branches: [main]
     paths-ignore:
       - "docs/**"
@@ -38,6 +38,7 @@ on:
       - "e2e/**"
       - "tsp-reference/**"
       - "scripts/openvtc/**"
+      - "scripts/roadmap/**"
   # A pull request that changes what the native compilers see gets both builds
   # before it merges. No required check compiles Objective-C, Swift or Kotlin,
   # and #562 reached main with an AppDelegate.mm that didn't compile (#568).
@@ -178,8 +179,11 @@ jobs:
           sudo xcode-select --switch /Applications/Xcode_26.3.app
           xcodebuild -version
 
+      # Restore here, save after the pod install on main only: a pull request's save lands on its own ref, which no
+      # other PR can read (the wallet cache filled its 10 GB that way with yarn copies, 10-30).
       - name: Cache pod dependencies
-        uses: actions/cache@v4
+        id: pods
+        uses: actions/cache/restore@v4
         with:
           path: |
             app/ios/Pods
@@ -210,6 +214,17 @@ jobs:
         run: |
           export USE_HERMES=1
           yarn run ios:setup
+
+      - name: Save pod dependencies (main only)
+        # By ref, not event: many runs here are branch dispatches, and a save there lands on that branch alone.
+        if: github.ref == 'refs/heads/main' && steps.pods.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('app/ios/Podfile.lock') }}
 
       - name: Create environment settings (store configuration)
         working-directory: app
@@ -276,6 +291,8 @@ jobs:
             | xxd -r -p || true)
           echo "$ents" | grep -q application-identifier \
             || { echo "::error::the simulator app carries no application-identifier entitlement: its keychain would refuse every read"; exit 1; }
+          # Rooms' sample data never in a CI build (the metro stub; ROOMS_SAMPLE unset).
+          bash "$GITHUB_WORKSPACE/scripts/ci/check-no-rooms-sample.sh" "$app/main.jsbundle" "iOS simulator bundle"
           bundle_sha=$(shasum -a 256 "$app/main.jsbundle" | cut -c1-12)
           mkdir -p out
           (cd "$(dirname "$app")" && zip -qry "$GITHUB_WORKSPACE/out/keyring-sim.zip" "$(basename "$app")")
@@ -421,6 +438,8 @@ jobs:
           set -euo pipefail
           npx react-native bundle --platform android --dev false --reset-cache \
             --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
+          # Rooms' sample data never in a CI build (the metro stub; ROOMS_SAMPLE unset).
+          bash ../scripts/ci/check-no-rooms-sample.sh android/app/src/main/assets/index.android.bundle "Android release bundle"
           # As the staging build does: no restored Gradle caches (a restored cache
           # left the libraries' codegen folders missing, so CMake failed), and the
           # same Gradle tasks.

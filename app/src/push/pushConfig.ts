@@ -68,6 +68,8 @@ export function pushNotificationsConfig(deps: PushConfigDeps): PushNotifications
           deps.log('push platform: stop failed', { error: e instanceof Error ? e.message : String(e) })
         }
       }
+      // Not known, for now. Explicit, so this also fits bifold's coming toggle type, which reads this value.
+      return undefined
     },
   }
 }
