@@ -145,13 +145,18 @@ export const JOBS_RETRY_MS = 30000
 /**
  * A finished gate-smoke run's verdict, read until every judged platform's job is in the list. An absent job is not a
  * red one: on 11-09 (278.9, during a GitHub Actions incident) a read 8 s after the run completed came back without its
- * green iOS job, and that one read made the verdict smoke-red. So an absent job is read again, and only a job that is
- * there and not green makes the smoke red. Still absent after every read: incomplete, which is neither green nor red,
- * and the caller must not act on it as a red. readJobs() returns the run's jobs array.
+ * green iOS job, and that one read made the verdict smoke-red. So redness is decided first, from the jobs that are
+ * listed: any listed job that is not green makes the smoke red at once, whatever else is absent. Only with no listed red
+ * is an absent job read again. Still absent after every read: incomplete, which is neither green nor red, and the caller
+ * must not act on it as a red. readJobs() returns the run's jobs array.
  */
 export async function readSmokeVerdict({ readJobs, platforms, sleep, log = () => {}, attempts = JOBS_ATTEMPTS, retryMs = JOBS_RETRY_MS }) {
   for (let attempt = 1; ; attempt++) {
     const verdict = smokeVerdict(readJobs(), platforms)
+    // Red first, from the jobs that ARE listed: a listed red is red whatever else is absent. Without this, ios missing
+    // beside android failure (an incident read with a real red) became incomplete, and the brake did not act on a red.
+    const red = verdict.rows.some((r) => r.conclusion !== 'missing' && r.conclusion !== 'success')
+    if (red) return { ...verdict, incomplete: false }
     const absent = verdict.rows.filter((r) => r.conclusion === 'missing').map((r) => r.platform)
     if (!absent.length) return { ...verdict, incomplete: false }
     if (attempt >= attempts) return { ...verdict, green: false, incomplete: true }

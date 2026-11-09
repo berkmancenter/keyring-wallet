@@ -570,3 +570,17 @@ test('postRelease: a smoke job never listed is smoke-incomplete, never smoke-red
   assert.equal(r.verdict, 'smoke-incomplete')
   assert.deepEqual(r.rows, [{ platform: 'ios', conclusion: 'missing' }, { platform: 'android', conclusion: 'success' }])
 })
+
+// ac on #888: red is decided first, from the listed jobs. iOS absent beside a real Android red (an incident read with a
+// real red) is red on one read, never incomplete, or the brake would not act on a real red.
+test('a listed red beside an absent job is red on ONE read, with no sleep, never incomplete', async () => {
+  const r = reads([{ ...ANDROID_GREEN, conclusion: 'failure' }])
+  const v = await readSmokeVerdict({ readJobs: r.readJobs, platforms: ['ios', 'android'], sleep: async () => assert.fail('no sleep') })
+  assert.deepEqual([v.green, v.incomplete, r.count()], [false, false, 1])
+  assert.deepEqual(v.rows, [{ platform: 'ios', conclusion: 'missing' }, { platform: 'android', conclusion: 'failure' }])
+})
+
+test('postRelease: iOS absent beside a red Android is smoke-red, so the brake acts', async () => {
+  const r = await postRelease(opts(fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: [{ ...GREEN[1], conclusion: 'failure' }] }).gh))
+  assert.equal(r.verdict, 'smoke-red')
+})

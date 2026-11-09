@@ -205,3 +205,19 @@ test('the brake still acts only on smoke-red: smoke-incomplete never reaches it'
   assert.match(brakeJob, /needs\.smoke\.outputs\.verdict == 'smoke-red'/)
   assert.doesNotMatch(brakeJob, /smoke-incomplete/)
 })
+
+test('iOS absent beside a red Android on both reads: re-run once, then still red, so the brake withdraws', async () => {
+  const calls = []
+  let attempt = 1
+  let reads = 0
+  const gh = (...args) => {
+    calls.push(args)
+    if (args[0] === 'run' && args[1] === 'rerun') { attempt = 2; return '' }
+    if (String(args[1]).endsWith('/jobs?per_page=100')) return JSON.stringify({ jobs: [{ ...ANDROID_OK, conclusion: 'failure' }] })
+    reads++
+    return JSON.stringify({ id: 601, run_attempt: attempt, status: attempt === 1 || reads % 2 === 0 ? 'completed' : 'in_progress' })
+  }
+  const r = await rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => {}, log: () => {} })
+  assert.deepEqual([r.stillRed, r.rerun], [true, true])
+  assert.equal(calls.filter((c) => c[0] === 'run' && c[1] === 'rerun').length, 1)
+})
