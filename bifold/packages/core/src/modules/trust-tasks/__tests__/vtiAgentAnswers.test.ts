@@ -25,6 +25,9 @@ const mockGreetings: Array<{ from: string; to: string }> = []
 const mockAdvertised: Record<string, string | undefined> = {}
 const mockTspVia: Record<string, string | undefined> = {}
 const mockPacked: Record<string, unknown>[] = []
+/** Identities whose sign-in fails, as a mediator answering 503 does. */
+const mockFailStart = new Set<string>()
+let mockStarts = 0
 
 jest.mock('@bifold/trust-tasks', () => ({
   tsp: { CODEC_FORMS_RELATIONSHIPS: true, peekRevision: () => ({ minor: 0 }) },
@@ -75,6 +78,9 @@ jest.mock('../module/VtiMediatorTransport', () => ({
       return this.open
     }
     async start() {
+      mockStarts++
+      if (mockFailStart.has(this.record.did))
+        throw new Error('challenge answered 503 with a non-JSON body: no available server')
       this.open = true
     }
     async stop() {
@@ -115,7 +121,18 @@ jest.mock('../module/tspCapability', () => ({
 import { DeviceEventEmitter } from 'react-native'
 
 import { plainError } from '../screens/plainError'
-import { VTI_ANSWER_HOLD_MS, VTI_BACKLOG_GRACE_MS, VtiSentNoAnswer, isVtiReadTask, vtiAgent } from '../module/vtiAgent'
+import {
+  VTI_ANSWER_HOLD_MS,
+  VTI_BACKLOG_GRACE_MS,
+  VTI_SIGNIN_ONLINE_WITHIN_MS,
+  VTI_SIGNIN_REST_FIRST_MS,
+  VTI_SIGNIN_REST_MAX_MS,
+  VtiSentNoAnswer,
+  isVtiReadTask,
+  signInRestUntil,
+  vtiAgent,
+} from '../module/vtiAgent'
+import { fakeAgent } from '../../../../__tests__/helpers/cardVault'
 import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 import { OFFERS_LIST_TYPES } from '../../rooms/real/wire'
 
@@ -741,5 +758,108 @@ describe('signing in: no fixed wait, and a stale reply naming no thread answers 
     const { session, answer } = await askOn('did:webvh:p:no-wait-5')
     session.onMessage(didcommReply((session.didcomm as Sent[])[0], MEMBERSHIPS, { items: ['threaded'] }))
     expect(await answer).toMatchObject({ body: { payload: { items: ['threaded'] } } })
+  })
+})
+
+// Rooms fix 3 (rooms-slow, 11-05): an identity whose mediator is down (QmPv211, 503) or whose agent is gone (QmT6Jb)
+// took 10-26 s per sign-in, retried every 30 s from launch by background callers, and every other sign-in queued
+// behind each try. After a failure, a background sign-in leaves that identity alone for a while, kept across launches;
+// the person's own steps always try.
+describe('an identity whose sign-in failed rests from background sign-ins', () => {
+  const C = 'did:webvh:c:rest'
+  const DEAD = 'did:webvh:p:rest-dead'
+  const LIVE = 'did:webvh:p:rest-live'
+  let clock = 0
+  const tryAs = (who: string, background: boolean, onAgent: unknown = agent) => {
+    mockTspVia[C] = 'did:webvh:their-mediator'
+    return vtiAgent.connect(onAgent as never, 'did:peer:lab', { persona: persona(who), background })
+  }
+  const refusedName = async (p: Promise<unknown>) =>
+    (await p.then(
+      () => 'signed in',
+      (e: Error) => e.name
+    )) as string
+  beforeEach(() => {
+    clock = Date.parse('2026-11-05T22:00:00Z')
+    vtiAgent.now = () => clock
+    vtiAgent.forgetSignInRestsForTests()
+    mockFailStart.clear()
+    mockStarts = 0
+  })
+  afterEach(() => {
+    vtiAgent.now = () => Date.now()
+    vtiAgent.forgetSignInRestsForTests()
+    mockFailStart.clear()
+  })
+
+  it('after a failure, a background sign-in is refused at once, without trying; the person’s own still tries', async () => {
+    mockFailStart.add(DEAD)
+    expect(await refusedName(tryAs(DEAD, true))).toBe('Error')
+    const tries = mockStarts
+    expect(await refusedName(tryAs(DEAD, true))).toBe('VtiSignInResting')
+    expect(mockStarts).toBe(tries)
+    // The person's own step (an ordinary connect) still tries.
+    expect(await refusedName(tryAs(DEAD, false))).toBe('Error')
+    expect(mockStarts).toBe(tries + 1)
+  })
+
+  it('another identity is not held back by it (control)', async () => {
+    mockFailStart.add(DEAD)
+    await refusedName(tryAs(DEAD, true))
+    expect(await refusedName(tryAs(LIVE, true))).toBe('signed in')
+  })
+
+  it('once its rest runs out it is tried again, and a success ends the rest', async () => {
+    mockFailStart.add(DEAD)
+    await refusedName(tryAs(DEAD, true))
+    clock += VTI_SIGNIN_REST_FIRST_MS - 1
+    expect(await refusedName(tryAs(DEAD, true))).toBe('VtiSignInResting')
+    clock += 1
+    mockFailStart.delete(DEAD)
+    expect(await refusedName(tryAs(DEAD, true))).toBe('signed in')
+    await vtiAgent.disconnect()
+    mockFailStart.add(DEAD)
+    await refusedName(tryAs(DEAD, true))
+    // Back to the first step, not doubled from before the success.
+    clock += VTI_SIGNIN_REST_FIRST_MS
+    expect(await refusedName(tryAs(DEAD, true))).toBe('Error')
+  })
+
+  it('while the phone is online it doubles with each failure, up to its limit', async () => {
+    mockFailStart.add(DEAD)
+    await refusedName(tryAs(LIVE, true)) // online
+    let rest = VTI_SIGNIN_REST_FIRST_MS
+    for (let i = 0; i < 3; i++) {
+      await vtiAgent.disconnect()
+      await refusedName(tryAs(LIVE, true)) // keeps the phone counted as online
+      expect(await refusedName(tryAs(DEAD, true))).toBe('Error')
+      clock += rest - 1
+      expect(await refusedName(tryAs(DEAD, true))).toBe('VtiSignInResting')
+      clock += 1
+      rest *= 2
+    }
+    expect(signInRestUntil({ did: DEAD, failedAt: 0, count: 60 })).toBe(VTI_SIGNIN_REST_MAX_MS)
+  })
+
+  it('offline — nothing signed in lately — every failure stays at the first step', async () => {
+    mockFailStart.add(DEAD)
+    for (let i = 0; i < 4; i++) {
+      expect(await refusedName(tryAs(DEAD, true))).toBe('Error')
+      clock += VTI_SIGNIN_REST_FIRST_MS
+    }
+    // Online again, but long ago: still the first step.
+    expect(VTI_SIGNIN_ONLINE_WITHIN_MS).toBeGreaterThan(VTI_SIGNIN_REST_FIRST_MS)
+  })
+
+  it('kept across a launch: read back from the phone, the identity is still left alone', async () => {
+    const { agent: withRecords } = fakeAgent()
+    ;(withRecords as unknown as { config: unknown }).config = { logger }
+    mockFailStart.add(DEAD)
+    await refusedName(tryAs(DEAD, true, withRecords))
+    await new Promise((r) => setTimeout(r, 0)) // the write is not waited for
+    vtiAgent.forgetSignInRestsForTests() // a new launch: nothing in memory
+    const tries = mockStarts
+    expect(await refusedName(tryAs(DEAD, true, withRecords))).toBe('VtiSignInResting')
+    expect(mockStarts).toBe(tries)
   })
 })

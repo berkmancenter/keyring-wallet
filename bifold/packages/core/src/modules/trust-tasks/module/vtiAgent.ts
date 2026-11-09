@@ -62,6 +62,7 @@ import { fetchWaitingIfBusy } from './vtcBusy'
 import { isAgentsOwnPersona } from './agentOwnIdentity'
 import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
+import { listKeyed, putKeyed } from './keyedRecords'
 import { releaseWarn } from './releaseLog'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
 import { httpsLogoUrl } from './communityBrand'
@@ -238,6 +239,51 @@ export class VtiSessionHeld extends Error {
     super(`vtiAgent: the session is kept for another of this phone's identities${reason ? ` (${reason})` : ''}`)
     // A literal, read by name in vtiPersonaInbox (a class name does not survive minifying).
     this.name = 'VtiSessionHeld'
+  }
+}
+
+/**
+ * After an identity's sign-in fails, how long a background sign-in (a poll, the persona inbox) leaves that identity
+ * alone: this long after the first failure, doubling with each failure after it, up to `VTI_SIGNIN_REST_MAX_MS`. An
+ * identity whose mediator is down, or whose agent is gone, took 10-26 s per try and blocked every other sign-in behind
+ * it, retried every 30 s from launch (rooms-slow, 11-05). The person's own steps always try; a success ends the rest.
+ */
+export const VTI_SIGNIN_REST_FIRST_MS = 30_000
+export const VTI_SIGNIN_REST_MAX_MS = 6 * 60 * 60 * 1000
+/**
+ * A rest only grows while some other sign-in succeeded this recently: the phone is online, so the failing identity is
+ * the trouble. Offline, every identity fails alike, and none should be left alone for longer than the first step.
+ */
+export const VTI_SIGNIN_ONLINE_WITHIN_MS = 10 * 60 * 1000
+
+/** What is kept of an identity's failed sign-ins, across launches. */
+export interface VtiSignInRest {
+  did: string
+  failedAt: number
+  /** Failures in a row; 0 once it signs in. */
+  count: number
+}
+
+/** When a background sign-in may try this identity again (0: now). */
+export const signInRestUntil = (rest: VtiSignInRest | undefined): number =>
+  !rest || rest.count < 1
+    ? 0
+    : rest.failedAt + Math.min(VTI_SIGNIN_REST_FIRST_MS * 2 ** (rest.count - 1), VTI_SIGNIN_REST_MAX_MS)
+
+const SIGNIN_REST_RECORD = 'keyring/vti-signin-rest'
+const SIGNIN_REST_KIND = 'rest'
+
+/**
+ * A background sign-in refused because this identity's last sign-in failed and its rest has not run out
+ * (`VTI_SIGNIN_REST_FIRST_MS`). Nothing was tried or disconnected. The message names no DID.
+ */
+export class VtiSignInResting extends Error {
+  constructor(readonly until: number) {
+    super(
+      `vtiAgent: this identity's last sign-in failed; background sign-ins try it again from ${new Date(until).toISOString()}`
+    )
+    // A literal, so a caller can read it by name (a class name does not survive minifying).
+    this.name = 'VtiSignInResting'
   }
 }
 
@@ -996,6 +1042,11 @@ class VtiAgentController {
   now: () => number = () => Date.now()
   /** When the current session's socket opened (`VTI_BACKLOG_GRACE_MS`). */
   private openedAt = 0
+  /** Each identity's failed sign-ins (`VTI_SIGNIN_REST_FIRST_MS`), kept across launches; read once, on first need. */
+  private readonly rests = new Map<string, VtiSignInRest>()
+  private restsRead?: Promise<void>
+  /** When any identity last signed in (`VTI_SIGNIN_ONLINE_WITHIN_MS`). */
+  private lastSignedInAt?: number
 
   /** The live holds; one past its time is dropped, and said once. */
   private liveHolds(): SessionHold[] {
@@ -1129,6 +1180,57 @@ class VtiAgentController {
   }
 
   /**
+   * Throws `VtiSignInResting` while `did`'s rest runs, unless the session is already open as it. A rest can outlive an
+   * open session: `noteSignIn` runs only when a sign-in named a DID, so a connect that named none can leave the session
+   * open as an identity whose rest, kept from an earlier launch, has not run out.
+   */
+  private refuseIfResting(did: string): void {
+    if (this.session?.isOpen && this.state.did === did) return
+    const until = signInRestUntil(this.rests.get(did))
+    if (until > this.now()) throw new VtiSignInResting(until)
+  }
+
+  /** Read the rests kept on this phone, once. One that can't be read leaves none: everything is tried. */
+  private readRests(agent: Agent): Promise<void> {
+    this.restsRead ??= listKeyed<VtiSignInRest>(agent, SIGNIN_REST_RECORD, SIGNIN_REST_KIND)
+      .then((kept) => {
+        for (const rest of kept) if (rest?.did && !this.rests.has(rest.did)) this.rests.set(rest.did, rest)
+      })
+      .catch(() => undefined)
+    return this.restsRead
+  }
+
+  /**
+   * Note how a sign-in as `did` ended. A success ends its rest. A failure starts one, or doubles it while the phone is
+   * online (`VTI_SIGNIN_ONLINE_WITHIN_MS`). Kept on the phone without waiting for the write.
+   */
+  private noteSignIn(agent: Agent, did: string, signedIn: boolean): void {
+    const now = this.now()
+    const before = this.rests.get(did)
+    if (signedIn) this.lastSignedInAt = now
+    if (signedIn && !before?.count) return
+    const online = this.lastSignedInAt !== undefined && now - this.lastSignedInAt <= VTI_SIGNIN_ONLINE_WITHIN_MS
+    const count = signedIn ? 0 : online ? (before?.count ?? 0) + 1 : Math.max(before?.count ?? 0, 1)
+    const rest: VtiSignInRest = { did, failedAt: signedIn ? 0 : now, count }
+    this.rests.set(did, rest)
+    if (!signedIn)
+      releaseWarn(
+        `vtiAgent: sign-in as ${didPrefix(did)} failed (${count} in a row); background sign-ins leave it until ${new Date(signInRestUntil(rest)).toISOString()}`
+      )
+    void putKeyed(agent, SIGNIN_REST_RECORD, SIGNIN_REST_KIND, did, rest as unknown as Record<string, unknown>).catch(
+      () => undefined
+    )
+  }
+
+  /** For tests: forget every rest, here and as read from the phone. */
+  // prettier-ignore
+  forgetSignInRestsForTests(): void { // tier-exempt(deletes stored records): its body clears in-memory maps only (rests, restsRead, lastSignedInAt)
+    this.rests.clear()
+    this.restsRead = undefined
+    this.lastSignedInAt = undefined
+  }
+
+  /**
    * Open (or keep) the session as `identity` or `persona`.
    *
    * Serialised: a call made while another is in flight waits for it, then
@@ -1177,11 +1279,18 @@ class VtiAgentController {
     const background = options.background === true
     const waiter = Symbol(wantedDid ?? 'new identity')
     let saidWaiting = false
+    // A background sign-in leaves alone an identity whose last sign-in failed, until its rest runs out: refused before
+    // it queues, and again once the sign-in it queued behind settles (which may have been that identity failing).
+    if (background && wantedDid) {
+      await this.readRests(agent)
+      this.refuseIfResting(wantedDid)
+    }
     try {
       for (;;) {
         if (this.connecting) releaseWarn('vtiAgent: connect waits for an earlier sign-in to settle')
         while (this.connecting) await this.connecting.catch(() => undefined)
         // Checked after the earlier sign-in settles, and nothing awaited between this and `connecting` being set.
+        if (background && wantedDid) this.refuseIfResting(wantedDid)
         const blocker = this.blockerFor(wantedDid, background)
         if (!blocker) break
         if ('refuse' in blocker) {
@@ -1208,9 +1317,13 @@ class VtiAgentController {
     this.connecting = attempt
     try {
       await attempt
+    } catch (error) {
+      if (wantedDid) this.noteSignIn(agent, wantedDid, false)
+      throw error
     } finally {
       if (this.connecting === attempt) this.connecting = undefined
     }
+    if (wantedDid) this.noteSignIn(agent, wantedDid, true)
     if (!background && wantedDid && claims) {
       // Nobody else's refusals are cleared here, by a renewal or by a new claim: the count is the waiter's, and another
       // claim only makes the wait longer. It starts afresh when that identity gets through, below.
