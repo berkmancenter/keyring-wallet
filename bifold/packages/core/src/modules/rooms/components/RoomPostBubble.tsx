@@ -43,7 +43,7 @@ export const RoomPostBubble: React.FC<{
   onOpenReactions?: () => void
   /** Who wrote this record first, when this version came from someone else. */
   rewroteFrom?: Identity
-  /** The long-press sheet. Only for a post with words to act on. */
+  /** The long-press sheet. Only for a post with words or a file to act on. */
   onLongPress?: () => void
 }> = ({
   post,
@@ -179,6 +179,7 @@ export const RoomPostBubble: React.FC<{
                   edge={mine ? ColorPalette.grayscale.white : ColorPalette.grayscale.lightGrey}
                   // A file still on its way up has nothing to open yet.
                   onPress={post.delivery ? undefined : onOpenFile}
+                  onLongPress={onLongPress}
                 />
               ))}
             </>

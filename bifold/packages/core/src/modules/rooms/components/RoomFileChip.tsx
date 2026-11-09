@@ -1,7 +1,8 @@
 /**
  * A file a post carries, as a chip under its words: an icon for its type, its name, and the type and size the
  * sharer gave it. Tapping it opens the attachment sheet; nothing is downloaded until the member asks there. A file
- * still on its way up has no sheet yet: its chip is not a button.
+ * still on its way up has no sheet yet: its chip is not a button. A long press on it is the post's, as on the rest of
+ * the bubble: without it a long press on a file post would open the file, never the post's sheet.
  *
  * @module rooms/components/RoomFileChip
  */
@@ -22,7 +23,9 @@ export const RoomFileChip: React.FC<{
   ink: string
   edge: string
   onPress?: (file: RoomFile) => void
-}> = ({ file, ink, edge, onPress }) => {
+  /** The post's long-press sheet. */
+  onLongPress?: () => void
+}> = ({ file, ink, edge, onPress, onLongPress }) => {
   const { t, i18n } = useTranslation()
   const line = [fileTypeText(file), file.size !== undefined ? fileSizeText(t, file.size, i18n.language) : undefined]
     .filter(Boolean)
@@ -60,6 +63,7 @@ export const RoomFileChip: React.FC<{
   return (
     <Pressable
       onPress={() => onPress(file)}
+      onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={t('Rooms.FileOpenHint')}
