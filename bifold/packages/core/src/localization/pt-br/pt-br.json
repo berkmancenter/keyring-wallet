@@ -322,6 +322,7 @@
     "AllowBiometricsDesc": "Para permitir, abra Ajustes › Keyring neste aparelho e ative o Face ID.",
     "OpenSettings": "Abrir as configurações",
     "OpenSettingsIos": "Abrir Ajustes",
+    "Confirming": "Verificando o Face ID…",
     "Warning": "Tenha certeza que somente você tem acesso à sua carteira.",
     "UseToUnlock": "Utilizar biometria para destravar a carteira?",
     "Recommended": "Recomendado. É mais rápido que o seu PIN, e você o digita menos vezes onde outras pessoas poderiam ver.",

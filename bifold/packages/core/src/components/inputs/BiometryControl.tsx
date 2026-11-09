@@ -1,6 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, View, AppState, DeviceEventEmitter } from 'react-native'
+import {
+  ActivityIndicator,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  AppState,
+  DeviceEventEmitter,
+} from 'react-native'
 import { check, PERMISSIONS, PermissionStatus, request, RESULTS } from 'react-native-permissions'
 import Keychain, { getSupportedBiometryType, BIOMETRY_TYPE } from 'react-native-keychain'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -314,7 +324,19 @@ const BiometryControl: React.FC<BiometryControlProps> = ({
           <View style={{ flexShrink: 1, marginRight: 10, justifyContent: 'center' }}>
             <ThemedText variant="bold">{t('Biometry.UseToUnlock')}</ThemedText>
           </View>
-          <View style={{ justifyContent: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* The dimmed switch alone read as "off" while Face ID was checking: say it is working, and tell screen
+                readers so. */}
+            {confirming ? (
+              <ActivityIndicator
+                color={ColorPalette.brand.primary}
+                style={{ marginRight: Spacing.sm }}
+                accessible
+                accessibilityLabel={t('Biometry.Confirming')}
+                accessibilityLiveRegion="polite"
+                testID={testIdWithKey('BiometryConfirming')}
+              />
+            ) : null}
             <ToggleButton
               testID={testIdWithKey('ToggleBiometrics')}
               isEnabled={biometryEnabled}

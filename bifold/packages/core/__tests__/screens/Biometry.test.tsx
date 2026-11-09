@@ -340,7 +340,7 @@ describe('Biometry Screen', () => {
         })
     )
 
-    const { findByTestId, findByText } = renderWithStore()
+    const { findByTestId, findByText, queryByTestId } = renderWithStore()
 
     await findByText('Biometry.EnabledText1')
     const toggleButton = await findByTestId(testIdWithKey('ToggleBiometrics'))
@@ -350,6 +350,8 @@ describe('Biometry Screen', () => {
       const pending = await findByTestId(testIdWithKey('ToggleBiometrics'))
       expect(pending.props.accessibilityState.disabled).toBe(true)
     })
+    // A spinner says it is working, so the dimmed switch doesn't read as plain "off".
+    expect(queryByTestId(testIdWithKey('BiometryConfirming'))).toBeTruthy()
     fireEvent(await findByTestId(testIdWithKey('ToggleBiometrics')), 'press')
     expect(mockedProbe).toHaveBeenCalledTimes(1)
 
@@ -361,6 +363,7 @@ describe('Biometry Screen', () => {
       expect(done.props.accessibilityState.checked).toBe(true)
       expect(done.props.accessibilityState.disabled).toBe(false)
     })
+    expect(queryByTestId(testIdWithKey('BiometryConfirming'))).toBeNull()
     expect(mockedProbe).toHaveBeenCalledTimes(1)
   })
 

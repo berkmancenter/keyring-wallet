@@ -377,6 +377,7 @@
     "SetupBiometricsDesc": "Pour déverrouiller Keyring avec votre biométrie, configurez votre biométrie dans les paramètres de votre appareil.",
     "OpenSettings": "Ouvrir les paramètres",
     "OpenSettingsIos": "Ouvrir Réglages",
+    "Confirming": "Vérification de Face ID…",
     "ConfirmWithKeyringPIN": "Confirmer avec le NIP Keyring",
     "ConfirmPinNote": "La Biométrie est désactivée dans le Menu de Keyring : confirmez avec votre NIP Keyring.",
     "ConfirmPinAfterMissingKey": "La Biométrie n'a pas pu être utilisée ici. Confirmez plutôt avec votre NIP Keyring.",

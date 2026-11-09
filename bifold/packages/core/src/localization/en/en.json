@@ -349,6 +349,7 @@
     "SetupBiometricsDesc": "To unlock Keyring with your biometrics, please set up your biometrics in your device's settings.",
     "OpenSettings": "Open settings",
     "OpenSettingsIos": "Open settings",
+    "Confirming": "Checking Face ID…",
     "ConfirmRelationship": "Confirm Relationship",
     "SignCredentialWith": "Sign credential with {{name}}?",
     "VrcConfirmationDescription": "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection.",

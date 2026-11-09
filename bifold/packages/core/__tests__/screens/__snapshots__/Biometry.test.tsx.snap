@@ -133,7 +133,8 @@ exports[`Biometry Screen renders correctly when biometry available 1`] = `
         <View
           style={
             Object {
-              "justifyContent": "center",
+              "alignItems": "center",
+              "flexDirection": "row",
             }
           }
         >
@@ -453,7 +454,8 @@ exports[`Biometry Screen renders correctly when biometry unavailable 1`] = `
         <View
           style={
             Object {
-              "justifyContent": "center",
+              "alignItems": "center",
+              "flexDirection": "row",
             }
           }
         >
