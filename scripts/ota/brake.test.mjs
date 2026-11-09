@@ -169,3 +169,39 @@ test("the re-run judges only the platforms the release published", async () => {
 test('the brake job hands the re-run the platforms the release published', () => {
   assert.match(brakeCode, /brake\.mjs rerun --gate-smoke "\$GATE_SMOKE" --platforms "\$PLATFORMS"/)
 })
+
+// 278.9 (11-09): a job never listed is not a red one. The brake re-reads, and refuses to re-run or withdraw on it.
+const absentThen = (lists) => {
+  const calls = []
+  let n = 0
+  const gh = (...args) => {
+    calls.push(args)
+    if (args[0] === 'run') return ''
+    if (String(args[1]).endsWith('/jobs?per_page=100')) return JSON.stringify({ jobs: lists[Math.min(n++, lists.length - 1)] })
+    return JSON.stringify({ id: 601, run_attempt: 1, status: 'completed' })
+  }
+  return { gh, calls }
+}
+const IOS_OK = { name: 'iOS smoke (macos-26) · cb36b83a', conclusion: 'success' }
+const ANDROID_OK = { name: 'Android smoke (ubuntu-latest, KVM) · cb36b83a', conclusion: 'success' }
+
+test('a smoke job absent on the first read and green on the next: not re-run, nothing withdrawn', async () => {
+  const { gh, calls } = absentThen([[ANDROID_OK], [IOS_OK, ANDROID_OK]])
+  const r = await rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => {}, log: () => {} })
+  assert.deepEqual([r.stillRed, r.rerun], [false, false])
+  assert.equal(calls.some((c) => c[0] === 'run'), false)
+})
+
+test('a smoke job absent on every read: an error that says nothing was withdrawn, and no re-run', async () => {
+  const { gh, calls } = absentThen([[ANDROID_OK]])
+  await assert.rejects(
+    rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => {}, log: () => {} }),
+    /gate-smoke 601 before the re-run: no ios job listed after every re-read: NOTHING was withdrawn, and the release is still live/
+  )
+  assert.equal(calls.some((c) => c[0] === 'run'), false)
+})
+
+test('the brake still acts only on smoke-red: smoke-incomplete never reaches it', () => {
+  assert.match(brakeJob, /needs\.smoke\.outputs\.verdict == 'smoke-red'/)
+  assert.doesNotMatch(brakeJob, /smoke-incomplete/)
+})
