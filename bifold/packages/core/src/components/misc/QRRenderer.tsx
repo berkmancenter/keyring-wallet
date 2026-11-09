@@ -18,6 +18,10 @@ interface QRRendererProps {
   testID?: string
 }
 
+/** The margin QRRenderer keeps above and below its code, in points. A screen that sizes a box around the code reads
+ * this rather than repeating the number. */
+export const QR_RENDERER_MARGIN = 20
+
 const QRRenderer: React.FC<QRRendererProps> = ({ value, onError, size, quietZone, testID = 'QRRenderer' }) => {
   const { width } = useWindowDimensions()
   const { t } = useTranslation()
@@ -26,7 +30,7 @@ const QRRenderer: React.FC<QRRendererProps> = ({ value, onError, size, quietZone
   const styles = StyleSheet.create({
     container: {
       flexGrow: 1,
-      marginVertical: 20,
+      marginVertical: QR_RENDERER_MARGIN,
       backgroundColor: 'white',
       // A code sized smaller than its box sits in the middle, not at the left.
       alignItems: 'center',

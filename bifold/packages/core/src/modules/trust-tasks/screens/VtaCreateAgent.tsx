@@ -46,7 +46,7 @@ import { Screens } from '../../../types/navigators'
 import { effectiveGrantPollWindowMs } from '../../../utils/e2eClocks'
 import { testIdWithKey } from '../../../utils/testable'
 import { GRANT_POLL_WINDOW_MS } from '../clocks'
-import QRRenderer from '../../../components/misc/QRRenderer'
+import QRRenderer, { QR_RENDERER_MARGIN } from '../../../components/misc/QRRenderer'
 import { confirmOwner, ownerLockKind, type OwnerConfirmFailure, type OwnerLockKind } from '../module/ownerConfirm'
 import type { AgentLabel } from '../module/agentLabel'
 import { AgentAlreadyOnPhone, vtaAgent } from '../module/vtaAgent'
@@ -78,9 +78,8 @@ export const AGENT_HOST_WEBSITE: string | undefined = undefined
 const SCREEN_PADDING = 20
 const CARD_PADDING = 16
 const CARD_GAP = 8
-/** White margin a camera needs around a code; QRRenderer's own vertical margin is 20 each side. */
+/** White margin a camera needs around a code (QRRenderer adds its own QR_RENDERER_MARGIN above and below). */
 const QR_QUIET_ZONE = 16
-const QR_RENDERER_MARGIN = 20
 /** A floor: in a space smaller than this the code keeps this size and the page scrolls. */
 const QR_MIN_SIZE = 160
 

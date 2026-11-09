@@ -10,11 +10,11 @@ import React from 'react'
 import { Share, StyleSheet } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { QR_RENDERER_MARGIN } from '../../../components/misc/QRRenderer'
 import { testIdWithKey } from '../../../utils/testable'
 import type { SharedConnectInvite } from '../module/sharedConnectInviteTypes'
 import { SharedConnectInviteIds as Ids } from '../screens/SharedConnect.ids'
 import {
-  QR_MARGIN,
   SharedConnectInviteView,
   clockOf,
   makeSharedConnectInviteScreen,
@@ -163,10 +163,13 @@ describe('the code', () => {
     // time left, Copy link and Share below it (WP9 live run on Android, 11-07). Jest has no layout, so this pins the
     // box's own height: the code's size (280 at the test window's width) plus QRRenderer's margin above and below.
     const tree = show(invite())
+    // The margin as QRRenderer actually renders it, so the box and the code can't drift apart.
+    const margin = StyleSheet.flatten(tree.getByTestId(id(Ids.qr)).props.style).marginVertical
+    expect(margin).toBe(QR_RENDERER_MARGIN)
     let box = tree.getByTestId(id(Ids.qr)).parent
     while (box && (typeof box.type !== 'string' || box.props.testID === id(Ids.qr))) box = box.parent
     const style = StyleSheet.flatten(box?.props.style)
-    expect(style.height).toBe(280 + 2 * QR_MARGIN)
+    expect(style.height).toBe(280 + 2 * margin)
     expect(style.backgroundColor).toBeDefined()
   })
 
