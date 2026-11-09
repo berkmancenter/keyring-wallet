@@ -38,22 +38,36 @@ test('control: a device that is there returns at once with 0 and says nothing', 
   assert.equal(r.stderr, '');
 });
 
-// Every wait in the harness's shell: legs, lib.sh, the CI leg. A wait is fine only under a deadline (galarm, timeout).
-const shells = [
-  ...readdirSync(path.join(here, 'legs')).filter((f) => f.endsWith('.sh')).map((f) => path.join(here, 'legs', f)),
-  LIB,
-  ...readdirSync(path.join(here, 'ci')).filter((f) => f.endsWith('.sh')).map((f) => path.join(here, 'ci', f)),
-];
-const bare = (text) => text.split('\n').filter((l) => !/^\s*#/.test(l) && /wait-for-device/.test(l) && !/\b(galarm|timeout) +("?\$\w+"?|\d+) /.test(l));
+// Every shell file under e2e/gate, found by walking it (ac on #884: a hand-built list of legs/, lib.sh and ci/ missed
+// gate.sh, pnm-rest.sh and watch.sh). A wait is fine only where the deadline's own command IS the wait: each command
+// of a line (split on ; && || |) that runs wait-for-device must start with galarm or timeout, after any VAR=value.
+// Known false positives, all in the safe direction (a guarded wait flagged, never a bare one passed; ac on #884): a
+// guarded wait right after `; then` (or else, do, {); a trailing `# …` comment that mentions a bare wait; `timeout
+// --foreground 120`; a guard on the previous `\` continuation line. If one fires, rewrite the line, not this check.
+const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  e.name === 'node_modules' ? [] : e.isDirectory() ? walk(path.join(dir, e.name)) : e.name.endsWith('.sh') ? [path.join(dir, e.name)] : []);
+const shells = walk(here);
+const guarded = (cmd) => /^\s*(\w+=\S*\s+)*(galarm|timeout)\s+("?\$\w+"?|\d+)\s/.test(cmd);
+const bare = (text) => text.split('\n').filter((l) => !/^\s*#/.test(l))
+  .filter((l) => l.split(/;|&&|\|\||\|/).some((cmd) => /wait-for-device/.test(cmd) && !guarded(cmd)));
 
-test('no bare `adb wait-for-device` is left in any leg, lib.sh or the CI leg', () => {
+test('the walk finds every shell file, the ones a hand list missed among them', () => {
+  const rel = shells.map((f) => path.relative(here, f));
+  for (const f of ['gate.sh', 'lib.sh', 'pnm-rest.sh', 'watch.sh', 'legs/lostreq.sh', 'ci/gate-ci-leg.sh']) assert.ok(rel.includes(f), f);
+});
+
+test('no bare `adb wait-for-device` is left in any shell file under e2e/gate', () => {
   const found = shells.flatMap((f) => bare(readFileSync(f, 'utf8')).map((l) => `${path.relative(here, f)}: ${l.trim()}`));
   assert.deepEqual(found, []);
 });
 
-test('control: the check catches a bare wait like the one that hung lostreq, and passes adb_wait and galarm', () => {
+test('controls: the bare wait that hung lostreq and one chained after a guarded command are caught; a guarded wait is not', () => {
   assert.equal(bare('adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device').length, 1);
-  assert.equal(bare('adb_wait $E || broken "x"').length, 0);
+  // ac on #884: a deadline on the line's FIRST command must not cover a wait chained after it.
+  assert.equal(bare('galarm 900 node run-join-lost.mjs; adb -s $E wait-for-device').length, 1);
+  assert.equal(bare('timeout 60 true && adb -s "$serial" wait-for-device').length, 1);
+  // Real controls: each holds wait-for-device, so each is flagged if the exemption goes.
   assert.equal(bare('  GALARM_STEPS=0 galarm "$t" adb -s "$s" wait-for-device; rc=$?').length, 0);
-  assert.equal(bare('timeout 120 adb -s "$serial" wait-for-device || exit 2').length, 0);
+  assert.equal(bare('timeout 120 adb -s "$serial" wait-for-device || { echo ENV; exit 2; }').length, 0);
+  assert.equal(bare('    GALARM_STEPS=0 galarm 120 adb -s "emulator-$port" wait-for-device 2>/dev/null \\').length, 0);
 });
