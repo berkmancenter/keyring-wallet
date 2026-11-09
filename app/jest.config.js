@@ -1,6 +1,9 @@
 module.exports = {
   preset: 'react-native',
   testTimeout: 10000,
+  // Cap workers: the pre-push hook runs the whole suite, and one worker per core
+  // (~1 GB each) starves a laptop. A --maxWorkers flag still overrides this.
+  maxWorkers: 2,
   setupFiles: ['<rootDir>/jestSetup.js'],
   setupFilesAfterEnv: ['@testing-library/jest-native/extend-expect'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
