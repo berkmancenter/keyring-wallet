@@ -1545,11 +1545,17 @@ describe('several agents', () => {
       },
     },
   })
-  const lookDelivering = (messages: unknown[], opts: { fail?: boolean } = {}) => {
+  type Checked = { id: unknown; vtaDid: string; approver: string }
+  const lookDelivering = (
+    messages: unknown[],
+    opts: { fail?: boolean; refuse?: (doc: Record<string, unknown>) => boolean } = {}
+  ) => {
     // A look waits for quiet on the wall clock: real timers, whatever a test before left on.
     jest.useRealTimers()
     const looked: string[] = []
+    const checked: Checked[] = []
     const lookClient = (_a: unknown, vtaDid: string, _s: unknown, o: { onInbound: (p: unknown) => void }) => ({
+      managerDid: 'did:peer:2.this-phone',
       connect: async () => {
         looked.push(vtaDid)
         if (opts.fail) throw new Error('unreachable')
@@ -1557,7 +1563,17 @@ describe('several agents', () => {
       },
       disconnect: async () => undefined,
     })
-    return { looked, deps: { lookClient, lookQuietMs: 20, lookMaxMs: 200 } }
+    // The check a request passes before it is kept (its own suite is consentCheck.test.ts): here it records what it
+    // was asked, and refuses what the test says to.
+    const checkConsentRequest = async (
+      _a: unknown,
+      doc: Record<string, unknown>,
+      expect: { vtaDid: string; approver: string }
+    ) => {
+      checked.push({ id: doc.id, vtaDid: expect.vtaDid, approver: expect.approver })
+      return opts.refuse?.(doc) ? { ok: false as const, reason: 'wrong-issuer' as const } : { ok: true as const }
+    }
+    return { looked, checked, deps: { lookClient, lookQuietMs: 20, lookMaxMs: 200, checkConsentRequest } }
   }
 
   it("a look keeps the other agent's requests, as the live session would, and leaves the current agent alone", async () => {
@@ -1572,6 +1588,19 @@ describe('several agents', () => {
     expect(vta.getState().otherRequests?.[WORK.vtaDid]).toMatchObject({ reachable: true, approvals: [{ id: 'r1' }] })
     expect(vta.getState().approvals).toEqual([])
     expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: HOME.vtaDid })
+  })
+
+  it('a look keeps only the requests that pass the check, checked against the agent looked at and this phone', async () => {
+    const { checked, deps } = lookDelivering([request('r1'), request('r2')], { refuse: (doc) => doc.id === 'r2' })
+    const { vta } = twoAgents(deps)
+    await vta.restore({} as never)
+    await vta.lookAtOtherAgents({} as never)
+    // r1 passes (control), r2 does not and is not kept.
+    expect(vta.getState().otherRequests?.[WORK.vtaDid]?.approvals.map((a) => a.id)).toEqual(['r1'])
+    expect(checked).toEqual([
+      { id: 'r1', vtaDid: WORK.vtaDid, approver: 'did:peer:2.this-phone' },
+      { id: 'r2', vtaDid: WORK.vtaDid, approver: 'did:peer:2.this-phone' },
+    ])
   })
 
   // A tester's 277.4 log (11-02): at a push-wake start the look ran before the stored link was read, took the current

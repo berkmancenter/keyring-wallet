@@ -292,6 +292,8 @@ export interface VtaAgentDeps {
   ) => Pick<VtaClient, 'connect' | 'disconnect' | 'task'>
   /** How long a key fetch waits for the current agent's session (KEY_FETCH_WAIT_MS); shorter in tests. */
   keyFetchWaitMs?: number
+  /** For tests: the check a consent request passes before it is listed (checkConsentRequest). */
+  checkConsentRequest?: typeof checkConsentRequest
   /** The client a session with a linked agent that is not the current one opens (withAgentSession). */
   agentClient?: (agent: Agent, vtaDid: string, store: VtiIdentityStore) => VtaClient
   /** The client a key fetch opens for a linked agent that is not the current one (fetchKeyCopy). */
@@ -1186,6 +1188,8 @@ export class VtaAgentController {
   /** One look: the requests seen, or undefined when the agent could not be reached. */
   private async lookAt(agent: Agent, vtaDid: string): Promise<VtiApproval[] | undefined> {
     const seen: VtiApproval[] = []
+    // Each request is checked before it is kept; the look waits for every check.
+    const checks: Promise<void>[] = []
     // Time since the last message, counted in the look's own sleeps: not the
     // clock, which a phone (or a test) can move under it.
     let sinceLast = 0
@@ -1197,7 +1201,20 @@ export class VtaAgentController {
         onInbound: (plaintext: DidCommV2PlaintextMessage) => {
           sinceLast = 0
           const kept = keepManagerMessage(plaintext, this.now())
-          if (kept && 'approval' in kept && !seen.some((a) => a.id === kept.approval.id)) seen.push(kept.approval)
+          if (!kept || !('approval' in kept)) return
+          const { approval } = kept
+          const approver = (client as Partial<Pick<VtaClient, 'managerDid'>>).managerDid
+          checks.push(
+            this.passesCheck(
+              agent,
+              vtaDid,
+              approver,
+              approval.id,
+              plaintext.body as unknown as Record<string, unknown>
+            ).then((ok) => {
+              if (ok && !seen.some((a) => a.id === approval.id)) seen.push({ ...approval, requestCheck: 'verified' })
+            })
+          )
         },
       }
     )
@@ -1210,6 +1227,7 @@ export class VtaAgentController {
         await new Promise((resolve) => setTimeout(resolve, step))
         sinceLast += step
       }
+      await Promise.all(checks)
       return seen
     } catch {
       return undefined
@@ -3412,34 +3430,65 @@ export class VtaAgentController {
     if (kept && 'approval' in kept) {
       const { approval } = kept
       if (this.state.approvals.some((a) => a.id === approval.id)) return
-      this.set({ approvals: [approval, ...this.state.approvals] })
-      void this.checkRequest(approval.id, plaintext.body as unknown as Record<string, unknown>)
-      // Asked by a device this phone has not seen named: read the list once,
-      // in the background, so the card can say which device asked.
-      const agent = this.agent
-      if (agent && !this.state.knownDevices?.[approval.requester]) void this.agentDevices(agent).catch(() => undefined)
+      const current = this.current
+      if (!current) return
+      void this.listIfChecked(current, approval, plaintext.body as unknown as Record<string, unknown>)
       return
     }
     if (kept && 'granted' in kept) this.set({ awaitingConsentFor: undefined })
   }
 
-  /** Check a consent request against the linked agent and this phone, and log the verdict (log-only). */
-  private async checkRequest(id: string, doc: Record<string, unknown>) {
-    const current = this.current
-    const approver = current?.client.managerDid
-    if (!current || !approver) return
-    const log = current.agent.config?.logger
-    const verdict = await checkConsentRequest(current.agent, doc, { vtaDid: current.vtaDid, approver }).catch(() => ({
+  /**
+   * List a consent request only once it passes the check, and only on the
+   * agent it arrived through: the session may have moved on while it ran.
+   */
+  private async listIfChecked(
+    current: { client: VtaClient; vtaDid: string; store: VtiIdentityStore; agent: Agent },
+    approval: VtiApproval,
+    doc: Record<string, unknown>
+  ) {
+    const ok = await this.passesCheck(current.agent, current.vtaDid, current.client.managerDid, approval.id, doc)
+    if (!ok || this.current?.vtaDid !== current.vtaDid) return
+    if (this.state.approvals.some((a) => a.id === approval.id)) return
+    this.set({ approvals: [{ ...approval, requestCheck: 'verified' }, ...this.state.approvals] })
+    // Asked by a device this phone has not seen named: read the list once,
+    // in the background, so the card can say which device asked.
+    const agent = this.agent
+    if (agent && !this.state.knownDevices?.[approval.requester]) void this.agentDevices(agent).catch(() => undefined)
+  }
+
+  /**
+   * The check a consent request passes before a person sees it, as
+   * `ConsentRequest::verify` does: its proof, its signer is its issuer, that
+   * issuer is the agent it arrived through, it is addressed to this phone, and
+   * it has not expired (consentCheck.ts). A request that does not pass is not
+   * shown (pnm_cnm_subtask §4.2); the reason is in the log.
+   */
+  private async passesCheck(
+    agent: Agent,
+    vtaDid: string,
+    approver: string | undefined,
+    id: string,
+    doc: Record<string, unknown>
+  ): Promise<boolean> {
+    const log = agent.config?.logger
+    if (!approver) {
+      log?.warn?.(
+        `[TrustTasks:VtaAgent] consent request ${id} not shown: no identity at ${didPrefix(vtaDid)} to check it against`
+      )
+      return false
+    }
+    const check = this.deps.checkConsentRequest ?? checkConsentRequest
+    const verdict = await check(agent, doc, { vtaDid, approver }).catch(() => ({
       ok: false as const,
       reason: 'proof' as const,
     }))
-    const requestCheck = verdict.ok ? 'verified' : verdict.reason
-    if (verdict.ok) log?.info?.(`[TrustTasks:VtaAgent] consent request ${id} verified`)
-    else
-      log?.warn?.(
-        `[TrustTasks:VtaAgent] consent request ${id} did not pass the check (${verdict.reason}); listed anyway`
-      )
-    this.update(id, { requestCheck })
+    if (verdict.ok) {
+      log?.info?.(`[TrustTasks:VtaAgent] consent request ${id} verified`)
+      return true
+    }
+    log?.warn?.(`[TrustTasks:VtaAgent] consent request ${id} did not pass the check (${verdict.reason}); not shown`)
+    return false
   }
 
   /**

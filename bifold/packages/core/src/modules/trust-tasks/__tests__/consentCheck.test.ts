@@ -270,6 +270,7 @@ describe('an approval as the phone lists it', () => {
     const controller = controllerWith()
     const doc = await signed(vta, requestDoc())
     deliver(controller, { ...doc, payload: { ...(doc.payload as object) } })
+    await settled()
     expect(controller.getState().approvals[0]).toMatchObject({
       id: 'urn:uuid:consent-request-1',
       matchCode: 'abcdef',
@@ -278,13 +279,48 @@ describe('an approval as the phone lists it', () => {
     })
   })
 
-  it('still lists a request that fails the check, and logs why (log-only)', async () => {
+  it('does not list a request that fails the check, and logs why', async () => {
     const controller = controllerWith()
     deliver(controller, requestDoc())
     await settled()
-    expect(controller.getState().approvals).toHaveLength(1)
-    expect(controller.getState().approvals[0].requestCheck).toBe('unsigned')
+    expect(controller.getState().approvals).toHaveLength(0)
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unsigned'))
+  })
+
+  it('does not list a request signed by an agent other than the one it arrived through', async () => {
+    const controller = controllerWith()
+    deliver(controller, await signed(other, requestDoc({ issuer: other.did })))
+    await settled()
+    expect(controller.getState().approvals).toHaveLength(0)
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('wrong-issuer'))
+  })
+
+  it('does not list a request addressed to another phone', async () => {
+    const controller = controllerWith()
+    deliver(controller, await signed(vta, requestDoc({ recipient: 'did:key:z6MkanotherPhone' })))
+    await settled()
+    expect(controller.getState().approvals).toHaveLength(0)
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('wrong-recipient'))
+  })
+
+  it('does not list a request when this phone has no identity at the agent to check it against', async () => {
+    const controller = new VtaAgentController()
+    ;(controller as unknown as { current: unknown }).current = { vtaDid: vta.did, agent: vta.agent, client: {} }
+    deliver(controller, await signed(vta, requestDoc()))
+    await settled()
+    expect(controller.getState().approvals).toHaveLength(0)
+  })
+
+  it('does not list a request that arrives after the session moved to another agent', async () => {
+    const controller = controllerWith()
+    deliver(controller, await signed(vta, requestDoc()))
+    ;(controller as unknown as { current: unknown }).current = {
+      vtaDid: other.did,
+      agent: other.agent,
+      client: { managerDid: PHONE },
+    }
+    await settled()
+    expect(controller.getState().approvals).toHaveLength(0)
   })
 
   it('records a request that passes the check', async () => {
