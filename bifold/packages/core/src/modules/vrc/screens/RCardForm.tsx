@@ -4,7 +4,6 @@ import {
   Image,
   InteractionManager,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -33,7 +32,7 @@ import { InlineErrorConfig } from '../../../types/error'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
 import RCardPhotoCropModal from './RCardPhotoCropModal'
-import KeyboardPaddedView from '../../../components/views/KeyboardPaddedView'
+import { KeyboardSpace } from '../../../components/views/KeyboardPaddedView'
 
 /** Adapts expo-image-manipulator's manipulateAsync to the injectable shape processRCardPhoto expects. */
 const rcardManipulateAsync: ManipulateAsyncFn = (uri, actions, saveOptions) =>
@@ -131,22 +130,6 @@ export interface RCardFormProps {
   /** Called with valid, trimmed-by-caller form input. Throw to show the generic error modal. */
   onSubmit: (input: RCardFormInput) => Promise<void>
 }
-
-/**
- * Room for the keyboard. On iOS the padding is capped at what the keyboard
- * covers: React Native's KeyboardAvoidingView, with a fixed 90-point offset,
- * padded this form away entirely on a first run (IN-525). Android keeps the
- * KeyboardAvoidingView it had: not because Android is immune (the padding
- * rule is the same), but because nothing has shown it there.
- */
-const KeyboardSpace: React.FC<{ children: React.ReactNode }> = ({ children }) =>
-  Platform.OS === 'ios' ? (
-    <KeyboardPaddedView style={{ flex: 1 }}>{children}</KeyboardPaddedView>
-  ) : (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={20}>
-      {children}
-    </KeyboardAvoidingView>
-  )
 
 const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, submitLabel, onSubmit }) => {
   const { t } = useTranslation()
@@ -353,7 +336,10 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-      <KeyboardSpace>
+      {/* Room for the keyboard: on iOS the padding is capped at what the keyboard covers, since React Native's
+          KeyboardAvoidingView padded this form away entirely on a first run (IN-525). Android keeps the
+          KeyboardAvoidingView it had. */}
+      <KeyboardSpace style={{ flex: 1 }} android={{ behavior: 'padding', keyboardVerticalOffset: 20 }}>
         <View style={styles.cardWrapper}>
           <View style={styles.card}>
             <ScrollView
