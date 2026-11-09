@@ -459,13 +459,22 @@ avd_writable() {
   [ -f "$dir/keyring-verity-off" ] && return 0
   local s=emulator-$port
   AVD=$name EMU_EXTRA=-writable-system emu_start "$port" || return 1
-  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb -s "$s" wait-for-device
-  adb -s "$s" disable-verity 2>&1 | tail -1; adb -s "$s" reboot; sleep 10; adb -s "$s" wait-for-device
+  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb_wait "$s" || return 1
+  adb -s "$s" disable-verity 2>&1 | tail -1; adb -s "$s" reboot; sleep 10; adb_wait "$s" 300 || return 1
   local i; for i in $(seq 1 60); do [ "$(adb -s "$s" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 5; done
-  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb -s "$s" wait-for-device
+  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb_wait "$s" || return 1
   adb -s "$s" remount 2>&1 | tail -1
   emu_stop
   touch "$dir/keyring-verity-off"; echo "avd_writable: $name ready (verity off)"
+}
+# adb_wait <serial> [seconds]: `adb wait-for-device` with a deadline (default 120 s), through galarm. A bare wait has
+# none: on 11-09 emulator-5572 died mid-lostreq and its wait held the whole nightly 4 h 15 min (08:20Z-12:36Z). It
+# says which device did not come back and returns galarm's code (142 on the deadline); the caller decides what breaks.
+adb_wait() {
+  local s=$1 t=${2:-120} rc
+  GALARM_STEPS=0 galarm "$t" adb -s "$s" wait-for-device; rc=$?
+  [ "$rc" = 0 ] || echo "adb_wait: $s did not come back within ${t} s (rc $rc)" >&2
+  return "$rc"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { local t0 rc; t0=$(date +%s); xcrun simctl boot "$1" 2>/dev/null; GALARM_STEPS=0 galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; rc=$?; step_rec sim_boot "$t0" "$(( $(date +%s) - t0 ))"; return $rc; }

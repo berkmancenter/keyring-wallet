@@ -30,7 +30,7 @@ fin() {
 }
 LEG_CLEANUP=fin
 emu_start 5572
-adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device; echo "adb root: uid $(adb -s $E shell id -u)"
+adb -s $E root >/dev/null 2>&1; sleep 3; adb_wait $E || broken "$E did not come back after adb root"; echo "adb root: uid $(adb -s $E shell id -u)"
 # Each case keeps the app's own log (its [VTA] resume lines among them): a case that fails can be read afterwards
 # (#513: link-address-resume failed once and nothing showed whether the app's resume ran). 16M so a case cannot wrap.
 adb -s $E logcat -G 16M >/dev/null 2>&1
