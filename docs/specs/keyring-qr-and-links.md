@@ -1,6 +1,6 @@
 # One-scan trigger links: QR codes and links that start an exchange
 
-**Status:** DRAFT proposal. Implemented by no one. Aligned with the trigger-link chapter of the VTI specification draft (`trustoverip/dtgwg-vti-spec` PR #58, `spec/07a-links.md`, requirements VTI-LNK-001 to 116), which carries the same rules as normative text for VTI. Each rule below names the VTI requirement it matches. Where this document differs from that draft, the difference is named. The link host `link.trustoverip.org` is a proposal to Trust Over IP that has not been agreed. No phone has been tested with these links.
+**Status:** DRAFT proposal. Implemented by no one. Tracks the merged trigger-link chapter of the VTI specification (`trustoverip/dtgwg-vti-spec`, `spec/07a-links.md`, read on `main` at `a8157ea3` on 2026-11-09, requirements VTI-LNK-001 to 131), which carries the same rules as normative text for VTI. Each rule below names the VTI requirement it matches; where this document and the chapter differ, the chapter wins. This document was written before `dtgwg-vti-spec` issue 86 (a person-to-person shared-connect flow, a per-flow size budget and a registry entry) and predates it. The outcomes of that issue are pending, and nothing here specifies a shared-connect flow, an `inv` field or a `_label` field. The one size budget below (section 6 rule 5 (d), VTI-LNK-081) is expected to become a budget per flow. The link host `link.trustoverip.org` is a proposal to Trust Over IP that has not been agreed. No phone has been tested with these links.
 
 **Principles.**
 1. **Modular.** The format names whom to contact and which flow to start. It does not choose the protocol of the exchange: each flow states its first request. So it can carry flows built on Trust Tasks, DIDComm, OpenID or anything else, and it can later be contributed for use beyond VTI and Keyring.
@@ -22,11 +22,11 @@
 - [annex](./keyring-qr-and-links.annex.md) (non-normative: link hosting, device tests, rendering guidance, rationale, alternatives, and upstream fit);
 - [proposal to Trust Over IP](./keyring-qr-and-links.toip-proposal.md) (the shared link host).
 
-"Trigger link" is this document's term, and the VTI draft uses it too.
+**Terms.** "Trigger link" is the normative term, as in the VTI chapter. "One-scan" is informal shorthand for the goal (one scan opens the wallet the person already uses): it is not a defined term, and it appears in titles only. `keyring://vti/invitation` is a different Keyring link and is not a trigger link. This document says "consumer" where the chapter says "reader"; they are the same role.
 
 ## 1. Model
 
-An **inviter** shows a short text as a QR code or a link. A person carries it to a **consumer** (a wallet, the VTI draft's "reader") by scanning it with a camera, opening it as a link, or pasting it. The text is a **trigger**: it names whom to contact, a handle for the pending exchange, optionally when it stops being good, and optionally which flow it opens. It carries no task, endpoint, key, challenge or authorising secret. A **producer** is anything that emits a trigger on the inviter's behalf.
+An **inviter** shows a short text as a QR code or a link. A person carries it to a **consumer** (a wallet; the chapter's "reader") by scanning it with a camera, opening it as a link, or pasting it. The text is a **trigger**: it names whom to contact, a handle for the pending exchange, optionally when it stops being good, and optionally which flow it opens. It carries no task, endpoint, key, challenge or authorising secret. A **producer** is anything that emits a trigger on the inviter's behalf.
 
 The consumer treats every field as an untrusted hint, as the Trust Tasks push binding treats a wake-up payload (`bindings/push/0.1`: "A consumer MUST treat every field of the push payload as an untrusted hint"). It:
 1. reads the text (section 3);
@@ -144,7 +144,7 @@ A consumer holds the list of flow URIs it implements, without their version segm
    - **Exception for known contacts.** For a flow that acts only for contacts already in the consumer's own records, the consumer MAY resolve such a contact before the person continues. The host contacted is then one the person chose when the record was made.
 2. **Approve after verification** (VTI-LNK-052). The consumer resolves the contact's DID document and verifies it (for `did:webvh`, the log verifies) before sending anything. If it cannot, it stops with `did-document-unverified` (outcome `invalid`) and sends nothing. After verification it shows the verified details, and sends nothing until the person approves.
 3. **Unauthenticated text is never fact** (VTI-LNK-052). No field of the trigger other than the contact is shown as a statement of what the exchange is.
-4. **Fresh key.** A first request the consumer signs is signed with a key made for this exchange and not used elsewhere. The exception is a flow that defines a signature by an identifier the person chose in rule 2's approval. *Differs from the VTI draft as it stands,* which states this only inside its Trust Task first request. Our proposed change to PR #58 moves it into a general VTI-LNK-054.
+4. **Fresh key** (VTI-LNK-057). A first request the consumer signs is signed by a key made for this exchange and used for no other exchange. The exception is a flow that defines a signature by an identifier the person chooses when approving. Such a flow MUST state why the exchange needs an identifier the person already uses, and the consumer MUST tell the person, before approval, which identifier the inviter will see.
 5. **Transport from the document only** (VTI-LNK-053).
    - **Candidates.** The candidates are the services of the verified DID document that meet three conditions:
      - their `type` maps to a binding the consumer implements, for example `DIDCommMessaging` to the DIDComm binding or `TrustTaskHTTPS` to the Trust Tasks HTTPS binding. The match is on `type`, never on `id` (`bindings/https/0.3` section 6.2);
@@ -162,12 +162,10 @@ A consumer holds the list of flow URIs it implements, without their version segm
    - It carries no port.
    - It is not `localhost`, a name under `localhost` or `local` (RFC 6761, RFC 6762), or a name under `home.arpa` (RFC 8375).
    - A consumer SHOULD also refuse an endpoint whose resolved address is loopback, link-local or private.
-7. **The first request is the flow's choice.** Each flow states the request a consumer sends first.
+7. **The first request is the flow's choice** (VTI-LNK-057). Each flow states the request a consumer sends first.
    - It is sent only after rule 2's approval, and only over the transport rule 5 chose.
    - It carries the handle, so the inviter can find the pending exchange.
-   - A flow MAY use the Trust Task first request (section 8.1), or define its own, for example a DIDComm or OpenID request. This document requires no particular protocol.
-
-   *Differs from the VTI draft as it stands,* whose VTI-LNK-054 requires the Trust Task first request of every trigger link. Our proposed change to PR #58 makes VTI-LNK-054 this general rule, and moves the Trust Task first request to VTI-LNK-057 for VTI's own flows.
+   - A flow MAY use the Trust Task first request (section 8.1), or define its own, for example a DIDComm or OpenID request. The format requires no particular protocol; VTI's registry flows all use the Trust Task first request (VTI-LNK-054, section 8.1).
 8. **No hint** (VTI-LNK-055). The consumer MAY ask the inviter what it supports, through a discovery mechanism of a protocol both implement; for Trust Tasks, that is `trust-task-discovery` (draft). Discovery does not say which flow a handle opens, so a consumer MAY refuse a trigger it cannot place (outcome `invalid`).
 9. **A link activated on a page** (VTI-LNK-056). A consumer that receives a trigger from the activation of a link on a page, such as a browser extension, MUST record the origin of that page at activation, and MUST NOT act on an activation the person did not make. A flow may use the recorded origin; `sign-in` refuses a page that is not the portal (VTI-LNK-105).
 
@@ -181,7 +179,7 @@ A consumer holds the list of flow URIs it implements, without their version segm
    - (a) MUST generate the handle's bytes from a cryptographically secure random source (VTI-LNK-034). An inviter compares a handle as a string (VTI-LNK-035).
    - (b) MUST set `_exp` no later than the inviter's own lifetime for the handle (VTI-LNK-037).
    - (c) MUST emit only ASCII (VTI-LNK-080), and MUST percent-encode `&`, `=`, `#` and `%` inside a value.
-   - (d) MUST NOT emit a trigger whose `https` form exceeds 251 bytes where the code is rendered at QR error-correction level M, or 177 bytes where it is rendered at level Q (VTI-LNK-081). These are the capacities of a version 11 QR code. A flow's field limits follow from them. The limit binds producers, not readers, so a valid link stays valid after something appends to it.
+   - (d) MUST NOT emit a trigger whose `https` form exceeds 251 bytes where the code is rendered at QR error-correction level M, or 177 bytes where it is rendered at level Q (VTI-LNK-081). These are the capacities of a version 11 QR code. A flow's field limits follow from them. This is a single budget for every flow; it is expected to become a budget per flow once `dtgwg-vti-spec` issue 86 settles. The limit binds producers, not readers, so a valid link stays valid after something appends to it.
    - (e) MUST serve any page that carries or shows the trigger with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. It MUST load no third-party scripts there, and never copy the fragment into a request, a log, or a script that sends it (VTI-LNK-082).
    - (f) MUST give any redirect from such a page an explicit fragment, possibly empty, because otherwise the client re-applies the original fragment to the target (RFC 9110 sections 10.2.2 and 17.11; VTI-LNK-083).
    - (g) MUST NOT show a trigger whose link host is the domain of the page showing it, because iOS opens such a link in the browser (VTI-LNK-084).
@@ -221,20 +219,24 @@ This section is not part of the general standard. It records what the VTI specif
 
 ### 8.1 The Trust Task first request
 
-One option a flow may adopt under section 5 rule 7. A flow that adopts this option sends, as its first request, a Trust Task document (VTI-LNK-057) with:
-- `issuer`: an identifier the consumer generated for this exchange and uses nowhere else;
+One option a flow may adopt under section 5 rule 7. For every flow in the VTI registry (VTI-LNK-046), the first request is a Trust Task document (VTI-LNK-054), with:
+- `issuer`: a `did:key` identifier for a fresh Ed25519 key, generated by the consumer for this exchange and used for no other exchange (VTI-LNK-054; the general fresh-key rule is VTI-LNK-057, section 5 rule 4);
 - `recipient`: the contact (framework, Audience Binding: a document carrying a `proof` "MUST also carry an in-band `recipient` member" unless its specification is a bearer specification);
 - a unique `id`;
 - the handle as `parentThreadId`;
 - a signature by the issuer's key.
 
-The framework defines `parentThreadId` as "the `threadId` of the exchange that contains this one". This document treats the invitation as that exchange, and `bindings/didcomm/0.2` section 3.1 maps the member to DIDComm `pthid`. `parentThreadId` "carries no normative validation semantics", so the inviter looks the handle up and decides by its own policy.
+The consumer sends it only after the person approves, and only over the transport chosen under VTI-LNK-053 (VTI-LNK-054).
 
-Every flow under `https://link.trustoverip.org/vti/flow/` uses this option (VTI-LNK-057).
+The framework defines `parentThreadId` as "the `threadId` of the exchange that contains this one". This document treats the pending exchange named by the handle as that exchange, and `bindings/didcomm/0.2` section 3.1 maps the member to DIDComm `pthid`. `parentThreadId` "carries no normative validation semantics", so the inviter looks the handle up and decides by its own policy.
+
+**Scope of the fresh `did:key` rule.** VTI-LNK-054 is stated for the flows in the VTI registry, and no flow in the registry uses the exception of VTI-LNK-057 for an identifier the person chooses. This document does not generalise it. Whether a flow outside the registry, such as the shared-connect flow under discussion in `dtgwg-vti-spec` issue 86, would need an identifier the person already uses is open there, and is not decided here.
 
 ### 8.2 The flows VTI defines
 
 The VTI specification governs flows under `https://link.trustoverip.org/vti/flow/` (VTI-LNK-046). Both use the Trust Task first request (section 8.1). Their full requirements are VTI-LNK-100 to 105 and 110 to 116.
+
+The 300 second expiry limit is stated for `sign-in` (VTI-LNK-100) and `vta-claim` (VTI-LNK-110) only, and this document does not generalise it. Expiry rules for other flows are per flow, and a per-flow expiry for flows beyond these is pending `dtgwg-vti-spec` issue 86.
 
 | Flow | Identifier (version 0.1, draft) | Contact | Expiry | Contact rules |
 |---|---|---|---|---|
@@ -253,6 +255,6 @@ The VTI specification governs flows under `https://link.trustoverip.org/vti/flow
   - W3C DID 1.0 (section 3.1);
   - ISO/IEC 18004 (QR code capacities).
 - **Trust Tasks.** Framework Working Draft 0.7.0 (Type URI; Compatibility Rules; Migrating Between Versions; Audience Binding; Consumer Requirements; `parentThreadId`); `bindings/didcomm/0.2`, `bindings/https/0.3`, `bindings/push/0.1` and `trust-task-discovery/0.3`, all draft.
-- **VTI.** The VTI specification draft, trigger-link chapter (`trustoverip/dtgwg-vti-spec` PR #58, branch `feat/trigger-links`, read 2026-10-10).
+- **VTI.** The VTI specification, trigger-link chapter (`trustoverip/dtgwg-vti-spec`, `spec/07a-links.md`, merged from PR #58), read on `main` at `a8157ea3` on 2026-11-09. Issue 86 of that repository is open and not reflected here.
 
 Where each was read is in annex F.

@@ -46,7 +46,7 @@ https://link.trustoverip.org/t#_from=did:webvh:QmPEQVM1JPTyrvEgBcDXwjK4TeyLGSX1P
 
 - **A shared custom scheme.** Any app can register a scheme (RFC 8252 section 8.1: "indeterminate as to which app will receive"), and I could not confirm that camera apps open one.
 - **One link or button per wallet.** This is the page the proposal is meant to avoid.
-- **A DIDComm out-of-band invitation.** A receiving agent may create a connection before it reads the goal, the text is about twice as long, and the payload sits in the query, which the host receives.
+- **A DIDComm out-of-band invitation.** The goal code is optional and self-attested, so nothing makes the receiving agent show the person who is asking first, the text is about twice as long, and the payload sits in the query, which the host receives.
 
 ## What I have not verified
 
