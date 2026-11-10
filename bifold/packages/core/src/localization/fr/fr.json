@@ -2664,6 +2664,7 @@
       "stepUpDeclined": "Vous avez refusé la vérification supplémentaire, votre agent ne l'a donc pas fait.",
       "notConfirmed": "Keyring n'a pas pu confirmer que c'est vous.",
       "awaitingApproval": "Votre agent attend l'approbation de quelqu'un d'autre. Réessayez quand ce sera fait.",
+      "notServed": "Votre agent ne permet pas de demander avant cette action, donc rien n'a changé.",
       "notApproved": "Votre approbateur n'a pas approuvé à temps, donc votre agent ne l'a pas fait. Il a peut-être refusé.",
       "noAnswer": "Votre agent n'a pas répondu. Vérifiez Mon agent avant de réessayer.",
       "unreachable": "Keyring n'a pas pu joindre votre agent. Vérifiez votre connexion et réessayez.",

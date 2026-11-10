@@ -2703,6 +2703,7 @@
       "stepUpDeclined": "You declined the extra check, so your agent didn't do this.",
       "notConfirmed": "Keyring couldn't confirm it's you.",
       "awaitingApproval": "Your agent is waiting for someone else to approve this. Try again once they have.",
+      "notServed": "Your agent doesn't support asking before this, so nothing changed.",
       "notApproved": "Your approver didn't approve this in time, so your agent didn't do it. They may have said no.",
       "noAnswer": "Your agent didn't answer. Check My Agent before trying again.",
       "unreachable": "Keyring couldn't reach your agent. Check your connection and try again.",

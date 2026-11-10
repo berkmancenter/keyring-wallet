@@ -49,12 +49,34 @@ describe('trusted approvers', () => {
     expect(withTrustedApprovers(row, [], [])).toEqual(before)
   })
 
+  it("an action the agent's answer names no version of is refused by name, and nothing is written (the lab run, 11-10)", () => {
+    // The lab build listed add-device at acl/grant 0.2/0.1 only; VTI main serves 0.3 and retires both, so writing them
+    // anyway had the agent refuse the whole row. Control: the same answer with 0.3 in it writes that one rule.
+    const served = [`${SPEC}vault/credentials/present/0.1`, `${SPEC}policy/upsert/0.3`]
+    expect(() => withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['shareCredential', 'addDevice'], served)).toThrow(
+      expect.objectContaining({ reason: 'not-served', detail: 'addDevice' })
+    )
+    const withGrant = withTrustedApprovers(
+      EMPTY_APPROVALS,
+      [JORDAN],
+      ['shareCredential', 'addDevice'],
+      [...served, `${SPEC}acl/grant/0.3`]
+    )
+    expect(withGrant.rules.map((r) => r.taskType)).toEqual([
+      `${SPEC}vault/credentials/present/0.1`,
+      `${SPEC}acl/grant/0.3`,
+    ])
+  })
+
   it('writes only the versions the agent dispatches, when it is known', () => {
     const row = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['addDevice'], [`${SPEC}acl/grant/0.2`])
     expect(row.rules.map((r) => r.taskType)).toEqual([`${SPEC}acl/grant/0.2`])
     // VTI main 887370a3b dispatches acl/grant only at 0.3: the rule is written there, not for nothing.
     const main = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['addDevice'], [`${SPEC}acl/grant/0.3`])
     expect(main.rules.map((r) => r.taskType)).toEqual([`${SPEC}acl/grant/0.3`])
+    // Changing who approves, on VTI main (policy/upsert 0.2 retired, 0.3 served): only 0.3.
+    const rules = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['changeApprovers'], [`${SPEC}policy/upsert/0.3`])
+    expect(rules.rules.map((r) => r.taskType)).toEqual([`${SPEC}policy/upsert/0.3`])
     // Unknown: every listed version.
     const all = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['addDevice'])
     expect(all.rules.map((r) => r.taskType)).toEqual([

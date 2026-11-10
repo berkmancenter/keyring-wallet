@@ -58,16 +58,33 @@ export const OLDER_VERSIONS: Readonly<Record<string, readonly string[]>> = {
 /** Every version of an offered task, newest first. */
 export const versionsOf = (taskType: string): readonly string[] => [taskType, ...(OLDER_VERSIONS[taskType] ?? [])]
 
+/** Rules are not written: the agent dispatches none of the versions Keyring knows for `taskType`. */
+export class NotServed extends Error {
+  constructor(readonly taskType: string) {
+    super(`Your agent doesn't support asking before this (${taskType}), so it changed nothing.`)
+    this.name = 'NotServed'
+  }
+}
+
 /**
- * The versions of an offered task this phone's rules must name: each one the
- * agent dispatches (`served`, from its discovery answer). Every version Keyring
- * knows when that is unknown or names none: a rule on a version the agent does
- * not dispatch holds nothing, but the agent takes it (its write path refuses
- * only retired types), and the one it does dispatch is then covered.
+ * The versions of an offered task this phone's rules must name: exactly the
+ * ones the agent dispatches (`served`, from its discovery answer), never one
+ * it does not. An agent refuses a write that names a retired type, and the
+ * whole row with it (VTI main 887370a3b retires contexts/delete 1.0, acl/grant
+ * 0.1 and 0.2, policy/upsert 0.2, …), so an agent whose answer names none of
+ * them refuses here ({@link NotServed}) rather than send a row it will refuse.
+ * With no answer (an agent that serves no discovery, or did not reply), every
+ * version Keyring knows: an older agent takes that, and the one it dispatches
+ * is covered. On a current agent whose discovery went unanswered that row can
+ * be refused; the person is told and can try again. Refusing there as well was
+ * tried (11-10, #1008) and broke the owner's rules on every agent that serves
+ * no discovery (34 rows), so it is not done.
  */
 export const ruleVersionsFor = (taskType: string, served?: readonly string[]): readonly string[] => {
-  const dispatched = versionsOf(taskType).filter((uri) => served?.includes(uri))
-  return dispatched.length ? dispatched : versionsOf(taskType)
+  if (!served) return versionsOf(taskType)
+  const dispatched = versionsOf(taskType).filter((uri) => served.includes(uri))
+  if (!dispatched.length) throw new NotServed(taskType)
+  return dispatched
 }
 
 /**

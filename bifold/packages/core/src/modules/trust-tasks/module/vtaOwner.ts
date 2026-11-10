@@ -89,6 +89,8 @@ export class DeviceCannotOwn extends Error {
  * - `notApproved` — the agent held the act for someone else's approval, and the
  *   question ended without a yes: they said no, or it lapsed (VtaClient's consentNotGiven refusal).
  *   Not the agent's refusal: it did what its rule says.
+ * - `notServed` — Keyring did not write an approval rule: the agent's answer
+ *   names no version of that task it dispatches (approvalRules NotServed).
  * - `noAnswer` — the agent said nothing in time; the act may or may not have
  *   happened, so the list is worth reading again.
  * - `unreachable` — Keyring could not sign in to the agent.
@@ -108,6 +110,7 @@ export type DeviceRefusalReason =
   | 'notConfirmed'
   | 'awaitingApproval'
   | 'notApproved'
+  | 'notServed'
   | 'noAnswer'
   | 'unreachable'
   | 'failed'
@@ -128,6 +131,7 @@ const PLAIN_WORDS: Record<DeviceRefusalReason, string> = {
   notConfirmed: "Keyring couldn't confirm it's you.",
   awaitingApproval: 'Your agent is waiting for someone else to approve this.',
   notApproved: "It wasn't approved in time, so your agent didn't do it.",
+  notServed: "Your agent doesn't support asking before this, so nothing changed.",
   noAnswer: "Your agent didn't answer. Check the list before trying again.",
   unreachable: "Keyring couldn't reach your agent. Check your connection and try again.",
   failed: "Your agent couldn't do that.",
@@ -212,6 +216,8 @@ export function deviceRefusalOf(error: unknown): DeviceActionRefused {
   // as the agent's own again. So this copy of the code is deliberate, and it is guarded: consentNotGiven.test.ts builds
   // the error with VtaClient's factory and reads it here, so drift on either side fails that row.
   if (error instanceof VtiRefusal && error.code === 'consentNotGiven') return refusal('notApproved')
+  // By name, as above by code: approvalRules is not imported here, so no stub of it can break this line.
+  if (error instanceof Error && error.name === 'NotServed') return refusal('notServed')
   if (!(error instanceof VtiRefusal)) return refusal(NO_ANSWER.test(message) ? 'noAnswer' : 'failed')
   const details = (error.details ?? {}) as { reason?: unknown }
   if (message === STEP_UP_REQUIRED || details.reason === STEP_UP_REQUIRED) return refusal('stepUpRequired')

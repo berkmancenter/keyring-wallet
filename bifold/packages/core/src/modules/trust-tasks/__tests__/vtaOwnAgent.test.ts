@@ -1691,6 +1691,23 @@ describe('trusted approvers: another person approves for this agent', () => {
     expect(setsHeld()).toEqual({ [`keyring-phone:${PHONE}`]: [PHONE] })
   })
 
+  it("an action the agent's answer names no version of is refused as notServed, and nothing is written (control: with it)", async () => {
+    // The lab run, 11-10: an answer without acl/grant/0.3 had Keyring write retired versions, and the agent refused
+    // the whole row. Now the write never goes out.
+    mockVta.discovery = [PRESENT, MINT, 'https://trusttasks.org/spec/policy/upsert/0.3']
+    const { vta } = await linkedPhone()
+    await expect(vta.setTrustedApprovers(agent, [JORDAN], ['shareCredential', 'addDevice'])).rejects.toMatchObject({
+      reason: 'notServed',
+    })
+    expect(sentOf(POLICY_UPSERT)).toHaveLength(0)
+    expect(rulesHeld()).toEqual([])
+    mockVta.discovery = [...mockVta.discovery, 'https://trusttasks.org/spec/acl/grant/0.3']
+    await vta.setTrustedApprovers(agent, [JORDAN], ['shareCredential', 'addDevice'])
+    expect(rulesHeld().map((r) => r.taskType)).toEqual(
+      expect.arrayContaining([PRESENT, 'https://trusttasks.org/spec/acl/grant/0.3'])
+    )
+  })
+
   it('an action another rule already holds is refused, and nothing is written', async () => {
     mockVta.policy = {
       version: 2,

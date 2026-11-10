@@ -96,7 +96,7 @@ export function trustedApproversView(model: Pick<ApprovalsModel, 'rules' | 'sets
 /** Refused before anything is sent. */
 export class TrustedRuleRefused extends Error {
   constructor(
-    readonly reason: 'not-a-did' | 'held-elsewhere' | 'unknown-action',
+    readonly reason: 'not-a-did' | 'held-elsewhere' | 'unknown-action' | 'not-served',
     readonly detail: string
   ) {
     super(`trusted approver rule refused (${reason}): ${detail}`)
@@ -112,9 +112,11 @@ export class TrustedRuleRefused extends Error {
  * action another rule already names (two rules for one task overlap, vta-sdk
  * approvals/mod.rs validate).
  *
- * `served`, when known, is the task types the agent dispatches: a rule is
- * written only for those versions, as {@link ruleVersionsFor} does for the
- * phone's own rules. Unknown, every listed version is written.
+ * `served` is the task types the agent dispatches: a rule is written only for
+ * those versions, never another, as {@link ruleVersionsFor} does for the
+ * phone's own rules (an agent refuses the whole row when one rule names a
+ * retired type). With no answer, every listed version. Refuses `not-served`
+ * for an action the agent's answer names no version of; nothing is written.
  */
 export function withTrustedApprovers(
   model: Pick<ApprovalsModel, 'rules' | 'sets'>,
@@ -136,8 +138,11 @@ export function withTrustedApprovers(
     const listed = taskTypesOf(key)
     const clash = others.find((rule) => listed.includes(rule.taskType))
     if (clash) throw new TrustedRuleRefused('held-elsewhere', clash.taskType)
+    // Never a version the agent does not dispatch: one retired type and the agent refuses the whole row (the lab
+    // run, 11-10: acl/grant 0.1/0.2 against VTI main). With no answer, every listed version, as ruleVersionsFor.
     const versions = served ? listed.filter((uri) => served.includes(uri)) : listed
-    for (const taskType of versions.length ? versions : listed)
+    if (!versions.length) throw new TrustedRuleRefused('not-served', key)
+    for (const taskType of versions)
       rules.push({ taskType, requires: 'consent', approverSet: TRUSTED_SET, minApprovals: 1, excludeRequester: true })
   }
   sets[TRUSTED_SET] = members

@@ -2832,7 +2832,8 @@ export class VtaAgentController {
           releaseWarn(`[VTI] trusted approvers: rules written, version ${model.version} → ${version}`)
           return { view: trustedApproversView(next), version }
         } catch (error) {
-          if (error instanceof TrustedRuleRefused) throw new DeviceActionRefused('failed', error.message)
+          if (error instanceof TrustedRuleRefused)
+            throw new DeviceActionRefused(error.reason === 'not-served' ? 'notServed' : 'failed', error.message)
           const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
           if (details?.reason === 'conflict' && attempt === 0) continue
           throw this.refused(error)
