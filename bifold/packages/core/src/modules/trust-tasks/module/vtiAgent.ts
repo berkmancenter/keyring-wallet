@@ -217,7 +217,7 @@ export const VTI_TURN_AFTER_REFUSALS = 2
 /** How long a hold (`holding`) keeps others waiting when its caller names no time: a stuck hold must not freeze sign-ins. */
 export const VTI_HOLD_MAX_MS = 10 * 60_000
 
-/** How long a background hold keeps others waiting when its caller names no time. */
+/** How long a background hold, or a listing read's (`holding`'s `listing`), keeps others waiting when its caller names no time. */
 export const VTI_BACKGROUND_HOLD_MAX_MS = 2 * 60_000
 
 /**
@@ -291,6 +291,8 @@ export class VtiSignInResting extends Error {
 interface SessionHold {
   did: string
   background: boolean
+  /** A screen's listing read (`holding`'s `listing`): a poll waits for it rather than being refused. */
+  listing?: boolean
   until: number
   reason?: string
 }
@@ -1065,6 +1067,8 @@ class VtiAgentController {
   /** The holds on the session (`holding`), and the ordinary connects waiting for one to end, by DID. */
   private readonly holds = new Map<symbol, SessionHold>()
   private readonly foregroundWaiting = new Map<symbol, string>()
+  /** The listing reads waiting for the session (`holding`'s `listing`), by DID: a poll as another identity waits for them. */
+  private readonly listingWaiting = new Map<symbol, string>()
   private readonly holdWatchers = new Set<() => void>()
   /** The DID an ordinary connect last signed in as, and until when a background one leaves it (`VTI_FOREGROUND_CLAIM_MS`). */
   private claim?: { did: string; until: number }
@@ -1095,20 +1099,47 @@ class VtiAgentController {
 
   /**
    * What stops a connect as `did` from going ahead now: `wait` until the holds named end, `refuse` with
-   * `VtiSessionHeld`, or nothing. An ordinary connect waits only for another DID's ordinary hold — a background one is
-   * a poll and gives way. A background connect waits for another DID's background hold, and is refused by anything an
-   * ordinary caller holds, waits for, or signed in as within `VTI_FOREGROUND_CLAIM_MS` — that last one only until the
-   * same identity has been refused by it `VTI_TURN_AFTER_REFUSALS` times running (`byClaim`): then it is its turn. No
-   * DID (a new identity) never switches an open session, so nothing stops it then.
+   * `VtiSessionHeld`, or nothing. Three kinds of caller, in this order of way: a step's (ordinary), a screen's listing
+   * read (`listing`), a poll (`background`).
+   *
+   * - An ordinary connect waits only for another DID's ordinary hold, a listing read's included. A poll's hold gives
+   *   way to it.
+   * - A listing read waits for another DID's hold of any kind, and for an ordinary connect waiting for the session: it
+   *   switches nothing away, and nothing refuses it.
+   * - A background connect is refused by a step's hold, by an ordinary connect waiting, or by the DID an ordinary
+   *   connect signed in as within `VTI_FOREGROUND_CLAIM_MS` (that last only until the same identity has been refused by
+   *   it `VTI_TURN_AFTER_REFUSALS` times running: `byClaim`, then it is its turn). It waits for another DID's listing
+   *   read that holds the session, for one waiting for it when this connect would switch the session, and for another
+   *   DID's poll.
+   *
+   * No DID (a new identity) never switches an open session, so nothing stops it then.
    */
   private blockerFor(
     did: string | undefined,
-    background: boolean
+    background: boolean,
+    listing = false
   ): { wait: SessionHold } | { refuse: VtiSessionHeld; byClaim?: true } | undefined {
     const holds = this.liveHolds().filter((h) => h.did !== did)
     const ordinary = holds.find((h) => !h.background)
+    const polling = holds.find((h) => h.background)
+    // Waiting for an identity that holds nothing yet: what it waits on ends that wait (`holdsChanged`). Every other wait
+    // here is on a live hold, and so is timed by that hold's `until`; this one gets a clock of its own, so a wake that
+    // never came is re-checked rather than waited on for ever (`holdsMoved`).
+    const waitingFor = (d: string, reason: string): SessionHold => ({
+      did: d,
+      background,
+      until: this.now() + VTI_BACKGROUND_HOLD_MAX_MS,
+      reason,
+    })
+    if (listing) {
+      const held = ordinary ?? polling
+      if (held) return { wait: held }
+      const step = [...this.foregroundWaiting.values()].find((d) => d !== did)
+      return step ? { wait: waitingFor(step, 'an identity is waiting to sign in') } : undefined
+    }
     if (!background) return ordinary ? { wait: ordinary } : undefined
-    if (ordinary) return { refuse: new VtiSessionHeld(ordinary.did, ordinary.reason) }
+    const step = holds.find((h) => !h.background && !h.listing)
+    if (step) return { refuse: new VtiSessionHeld(step.did, step.reason) }
     const waiting = [...this.foregroundWaiting.values()].find((d) => d !== did)
     if (waiting) return { refuse: new VtiSessionHeld(waiting, 'an identity is waiting to sign in') }
     const sessionDid = this.state.did ?? this.state.signingInAs
@@ -1121,15 +1152,24 @@ class VtiAgentController {
       (!did || (this.refusedByClaim.get(did) ?? 0) < VTI_TURN_AFTER_REFUSALS)
     )
       return { refuse: new VtiSessionHeld(this.claim.did, 'signed in for a step just now'), byClaim: true }
-    const polling = holds.find((h) => h.background)
+    const read = holds.find((h) => h.listing)
+    if (read) return { wait: read }
+    // A listing read waiting goes before a poll that would switch the session; a poll that shares the session as it is
+    // signed in finishes its round first, so a round is not split by a switch there and back. With no session open at
+    // all, a poll would open one rather than switch it, and waits too: the listing read is ahead of it.
+    const reading = [...this.listingWaiting.values()].find((d) => d !== did)
+    if (reading && did && did !== sessionDid) return { wait: waitingFor(reading, 'a listing read is waiting') }
     return polling ? { wait: polling } : undefined
   }
 
-  /** Resolves when a hold or a waiter comes or goes, or when the soonest hold or the claim runs out of time. */
-  private holdsMoved(): Promise<void> {
+  /**
+   * Resolves when a hold or a waiter comes or goes, or when the soonest hold, the claim or `until` (what the caller waits
+   * on, if it is not a hold) runs out of time. With none of those, nothing is timed: `Math.min()` is `Infinity`.
+   */
+  private holdsMoved(until = Infinity): Promise<void> {
     return new Promise((resolve) => {
       const claimEnds = this.claim && this.claim.until > this.now() ? [this.claim.until] : []
-      const soonest = Math.min(...this.liveHolds().map((h) => h.until), ...claimEnds)
+      const soonest = Math.min(...this.liveHolds().map((h) => h.until), ...claimEnds, until)
       const done = () => {
         if (timer) clearTimeout(timer)
         this.holdWatchers.delete(done)
@@ -1171,6 +1211,13 @@ class VtiAgentController {
    * `claims: false`: an ordinary hold that leaves no claim (`VTI_FOREGROUND_CLAIM_MS`) behind it. A screen's listing
    * read (the polls) is the person's, so it does not give way while it runs, but it is no step to protect after: each
    * one renewed the claim, and kept another community's reads from the session while the screen was open (11-03).
+   *
+   * `listing`: a screen's listing read (the polls). It takes its turn, between a step and a poll (`blockerFor`): it
+   * waits for another identity's hold of any kind, a poll's included, so it never switches a rooms listing away
+   * mid-read; and a poll as another identity waits for it rather than being refused. While a polls read held the
+   * session as an ordinary caller, both communities' rooms listings were refused and the list showed neither (rooms
+   * slow, 11-04). It is never refused and leaves no claim; without `maxMs` it keeps others waiting at most
+   * `VTI_BACKGROUND_HOLD_MAX_MS`.
    */
   async holding<T>(
     agent: Agent,
@@ -1183,14 +1230,17 @@ class VtiAgentController {
       maxMs?: number
       background?: boolean
       claims?: boolean
+      listing?: boolean
     } = {}
   ): Promise<T> {
     const background = opts.background === true
+    const listing = !background && opts.listing === true
     const key = Symbol(persona.did)
     const hold = (): SessionHold => ({
       did: persona.did,
       background,
-      until: this.now() + (opts.maxMs ?? (background ? VTI_BACKGROUND_HOLD_MAX_MS : VTI_HOLD_MAX_MS)),
+      ...(listing ? { listing } : {}),
+      until: this.now() + (opts.maxMs ?? (background || listing ? VTI_BACKGROUND_HOLD_MAX_MS : VTI_HOLD_MAX_MS)),
       reason: opts.reason,
     })
     // Taken as the sign-in settles, before any other caller waiting on it runs; if the session was not left as
@@ -1199,9 +1249,9 @@ class VtiAgentController {
       await this.signIn(
         agent,
         mediatorDid,
-        { persona, peerRevisionStore: opts.peerRevisionStore, background },
+        { persona, peerRevisionStore: opts.peerRevisionStore, background, listing },
         { key, hold },
-        opts.claims !== false
+        opts.claims !== false && !listing
       )
     try {
       return await fn(persona.did)
@@ -1294,6 +1344,8 @@ class VtiAgentController {
        * nothing disconnected.
        */
       background?: boolean
+      /** A screen's listing read (`holding`'s `listing`): waits its turn, never refused, switches no hold away. */
+      listing?: boolean
     } = {}
   ): Promise<void> {
     return this.signIn(agent, mediatorDid, options)
@@ -1309,6 +1361,7 @@ class VtiAgentController {
   ): Promise<void> {
     const wantedDid = options.persona?.did ?? options.identity?.did
     const background = options.background === true
+    const listing = !background && options.listing === true
     const waiter = Symbol(wantedDid ?? 'new identity')
     let saidWaiting = false
     // A background sign-in leaves alone an identity whose last sign-in failed, until its rest runs out: refused before
@@ -1323,7 +1376,7 @@ class VtiAgentController {
         while (this.connecting) await this.connecting.catch(() => undefined)
         // Checked after the earlier sign-in settles, and nothing awaited between this and `connecting` being set.
         if (background && wantedDid) this.refuseIfResting(wantedDid)
-        const blocker = this.blockerFor(wantedDid, background)
+        const blocker = this.blockerFor(wantedDid, background, listing)
         if (!blocker) break
         if ('refuse' in blocker) {
           if ('byClaim' in blocker && wantedDid)
@@ -1336,14 +1389,17 @@ class VtiAgentController {
             `vtiAgent: connect waits for a hold on the session${blocker.wait.reason ? ` (${blocker.wait.reason})` : ''} to end`
           )
         }
-        if (!background && wantedDid && !this.foregroundWaiting.has(waiter)) {
-          this.foregroundWaiting.set(waiter, wantedDid)
+        // A step waiting refuses polls as another identity; a listing read waiting makes them wait instead.
+        const waitingIn = listing ? this.listingWaiting : this.foregroundWaiting
+        if (!background && wantedDid && !waitingIn.has(waiter)) {
+          waitingIn.set(waiter, wantedDid)
           this.holdsChanged()
         }
-        await this.holdsMoved()
+        await this.holdsMoved(blocker.wait.until)
       }
     } finally {
-      if (this.foregroundWaiting.delete(waiter)) this.holdsChanged()
+      // `listing` is fixed for the call, so the waiter is in one map at most and `||` skips nothing.
+      if (this.foregroundWaiting.delete(waiter) || this.listingWaiting.delete(waiter)) this.holdsChanged()
     }
     const attempt = this.connectNow(agent, mediatorDid, options)
     this.connecting = attempt

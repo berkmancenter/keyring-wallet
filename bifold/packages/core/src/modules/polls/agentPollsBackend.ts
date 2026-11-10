@@ -45,11 +45,13 @@ export const isPollsListing = (type: string): boolean => /\/vtc\/elections\/(lis
 export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: string } = {}): PollsBackend {
   const identityStore = new GenericRecordsIdentityStore(agent)
   const communityStore = new GenericRecordsCommunityStore(agent)
-  // The session to a community is the persona the phone joined it with, held while the task runs: a read and a
-  // ticket request are the person's own acts, and hold it as an ordinary caller does. A listing read leaves no claim on
-  // the session after it (`claims: false`): each one renewed it, and another community's rooms were refused for as long
-  // as the polls were open (34VR-Y58H, 277.8, 11-03). A ticket request still does.
-  const asPersona = async <T>(community: string, fn: () => Promise<T>, claims = true): Promise<T> => {
+  // The session to a community is the persona the phone joined it with, held while the task runs. A ticket request is
+  // the person's own act, and holds it as an ordinary caller does. A listing read takes its turn (`listing`): it waits
+  // for another community's rooms listing rather than cutting it off, and that listing waits for it rather than being
+  // refused — while a polls read held the session as an ordinary caller, the rooms of both communities were refused
+  // and the list showed neither (rooms slow, 11-04). It leaves no claim after it either: each one renewed the claim, and
+  // another community's rooms were refused for as long as the polls were open (34VR-Y58H, 277.8, 11-03).
+  const asPersona = async <T>(community: string, fn: () => Promise<T>, listing = false): Promise<T> => {
     // As rooms: the identity kept for this community, or the one its membership names (sharedIdentity, IN-517).
     const persona = await personaForCommunity(identityStore, communityStore, community)
     if (!persona) {
@@ -63,7 +65,8 @@ export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: s
     return vtiAgent.holding(agent, options.mediatorDid, persona, fn, {
       peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
       reason: 'polls',
-      claims,
+      claims: !listing,
+      ...(listing ? { listing } : {}),
     })
   }
   // The signed-in client rooms use: `task` and what the agent serves, nothing else.
@@ -75,7 +78,7 @@ export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: s
 
   return {
     communityTask: (community, type, payload) =>
-      asPersona(community, () => vtiAgent.communityTask(community, type, payload), !isPollsListing(type)),
+      asPersona(community, () => vtiAgent.communityTask(community, type, payload), isPollsListing(type)),
     sendCompleted: (community, document) => asPersona(community, () => vtiAgent.sendCompleted(community, document)),
     agentTask: async (type, payload) =>
       (await (await client()).task(type, payload as Record<string, unknown>)) as Record<string, unknown>,
