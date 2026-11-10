@@ -61,6 +61,7 @@ import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type Ts
 import { fetchWaitingIfBusy } from './vtcBusy'
 import { isAgentsOwnPersona } from './agentOwnIdentity'
 import { didPrefix } from './didPrefix'
+import { PROBLEM_REPORT, problemReportWords } from './problemReportWords'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { listKeyed, putKeyed } from './keyedRecords'
 import { releaseWarn } from './releaseLog'
@@ -100,7 +101,6 @@ const ELECTIONS_READS = [
   'https://trusttasks.org/spec/vtc/elections/show/0.3',
   'https://trusttasks.org/spec/vtc/elections/show/0.2',
 ]
-const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 /*
  * Every document `ask` sends is signed. `ask` carries only DIDComm and TSP,
  * and over those a VTC takes a document only when its proof is by its
@@ -755,6 +755,22 @@ class VtiAgentController {
         `vtiAgent: ${who} refused ${entry ? taskName(entry.type) : 'a task'}: ${refusal.code}${
           refusal.message ? ` — ${refusal.message}` : ''
         }`
+      )
+    }
+    // A DIDComm problem-report, said with its code, words and the thread it
+    // answers: three reached a tester's report as a bare type (IN-617). Said
+    // through releaseWarn, as the transport says the mediator's own, so it
+    // reaches a report whatever logger the agent has. One threaded on an ask
+    // is that ask's refusal (below), so it is said twice on purpose: here as
+    // received, with its thread, and again by whatever logs the ask's failure.
+    // Any other goes to the inbox, which keeps none of it.
+    if (type === PROBLEM_REPORT) {
+      const who = hidden ? 'the community' : didPrefix(plaintext.from)
+      releaseWarn(
+        `vtiAgent: ${who} sent a problem-report on ${entry ? taskName(entry.type) : 'no request in flight'}: ${problemReportWords(
+          plaintext,
+          { hideDids: hidden }
+        )}`
       )
     }
     if (entry) {

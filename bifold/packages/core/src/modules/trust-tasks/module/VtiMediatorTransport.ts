@@ -59,6 +59,7 @@ import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didc
 import { tsp } from '@bifold/trust-tasks'
 
 import { didPrefix } from './didPrefix'
+import { isProblemReport, problemReportWords } from './problemReportWords'
 import { releaseWarn } from './releaseLog'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
 
@@ -975,7 +976,17 @@ export class VtiMediatorSession {
           this.heardPickup(plaintext)
           return
         }
-        if (plaintext.from === this.mediator.did) return
+        if (plaintext.from === this.mediator.did) {
+          // The mediator's own problem-report, about something this transport
+          // sent it: dropped unsaid, three reached a tester's report as a bare
+          // type, each just after the socket closed (IN-617). Still not handed
+          // on or acknowledged, as before; only said.
+          if (isProblemReport(plaintext))
+            releaseWarn(
+              `${LOG_PREFIX} ${this.where} sent a problem-report for ${didPrefix(this.identity.did)}: ${problemReportWords(plaintext)}`
+            )
+          return
+        }
         // The mediator ids a stored message by sha256(packed bytes) and streams
         // those exact bytes, so the hash of the raw frame is the queue id that
         // acknowledges a live delivery (affinidi-messaging-sdk, websocket.rs)
