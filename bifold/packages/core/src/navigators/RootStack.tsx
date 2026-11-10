@@ -13,6 +13,7 @@ import { BiometricConfirmationProvider } from '../contexts/biometric-confirmatio
 import RelationshipProposalModal from '../modules/vrc/components/RelationshipProposalModal'
 import LateStepReadyModal from '../modules/vrc/components/LateStepReadyModal'
 import ContinuityCheckModal from '../modules/vrc/components/ContinuityCheckModal'
+import ApproverOfferModal from '../modules/trust-tasks/components/ApproverOfferModal'
 import LocalityPreflightModal from '../modules/vrc/components/LocalityPreflightModal'
 import CredentialExchangeQueryModal from '../modules/trust-tasks/components/CredentialExchangeQueryModal'
 import { useStore } from '../contexts/store'
@@ -105,6 +106,7 @@ const RootStack: React.FC = () => {
                   <RelationshipProposalModal />
                   <LateStepReadyModal />
                   <ContinuityCheckModal />
+                  <ApproverOfferModal />
                   <LocalityPreflightModal />
                   <CredentialExchangeQueryModal />
                 </ActivityProvider>

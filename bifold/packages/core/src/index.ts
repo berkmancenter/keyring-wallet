@@ -282,6 +282,7 @@ export {
   setTspCarriageEnabled,
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
+  setTrustedApproversEnabled,
   setDidCommV2Enabled,
   setPeerLegCarriage,
   getPeerLegCarriage,

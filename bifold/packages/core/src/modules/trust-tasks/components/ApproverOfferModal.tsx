@@ -1,0 +1,183 @@
+/**
+ * "Be an approver for {{asker}}?" — the asked phone's half of the role offer (approverRole.ts). Shown when a contact's
+ * offer arrives, verified under the relationship this phone has with them; never one that failed that check.
+ *
+ * Yes names the DID this phone approves as, its manager DID on its own linked agent (`vtaAgent.approverDid`), so a yes
+ * needs this phone linked; without that only No and Not now are offered, and it says why. No sends a signed no.
+ * Not now sends nothing and hides the offer until the app starts again (it is kept, and comes back then).
+ *
+ * Self-contained: mounted once at the root beside ContinuityCheckModal. With the trusted-approvers switch off it shows
+ * nothing and brings nothing back.
+ */
+import { useAgent } from '@bifold/react-hooks'
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
+import { ScrollView, StyleSheet } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+
+import Button, { ButtonType } from '../../../components/buttons/Button'
+import SafeAreaModal from '../../../components/modals/SafeAreaModal'
+import { ThemedText } from '../../../components/texts/ThemedText'
+import { useTheme } from '../../../contexts/theme'
+import { testIdWithKey } from '../../../utils/testable'
+import {
+  approverRoleEvents,
+  respondToRoleOffer,
+  restoreRoleOfferPrompts,
+  roleOfferPromptStore,
+  type RoleOfferPrompt,
+} from '../approverRole'
+import { releaseWarn } from '../module/releaseLog'
+import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
+import { vtaAgent } from '../module/vtaAgent'
+
+export const ApproverOfferIds = {
+  sheet: 'ApproverOffer',
+  body: 'ApproverOfferBody',
+  yes: 'ApproverOfferYes',
+  no: 'ApproverOfferNo',
+  notNow: 'ApproverOfferNotNow',
+  needsAgent: 'ApproverOfferNeedsAgent',
+  failed: 'ApproverOfferFailed',
+} as const
+
+/** Offers put off with Not now, by connection, until the app starts again. */
+const putOff = new Set<string>()
+
+/** Tests only. */
+export const resetPutOff = () => putOff.clear()
+
+const firstShown = () => roleOfferPromptStore.list().find((prompt) => prompt.open && !putOff.has(prompt.connectionId))
+
+const ApproverOfferModal: React.FC = () => {
+  const { agent } = useAgent()
+  const { ColorPalette } = useTheme()
+  const { t } = useTranslation()
+  const on = isTrustedApproversEnabled()
+  const [prompt, setPrompt] = useState<RoleOfferPrompt | undefined>(() => (on ? firstShown() : undefined))
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const linked = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().link.kind === 'linked')
+
+  useEffect(() => {
+    if (!agent || !on) return
+    restoreRoleOfferPrompts(agent).catch((error: unknown) =>
+      releaseWarn(`[VTI] approver offers not brought back: ${(error as Error)?.message ?? error}`)
+    )
+  }, [agent, on])
+
+  useEffect(() => {
+    if (!on) return
+    const refresh = () => setPrompt(firstShown())
+    approverRoleEvents.on('offer', refresh)
+    approverRoleEvents.on('promptCleared', refresh)
+    return () => {
+      approverRoleEvents.off('offer', refresh)
+      approverRoleEvents.off('promptCleared', refresh)
+    }
+  }, [on])
+
+  const answer = useCallback(
+    async (accept: boolean) => {
+      if (!agent || !prompt || busy) return
+      setBusy(true)
+      setFailed(false)
+      try {
+        const approverDid = accept ? await vtaAgent.approverDid(agent) : undefined
+        await respondToRoleOffer(agent, prompt.connectionId, accept, approverDid)
+        releaseWarn(`[VTI] approver offer answered: ${accept ? 'yes' : 'no'}`)
+      } catch (error) {
+        releaseWarn(
+          `[VTI] approver answer not sent (${(error as Error)?.name ?? 'error'}: ${(error as Error)?.message})`
+        )
+        setFailed(true)
+      } finally {
+        setBusy(false)
+      }
+    },
+    [agent, prompt, busy]
+  )
+
+  const notNow = useCallback(() => {
+    if (!prompt) return
+    putOff.add(prompt.connectionId)
+    setFailed(false)
+    setPrompt(firstShown())
+  }, [prompt])
+
+  if (!on || !prompt) return null
+
+  const words = {
+    asker: prompt.asker || t('Approver.UnnamedContact'),
+    interpolation: { escapeValue: false },
+  }
+  const styles = StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    safeAreaView: {
+      flexShrink: 1,
+      backgroundColor: ColorPalette.brand.modalPrimaryBackground,
+      borderTopRightRadius: 20,
+      borderTopLeftRadius: 20,
+    },
+    container: { paddingHorizontal: 24, paddingBottom: 24, paddingTop: 24, gap: 12 },
+    centred: { textAlign: 'center' },
+    muted: { color: ColorPalette.grayscale.mediumGrey },
+    error: { color: ColorPalette.semantic.error, textAlign: 'center' },
+  })
+
+  return (
+    <SafeAreaModal visible transparent animationType="slide">
+      <SafeAreaView style={styles.overlay} edges={['top']}>
+        <SafeAreaView style={styles.safeAreaView} edges={['bottom']}>
+          <ScrollView
+            bounces={false}
+            contentContainerStyle={styles.container}
+            testID={testIdWithKey(ApproverOfferIds.sheet)}
+          >
+            <ThemedText variant="headingThree" style={styles.centred} accessibilityRole="header">
+              {t('Approver.OfferTitle', words)}
+            </ThemedText>
+            <ThemedText testID={testIdWithKey(ApproverOfferIds.body)}>{t('Approver.OfferBody', words)}</ThemedText>
+            {prompt.actions.map((action) => (
+              <ThemedText key={action}>• {t(`Approver.Action.${action}`)}</ThemedText>
+            ))}
+            <ThemedText style={styles.muted}>{t('Approver.OfferHow')}</ThemedText>
+            {!linked ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey(ApproverOfferIds.needsAgent)}>
+                {t('Approver.OfferNeedsAgent')}
+              </ThemedText>
+            ) : null}
+            {failed ? (
+              <ThemedText style={styles.error} testID={testIdWithKey(ApproverOfferIds.failed)}>
+                {t('Approver.OfferFailed')}
+              </ThemedText>
+            ) : null}
+            <Button
+              title={t('Approver.OfferYes')}
+              buttonType={ButtonType.Primary}
+              onPress={() => void answer(true)}
+              disabled={busy || !linked}
+              testID={testIdWithKey(ApproverOfferIds.yes)}
+            />
+            <Button
+              title={t('Approver.OfferNo')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => void answer(false)}
+              disabled={busy}
+              testID={testIdWithKey(ApproverOfferIds.no)}
+            />
+            <Button
+              title={t('Approver.OfferNotNow')}
+              buttonType={ButtonType.Tertiary}
+              onPress={notNow}
+              disabled={busy}
+              testID={testIdWithKey(ApproverOfferIds.notNow)}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </SafeAreaView>
+    </SafeAreaModal>
+  )
+}
+
+export default ApproverOfferModal

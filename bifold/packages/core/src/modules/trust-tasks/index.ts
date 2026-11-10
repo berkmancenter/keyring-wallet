@@ -50,6 +50,11 @@ export {
   setSharedConnectInviteEnabled,
   isSharedConnectInviteEnabled,
 } from './module/sharedConnectFlag'
+export {
+  setTrustedApproversEnabled,
+  isTrustedApproversEnabled,
+  TRUSTED_APPROVERS_REMOTE_OFF,
+} from './module/trustedApproversFlag'
 
 // 228 writer: DTG Credentials v1 shapes are written only when this is on (default off).
 export {

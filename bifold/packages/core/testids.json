@@ -161,6 +161,7 @@
     "AgentUnreachableRetry": ["src/modules/trust-tasks/screens/AgentUnreachableNotice.tsx"],
     "AgentVetterCard": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentVetterLapsed": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentWhoApprovesRow": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
     "AllowCameraUse": ["src/components/modals/CameraDisclosureModal.tsx"],
     "AppGuides": ["src/screens/Settings.tsx"],
     "AppSettingCancel": ["src/screens/PINVerify.tsx"],
@@ -180,6 +181,18 @@
       "src/modules/trust-tasks/screens/MyAgent.ids.ts",
       "src/modules/trust-tasks/screens/RequestCard.tsx"
     ],
+    "ApproverAsk": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
+    "ApproverAskAgain": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
+    "ApproverAskButton": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
+    "ApproverAskError": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
+    "ApproverAskStatus": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
+    "ApproverOffer": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
+    "ApproverOfferBody": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
+    "ApproverOfferFailed": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
+    "ApproverOfferNeedsAgent": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
+    "ApproverOfferNo": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
+    "ApproverOfferNotNow": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
+    "ApproverOfferYes": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
     "AskMe": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AskMeDetails": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AskMeElsewhere": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
@@ -1484,6 +1497,10 @@
     "TrustTaskApprovalTitle": ["src/screens/TrustTaskApprovalCard.tsx", "src/screens/TrustTaskApprovalModal.tsx"],
     "TrustTaskApprove": ["src/screens/TrustTaskApprovalCard.tsx", "src/screens/TrustTaskApprovalModal.tsx"],
     "TrustTaskDeny": ["src/screens/TrustTaskApprovalCard.tsx", "src/screens/TrustTaskApprovalModal.tsx"],
+    "TrustedApprovers": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversApprovingFor": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversError": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversNone": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "UndoToast": ["src/components/toast/UndoToast.tsx"],
     "UndoToastUndo": ["src/components/toast/UndoToast.tsx"],
     "UnverifiedProofView": ["src/screens/ProofDetails.tsx"],
@@ -2170,6 +2187,42 @@
       "src/modules/rooms/screens/RoomInfo.tsx": "PART_TEST_ID[part]"
     },
     {
+      "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.body"
+    },
+    {
+      "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.failed"
+    },
+    {
+      "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.needsAgent"
+    },
+    {
+      "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.no"
+    },
+    {
+      "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.notNow"
+    },
+    {
+      "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.sheet"
+    },
+    {
+      "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.yes"
+    },
+    {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.again"
+    },
+    {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.ask"
+    },
+    {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.row"
+    },
+    {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.status"
+    },
+    {
       "src/modules/trust-tasks/screens/CommunityMark.tsx": "VtiCommunityIds.logo"
     },
     {
@@ -2774,6 +2827,33 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.waitingForPhone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.accepted(ask.connectionId)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.add(ask.connectionId)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.approver(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.approvingFor"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.none"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.notNow(ask.connectionId)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.remove(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.screen"
     },
     {
       "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.applyToCommunityButton"

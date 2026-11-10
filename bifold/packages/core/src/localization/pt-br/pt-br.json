@@ -1134,7 +1134,8 @@
     "Invited": "Entrar por convite",
     "Join": "Entrar em uma comunidade",
     "VtaClaim": "Configurar seu agente",
-    "SharedConnect": "Conectar com alguém"
+    "SharedConnect": "Conectar com alguém",
+    "VtaTrustedApprovers": "Quem aprova"
   },
   "Loading": {
     "TakingTooLong": "Isso esta demorando mais que o normal. Você pode voltar para a home ou continuar esperando.",
@@ -3482,5 +3483,46 @@
     "VoteLaterKeeps": "Votar mais tarde guarda seu bilhete. A votação mostra “Bilhete pronto” na lista até você votar.",
     "BackToCommunity": "Voltar à comunidade",
     "CertifiedOn": "Certificado pela comunidade em {{date}}"
+  },
+  "Approver": {
+    "AskTitle": "Aprovador",
+    "Ask": "Pedir a {{name}} para ser meu aprovador",
+    "AskCaption": "{{name}} será consultado no celular antes de o seu agente compartilhar uma credencial, entrar em uma comunidade, adicionar um dispositivo ou mudar quem aprova.",
+    "Waiting": "Aguardando a resposta de {{name}}.",
+    "AskAgain": "Pedir de novo",
+    "SaidYes": "{{name}} disse sim. Adicione em Meu agente, em Quem aprova.",
+    "IsApprover": "{{name}} aprova por você.",
+    "NoRelationship": "Troque primeiro uma credencial de relacionamento com {{name}}.",
+    "NotSent": "O pedido não chegou a {{name}}. Tente de novo.",
+    "OfferTitle": "Ser aprovador de {{asker}}?",
+    "OfferBody": "{{asker}} pede que você aprove isto, no seu celular, antes que o agente dele faça:",
+    "OfferHow": "A cada vez, um pedido chega a este celular. Você pode dizer sim ou não.",
+    "OfferYes": "Sim, vou aprovar",
+    "OfferNo": "Não",
+    "OfferNotNow": "Agora não",
+    "OfferNeedsAgent": "Para dizer sim, vincule primeiro este celular ao seu próprio agente, em Meu agente.",
+    "OfferFailed": "Sua resposta não foi enviada. Tente de novo.",
+    "Action": {
+      "shareCredential": "Compartilhar uma credencial",
+      "joinCommunity": "Entrar em uma comunidade",
+      "addDevice": "Adicionar um dispositivo",
+      "changeApprovers": "Mudar quem aprova"
+    },
+    "Intro": "Pessoas de confiança podem aprovar algumas coisas antes que o seu agente as faça. Elas são consultadas no próprio celular.",
+    "Loading": "Lendo as regras do seu agente…",
+    "None": "Ninguém aprova por você ainda. Peça a um contato na página dele.",
+    "Approvers": "Quem aprova",
+    "Unnamed": "Alguém fora dos seus contatos",
+    "Remove": "Remover",
+    "RemoveNeedsYes": "Seu agente pode consultar seus aprovadores antes de remover um.",
+    "Covers": "Eles aprovam:",
+    "HeldElsewhere": "Já coberto por outra regra: {{actions}}",
+    "Accepted": "Disse sim",
+    "Add": "Adicionar {{name}}",
+    "NotNow": "Agora não",
+    "IApproveFor": "Pessoas por quem eu aprovo",
+    "IApproveForNone": "Ninguém ainda.",
+    "IApproveForSince": "Desde {{date}}",
+    "UnnamedContact": "Um contato"
   }
 }

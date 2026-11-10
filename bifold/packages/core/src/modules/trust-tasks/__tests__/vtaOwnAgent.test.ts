@@ -1633,6 +1633,60 @@ describe('VtaClient: approval rules follow a key swap', () => {
   })
 })
 
+describe('trusted approvers: another person approves for this agent', () => {
+  const JORDAN = 'did:peer:2.jordans-phone'
+  const TRUSTED = 'keyring-trusted-approvers'
+  const MINT = 'https://trusttasks.org/spec/vta/webvh/dids/create/1.2'
+  const PRESENT = 'https://trusttasks.org/spec/vault/credentials/present/0.1'
+  const rulesHeld = () => (mockVta.policy?.ext['openvtc.approvals'] ?? []) as Array<Record<string, unknown>>
+  const setsHeld = () => mockVta.policy?.ext['openvtc.approver-sets'] as Record<string, string[]> | undefined
+
+  it('naming an approver: the owner check, then the rules and the set written against the version read', async () => {
+    const { vta } = await linkedPhone()
+    const state = await vta.setTrustedApprovers(agent, [JORDAN], ['shareCredential', 'joinCommunity'])
+    expect(mockVta.log[0]).toBe('confirmOwner: Change who approves for you')
+    expect(sentOf(POLICY_UPSERT)[0].payload).toMatchObject({ id: 'approvals', expectedVersion: 0 })
+    expect(setsHeld()).toEqual({ [TRUSTED]: [JORDAN] })
+    expect(rulesHeld()).toEqual(
+      expect.arrayContaining([
+        { taskType: PRESENT, requires: 'consent', approverSet: TRUSTED, minApprovals: 1, excludeRequester: true },
+        { taskType: MINT, requires: 'consent', approverSet: TRUSTED, minApprovals: 1, excludeRequester: true },
+      ])
+    )
+    expect(state.view).toEqual({ approvers: [JORDAN], keys: ['shareCredential', 'joinCommunity'], heldElsewhere: [] })
+    // Read back the same way.
+    expect((await vta.trustedApprovers(agent)).view.approvers).toEqual([JORDAN])
+  })
+
+  it('keeps this phone\'s own "Ask me before…" rule, and removing the approver leaves only that', async () => {
+    const { vta } = await linkedPhone()
+    await vta.setApprovalRule(agent, CONTEXTS_CREATE, true)
+    const own = rulesHeld()
+    await vta.setTrustedApprovers(agent, [JORDAN], ['joinCommunity'])
+    expect(rulesHeld().slice(0, own.length)).toEqual(own)
+    await vta.setTrustedApprovers(agent, [], [])
+    expect(rulesHeld()).toEqual(own)
+    expect(setsHeld()).toEqual({ [`keyring-phone:${PHONE}`]: [PHONE] })
+  })
+
+  it('an action another rule already holds is refused, and nothing is written', async () => {
+    mockVta.policy = {
+      version: 2,
+      module: 'elsewhere',
+      ext: {
+        'openvtc.approvals': [{ taskType: PRESENT, requires: 'consent', approverSet: 'ops' }],
+        'openvtc.approver-sets': { ops: ['did:key:z6MkOps'] },
+      },
+    }
+    const { vta } = await linkedPhone()
+    await expect(vta.setTrustedApprovers(agent, [JORDAN], ['shareCredential'])).rejects.toBeInstanceOf(
+      DeviceActionRefused
+    )
+    expect(sentOf(POLICY_UPSERT)).toEqual([])
+    expect((await vta.trustedApprovers(agent)).view.heldElsewhere).toEqual(['shareCredential'])
+  })
+})
+
 describe('"Ask me before…": the agent\'s approval rules', () => {
   const CREATE = CONTEXTS_CREATE
   const REVOKE_KEY = 'https://trusttasks.org/spec/keys/revoke/0.1'

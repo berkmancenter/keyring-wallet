@@ -1260,7 +1260,8 @@
     "VtaNewPhoneOffer": "Your other devices",
     "SignIn": "Sign in",
     "VtaClaim": "Set up your agent",
-    "SharedConnect": "Connect with someone"
+    "SharedConnect": "Connect with someone",
+    "VtaTrustedApprovers": "Who approves"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -3608,5 +3609,46 @@
     "VoteLaterKeeps": "Vote later keeps your ticket. The poll shows “Ticket ready” in the list until you vote.",
     "BackToCommunity": "Back to the community",
     "CertifiedOn": "Certified by the community on {{date}}"
+  },
+  "Approver": {
+    "AskTitle": "Approver",
+    "Ask": "Ask {{name}} to be my approver",
+    "AskCaption": "{{name}} will be asked on their phone before your agent shares a credential, joins a community, adds a device or changes who approves.",
+    "Waiting": "Waiting for {{name}} to answer.",
+    "AskAgain": "Ask again",
+    "SaidYes": "{{name}} said yes. Add them on My agent, under Who approves.",
+    "IsApprover": "{{name}} approves for you.",
+    "NoRelationship": "Exchange a relationship credential with {{name}} first.",
+    "NotSent": "The ask didn't go to {{name}}. Try again.",
+    "OfferTitle": "Be an approver for {{asker}}?",
+    "OfferBody": "{{asker}} asks you to approve these, on your phone, before their agent does them:",
+    "OfferHow": "Each time, a request comes to this phone. You can say yes or no.",
+    "OfferYes": "Yes, I'll approve",
+    "OfferNo": "No",
+    "OfferNotNow": "Not now",
+    "OfferNeedsAgent": "To say yes, link this phone to your own agent first, on My agent.",
+    "OfferFailed": "Your answer didn't go. Try again.",
+    "Action": {
+      "shareCredential": "Sharing a credential",
+      "joinCommunity": "Joining a community",
+      "addDevice": "Adding a device",
+      "changeApprovers": "Changing who approves"
+    },
+    "Intro": "People you trust can approve some things before your agent does them. They are asked on their own phone.",
+    "Loading": "Reading your agent's rules…",
+    "None": "Nobody approves for you yet. Ask a contact from their contact page.",
+    "Approvers": "Who approves",
+    "Unnamed": "Someone not in your contacts",
+    "Remove": "Remove",
+    "RemoveNeedsYes": "Your agent may ask your approvers before it removes one.",
+    "Covers": "They approve:",
+    "HeldElsewhere": "Already held by another rule: {{actions}}",
+    "Accepted": "Said yes",
+    "Add": "Add {{name}}",
+    "NotNow": "Not now",
+    "IApproveFor": "People I approve for",
+    "IApproveForNone": "Nobody yet.",
+    "IApproveForSince": "Since {{date}}",
+    "UnnamedContact": "A contact"
   }
 }

@@ -33,6 +33,13 @@ import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutc
 import type { StepUpRequest } from './stepUp'
 import { releaseWarn } from './releaseLog'
 import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
+import {
+  TrustedRuleRefused,
+  trustedApproversView,
+  withTrustedApprovers,
+  type TrustedApproversView,
+  type TrustedKey,
+} from './trustedApprovers'
 import { VtiRefusal, vtiAgent } from './vtiAgent'
 import {
   ManagerKeyUnresolved,
@@ -110,6 +117,13 @@ export interface ApprovalRulesState {
   view: ApprovalsView
   /** This phone may write the rules: an unrestricted admin, and a row Keyring reads whole. */
   canChange: boolean
+}
+
+/** Who approves for this person, as the agent holds it (trusted-approver plan §4). */
+export interface TrustedApproversState {
+  view: TrustedApproversView
+  /** The row's version, as read or as written. */
+  version: number
 }
 
 export interface VtiApproval extends VtaConsentRequest {
@@ -2716,6 +2730,70 @@ export class VtaAgentController {
           const held = { ...next, version, unreadable: false }
           return { model: held, view: approvalsView(held, managerDid, served), canChange: true }
         } catch (error) {
+          const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
+          if (details?.reason === 'conflict' && attempt === 0) continue
+          throw this.refused(error)
+        }
+      }
+    })
+  }
+
+  /**
+   * The DID this phone approves as when it says yes to being someone's
+   * approver: its manager DID on its own linked agent, where that agent's
+   * consent requests reach it. Signs in if it must. Refuses with
+   * {@link DeviceActionRefused} `notLinked` when there is none.
+   */
+  async approverDid(agent: Agent): Promise<string> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    if (!client.managerDid) throw new DeviceActionRefused('notLinked')
+    return client.managerDid
+  }
+
+  /**
+   * Who approves for this person, read from the agent's approvals row
+   * (trustedApprovers.ts). Signs in if it must. Refuses with
+   * {@link DeviceActionRefused}.
+   */
+  async trustedApprovers(agent: Agent): Promise<TrustedApproversState> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    const model = await client.readApprovals().catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    return { view: trustedApproversView(model), version: model.version }
+  }
+
+  /**
+   * Set who approves for this person and for what (trusted-approver plan §4
+   * step 3), on the row as the agent holds it now: read, change only the
+   * trusted rules, write against the version read, and on a clash read and
+   * apply once more, as {@link setApprovalRule} does. Empty `approvers` or
+   * `keys` removes them. Asks the person to confirm first; nothing is sent
+   * without it. If the agent holds rule changes for the approver's yes, the
+   * write waits for it like any held task.
+   */
+  async setTrustedApprovers(
+    agent: Agent,
+    approvers: readonly string[],
+    keys: readonly TrustedKey[]
+  ): Promise<TrustedApproversState> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner('Change who approves for you')
+    releaseWarn('[VTI] trusted approvers: owner confirmed; writing the rules')
+    return this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      const served = await client.supportedTypes()
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const model = await client.readApprovals()
+          if (model.unreadable)
+            throw new DeviceActionRefused('failed', 'the approval rules hold something Keyring cannot read')
+          const next = withTrustedApprovers(model, approvers, keys, served)
+          const version = await client.writeApprovals(next, model.version)
+          releaseWarn(`[VTI] trusted approvers: rules written, version ${model.version} → ${version}`)
+          return { view: trustedApproversView(next), version }
+        } catch (error) {
+          if (error instanceof TrustedRuleRefused) throw new DeviceActionRefused('failed', error.message)
           const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
           if (details?.reason === 'conflict' && attempt === 0) continue
           throw this.refused(error)

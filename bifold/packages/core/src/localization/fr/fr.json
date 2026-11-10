@@ -1201,7 +1201,8 @@
     "Invited": "Rejoindre sur invitation",
     "Join": "Rejoindre une communauté",
     "VtaClaim": "Configurer votre agent",
-    "SharedConnect": "Se connecter avec quelqu'un"
+    "SharedConnect": "Se connecter avec quelqu'un",
+    "VtaTrustedApprovers": "Qui approuve"
   },
   "Loading": {
     "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
@@ -3566,5 +3567,46 @@
     "VoteLaterKeeps": "Voter plus tard garde votre ticket. Le sondage affiche « Ticket prêt » dans la liste jusqu'à ce que vous votiez.",
     "BackToCommunity": "Retour à la communauté",
     "CertifiedOn": "Certifié par la communauté le {{date}}"
+  },
+  "Approver": {
+    "AskTitle": "Approbateur",
+    "Ask": "Demander à {{name}} d’être mon approbateur",
+    "AskCaption": "{{name}} sera sollicité sur son téléphone avant que votre agent partage une attestation, rejoigne une communauté, ajoute un appareil ou change qui approuve.",
+    "Waiting": "En attente de la réponse de {{name}}.",
+    "AskAgain": "Redemander",
+    "SaidYes": "{{name}} a dit oui. Ajoutez cette personne dans Mon agent, sous Qui approuve.",
+    "IsApprover": "{{name}} approuve pour vous.",
+    "NoRelationship": "Échangez d’abord une attestation de relation avec {{name}}.",
+    "NotSent": "La demande n’est pas partie vers {{name}}. Réessayez.",
+    "OfferTitle": "Être approbateur pour {{asker}} ?",
+    "OfferBody": "{{asker}} vous demande d’approuver ceci, sur votre téléphone, avant que son agent le fasse :",
+    "OfferHow": "À chaque fois, une demande arrive sur ce téléphone. Vous pouvez dire oui ou non.",
+    "OfferYes": "Oui, j’approuverai",
+    "OfferNo": "Non",
+    "OfferNotNow": "Plus tard",
+    "OfferNeedsAgent": "Pour dire oui, liez d’abord ce téléphone à votre propre agent, dans Mon agent.",
+    "OfferFailed": "Votre réponse n’est pas partie. Réessayez.",
+    "Action": {
+      "shareCredential": "Partager une attestation",
+      "joinCommunity": "Rejoindre une communauté",
+      "addDevice": "Ajouter un appareil",
+      "changeApprovers": "Changer qui approuve"
+    },
+    "Intro": "Des personnes de confiance peuvent approuver certaines choses avant que votre agent les fasse. Elles sont sollicitées sur leur propre téléphone.",
+    "Loading": "Lecture des règles de votre agent…",
+    "None": "Personne n’approuve encore pour vous. Demandez à un contact depuis sa page.",
+    "Approvers": "Qui approuve",
+    "Unnamed": "Une personne absente de vos contacts",
+    "Remove": "Retirer",
+    "RemoveNeedsYes": "Votre agent peut demander à vos approbateurs avant d’en retirer un.",
+    "Covers": "Ils approuvent :",
+    "HeldElsewhere": "Déjà couvert par une autre règle : {{actions}}",
+    "Accepted": "A dit oui",
+    "Add": "Ajouter {{name}}",
+    "NotNow": "Plus tard",
+    "IApproveFor": "Les personnes pour qui j’approuve",
+    "IApproveForNone": "Personne pour l’instant.",
+    "IApproveForSince": "Depuis le {{date}}",
+    "UnnamedContact": "Un contact"
   }
 }

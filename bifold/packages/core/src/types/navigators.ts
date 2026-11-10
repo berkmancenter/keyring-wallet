@@ -89,6 +89,7 @@ export enum Screens {
   VtaAgent = 'Your agent',
   VtaRequests = 'Requests',
   VtaAskMe = 'Ask me before',
+  VtaTrustedApprovers = 'Who approves',
   VtaAgentSettings = 'Agent settings',
   VtiInvited = 'Invited',
   VtiJoin = 'Join',
@@ -185,6 +186,7 @@ export type MyAgentStackParams = {
   [Screens.VtaAgent]: { highlightCommunity?: string } | undefined
   [Screens.VtaRequests]: undefined
   [Screens.VtaAskMe]: undefined
+  [Screens.VtaTrustedApprovers]: undefined
   [Screens.VtaAgentSettings]: { unlink?: boolean } | undefined
   [Screens.VtiInvited]: undefined
   [Screens.VtaCreateAgent]: { addDevice?: boolean; byAddress?: boolean } | undefined

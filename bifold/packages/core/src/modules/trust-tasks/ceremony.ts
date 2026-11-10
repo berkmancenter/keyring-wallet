@@ -67,6 +67,8 @@ import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
 import * as continuitySpec from '../vrc/contacts/continuitySpec'
 import { handleContinuityRequest, handleContinuityResponse } from '../vrc/contacts/continuity'
+import * as approverRoleSpec from './approverRoleSpec'
+import { handleRoleOfferRequest, handleRoleOfferResponse } from './approverRole'
 import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
 import { setupChatInbound } from '../chat/inbound'
@@ -2047,6 +2049,17 @@ function registerBuiltinTrustTasks(): void {
     orchestration: { requiresDiscovery: false },
     handleRequest: handleContinuityRequest,
     handleResponse: handleContinuityResponse,
+  })
+
+  // Keyring's own type (private authority): one person asks a contact to be their trusted approver. Its handlers do
+  // nothing while the trusted-approvers switch is off.
+  trustTaskRegistry.register({
+    typeUri: approverRoleSpec.TYPE_URI,
+    spec: approverRoleSpec.SPEC as never,
+    responseSpec: approverRoleSpec.RESPONSE_SPEC as never,
+    orchestration: { requiresDiscovery: false },
+    handleRequest: handleRoleOfferRequest,
+    handleResponse: handleRoleOfferResponse,
   })
 }
 
