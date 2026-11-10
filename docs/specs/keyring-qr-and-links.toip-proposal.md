@@ -1,6 +1,6 @@
 # Proposal: a shared link host for one-scan links
 
-**Status:** DRAFT, not sent. From Brendan Miller to Trust Over IP. Trust Over IP has agreed to nothing here. The link format is specified in [`keyring-qr-and-links.md`](./keyring-qr-and-links.md). VTI's flows and their identifiers are specified in the VTI specification draft (`trustoverip/dtgwg-vti-spec`, trigger-link chapter), so this proposal asks only for a host.
+**Status:** DRAFT, not sent. From Brendan Miller to Trust Over IP. Trust Over IP has agreed to nothing here. The link format is specified in [`keyring-qr-and-links.md`](./keyring-qr-and-links.md). VTI's flows and their identifiers are specified in the VTI specification (`trustoverip/dtgwg-vti-spec`, trigger-link chapter), so this proposal asks only for a host.
 
 ## The problem
 

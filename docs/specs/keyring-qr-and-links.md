@@ -13,7 +13,7 @@
 
 **Scope: a general standard, and what we adopt.**
 - **The general standard.** This document proposes a QR code and link format for any wallet and any inviter, in any ecosystem, written so that it can later be contributed for wider use. It is sections 1 to 7.
-- **What VTI and Keyring adopt.** Section 8 holds VTI's choices: the Trust Task first request and VTI's two flows, which Keyring and the VTA Farm adopt. They are examples of the format, not part of it. What Keyring and the Farm choose for themselves, which is deliberately narrower, is in the plan ([`one-scan-and-vtc-sign-in-plan.md`](../plans/one-scan-and-vtc-sign-in-plan.md), section 1.3), not here.
+- **What VTI and Keyring adopt.** Section 8 holds VTI's choices: the Trust Task first request and VTI's registry flows (`sign-in`, `vta-claim` and `step-up`), of which Keyring and the VTA Farm adopt the first two. They are examples of the format, not part of it. What Keyring and the Farm choose for themselves, which is deliberately narrower, is in the plan ([`one-scan-and-vtc-sign-in-plan.md`](../plans/one-scan-and-vtc-sign-in-plan.md), section 1.3), not here.
 
 **Keywords:** MUST, MUST NOT, SHOULD and MAY are used as in BCP 14 (RFC 2119, RFC 8174), only when in capitals.
 
@@ -94,7 +94,7 @@ Names are compared case-sensitively after decoding. Some consequences:
 6. `_from` absent: `missing-from`. Not a well-formed contact (section 2): `bad-from`. A contact form the consumer does not support: `unsupported-vid`.
 7. `_id` absent or not as in section 2: `bad-id`. `_exp` present and not as in section 2: `bad-exp`.
 8. `_type` present and not as in section 2: `bad-type`. A path form is resolved as in section 4. A resolved flow that names a flow the consumer implements, but on a different host: `wrong-host`. A resolved flow that, without its version segment, is not a flow the consumer implements: `unknown-flow`. A version the consumer does not accept (section 4): `unsupported-version`.
-9. The flow does not allow the contact (section 4): `from-not-allowed`. The flow requires an expiry and `_exp` is absent: `missing-exp`.
+9. The flow does not allow the contact (section 4), such as a contact no route of the contact rule (section 8.3) can qualify: `from-not-allowed`. The flow requires an expiry and `_exp` is absent: `missing-exp`.
 10. `_exp + 60 <= now`, by the consumer's clock: `expired`. The 60 seconds absorb phone clock error. The inviter still decides expiry by its own clock.
 11. Accept, with `from`, `id`, `exp` (or null), `flow` and `task` (or null when there is no hint), and `ignored`.
 
@@ -105,7 +105,7 @@ A consumer MAY check in another order if it always reports the same result.
 | Outcome | Reasons | Message |
 |---|---|---|
 | `update` | `unsupported-vid`, `unknown-flow`, `unsupported-version` | "This code needs a newer version of the app." |
-| `expired` | `expired` | "This code has expired. Get a new one." |
+| `expired` | `expired`, `step-up-gone` (VTI-LNK-129) | "This code has expired. Get a new one." |
 | `unreachable` | `no-common-transport` (section 5) | "This service can't be reached from your wallet." |
 | `pass-on` | `not-ours` | None. The text goes to the consumer's other handlers, unchanged. |
 | `invalid` | every other reason | "This code can't be used." |
@@ -115,6 +115,8 @@ After `unsupported-vid`, `unknown-flow` or `unsupported-version`, a consumer MUS
 - `unsupported-vid` maps to `update`, because a newer wallet may support that kind of identifier.
 - `from-not-allowed` maps to `invalid`, because no update changes a flow's rule.
 - `wrong-host` maps to `invalid`, because telling the person to update the app would be wrong.
+- `domain-not-linked` (VTI-LNK-123, section 8.3) maps to `invalid`, because the fault is the service's, and no update to the consumer repairs it.
+- The other reasons the VTI flows add after reading (`did-document-unverified`, `no-portal-service`, `wrong-origin`, `not-in-records`, `not-the-subject`, `binding-mismatch`) are all `invalid`, as the chapter's table (VTI-LNK-021) gives "every other reason".
 
 ## 4. Flows and versions
 
@@ -140,9 +142,11 @@ A consumer holds the list of flow URIs it implements, without their version segm
 1. **Confirm before any network activity** (VTI-LNK-050, 051).
    - Before any network activity, DID resolution included, the consumer shows who the contact claims to be, labelled unverified, and waits for the person to continue.
    - For a contact with a domain, it shows the domain, followed by the path where the identifier has one: `dids.example.org/farm-auth` for `did:webvh:<SCID>:dids.example.org:farm-auth`.
-   - For a contact without a domain, it shows its own label for that contact if it has one, and otherwise says the contact has no domain to show.
+   - For a contact without a domain, it shows its own label for that contact if it has one, and otherwise says the contact has no domain to show. For a `did:scid:vh:1` identifier it shows the host and path of its `src` parameter.
    - **Exception for known contacts.** For a flow that acts only for contacts already in the consumer's own records, the consumer MAY resolve such a contact before the person continues. The host contacted is then one the person chose when the record was made.
-2. **Approve after verification** (VTI-LNK-052). The consumer resolves the contact's DID document and verifies it (for `did:webvh`, the log verifies) before sending anything. If it cannot, it stops with `did-document-unverified` (outcome `invalid`) and sends nothing. After verification it shows the verified details, and sends nothing until the person approves.
+   - **Exception for a page activation.** A consumer that received the trigger from the person's activation of a link on a page (rule 9) MAY also resolve and verify the contact before the person continues, for any flow except `vta-claim` (VTI-LNK-051, 111). A trigger read by a camera or pasted MUST NOT be resolved early on that ground.
+   - **What early resolution fetches.** Only what resolving and verifying the DID document needs. The domain-linkage fetch of route B (section 8.3) is not part of resolution, and a consumer MUST NOT make it before the person continues, on any ground (VTI-LNK-051, 122).
+2. **Approve after verification** (VTI-LNK-052). The consumer resolves the contact's DID document and verifies it (for `did:webvh`, the log verifies; for `did:scid:vh:1`, the log verifies as for `did:webvh`, through the source the contact names) before sending anything. If it cannot, it stops with `did-document-unverified` (outcome `invalid`) and sends nothing. After verification it shows the verified details, and sends nothing until the person approves, except as VTI-LNK-106 allows for `sign-in` (section 8.2). The consumer sends nothing to the contact's services, and fetches no endpoint the document lists, before then; the route B fetch of section 8.3 is the one fetch made after the person continues.
 3. **Unauthenticated text is never fact** (VTI-LNK-052). No field of the trigger other than the contact is shown as a statement of what the exchange is.
 4. **Fresh key** (VTI-LNK-057). A first request the consumer signs is signed by a key made for this exchange and used for no other exchange. The exception is a flow that defines a signature by an identifier the person chooses when approving. Such a flow MUST state why the exchange needs an identifier the person already uses, and the consumer MUST tell the person, before approval, which identifier the inviter will see.
 5. **Transport from the document only** (VTI-LNK-053).
@@ -155,7 +159,7 @@ A consumer holds the list of flow URIs it implements, without their version segm
    - **Choosing.** The consumer's own preference order chooses among bindings. Among candidates of one type, the first in document order wins. The order of services of different types, and DIDComm's `accept`, do not choose.
    - **No candidate.** The result is `no-common-transport`. Nothing is sent, and the consumer does not fall back to another path or to anything in the text.
    - **Replies and freshness.** The request and its reply use the chosen binding. The document is resolved afresh for each exchange.
-6. **Host rules** (VTI-LNK-060, 061). These apply to the link host, to the host of a contact that has one, and to every endpoint host the consumer contacts.
+6. **Host rules** (VTI-LNK-060, 061). These apply to the link host, to the host of a contact that has one (for a `did:scid:vh:1` identifier, the host of its `src` parameter after percent-decoding), and to every endpoint host the consumer contacts.
    - A host is a DNS name of at least two labels and at most 253 characters, with no trailing dot.
    - Each label is 1 to 63 characters of lowercase `a-z`, `0-9` and `-`, not beginning or ending with `-`. The last label is not all digits.
    - It is not an IP address in any form, including the forms WHATWG host parsing turns into an address.
@@ -167,7 +171,7 @@ A consumer holds the list of flow URIs it implements, without their version segm
    - It carries the handle, so the inviter can find the pending exchange.
    - A flow MAY use the Trust Task first request (section 8.1), or define its own, for example a DIDComm or OpenID request. The format requires no particular protocol; VTI's registry flows all use the Trust Task first request (VTI-LNK-054, section 8.1).
 8. **No hint** (VTI-LNK-055). The consumer MAY ask the inviter what it supports, through a discovery mechanism of a protocol both implement; for Trust Tasks, that is `trust-task-discovery` (draft). Discovery does not say which flow a handle opens, so a consumer MAY refuse a trigger it cannot place (outcome `invalid`).
-9. **A link activated on a page** (VTI-LNK-056). A consumer that receives a trigger from the activation of a link on a page, such as a browser extension, MUST record the origin of that page at activation, and MUST NOT act on an activation the person did not make. A flow may use the recorded origin; `sign-in` refuses a page that is not the portal (VTI-LNK-105).
+9. **A link activated on a page** (VTI-LNK-056). A consumer that receives a trigger from the activation of a link on a page, such as a browser extension, MUST record the origin of that page at activation, and MUST NOT act on an activation the person did not make. A flow may use the recorded origin; `sign-in` refuses a page that is not the portal (VTI-LNK-105), and may take the activation as the person continuing (VTI-LNK-106; section 8.2).
 
 ## 6. Security and producer requirements
 
@@ -204,12 +208,14 @@ A consumer holds the list of flow URIs it implements, without their version segm
 - A rejected result has `outcome`, `reason` and `ui`.
 
 **What no vector can test:**
-- section 5 rules 1 to 4 and 7 to 9;
+- section 5 rules 1 to 4 and 7 to 9, and everything in section 8.2 and 8.3 that needs resolution, a page, the consumer's records or a fetch: the routes of the contact rule, `domain-not-linked`, `no-portal-service`, `wrong-origin`, `not-in-records`, `step-up-gone`, `not-the-subject` and `binding-mismatch`;
 - the resolved-address check of rule 6, and the host rules on a contact's host, which apply at resolution;
 - fresh resolution, and same-binding replies, in rule 5;
 - section 6;
 - DID verification;
 - what any phone does with a link.
+
+The vectors do test the reader-side part of the contact rule that needs no resolution: a contact whose method cannot list services (`did:key`) is `from-not-allowed` for `sign-in` and `vta-claim`, and the `step-up` flow reads like the others.
 
 The vectors test a reader's parsing, not any wallet's code.
 
@@ -234,14 +240,45 @@ The framework defines `parentThreadId` as "the `threadId` of the exchange that c
 
 ### 8.2 The flows VTI defines
 
-The VTI specification governs flows under `https://link.trustoverip.org/vti/flow/` (VTI-LNK-046). Both use the Trust Task first request (section 8.1). Their full requirements are VTI-LNK-100 to 105 and 110 to 116.
+The VTI specification governs flows under `https://link.trustoverip.org/vti/flow/` (VTI-LNK-046). All three use the Trust Task first request (section 8.1). Their full requirements are VTI-LNK-100 to 107 for `sign-in`, VTI-LNK-110 to 117 for `vta-claim`, and VTI-LNK-125 to 131 for `step-up`. Keyring and the VTA Farm adopt `sign-in` and `vta-claim`; the plan does not schedule `step-up`.
 
-The 300 second expiry limit is stated for `sign-in` (VTI-LNK-100) and `vta-claim` (VTI-LNK-110) only, and this document does not generalise it. Expiry rules for other flows are per flow, and a per-flow expiry for flows beyond these is pending `dtgwg-vti-spec` issue 86.
+The 300 second expiry limit is stated for `sign-in` (VTI-LNK-100), `vta-claim` (VTI-LNK-110) and `step-up` (VTI-LNK-125, which also bounds it by the hand-off's `expiresAt`), and this document does not generalise it. Expiry rules for other flows are per flow, and a per-flow expiry for flows beyond these is pending `dtgwg-vti-spec` issue 86.
 
 | Flow | Identifier (version 0.1, draft) | Contact | Expiry | Contact rules |
 |---|---|---|---|---|
-| sign in to a community portal | `https://link.trustoverip.org/vti/flow/sign-in/0.1` | the community's VTC | required, at most 300 seconds after the code is made | The consumer acts only for a community already in its records, and sends nothing to any other. The contact's document must list the portal's service, so a `did:key` is `from-not-allowed`. |
-| claim a VTA from a VTA Farm | `https://link.trustoverip.org/vti/flow/vta-claim/0.1` | the Farm | required, at most 300 seconds after the code is made | A first contact: rule 1's known-contact exception does not apply. The contact's document must list the claim service, so a `did:key` is `from-not-allowed`. |
+| sign in to a service's portal | `https://link.trustoverip.org/vti/flow/sign-in/0.1` | the service's VID: a VTC, or another service offering sign-in, such as a DID hosting service | required, at most 300 seconds after the code is made (VTI-LNK-100) | The consumer acts only for a service already in its records (VTI-LNK-101). The contact must qualify under the contact rule (section 8.3), and its verified document must list a `SignInPortal` service (VTI-LNK-102), so a `did:key` is `from-not-allowed` (VTI-LNK-102, 118). |
+| claim a VTA from a VTA Farm | `https://link.trustoverip.org/vti/flow/vta-claim/0.1` | the Farm's VID | required, at most 300 seconds after the code is made (VTI-LNK-110) | A first contact: neither early-resolution exception of section 5 rule 1 applies (VTI-LNK-111). The contact must qualify under the contact rule, and its verified document must list the Farm's claim service (VTI-LNK-112), so a `did:key` is `from-not-allowed` (VTI-LNK-112, 118). |
+| approve one operation a delegated key was refused | `https://link.trustoverip.org/vti/flow/step-up/0.1` | the VID of the service that refused the operation | required, no later than the hand-off's `expiresAt` and at most 300 seconds after the link is made (VTI-LNK-125) | The consumer acts only for a service already in its records, and never offers to add one (VTI-LNK-128). The contact rule does not apply: the service qualified when the person added it. |
+
+**`sign-in`.**
+- **Handle.** A VTC SHOULD use a 16-byte handle (VTI-LNK-103).
+- **Names shown.** Before the first request the consumer shows the name it holds for the contact in its own records, and the portal origin from the verified document, never a name taken from the link. It flags a signed reply whose name differs from its record before the person approves anything further (VTI-LNK-104).
+- **Same-device click.** A consumer that recorded the origin of the page the link was activated from (section 5 rule 9) compares it with the portal's origin in the verified document, and on a difference stops with `wrong-origin` (outcome `invalid`) and sends nothing (VTI-LNK-105).
+- **Activation as approval.** Where that origin matched, the service is in the consumer's records, and the records hold exactly one identity for it, the consumer MAY take the activation as the person continuing and approving the first request. With more than one identity it lets the person choose. It still shows the service's name and portal origin before the person approves the sign-in itself (VTI-LNK-106).
+- **Number entry.** A portal that asks the person to enter a number SHOULD mark the element showing it with `data-oob-request-id` (the handle) and `data-oob-match-number`. A consumer that received the link from the activation on that page MAY read the number from that page, for that handle, while the page's origin is still the one it recorded, and MUST NOT send anything to the page. If it finds no number, or a signed reply gives a name that differs from its records, it asks the person to enter it (VTI-LNK-107).
+
+**`vta-claim`.**
+- **First request.** The issuer of the first request is the identifier the claim makes an administrator of the VTA. The consumer MUST NOT use an identifier it already uses for another VTA or exchange (VTI-LNK-113).
+- **First claim wins.** A Farm accepts at most one claim per handle, atomically, and does not treat a request without a valid signed first request as a claim (VTI-LNK-114).
+- **Claim check.** After a successful claim a Farm SHOULD show a claim check on the claim page, the consumer SHOULD show the same one computed from its own identifier, and the Farm SHOULD hold the VTA in reservation until the person confirms they match (VTI-LNK-115).
+- **Handle.** A Farm SHOULD use a 16-byte handle (VTI-LNK-116).
+- **Adding an administrator.** A Farm that uses `vta-claim` to add an administrator to a running VTA MUST show the code only to a signed-in account that already controls the VTA, and MUST apply the claim check before the identifier is written (VTI-LNK-117).
+
+**`step-up`.**
+- **The link's producer.** It is the party that sent the refused operation, from the hand-off the service gave it. It shows the link only to the person the step-up's subject is, and does not present the inline step-up request as something the person approves (VTI-LNK-127). A service issues a handle only in the `details.stepUpHandoff` of a refusal for an operation bound under VTI-APV-015, answers each handle at most once, and answers every handle it cannot answer with the same refusal (VTI-LNK-126).
+- **First request.** `auth/step-up/requests/show/0.1`, carrying the handle as `handle` as well as `parentThreadId`. A consumer that receives the refusal for an unanswerable handle stops with `step-up-gone` (outcome `expired`) (VTI-LNK-129). A contact not in the consumer's records is `not-in-records` (outcome `invalid`), and nothing is sent (VTI-LNK-128).
+- **On the response.** The consumer verifies the returned step-up request as a Trust Task document in its own right, stops with `not-the-subject` if its records hold no identity for the service that is the subject, and recomputes the binding from the returned operation, stopping with `binding-mismatch` if it differs (VTI-LNK-130). If the person approves, the consumer sends the answer as the subject to the contact, and does not pass the evidence or the answer to the party that made the link (VTI-LNK-131).
+
+### 8.3 The contact rule for `sign-in` and `vta-claim`
+
+The contact rule decides which DIDs `sign-in` and `vta-claim` accept as a contact. It qualifies a contact by what the consumer can prove about it, not by its DID method. The **contact's origin** is, for `sign-in`, the portal's origin (VTI-LNK-102), and, for `vta-claim`, the origin of the claim service's endpoint (VTI-LNK-112).
+
+- **The rule** (VTI-LNK-118). A contact qualifies only if the consumer resolves its DID with a method it supports and verifies the document (section 5 rule 2), the document lists the service the flow requires, and the contact qualifies through route A or route B. A consumer with no resolver for the method stops with `unsupported-vid` (outcome `update`), not `from-not-allowed`. It refuses with `from-not-allowed` only a contact no route can qualify, such as a method whose documents cannot list services (`did:key`). It refuses a `did:peer` contact with `from-not-allowed` by either route.
+- **Route A, host-named** (VTI-LNK-119). The method names, in the identifier, the host that serves its document, and resolution confirms the document came from that host: for example `did:webvh`, `did:web`, `did:webs`, and a `did:scid:vh:1` DID URL with a `src` parameter, whose host is the host of `src`. A producer gives a `did:scid:vh:1` contact with its `src`. A contact without `src` names no host, so route A cannot qualify it and the consumer refuses it with `from-not-allowed`.
+- **Route B, domain-linked** (VTI-LNK-120, 121). For a contact of any method route A does not cover, the consumer confirms, before it sends the first request, that the contact's origin is linked to the contact's DID by the Well-Known DID Configuration. It fetches `<contact's origin>/.well-known/did-configuration.json` with a `GET` that carries no cookies or credentials, follows no redirect to another origin, times out, and reads at most 64 KiB. It treats the origin as linked only on a Domain Linkage Credential in `linked_dids` that meets the four conditions of VTI-LNK-121 (issuer and subject equal the contact's DID; the origin equals the contact's origin exactly; valid now, with 60 seconds' allowance; signature verifies with an `assertionMethod` key of the verified document), in a JWT or Data Integrity (`eddsa-jcs-2022`) format the consumer supports.
+- **When the fetch is made** (VTI-LNK-122). Only after the person has continued, whatever the activation (camera, paste or page), and never early under VTI-LNK-051. Until the check succeeds, the consumer does not show the contact's origin as its verified domain.
+- **Failure** (VTI-LNK-123). Any failure of the check, a failed fetch included, stops the consumer with `domain-not-linked` (outcome `invalid`), and it sends nothing to the contact's services.
+- **The inviter's part** (VTI-LNK-124). An inviter whose DID qualifies only through route B publishes a DID configuration that VTI-LNK-121 accepts before it emits a `sign-in` or `vta-claim` link, and serves it with `Access-Control-Allow-Origin: *` and without requiring credentials. For a contact that qualifies only through route B, the `vta-claim` service endpoint MUST be an `https` URL meeting the host rules (VTI-LNK-112).
 
 ## 9. References
 

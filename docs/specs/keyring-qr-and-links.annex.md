@@ -80,7 +80,7 @@ The vectors cannot show what a phone does with a link. These runs use real devic
 - **Standard decoding.** `URLSearchParams` and `urlencode` percent-encode colons and slashes. A reader that refused `%` would refuse what standard libraries emit.
 - **No fetch, nothing spent on a GET.** Link previews, mail scanners, chat unfurlers, in-app browsers and an unverified-link browser fallback all fetch a link before the phone does. A handle spent on a GET strands the real person.
 - **Confirm before network.** Without it, any web page could make a phone fetch a DID log from a host the page chose (revealing the phone's address and reaching local hosts) and send a signed request. The first screen shows only what the text says, labelled unverified: the domain, and the path for an identifier that has one, since one host may serve many identifiers.
-- **Known contacts may be resolved first.** For a flow that acts only for contacts already in the wallet's records, resolving such a contact before the tap reaches only a host the person chose when the record was made, so the reason above does not apply.
+- **Known contacts may be resolved first.** For a flow that acts only for contacts already in the wallet's records, resolving such a contact before the tap reaches only a host the person chose when the record was made, so the reason above does not apply. A link activated on a page may also be resolved first, except for a `vta-claim` Farm, which is a first contact (VTI-LNK-051, 111). Only the DID document is fetched: the domain-linkage fetch of route B (VTI-LNK-120) always waits for the tap (VTI-LNK-122).
 - **Expiry allowance of 60 seconds.** Phone clocks drift. 60 s absorbs that without outlasting a code that lives a few minutes. The inviter still decides expiry by its own clock.
 - **One spelling per handle.** Requiring the unused bits of the last character to be zero means a handle compared as a string cannot be presented twice under two spellings. 128 bits is the floor for a value nobody can guess; 256 bits leaves room for an inviter that encodes state in the handle.
 - **The size limit binds producers, not readers.** A reader that refused long links would break a valid link when a mail system appends a parameter. The producer limit is what keeps codes scannable.
@@ -126,11 +126,11 @@ The vectors cannot show what a phone does with a link. These runs use real devic
 | `auth/step-up/approver/invite/0.1`, `redeem/start/0.1`; `auth/passkey/enroll/invite/0.2` | single-use invite URL with a code "never carried in `url`"; "the fifth wrong code voids the invite" |
 | `trust-task-discovery/0.3` | "A discoverer SHOULD ask in 0.3"; it "MUST NOT act on a discovery response whose origin it can authenticate neither in-band (via `proof`) nor from the transport" |
 | ceremonies (`vtc/member-onboarding`, `vetting/identity-vetting`, `mutual-attestation`) | the `ceremony` member is normative and "A consumer MUST NOT grant any authority on the basis of ceremony membership alone"; no ceremony defines a QR or trigger format |
-| claim of a parked agent, community sign-in | no upstream Trust Task (searched at `7b6bb488`). Since 2026-10-10 the flows are defined in the VTI specification draft (`sign-in`, `vta-claim`; VTI-LNK-100 to 116) |
+| claim of a parked agent, community sign-in | no upstream Trust Task (searched at `7b6bb488`). Since 2026-10-10 the flows are defined in the VTI specification (`sign-in`, `vta-claim` and, since later, `step-up`; VTI-LNK-100 to 131) |
 
 `TSPTransport` appears in upstream example DID documents and source, but no binding names a DID-document service type for TSP (`bindings/tsp/0.1`), and TSP itself defines no invitation format, so the spec maps no service type to TSP.
 
-**The VTI specification draft.** `trustoverip/dtgwg-vti-spec` PR #58, branch `feat/trigger-links`, `spec/07a-links.md` (VTI-LNK-001 to 116), fetched read-only on 2026-10-10. The spec cites its requirement identifiers.
+**The VTI specification.** `trustoverip/dtgwg-vti-spec`, `spec/07a-links.md` (VTI-LNK-001 to 131), merged from PR #58, read on `main` at `a8157ea3` on 2026-11-09 (first read from the PR branch on 2026-10-10). The spec cites its requirement identifiers. Issue 86 of that repository (a person-to-person shared-connect flow, a per-flow size budget and a registry entry) is open and not reflected here.
 
 **Where each other citation was read** (all on 2026-10-08):
 

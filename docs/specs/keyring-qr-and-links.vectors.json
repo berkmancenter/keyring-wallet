@@ -65,6 +65,18 @@
         }
       },
       {
+        "flow": "step-up",
+        "typeBase": "https://link.trustoverip.org/vti/flow/step-up",
+        "status": "draft",
+        "expRequired": true,
+        "allowedVidTypes": "any",
+        "supported": {
+          "0": [
+            1
+          ]
+        }
+      },
+      {
         "flow": "example-stable",
         "typeBase": "https://tasks.example.org/spec/example-stable",
         "status": "stable",
@@ -94,7 +106,7 @@
       "invalid": "This code can't be used.",
       "pass-on": "No message: the text goes to the consumer's other handlers, unchanged."
     },
-    "notes": "Spec section 7 defines how to use this file. input is the scanned, opened or pasted text; channel is scan, deeplink or paste and never changes a core result. An accept lists via (url), from, id, exp (or null), flow (the config label, or null when there is no hint), task (uri, major, minor, or null) and ignored (fragment.<name> for each unknown name that begins with an underscore, in document order). task.uri is the resolved flow URI: a path-form _type (one leading /) is resolved against https:// and the link's host, lowercased, whatever the link's scheme. Flows match by the whole resolved URI without its version segment. A resolved flow whose path, without its version segment, is that of a configured flow on a different host is wrong-host (ui invalid). A draft flow accepts only the listed MINORs; a stable flow accepts any MINOR of a listed MAJOR. allowedVidTypes lists the DID methods a flow accepts as its contact (any other is from-not-allowed), or is any. _from is read under vidSyntax; host rules on a contact's host apply at resolution and no vector tests them. A handle is 22 to 43 characters of base64url, not of a length in handleMalformedLengths, and canonical (handleCanonical). A trigger is expired when exp + skew <= now. The host link.trustoverip.org and the prefix https://link.trustoverip.org/vti/flow/ are proposals: neither is agreed or registered. tasks.example.org, invite.example.org, the flows example-stable and badge-pickup, and the alias scheme examplewallet are test-only. ui follows the reason as in spec section 3. selectionVectors take a DID document and test spec section 5 rule 5 only; the consumer's preference order there is a fixture.",
+    "notes": "Spec section 7 defines how to use this file. input is the scanned, opened or pasted text; channel is scan, deeplink or paste and never changes a core result. An accept lists via (url), from, id, exp (or null), flow (the config label, or null when there is no hint), task (uri, major, minor, or null) and ignored (fragment.<name> for each unknown name that begins with an underscore, in document order). task.uri is the resolved flow URI: a path-form _type (one leading /) is resolved against https:// and the link's host, lowercased, whatever the link's scheme. Flows match by the whole resolved URI without its version segment. A resolved flow whose path, without its version segment, is that of a configured flow on a different host is wrong-host (ui invalid). A draft flow accepts only the listed MINORs; a stable flow accepts any MINOR of a listed MAJOR. allowedVidTypes lists the DID methods a flow accepts as its contact (any other is from-not-allowed), or is any. For sign-in and vta-claim this is the reader-side part of the contact rule (VTI-LNK-118): a DID of a method whose documents cannot list services, such as did:key, is from-not-allowed. The routes of the contact rule themselves (host-named, domain-linked) need resolution and are not tested here. For step-up the contact rule does not apply (VTI-LNK-128), so any contact is allowed at reading. _from is read under vidSyntax; host rules on a contact's host apply at resolution and no vector tests them. A handle is 22 to 43 characters of base64url, not of a length in handleMalformedLengths, and canonical (handleCanonical). A trigger is expired when exp + skew <= now. The host link.trustoverip.org and the prefix https://link.trustoverip.org/vti/flow/ are proposals: neither is agreed or registered. tasks.example.org, invite.example.org, the flows example-stable and badge-pickup, and the alias scheme examplewallet are test-only. ui follows the reason as in spec section 3. selectionVectors take a DID document and test spec section 5 rule 5 only; the consumer's preference order there is a fixture.",
     "selection": {
       "serviceTypeToBinding": {
         "DIDCommMessaging": "didcomm",
@@ -2315,6 +2327,49 @@
           "minor": 1
         },
         "ignored": []
+      }
+    },
+    {
+      "id": "valid-step-up",
+      "group": "flow",
+      "note": "VTI-LNK-125: _exp is required. Whether the contact is in the reader's records (VTI-LNK-128, not-in-records) is reader state, and no vector tests it",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmCommScid:portal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460920&_type=/vti/flow/step-up/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmCommScid:portal.community.example",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791460920,
+        "flow": "step-up",
+        "task": {
+          "uri": "https://link.trustoverip.org/vti/flow/step-up/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "missing-exp-step-up",
+      "group": "flow",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmCommScid:portal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=/vti/flow/step-up/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expired-step-up",
+      "group": "exp",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmCommScid:portal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460740&_type=/vti/flow/step-up/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "expired",
+        "ui": "expired"
       }
     },
     {
