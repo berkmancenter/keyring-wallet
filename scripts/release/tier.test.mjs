@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { addedLines, applyHolds, changedFiles, classify, FLAGS, flagsOf, MIGRATION_PATHS, parseRange, verdict } from './tier.mjs';
+import { addedLines, applyHolds, changedFiles, classify, exemptionOf, FLAGS, flagsOf, MIGRATION_PATHS, parseRange, verdict } from './tier.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 
@@ -203,6 +203,38 @@ test('deletes stored records: storage deletes hold, a Map or Set delete does not
     'await walletStorage.remove(key)', 'await store.delete(id)', 'await deleteRecord(r)', 'forgetConnection(id)', 'wipeWallet()']) assert.equal(held(l), true, l);
 });
 
+test('tier-exempt: a named, reasoned exemption keeps one line out of one content flag, and is always reported', () => {
+  const F = 'bifold/packages/core/src/modules/rooms/agentRoomsService.ts';
+  const held = (line) => flagsOf([F], { [F]: [line] }).some((f) => f.flag === 'deletes stored records');
+  // bifold #933's line: an in-memory Map named for records. Without the note it holds; with it, it does not.
+  assert.equal(held('      this.recordMembers.delete(k)'), true);
+  const ok = '      this.recordMembers.delete(k) // tier-exempt(deletes stored records): in-memory Map cache, not storage';
+  assert.equal(held(ok), false);
+  // The exemption is reported, never silent.
+  const v = verdict([F], { added: { [F]: [ok] } });
+  assert.deepEqual(v.exempted, [{ flag: 'deletes stored records', file: F, line: ok.trim(), reason: 'in-memory Map cache, not storage' }]);
+  assert.equal(v.tier, 'ota');
+  // It must name this exact flag, carry a real reason, and be a comment: anything else still holds.
+  for (const l of [
+    '      this.recordMembers.delete(k) // tier-exempt(sign-in / key handling): in-memory Map cache, not storage',
+    '      this.recordMembers.delete(k) // tier-exempt(deletes stored records): ok',
+    '      this.recordMembers.delete(k) // tier-exempt(deletes stored records):',
+    '      this.recordMembers.delete(k) /* tier-exempt(deletes stored records): in-memory Map cache */',
+    '      this.recordMembers.delete(k) // tier-exempt deletes stored records: in-memory Map cache',
+  ]) assert.equal(held(l), true, l);
+  // A real storage delete still holds when the note sits on another line.
+  assert.equal(flagsOf([F], { [F]: [ok, 'await agent.genericRecords.delete(rec)'] }).some((f) => f.flag === 'deletes stored records'), true);
+  assert.equal(exemptionOf('x.delete(k) // tier-exempt(deletes stored records): in-memory Set of ids', 'deletes stored records'), 'in-memory Set of ids');
+});
+
+test('tier-exempt: a path flag cannot be exempted', () => {
+  const F = 'bifold/packages/core/src/modules/trust-tasks/module/VtaClient.ts';
+  const note = '// tier-exempt(sign-in / key handling): a comment cannot clear a path rule';
+  const v = verdict([F], { added: { [F]: [note] } });
+  assert.equal(v.tier, 'ota-strict');
+  assert.deepEqual(v.exempted, []);
+});
+
 test('deletes stored records: the device-store deletes hold; their reads and writes do not', () => {
   const held = (line) => flagsOf(['app/src/screens/X.tsx'], { 'app/src/screens/X.tsx': [line] }).some((f) => f.flag === 'deletes stored records');
   for (const l of ["await AsyncStorage.removeItem('draft:' + id)", 'await AsyncStorage.multiRemove(keys)', 'await AsyncStorage.clear()',
@@ -241,7 +273,7 @@ test('the command line: exit 0 ota, 5 ota-strict, 4 unchecked; an error carries 
   assert.equal(run('--files', 'app/ios/Podfile').code, 2);
   const err = run('--range', 'not-a-range', '--json');
   assert.equal(err.code, 3);
-  assert.deepEqual(Object.keys(JSON.parse(err.out)).sort(), ['error', 'flags', 'held', 'reasons', 'strict', 'tier', 'unchecked']);
+  assert.deepEqual(Object.keys(JSON.parse(err.out)).sort(), ['error', 'exempted', 'flags', 'held', 'reasons', 'strict', 'tier', 'unchecked']);
 });
 
 test('the command line: a sign-in change read from a range exits 5 and names the strict conditions', () => {

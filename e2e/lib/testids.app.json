@@ -64,6 +64,7 @@
     "ToggleEnableAppToAppPersonFlow": ["src/screens/Developer.tsx"],
     "ToggleEnableDidCommV2": ["src/screens/Developer.tsx"],
     "ToggleEnableLivePickup": ["src/screens/Developer.tsx"],
+    "ToggleEnableSharedConnect": ["src/screens/Developer.tsx"],
     "ToggleEnableTspCarriage": ["src/screens/Developer.tsx"],
     "ToggleFeatureRooms": ["src/screens/Developer.tsx"],
     "ToggleRemoteLoggingSwitch": ["src/screens/Developer.tsx"],
