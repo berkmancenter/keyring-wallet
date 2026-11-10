@@ -27,17 +27,17 @@ const ignored = (t) => `${t}.500  4321  4400 W ReactNativeJS: [VTI] ignored a re
  * logging a notice (`line`): the fake removal appends it, as the real phone logs it after
  * the removal. Returns the admin calls, the adb calls and what was printed.
  */
-function run({ pid = '4321', readable = true, logcat = '', wait = '2', out = `JOIN_MEMBER ${A}\n`, tags = '', collects = 1, line = applied(CLOCK + 1) } = {}) {
+function run({ pid = '4321', readable = true, status = 'member-removed -> 3', skip = '', slow = 0, logcat = '', wait = '2', out = `JOIN_MEMBER ${A}\n`, tags = '', collects = 1, line = applied(CLOCK + 1) } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'notice-'));
   try {
     writeFileSync(path.join(dir, 'leg.out'), out);
     writeFileSync(path.join(dir, 'logcat'), logcat);
     const calls = path.join(dir, 'calls'), adbs = path.join(dir, 'adbs');
     const printed = execFileSync('bash', ['-c', `set -u
-      D=${JSON.stringify(dir)}; BID=asml.bkc.harvard.wallet; GATE_NOTICE_WAIT=${wait}; ${tags ? `NOTICE_TAGS=${JSON.stringify(tags)}` : ""}
+      D=${JSON.stringify(dir)}; BID=asml.bkc.harvard.wallet; GATE_NOTICE_WAIT=${wait}${tags ? `; NOTICE_TAGS=${JSON.stringify(tags)}` : ""}${skip ? `; NOTICE_SKIP=${JSON.stringify(skip)}` : ""}
       galarm() { shift; "$@"; }
       c_admin() {
-        echo "$*" >> ${JSON.stringify(calls)}; echo "member-removed -> 3"
+        echo "$*" >> ${JSON.stringify(calls)}; sleep ${slow}; echo ${JSON.stringify(status)}
         [ "$(wc -l < ${JSON.stringify(calls)})" -le ${collects} ] && echo ${JSON.stringify(line)} >> "$D/logcat"; return 0
       }
       adb() {
@@ -58,36 +58,36 @@ function run({ pid = '4321', readable = true, logcat = '', wait = '2', out = `JO
 
 test('lib.sh has the helper', () => assert.ok(helper));
 
-test('a notice the app logs after the removal is collected: one removal, NOTICE_COLLECTED with the seconds', () => {
+test('a notice the app logs after the removal is collected: one removal, NOTICE_DELIVERED with the seconds', () => {
   const r = run({ logcat: `${applied(CLOCK - 300)}\n` });
   assert.deepEqual(r.calls, [`member-remove ${A} gate: flow B member, removed after the leg`]);
-  assert.match(r.printed, new RegExp(`^NOTICE_COLLECTED ${A} \\d+$`, 'm'));
+  assert.match(r.printed, new RegExp(`^NOTICE_DELIVERED ${A} \\d+ removal=3$`, 'm'));
   assert.ok(r.adbs.some((a) => /monkey -p asml\.bkc\.harvard\.wallet/.test(a)), 'the app is brought to the front first');
 });
 
 test('"ignored a removal notice" also means the phone collected it', () => {
-  assert.match(run({ line: ignored(CLOCK + 1) }).printed, /^NOTICE_COLLECTED /m);
+  assert.match(run({ line: ignored(CLOCK + 1) }).printed, /^NOTICE_DELIVERED /m);
 });
 
 test('control: a notice line from BEFORE the removal does not count, so it waits out the cap and says not collected', () => {
   const t = Date.now();
   const r = run({ logcat: `${applied(CLOCK - 1)}\n${applied(CLOCK - 3600)}\n`, collects: 0, wait: '2' });
-  assert.match(r.printed, new RegExp(`^NOTICE_NOT_COLLECTED ${A} none in 2 s$`, 'm'));
-  assert.doesNotMatch(r.printed, /^NOTICE_COLLECTED /m);
+  assert.match(r.printed, new RegExp(`^NOTICE_NOT_DELIVERED ${A} none in 2 s removal=3$`, 'm'));
+  assert.doesNotMatch(r.printed, /^NOTICE_DELIVERED /m);
   assert.ok(Date.now() - t >= 1500, 'it waited for the notice');
   assert.equal(r.calls.length, 1, 'the member is removed either way');
 });
 
 test('control: an app that is not running cannot collect; the member is still removed, with no wait', () => {
   const r = run({ pid: '' });
-  assert.match(r.printed, new RegExp(`^NOTICE_NOT_COLLECTED ${A} app not running$`, 'm'));
+  assert.match(r.printed, new RegExp(`^NOTICE_NOT_DELIVERED ${A} app not running removal=3$`, 'm'));
   assert.equal(r.calls.length, 1);
   assert.ok(!r.adbs.some((a) => /logcat/.test(a)), 'nothing to read');
 });
 
 test('an unreadable log before the removal: nothing is counted, and the member is still removed', () => {
   const r = run({ readable: false });
-  assert.match(r.printed, /^NOTICE_NOT_COLLECTED \S+ log unreadable$/m);
+  assert.match(r.printed, /^NOTICE_NOT_DELIVERED \S+ log unreadable removal=3$/m);
   assert.equal(r.calls.length, 1);
 });
 
@@ -102,16 +102,41 @@ test('NOTICE_TAGS picks the driver\'s own member lines (agents: R2/R6/R10_MEMBER
   const out = `R2_MEMBER ${A}\nR6_MEMBER ${B}\nR10_MEMBER ${A}\nJOIN_MEMBER did:webvh:QmZ:dids.ic3.dev:not-this-leg\nR3_MEMBER did:webvh:QmY:x\n`;
   const r = run({ out, tags: 'R2_MEMBER|R6_MEMBER|R10_MEMBER', collects: 2 });
   assert.deepEqual(r.calls.map((c) => c.split(' ')[1]).sort(), [A, B].sort());
-  assert.equal((r.printed.match(/^NOTICE_COLLECTED /gm) ?? []).length, 2);
+  assert.equal((r.printed.match(/^NOTICE_DELIVERED /gm) ?? []).length, 2);
 });
 
 test('control: one notice for two members collects one; the first member\'s line is not the second\'s', () => {
   const B = 'did:webvh:QmB:dids.ic3.dev:pause-canyon';
   const r = run({ out: `JOIN_MEMBER ${A}\nJOIN_MEMBER ${B}\n`, collects: 1 });
-  assert.equal((r.printed.match(/^NOTICE_COLLECTED /gm) ?? []).length, 1, r.printed);
-  assert.equal((r.printed.match(/^NOTICE_NOT_COLLECTED \S+ none in 2 s$/gm) ?? []).length, 1, r.printed);
+  assert.equal((r.printed.match(/^NOTICE_DELIVERED /gm) ?? []).length, 1, r.printed);
+  assert.equal((r.printed.match(/^NOTICE_NOT_DELIVERED \S+ none in 2 s removal=3$/gm) ?? []).length, 1, r.printed);
 });
 
+
+test('the removal\'s status rides on the NOTICE_ line; a removal that printed none says removal=none', () => {
+  assert.match(run({ status: 'error: 502 Bad Gateway', collects: 0 }).printed, /^NOTICE_NOT_DELIVERED \S+ none in 2 s removal=none$/m);
+});
+
+test('NOTICE_SKIP removes without waiting or reading the phone, and says why', () => {
+  const t = Date.now();
+  const r = run({ skip: 'last install is not the member\'s' });
+  assert.equal(r.calls.length, 1);
+  assert.deepEqual(r.adbs, []);
+  assert.match(r.printed, new RegExp(`^NOTICE_NOT_DELIVERED ${A} not waited: last install is not the member's removal=3$`, 'm'));
+  assert.ok(Date.now() - t < 1500);
+});
+
+test('the wait is counted from when the removal returned, not from before it (a slow removal keeps its 2 s)', () => {
+  const t = Date.now();
+  const r = run({ collects: 0, wait: '2', status: 'member-removed -> 3', slow: 2 });
+  assert.match(r.printed, /none in 2 s/);
+  assert.ok(Date.now() - t >= 3500, `waited ${Date.now() - t} ms`);
+});
+
+test('waiting.sh removes without the wait, with its reason (its last install is the cards-back re-link)', () => {
+  const fin = fn(readFileSync(path.join(here, 'legs/waiting.sh'), 'utf8'), 'fin') ?? '';
+  assert.match(fin, /NOTICE_SKIP="last install is the cards-back re-link, not the member's" \\\n\s+c_members_remove_collected \$E /);
+});
 
 // The order inside each leg's fin(): the member is removed (and its notice waited for) before the app is uninstalled,
 // the emulator stopped and the phone's keys removed. No direct member-remove is left in those fins.

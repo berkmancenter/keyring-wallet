@@ -257,37 +257,46 @@ c_members_deferred() {
   mv "$keep" "$f"
 }
 # c_members_remove_collected <serial> <why> <driver output>…: as c_members_remove, but on an Android phone that still
-# runs the app, BEFORE the leg uninstalls it, and then waits for the phone to collect each member's removal notice.
-# Removing a member makes C push it a removal notice that lives 30 days (vtc-service REMOVAL_NOTICE_DELIVER_BY). A wiped
-# phone never collects it, so it stays in C's outbox, polled every 10 s, for the whole window (IN-621, IN-627). The proof
-# of collection is the app's own line, "[VTI] applied a removal notice" ("ignored" also means it collected one), logged
-# after the removal (vtiCommunityNotices.ts). It prints NOTICE_COLLECTED <member> <s> or NOTICE_NOT_COLLECTED <member>
-# <why> and never fails the leg: the removal itself happens either way. NOTICE_TAGS (an ERE alternation, default
-# JOIN_MEMBER) names the driver's member lines, as agents' R2_MEMBER|R6_MEMBER|R10_MEMBER. GATE_NOTICE_WAIT (s, default 60) caps the wait;
-# every adb call has its own 15 s deadline, so a dying emulator cannot hold the cleanup.
+# holds the member's own install of the app, BEFORE the leg uninstalls it; then it waits for the phone to collect each
+# member's removal notice. Removing a member makes C push it a removal notice that lives 30 days (vtc-service
+# REMOVAL_NOTICE_DELIVER_BY). A wiped phone never collects it, so it stays in C's outbox, polled every 10 s, for the
+# whole window (IN-621, IN-627).
+# - The proof is the app's own line after the removal: "[VTI] applied a removal notice", or "[VTI] ignored a removal
+#   notice" (vtiCommunityNotices.ts). Both mean the phone COLLECTED it, i.e. delivery, not that the app showed the
+#   removal. Both are logger.info/warn lines: a release build that stopped logging them would turn every member into
+#   NOTICE_NOT_DELIVERED, with the removal itself unchanged.
+# - Each member is judged against the count just before its removal, so an earlier member's line never counts for it.
+# - It prints NOTICE_DELIVERED <member> <s> removal=<status> or NOTICE_NOT_DELIVERED <member> <why> removal=<status>
+#   (status "none" = the removal call printed no status). It never fails the leg: the removal happens either way.
+# - NOTICE_TAGS (an ERE alternation, default JOIN_MEMBER) names the driver's member lines (agents: R2|R6|R10_MEMBER).
+#   NOTICE_SKIP=<why> removes without waiting, for a leg whose last install is not the member's.
+# - Time: GATE_NOTICE_WAIT (s, default 60) caps the wait, counted from when the removal returned. Every adb call has
+#   its own 15 s deadline (galarm, not a test row), so the worst case per member is about 60 + 15 (the last read) +
+#   45 (pidof, monkey, baseline) = 120 s beyond the removal call itself.
 c_members_remove_collected() {
-  local s=$1 why=$2 m t0 n0 n wait=${GATE_NOTICE_WAIT:-60}; shift 2
-  # notices: how many notice lines the phone's log holds now. Each member's removal is judged against the count just
-  # before it, so a line already there (an earlier member's notice) never passes for this one's.
-  # A failed read prints nothing (not "0"), so the caller can tell it from a log with no notice in it.
+  local s=$1 why=$2 m t0 n0 n st wait=${GATE_NOTICE_WAIT:-60}; shift 2
+  # notices: how many notice lines the phone's log holds now. A failed read prints nothing (not "0").
   notices() { local o; o=$(GALARM_STEPS=0 galarm 15 adb -s "$s" logcat -d 2>/dev/null) || return 0
     printf '%s\n' "$o" | grep -cE '\[VTI\] (applied|ignored) a removal notice'; }
+  # rm_member: the removal, its status for the NOTICE_ line ("none" when the call printed none).
+  rm_member() { st=$(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1); echo "  C member …${m: -24}: $st"; st=${st#-> }; st=${st:-none}; }
   for m in $(grep -hoE "^(${NOTICE_TAGS:-JOIN_MEMBER}) did:[^ ]+" "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
+    if [ -n "${NOTICE_SKIP:-}" ]; then rm_member; echo "NOTICE_NOT_DELIVERED $m not waited: $NOTICE_SKIP removal=$st"; continue; fi
     if [ -z "$(GALARM_STEPS=0 galarm 15 adb -s "$s" shell pidof "$BID" 2>/dev/null | tr -d '\r')" ]; then
-      echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
-      echo "NOTICE_NOT_COLLECTED $m app not running"; continue
+      rm_member; echo "NOTICE_NOT_DELIVERED $m app not running removal=$st"; continue
     fi
     GALARM_STEPS=0 galarm 15 adb -s "$s" shell monkey -p "$BID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-    n0=$(notices); t0=$(date +%s)
-    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+    n0=$(notices)
+    rm_member; t0=$(date +%s)
     # An unreadable log before the removal leaves nothing to compare with: count nothing rather than guess.
-    case $n0 in ''|*[!0-9]*) echo "NOTICE_NOT_COLLECTED $m log unreadable"; continue ;; esac
+    case $n0 in ''|*[!0-9]*) echo "NOTICE_NOT_DELIVERED $m log unreadable removal=$st"; continue ;; esac
     n=$n0
     while [ $(( $(date +%s) - t0 )) -lt "$wait" ]; do
       n=$(notices); [ "${n:-0}" -gt "$n0" ] && break
       sleep 1
     done
-    if [ "${n:-0}" -gt "$n0" ]; then echo "NOTICE_COLLECTED $m $(( $(date +%s) - t0 ))"; else echo "NOTICE_NOT_COLLECTED $m none in ${wait} s"; fi
+    if [ "${n:-0}" -gt "$n0" ]; then echo "NOTICE_DELIVERED $m $(( $(date +%s) - t0 )) removal=$st"
+    else echo "NOTICE_NOT_DELIVERED $m none in ${wait} s removal=$st"; fi
   done
 }
 # link_trimmed: whether a link leg (linkwait, linkfail, pnmlink) runs its trimmed rows: on a nightly or changed run, with
