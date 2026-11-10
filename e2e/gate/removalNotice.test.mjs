@@ -151,7 +151,8 @@ test('a log that rolls during the wait (fewer notice lines than the baseline) is
 const ORDER_LEGS = ['waiting', 'lostreq', 'update-android', 'relaunch-android', 'agents'];
 function orderProblems(fin) {
   const at = (re) => { const m = fin.search(re); return m < 0 ? Infinity : m; };
-  const remove = at(/c_members_remove_collected \$E /);
+  // The call must be a command of its own (env assignments before it are fine), not text after `:`, `#` or `echo`.
+  const remove = at(/^[ \t]*(?:[A-Z_]+=(?:'[^']*'|"[^"]*"|\S+)[ \t]+(?:\\\n[ \t]*)?)*c_members_remove_collected \$E /m);
   const problems = [];
   if (remove === Infinity) problems.push('no c_members_remove_collected');
   for (const [what, re] of [['uninstall', /uninstall \$BID/], ['emu_stop', /emu_stop/], ['keys_since', /keys_since /]]) {
@@ -167,6 +168,14 @@ for (const leg of ORDER_LEGS) {
     assert.deepEqual(orderProblems(fin), []);
   });
 }
+
+test('control: a disabled call (behind `:` or `#`) is not taken for the removal', () => {
+  const ok = 'fin() {\n  NOTICE_TAGS=\'R2_MEMBER\' c_members_remove_collected $E "x" "$LEG_DIR/a.out"\n  adb -s $E uninstall $BID; emu_stop; keys_since a b\n}';
+  assert.deepEqual(orderProblems(ok), []);
+  for (const off of [': c_members_remove_collected $E "x" a', '# c_members_remove_collected $E "x" a', 'echo c_members_remove_collected $E "x" a']) {
+    assert.ok(orderProblems(ok.replace(/NOTICE_TAGS=[^\n]*/, off)).includes('no c_members_remove_collected'), off);
+  }
+});
 
 test('control: the order check catches the old fin (uninstall and emu_stop, then the removal)', () => {
   const old = `fin() {
