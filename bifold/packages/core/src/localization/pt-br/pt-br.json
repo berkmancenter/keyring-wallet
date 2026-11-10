@@ -1008,7 +1008,11 @@
     "ThingCards": "os cartões que ele guarda",
     "ForAgentAsksTo": "O agente de {{asker}} pede que você aprove: {{action}}",
     "ForAgentAsksSomething": "O agente de {{asker}} pede que você aprove algo que o Keyring ainda não sabe descrever.",
-    "ForAgentNote": "Você aprova por {{asker}}. Sua resposta vai para o agente dessa pessoa, não para o seu."
+    "ForAgentNote": "Você aprova por {{asker}}. Sua resposta vai para o agente dessa pessoa, não para o seu.",
+    "ForAgentTaskDoes": "O agente de {{asker}} não descreveu isso. Esta tarefa iria {{action}}.",
+    "ForAgentApproveIf": "Aprove só se souber que {{asker}} quis fazer isso.",
+    "ForAgentOutcomeUnknown": "O Keyring não consegue dizer o que isso faria. Aprove só se souber que {{asker}} quis fazer isso.",
+    "ForAgentMatchCode": "O código deste pedido:"
   },
   "TabStack": {
     "Messages": "Mensagens",

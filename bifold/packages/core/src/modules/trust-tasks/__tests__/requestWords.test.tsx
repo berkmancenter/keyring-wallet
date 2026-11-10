@@ -122,6 +122,36 @@ describe('what approving would do, when the agent did not say', () => {
     )
   })
 
+  it("for someone else's agent: their agent and their intent, and no screen of theirs to compare the code with (control: the row above)", () => {
+    // The lab run, 11-10: Jordan's card for Sam's agent said "Your agent didn't describe it", "Approve only if you
+    // started this yourself" and "check the screen that asked shows this code", none of it true for Jordan.
+    const forSam = { ...approval, forAgent: { agentDid: 'did:webvh:sams-agent.example', asker: 'Sam' } }
+    const tree = render(
+      <BasicAppContext>
+        <ApprovalDetails approval={forSam} />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(testIdWithKey('ApprovalTaskDoes'))).toHaveTextContent(/Requests\.ForAgentTaskDoes/)
+    expect(tree.getByTestId(testIdWithKey('ApprovalOutcomeUnknown'))).toHaveTextContent(/Requests\.ForAgentApproveIf/)
+    expect(tree.getByTestId(testIdWithKey('ApprovalMatchCodeLabel'))).toHaveTextContent(/Requests\.ForAgentMatchCode/)
+    expect(tree.getByTestId(testIdWithKey('ApprovalMatchCode'))).toHaveTextContent('0af466')
+    const unknown = render(
+      <BasicAppContext>
+        <ApprovalDetails approval={{ ...forSam, taskType: `${SPEC}vta/something/new/0.1` }} />
+      </BasicAppContext>
+    )
+    expect(unknown.getByTestId(testIdWithKey('ApprovalOutcomeUnknown'))).toHaveTextContent(
+      /Requests\.ForAgentOutcomeUnknown/
+    )
+    // This phone's own agent: the words as they were.
+    const own = render(
+      <BasicAppContext>
+        <ApprovalDetails approval={approval} />
+      </BasicAppContext>
+    )
+    expect(own.getByTestId(testIdWithKey('ApprovalMatchCodeLabel'))).toHaveTextContent(/MyAgent\.ApprovalMatchCode/)
+  })
+
   it('a task it does not know: as before', () => {
     const tree = render(
       <BasicAppContext>

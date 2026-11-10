@@ -1124,7 +1124,11 @@
     "ThingCards": "the cards it keeps",
     "ForAgentAsksTo": "{{asker}}'s agent asks you to approve: {{action}}",
     "ForAgentAsksSomething": "{{asker}}'s agent asks you to approve something Keyring can't describe yet.",
-    "ForAgentNote": "You approve for {{asker}}. Your answer goes to {{asker}}'s agent, not yours."
+    "ForAgentNote": "You approve for {{asker}}. Your answer goes to {{asker}}'s agent, not yours.",
+    "ForAgentTaskDoes": "{{asker}}'s agent didn't describe it. This task would {{action}}.",
+    "ForAgentApproveIf": "Approve only if you know {{asker}} meant to do this.",
+    "ForAgentOutcomeUnknown": "Keyring can't tell what this would do. Approve only if you know {{asker}} meant to do it.",
+    "ForAgentMatchCode": "This request's code:"
   },
   "TabStack": {
     "Messages": "Message",

@@ -1062,7 +1062,11 @@
     "ThingCards": "les cartes qu'il conserve",
     "ForAgentAsksTo": "L’agent de {{asker}} vous demande d’approuver : {{action}}",
     "ForAgentAsksSomething": "L’agent de {{asker}} vous demande d’approuver quelque chose que Keyring ne sait pas encore décrire.",
-    "ForAgentNote": "Vous approuvez pour {{asker}}. Votre réponse va à son agent, pas au vôtre."
+    "ForAgentNote": "Vous approuvez pour {{asker}}. Votre réponse va à son agent, pas au vôtre.",
+    "ForAgentTaskDoes": "L'agent de {{asker}} ne l'a pas décrit. Cette tâche consisterait à {{action}}.",
+    "ForAgentApproveIf": "N'approuvez que si vous savez que {{asker}} voulait le faire.",
+    "ForAgentOutcomeUnknown": "Keyring ne peut pas dire ce que cela ferait. N'approuvez que si vous savez que {{asker}} voulait le faire.",
+    "ForAgentMatchCode": "Le code de cette demande :"
   },
   "TabStack": {
     "Messages": "Messages",
