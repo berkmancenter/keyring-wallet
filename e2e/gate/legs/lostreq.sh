@@ -19,12 +19,12 @@ fin() {
   # IN-258's cut of the status-list host (run-card-status.mjs puts it back itself; this is for a driver that was killed).
   local h; for h in $(grep -oE '^STATUS_BLOCK_HOST [^ ]+' "$LEG_DIR/card.out" 2>/dev/null | awk '{print $2}' | sort -u); do for t in iptables ip6tables; do
     adb -s $E shell $t -D OUTPUT -p tcp -m string --string "$h" --algo bm -j REJECT --reject-with tcp-reset >/dev/null 2>&1; adb -s $E shell $t -D OUTPUT -d "$h" -j REJECT >/dev/null 2>&1; done; done
+  # The member first, with the phone's network back and the app still on it, so it collects C's removal notice
+  # (IN-621): see lib.sh.
+  c_members_remove_collected $E "gate: IN-258 card-status member, removed after the leg" "$LEG_DIR/card.out"
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"
   local r; for r in $(grep -hoE '^ARRIVED_REQ [^ ]+' "$LEG_DIR/lost.out" "$LEG_DIR/card.out" 2>/dev/null | awk '{print $2}' | sort -u); do
     echo "  decline $r: $(JOIN_DECIDE_REASON='gate: an offline-ask test that reached C anyway, declined after the leg' c_admin join-decide "$r" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
-  done
-  local m; for m in $(grep -oE '^JOIN_MEMBER did:[^ ]+' "$LEG_DIR/card.out" 2>/dev/null | awk '{print $2}' | sort -u); do
-    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate: IN-258 card-status member, removed after the leg" | grep -oE -- '-> [0-9]+' | tail -1)"
   done
 }
 LEG_CLEANUP=fin

@@ -256,6 +256,35 @@ c_members_deferred() {
   done < <(sort -u -t$'\t' -k1,2 "$f" | awk -F'\t' '!seen[$1 FS $2]++')
   mv "$keep" "$f"
 }
+# c_members_remove_collected <serial> <why> <driver output>…: as c_members_remove, but on an Android phone that still
+# runs the app, BEFORE the leg uninstalls it, and then waits for the phone to collect each member's removal notice.
+# Removing a member makes C push it a removal notice that lives 30 days (vtc-service REMOVAL_NOTICE_DELIVER_BY). A wiped
+# phone never collects it, so it stays in C's outbox, polled every 10 s, for the whole window (IN-621, IN-627). The proof
+# of collection is the app's own line, "[VTI] applied a removal notice" ("ignored" also means it collected one), logged
+# after the removal (vtiCommunityNotices.ts). It prints NOTICE_COLLECTED <member> <s> or NOTICE_NOT_COLLECTED <member>
+# <why> and never fails the leg: the removal itself happens either way. GATE_NOTICE_WAIT (s, default 60) caps the wait;
+# every adb call has its own 15 s deadline, so a dying emulator cannot hold the cleanup.
+c_members_remove_collected() {
+  local s=$1 why=$2 m since t0 n wait=${GATE_NOTICE_WAIT:-60}; shift 2
+  for m in $(grep -hoE '^JOIN_MEMBER did:[^ ]+' "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
+    if [ -z "$(GALARM_STEPS=0 galarm 15 adb -s "$s" shell pidof "$BID" 2>/dev/null | tr -d '\r')" ]; then
+      echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+      echo "NOTICE_NOT_COLLECTED $m app not running"; continue
+    fi
+    GALARM_STEPS=0 galarm 15 adb -s "$s" shell monkey -p "$BID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+    since=$(GALARM_STEPS=0 galarm 15 adb -s "$s" shell date +%s 2>/dev/null | tr -d '\r'); t0=$(date +%s)
+    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+    # Without the phone's clock an older line could pass for this notice: count nothing rather than guess.
+    case $since in ''|*[!0-9]*) echo "NOTICE_NOT_COLLECTED $m no phone clock"; continue ;; esac
+    n=0
+    while [ $(( $(date +%s) - t0 )) -lt "$wait" ]; do
+      n=$(GALARM_STEPS=0 galarm 15 adb -s "$s" logcat -d -v epoch 2>/dev/null | awk -v t="$since" '$1+0 >= t && /\[VTI\] (applied|ignored) a removal notice/' | wc -l | tr -d ' ')
+      [ "$n" -gt 0 ] && break
+      sleep 1
+    done
+    if [ "$n" -gt 0 ]; then echo "NOTICE_COLLECTED $m $(( $(date +%s) - t0 ))"; else echo "NOTICE_NOT_COLLECTED $m none in ${wait} s"; fi
+  done
+}
 # link_trimmed: whether a link leg (linkwait, linkfail, pnmlink) runs its trimmed rows: on a nightly or changed run, with
 # no rows asked for by name (E2E_ONLY_ROWS) and LINK_FULL not 1. The store-build gate (kind gate), a dry run and anything
 # else run every row. W1 of docs/plans/farm-test-footprint-plan.md (IN-560): fewer links on runners short of memory.

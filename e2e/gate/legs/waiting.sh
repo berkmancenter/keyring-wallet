@@ -17,10 +17,9 @@ leg_begin waiting "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5572
 fin() {
   { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }
+  # The member first, while the phone still runs the app, so it collects C's removal notice (IN-621): see lib.sh.
+  c_members_remove_collected $E "gate: flow B member, removed after the leg" "$LEG_DIR/waiting.out"
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"
-  local m; for m in $(grep -oE '^JOIN_MEMBER did:[^ ]+' "$LEG_DIR/waiting.out" 2>/dev/null | awk '{print $2}' | sort -u); do
-    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate: flow B member, removed after the leg" | grep -oE -- '-> [0-9]+' | tail -1)"
-  done
   # The cards the phone kept in the runner's vault (CARD_IDS): archived, as pnm has no delete, so they leave every query.
   local id; for id in $(grep -hE '^CARD_IDS ' "$LEG_DIR/waiting.out" 2>/dev/null | awk '{print $2, $3}' | tr ' ' '\n' | grep -v '^$' | sort -u); do
     echo "  vault card …${id: -12}: $(pnm "$RUNNER_MAIN_SLUG" cred-vault archive "$id" --reason "gate: waiting leg card, archived after the leg" | tail -1 | cut -c1-60)"
