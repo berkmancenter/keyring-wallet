@@ -602,6 +602,14 @@ export class AgentRoomsService implements RoomsService {
         )
       }
     }
+    // A community skipped because a step keeps the session as another identity was not read now, not found empty: its
+    // rooms stay as they were last read, as the rows keep them (useRoomRows), until a listing reads it again. Left to
+    // the custody stand-ins below, which have no name and no rights, a room of it opened meanwhile said "Unnamed room"
+    // and "Details not loaded" while its row still showed its name (278.12, 11-10). A community that couldn't be
+    // reached gets no such keeping: that is not known to be passing.
+    const keptDids = new Set(kept.map((c) => c.did))
+    for (const [roomId, room] of this.rooms)
+      if (room.communityDid && keptDids.has(room.communityDid) && !next.has(roomId)) next.set(roomId, room)
     // Keys held as an identity the phone left a community as are what the leave left behind, not a room.
     const departed = new Set(await departedAsked)
     for (const custody of held)

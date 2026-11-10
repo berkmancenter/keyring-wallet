@@ -806,6 +806,108 @@ describe('every community kept from for now', () => {
     expect(lines.join('\n')).not.toMatch(/persona-a|said no/)
   })
 
+  // 278.12, 11-10: a room of a kept community, opened while its row still showed its name, said "Unnamed room" and
+  // "Details not loaded": the listing kept the rows (#981) but the service held the room as its custody stand-in.
+  describe('a room of a community kept from for now, as last read', () => {
+    const OTHER: RoomsCommunity = { did: 'did:webvh:community:b', name: 'Choir', personaDid: 'did:key:persona-b' }
+    const OTHER_ROOM = 'did:webvh:room:choirroom77'
+    type Mode = 'answers' | 'kept' | 'unreachable' | 'listsNone'
+    const twoCommunities = () => {
+      let mode: Mode = 'answers'
+      // The first community lists the other's room too: one listed now by a community that answered.
+      let alsoListedHere = false
+      const base = backend()
+      const { b } = backend({
+        communities: async () => [COMMUNITY, OTHER],
+        agentTask: jest.fn(async (type: string, payload: Record<string, unknown>) => {
+          const answer = await base.agentTask(type, payload)
+          if (type !== ROOMS_TASK.keysList02) return answer
+          const rooms = (answer as { rooms: unknown[] }).rooms
+          return {
+            rooms: [...rooms, { roomId: OTHER_ROOM, epoch: 2, earliestReadableEpoch: 1, member: OTHER.personaDid }],
+          }
+        }),
+        communityTask: jest.fn(async (did: string, type: string, payload: Record<string, unknown>) => {
+          if (did !== OTHER.did) {
+            const answer = (await base.communityTask(did, type, payload)) as { items: unknown[] }
+            if (!alsoListedHere || payload.cursor) return answer
+            const moved = { roomId: OTHER_ROOM, host: HOST, label: 'Moved here', visibility: 'attributed' }
+            return { ...answer, items: [...answer.items, { ...moved, actions: ['read'], state: 'admitted' }] }
+          }
+          if (mode === 'kept') throw kept()
+          if (mode === 'unreachable') throw new Error('community unreachable')
+          if (mode === 'listsNone') return { items: [] }
+          return {
+            items: [
+              {
+                roomId: OTHER_ROOM,
+                host: OTHER.did,
+                label: 'Choir practice',
+                visibility: 'attributed',
+                actions: ['read', 'write'],
+                state: 'admitted',
+              },
+            ],
+          }
+        }),
+        sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+        sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+      })
+      const service = new AgentRoomsService(b)
+      const list = async (now: Mode) => {
+        mode = now
+        return (await service.listMyRooms()).find((r) => r.roomId === OTHER_ROOM)
+      }
+      return { service, list, listHereToo: () => (alsoListedHere = true) }
+    }
+
+    it('lists it, and opens it, with its name and rights as last read, not as custody', async () => {
+      const { service, list } = twoCommunities()
+      const read = await list('answers')
+      expect(read).toMatchObject({ source: 'community', nameFrom: 'community', communityDid: OTHER.did })
+      expect(String(read?.name)).toBe('Choir practice')
+      expect(await list('kept')).toEqual(read)
+      const opened = await service.getRoom(OTHER_ROOM)
+      expect(opened).toMatchObject({ source: 'community', communityDid: OTHER.did, verbs: ['read', 'write'] })
+      expect(String(opened.name)).toBe('Choir practice')
+    })
+
+    it('a community that answers keeps being read afresh while the other is kept (control)', async () => {
+      const { service, list } = twoCommunities()
+      await list('answers')
+      await list('kept')
+      expect(await service.getRoom(ROOM)).toMatchObject({ source: 'community', communityDid: COMMUNITY.did })
+      expect(await service.getRoom(CUSTODY_ROOM)).toMatchObject({ source: 'custody' })
+    })
+
+    it('a room another community lists now is that one’s, not the kept copy (control)', async () => {
+      const { list, listHereToo } = twoCommunities()
+      await list('answers')
+      listHereToo()
+      const now = await list('kept')
+      expect(now).toMatchObject({ communityDid: COMMUNITY.did, verbs: ['read'] })
+      expect(String(now?.name)).toBe('Moved here')
+    })
+
+    it('a first listing with the community kept has nothing earlier: custody, as today (control)', async () => {
+      const { list } = twoCommunities()
+      expect(await list('kept')).toMatchObject({ source: 'custody', nameFrom: 'roomId' })
+    })
+
+    it('a community that could not be reached is not kept: custody, as today (control)', async () => {
+      const { list } = twoCommunities()
+      await list('answers')
+      expect(await list('unreachable')).toMatchObject({ source: 'custody' })
+    })
+
+    it('read again, the community decides: a room it no longer lists is not held over (control)', async () => {
+      const { list } = twoCommunities()
+      await list('answers')
+      await list('kept')
+      expect(await list('listsNone')).toMatchObject({ source: 'custody' })
+    })
+  })
+
   it('still fails when a community that could not be reached is among them', async () => {
     const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
     const { b } = backend({
