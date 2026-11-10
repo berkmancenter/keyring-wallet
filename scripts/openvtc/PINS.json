@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-23",
+  "updated": "2026-11-10",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -93,10 +93,10 @@
     },
     "dtgwg-trust-tasks-tf": {
       "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
-      "sha": "7b6bb488",
-      "commitDate": "2026-10-05",
-      "pinnedOn": "2026-10-07",
-      "why": "Tag trust-tasks-v0.27.7, the trust-tasks-rs version VTI vta-service-v0.55.0 builds with. Publishes the hidden-vetting task specs (vtc/vetting/hidden/{publish,show,withdraw}/0.1, vtc/vetting/pcs-challenge/0.1), vtc/vetting/vetters/event-mode/0.1, and the hidden path in vetting/attestation/0.1, so they can be cited and used as fixtures at a pin.",
+      "sha": "2a66a0351",
+      "commitDate": "2026-11-10",
+      "pinnedOn": "2026-11-10",
+      "why": "AclEntry 0.3 (purposes), acl/list/0.4 and acl/{grant,revoke,update}/0.3: what VTI main 887370a3b serves and bifold #1005 sends; the previous pin predated them, so #1005's payload checks had to read unpinned origin/main",
       "watch": [
         "SPEC.md",
         "specs/_framework/",
