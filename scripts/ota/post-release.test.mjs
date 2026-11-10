@@ -1,10 +1,10 @@
 // node --test scripts/ota/
 import assert from 'node:assert/strict'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
 
-import { baseOf, bundleNotice, bundlesFromAnnotations, bundlesFromLog, bundlesFromRecord, ghError, NOTICE_TITLE, pickDispatched, postRelease, publishedJobs, readSmokeVerdict, screensOf, smokeVerdict } from './post-release.mjs'
+import { baseOf, bundleNotice, bundlesFromAnnotations, bundlesFromLog, bundlesFromRecord, ghError, JOB_PAGES, NOTICE_TITLE, pickDispatched, postRelease, publishedJobs, readAllJobs, readSmokeVerdict, screensOf, smokeVerdict } from './post-release.mjs'
 
 const SHA = 'cb36b83a1e0b6a67fb0e8fd32b6b95dd88d9ac3f'
 const PREV = 'a'.repeat(40)
@@ -583,4 +583,51 @@ test('a listed red beside an absent job is red on ONE read, with no sleep, never
 test('postRelease: iOS absent beside a red Android is smoke-red, so the brake acts', async () => {
   const r = await postRelease(opts(fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: [{ ...GREEN[1], conclusion: 'failure' }] }).gh))
   assert.equal(r.verdict, 'smoke-red')
+})
+
+// POSTREL-MISSING-JOB (11-10): the smoke's jobs are read page by page, so a judged job on page 2 is read, not absent.
+const pagedApi = (pages, totalCount) => {
+  const routes = []
+  const api = (route) => {
+    routes.push(route)
+    const page = Number(new URL(`https://x/${route}`).searchParams.get('page'))
+    return { total_count: totalCount, jobs: pages[page - 1] ?? [] }
+  }
+  return { api, routes }
+}
+const filler = (n) => Array.from({ length: n }, (_, i) => ({ name: `Which build #${i}`, conclusion: 'success' }))
+const PAGED_IOS = { name: 'iOS smoke (macos-26) · 5d150fbb', conclusion: 'success' }
+const PAGED_ANDROID = { name: 'Android smoke (ubuntu-latest, KVM) · 5d150fbb', conclusion: 'success' }
+
+test('a judged job on the second page is read: green, where the first page alone said ios missing', () => {
+  const pages = [[...filler(99), PAGED_ANDROID], [PAGED_IOS]]
+  const { api, routes } = pagedApi(pages, 101)
+  const jobs = readAllJobs(api, 'o/r', 601)
+  assert.equal(jobs.length, 101)
+  assert.deepEqual(routes, ['repos/o/r/actions/runs/601/jobs?per_page=100&page=1', 'repos/o/r/actions/runs/601/jobs?per_page=100&page=2'])
+  assert.equal(smokeVerdict(jobs).green, true)
+  // The control: the one-page read this replaces.
+  assert.deepEqual(smokeVerdict(pages[0]).rows, [{ platform: 'ios', conclusion: 'missing' }, { platform: 'android', conclusion: 'success' }])
+})
+
+test('a short first page is the whole list: one read', () => {
+  const { api, routes } = pagedApi([[PAGED_IOS, PAGED_ANDROID]], 2)
+  assert.equal(readAllJobs(api, 'o/r', 601).length, 2)
+  assert.equal(routes.length, 1)
+})
+
+test('a full page that reaches total_count is the whole list: no empty second read', () => {
+  const { api, routes } = pagedApi([filler(100)], 100)
+  assert.equal(readAllJobs(api, 'o/r', 601).length, 100)
+  assert.equal(routes.length, 1)
+})
+
+test('the reads are bounded: a list that never ends stops after JOB_PAGES pages', () => {
+  const api = () => ({ jobs: filler(100) })
+  assert.equal(readAllJobs(api, 'o/r', 601).length, 100 * JOB_PAGES)
+})
+
+test('postRelease reads the smoke run page by page (its readJobs is readAllJobs)', () => {
+  const src = readFileSync(new URL('./post-release.mjs', import.meta.url), 'utf8')
+  assert.match(src, /readSmokeVerdict\(\{ readJobs: \(\) => readAllJobs\(api, repo, smoke\.id\)/)
 })

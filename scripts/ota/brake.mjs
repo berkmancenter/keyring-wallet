@@ -29,7 +29,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
-import { readSmokeVerdict } from './post-release.mjs'
+import { readAllJobs, readSmokeVerdict } from './post-release.mjs'
 
 // The only things this module may do to a bundle. A test holds it to this.
 export const BRAKE_ACTIONS = Object.freeze(['withdraw'])
@@ -66,7 +66,7 @@ export async function rerunAndJudge({ gateSmoke, repo, platforms, gh = realGh, s
   const api = (route) => JSON.parse(gh('api', route))
   const before = api(`repos/${repo}/actions/runs/${gateSmoke}`)
   if (before.status !== 'completed') throw new Error(`gate-smoke ${gateSmoke} is still ${before.status}`)
-  const readJobs = () => api(`repos/${repo}/actions/runs/${gateSmoke}/jobs?per_page=100`).jobs
+  const readJobs = () => readAllJobs(api, repo, gateSmoke)
   // A job that is never listed is not a red one (278.9, 11-09): re-read, and refuse to act on a smoke that can't be read.
   const unreadable = (rows, when) =>
     new Error(`gate-smoke ${gateSmoke} ${when}: no ${rows.filter((r) => r.conclusion === 'missing').map((r) => r.platform).join(', ')} job listed after every re-read: NOTHING was withdrawn, and the release is still live`)

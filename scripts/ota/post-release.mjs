@@ -138,6 +138,23 @@ export const smokeVerdict = (jobs, platforms = SMOKE_JOBS.map(([p]) => p)) => {
   return { green: rows.every((r) => r.conclusion === 'success'), rows }
 }
 
+/**
+ * Every job of a run, page by page (100 a page, at most 10 pages). One page was the whole read until 11-10, so a run
+ * with more jobs than a page (re-runs, matrices) could leave a judged job off it, read as absent. Stops on a short or
+ * empty page, or once total_count is reached. api(route) returns the parsed response.
+ */
+export const JOB_PAGES = 10
+export const readAllJobs = (api, repo, runId, { perPage = 100, pages = JOB_PAGES } = {}) => {
+  const jobs = []
+  for (let page = 1; page <= pages; page++) {
+    const r = api(`repos/${repo}/actions/runs/${runId}/jobs?per_page=${perPage}&page=${page}`)
+    const got = Array.isArray(r?.jobs) ? r.jobs : []
+    jobs.push(...got)
+    if (got.length < perPage || (Number.isFinite(r?.total_count) && jobs.length >= r.total_count)) break
+  }
+  return jobs
+}
+
 // Re-reading a smoke run's jobs when a judged platform's job is absent: up to six reads, 30 s apart.
 export const JOBS_ATTEMPTS = 6
 export const JOBS_RETRY_MS = 30000
@@ -353,7 +370,7 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     return { ...base, bundles, sources, screens, since, verdict: 'builds-red', testBuilds: builds.id, reusedBuilds: Boolean(reused) }
   }
   const smoke = await dispatchAndWait('gate-smoke.yml', [`run-id=${builds.id}`, 'platform=both'], { title: `Test builds ${builds.id}` })
-  const verdict = await readSmokeVerdict({ readJobs: () => api(`repos/${repo}/actions/runs/${smoke.id}/jobs?per_page=100`).jobs, platforms: base.platforms, sleep, log })
+  const verdict = await readSmokeVerdict({ readJobs: () => readAllJobs(api, repo, smoke.id), platforms: base.platforms, sleep, log })
   log(`gate-smoke ${smoke.id}: ${verdict.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}`)
   // smoke-incomplete is deliberately not smoke-red: the brake acts only on smoke-red, and a job never seen says nothing
   // about the bundle. The job still fails (exit 2), so a person reads the smoke run and decides.
