@@ -30,7 +30,7 @@ describe('the log buffer keeps what happened, not the mediator polling', () => {
     // One per minute, the current one included.
     expect(summaries.length).toBeGreaterThanOrEqual(30)
     expect(summaries[1]).toMatch(
-      /60 status requests, 60 statuses, 60 service lookups, no messages \(180 lines collapsed\)/
+      /in log lines \(a request is written to several\): 60 status-request lines, 60 status lines, 60 service-lookup lines, no messages \(180 lines collapsed\)/
     )
   })
 
@@ -45,7 +45,7 @@ describe('the log buffer keeps what happened, not the mediator polling', () => {
     const lines = getRecentLogLines()
     expect(lines.filter((l) => l.includes('message_count'))).toHaveLength(1)
     expect(lines.some((l) => l.includes('WARN') && l.includes('failed'))).toBe(true)
-    expect(lines[lines.length - 1]).toMatch(/1 status requests/)
+    expect(lines[lines.length - 1]).toMatch(/: 1 status-request line, no messages/)
   })
 
   test('every other line is kept, in order', () => {
@@ -54,7 +54,7 @@ describe('the log buffer keeps what happened, not the mediator polling', () => {
     recordLogLine('info', ['second'], at(t0, 61))
     const lines = getRecentLogLines()
     expect(lines[0]).toMatch(/first$/)
-    expect(lines[1]).toMatch(/mediator polling in this minute: 1 status requests/)
+    expect(lines[1]).toMatch(/mediator polling in this minute, in log lines .*: 1 status-request line, no messages/)
     expect(lines[2]).toMatch(/second$/)
   })
 })
