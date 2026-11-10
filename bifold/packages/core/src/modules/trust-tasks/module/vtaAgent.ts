@@ -162,6 +162,11 @@ export interface VtaAgentState {
    */
   consentGranted?: { taskType: string; at: number }
   /**
+   * The last task of ours whose hold ended without consent, and when: the question {@link awaitingConsentFor} named
+   * was answered no or lapsed (VtaClient's consentNotGiven refusal). The phone cannot tell which, and the task was not run.
+   */
+  consentNotGiven?: { taskType: string; at: number }
+  /**
    * The agent holds this phone's own `device/set-wake` for consent: an
    * approval rule covers the notification setting, so switching notifications
    * cannot take effect from this phone. Settings → Notifications says so.
@@ -863,7 +868,10 @@ export class VtaAgentController {
         }
       },
       onInbound: (plaintext) => this.inbound(plaintext),
-      onConsentPending: ({ taskType }) => this.set({ awaitingConsentFor: taskType, consentGranted: undefined }),
+      onConsentPending: ({ taskType }) =>
+        this.set({ awaitingConsentFor: taskType, consentGranted: undefined, consentNotGiven: undefined }),
+      onConsentNotGiven: ({ taskType }) =>
+        this.set({ awaitingConsentFor: undefined, consentNotGiven: { taskType, at: Date.now() } }),
       onStepUp: (request, context) => this.askStepUp(request, context),
       onRepliesStalled: (stalled) => {
         if (this.current?.client === client) this.set({ repliesStalled: stalled })
@@ -1059,6 +1067,7 @@ export class VtaAgentController {
       approvals: [],
       awaitingConsentFor: undefined,
       consentGranted: undefined,
+      consentNotGiven: undefined,
       error: undefined,
       reconnectGaveUp: false,
       ownsAgent: false,
@@ -1495,6 +1504,7 @@ export class VtaAgentController {
       approvals: [],
       awaitingConsentFor: undefined,
       consentGranted: undefined,
+      consentNotGiven: undefined,
       wakeBlockedByRule: undefined,
       error: undefined,
       ownsAgent: false,
@@ -3546,7 +3556,11 @@ export class VtaAgentController {
     }
     if (kept && 'granted' in kept) {
       const taskType = this.state.awaitingConsentFor
-      this.set({ awaitingConsentFor: undefined, ...(taskType ? { consentGranted: { taskType, at: Date.now() } } : {}) })
+      this.set({
+        awaitingConsentFor: undefined,
+        consentNotGiven: undefined,
+        ...(taskType ? { consentGranted: { taskType, at: Date.now() } } : {}),
+      })
     }
   }
 

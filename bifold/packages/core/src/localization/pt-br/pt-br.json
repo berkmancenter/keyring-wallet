@@ -2577,6 +2577,7 @@
       "stepUpDeclined": "Você recusou a verificação extra, então seu agente não fez isso.",
       "notConfirmed": "O Keyring não conseguiu confirmar que é você.",
       "awaitingApproval": "Seu agente está esperando a aprovação de outra pessoa. Tente de novo quando ela aprovar.",
+      "notApproved": "Seu aprovador não aprovou a tempo, então seu agente não fez isso. Talvez tenha recusado.",
       "noAnswer": "Seu agente não respondeu. Confira Meu agente antes de tentar de novo.",
       "unreachable": "O Keyring não conseguiu falar com seu agente. Confira sua conexão e tente de novo.",
       "failed": "Seu agente não conseguiu fazer isso.",
@@ -3553,6 +3554,9 @@
     "WaitMayNeedOpen": "O telefone de {{names}} pode não tocar. Se não tocar, {{names}} precisa abrir o Keyring para responder.",
     "NamesOr": " ou ",
     "ApprovedBy": "Aprovado por {{names}}",
+    "NotGivenBy": "{{names}} não aprovou",
+    "NotGivenWhy": "{{names}} disse não, ou não respondeu a tempo, então seu agente não continuou.",
+    "NotGivenNoNag": "O Keyring não vai perguntar a {{names}} de novo por conta própria.",
     "ApprovedGoAhead": "{{names}} disse sim, então seu agente pode seguir.",
     "AcceptReason": "Aceitar ser aprovador de {{asker}}",
     "AcceptAsksLock": "Para aceitar, confirme {{method}}. Recusar é um toque."

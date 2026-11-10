@@ -702,6 +702,7 @@ describe('setup ends at Ready; another device is added from My devices', () => {
       'accessRevoked',
       'stepUpRequired',
       'awaitingApproval',
+      'notApproved',
       'noAnswer',
       'unreachable',
       'failed',

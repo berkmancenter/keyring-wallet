@@ -616,14 +616,15 @@ const CONSENT_REQUIRED = 'auth:consent_required'
  */
 export function consentPendingOf(
   error: unknown
-): { payloadDigest?: string; requests: Record<string, unknown>[]; omitted?: number } | undefined {
+): { payloadDigest?: string; challenge?: string; requests: Record<string, unknown>[]; omitted?: number } | undefined {
   if (!(error instanceof VtiRefusal)) return undefined
   const details = error.details as
     | {
         reason?: string
         payloadDigest?: string
+        challenge?: string
         consentRequestsOmitted?: number
-        consentRequests?: (Record<string, unknown> & { payload?: { payloadDigest?: string } })[]
+        consentRequests?: (Record<string, unknown> & { payload?: { payloadDigest?: string; challenge?: string } })[]
       }
     | undefined
   if (details?.reason === CONSENT_REQUIRED) {
@@ -633,8 +634,14 @@ export function consentPendingOf(
     // do not fit, and `consentRequestsOmitted` counts them. Read the digest from
     // `details` first, so the grant can still be waited on precisely.
     const omitted = typeof details.consentRequestsOmitted === 'number' ? details.consentRequestsOmitted : undefined
+    // The nonce that names this question: the same while it is pending, a new one once it was answered no or lapsed
+    // (vta-sdk error.rs ConsentRequired.challenge). A refusal without one cannot be told apart, so it is left out.
+    const challenge = [details.challenge, requests[0]?.payload?.challenge].find(
+      (c): c is string => typeof c === 'string' && c.length > 0
+    )
     return {
       payloadDigest: details.payloadDigest ?? requests[0]?.payload?.payloadDigest,
+      ...(challenge ? { challenge } : {}),
       requests,
       ...(omitted !== undefined ? { omitted } : {}),
     }
@@ -643,6 +650,29 @@ export function consentPendingOf(
     return { requests: [] }
   }
   return undefined
+}
+
+/**
+ * A task held for consent that was not given: the question this phone waited on is gone, so it was answered no or it
+ * lapsed. The agent deletes the request either way and says nothing to the asking phone; the only sign is that a
+ * re-submit raises a new question, with a new challenge (VTI task-consent.md, "Pending vs denied"). The phone cannot
+ * tell a no from a lapse, so this never says which. It stops there: asking again would turn a no into a nag (the
+ * habituation attack), which is why upstream's own client stops at the same point (vta-cli-common consent.rs,
+ * `ConsentOutcome::Resolved`).
+ */
+export const CONSENT_NOT_GIVEN = 'consentNotGiven'
+
+/**
+ * Made when needed, never declared as a subclass: a class extending VtiRefusal is evaluated when this module loads,
+ * and suites that stub vtiAgent with a hand-written factory would fail to load at all. Read it by its code,
+ * never by class.
+ */
+export function consentNotGiven(taskType: string): VtiRefusal {
+  return new VtiRefusal(
+    CONSENT_NOT_GIVEN,
+    `${LOG_PREFIX} ${taskType} was not approved: the approver said no, or the request lapsed`,
+    { taskType }
+  )
 }
 
 /**
@@ -1194,6 +1224,8 @@ export class VtaClient {
       onInbound?: (plaintext: DidCommV2PlaintextMessage) => void
       /** A task was held for an approver's consent; the wait is on. */
       onConsentPending?: (info: { taskType: string; payloadDigest?: string }) => void
+      /** The held task's question was answered no or lapsed ({@link consentNotGiven}); the wait is over. */
+      onConsentNotGiven?: (info: { taskType: string }) => void
       /** How long to wait for approvers before giving up on a held task. Unset: `CONSENT_WAIT_MS`, shorter in a short-clock test build. */
       consentWaitMs?: number
       /**
@@ -1485,7 +1517,18 @@ export class VtaClient {
           return await this.sendTask<T>(type, payload, timeoutMs, documentExtras)
         } catch (retryError) {
           lastError = retryError
-          if (!consentPendingOf(retryError)) throw retryError
+          const still = consentPendingOf(retryError)
+          if (!still) throw retryError
+          // A pending question is answered with the same challenge. A new one means ours is gone, answered no or
+          // lapsed, and this re-submit has just raised another: stop, before asking again turns a no into a nag.
+          // Without a challenge on both, the two cannot be told apart, and the wait goes on as before.
+          if (pending.challenge && still.challenge && still.challenge !== pending.challenge) {
+            this.agent.config.logger.info(
+              `${LOG_PREFIX} ${type}: consent was not given (the question changed); not asking again`
+            )
+            this.options.onConsentNotGiven?.({ taskType: type })
+            throw consentNotGiven(type)
+          }
         }
       }
       throw lastError instanceof Error ? lastError : new Error(String(lastError))
