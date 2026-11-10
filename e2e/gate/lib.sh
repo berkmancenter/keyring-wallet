@@ -262,27 +262,31 @@ c_members_deferred() {
 # phone never collects it, so it stays in C's outbox, polled every 10 s, for the whole window (IN-621, IN-627). The proof
 # of collection is the app's own line, "[VTI] applied a removal notice" ("ignored" also means it collected one), logged
 # after the removal (vtiCommunityNotices.ts). It prints NOTICE_COLLECTED <member> <s> or NOTICE_NOT_COLLECTED <member>
-# <why> and never fails the leg: the removal itself happens either way. GATE_NOTICE_WAIT (s, default 60) caps the wait;
+# <why> and never fails the leg: the removal itself happens either way. NOTICE_TAGS (an ERE alternation, default
+# JOIN_MEMBER) names the driver's member lines, as agents' R2_MEMBER|R6_MEMBER|R10_MEMBER. GATE_NOTICE_WAIT (s, default 60) caps the wait;
 # every adb call has its own 15 s deadline, so a dying emulator cannot hold the cleanup.
 c_members_remove_collected() {
-  local s=$1 why=$2 m since t0 n wait=${GATE_NOTICE_WAIT:-60}; shift 2
-  for m in $(grep -hoE '^JOIN_MEMBER did:[^ ]+' "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
+  local s=$1 why=$2 m since t0 n0 n wait=${GATE_NOTICE_WAIT:-60}; shift 2
+  # notices <since>: how many notice lines the phone has logged since <since> (its own clock, logcat -v epoch).
+  notices() { GALARM_STEPS=0 galarm 15 adb -s "$s" logcat -d -v epoch 2>/dev/null | awk -v t="$1" '$1+0 >= t && /\[VTI\] (applied|ignored) a removal notice/' | wc -l | tr -d ' '; }
+  for m in $(grep -hoE "^(${NOTICE_TAGS:-JOIN_MEMBER}) did:[^ ]+" "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
     if [ -z "$(GALARM_STEPS=0 galarm 15 adb -s "$s" shell pidof "$BID" 2>/dev/null | tr -d '\r')" ]; then
       echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
       echo "NOTICE_NOT_COLLECTED $m app not running"; continue
     fi
     GALARM_STEPS=0 galarm 15 adb -s "$s" shell monkey -p "$BID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
     since=$(GALARM_STEPS=0 galarm 15 adb -s "$s" shell date +%s 2>/dev/null | tr -d '\r'); t0=$(date +%s)
+    # Without the phone's clock an older line could pass for this notice: count nothing rather than guess. A line
+    # already there (an earlier member's notice in the same second) is the baseline, so each member needs its own.
+    case $since in ''|*[!0-9]*) n0=; ;; *) n0=$(notices "$since") ;; esac
     echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
-    # Without the phone's clock an older line could pass for this notice: count nothing rather than guess.
-    case $since in ''|*[!0-9]*) echo "NOTICE_NOT_COLLECTED $m no phone clock"; continue ;; esac
-    n=0
+    [ -n "$n0" ] || { echo "NOTICE_NOT_COLLECTED $m no phone clock"; continue; }
+    n=$n0
     while [ $(( $(date +%s) - t0 )) -lt "$wait" ]; do
-      n=$(GALARM_STEPS=0 galarm 15 adb -s "$s" logcat -d -v epoch 2>/dev/null | awk -v t="$since" '$1+0 >= t && /\[VTI\] (applied|ignored) a removal notice/' | wc -l | tr -d ' ')
-      [ "$n" -gt 0 ] && break
+      n=$(notices "$since"); [ "${n:-0}" -gt "$n0" ] && break
       sleep 1
     done
-    if [ "$n" -gt 0 ]; then echo "NOTICE_COLLECTED $m $(( $(date +%s) - t0 ))"; else echo "NOTICE_NOT_COLLECTED $m none in ${wait} s"; fi
+    if [ "${n:-0}" -gt "$n0" ]; then echo "NOTICE_COLLECTED $m $(( $(date +%s) - t0 ))"; else echo "NOTICE_NOT_COLLECTED $m none in ${wait} s"; fi
   done
 }
 # link_trimmed: whether a link leg (linkwait, linkfail, pnmlink) runs its trimmed rows: on a nightly or changed run, with

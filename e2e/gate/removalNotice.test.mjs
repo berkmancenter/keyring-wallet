@@ -23,18 +23,23 @@ const ignored = (t) => `${t}.500  4321  4400 W ReactNativeJS: [VTI] ignored a re
 
 /**
  * Runs the helper against a fake phone: `pid` ('' = the app is not running), `clock` (the phone's `date +%s`), and
- * `logcat` (what `logcat -d -v epoch` prints). Returns the admin calls, the adb calls and what was printed.
+ * `logcat` (what `logcat -d -v epoch` prints before any removal). `collects` is how many removals the phone answers by
+ * logging a notice (`line`, one second after the clock): the fake removal appends it, as the real phone logs it after
+ * the removal. Returns the admin calls, the adb calls and what was printed.
  */
-function run({ pid = '4321', clock = String(CLOCK), logcat = '', wait = '2', out = `JOIN_MEMBER ${A}\n` } = {}) {
+function run({ pid = '4321', clock = String(CLOCK), logcat = '', wait = '2', out = `JOIN_MEMBER ${A}\n`, tags = '', collects = 1, line = applied(CLOCK + 1) } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'notice-'));
   try {
     writeFileSync(path.join(dir, 'leg.out'), out);
     writeFileSync(path.join(dir, 'logcat'), logcat);
     const calls = path.join(dir, 'calls'), adbs = path.join(dir, 'adbs');
     const printed = execFileSync('bash', ['-c', `set -u
-      D=${JSON.stringify(dir)}; BID=asml.bkc.harvard.wallet; GATE_NOTICE_WAIT=${wait}
+      D=${JSON.stringify(dir)}; BID=asml.bkc.harvard.wallet; GATE_NOTICE_WAIT=${wait}; ${tags ? `NOTICE_TAGS=${JSON.stringify(tags)}` : ""}
       galarm() { shift; "$@"; }
-      c_admin() { echo "$*" >> ${JSON.stringify(calls)}; echo "member-removed -> 3"; }
+      c_admin() {
+        echo "$*" >> ${JSON.stringify(calls)}; echo "member-removed -> 3"
+        [ "$(wc -l < ${JSON.stringify(calls)})" -le ${collects} ] && echo ${JSON.stringify(line)} >> "$D/logcat"; return 0
+      }
       adb() {
         echo "$*" >> ${JSON.stringify(adbs)}
         case "$*" in
@@ -55,19 +60,19 @@ function run({ pid = '4321', clock = String(CLOCK), logcat = '', wait = '2', out
 test('lib.sh has the helper', () => assert.ok(helper));
 
 test('a notice the app logs after the removal is collected: one removal, NOTICE_COLLECTED with the seconds', () => {
-  const r = run({ logcat: `${applied(CLOCK - 300)}\n${applied(CLOCK + 2)}\n` });
+  const r = run({ logcat: `${applied(CLOCK - 300)}\n` });
   assert.deepEqual(r.calls, [`member-remove ${A} gate: flow B member, removed after the leg`]);
   assert.match(r.printed, new RegExp(`^NOTICE_COLLECTED ${A} \\d+$`, 'm'));
   assert.ok(r.adbs.some((a) => /monkey -p asml\.bkc\.harvard\.wallet/.test(a)), 'the app is brought to the front first');
 });
 
 test('"ignored a removal notice" also means the phone collected it', () => {
-  assert.match(run({ logcat: `${ignored(CLOCK + 1)}\n` }).printed, /^NOTICE_COLLECTED /m);
+  assert.match(run({ line: ignored(CLOCK + 1) }).printed, /^NOTICE_COLLECTED /m);
 });
 
 test('control: a notice line from BEFORE the removal does not count, so it waits out the cap and says not collected', () => {
   const t = Date.now();
-  const r = run({ logcat: `${applied(CLOCK - 1)}\n${applied(CLOCK - 3600)}\n`, wait: '2' });
+  const r = run({ logcat: `${applied(CLOCK - 1)}\n${applied(CLOCK - 3600)}\n`, collects: 0, wait: '2' });
   assert.match(r.printed, new RegExp(`^NOTICE_NOT_COLLECTED ${A} none in 2 s$`, 'm'));
   assert.doesNotMatch(r.printed, /^NOTICE_COLLECTED /m);
   assert.ok(Date.now() - t >= 1500, 'it waited for the notice');
@@ -75,14 +80,14 @@ test('control: a notice line from BEFORE the removal does not count, so it waits
 });
 
 test('control: an app that is not running cannot collect; the member is still removed, with no wait', () => {
-  const r = run({ pid: '', logcat: `${applied(CLOCK + 2)}\n` });
+  const r = run({ pid: '' });
   assert.match(r.printed, new RegExp(`^NOTICE_NOT_COLLECTED ${A} app not running$`, 'm'));
   assert.equal(r.calls.length, 1);
   assert.ok(!r.adbs.some((a) => /logcat/.test(a)), 'nothing to read');
 });
 
 test('without the phone\'s clock nothing is counted (an older line could pass), and the member is still removed', () => {
-  const r = run({ clock: '', logcat: `${applied(CLOCK + 2)}\n` });
+  const r = run({ clock: '' });
   assert.match(r.printed, /^NOTICE_NOT_COLLECTED \S+ no phone clock$/m);
   assert.equal(r.calls.length, 1);
 });
@@ -93,9 +98,29 @@ test('no JOIN_MEMBER line: no removal and no adb call (control)', () => {
   assert.deepEqual(r.adbs, []);
 });
 
+test('NOTICE_TAGS picks the driver\'s own member lines (agents: R2/R6/R10_MEMBER), each once, and only those', () => {
+  const B = 'did:webvh:QmB:dids.ic3.dev:pause-canyon';
+  const out = `R2_MEMBER ${A}\nR6_MEMBER ${B}\nR10_MEMBER ${A}\nJOIN_MEMBER did:webvh:QmZ:dids.ic3.dev:not-this-leg\nR3_MEMBER did:webvh:QmY:x\n`;
+  const r = run({ out, tags: 'R2_MEMBER|R6_MEMBER|R10_MEMBER', collects: 2 });
+  assert.deepEqual(r.calls.map((c) => c.split(' ')[1]).sort(), [A, B].sort());
+  assert.equal((r.printed.match(/^NOTICE_COLLECTED /gm) ?? []).length, 2);
+});
+
+test('control: one notice for two members collects one; the first member\'s line is not the second\'s', () => {
+  const B = 'did:webvh:QmB:dids.ic3.dev:pause-canyon';
+  const r = run({ out: `JOIN_MEMBER ${A}\nJOIN_MEMBER ${B}\n`, collects: 1 });
+  assert.equal((r.printed.match(/^NOTICE_COLLECTED /gm) ?? []).length, 1, r.printed);
+  assert.equal((r.printed.match(/^NOTICE_NOT_COLLECTED \S+ none in 2 s$/gm) ?? []).length, 1, r.printed);
+});
+
+test('control: a notice already logged in the removal\'s own second (an earlier one) is the baseline, not this one', () => {
+  const r = run({ logcat: `${applied(CLOCK)}\n${applied(CLOCK + 1)}\n`, collects: 0 });
+  assert.match(r.printed, /^NOTICE_NOT_COLLECTED \S+ none in 2 s$/m);
+});
+
 // The order inside each leg's fin(): the member is removed (and its notice waited for) before the app is uninstalled,
 // the emulator stopped and the phone's keys removed. No direct member-remove is left in those fins.
-const ORDER_LEGS = ['waiting', 'lostreq', 'update-android', 'relaunch-android'];
+const ORDER_LEGS = ['waiting', 'lostreq', 'update-android', 'relaunch-android', 'agents'];
 function orderProblems(fin) {
   const at = (re) => { const m = fin.search(re); return m < 0 ? Infinity : m; };
   const remove = at(/c_members_remove_collected \$E /);

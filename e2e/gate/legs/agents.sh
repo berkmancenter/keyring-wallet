@@ -9,9 +9,12 @@ leg_begin agents "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1
-  { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
+  { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }
+  # The members first, while the phone still runs the app, so it collects C's removal notices (IN-621): see lib.sh.
+  NOTICE_TAGS='R2_MEMBER|R6_MEMBER|R10_MEMBER' c_members_remove_collected $E "gate cleanup" "$LEG_DIR/agents.out"
+  adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
   echo "== cleanup $(utc)"
-  local s m c
+  local s c
   # R9 grants its scanned key on the community's own agent before the refusal.
   keys_since "$COMMUNITY_AGENT_SLUG" "$T0"
   # R11 holds a swap on the main runner (it enforces approval rules): its temporary key, and the rule if a run broke.
@@ -20,9 +23,6 @@ fin() {
   for s in "$RUNNER_A_SLUG" "$RUNNER_B_SLUG"; do
     keys_since "$s" "$T0"; gate_sweep_runner "$s"   # the gate's own rules only: runner A is also used by hand
     for c in $(pnm "$s" contexts list | grep -oE 'agents-r3-[0-9]+' | sort -u); do echo "  $s context $c: $(pnm "$s" contexts delete -y "$c" | tail -1 | cut -c1-50)"; done
-  done
-  for m in $(grep -oE '^(R2_MEMBER|R6_MEMBER|R10_MEMBER) did:[^ ]+' "$LEG_DIR/agents.out" 2>/dev/null | awk '{print $2}' | sort -u); do
-    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate cleanup" | grep -oE -- '-> [0-9]+' | tail -1)"
   done
 }
 LEG_CLEANUP=fin
