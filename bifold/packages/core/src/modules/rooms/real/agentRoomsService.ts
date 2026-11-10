@@ -74,6 +74,7 @@ import { OPEN_FILE_BYTES, openRoomFile, type OpenFileCopy } from './files/open'
 import { checkSender, type ResolveSender } from './files/sender'
 import { TextSenderCount } from './files/textSenderCount'
 import {
+  GOVERNED_BODY_MEMBERS,
   governedMembersIn,
   keptMembers,
   messageMembers,
@@ -182,9 +183,10 @@ export interface RoomsBackend {
    */
   resolveSender?: ResolveSender
   /**
-   * Lets `sendRecord` send. Only tests set it: signing new content needs a maintainer's word on the finished change.
+   * Lets `sendRecord` send. The real backend reads it from the release's switch (`recordSendingSwitch.ts`) each time it
+   * is asked, so a release that turns sending off has it off everywhere; tests set it themselves.
    */
-  recordSending?: boolean
+  readonly recordSending?: boolean
 }
 
 /** The picked file, and the room host's HTTPS Trust Task door, which an upload's single-use key sends to. */
@@ -1559,7 +1561,7 @@ export class AgentRoomsService implements RoomsService {
     return types.find((t) => served.includes(t))
   }
 
-  /** Whether `sendRecord` is on: only where `RoomsBackend.recordSending` is set, which nothing but tests does. */
+  /** Whether `sendRecord` is on: `RoomsBackend.recordSending`, which the real backend reads from the release's switch on each ask. */
   public recordSendingOn(): boolean {
     return this.backend.recordSending === true
   }
@@ -1574,14 +1576,28 @@ export class AgentRoomsService implements RoomsService {
     const { community, host } = this.hostOf(room, 'write')
     const served = this.served?.types ?? []
     const canSeal = this.sealType(true) !== undefined
-    if (!served.includes(ROOMS_TASK.keysProfileRead)) return { listed: [], canSeal, unresolved: false }
+    // One line per decision, so a report says which part of the rule a refusal came from: the profile not read, read
+    // and listing nothing, or the agent not sealing. Governed members by name (the spec's words), any others counted.
+    const said = (how: string, features: RecordFeatures): RecordFeatures => {
+      const named = features.listed.filter((m) => (GOVERNED_BODY_MEMBERS as readonly string[]).includes(m))
+      const others = features.listed.length - named.length
+      this.backend.warn(
+        `rooms: ${logRef(room.roomId)} record members ${how}: lists ${named.length ? named.join(',') : 'none'}${
+          others ? ` (+${others} other)` : ''
+        }; agent seals ${features.canSeal ? 'yes' : 'no'}`
+      )
+      return features
+    }
+    if (!served.includes(ROOMS_TASK.keysProfileRead))
+      return said('not asked (the agent reads no profile)', { listed: [], canSeal, unresolved: false })
     const k = `${room.roomId}\n${host}\n${community.personaDid}`
     const epoch = await this.heldRooms().then(
       (held) => held.find((h) => h.roomId === room.roomId && (!h.member || h.member === community.personaDid))?.epoch,
       () => undefined
     )
     const kept = this.recordMembers.get(k)
-    if (kept && epoch !== undefined && kept.epoch === epoch) return { listed: kept.listed, canSeal, unresolved: false }
+    if (kept && epoch !== undefined && kept.epoch === epoch)
+      return said('kept from this epoch', { listed: kept.listed, canSeal, unresolved: false })
     try {
       const listed = parseProfileRecordMembers(
         await this.backend.agentTask(ROOMS_TASK.keysProfileRead, { roomId: room.roomId, host })
@@ -1590,15 +1606,15 @@ export class AgentRoomsService implements RoomsService {
         this.recordMembers.set(k, { epoch, listed })
         holdingOpened.add(this)
       }
-      return { listed, canSeal, unresolved: false }
-    } catch {
-      return { listed: [], canSeal, unresolved: true }
+      return said('read', { listed, canSeal, unresolved: false })
+    } catch (e) {
+      return said(`not read (${failureCategory(e)})`, { listed: [], canSeal, unresolved: true })
     }
   }
 
   /**
    * Writes a message, a reply or a reaction to an attributed room, by the writer's rule (`recordWrites.ts`). Off until
-   * `RoomsBackend.recordSending` is set, which nothing but tests does: signing new content needs a maintainer's word.
+   * `RoomsBackend.recordSending` says so: the real backend reads the release's switch (`recordSendingSwitch`) on every send.
    */
   public async sendRecord(roomId: string, write: RecordWrite): Promise<{ key: string; version: number }> {
     if (!this.backend.recordSending) throw new RecordSendingOff()
@@ -1640,6 +1656,9 @@ export class AgentRoomsService implements RoomsService {
         body = write.value
       } else if (write.type === 'edit') {
         if (prior.kind !== 'message') throw new RoomsRefused('write', 'notThatKind', false, 'not a message')
+        // An edit's new version is words alone (`{ title: '', body, members }` below): a post that carries a file
+        // would lose it. Its author can withdraw it instead.
+        if (prior.file) throw new RoomsRefused('write', 'notThatKind', false, 'a post with a file is not edited')
         body = write.body
       } else {
         if (prior.kind !== 'message' && prior.kind !== 'reaction')

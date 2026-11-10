@@ -7,8 +7,8 @@
  * `preview` into a room unless the room's current profile" lists that member; no profile, one that doesn't list it, or
  * one that can't be read permits none.
  *
- * **Sending isn't switched on.** `RoomsBackend.recordSending` is set by nothing but tests, and signing new content
- * needs a maintainer's word on the finished change before it is.
+ * **Sending is a release's switch.** `RoomsBackend.recordSending` is what the real backend reads, on every send, from
+ * `recordSendingSwitch.ts`: a release turns it on, and a release can turn it off again for everyone.
  *
  * @module rooms/real/recordWrites
  */

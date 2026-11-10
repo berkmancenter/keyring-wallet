@@ -21,6 +21,7 @@ import { GenericRecordsVettingStore } from '../../trust-tasks/module/vtiVetting'
 import { vtiAgent } from '../../trust-tasks/module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vtiTsp'
 
+import { isRoomRecordSendingOn } from '../recordSendingSwitch'
 import { afterLeavingCommunity } from '../roomsLeave'
 
 import type { RoomsBackend, RoomsCommunity, RoomsUploadBackend } from './agentRoomsService'
@@ -159,6 +160,10 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
 
     uploads: createUploadBackend(agent),
     resolveSender: senderResolver(agent),
+    // Read on every send, never kept: a release that turns sending off has it off at the next start (recordSendingSwitch).
+    get recordSending() {
+      return isRoomRecordSendingOn()
+    },
     sessionKept: isSessionKept,
     sessionFree: async (communityDid) => {
       const persona = await identityStore.getPersona(communityDid)

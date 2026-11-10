@@ -3,7 +3,8 @@
  * of their own message (trust-tasks-tf #1027; `real/recordWrites.ts`). Three things decide it, and each one alone
  * keeps the room as it is today, Copy only:
  *
- * - the build: `RoomsService.recordSendingOn`, which nothing turns on yet. Off, the room's profile isn't even read.
+ * - the build: `RoomsService.recordSendingOn`, which the release's switch decides (`recordSendingSwitch.ts`: on, unless a
+ *   release turns it off remotely). Off, the room's profile isn't even read.
  * - the room: Keyring writes these only in an attributed room the member has joined.
  * - the room's profile: a writer may use a member only when the profile lists it and the member's agent seals it.
  *
