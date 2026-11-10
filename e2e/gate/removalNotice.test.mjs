@@ -196,6 +196,30 @@ test('control: a disabled call (behind `:` or `#`) is not taken for the removal'
   }
 });
 
+// Which members agents.sh removes is decided by its NOTICE_TAGS value, so that value is derived from what its driver
+// prints rather than trusted: a wrong or missing value (the default JOIN_MEMBER) matches no line, and the leg would leave
+// every member on C with all the other rows green. The other legs use the default, which their drivers print.
+const printedTags = (src) => [...new Set([...src.matchAll(/console\.log\(`([A-Z0-9]+_MEMBER) \$\{/g)].map((m) => m[1]))].sort();
+const legTags = (fin) => {
+  const m = fin.match(/^[ \t]*NOTICE_TAGS=(?:'([^']*)'|"([^"]*)"|(\S+))[ \t]+c_members_remove_collected /m);
+  return m ? (m[1] ?? m[2] ?? m[3]).split('|').sort() : ['JOIN_MEMBER'];
+};
+test('agents.sh removes exactly the member tags run-several-agents.mjs prints', () => {
+  const printed = printedTags(readFileSync(path.join(here, '../run-several-agents.mjs'), 'utf8'));
+  assert.ok(printed.length >= 3, `found ${printed}`);
+  const fin = fn(readFileSync(path.join(here, 'legs/agents.sh'), 'utf8'), 'fin') ?? '';
+  assert.deepEqual(legTags(fin), printed);
+});
+
+test('controls: a narrowed, wrong or missing NOTICE_TAGS on agents.sh no longer matches what its driver prints', () => {
+  const printed = printedTags(readFileSync(path.join(here, '../run-several-agents.mjs'), 'utf8'));
+  const fin = fn(readFileSync(path.join(here, 'legs/agents.sh'), 'utf8'), 'fin') ?? '';
+  const line = fin.match(/NOTICE_TAGS=\S+ /)[0];
+  for (const off of ["NOTICE_TAGS='R2_MEMBER' ", 'NOTICE_TAGS=JOIN_MEMBER ', '']) {
+    assert.notDeepEqual(legTags(fin.replace(line, off)), printed, JSON.stringify(off));
+  }
+});
+
 test('control: the order check catches the old fin (uninstall and emu_stop, then the removal)', () => {
   const old = `fin() {
   { [ -n "\${LC:-}" ] && kill "$LC" 2>/dev/null; }
