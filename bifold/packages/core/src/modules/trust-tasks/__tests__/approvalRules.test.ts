@@ -250,6 +250,75 @@ describe('the phone never sends an offered task', () => {
     expect(unlisted).toEqual([])
   })
 
+  // A rooms read, write or watch goes to the agent too, from the rooms backend rather than the client's own list.
+  const ROOMS_REAL = join(__dirname, '..', '..', 'rooms', 'real')
+  // What the phone asks its own agent: `rooms/keys` and `vault`. A host's and a community's tasks (`rooms/records`,
+  // `rooms/blobs`, `vtc`) never pass the agent's policy gate. `rooms/keys/changed` is pushed by the agent, never sent:
+  // should it ever join ROOMS_TASK (to parse it), take it out here, or the first test below fails for the wrong reason.
+  const toAgent = (uri: string) => /\/spec\/(rooms\/keys|vault)\//.test(uri) && !uri.includes('/rooms/keys/changed/')
+  const roomsTypes = () => {
+    const { ROOMS_TASK } = jest.requireActual('../../rooms/real/wire') as { ROOMS_TASK: Record<string, string> }
+    const { UPLOAD_TASK } = jest.requireActual('../../rooms/real/files/upload') as {
+      UPLOAD_TASK: Record<string, string>
+    }
+    return { ROOMS_TASK, UPLOAD_TASK }
+  }
+
+  it('every rooms task the phone asks its agent is on the list of what the phone sends', () => {
+    // A rule set elsewhere on one that is missing (a class rule on `Mutating` names read 0.2 and watch 0.1) would hold
+    // each room read and ask its approvers every time, without the screen saying which rule is to blame.
+    const { ROOMS_TASK, UPLOAD_TASK } = roomsTypes()
+    const asked = [...Object.values(ROOMS_TASK), ...Object.values(UPLOAD_TASK)].filter(toAgent)
+    expect(asked.length).toBeGreaterThan(10)
+    expect(asked.filter((uri) => !PHONE_SENDS.includes(uri))).toEqual([])
+  })
+
+  /**
+   * The call sites that name their task through a variable or a helper rather than inline, each with why the rule above
+   * covers it. A new one fails the test below until it is read and named here.
+   */
+  const INDIRECT: Record<string, string> = {
+    'this.browseType()': 'the newest ROOMS_TASK.keysBrowse* the agent serves',
+    get: 'ROOMS_TASK.vaultGet02 or vaultGet01',
+    type: "agentStep's own type, each named at its caller",
+    act: 'the newest ROOMS_TASK.keysAct* the agent serves (actType)',
+    sealType: 'ROOMS_TASK.keysSeal02 or keysSeal03 (sealType)',
+  }
+
+  it("the rooms tasks sent to the agent are the ones that rule names: rooms/keys and vault, never a host's or a community's", () => {
+    // Ties the rule above to the code: what the rooms backend hands to agentTask (its first argument) or agentStep (its
+    // third), in every file under rooms/real.
+    const { ROOMS_TASK, UPLOAD_TASK } = roomsTypes()
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith('.ts') ? [join(dir, e.name)] : []
+      )
+    const arg = String.raw`(?:'[^']*'|"[^"]*"|\`[^\`]*\`|[\w.]+)`
+    const sites = walk(ROOMS_REAL).flatMap((file) => {
+      const src = readFileSync(file, 'utf8')
+      return [
+        ...[...src.matchAll(/\.agentTask\(\s*([^,]+?)\s*,/g)].map((m) => m[1].trim()),
+        ...[...src.matchAll(new RegExp(String.raw`\.agentStep\(\s*${arg},\s*${arg},\s*([^,]+?)\s*,`, 'g'))].map((m) =>
+          m[1].trim()
+        ),
+      ]
+    })
+    expect(sites.length).toBeGreaterThan(12)
+    const named = (site: string) => {
+      const [, table, key] = /^(ROOMS_TASK|UPLOAD_TASK)\.(\w+)$/.exec(site) ?? []
+      return table ? (table === 'ROOMS_TASK' ? ROOMS_TASK : UPLOAD_TASK)[key] : undefined
+    }
+    expect(sites.filter((site) => !named(site) && !(site in INDIRECT))).toEqual([])
+    // And each one named is still in the code, so the list cannot keep a site that has gone.
+    expect(Object.keys(INDIRECT).filter((site) => !sites.includes(site))).toEqual([])
+    for (const site of sites.filter(named))
+      expect([site, named(site)]).toEqual([site, expect.stringMatching(/\/spec\/(rooms\/keys|vault)\//)])
+  })
+
+  it('a signal the agent pushes is not on the list: the phone receives rooms/keys/changed, it never sends it', () => {
+    expect(PHONE_SENDS.filter((uri) => uri.includes('/rooms/keys/changed/'))).toEqual([])
+  })
+
   it('the app has no caller of createContext', () => {
     const src = join(__dirname, '..', '..', '..')
     const walk = (dir: string): string[] =>

@@ -135,6 +135,30 @@ export const PHONE_SENDS: readonly string[] = [
   'policy/get/0.1',
   'policy/upsert/0.2',
   'policy/upsert/0.3',
+  // Rooms: what the phone asks its own agent for a room. Each goes through the policy gate, so a rule on one holds the
+  // phone as it reads, writes or watches a room, and asks the rule's approvers each time it does. `read` 0.2 and
+  // `watch` 0.1 are declared `Mutating` upstream, so a rule set elsewhere on that class names them too. Every
+  // `rooms/keys/*` type in ROOMS_TASK must be here (approvalRules.test.ts); `browse` 0.4, `read` 0.2 and `watch` 0.1 are
+  // listed ahead of the code that sends them, so that code cannot arrive without them.
+  'rooms/keys/list/0.1',
+  'rooms/keys/list/0.2',
+  'rooms/keys/browse/0.1',
+  'rooms/keys/browse/0.3',
+  'rooms/keys/browse/0.4',
+  'rooms/keys/read/0.1',
+  'rooms/keys/read/0.2',
+  'rooms/keys/watch/0.1',
+  'rooms/keys/key-package/0.2',
+  'rooms/keys/welcome/0.1',
+  'rooms/keys/backfill/0.2',
+  'rooms/keys/act/0.5',
+  'rooms/keys/act/0.6',
+  'rooms/keys/act/0.8',
+  'rooms/keys/act/0.9',
+  'rooms/keys/seal/0.2',
+  'rooms/keys/seal/0.3',
+  'rooms/keys/profile/read/0.1',
+  'rooms/keys/file-key/0.2',
 ].map((slug) => SPEC + slug)
 
 /**
