@@ -75,7 +75,8 @@ test('control: a notice line from BEFORE the removal does not count, so it waits
   const r = run({ logcat: `${applied(CLOCK - 1)}\n${applied(CLOCK - 3600)}\n`, collects: 0, wait: '2' });
   assert.match(r.printed, new RegExp(`^NOTICE_NOT_DELIVERED ${A} none in 2 s removal=3$`, 'm'));
   assert.doesNotMatch(r.printed, /^NOTICE_DELIVERED /m);
-  assert.ok(Date.now() - t >= 1500, 'it waited for the notice');
+  // Whole-second clock: a 2 s cap lasts at least wait - 1 = 1 s; not waiting at all ends in well under that.
+  assert.ok(Date.now() - t >= 800, `it waited for the notice (${Date.now() - t} ms)`);
   assert.equal(r.calls.length, 1, 'the member is removed either way');
 });
 
@@ -149,25 +150,43 @@ test('a log that rolls during the wait (fewer notice lines than the baseline) is
 // The order inside each leg's fin(): the member is removed (and its notice waited for) before the app is uninstalled,
 // the emulator stopped and the phone's keys removed. No direct member-remove is left in those fins.
 const ORDER_LEGS = ['waiting', 'lostreq', 'update-android', 'relaunch-android', 'agents'];
-function orderProblems(fin) {
+// A text scan approximates "the call runs", it cannot prove it: a call inside `if false; then` still passes. What it
+// does catch is the call being disabled where it stands, or its wait being switched off by an env prefix.
+const CALL_PREFIX = { wait: "NOTICE_TAGS=(?:'[^']*'|\"[^\"]*\"|\\S+)[ \\t]+", skip: 'NOTICE_SKIP="[^"]*"[ \\t]*\\\\\\n[ \\t]*' };
+function orderProblems(fin, { skip = false } = {}) {
   const at = (re) => { const m = fin.search(re); return m < 0 ? Infinity : m; };
-  // The call must be a command of its own (env assignments before it are fine), not text after `:`, `#` or `echo`.
-  const remove = at(/^[ \t]*(?:[A-Z_]+=(?:'[^']*'|"[^"]*"|\S+)[ \t]+(?:\\\n[ \t]*)?)*c_members_remove_collected \$E /m);
+  // The call must be a command of its own, not text after `:`, `#` or `echo`, with only the prefixes this leg may use:
+  // NOTICE_TAGS for every leg, NOTICE_SKIP only where the leg is allowed to skip the wait (waiting).
+  const prefix = skip ? CALL_PREFIX.skip : `(?:${CALL_PREFIX.wait})?`;
+  const remove = at(new RegExp(`^[ \\t]*${prefix}c_members_remove_collected \\$E `, 'm'));
   const problems = [];
   if (remove === Infinity) problems.push('no c_members_remove_collected');
   for (const [what, re] of [['uninstall', /uninstall \$BID/], ['emu_stop', /emu_stop/], ['keys_since', /keys_since /]]) {
     if (at(re) < remove) problems.push(`${what} before the removal`);
   }
   if (/c_admin member-remove/.test(fin)) problems.push('a direct member-remove is left');
+  if (!skip && /\b(NOTICE_SKIP|GATE_NOTICE_WAIT)=/.test(fin)) problems.push('the wait is switched off');
   return problems;
 }
 
 for (const leg of ORDER_LEGS) {
   test(`${leg}.sh removes its member before the app goes`, () => {
     const fin = fn(readFileSync(path.join(here, `legs/${leg}.sh`), 'utf8'), 'fin') ?? '';
-    assert.deepEqual(orderProblems(fin), []);
+    assert.deepEqual(orderProblems(fin, { skip: leg === 'waiting' }), []);
   });
 }
+
+test('controls: a leg that must wait cannot switch the wait off by a prefix or an assignment', () => {
+  const fin = fn(readFileSync(path.join(here, 'legs/update-android.sh'), 'utf8'), 'fin') ?? '';
+  assert.deepEqual(orderProblems(fin), []);
+  for (const [name, off] of [['NOTICE_SKIP prefix', 'NOTICE_SKIP=x c_members_remove_collected'], ['GATE_NOTICE_WAIT prefix', 'GATE_NOTICE_WAIT=0 c_members_remove_collected'],
+    ['NOTICE_SKIP set earlier', 'NOTICE_SKIP=x; c_members_remove_collected'], ['GATE_NOTICE_WAIT set earlier', 'local GATE_NOTICE_WAIT=0; c_members_remove_collected']]) {
+    assert.notDeepEqual(orderProblems(fin.replace('c_members_remove_collected', off)), [], name);
+  }
+  // waiting's own skip passes only where skipping is allowed.
+  const w = fn(readFileSync(path.join(here, 'legs/waiting.sh'), 'utf8'), 'fin') ?? '';
+  assert.ok(orderProblems(w).length > 0);
+});
 
 test('control: a disabled call (behind `:` or `#`) is not taken for the removal', () => {
   const ok = 'fin() {\n  NOTICE_TAGS=\'R2_MEMBER\' c_members_remove_collected $E "x" "$LEG_DIR/a.out"\n  adb -s $E uninstall $BID; emu_stop; keys_since a b\n}';

@@ -299,6 +299,7 @@ c_members_remove_collected() {
     while [ $(( $(date +%s) - t0 )) -lt "$wait" ]; do
       n=$(_crc_notices "$s"); [ "${n:-0}" -gt "$n0" ] && break
       # The buffer rolled (oldest lines, the baseline's, evicted first): a delivery may now hide below n0.
+      # (A roll exactly as large as a new notice leaves n == n0: that reads as "none in N s", not rolled.)
       [ -n "$n" ] && [ "$n" -lt "$n0" ] && rolled=1
       sleep 1
     done
