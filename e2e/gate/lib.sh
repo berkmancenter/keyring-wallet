@@ -267,35 +267,43 @@ c_members_deferred() {
 #   NOTICE_NOT_DELIVERED, with the removal itself unchanged.
 # - Each member is judged against the count just before its removal, so an earlier member's line never counts for it.
 # - It prints NOTICE_DELIVERED <member> <s> removal=<status> or NOTICE_NOT_DELIVERED <member> <why> removal=<status>
+#   (why: none in N s, log rolled, log unreadable, app not running, not waited: <NOTICE_SKIP>)
 #   (status "none" = the removal call printed no status). It never fails the leg: the removal happens either way.
 # - NOTICE_TAGS (an ERE alternation, default JOIN_MEMBER) names the driver's member lines (agents: R2|R6|R10_MEMBER).
 #   NOTICE_SKIP=<why> removes without waiting, for a leg whose last install is not the member's.
 # - Time: GATE_NOTICE_WAIT (s, default 60) caps the wait, counted from when the removal returned. Every adb call has
 #   its own 15 s deadline (galarm, not a test row), so the worst case per member is about 60 + 15 (the last read) +
 #   45 (pidof, monkey, baseline) = 120 s beyond the removal call itself.
+# _crc_notices <serial>: how many notice lines the phone's log holds now; a failed read prints nothing (not "0").
+_crc_notices() { local o; o=$(GALARM_STEPS=0 galarm 15 adb -s "$1" logcat -d 2>/dev/null) || return 0
+  printf '%s\n' "$o" | grep -cE '\[VTI\] (applied|ignored) a removal notice'; }
+# _crc_remove <member> <why>: the removal; prints its status ("-> <code>"), or nothing.
+_crc_remove() { c_admin member-remove "$1" "$2" | grep -oE -- '-> [0-9]+' | tail -1; }
 c_members_remove_collected() {
-  local s=$1 why=$2 m t0 n0 n st wait=${GATE_NOTICE_WAIT:-60}; shift 2
-  # notices: how many notice lines the phone's log holds now. A failed read prints nothing (not "0").
-  notices() { local o; o=$(GALARM_STEPS=0 galarm 15 adb -s "$s" logcat -d 2>/dev/null) || return 0
-    printf '%s\n' "$o" | grep -cE '\[VTI\] (applied|ignored) a removal notice'; }
-  # rm_member: the removal, its status for the NOTICE_ line ("none" when the call printed none).
-  rm_member() { st=$(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1); echo "  C member …${m: -24}: $st"; st=${st#-> }; st=${st:-none}; }
+  local s=$1 why=$2 m t0 n0 n st rolled wait=${GATE_NOTICE_WAIT:-60}; shift 2
   for m in $(grep -hoE "^(${NOTICE_TAGS:-JOIN_MEMBER}) did:[^ ]+" "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
-    if [ -n "${NOTICE_SKIP:-}" ]; then rm_member; echo "NOTICE_NOT_DELIVERED $m not waited: $NOTICE_SKIP removal=$st"; continue; fi
+    if [ -n "${NOTICE_SKIP:-}" ]; then
+      st=$(_crc_remove "$m" "$why"); echo "  C member …${m: -24}: $st"; st=${st#-> }
+      echo "NOTICE_NOT_DELIVERED $m not waited: $NOTICE_SKIP removal=${st:-none}"; continue
+    fi
     if [ -z "$(GALARM_STEPS=0 galarm 15 adb -s "$s" shell pidof "$BID" 2>/dev/null | tr -d '\r')" ]; then
-      rm_member; echo "NOTICE_NOT_DELIVERED $m app not running removal=$st"; continue
+      st=$(_crc_remove "$m" "$why"); echo "  C member …${m: -24}: $st"; st=${st#-> }
+      echo "NOTICE_NOT_DELIVERED $m app not running removal=${st:-none}"; continue
     fi
     GALARM_STEPS=0 galarm 15 adb -s "$s" shell monkey -p "$BID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-    n0=$(notices)
-    rm_member; t0=$(date +%s)
+    n0=$(_crc_notices "$s")
+    st=$(_crc_remove "$m" "$why"); t0=$(date +%s); echo "  C member …${m: -24}: $st"; st=${st#-> }; st=${st:-none}
     # An unreadable log before the removal leaves nothing to compare with: count nothing rather than guess.
     case $n0 in ''|*[!0-9]*) echo "NOTICE_NOT_DELIVERED $m log unreadable removal=$st"; continue ;; esac
-    n=$n0
+    n=$n0; rolled=
     while [ $(( $(date +%s) - t0 )) -lt "$wait" ]; do
-      n=$(notices); [ "${n:-0}" -gt "$n0" ] && break
+      n=$(_crc_notices "$s"); [ "${n:-0}" -gt "$n0" ] && break
+      # The buffer rolled (oldest lines, the baseline's, evicted first): a delivery may now hide below n0.
+      [ -n "$n" ] && [ "$n" -lt "$n0" ] && rolled=1
       sleep 1
     done
     if [ "${n:-0}" -gt "$n0" ]; then echo "NOTICE_DELIVERED $m $(( $(date +%s) - t0 )) removal=$st"
+    elif [ -n "$rolled" ]; then echo "NOTICE_NOT_DELIVERED $m log rolled removal=$st"
     else echo "NOTICE_NOT_DELIVERED $m none in ${wait} s removal=$st"; fi
   done
 }

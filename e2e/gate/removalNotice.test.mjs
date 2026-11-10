@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const lib = readFileSync(path.join(here, 'lib.sh'), 'utf8');
 const fn = (src, name) => src.match(new RegExp(`^${name}\\(\\) \\{[\\s\\S]*?^\\}$`, 'm'))?.[0];
-const helper = fn(lib, 'c_members_remove_collected');
+const helper = [fn(lib, 'c_members_remove_collected')].concat(['_crc_notices', '_crc_remove'].map((n) => lib.match(new RegExp(`^${n}\\(\\) \\{[^\\n]*(?:\\n  [^\\n]*)*`, 'm'))?.[0])).join('\n');
 
 const A = 'did:webvh:QmA:dids.ic3.dev:frown-coral';
 const CLOCK = 1794300000;
@@ -27,7 +27,7 @@ const ignored = (t) => `${t}.500  4321  4400 W ReactNativeJS: [VTI] ignored a re
  * logging a notice (`line`): the fake removal appends it, as the real phone logs it after
  * the removal. Returns the admin calls, the adb calls and what was printed.
  */
-function run({ pid = '4321', readable = true, status = 'member-removed -> 3', skip = '', slow = 0, logcat = '', wait = '2', out = `JOIN_MEMBER ${A}\n`, tags = '', collects = 1, line = applied(CLOCK + 1) } = {}) {
+function run({ pid = '4321', readable = true, status = 'member-removed -> 3', skip = '', slow = 0, rollAfterRemoval = false, logcat = '', wait = '2', out = `JOIN_MEMBER ${A}\n`, tags = '', collects = 1, line = applied(CLOCK + 1) } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'notice-'));
   try {
     writeFileSync(path.join(dir, 'leg.out'), out);
@@ -38,7 +38,8 @@ function run({ pid = '4321', readable = true, status = 'member-removed -> 3', sk
       galarm() { shift; "$@"; }
       c_admin() {
         echo "$*" >> ${JSON.stringify(calls)}; sleep ${slow}; echo ${JSON.stringify(status)}
-        [ "$(wc -l < ${JSON.stringify(calls)})" -le ${collects} ] && echo ${JSON.stringify(line)} >> "$D/logcat"; return 0
+        [ "$(wc -l < ${JSON.stringify(calls)})" -le ${collects} ] && echo ${JSON.stringify(line)} >> "$D/logcat"
+        ${rollAfterRemoval ? 'tail -n +2 "$D/logcat" > "$D/l2"; mv "$D/l2" "$D/logcat"' : ':'}; return 0
       }
       adb() {
         echo "$*" >> ${JSON.stringify(adbs)}
@@ -130,12 +131,19 @@ test('the wait is counted from when the removal returned, not from before it (a 
   const t = Date.now();
   const r = run({ collects: 0, wait: '2', status: 'member-removed -> 3', slow: 2 });
   assert.match(r.printed, /none in 2 s/);
-  assert.ok(Date.now() - t >= 3500, `waited ${Date.now() - t} ms`);
+  // The helper counts whole seconds, so the cap is effectively [wait - 1, wait]: fixed, it lasts at least slow + wait - 1
+  // = 3 s; the bug (the wait started before the removal) ends at about 2 s.
+  assert.ok(Date.now() - t >= 2500, `waited ${Date.now() - t} ms`);
 });
 
 test('waiting.sh removes without the wait, with its reason (its last install is the cards-back re-link)', () => {
   const fin = fn(readFileSync(path.join(here, 'legs/waiting.sh'), 'utf8'), 'fin') ?? '';
   assert.match(fin, /NOTICE_SKIP="last install is the cards-back re-link, not the member's" \\\n\s+c_members_remove_collected \$E /);
+});
+
+test('a log that rolls during the wait (fewer notice lines than the baseline) is its own reason, not "none"', () => {
+  const r = run({ logcat: `${applied(CLOCK - 9)}\n${applied(CLOCK - 8)}\n`, collects: 0, rollAfterRemoval: true });
+  assert.match(r.printed, /^NOTICE_NOT_DELIVERED \S+ log rolled removal=3$/m);
 });
 
 // The order inside each leg's fin(): the member is removed (and its notice waited for) before the app is uninstalled,
