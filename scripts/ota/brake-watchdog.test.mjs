@@ -96,6 +96,17 @@ test('check: no handoff artifact is an alert that names why', async () => {
   assert.deepEqual([r.action, r.unreadable], ['alert', '0 post-release-handoff artifacts'])
 })
 
+test('check reads only the post-release-handoff-<sha> artifact, beside any other artifact of the run', async () => {
+  const artifacts = [
+    { name: 'post-release-handoff-5d150fbb2270762cdfa4d493e55346726287c49c', expired: false },
+    { name: 'screen-check-handoff-notes', expired: false },
+    { name: 'post-release-handoff-5d150fbb2270762cdfa4d493e55346726287c49c-old', expired: false },
+  ]
+  const f = fakeRun({ verdict: 'smoke-red', jobs: [SMOKE_FAILED], artifacts })
+  const r = await check({ run: '1', repo: 'o/r', gh: f.gh, download: f.download, now: at('2026-11-09T18:12:00Z'), dir: scratch() })
+  assert.deepEqual([r.action, r.unreadable], ['brake', undefined])
+})
+
 test('check: a handoff without platforms (written before this change) takes them from its bundles', async () => {
   const f = fakeRun({ verdict: 'smoke-red', jobs: [SMOKE_FAILED], platforms: null })
   const r = await check({ run: '1', repo: 'o/r', gh: f.gh, download: f.download, now: at('2026-11-09T18:12:00Z'), dir: scratch() })
