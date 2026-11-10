@@ -2694,6 +2694,10 @@
     "ShareCodeMessage": "Mon code propriétaire Keyring — ajoutez-le comme propriétaire (admin) de mon agent :"
   },
   "AskMe": {
+    "TrustedTitle": "Vos approbateurs de confiance",
+    "TrustedOtherAction": "Une autre action",
+    "TrustedOpen": "Qui approuve",
+    "TrustedSwitchedOff": "Elles viennent des approbateurs de confiance, désactivés sur ce téléphone. Elles bloquent toujours ces actions sur votre agent.",
     "Intro": "Votre agent peut attendre votre accord avant de faire certaines choses. Il vous le demande sur ce téléphone.",
     "Enforcement": "Votre agent ne vous demande rien si les approbations ne sont pas activées là où il est hébergé.",
     "Loading": "Lecture des règles de votre agent…",
@@ -3581,6 +3585,7 @@
     "CertifiedOn": "Certifié par la communauté le {{date}}"
   },
   "Approver": {
+    "SwitchedOff": "Les approbateurs de confiance sont désactivés.",
     "AskTitle": "Approbateur",
     "Ask": "Demander à {{name}} d’être mon approbateur",
     "AskCaption": "{{name}} voit exactement ce que vous choisissez et peut refuser d’être votre approbateur.",

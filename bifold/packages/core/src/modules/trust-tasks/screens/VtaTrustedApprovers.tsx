@@ -8,7 +8,9 @@
  * Approvers are named from the relationships this phone asked over; one added some other way is said to be someone
  * not in the contacts.
  *
- * Reached from My agent only while the trusted-approvers switch is on.
+ * Reached from My agent only while the trusted-approvers switch is on, and guarded here too: navigation restore, a
+ * later entry point, or the remote off (TRUSTED_APPROVERS_REMOTE_OFF) must not leave a working screen behind. Read again
+ * on each focus, so a switch-off while it is open takes effect the next time it shows.
  *
  * @module trust-tasks/screens/VtaTrustedApprovers
  */
@@ -38,6 +40,7 @@ import {
   type RoleOfferPrompt,
 } from '../approverRole'
 import { releaseWarn } from '../module/releaseLog'
+import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
 
 import { localDate } from './localTime'
@@ -45,6 +48,7 @@ import { deviceErrorWords } from './VtaDevices'
 
 export const TrustedApproversIds = {
   screen: 'TrustedApprovers',
+  off: 'TrustedApproversOff',
   error: 'TrustedApproversError',
   none: 'TrustedApproversNone',
   approver: (did: string) => `TrustedApprover_${did}`,
@@ -75,6 +79,7 @@ const VtaTrustedApprovers: React.FC = () => {
   const [mine, setMine] = useState<RoleOfferPrompt[]>([])
   const [error, setError] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
+  const [on, setOn] = useState(isTrustedApproversEnabled)
 
   const wordsFor = useCallback((e: unknown) => deviceErrorWords(e, t), [t])
 
@@ -110,7 +115,10 @@ const VtaTrustedApprovers: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      void load()
+      const now = isTrustedApproversEnabled()
+      setOn(now)
+      // Switched off: nothing is read or written, and the agent is not asked.
+      if (now) void load()
     }, [load])
   )
 
@@ -197,6 +205,15 @@ const VtaTrustedApprovers: React.FC = () => {
   const actionList = (keys: readonly string[]) => keys.map((key) => t(`Approver.Action.${key}`)).join(', ')
   const nameOf = (did: string) => names[did] ?? t('Approver.Unnamed')
   const waiting = accepted.filter((ask) => !view?.approvers.includes(ask.acceptedAs as string))
+
+  if (!on || !isTrustedApproversEnabled())
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+        <View style={styles.content}>
+          <ThemedText testID={testIdWithKey(TrustedApproversIds.off)}>{t('Approver.SwitchedOff')}</ThemedText>
+        </View>
+      </SafeAreaView>
+    )
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>

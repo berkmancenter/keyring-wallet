@@ -15,7 +15,7 @@
  * @module trust-tasks/screens/VtaAskMe
  */
 import { useAgent } from '@bifold/react-hooks'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { effectiveMinApprovals } from '../module/approvalsPolicy'
 import { releaseWarn } from '../module/releaseLog'
@@ -33,6 +34,8 @@ import {
   letThroughCardShown,
   type TestRequestOutcome,
 } from '../module/testRequestOutcome'
+import { TRUSTED_SET, trustedKeyOf } from '../module/trustedApprovers'
+import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
 
 import { deviceErrorWords } from './VtaDevices'
@@ -45,6 +48,7 @@ const VtaAskMe: React.FC = () => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const { ColorPalette } = useTheme()
+  const navigation = useNavigation()
   const [state, setState] = useState<ApprovalRulesState | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
@@ -162,6 +166,12 @@ const VtaAskMe: React.FC = () => {
     rule.requires === 'reauth' ? t('AskMe.RuleReauth') : t('AskMe.RuleConsent', { count: effectiveMinApprovals(rule) })
 
   const canChange = state?.canChange ?? false
+  // Rules from trusted approvers (the one set Keyring writes for them), apart from rules set anywhere else.
+  const trustedOn = isTrustedApproversEnabled()
+  const isTrustedRule = (rule: { approverSet?: string; requires: string }) =>
+    rule.requires === 'consent' && rule.approverSet === TRUSTED_SET
+  const trustedHere = (state?.view.elsewhere ?? []).filter(({ rule }) => isTrustedRule(rule))
+  const otherHere = (state?.view.elsewhere ?? []).filter(({ rule }) => !isTrustedRule(rule))
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -285,10 +295,43 @@ const VtaAskMe: React.FC = () => {
 
         {state ? <ThemedText style={styles.muted}>{t('AskMe.Nudge')}</ThemedText> : null}
 
-        {state?.view.elsewhere.length ? (
+        {/* Trusted approvers' rules hold these actions on purpose: grouped, in action words, never as raw task types
+            and never flagged as holding this phone. With the switch off they are still listed (they still hold the
+            actions), and say where they came from. */}
+        {trustedHere.length ? (
+          <View style={{ gap: 8 }} testID={testIdWithKey('AskMeTrusted')}>
+            <ThemedText variant="bold">{t('AskMe.TrustedTitle')}</ThemedText>
+            {trustedHere.map(({ rule }, i) => {
+              const key = trustedKeyOf(rule.taskType)
+              return (
+                <View key={`${rule.taskType}-${i}`} style={styles.card} testID={testIdWithKey('AskMeTrustedRule')}>
+                  <ThemedText>{key ? t(`Approver.Action.${key}`) : t('AskMe.TrustedOtherAction')}</ThemedText>
+                  <ThemedText style={styles.muted}>{ruleWords(rule)}</ThemedText>
+                  {details ? <ThemedText style={styles.mono}>{JSON.stringify(rule)}</ThemedText> : null}
+                </View>
+              )
+            })}
+            {trustedOn ? (
+              <Button
+                title={t('AskMe.TrustedOpen')}
+                buttonType={ButtonType.Tertiary}
+                onPress={() =>
+                  (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtaTrustedApprovers)
+                }
+                testID={testIdWithKey('AskMeTrustedOpen')}
+              />
+            ) : (
+              <ThemedText style={styles.muted} testID={testIdWithKey('AskMeTrustedOff')}>
+                {t('AskMe.TrustedSwitchedOff')}
+              </ThemedText>
+            )}
+          </View>
+        ) : null}
+
+        {otherHere.length ? (
           <View style={{ gap: 8 }} testID={testIdWithKey('AskMeElsewhere')}>
             <ThemedText variant="bold">{t('AskMe.SetElsewhereTitle')}</ThemedText>
-            {state.view.elsewhere.map(({ rule, holdsThisPhone, offered }, i) => (
+            {otherHere.map(({ rule, holdsThisPhone, offered }, i) => (
               <View key={`${rule.taskType}-${i}`} style={styles.card}>
                 <ThemedText>
                   {offered ? t(`AskMe.Task.${offered}`) : (rule.taskType.split('/spec/')[1] ?? rule.taskType)}

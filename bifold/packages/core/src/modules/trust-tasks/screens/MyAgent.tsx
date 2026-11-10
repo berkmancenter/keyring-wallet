@@ -49,6 +49,7 @@ import { ownVetterGrantState } from '../module/vtiGrantState'
 import { useCommunityChanged } from '../module/communityChanged'
 import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
+import { shownApprovals } from '../module/waitingRequests'
 
 import { openScanner } from './openScanner'
 import { useChosenCommunityDid } from './useCommunity'
@@ -466,14 +467,14 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           ) : null}
           {/* Which of this person's approvers it waits on, when it is theirs to approve; hidden otherwise. */}
           <ApproverWaitNote />
-          {vta.approvals.length === 0 ? (
+          {shownApprovals(vta.approvals).length === 0 ? (
             <Text style={styles.value} testID={testIdWithKey(MyAgentIds.noApprovals)}>
               {vta.status === 'connected'
                 ? `${t('MyAgent.NoApprovals')} ${t('MyAgent.AgentListening')}`
                 : t('MyAgent.NoApprovals')}
             </Text>
           ) : (
-            vta.approvals.map((approval) => (
+            shownApprovals(vta.approvals).map((approval) => (
               <View key={approval.id} style={styles.card} testID={testIdWithKey(MyAgentIds.approvalCard)}>
                 <Text style={styles.value}>
                   {t('MyAgent.ApprovalAsks', {

@@ -15,6 +15,7 @@
 import type { TFunction } from 'i18next'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
+import { isTrustedApproversEnabled } from './trustedApproversFlag'
 import { vtaAgent, type VtiApproval } from './vtaAgent'
 
 const expiryOf = (approval: Pick<VtiApproval, 'expiresAt'>): number | undefined => {
@@ -23,11 +24,24 @@ const expiryOf = (approval: Pick<VtiApproval, 'expiresAt'>): number | undefined 
 }
 
 /**
- * The requests still waiting at `now`. A request whose expiry cannot be read
- * is kept: better a request shown that the agent then refuses than one hidden.
+ * The requests the screens show and count. With the trusted-approvers switch
+ * off, none asked by someone else's agent (`forAgent`): one listed before the
+ * switch went off stays in memory until it expires, and must not be shown,
+ * counted or answered from a screen meanwhile. This phone's own are unaffected.
  */
-export function waitingRequests<T extends Pick<VtiApproval, 'status' | 'expiresAt'>>(approvals: T[], now: number): T[] {
-  return approvals.filter((approval) => {
+export function shownApprovals<T extends Partial<Pick<VtiApproval, 'forAgent'>>>(approvals: T[]): T[] {
+  return isTrustedApproversEnabled() ? approvals : approvals.filter((approval) => !approval.forAgent)
+}
+
+/**
+ * The requests still waiting at `now`, of those shown ({@link shownApprovals}).
+ * A request whose expiry cannot be read is kept: better a request shown that
+ * the agent then refuses than one hidden.
+ */
+export function waitingRequests<
+  T extends Pick<VtiApproval, 'status' | 'expiresAt'> & Partial<Pick<VtiApproval, 'forAgent'>>,
+>(approvals: T[], now: number): T[] {
+  return shownApprovals(approvals).filter((approval) => {
     if (approval.status !== 'pending' && approval.status !== 'failed') return false
     const expiry = expiryOf(approval)
     return expiry === undefined || expiry > now

@@ -516,6 +516,28 @@ describe('Who approves', () => {
     const tree = await show(<VtaTrustedApprovers />)
     expect(tree.getByTestId(id(TrustedApproversIds.none))).toBeTruthy()
   })
+
+  test('switched off, or turned off remotely over a saved on, it shows only that, and asks the agent nothing (control: on)', async () => {
+    // Its own guard, not only the row that opens it: navigation restore or the remote off must not leave it working.
+    kept([ask({ state: 'accepted', acceptedAs: JORDAN, actions: ['shareCredential'] })], { [JORDAN]: 'Jordan' })
+    const read = jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([AMY], ['shareCredential']))
+    setTrustedApproversEnabled(false)
+    const off = await show(<VtaTrustedApprovers />)
+    expect(off.getByTestId(id(TrustedApproversIds.off))).toBeTruthy()
+    expect(off.queryByTestId(id(TrustedApproversIds.screen))).toBeNull()
+    expect(off.queryByTestId(id(TrustedApproversIds.add(CONN)))).toBeNull()
+    setTrustedApproversEnabled(true)
+    TRUSTED_APPROVERS_REMOTE_OFF.off = true
+    const killed = await show(<VtaTrustedApprovers />)
+    expect(killed.getByTestId(id(TrustedApproversIds.off))).toBeTruthy()
+    expect(killed.queryByTestId(id(TrustedApproversIds.approver(AMY)))).toBeNull()
+    expect(read).not.toHaveBeenCalled()
+    TRUSTED_APPROVERS_REMOTE_OFF.off = false
+    const on = await show(<VtaTrustedApprovers />)
+    expect(on.getByTestId(id(TrustedApproversIds.screen))).toBeTruthy()
+    expect(on.getByTestId(id(TrustedApproversIds.approver(AMY)))).toBeTruthy()
+    expect(read).toHaveBeenCalled()
+  })
 })
 
 describe('People I approve for: stepping down', () => {

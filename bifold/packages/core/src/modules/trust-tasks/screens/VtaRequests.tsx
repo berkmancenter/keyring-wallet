@@ -27,6 +27,7 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { shownApprovals } from '../module/waitingRequests'
 
 import { agentHomeScreen } from './agentHome'
 import { OtherAgentsRequests } from './OtherAgentsRequests'
@@ -90,7 +91,7 @@ const VtaRequests: React.FC = () => {
   const view = requestsView({
     link: state.link,
     reconnectGaveUp: state.reconnectGaveUp,
-    approvals: state.approvals,
+    approvals: shownApprovals(state.approvals),
     now,
     onlineSince: onlineSince.current,
     decided,
@@ -196,7 +197,7 @@ const VtaRequests: React.FC = () => {
           <View style={styles.card} testID={testIdWithKey('RequestsEmpty')}>
             <ThemedText>{t('Requests.Empty')}</ThemedText>
             {/* Nothing has ever arrived: the likely reason is that the agent has no rule to ask about. */}
-            {state.approvals.length === 0 ? (
+            {shownApprovals(state.approvals).length === 0 ? (
               <View style={{ gap: 12 }} testID={testIdWithKey('RequestsAskMeCard')}>
                 <ThemedText style={styles.muted}>{t('Requests.AskMeEmpty')}</ThemedText>
                 <Button

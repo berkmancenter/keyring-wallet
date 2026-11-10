@@ -19,6 +19,7 @@ import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
 import { GenericRecordsTestRequestStore } from '../module/testRequestOutcome'
 import { DeviceActionRefused, OwnerNotConfirmed } from '../module/vtaOwner'
 import VtaAskMe from '../screens/VtaAskMe'
+import { setTrustedApproversEnabled } from '../module/trustedApproversFlag'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -148,6 +149,46 @@ describe('Ask me before…', () => {
     const tree = await show()
     expect(tree.getByTestId(id('AskMeElsewhere'))).toHaveTextContent(/device\/set-wake\/0\.2/)
     expect(tree.getByTestId(id('AskMeHoldsThisPhone'))).toBeTruthy()
+  })
+
+  test("trusted approvers' rules are their own group in action words, never raw or flagged; still listed when switched off (control: a pnm rule above)", async () => {
+    const TRUSTED = 'keyring-trusted-approvers'
+    const rule = (taskType: string) => ({
+      taskType,
+      requires: 'consent' as const,
+      approverSet: TRUSTED,
+      minApprovals: 1,
+    })
+    const model = {
+      rules: [
+        rule('https://trusttasks.org/spec/vault/credentials/present/0.1'),
+        rule('https://trusttasks.org/spec/policy/upsert/0.3'),
+      ],
+      sets: { [TRUSTED]: ['did:peer:2.jordans-phone'] },
+      version: 4,
+    }
+    jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(model))
+    try {
+      setTrustedApproversEnabled(true)
+      const on = await show()
+      expect(on.getByTestId(id('AskMeTrusted'))).toHaveTextContent(/Approver\.Action\.shareCredential/)
+      expect(on.getByTestId(id('AskMeTrusted'))).toHaveTextContent(/Approver\.Action\.changeApprovers/)
+      expect(on.getByTestId(id('AskMeTrusted'))).not.toHaveTextContent(/credentials\/present|policy\/upsert/)
+      // policy/upsert is sent by this phone, but a trusted approver's hold on it is the design, not a fault.
+      expect(on.queryByTestId(id('AskMeHoldsThisPhone'))).toBeNull()
+      expect(on.queryByTestId(id('AskMeElsewhere'))).toBeNull()
+      expect(on.getByTestId(id('AskMeTrustedOpen'))).toBeTruthy()
+
+      setTrustedApproversEnabled(false)
+      const off = await show()
+      expect(off.getAllByTestId(id('AskMeTrustedRule'))).toHaveLength(2)
+      expect(off.getByTestId(id('AskMeTrustedOff'))).toHaveTextContent('AskMe.TrustedSwitchedOff')
+      expect(off.queryByTestId(id('AskMeTrustedOpen'))).toBeNull()
+      expect(off.queryByTestId(id('AskMeHoldsThisPhone'))).toBeNull()
+      expect(off.getByTestId(id('AskMeTrusted'))).not.toHaveTextContent(/credentials\/present|policy\/upsert/)
+    } finally {
+      setTrustedApproversEnabled(false)
+    }
   })
 
   test('one that may not change the rules is told so, and every switch is still', async () => {

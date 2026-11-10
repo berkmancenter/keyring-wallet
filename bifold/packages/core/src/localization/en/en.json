@@ -2733,6 +2733,10 @@
     "ShareCodeMessage": "My Keyring owner code — add it as an owner (admin) of my agent:"
   },
   "AskMe": {
+    "TrustedTitle": "Your trusted approvers",
+    "TrustedOtherAction": "Another action",
+    "TrustedOpen": "Who approves",
+    "TrustedSwitchedOff": "These come from trusted approvers, which are switched off on this phone. They still hold these actions on your agent.",
     "Intro": "Your agent can wait for your approval before it does some things. It asks you on this phone.",
     "Enforcement": "Your agent only asks you if approvals are switched on where it is hosted.",
     "Loading": "Reading your agent's rules…",
@@ -3623,6 +3627,7 @@
     "CertifiedOn": "Certified by the community on {{date}}"
   },
   "Approver": {
+    "SwitchedOff": "Trusted approvers are switched off.",
     "AskTitle": "Approver",
     "Ask": "Ask {{name}} to be my approver",
     "AskCaption": "{{name}} sees exactly what you choose, and can say no to being your approver.",

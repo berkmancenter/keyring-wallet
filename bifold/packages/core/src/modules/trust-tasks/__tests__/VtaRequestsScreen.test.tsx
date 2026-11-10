@@ -17,6 +17,8 @@ import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent, type VtiApproval } from '../module/vtaAgent'
 import { QUIET_MS } from '../screens/requestsView'
 import VtaRequests from '../screens/VtaRequests'
+import { setTrustedApproversEnabled } from '../module/trustedApproversFlag'
+import { waitingRequests } from '../module/waitingRequests'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -90,6 +92,35 @@ describe('Requests', () => {
   }
 
   // Several agents, step 3: the other agents' requests, decided after switching.
+  test("with the switch off, a request from someone else's agent is neither listed nor counted; this phone's own still is (control: on)", async () => {
+    // One listed before a live switch-off stays in memory until it expires: no screen may show, count or answer it.
+    const sams = request('s', { forAgent: { agentDid: 'did:webvh:sams-agent.example', asker: 'Sam' } })
+    controller.set({ approvals: [sams, request('a')] })
+    try {
+      setTrustedApproversEnabled(false)
+      expect(waitingRequests([sams, request('a')], NOW.getTime()).map((r) => r.id)).toEqual(['a'])
+      const off = render(
+        <BasicAppContext>
+          <VtaRequests />
+        </BasicAppContext>
+      )
+      await act(async () => undefined)
+      expect(off.getAllByTestId(id('AgentApprovalCard'))).toHaveLength(1)
+      off.unmount()
+      setTrustedApproversEnabled(true)
+      expect(waitingRequests([sams, request('a')], NOW.getTime()).map((r) => r.id)).toEqual(['s', 'a'])
+      const on = render(
+        <BasicAppContext>
+          <VtaRequests />
+        </BasicAppContext>
+      )
+      await act(async () => undefined)
+      expect(on.getAllByTestId(id('AgentApprovalCard'))).toHaveLength(2)
+    } finally {
+      setTrustedApproversEnabled(false)
+    }
+  })
+
   describe('other agents', () => {
     const WORK = 'did:webvh:example:requests-work-vta'
     const pendingAt = (id: string) => ({ id, status: 'pending', receivedAt: 't', challenge: 'c' })
