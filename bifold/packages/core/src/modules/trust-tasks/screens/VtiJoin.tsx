@@ -48,6 +48,7 @@ import { claimWords, joinNeedWords } from './claimWords'
 import { DidDetails } from './DidDetails'
 import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
+import ApproverWaitNote from './ApproverWaitNote'
 import { readJoinHolds } from './joinHolds'
 import { joinCard, VETTING_NOT_SUPPORTED_KEY } from './joinWays'
 import { JoinWaysCard } from './JoinWaysCard'
@@ -1051,6 +1052,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               {t('Invited.PreparingSlow')}
             </ThemedText>
           ) : null}
+          {/* Joining mints this community's identity: an approver may hold it (mock frame 4). Hidden otherwise. */}
+          <ApproverWaitNote />
         </>
       )
       break

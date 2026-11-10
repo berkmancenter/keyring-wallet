@@ -26,11 +26,13 @@ import { testIdWithKey } from '../../../utils/testable'
 import {
   acceptedRoleOffers,
   approverNames,
+  steppedDownApprovers,
   approverRemoved,
   approverRoleEvents,
   approvingFor,
   closeRoleOffer,
   nextTrustedRules,
+  stepDownAsApprover,
   withoutApprover,
   type RoleOfferAsk,
   type RoleOfferPrompt,
@@ -51,6 +53,11 @@ export const TrustedApproversIds = {
   add: (connectionId: string) => `TrustedApproverAdd_${connectionId}`,
   notNow: (connectionId: string) => `TrustedApproverNotNow_${connectionId}`,
   approvingFor: 'TrustedApproversApprovingFor',
+  steppedDown: (did: string) => `TrustedApproverSteppedDown_${did}`,
+  stepDown: (connectionId: string) => `TrustedApproverStepDown_${connectionId}`,
+  stepDownConfirm: (connectionId: string) => `TrustedApproverStepDownConfirm_${connectionId}`,
+  stepDownCancel: (connectionId: string) => `TrustedApproverStepDownCancel_${connectionId}`,
+  stepDownError: 'TrustedApproverStepDownError',
 } as const
 
 const VtaTrustedApprovers: React.FC = () => {
@@ -59,6 +66,11 @@ const VtaTrustedApprovers: React.FC = () => {
   const { ColorPalette } = useTheme()
   const [state, setState] = useState<TrustedApproversState | undefined>()
   const [accepted, setAccepted] = useState<RoleOfferAsk[]>([])
+  /** Approvers who said they stepped down, by the DID they had said yes as. */
+  const [steppedDown, setSteppedDown] = useState<string[]>([])
+  /** The "People I approve for" card whose Step down is being confirmed. */
+  const [confirming, setConfirming] = useState<string | undefined>()
+  const [stepDownError, setStepDownError] = useState<string | undefined>()
   const [names, setNames] = useState<Record<string, string>>({})
   const [mine, setMine] = useState<RoleOfferPrompt[]>([])
   const [error, setError] = useState<string | undefined>()
@@ -74,7 +86,10 @@ const VtaTrustedApprovers: React.FC = () => {
       approverNames(agent),
       approvingFor(agent),
     ]).catch(() => [[], {}, []] as [RoleOfferAsk[], Record<string, string>, RoleOfferPrompt[]])
+    // Read on its own: a note that cannot be read must not blank the lists above.
+    const stepped = await steppedDownApprovers(agent).catch(() => [] as string[])
     setAccepted(yeses)
+    setSteppedDown(stepped)
     setNames(known)
     setMine(approving)
   }, [agent])
@@ -139,6 +154,27 @@ const VtaTrustedApprovers: React.FC = () => {
     if (!agent) return
     await closeRoleOffer(agent, ask.connectionId, false).catch(() => undefined)
     await loadKept()
+  }
+
+  const onStepDown = async (prompt: RoleOfferPrompt) => {
+    if (!agent) return
+    setStepDownError(undefined)
+    setBusy(prompt.connectionId)
+    try {
+      await stepDownAsApprover(agent, prompt.connectionId)
+      setConfirming(undefined)
+      await loadKept()
+    } catch (e) {
+      releaseWarn(`[VTI] step down not sent (${(e as Error)?.name ?? 'error'}: ${(e as Error)?.message ?? e})`)
+      setStepDownError(
+        t('Approver.StepDownFailed', {
+          asker: prompt.asker || t('Approver.UnnamedContact'),
+          interpolation: { escapeValue: false },
+        })
+      )
+    } finally {
+      setBusy(undefined)
+    }
   }
 
   const onRemove = async (did: string) => {
@@ -218,10 +254,17 @@ const VtaTrustedApprovers: React.FC = () => {
         {view?.approvers.map((did) => (
           <View key={did} style={styles.card} testID={testIdWithKey(TrustedApproversIds.approver(did))}>
             <ThemedText variant="bold">{nameOf(did)}</ThemedText>
-            <ThemedText style={styles.muted}>{t('Approver.Covers')}</ThemedText>
+            {steppedDown.includes(did) ? (
+              <ThemedText testID={testIdWithKey(TrustedApproversIds.steppedDown(did))}>
+                {t('Approver.SteppedDownRemove', { name: nameOf(did), interpolation: { escapeValue: false } })}
+              </ThemedText>
+            ) : null}
+            <ThemedText style={styles.muted}>
+              {t('Approver.Covers', { name: nameOf(did), interpolation: { escapeValue: false } })}
+            </ThemedText>
             <ThemedText>{actionList(view.keys)}</ThemedText>
             <Button
-              title={t('Approver.Remove')}
+              title={t('Approver.Remove', { name: nameOf(did), interpolation: { escapeValue: false } })}
               buttonType={ButtonType.Secondary}
               onPress={() => void onRemove(did)}
               disabled={busy !== undefined}
@@ -244,16 +287,64 @@ const VtaTrustedApprovers: React.FC = () => {
           {t('Approver.IApproveFor')}
         </ThemedText>
         <View testID={testIdWithKey(TrustedApproversIds.approvingFor)} style={{ gap: 8 }}>
-          {mine.length === 0 ? <ThemedText style={styles.muted}>{t('Approver.IApproveForNone')}</ThemedText> : null}
-          {mine.map((prompt) => (
-            <View key={prompt.connectionId} style={styles.card}>
-              <ThemedText variant="bold">{prompt.asker || t('Approver.UnnamedContact')}</ThemedText>
-              <ThemedText>{actionList(prompt.actions)}</ThemedText>
-              <ThemedText style={styles.muted}>
-                {t('Approver.IApproveForSince', { date: localDate(prompt.receivedAt) })}
-              </ThemedText>
-            </View>
-          ))}
+          {mine.length === 0 ? (
+            <ThemedText style={styles.muted}>{t('Approver.IApproveForNone')}</ThemedText>
+          ) : (
+            <ThemedText style={styles.muted}>{t('Approver.IApproveForIntro')}</ThemedText>
+          )}
+          {stepDownError ? (
+            <ThemedText style={styles.error} testID={testIdWithKey(TrustedApproversIds.stepDownError)}>
+              {stepDownError}
+            </ThemedText>
+          ) : null}
+          {mine.map((prompt) => {
+            const asker = { asker: prompt.asker || t('Approver.UnnamedContact'), interpolation: { escapeValue: false } }
+            return (
+              <View key={prompt.connectionId} style={styles.card}>
+                <ThemedText variant="bold">{asker.asker}</ThemedText>
+                <ThemedText style={styles.muted}>
+                  {t('Approver.IApproveForSince', { date: localDate(prompt.receivedAt) })}
+                </ThemedText>
+                <ThemedText style={styles.muted}>{t('Approver.YouApprove')}</ThemedText>
+                <ThemedText>{actionList(prompt.actions)}</ThemedText>
+                {confirming === prompt.connectionId ? (
+                  <>
+                    <ThemedText variant="bold">{t('Approver.StepDownConfirmTitle', asker)}</ThemedText>
+                    <ThemedText>{t('Approver.StepDownConfirmBody', asker)}</ThemedText>
+                    <Button
+                      title={t('Approver.StepDown')}
+                      buttonType={ButtonType.Secondary}
+                      onPress={() => void onStepDown(prompt)}
+                      disabled={busy !== undefined}
+                      testID={testIdWithKey(TrustedApproversIds.stepDownConfirm(prompt.connectionId))}
+                    >
+                      {busy === prompt.connectionId ? (
+                        <ActivityIndicator color={ColorPalette.brand.primary} />
+                      ) : undefined}
+                    </Button>
+                    <Button
+                      title={t('Global.Cancel')}
+                      buttonType={ButtonType.Tertiary}
+                      onPress={() => setConfirming(undefined)}
+                      disabled={busy !== undefined}
+                      testID={testIdWithKey(TrustedApproversIds.stepDownCancel(prompt.connectionId))}
+                    />
+                  </>
+                ) : (
+                  <Button
+                    title={t('Approver.StepDown')}
+                    buttonType={ButtonType.Tertiary}
+                    onPress={() => {
+                      setStepDownError(undefined)
+                      setConfirming(prompt.connectionId)
+                    }}
+                    disabled={busy !== undefined}
+                    testID={testIdWithKey(TrustedApproversIds.stepDown(prompt.connectionId))}
+                  />
+                )}
+              </View>
+            )
+          })}
         </View>
       </ScrollView>
     </SafeAreaView>

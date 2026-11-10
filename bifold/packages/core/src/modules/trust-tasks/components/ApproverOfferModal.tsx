@@ -2,7 +2,8 @@
  * "Be an approver for {{asker}}?" — the asked phone's half of the role offer (approverRole.ts). Shown when a contact's
  * offer arrives, verified under the relationship this phone has with them; never one that failed that check.
  *
- * Yes names the DID this phone approves as, its manager DID on its own linked agent (`vtaAgent.approverDid`), so a yes
+ * Accept asks for Face ID first (an owner act, as Approve on a request is): not confirmed, nothing is sent and the offer
+ * stays. Then it names the DID this phone approves as, its manager DID on its own linked agent (`vtaAgent.approverDid`), so a yes
  * needs this phone linked; without that only No and Not now are offered, and it says why. No sends a signed no.
  * Not now sends nothing and hides the offer until the app starts again (it is kept, and comes back then).
  *
@@ -28,8 +29,10 @@ import {
   type RoleOfferPrompt,
 } from '../approverRole'
 import { releaseWarn } from '../module/releaseLog'
+import { ownerLockKind, type OwnerLockKind } from '../module/ownerConfirm'
 import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent } from '../module/vtaAgent'
+import { OwnerNotConfirmed } from '../module/vtaOwner'
 
 export const ApproverOfferIds = {
   sheet: 'ApproverOffer',
@@ -39,6 +42,7 @@ export const ApproverOfferIds = {
   notNow: 'ApproverOfferNotNow',
   needsAgent: 'ApproverOfferNeedsAgent',
   failed: 'ApproverOfferFailed',
+  faceId: 'ApproverOfferFaceId',
 } as const
 
 /** Offers put off with Not now, by connection, until the app starts again. */
@@ -57,6 +61,15 @@ const ApproverOfferModal: React.FC = () => {
   const [prompt, setPrompt] = useState<RoleOfferPrompt | undefined>(() => (on ? firstShown() : undefined))
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  // The person's own lock, named as VtaCreateAgent names it: not everyone has Face ID.
+  const [lockKind, setLockKind] = useState<OwnerLockKind>('unknown')
+  useEffect(() => {
+    let live = true
+    void ownerLockKind().then((kind) => live && setLockKind(kind))
+    return () => {
+      live = false
+    }
+  }, [])
   const linked = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().link.kind === 'linked')
 
   useEffect(() => {
@@ -83,19 +96,28 @@ const ApproverOfferModal: React.FC = () => {
       setBusy(true)
       setFailed(false)
       try {
-        const approverDid = accept ? await vtaAgent.approverDid(agent) : undefined
+        const approverDid = accept
+          ? await vtaAgent.acceptAsApprover(
+              agent,
+              t('Approver.AcceptReason', {
+                asker: prompt.asker || t('Approver.UnnamedContact'),
+                interpolation: { escapeValue: false },
+              })
+            )
+          : undefined
         await respondToRoleOffer(agent, prompt.connectionId, accept, approverDid)
         releaseWarn(`[VTI] approver offer answered: ${accept ? 'yes' : 'no'}`)
       } catch (error) {
         releaseWarn(
           `[VTI] approver answer not sent (${(error as Error)?.name ?? 'error'}: ${(error as Error)?.message})`
         )
-        setFailed(true)
+        // Cancelled at Face ID: the person chose not to, so nothing failed; the offer simply stays.
+        if (!(error instanceof OwnerNotConfirmed && error.reason === 'cancelled')) setFailed(true)
       } finally {
         setBusy(false)
       }
     },
-    [agent, prompt, busy]
+    [agent, prompt, busy, t]
   )
 
   const notNow = useCallback(() => {
@@ -173,6 +195,9 @@ const ApproverOfferModal: React.FC = () => {
               disabled={busy}
               testID={testIdWithKey(ApproverOfferIds.notNow)}
             />
+            <ThemedText style={[styles.muted, styles.centred]} testID={testIdWithKey(ApproverOfferIds.faceId)}>
+              {t('Approver.AcceptAsksLock', { method: t(`CreateAgent.Lock.${lockKind}`) })}
+            </ThemedText>
           </ScrollView>
         </SafeAreaView>
       </SafeAreaView>

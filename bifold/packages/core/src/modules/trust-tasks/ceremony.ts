@@ -68,7 +68,7 @@ import * as witnessShare from './witnessShareSpec'
 import * as continuitySpec from '../vrc/contacts/continuitySpec'
 import { handleContinuityRequest, handleContinuityResponse } from '../vrc/contacts/continuity'
 import * as approverRoleSpec from './approverRoleSpec'
-import { handleRoleOfferRequest, handleRoleOfferResponse } from './approverRole'
+import { handleRoleOfferRequest, handleRoleOfferResponse, handleRoleStepDown } from './approverRole'
 import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
 import { setupChatInbound } from '../chat/inbound'
@@ -2060,6 +2060,15 @@ function registerBuiltinTrustTasks(): void {
     orchestration: { requiresDiscovery: false },
     handleRequest: handleRoleOfferRequest,
     handleResponse: handleRoleOfferResponse,
+  })
+
+  // Keyring's own type (private authority): an approver tells the person they no longer approve for them. One way,
+  // nothing answers it; its handler does nothing while the trusted-approvers switch is off.
+  trustTaskRegistry.register({
+    typeUri: approverRoleSpec.STEP_DOWN_TYPE_URI,
+    spec: approverRoleSpec.STEP_DOWN_SPEC as never,
+    orchestration: { requiresDiscovery: false },
+    handleRequest: handleRoleStepDown,
   })
 }
 

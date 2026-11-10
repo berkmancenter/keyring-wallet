@@ -157,6 +157,11 @@ export interface VtaAgentState {
   /** A task of ours the VTA is holding for someone else's consent. */
   awaitingConsentFor?: string
   /**
+   * The last task of ours the agent said someone approved (its `task-consent/granted` notice), and when: the hold
+   * {@link awaitingConsentFor} named, released. Only a yes is told this way; a no or a lapse is not told at all.
+   */
+  consentGranted?: { taskType: string; at: number }
+  /**
    * The agent holds this phone's own `device/set-wake` for consent: an
    * approval rule covers the notification setting, so switching notifications
    * cannot take effect from this phone. Settings → Notifications says so.
@@ -858,7 +863,7 @@ export class VtaAgentController {
         }
       },
       onInbound: (plaintext) => this.inbound(plaintext),
-      onConsentPending: ({ taskType }) => this.set({ awaitingConsentFor: taskType }),
+      onConsentPending: ({ taskType }) => this.set({ awaitingConsentFor: taskType, consentGranted: undefined }),
       onStepUp: (request, context) => this.askStepUp(request, context),
       onRepliesStalled: (stalled) => {
         if (this.current?.client === client) this.set({ repliesStalled: stalled })
@@ -1053,6 +1058,7 @@ export class VtaAgentController {
       managerDid: undefined,
       approvals: [],
       awaitingConsentFor: undefined,
+      consentGranted: undefined,
       error: undefined,
       reconnectGaveUp: false,
       ownsAgent: false,
@@ -1488,6 +1494,7 @@ export class VtaAgentController {
       managerDid: undefined,
       approvals: [],
       awaitingConsentFor: undefined,
+      consentGranted: undefined,
       wakeBlockedByRule: undefined,
       error: undefined,
       ownsAgent: false,
@@ -2757,6 +2764,16 @@ export class VtaAgentController {
   }
 
   /**
+   * Saying yes to being someone's approver (the offer sheet's Accept): an owner act, so Face ID, a fingerprint or the
+   * passcode first, with `reason` (already in the person's language) on the prompt; then the DID this phone approves
+   * as. Not confirmed, it throws {@link OwnerNotConfirmed} before anything is read or sent.
+   */
+  async acceptAsApprover(agent: Agent, reason: string): Promise<string> {
+    await this.confirmOwner(reason)
+    return this.approverDid(agent)
+  }
+
+  /**
    * Who approves for this person, read from the agent's approvals row
    * (trustedApprovers.ts). Signs in if it must. Refuses with
    * {@link DeviceActionRefused}.
@@ -3521,7 +3538,10 @@ export class VtaAgentController {
       void this.listIfChecked(current, approval, plaintext.body as unknown as Record<string, unknown>)
       return
     }
-    if (kept && 'granted' in kept) this.set({ awaitingConsentFor: undefined })
+    if (kept && 'granted' in kept) {
+      const taskType = this.state.awaitingConsentFor
+      this.set({ awaitingConsentFor: undefined, ...(taskType ? { consentGranted: { taskType, at: Date.now() } } : {}) })
+    }
   }
 
   /**

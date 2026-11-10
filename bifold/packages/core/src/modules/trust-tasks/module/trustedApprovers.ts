@@ -63,6 +63,10 @@ export type TrustedKey = (typeof TRUSTED_TASKS)[number]['key']
 const taskTypesOf = (key: TrustedKey): readonly string[] =>
   TRUSTED_TASKS.find((t) => t.key === key)?.taskTypes.flatMap((uri) => [...versionsOf(uri)]) ?? []
 
+/** The trusted action a task type falls under (any version a rule covers), if any. */
+export const trustedKeyOf = (taskType: string): TrustedKey | undefined =>
+  TRUSTED_TASKS.find((t) => taskTypesOf(t.key).includes(taskType))?.key
+
 const isTrusted = (rule: ApprovalRule) => rule.requires === 'consent' && rule.approverSet === TRUSTED_SET
 
 /** What the screen shows: who approves, for what, and what another rule already holds. */

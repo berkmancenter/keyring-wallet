@@ -27,11 +27,15 @@ import {
   RESPONSE_SPEC,
   ROLE_ACTIONS,
   SPEC,
+  STEP_DOWN_SPEC,
+  STEP_DOWN_TYPE_URI,
   TYPE_URI,
   type RoleOfferPayload,
   type RoleOfferResponsePayload,
+  type RoleStepDownPayload,
 } from './approverRoleSpec'
 import { signDocumentProof, verifyDocumentProof } from './documentProof'
+import { trustedKeyOf } from './module/trustedApprovers'
 import { isTrustedApproversEnabled } from './module/trustedApproversFlag'
 import type { InboundContext } from './registry'
 import { respondWith, type TrustTasksService } from './services/TrustTasksService'
@@ -117,6 +121,11 @@ export interface RoleOfferAsk {
   acceptedAs?: string
   /** Closed with the yes written on the agent: the contact approves for this person (as far as this phone wrote). */
   written?: boolean
+  /**
+   * When the contact said they no longer approve (a verified step-down). Only told: the agent keeps them until this
+   * phone writes them off, which the person confirms on Who approves.
+   */
+  steppedDown?: string
 }
 
 export type OfferResult = 'sent' | 'off' | 'noRelationship'
@@ -333,8 +342,8 @@ export interface RoleOfferPrompt {
   actions: RoleAction[]
   request: Record<string, unknown>
   receivedAt: string
-  /** Set once this phone's person answered; with `accepted`, the DID the yes named. */
-  answered?: 'accepted' | 'declined'
+  /** Set once this phone's person answered; with `accepted`, the DID the yes named. `steppedDown`: a yes taken back. */
+  answered?: 'accepted' | 'declined' | 'steppedDown'
   answeredAs?: string
 }
 
@@ -471,4 +480,122 @@ export async function approvingFor(agent: Pick<Agent, 'genericRecords'>): Promis
     .map((record) => record.content as unknown as RoleOfferPrompt)
     .filter((prompt) => prompt?.answered === 'accepted')
     .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Stepping down (Jordan's phone tells Sam's)
+
+/**
+ * This phone's person no longer approves for the contact on `connectionId`: a step-down, signed under this phone's
+ * relationship DID, goes to the contact's phone, and the yes kept here reads as taken back, so requests from that
+ * agent are no longer shown (foreignApproval.ts reads {@link approvingFor}). Sent first: if sending fails, nothing
+ * changes and the person can try again. The record's state is changed in place, never deleted.
+ */
+export async function stepDownAsApprover(agent: Agent, connectionId: string): Promise<'sent' | 'off' | 'notApproving'> {
+  if (!isTrustedApproversEnabled()) return 'off'
+  const [record] = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_PROMPT, connectionId })) ?? []
+  const prompt = record?.content as unknown as RoleOfferPrompt | undefined
+  if (!prompt || prompt.answered !== 'accepted' || !prompt.answeredAs) return 'notApproving'
+  const relationship = await relationshipOn(agent, connectionId)
+  if (!relationship) throw new Error(`${LOG_PREFIX} no relationship to sign the step-down under`)
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.did || !connection.theirDid) throw new Error(`${LOG_PREFIX} the connection has no DIDs`)
+
+  const id = utils.uuid()
+  const payload: RoleStepDownPayload = {
+    agent: prompt.agentDid,
+    approver: prompt.answeredAs,
+    steppedDownAt: new Date().toISOString(),
+  }
+  const document: Record<string, unknown> = {
+    id,
+    type: STEP_DOWN_TYPE_URI,
+    threadId: id,
+    issuer: connection.did,
+    recipient: connection.theirDid,
+    issuedAt: new Date().toISOString(),
+    payload,
+  }
+  const signed = await signDocumentProof(agent, document, relationship.myRelationshipDid as string)
+  const { getTrustTasksService, sendTrustTaskDocument } = ceremony()
+  await getTrustTasksService(agent).retain(agent.context, signed, 'request', connectionId)
+  await sendTrustTaskDocument(agent, connectionId, signed)
+
+  await keepPrompt(agent, { ...prompt, answered: 'steppedDown' })
+  agent.config?.logger?.info(`${LOG_PREFIX} stepped down on connection ${connectionId}`)
+  approverRoleEvents.emit('promptCleared', { connectionId })
+  return 'sent'
+}
+
+/**
+ * A contact's step-down arrives: verified under their relationship DID, it marks the offer they had said yes to as
+ * stepped down. It counts only for the DID they said yes as and the agent the offer named; anything else is dropped.
+ * Nothing is written on the agent here: removing them is the person's to confirm, on Who approves.
+ */
+export async function handleRoleStepDown(
+  agent: Agent,
+  service: TrustTasksService,
+  document: Record<string, unknown>,
+  context: InboundContext
+): Promise<void> {
+  if (!isTrustedApproversEnabled()) return
+  const relationship = await relationshipOn(agent, context.connectionId)
+  if (!relationship) return
+  const outcome = await service.consume(agent.context, {
+    spec: STEP_DOWN_SPEC as never,
+    document,
+    myDid: context.recipientDid,
+    senderDid: context.senderDid,
+    connectionId: context.connectionId,
+    proofPolicy: proofUnder(agent, relationship.counterpartyRelationshipDid as string),
+    handler: async () => undefined,
+  })
+  if (outcome.kind !== 'accepted' && outcome.kind !== 'handled') return
+
+  const payload = document.payload as RoleStepDownPayload
+  const [record] =
+    (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK, connectionId: context.connectionId })) ??
+    []
+  const ask = record?.content as unknown as RoleOfferAsk | undefined
+  if (!record || !ask?.acceptedAs || ask.acceptedAs !== payload.approver || ask.agentDid !== payload.agent) return
+  // An offer still open on this connection: a step-down never counts against it. Narrow but real: if this phone sent
+  // a NEW offer that crossed the step-down in flight, the step-down is dropped here, the asker is not told, and the
+  // earlier written approver stays on the agent until removed. Once the new offer reaches the approver it resets
+  // their prompt, so they cannot step down after it; only the in-flight crossing reaches this line.
+  if (ask.state === 'open') return
+  // A yes not yet written is simply taken back; a written one stays written (the agent still holds it) until removed.
+  record.content = {
+    ...ask,
+    ...(ask.state === 'accepted' ? { state: 'closed' } : {}),
+    steppedDown: payload.steppedDownAt,
+  }
+  await agent.genericRecords.update(record)
+  agent.config?.logger?.info(`${LOG_PREFIX} a contact stepped down on connection ${context.connectionId}`)
+  approverRoleEvents.emit('answered', { connectionId: context.connectionId, decision: 'steppedDown' })
+}
+
+/**
+ * The approvers this phone wrote on its agent who cover `taskType` (by the actions each was offered), by name: who a
+ * task held for consent is waiting on, as far as this phone knows. Empty when the task is not a trusted action or no
+ * written approver covers it; then the hold is some other rule's, and nothing here names it.
+ */
+export async function approversWaitedOn(agent: Agent, taskType: string): Promise<string[]> {
+  const key = trustedKeyOf(taskType)
+  if (!key) return []
+  const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK })) ?? []
+  const asks = records.map((record) => record.content as unknown as RoleOfferAsk)
+  const written = asks.filter((ask) => ask.written && ask.acceptedAs)
+  // The one set approves every action it holds: one written approver covering it means all of them are asked.
+  if (!written.some((ask) => ask.actions.includes(key))) return []
+  const names = await approverNames(agent)
+  return written.map((ask) => names[ask.acceptedAs as string]).filter((name): name is string => !!name)
+}
+
+/** The DIDs of approvers still written on the agent who said they stepped down: theirs to remove, on Who approves. */
+export async function steppedDownApprovers(agent: Pick<Agent, 'genericRecords'>): Promise<string[]> {
+  const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK })) ?? []
+  return records
+    .map((record) => record.content as unknown as RoleOfferAsk)
+    .filter((ask) => ask.written && ask.steppedDown && ask.acceptedAs)
+    .map((ask) => ask.acceptedAs as string)
 }

@@ -90,3 +90,42 @@ export const RESPONSE_SPEC = {
     },
   },
 } as const
+
+/**
+ * `approver/role-step-down/0.1`: the approver tells the person they no longer approve for them (trusted-approver
+ * plan T3, §4.4), over the same relationship. One way: nothing answers it. Signed under the approver's relationship
+ * DID and verified under the one the relationship established, as the offer is.
+ *
+ * It only tells: the person's agent keeps the approver in its set until the person's phone writes the change, which
+ * the person confirms (and which the agent may hold for the approvers' yes, as it holds any rule change they cover).
+ */
+export const STEP_DOWN_TYPE_URI = 'https://keyring.appliedtechnologylab.org/spec/approver/role-step-down/0.1'
+
+/** The step-down: whose agent, and the DID the approver had said yes as. */
+export interface RoleStepDownPayload {
+  agent: string
+  approver: string
+  steppedDownAt: string
+}
+
+export const STEP_DOWN_SPEC = {
+  typeUri: STEP_DOWN_TYPE_URI,
+  isBearer: false,
+  isProofRequired: true,
+  isRecipientRequired: true,
+  payloadSchema: {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: STEP_DOWN_TYPE_URI,
+    title: 'Approver Role Step-down — payload',
+    description:
+      "An approver tells the person, over an established VRC relationship, that they no longer approve for the person's agent.",
+    type: 'object',
+    additionalProperties: false,
+    required: ['agent', 'approver', 'steppedDownAt'],
+    properties: {
+      agent: { type: 'string', pattern: DID_PATTERN },
+      approver: { type: 'string', pattern: DID_PATTERN },
+      steppedDownAt: { type: 'string', format: 'date-time' },
+    },
+  },
+} as const

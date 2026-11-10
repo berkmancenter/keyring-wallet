@@ -56,6 +56,7 @@ import { useVtaDid } from './VtaStatus'
 import { sayFailure, type Said } from './plainError'
 import SaidFailure from './SaidFailure'
 import { localDate, localDateTime } from './localTime'
+import ApproverWaitNote from './ApproverWaitNote'
 
 /**
  * Where an agent comes from, for a person with none yet: a hosting service
@@ -463,6 +464,8 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               </Text>
             </View>
           ) : null}
+          {/* Which of this person's approvers it waits on, when it is theirs to approve; hidden otherwise. */}
+          <ApproverWaitNote />
           {vta.approvals.length === 0 ? (
             <Text style={styles.value} testID={testIdWithKey(MyAgentIds.noApprovals)}>
               {vta.status === 'connected'

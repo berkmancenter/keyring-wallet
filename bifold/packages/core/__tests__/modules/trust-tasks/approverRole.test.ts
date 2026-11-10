@@ -19,12 +19,16 @@ import {
   withoutApprover,
   handleRoleOfferRequest,
   handleRoleOfferResponse,
+  handleRoleStepDown,
+  stepDownAsApprover,
+  steppedDownApprovers,
+  approversWaitedOn,
   offerApproverRole,
   respondToRoleOffer,
   restoreRoleOfferPrompts,
   roleOfferPromptStore,
 } from '../../../src/modules/trust-tasks/approverRole'
-import { ROLE_ACTIONS, TYPE_URI } from '../../../src/modules/trust-tasks/approverRoleSpec'
+import { ROLE_ACTIONS, STEP_DOWN_TYPE_URI, TYPE_URI } from '../../../src/modules/trust-tasks/approverRoleSpec'
 import { TRUSTED_TASKS } from '../../../src/modules/trust-tasks/module/trustedApprovers'
 import {
   TRUSTED_APPROVERS_REMOTE_OFF,
@@ -504,5 +508,155 @@ describe('what the screens read', () => {
     expect(cleared).toHaveBeenCalledWith({ connectionId: JORDAN.connectionId })
     approverRoleEvents.off('offer', offer)
     approverRoleEvents.off('promptCleared', cleared)
+  })
+})
+
+describe('stepping down', () => {
+  /** Sam asks, Jordan says yes, Sam's phone has the yes; `written` as if Sam then added Jordan on Who approves. */
+  async function approving(
+    written: boolean,
+    actions: ('joinCommunity' | 'shareCredential' | 'changeApprovers')[] = ['joinCommunity', 'changeApprovers']
+  ) {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, actions)
+    await deliver(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    await deliver(sam)
+    if (written) await closeRoleOffer(sam.agent, SAM.connectionId, true)
+    mockSent.length = 0
+    return { sam, jordan }
+  }
+  const stepDownTo = (to: Phone, document = mockSent[mockSent.length - 1].document) =>
+    handleRoleStepDown(to.agent, pipeline, document, context(to))
+  const askOnSam = async (sam: Phone) => roleOfferAskOn(sam.agent, SAM.connectionId)
+
+  test("Jordan steps down: signed under Jordan's relationship DID, Jordan's phone stops approving for Sam, and nothing is deleted", async () => {
+    const { jordan } = await approving(true)
+    expect(await approvingFor(jordan.agent)).toHaveLength(1)
+    expect(await stepDownAsApprover(jordan.agent, JORDAN.connectionId)).toBe('sent')
+    expect(mockSent).toHaveLength(1)
+    expect(mockSent[0].document).toMatchObject({
+      type: STEP_DOWN_TYPE_URI,
+      payload: { agent: SAM_AGENT, approver: JORDAN_APPROVES_AS },
+      proof: { by: JORDAN.myRel },
+    })
+    expect(await approvingFor(jordan.agent)).toEqual([])
+    expect(jordan.store.deleteById).not.toHaveBeenCalled()
+  })
+
+  test("Sam's phone, on a verified step-down, marks the written yes: still written (the agent holds it) until removed", async () => {
+    const { sam, jordan } = await approving(true)
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    await stepDownTo(sam)
+    expect(await askOnSam(sam)).toMatchObject({ written: true, steppedDown: expect.any(String) })
+    expect(await steppedDownApprovers(sam.agent)).toEqual([JORDAN_APPROVES_AS])
+    // Once removed from the agent, it no longer asks to be removed.
+    await approverRemoved(sam.agent, JORDAN_APPROVES_AS)
+    expect(await steppedDownApprovers(sam.agent)).toEqual([])
+    expect(sam.store.deleteById).not.toHaveBeenCalled()
+  })
+
+  test('a yes not yet written is simply taken back: it no longer waits to be added', async () => {
+    const { sam, jordan } = await approving(false)
+    expect(await acceptedRoleOffers(sam.agent)).toHaveLength(1)
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    await stepDownTo(sam)
+    expect(await acceptedRoleOffers(sam.agent)).toEqual([])
+    expect(await askOnSam(sam)).toMatchObject({ state: 'closed', steppedDown: expect.any(String) })
+    expect(await steppedDownApprovers(sam.agent)).toEqual([])
+  })
+
+  test("a step-down not signed under Jordan's relationship DID changes nothing (control: the real one above does)", async () => {
+    const { sam, jordan } = await approving(true)
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    const forged = {
+      ...mockSent[0].document,
+      proof: { ...(mockSent[0].document.proof as object), by: 'did:peer:someone-else' },
+    }
+    await stepDownTo(sam, forged)
+    expect((await askOnSam(sam))?.steppedDown).toBeUndefined()
+  })
+
+  test('a step-down naming another approver DID, or another agent, changes nothing (control: the same re-signing, unaltered, counts)', async () => {
+    const cases: [Record<string, string>, boolean][] = [
+      [{}, true],
+      [{ approver: 'did:peer:2.someone-else' }, false],
+      [{ agent: 'did:webvh:another-agent.example' }, false],
+    ]
+    for (const [payload, counts] of cases) {
+      const { sam, jordan } = await approving(true)
+      await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+      const signed = mockSent[0].document
+      // Re-signed by Jordan over the altered payload, so only the payload check can refuse it.
+      const altered: Record<string, unknown> = { ...signed, payload: { ...(signed.payload as object), ...payload } }
+      const { proof: _p, ...unsigned } = altered
+      const resigned = {
+        ...unsigned,
+        proof: {
+          type: 'DataIntegrityProof',
+          cryptosuite: 'eddsa-jcs-2022',
+          by: JORDAN.myRel,
+          over: JSON.stringify(unsigned),
+        },
+      }
+      await stepDownTo(sam, resigned)
+      expect(Boolean((await askOnSam(sam))?.steppedDown)).toBe(counts)
+    }
+  })
+
+  test('a step-down while an offer is still open changes nothing: there is no yes on that offer to take back', async () => {
+    const { sam, jordan } = await approving(true)
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    const stepDown = mockSent[0].document
+    // Sam asks again: the record is now an open offer, carrying the same approver as before.
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
+    const [record] = sam.store.records
+    record.content = { ...record.content, acceptedAs: JORDAN_APPROVES_AS }
+    await stepDownTo(sam, stepDown)
+    expect(await askOnSam(sam)).toMatchObject({ state: 'open' })
+    expect((await askOnSam(sam))?.steppedDown).toBeUndefined()
+  })
+
+  test('with the switch off, nothing is sent and an arriving step-down changes nothing', async () => {
+    const { sam, jordan } = await approving(true)
+    setTrustedApproversEnabled(false)
+    expect(await stepDownAsApprover(jordan.agent, JORDAN.connectionId)).toBe('off')
+    expect(mockSent).toHaveLength(0)
+    setTrustedApproversEnabled(true)
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    setTrustedApproversEnabled(false)
+    await stepDownTo(sam)
+    setTrustedApproversEnabled(true)
+    expect((await askOnSam(sam))?.steppedDown).toBeUndefined()
+  })
+
+  test('a phone that never said yes, or already stepped down, sends nothing', async () => {
+    const jordan = phone(JORDAN)
+    expect(await stepDownAsApprover(jordan.agent, JORDAN.connectionId)).toBe('notApproving')
+    const both = await approving(true)
+    await stepDownAsApprover(both.jordan.agent, JORDAN.connectionId)
+    mockSent.length = 0
+    expect(await stepDownAsApprover(both.jordan.agent, JORDAN.connectionId)).toBe('notApproving')
+    expect(mockSent).toHaveLength(0)
+  })
+})
+
+describe('who a held task waits on', () => {
+  const MINT = TRUSTED_TASKS.find((t) => t.key === 'joinCommunity')!.taskTypes[1]
+  const SHARE = TRUSTED_TASKS.find((t) => t.key === 'shareCredential')!.taskTypes[0]
+
+  test('a task an approver Sam wrote covers names them (control: an action not offered, or not yet written, names nobody)', async () => {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
+    await deliver(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    await deliver(sam)
+    expect(await approversWaitedOn(sam.agent, MINT)).toEqual([])
+    await closeRoleOffer(sam.agent, SAM.connectionId, true)
+    expect(await approversWaitedOn(sam.agent, MINT)).toEqual(['Jordan'])
+    expect(await approversWaitedOn(sam.agent, SHARE)).toEqual([])
+    expect(await approversWaitedOn(sam.agent, 'https://trusttasks.org/spec/keys/export-secret/0.1')).toEqual([])
   })
 })
