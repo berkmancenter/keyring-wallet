@@ -1059,7 +1059,10 @@
     "ThingRules": "ses règles d'approbation",
     "ThingApprovals": "ses approbations",
     "ThingPersona": "vos informations d'identité",
-    "ThingCards": "les cartes qu'il conserve"
+    "ThingCards": "les cartes qu'il conserve",
+    "ForAgentAsksTo": "L’agent de {{asker}} vous demande d’approuver : {{action}}",
+    "ForAgentAsksSomething": "L’agent de {{asker}} vous demande d’approuver quelque chose que Keyring ne sait pas encore décrire.",
+    "ForAgentNote": "Vous approuvez pour {{asker}}. Votre réponse va à son agent, pas au vôtre."
   },
   "TabStack": {
     "Messages": "Messages",

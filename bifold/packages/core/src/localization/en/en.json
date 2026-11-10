@@ -1121,7 +1121,10 @@
     "ThingRules": "its approval rules",
     "ThingApprovals": "its approvals",
     "ThingPersona": "your identity details",
-    "ThingCards": "the cards it keeps"
+    "ThingCards": "the cards it keeps",
+    "ForAgentAsksTo": "{{asker}}'s agent asks you to approve: {{action}}",
+    "ForAgentAsksSomething": "{{asker}}'s agent asks you to approve something Keyring can't describe yet.",
+    "ForAgentNote": "You approve for {{asker}}. Your answer goes to their agent, not yours."
   },
   "TabStack": {
     "Messages": "Message",

@@ -1098,6 +1098,7 @@
     "RemovedPhone": ["src/modules/trust-tasks/screens/RemovedPhoneCard.tsx"],
     "RequestAsks": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "RequestExpired": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
+    "RequestForAgent": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "RequestNotTaken": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "RequestNotTakenDetail": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "RequestNotTakenDetailsToggle": ["src/modules/trust-tasks/screens/RequestCard.tsx"],

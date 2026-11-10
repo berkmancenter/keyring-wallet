@@ -30,6 +30,7 @@ import { classifyDid, type DidResolverAgent } from './classifyDid'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { setCurrentAgentDid } from './currentAgent'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
+import { approvedAgentOf, sendForeignDecision, takeForeignReply } from './foreignApproval'
 import type { StepUpRequest } from './stepUp'
 import { releaseWarn } from './releaseLog'
 import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
@@ -141,6 +142,11 @@ export interface VtiApproval extends VtaConsentRequest {
    * not. Log-only for now — a request that fails is still listed.
    */
   requestCheck?: 'verified' | string
+  /**
+   * Set when the request is from another person's agent, one this phone agreed to approve for (foreignApproval.ts):
+   * that agent, and the person who asked. The decision goes to that agent, not to this phone's own.
+   */
+  forAgent?: { agentDid: string; asker: string }
 }
 
 export interface VtaAgentState {
@@ -3504,6 +3510,8 @@ export class VtaAgentController {
   }
 
   private inbound(plaintext: DidCommV2PlaintextMessage) {
+    // The answer to a decision sent to another person's agent is that wait's, never a request.
+    if (takeForeignReply(plaintext)) return
     const kept = keepManagerMessage(plaintext, Date.now())
     if (kept && 'approval' in kept) {
       const { approval } = kept
@@ -3525,10 +3533,23 @@ export class VtaAgentController {
     approval: VtiApproval,
     doc: Record<string, unknown>
   ) {
-    const ok = await this.passesCheck(current.agent, current.vtaDid, current.client.managerDid, approval.id, doc)
+    // From another person's agent that this phone approves for: checked against that agent, as its issuer. Any other
+    // request is checked against the agent it arrived through, as before.
+    const other = await approvedAgentOf(current.agent, doc).catch(() => undefined)
+    const issuer = other?.agentDid ?? current.vtaDid
+    const ok = await this.passesCheck(current.agent, issuer, current.client.managerDid, approval.id, doc)
     if (!ok || this.current?.vtaDid !== current.vtaDid) return
     if (this.state.approvals.some((a) => a.id === approval.id)) return
-    this.set({ approvals: [{ ...approval, requestCheck: 'verified' }, ...this.state.approvals] })
+    const listed: VtiApproval = {
+      ...approval,
+      requestCheck: 'verified',
+      ...(other ? { forAgent: { agentDid: other.agentDid, asker: other.asker } } : {}),
+    }
+    this.set({ approvals: [listed, ...this.state.approvals] })
+    if (other) {
+      releaseWarn(`[VTI] approval asked by ${didPrefix(other.agentDid)}, an agent this phone approves for`)
+      return
+    }
     // Asked by a device this phone has not seen named: read the list once,
     // in the background, so the card can say which device asked.
     const agent = this.agent
@@ -3587,12 +3608,27 @@ export class VtaAgentController {
     if (decision === 'approve') await this.confirmOwner(APPROVE_REASON)
     try {
       const ms = this.deps.decisionDeadlineMs ?? DECISION_DEADLINE_MS
-      const sending = client.decideConsent(approval, decision, reason)
+      const other = approval.forAgent
+      const managerDid = client.managerDid
+      // Asked by another person's agent: the decision goes to that agent (foreignApproval.ts), as this phone.
+      const sending = other
+        ? managerDid && this.current
+          ? sendForeignDecision(
+              { agent: this.current.agent, managerDid, sendTo: (peer, plaintext) => client.sendTo(peer, plaintext) },
+              { issuer: other.agentDid, challenge: approval.challenge, payloadDigest: approval.payloadDigest },
+              decision,
+              reason,
+              ms
+            )
+          : Promise.reject(new DeviceActionRefused('notLinked'))
+        : client.decideConsent(approval, decision, reason)
       if (!(await withDeadline(sending, ms))) {
-        throw new Error(`the VTA did not take the decision within ${ms / 1000} s`)
+        // Name the agent the decision went to: for someone else's, that is the asking agent, never this phone's own.
+        throw new Error(`${other ? 'the asking agent' : 'the VTA'} did not take the decision within ${ms / 1000} s`)
       }
       this.update(id, { status: decision === 'approve' ? 'approved' : 'denied' })
-      this.note(decision === 'approve' ? 'approved' : 'denied')
+      // What this phone's own agent did; a decision for someone else's agent is not that.
+      if (!other) this.note(decision === 'approve' ? 'approved' : 'denied')
     } catch (error) {
       this.update(id, { status: 'failed', error: error instanceof Error ? error.message : String(error) })
       throw error

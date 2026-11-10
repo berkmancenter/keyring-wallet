@@ -1206,6 +1206,16 @@ export class VtaClient {
   }
 
   /**
+   * Seal `plaintext` as this phone's manager identity and forward it to `peerDid` over the open session: how this
+   * phone answers another agent that asks it to approve (foreignApproval.ts). Nothing is waited for here.
+   */
+  async sendTo(peerDid: string, plaintext: DidCommV2PlaintextMessage): Promise<void> {
+    const session = this.session
+    if (!session?.isOpen) throw new Error(`${LOG_PREFIX} no open session to send through`)
+    await session.sendTo(peerDid, plaintext)
+  }
+
+  /**
    * Mint the manager identity if this phone has none for this VTA yet. Minting
    * is separate from connecting because enrolment sits between them: the VTA's
    * operator has to admit this DID before a session can be opened.

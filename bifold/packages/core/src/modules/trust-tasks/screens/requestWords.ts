@@ -113,12 +113,21 @@ export function requesterName(did: string, context: RequesterContext, t: TFuncti
 
 /** "This phone asks your agent to create a context", or with the task's short name when it has no words. */
 export function requestLine(
-  approval: { requester: string; taskType: string },
+  approval: { requester: string; taskType: string; forAgent?: { asker: string } },
   context: RequesterContext,
   t: TFunction
 ): string {
-  const requester = requesterName(approval.requester, context, t)
   const action = taskWords(approval.taskType, t)
+  // Another person's agent, asking this phone as their approver: named by that person, never by a device of theirs.
+  if (approval.forAgent) {
+    const asker = approval.forAgent.asker || (t('Approver.UnnamedContact') as string)
+    return (
+      action
+        ? t('Requests.ForAgentAsksTo', { asker, action, interpolation: { escapeValue: false } })
+        : t('Requests.ForAgentAsksSomething', { asker, interpolation: { escapeValue: false } })
+    ) as string
+  }
+  const requester = requesterName(approval.requester, context, t)
   // A task Keyring cannot put in words is not named by its URI in the
   // sentence; its technical name is under the card's toggle.
   return (
