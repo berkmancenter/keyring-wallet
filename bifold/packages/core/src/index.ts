@@ -283,6 +283,8 @@ export {
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
   setTrustedApproversEnabled,
+  isTrustedApproversEnabled,
+  TRUSTED_APPROVERS_REMOTE_OFF,
   setDidCommV2Enabled,
   setPeerLegCarriage,
   getPeerLegCarriage,
