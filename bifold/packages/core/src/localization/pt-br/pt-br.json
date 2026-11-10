@@ -1941,6 +1941,8 @@
     "SendAgain": "Enviar de novo",
     "RequestSentTitle": "Pedido enviado",
     "WillShowWhenAccepted": "O Keyring mostra aqui e em Seu agente quando aceitarem.",
+    "CardAskedAgain": "{{community}} aprovou seu pedido, mas seu cartão de membro não chegou. O Keyring pediu a {{community}} que o envie de novo.",
+    "CardAskedRecently": "O Keyring pediu a {{community}} que reenviasse seu cartão há pouco. Verifique de novo mais tarde.",
     "AskedAs": "Você pediu para entrar como",
     "SeeFullPersonaId": "Ver o ID de persona completo",
     "ViewCommunity": "Ver comunidade",

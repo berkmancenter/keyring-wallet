@@ -2062,6 +2062,8 @@
     "SendAgain": "Send it again",
     "RequestSentTitle": "Request sent",
     "WillShowWhenAccepted": "Keyring shows it here and on Your agent when they accept.",
+    "CardAskedAgain": "{{community}} approved your request, but your membership card hasn't arrived. Keyring asked {{community}} to send it again.",
+    "CardAskedRecently": "Keyring asked {{community}} to send your card again a short while ago. Check again later.",
     "AskedAs": "You asked to join as",
     "SeeFullPersonaId": "See full persona ID",
     "ViewCommunity": "View community",

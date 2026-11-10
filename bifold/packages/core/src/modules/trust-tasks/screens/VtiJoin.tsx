@@ -36,7 +36,8 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { vtaAgent } from '../module/vtaAgent'
 import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 import { joinKnown, readFailed, useCommunityJourney, type CommunityJourneyReaders } from '../module/communityJourney'
-import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
+import { askForCardIfOwed, ensurePersonaFor, joinCommunity, readJoinState, type CardAsk } from '../module/vtiJoin'
+import { cardAskKey } from './cardAskKey'
 import { joinSeed, keepJoinedProfile } from '../module/vtiJoinSeed'
 
 import { CardStatusNotice } from './cardStatusNotice'
@@ -316,16 +317,27 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   }, [agent, communityDid, askStanding])
 
   const retryHolders = holding.retry
+  // What asking for an approved request's card came to, said under it (IN-617).
+  const [cardAsk, setCardAsk] = useState<CardAsk>()
   const onCheckAgain = useCallback(async () => {
     if (!agent || !communityDid) return
     setChecking(true)
     try {
       retryHolders()
-      await askStanding()
+      // Approved, and the card never came: ask the community to send it again
+      // first. Only here, on the person's own Check again. A failed ask changes
+      // nothing, and the status is read as before.
+      // Through a promise, so even a throw before the ask starts is caught.
+      const asked = await Promise.resolve()
+        .then(() => askForCardIfOwed(agent, communityDid, { mediatorDid: config?.mediatorDid }))
+        .catch(() => undefined)
+      if (asked?.resend) setCardAsk(asked)
+      // It polled the community already: read what it stored, without asking again.
+      await (asked?.polled ? rereadStanding() : askStanding())
     } finally {
       setChecking(false)
     }
-  }, [agent, communityDid, askStanding, retryHolders])
+  }, [agent, communityDid, askStanding, rereadStanding, retryHolders, config?.mediatorDid])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -1104,6 +1116,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         </ThemedText>
         {waiting ? (
           <ThemedText testID={testIdWithKey(VtiJoinIds.willShow)}>{t('Join.WillShowWhenAccepted')}</ThemedText>
+        ) : null}
+        {standing.kind === 'pending' && cardAskKey(cardAsk) ? (
+          <ThemedText testID={testIdWithKey(VtiJoinIds.cardAsk)}>{tp(cardAskKey(cardAsk)!)}</ThemedText>
         ) : null}
         {/* The community sent a card whose status list could not be read: it is
             not kept, and is tried again; said here rather than left silent

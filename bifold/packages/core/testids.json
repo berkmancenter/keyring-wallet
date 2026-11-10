@@ -733,6 +733,7 @@
     "JoinAsOption": ["src/modules/trust-tasks/screens/JoinAs.tsx"],
     "JoinAsk": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinAsks": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinCardAsk": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinChanged": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinCheckAgain": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinCheckingAgent": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
@@ -3041,6 +3042,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.asks"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.cardAsk"
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.changed"

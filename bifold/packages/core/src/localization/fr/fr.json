@@ -2028,6 +2028,8 @@
     "SendAgain": "L'envoyer à nouveau",
     "RequestSentTitle": "Demande envoyée",
     "WillShowWhenAccepted": "Keyring l'affiche ici et dans Votre agent quand elle est acceptée.",
+    "CardAskedAgain": "{{community}} a accepté votre demande, mais votre carte de membre n'est pas arrivée. Keyring a demandé à {{community}} de la renvoyer.",
+    "CardAskedRecently": "Keyring a demandé à {{community}} de renvoyer votre carte il y a peu. Vérifiez à nouveau plus tard.",
     "AskedAs": "Vous avez demandé à rejoindre en tant que",
     "SeeFullPersonaId": "Voir l'identifiant de persona complet",
     "ViewCommunity": "Voir la communauté",

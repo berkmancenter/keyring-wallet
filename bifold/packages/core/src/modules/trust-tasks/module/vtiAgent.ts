@@ -385,7 +385,23 @@ export interface JoinRequestStatus {
   code?: string
   reason?: string
   decidedAt?: string
+  /**
+   * While `approved`: whether the community holds this member's acknowledgement
+   * that the membership card arrived. Absent from a community that predates it
+   * (vtc-service before 0.12.0), which does not take `resendCredentials` either.
+   */
+  credentialsDelivered?: boolean
+  /** The answer to `resendCredentials`; absent when it was not asked, or is not supported. */
+  credentialResend?: 'queued' | 'notNeeded' | 'rateLimited'
+  /**
+   * With `rateLimited`: the earliest a re-send is honoured again. The spec has
+   * a community only SHOULD send it, so its absence says nothing more: not that
+   * no more will be honoured.
+   */
+  retryAfter?: string
 }
+
+const CREDENTIAL_RESENDS = ['queued', 'notNeeded', 'rateLimited'] as const
 
 export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
   if (!(refusal instanceof VtiRefusal)) return undefined
@@ -2268,9 +2284,21 @@ class VtiAgentController {
    * poll, which is how a request whose first answer was lost is found again.
    * Undefined when the community holds no such request (`notFound`); other
    * refusals surface as `VtiRefusal`.
+   *
+   * `resendCredentials` asks the community to deliver again the cards it
+   * already issued for an approved request. Its schema refuses unknown
+   * members, so a community that predates the field refuses the whole poll:
+   * set it only after this community's own answer said `credentialsDelivered:
+   * false` (vtiJoin `askForCardIfOwed`).
    */
-  async status(communityDid: string, options: { requestId?: string } = {}): Promise<JoinRequestStatus | undefined> {
-    const answer = await this.ask(communityDid, STATUS, options.requestId ? { requestId: options.requestId } : {})
+  async status(
+    communityDid: string,
+    options: { requestId?: string; resendCredentials?: boolean } = {}
+  ): Promise<JoinRequestStatus | undefined> {
+    const answer = await this.ask(communityDid, STATUS, {
+      ...(options.requestId ? { requestId: options.requestId } : {}),
+      ...(options.resendCredentials ? { resendCredentials: true } : {}),
+    })
     if (!answer) throw this.sentNoAnswer(communityDid, STATUS)
     const refusal = refusalOf(answer)
     if (refusal) {
@@ -2297,6 +2325,15 @@ class VtiAgentController {
       ...(status === 'rejected'
         ? { code: text(payload.code), reason: text(payload.reason), decidedAt: text(payload.decidedAt) }
         : {}),
+      // The delivery members mean the request was approved: only ever with `approved`.
+      ...(status === 'approved' && typeof payload.credentialsDelivered === 'boolean'
+        ? { credentialsDelivered: payload.credentialsDelivered }
+        : {}),
+      ...(status === 'approved' &&
+      CREDENTIAL_RESENDS.includes(payload.credentialResend as (typeof CREDENTIAL_RESENDS)[number])
+        ? { credentialResend: payload.credentialResend as (typeof CREDENTIAL_RESENDS)[number] }
+        : {}),
+      ...(status === 'approved' && text(payload.retryAfter) ? { retryAfter: text(payload.retryAfter) } : {}),
     }
   }
 

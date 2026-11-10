@@ -45,6 +45,7 @@ export const VtiJoinIds = {
   memberCheck: 'JoinMemberCheck',
   standingText: 'JoinStandingText',
   willShow: 'JoinWillShow',
+  cardAsk: 'JoinCardAsk',
   standingInvitation: 'JoinStandingInvitation',
   standingNeed: 'JoinStandingNeed',
   standingReason: 'JoinStandingReason',

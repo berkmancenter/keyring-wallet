@@ -27,9 +27,12 @@ jest.mock('../../vrc/vrc-biometric', () => ({
 }))
 const mockEnsurePersona = jest.fn(async () => ({ did: 'did:webvh:QmPersona:p' }))
 const mockReadJoinState = jest.fn(async (): Promise<unknown> => ({ kind: 'none' }))
+// Check again's ask for an approved request's card: nothing waits on a card unless a test says so.
+const mockAskForCard = jest.fn(async (): Promise<unknown> => ({ polled: false }))
 jest.mock('../module/vtiJoin', () => ({
   ensurePersonaFor: (...args: unknown[]) => mockEnsurePersona(...(args as [])),
   readJoinState: (...args: unknown[]) => mockReadJoinState(...(args as [])),
+  askForCardIfOwed: (...args: unknown[]) => mockAskForCard(...(args as [])),
 }))
 
 type Setter = { set(next: Record<string, unknown>): void }
@@ -599,6 +602,40 @@ describe('I want to join a community', () => {
         linked,
         expect.not.objectContaining({ poll: false })
       )
+    })
+
+    // IN-617: approved, the card never came, and Check again asks the community to send it again.
+    it('approved with no card: Check again asks for the card, says so, and reads what that stored', async () => {
+      const tree = await standAt({ kind: 'pending', submission: { ...submission, status: 'approved' } })
+      expect(tree.queryByTestId(testIdWithKey('JoinCardAsk'))).toBeNull()
+      mockReadJoinState.mockClear()
+      mockAskForCard.mockResolvedValueOnce({ polled: true, resend: 'queued' })
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCheckAgain'))))
+      expect(mockAskForCard).toHaveBeenCalledWith(expect.anything(), linked, { mediatorDid: config.mediatorDid })
+      expect(tree.getByTestId(testIdWithKey('JoinCardAsk'))).toHaveTextContent('Join.CardAskedAgain')
+      // It polled already: the standing is read from what it stored, not asked of the community again.
+      expect(mockReadJoinState).not.toHaveBeenCalledWith(
+        expect.anything(),
+        linked,
+        expect.not.objectContaining({ poll: false })
+      )
+    })
+
+    it('a Check again whose ask for the card fails still reads where the request stands', async () => {
+      const tree = await standAt({ kind: 'pending', submission: { ...submission, status: 'approved' } })
+      mockReadJoinState.mockClear()
+      // Thrown before any promise exists, as an absent or broken ask throws: a rejection alone is caught by a
+      // plain .catch, and would pass without the guard this test is for.
+      mockAskForCard.mockImplementationOnce(() => {
+        throw new Error('the ask could not start')
+      })
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCheckAgain'))))
+      expect(mockReadJoinState).toHaveBeenCalledWith(
+        expect.anything(),
+        linked,
+        expect.not.objectContaining({ poll: false })
+      )
+      expect(tree.queryByTestId(testIdWithKey('JoinCardAsk'))).toBeNull()
     })
 
     it('deferred: what is missing, in words, and the way back to vetting', async () => {
