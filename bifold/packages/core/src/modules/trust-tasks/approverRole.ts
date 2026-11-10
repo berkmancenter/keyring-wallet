@@ -43,6 +43,17 @@ import { respondWith, type TrustTasksService } from './services/TrustTasksServic
 const LOG_PREFIX = '[TrustTasks:ApproverRole]'
 
 /**
+ * Why an arriving offer, answer or step-down went no further, in the log a problem report carries: never silent
+ * (Alberto's two phones, 278.12, 11-10: an offer that never showed left nothing on the receiving phone). Names the
+ * connection and the reason, never the contents.
+ */
+const dropped = (agent: Agent, what: string, connectionId: string, why: string) =>
+  agent.config?.logger?.warn(`${LOG_PREFIX} ${what} on connection ${connectionId} not taken: ${why}`)
+const SWITCHED_OFF = 'trusted approvers are switched off on this phone (Settings › Developer)'
+const NO_RELATIONSHIP = 'no relationship with this contact to check it against'
+const refusedAs = (kind: string) => `it did not pass its check (${kind})`
+
+/**
  * genericRecords recordType of the offer this phone sent to a contact: one per connection, its state changed in place
  * (open, accepted, closed) rather than deleted, so this feature never deletes stored records and goes out over the air.
  */
@@ -191,9 +202,10 @@ export async function handleRoleOfferResponse(
   document: Record<string, unknown>,
   context: InboundContext
 ): Promise<void> {
-  if (!isTrustedApproversEnabled()) return
+  if (!isTrustedApproversEnabled())
+    return dropped(agent, 'an answer to my approver offer', context.connectionId, SWITCHED_OFF)
   const relationship = await relationshipOn(agent, context.connectionId)
-  if (!relationship) return
+  if (!relationship) return dropped(agent, 'an answer to my approver offer', context.connectionId, NO_RELATIONSHIP)
   const outcome = await service.consume(agent.context, {
     spec: RESPONSE_SPEC as never,
     document,
@@ -203,7 +215,8 @@ export async function handleRoleOfferResponse(
     proofPolicy: proofUnder(agent, relationship.counterpartyRelationshipDid as string),
     handler: async (doc) => doc,
   })
-  if (outcome.kind !== 'handled') return
+  if (outcome.kind !== 'handled')
+    return dropped(agent, 'an answer to my approver offer', context.connectionId, refusedAs(outcome.kind))
 
   const [record] =
     (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK, connectionId: context.connectionId })) ??
@@ -378,9 +391,9 @@ export async function handleRoleOfferRequest(
   document: Record<string, unknown>,
   context: InboundContext
 ): Promise<void> {
-  if (!isTrustedApproversEnabled()) return
+  if (!isTrustedApproversEnabled()) return dropped(agent, 'an approver offer', context.connectionId, SWITCHED_OFF)
   const relationship = await relationshipOn(agent, context.connectionId)
-  if (!relationship) return
+  if (!relationship) return dropped(agent, 'an approver offer', context.connectionId, NO_RELATIONSHIP)
   const outcome = await service.consume(agent.context, {
     spec: SPEC as never,
     document,
@@ -391,7 +404,8 @@ export async function handleRoleOfferRequest(
     handler: async () => undefined,
   })
   // No reply is sent here (that waits for the person), so a request that passes comes back 'accepted'.
-  if (outcome.kind !== 'accepted' && outcome.kind !== 'handled') return
+  if (outcome.kind !== 'accepted' && outcome.kind !== 'handled')
+    return dropped(agent, 'an approver offer', context.connectionId, refusedAs(outcome.kind))
 
   const payload = document.payload as RoleOfferPayload
   const credentials = await agent.w3cCredentials.getAll()
@@ -538,9 +552,9 @@ export async function handleRoleStepDown(
   document: Record<string, unknown>,
   context: InboundContext
 ): Promise<void> {
-  if (!isTrustedApproversEnabled()) return
+  if (!isTrustedApproversEnabled()) return dropped(agent, 'a step-down', context.connectionId, SWITCHED_OFF)
   const relationship = await relationshipOn(agent, context.connectionId)
-  if (!relationship) return
+  if (!relationship) return dropped(agent, 'a step-down', context.connectionId, NO_RELATIONSHIP)
   const outcome = await service.consume(agent.context, {
     spec: STEP_DOWN_SPEC as never,
     document,
@@ -550,7 +564,8 @@ export async function handleRoleStepDown(
     proofPolicy: proofUnder(agent, relationship.counterpartyRelationshipDid as string),
     handler: async () => undefined,
   })
-  if (outcome.kind !== 'accepted' && outcome.kind !== 'handled') return
+  if (outcome.kind !== 'accepted' && outcome.kind !== 'handled')
+    return dropped(agent, 'a step-down', context.connectionId, refusedAs(outcome.kind))
 
   const payload = document.payload as RoleStepDownPayload
   const [record] =

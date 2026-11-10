@@ -104,8 +104,10 @@ const JORDAN: Side = {
 let random = 0
 function phone(side: Side) {
   const store = memoryGenericRecords()
+  const warned: string[] = []
   const agent = {
     context: {},
+    config: { logger: { info: () => undefined, warn: (line: string) => warned.push(line) } },
     genericRecords: store,
     w3cCredentials: { getAll: async () => [] },
     kms: { randomBytes: ({ length }: { length: number }) => new Uint8Array(length).fill(++random) },
@@ -127,7 +129,7 @@ function phone(side: Side) {
       didcomm: { connections: { getById: async (id: string) => ({ id, did: side.mine, theirDid: side.theirs }) } },
     },
   } as any
-  return { agent, store, side }
+  return { agent, store, side, warned }
 }
 type Phone = ReturnType<typeof phone>
 
@@ -366,6 +368,44 @@ describe('becoming a trusted approver', () => {
     TRUSTED_APPROVERS_REMOTE_OFF.off = false
     await deliver(phone(JORDAN), offer)
     expect(roleOfferPromptStore.list()).toHaveLength(1)
+  })
+
+  test('an offer that goes no further says why in the log, naming the connection, never the contents (control: one shown says nothing of the kind)', async () => {
+    // Alberto's two phones, 278.12, 11-10: the offer reached the receiving phone (report F928-36ZG, 23:16:34.951Z) and
+    // then nothing at all was logged, because its switch was off.
+    const sam = phone(SAM)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
+    const offer = mockSent[0].document
+    const notTaken = (p: Phone) => p.warned.filter((line) => line.includes('not taken'))
+
+    setTrustedApproversEnabled(false)
+    const off = phone(JORDAN)
+    await deliver(off, offer)
+    setTrustedApproversEnabled(true)
+    expect(notTaken(off)).toEqual([expect.stringMatching(/approver offer on connection .+ not taken: .*switched off/)])
+    expect(notTaken(off)[0]).toContain(JORDAN.connectionId)
+
+    const noRelationship = phone({ ...JORDAN, theirRel: undefined })
+    await deliver(noRelationship, offer)
+    expect(notTaken(noRelationship)).toEqual([expect.stringMatching(/no relationship/)])
+
+    const forged = phone(JORDAN)
+    await deliver(forged, { ...offer, proof: { ...(offer.proof as object), by: 'did:peer:stranger' } })
+    expect(notTaken(forged)).toEqual([expect.stringMatching(/did not pass its check/)])
+    // Never the contents: no action, agent or challenge in any line. The challenge is checked by its value, so a leak
+    // is caught however it is written, not only one that spells out the word.
+    const { challenge, agent: askedAgent } = offer.payload as { challenge: string; agent: string }
+    expect(challenge.length).toBeGreaterThan(8)
+    for (const line of [...notTaken(off), ...notTaken(noRelationship), ...notTaken(forged)]) {
+      expect(line).not.toContain(challenge)
+      expect(line).not.toContain(askedAgent)
+      expect(line).not.toMatch(/joinCommunity/)
+    }
+
+    const shown = phone(JORDAN)
+    await deliver(shown, offer)
+    expect(roleOfferPromptStore.list()).toHaveLength(1)
+    expect(notTaken(shown)).toEqual([])
   })
 
   test("an offer waits across a restart on Jordan's phone", async () => {
