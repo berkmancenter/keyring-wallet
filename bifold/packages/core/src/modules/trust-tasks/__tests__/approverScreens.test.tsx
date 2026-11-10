@@ -26,6 +26,7 @@ import ApproverWaitNote, {
 } from '../screens/ApproverWaitNote'
 import * as ownerConfirm from '../module/ownerConfirm'
 import VtaTrustedApprovers, { TrustedApproversIds } from '../screens/VtaTrustedApprovers'
+import { forgetEnforcementChecks, onlyThisPhone } from '../screens/approverEnforcementCheck'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -537,6 +538,137 @@ describe('Who approves', () => {
     expect(on.getByTestId(id(TrustedApproversIds.screen))).toBeTruthy()
     expect(on.getByTestId(id(TrustedApproversIds.approver(AMY)))).toBeTruthy()
     expect(read).toHaveBeenCalled()
+  })
+})
+
+describe('Who approves: checking the agent waits for them (a live probe, only on a tap)', () => {
+  const ME_PHONE = 'did:peer:2.this-phone'
+  const MY_SET = `keyring-phone:${ME_PHONE}`
+  const CREATE_TEST = 'https://trusttasks.org/spec/vta/contexts/create/1.0'
+  const held = (approvers: string[]) =>
+    ({ view: { approvers, keys: ['joinCommunity'], heldElsewhere: [] }, version: 3 }) as TrustedApproversState
+  // null: signed in as no one known (a default would replace an explicit undefined).
+  const setup = (canTest = true, signedInAs: string | null = ME_PHONE) => {
+    jest.spyOn(approverRole, 'acceptedRoleOffers').mockResolvedValue([])
+    jest.spyOn(approverRole, 'approverNames').mockResolvedValue({ [JORDAN]: 'Jordan' })
+    jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([])
+    jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([JORDAN]))
+    const rules = jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue({
+      view: { canTest },
+      model: { rules: [{ taskType: CREATE_TEST, approverSet: MY_SET }], sets: { [MY_SET]: [ME_PHONE] } },
+    } as never)
+    const probe = jest.spyOn(vtaAgent, 'sendTestRequest')
+    // The phone signed in as the one member of its own set: the sole-member check compares with this, not the set name.
+    const real = vtaAgent.getState.bind(vtaAgent)
+    jest.spyOn(vtaAgent, 'getState').mockImplementation(() => ({ ...real(), managerDid: signedInAs ?? undefined }))
+    return { rules, probe }
+  }
+  const tap = async (tree: Awaited<ReturnType<typeof show>>) =>
+    act(async () => {
+      fireEvent.press(tree.getByTestId(id(`${TrustedApproversIds.check}Button`)))
+    })
+  const said = (tree: Awaited<ReturnType<typeof show>>) => tree.getByTestId(id(TrustedApproversIds.checkResult))
+
+  beforeEach(() => forgetEnforcementChecks())
+
+  test('nothing is probed on open or focus; a tap runs the test request once', async () => {
+    const { rules, probe } = setup()
+    probe.mockResolvedValue({ kind: 'held' })
+    const tree = await show(<VtaTrustedApprovers />)
+    expect(rules).not.toHaveBeenCalled()
+    expect(probe).not.toHaveBeenCalled()
+    await tap(tree)
+    expect(probe).toHaveBeenCalledTimes(1)
+  })
+
+  test("an agent that lets the test through says approvals aren't switched on (control: one that holds it waits)", async () => {
+    const { probe } = setup()
+    probe.mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    const off = await show(<VtaTrustedApprovers />)
+    await tap(off)
+    expect(said(off)).toHaveTextContent(/Approver\.CheckNotOn/)
+    off.unmount()
+    forgetEnforcementChecks()
+    probe.mockResolvedValue({ kind: 'held' })
+    const on = await show(<VtaTrustedApprovers />)
+    await tap(on)
+    expect(said(on)).toHaveTextContent(/Approver\.CheckHeld/)
+  })
+
+  test("no answer says it couldn't tell, and claims neither (control: the rows above)", async () => {
+    const { probe } = setup()
+    probe.mockRejectedValue(new DeviceActionRefused('noAnswer'))
+    const tree = await show(<VtaTrustedApprovers />)
+    await tap(tree)
+    expect(said(tree)).toHaveTextContent(/Approver\.CheckUnknown/)
+  })
+
+  test("without this phone's own test rule nothing is sent, and it says how to turn it on", async () => {
+    const { probe } = setup(false)
+    const tree = await show(<VtaTrustedApprovers />)
+    await tap(tree)
+    expect(probe).not.toHaveBeenCalled()
+    expect(said(tree)).toHaveTextContent(/Approver\.CheckNeedsTestRule/)
+  })
+
+  test("the sole-member check holds on its own: another phone's set holding only that phone is not this phone's (control: ours)", () => {
+    // Unreachable through the screen (canTest refuses another phone's rule first), so checked here: the set's name is
+    // how the rule is found, never who it is.
+    const ruleFor = (did: string) => ({
+      rules: [{ taskType: 'https://trusttasks.org/spec/vta/contexts/create/1.0', approverSet: `keyring-phone:${did}` }],
+      sets: { [`keyring-phone:${did}`]: [did] },
+    })
+    expect(onlyThisPhone(ruleFor('did:peer:2.other-phone'), 'did:peer:2.this-phone')).toBe(false)
+    expect(onlyThisPhone(ruleFor('did:peer:2.this-phone'), undefined)).toBe(false)
+    expect(onlyThisPhone(ruleFor('did:peer:2.this-phone'), 'did:peer:2.this-phone')).toBe(true)
+  })
+
+  test('a test rule whose set was edited to hold others is not sent: it would ask them too (control: this phone alone)', async () => {
+    const { rules, probe } = setup()
+    rules.mockResolvedValue({
+      view: { canTest: true },
+      model: { rules: [{ taskType: CREATE_TEST, approverSet: MY_SET }], sets: { [MY_SET]: [ME_PHONE, JORDAN] } },
+    } as never)
+    const tree = await show(<VtaTrustedApprovers />)
+    await tap(tree)
+    expect(probe).not.toHaveBeenCalled()
+    expect(said(tree)).toHaveTextContent(/Approver\.CheckWouldReachOthers/)
+  })
+
+  test("no manager DID known reads as couldn't tell, never as a rule that would ask others; nothing is sent (control: the edited set above)", async () => {
+    const { probe } = setup(true, null)
+    const tree = await show(<VtaTrustedApprovers />)
+    await tap(tree)
+    expect(probe).not.toHaveBeenCalled()
+    expect(said(tree)).toHaveTextContent(/Approver\.CheckUnknown/)
+    expect(said(tree)).not.toHaveTextContent(/WouldReachOthers/)
+  })
+
+  test('with the switch off, there is no check at all (control: on, it is there)', async () => {
+    setup()
+    setTrustedApproversEnabled(false)
+    expect((await show(<VtaTrustedApprovers />)).queryByTestId(id(TrustedApproversIds.check))).toBeNull()
+    setTrustedApproversEnabled(true)
+    TRUSTED_APPROVERS_REMOTE_OFF.off = true
+    expect((await show(<VtaTrustedApprovers />)).queryByTestId(id(TrustedApproversIds.check))).toBeNull()
+    TRUSTED_APPROVERS_REMOTE_OFF.off = false
+    expect((await show(<VtaTrustedApprovers />)).getByTestId(id(TrustedApproversIds.check))).toBeTruthy()
+  })
+
+  test('right after an approver is added, the check is offered, and not run', async () => {
+    const { probe } = setup()
+    jest
+      .spyOn(approverRole, 'acceptedRoleOffers')
+      .mockResolvedValue([ask({ state: 'accepted', acceptedAs: JORDAN, actions: ['joinCommunity'] })])
+    jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([]))
+    jest.spyOn(vtaAgent, 'setTrustedApprovers').mockResolvedValue(held([JORDAN]))
+    jest.spyOn(approverRole, 'closeRoleOffer').mockResolvedValue(undefined)
+    const tree = await show(<VtaTrustedApprovers />)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id(TrustedApproversIds.add(CONN))))
+    })
+    expect(tree.getByTestId(id(TrustedApproversIds.checkPrompt))).toBeTruthy()
+    expect(probe).not.toHaveBeenCalled()
   })
 })
 
