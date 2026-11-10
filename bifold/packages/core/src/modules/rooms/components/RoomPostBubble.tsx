@@ -163,6 +163,12 @@ export const RoomPostBubble: React.FC<{
             <ThemedText style={styles.quiet} testID={testIdWithKey('RoomPostWithdrawn')}>
               {t(mine ? 'Rooms.PostWithdrawnMine' : 'Rooms.PostWithdrawn')}
             </ThemedText>
+          ) : post.unread && (post.unreadWhy === 'removed' || post.unreadWhy === 'beyondChain') ? (
+            // The agent could not open it and already tried to repair its keys: not a failure that passes. Worded
+            // without a cause, since several room settings and membership changes lead here.
+            <ThemedText style={styles.quiet} testID={testIdWithKey('RoomPostCannotOpen')}>
+              {t('Rooms.PostCannotOpen')}
+            </ThemedText>
           ) : post.unread ? (
             <ThemedText style={styles.quiet} testID={testIdWithKey('RoomPostUnread')}>
               {t('Rooms.PostUnread')}

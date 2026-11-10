@@ -6,7 +6,14 @@
  * The parsers accept only what the specs define and drop anything else, so a malformed or hostile
  * answer can at worst lose a row, never inject one.
  */
-import type { HostCheck, RecordPrune, RoomTier, RoomVerb } from '../types'
+import {
+  RECORD_UNOPENED_REASONS,
+  type HostCheck,
+  type RecordPrune,
+  type RecordUnopenedReason,
+  type RoomTier,
+  type RoomVerb,
+} from '../types'
 
 import type { SenderCheck } from './files/sender'
 import type { BlobManifest } from './files/stream'
@@ -320,6 +327,13 @@ export function refusalCode(error: unknown): string | undefined {
   const e = error as Error & { code?: unknown; details?: unknown }
   const named = str(obj(e.details)?.code) ?? str(e.code)
   return named?.slice(named.lastIndexOf(':') + 1)
+}
+
+/** The reason an agent's `unknownEpoch` refusal gives for a record it could not open, when it is one Keyring knows. */
+export function recordUnopenedReason(error: unknown): RecordUnopenedReason | undefined {
+  if (refusalCode(error) !== 'unknownEpoch') return undefined
+  const reason = str(obj((error as { details?: unknown }).details)?.reason)
+  return RECORD_UNOPENED_REASONS.find((r) => r === reason)
 }
 
 /** One record's metadata in a listing (`rooms/_shared` `RecordMetadata`). */

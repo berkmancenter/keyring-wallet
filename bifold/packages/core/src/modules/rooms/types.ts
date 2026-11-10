@@ -436,6 +436,17 @@ export class RoomsRefused extends Error {
   }
 }
 
+/**
+ * Why the person's agent could not open a record, as it says in a `rooms/keys/read` refusal (`unknownEpoch`,
+ * `details.reason`; vta-service `room_group.rs` `open_refused`). The agent has already tried to repair its keys
+ * before answering (VTI #2231), so the phone does not ask it to again. `removed`: the record was sealed in an epoch
+ * this member was not in. `beyondChain`: the history the agent can reach does not go back that far.
+ * `notDelivered`: the agent is behind on the room's membership changes.
+ */
+export type RecordUnopenedReason = 'removed' | 'beyondChain' | 'notDelivered'
+
+export const RECORD_UNOPENED_REASONS: readonly RecordUnopenedReason[] = ['removed', 'beyondChain', 'notDelivered']
+
 /** The note being replaced changed since the preview. Nothing was sent; re-read it first. */
 export class RoomsConflict extends Error {
   public constructor(
@@ -503,7 +514,13 @@ export interface RoomsService {
    * against the room's record count.
    */
   listNotes(roomId: string, options?: { sinceVersion?: number }): Promise<NoteList>
+  /**
+   * One record, opened. Refused with `RoomsRefused('readNote', reason)` when the agent says why it could not open it
+   * (a {@link RecordUnopenedReason}); any other failure arrives as it came.
+   */
   readNote(roomId: string, key: string): Promise<Note>
+  /** For logs: how many records one page of a room could not open, by reason (`other` for any other failure). */
+  noteUnread?(roomId: string, counts: Readonly<Record<string, number>>): void
   prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview>
   /** Sends what the preview showed; with an attachment, `options` reports the upload and can cancel it (nothing is written). */
   confirmWrite(token: string, options?: RoomsTransferOptions): Promise<{ key: string; version: number }>

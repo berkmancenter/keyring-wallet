@@ -67,3 +67,31 @@ describe('RoomPostBubble: the long press inside the retry', () => {
     expect(onOpenAuthor).toHaveBeenCalledWith(author)
   })
 })
+
+// A post the agent could not open says so when its reason is one a plain retry does not change (removed, beyondChain), and keeps
+// "couldn't be read" otherwise. The words name no cause: several room settings and membership changes lead here.
+describe('RoomPostBubble: a post that was not opened', () => {
+  test.each(['removed', 'beyondChain'] as const)("says it can't be opened when the agent says %s", (reason) => {
+    const { getByTestId, queryByTestId, getByText } = show({ post: post({ unread: true, unreadWhy: reason }) })
+    expect(getByTestId(id('RoomPostCannotOpen'))).toBeTruthy()
+    expect(getByText('Rooms.PostCannotOpen')).toBeTruthy()
+    expect(queryByTestId(id('RoomPostUnread'))).toBeNull()
+  })
+
+  test.each([
+    ['notDelivered', 'notDelivered' as const],
+    ['no reason', undefined],
+  ])('keeps "couldn\'t be read" for %s (control)', (_what, reason) => {
+    const { getByTestId, queryByTestId } = show({ post: post({ unread: true, unreadWhy: reason }) })
+    expect(getByTestId(id('RoomPostUnread'))).toBeTruthy()
+    expect(queryByTestId(id('RoomPostCannotOpen'))).toBeNull()
+  })
+
+  test('a removed post says removed, whatever reason is left on it (control)', () => {
+    const { getByTestId, queryByTestId } = show({
+      post: post({ unread: false, retracted: true, unreadWhy: 'beyondChain' }),
+    })
+    expect(getByTestId(id('RoomPostRemoved'))).toBeTruthy()
+    expect(queryByTestId(id('RoomPostCannotOpen'))).toBeNull()
+  })
+})

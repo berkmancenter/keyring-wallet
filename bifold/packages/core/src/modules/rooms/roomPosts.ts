@@ -14,7 +14,7 @@ import { CHAT_PROFILE, type ChatMessageEvent, parseChatEvent } from '../chat/cha
 
 import { toInertText, type InertText } from './inertText'
 import type { PostRefusal } from './postRefusal'
-import type { Identity, Note, NoteSummary, RoomFile } from './types'
+import type { Identity, Note, NoteSummary, RecordUnopenedReason, RoomFile } from './types'
 
 export interface RoomPost {
   key: string
@@ -36,6 +36,8 @@ export interface RoomPost {
   pinned: boolean
   /** The record could not be read; only what the listing said about it is known. */
   unread: boolean
+  /** Why, when the agent said so (only on an unread post). */
+  unreadWhy?: RecordUnopenedReason
   /** A post this phone is still sending, or could not send (not yet a record in the room). */
   delivery?: 'sending' | 'failed'
   /** Why a failed post can't go, when no retry would pass (postRefusal): said instead of "Tap to try again". */

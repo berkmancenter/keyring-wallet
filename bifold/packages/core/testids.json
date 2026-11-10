@@ -1270,6 +1270,7 @@
     "RoomPostAuthor": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostBubble": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostCancel": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostCannotOpen": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostLate": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostNotSent": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostReactions": ["src/modules/rooms/components/RoomPostBubble.tsx"],

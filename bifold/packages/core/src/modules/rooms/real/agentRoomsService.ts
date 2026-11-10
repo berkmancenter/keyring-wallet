@@ -102,6 +102,7 @@ import {
   parseRead,
   parseSealed,
   parseVaultQuery,
+  recordUnopenedReason,
   refusalCode,
   ROOMS_TASK,
   vaultCredentialSubject,
@@ -846,7 +847,23 @@ export class AgentRoomsService implements RoomsService {
       // Told of a lock while its first read is still out, not only once one is kept.
       holdingOpened.add(this)
     }
-    return this.noteOf(await read)
+    try {
+      return this.noteOf(await read)
+    } catch (e) {
+      // The agent says why it could not open this record, having already tried to repair its keys (VTI #2231): passed
+      // on by reason, so the post can say it is not a passing failure. `notDelivered` alone may pass.
+      const reason = recordUnopenedReason(e)
+      if (reason) throw new RoomsRefused('readNote', reason, reason === 'notDelivered', message(e), e)
+      throw e
+    }
+  }
+
+  /** One line per page that left records unopened: the reasons and how many, never which records. */
+  public noteUnread(roomId: string, counts: Readonly<Record<string, number>>): void {
+    const parts = Object.entries(counts)
+      .filter(([, n]) => n > 0)
+      .map(([why, n]) => `${why} ${n}`)
+    if (parts.length) this.backend.warn(`rooms: ${logRef(roomId)} records not opened on this page: ${parts.join(', ')}`)
   }
 
   private async readRecord(room: KnownRoom, roomId: string, key: string): Promise<OpenedRecord> {

@@ -5,7 +5,8 @@ import {
   type RoomsCommunity,
 } from '../real/agentRoomsService'
 import { ROOMS_TASK } from '../real/wire'
-import { RoomsUnavailable } from '../types'
+import { RECORD_UNOPENED_REASONS, RoomsRefused, RoomsUnavailable } from '../types'
+import { failureCategory, logRef } from '../roomsLogWords'
 import { postOf, reactionValueOf } from '../roomPosts'
 
 const SPEC = 'https://trusttasks.org/spec/'
@@ -829,5 +830,64 @@ describe('every community kept from for now', () => {
       sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
     })
     expect((await new AgentRoomsService(b).listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+  })
+})
+
+// A read the agent refuses with `unknownEpoch` says why in `details.reason` (vta-service room_group.rs open_refused),
+// after the agent has tried to repair its keys (VTI #2231). The reason reaches the screen; nothing else changes.
+describe('a record the agent cannot open', () => {
+  const unknownEpoch = (reason: string) =>
+    Object.assign(refused('rooms/keys/open:unknownEpoch'), { details: { reason, earliestEpoch: 3 } })
+  const failingRead = (refusal: unknown) => {
+    const { b, agentTask } = backend()
+    const answer = agentTask.getMockImplementation()!
+    agentTask.mockImplementation(async (type, payload) => {
+      if (type === ROOMS_TASK.keysRead) throw refusal
+      return answer(type, payload)
+    })
+    return { b, service: new AgentRoomsService(b) }
+  }
+
+  it.each([
+    ['removed', false],
+    ['beyondChain', false],
+    ['notDelivered', true],
+  ] as const)('is refused with the reason the agent gave: %s (retryable %s)', async (reason, retryable) => {
+    const refusal = unknownEpoch(reason)
+    const { service } = failingRead(refusal)
+    const error = await service.readNote(ROOM, 'n1').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(RoomsRefused)
+    expect(error).toMatchObject({ operation: 'readNote', code: reason, retryable, refusal })
+    expect(failureCategory(error)).toBe(`refused (${reason})`)
+  })
+
+  it.each([
+    ['another refusal', refused('notFound')],
+    ['another refusal carrying a reason', Object.assign(refused('notFound'), { details: { reason: 'removed' } })],
+    ['unknownEpoch with a reason Keyring does not know', unknownEpoch('somethingNew')],
+    ['unknownEpoch with no details', refused('unknownEpoch')],
+    ['a failure that is not a refusal', new Error('no answer')],
+  ])('passes %s on as it came (control)', async (_what, refusal) => {
+    const { service } = failingRead(refusal)
+    await expect(service.readNote(ROOM, 'n1')).rejects.toBe(refusal)
+  })
+
+  it('logs every reason readNote can throw as itself, never as other', () => {
+    expect(RECORD_UNOPENED_REASONS.length).toBeGreaterThan(0)
+    const unknown = RECORD_UNOPENED_REASONS.filter(
+      (reason) => failureCategory(new RoomsRefused('readNote', reason, false)) !== `refused (${reason})`
+    )
+    expect(unknown).toEqual([])
+  })
+
+  it("logs a page's unopened records as reasons and counts, in one line, and nothing for none", () => {
+    const { b } = backend()
+    const service = new AgentRoomsService(b)
+    service.noteUnread(ROOM, { beyondChain: 3, other: 1, removed: 0 })
+    service.noteUnread(ROOM, {})
+    expect(b.warn).toHaveBeenCalledTimes(1)
+    expect(b.warn).toHaveBeenCalledWith(
+      `rooms: ${logRef(ROOM)} records not opened on this page: beyondChain 3, other 1`
+    )
   })
 })

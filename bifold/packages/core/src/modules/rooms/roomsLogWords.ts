@@ -167,6 +167,10 @@ const LOGGED_REFUSAL_CODES = new Set([
   'tooLarge',
   'tooLong',
   'welcomeMissing',
+  // Why the agent could not open a record: an `unknownEpoch` refusal's `details.reason`, which `readNote` throws as its
+  // code (`RECORD_UNOPENED_REASONS`; `notDelivered` is listed above as a spec code).
+  'beyondChain',
+  'removed',
   // A record a member may not rewrite or withdraw, and a tier its record writes aren't built for (`sendRecord`).
   'notThatKind',
   'notYours',

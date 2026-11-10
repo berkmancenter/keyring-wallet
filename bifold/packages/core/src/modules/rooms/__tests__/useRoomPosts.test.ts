@@ -9,7 +9,7 @@ import { AppState } from 'react-native'
 
 import { toInertText } from '../inertText'
 import { isChatPost, type RoomPost } from '../roomPosts'
-import type { Note, NoteList, NoteSummary, RoomsService } from '../types'
+import { RoomsRefused, type Note, type NoteList, type NoteSummary, type RoomsService } from '../types'
 import { useInViewAndActive } from '../useInViewAndActive'
 import {
   mergeNewer,
@@ -650,5 +650,69 @@ describe('a page counted in chat posts', () => {
     expect(chat(result.current.posts)).toHaveLength(3)
     expect(readKeys(service)).toEqual(['n1', 'n3', 'n5'])
     expect(result.current.hasOlder).toBe(false)
+  })
+})
+
+// A read refused with a reason (`RoomsRefused('readNote', reason)`, the service's): the post stays unread and says
+// why; a read that later succeeds clears it. Each round's failures go to the log as counts, never which posts.
+describe('a post the agent cannot open', () => {
+  const cannotOpen = (reason: string) => new RoomsRefused('readNote', reason, reason === 'notDelivered')
+  const failing = (refusals: Record<string, unknown>) => {
+    const { service, write } = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    const noteUnread = jest.fn()
+    const read = service.readNote.getMockImplementation()!
+    service.readNote.mockImplementation(async (roomId: string, key: string) => {
+      if (refusals[key] !== undefined) throw refusals[key]
+      return read(roomId, key)
+    })
+    return { service: Object.assign(service, { noteUnread }), noteUnread, write }
+  }
+
+  test('keeps the reason on the unread post, and logs the round once with each reason counted', async () => {
+    const { service, noteUnread } = failing({ a: cannotOpen('beyondChain'), b: new Error('no answer') })
+    const { result } = await open(service)
+    expect(result.current.posts?.map((p) => [p.key, p.unread, p.unreadWhy])).toEqual([
+      ['c', false, undefined],
+      ['b', true, undefined],
+      ['a', true, 'beyondChain'],
+    ])
+    expect(noteUnread).toHaveBeenCalledTimes(1)
+    expect(noteUnread).toHaveBeenCalledWith(ROOM, { beyondChain: 1, other: 1 })
+  })
+
+  test.each(['removed', 'beyondChain', 'notDelivered'])('carries %s as given', async (reason) => {
+    const { service } = failing({ a: cannotOpen(reason) })
+    const { result } = await open(service)
+    expect(result.current.posts?.find((p) => p.key === 'a')?.unreadWhy).toBe(reason)
+  })
+
+  test('a refusal of another operation, or with a code that is not a reason, gives no reason (control)', async () => {
+    const { service, noteUnread } = failing({
+      a: new RoomsRefused('listNotes', 'beyondChain', false),
+      b: new RoomsRefused('readNote', 'notFound', false),
+    })
+    const { result } = await open(service)
+    expect(result.current.posts?.filter((p) => p.unread).map((p) => [p.key, p.unreadWhy])).toEqual([
+      ['b', undefined],
+      ['a', undefined],
+    ])
+    expect(noteUnread).toHaveBeenCalledWith(ROOM, { other: 2 })
+  })
+
+  test('a round where every read lands logs nothing (control)', async () => {
+    const { service, noteUnread } = failing({})
+    await open(service)
+    expect(noteUnread).not.toHaveBeenCalled()
+  })
+
+  test('a newer version that reads drops the reason with the unread mark', async () => {
+    const { service, write } = failing({ a: cannotOpen('removed') })
+    const { result } = await open(service)
+    expect(result.current.posts?.find((p) => p.key === 'a')?.unreadWhy).toBe('removed')
+    service.readNote.mockImplementation(async (_roomId: string, key: string) => note(key, key === 'a' ? 4 : 1))
+    write(note('a', 4))
+    await tick()
+    const a = result.current.posts?.find((p) => p.key === 'a')
+    expect([a?.unread, a?.unreadWhy]).toEqual([false, undefined])
   })
 })

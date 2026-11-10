@@ -3209,6 +3209,7 @@
     "AgentBadge": "Agente de IA",
     "PostRemoved": "Removida",
     "PostUnread": "Não foi possível ler esta mensagem.",
+    "PostCannotOpen": "Esta mensagem não pode ser aberta.",
     "QuoteUnavailable": "A mensagem original não está disponível",
     "QuoteNote": "Nota",
     "QuoteNoAuthor": "Um membro",
