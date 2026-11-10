@@ -14,6 +14,7 @@ import {
   setDidCommV2Enabled,
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
+  setTrustedApproversEnabled,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -84,6 +85,7 @@ const Developer: React.FC = () => {
   const [enableSharedConnectInvite, setEnableSharedConnectInvite] = useState(
     !!store.developer.enableSharedConnectInvite
   )
+  const [enableTrustedApprovers, setEnableTrustedApprovers] = useState(!!store.developer.enableTrustedApprovers)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -394,6 +396,17 @@ const Developer: React.FC = () => {
     // Read live: the QR sheet offers "Show a code" from the next time it opens, no restart.
     setSharedConnectInviteEnabled(next)
     setEnableSharedConnectInvite(next)
+  }
+
+  const toggleEnableTrustedApproversSwitch = () => {
+    const next = !enableTrustedApprovers
+    dispatch({
+      type: BCDispatchAction.TOGGLE_TRUSTED_APPROVERS,
+      payload: [next],
+    })
+    // Read live: the contact page, My agent and an arriving offer read it from the next render, no restart.
+    setTrustedApproversEnabled(next)
+    setEnableTrustedApprovers(next)
   }
 
   const toggleEnableLivePickupSwitch = () => {
@@ -919,6 +932,7 @@ const Developer: React.FC = () => {
           title={t('Developer.EnableSharedConnectInvite')}
           accessibilityLabel={t('Developer.EnableSharedConnectInvite')}
           testID={testIdWithKey('ToggleEnableSharedConnectInvite')}
+          showRowSeparator
           // The row toggles too, as the shared-connect row above (iOS hides the Switch from automation).
           onPress={toggleEnableSharedConnectInviteSwitch}
         >
@@ -928,6 +942,21 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableSharedConnectInviteSwitch}
             value={enableSharedConnectInvite}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableTrustedApprovers')}
+          accessibilityLabel={t('Developer.EnableTrustedApprovers')}
+          testID={testIdWithKey('ToggleEnableTrustedApprovers')}
+          // The row toggles too, as the rows above (iOS hides the Switch from automation).
+          onPress={toggleEnableTrustedApproversSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableTrustedApprovers ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableTrustedApproversSwitch}
+            value={enableTrustedApprovers}
           />
         </SectionRow>
         <View style={styles.sectionSeparator}></View>
