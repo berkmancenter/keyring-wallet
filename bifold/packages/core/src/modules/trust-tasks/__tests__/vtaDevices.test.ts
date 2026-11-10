@@ -71,7 +71,9 @@ function fakeAgent(overrides: Partial<Record<string, (payload: Record<string, un
       sent.push({ type, payload })
       const answer = overrides[type]
       if (answer) return answer(payload) as T
-      // An agent before 0d3f268e: the 0.3 device tasks and acl/list/0.3 are refused, naming what it serves.
+      // An agent before 0d3f268e: the 0.3 device tasks and the newer acl/* versions are refused, naming what it serves.
+      if (type === AGENT_DEVICE_TASK.aclList04) throw unsupported(type, AGENT_DEVICE_TASK.aclList)
+      if (type === AGENT_DEVICE_TASK.aclRevoke03) throw unsupported(type, AGENT_DEVICE_TASK.aclRevoke)
       if (type === AGENT_DEVICE_TASK.heartbeat03) throw unsupported(type, AGENT_DEVICE_TASK.heartbeat)
       if (type === AGENT_DEVICE_TASK.list03) throw unsupported(type, AGENT_DEVICE_TASK.list)
       if (type === AGENT_DEVICE_TASK.aclList03) throw unsupported(type, AGENT_DEVICE_TASK.aclList)
@@ -308,7 +310,7 @@ describe('another phone acting as the same agent', () => {
 // with camelCase enum values on the wire: wipe's scope is `cacheAndKeys`.
 // acl/list and acl/revoke are not deprecated and stay at 0.1.
 describe('the device tasks this phone speaks', () => {
-  it('are the 0.2 versions with heartbeat and list at 0.3 too, the access-list tasks at 0.1 to 0.3', () => {
+  it('are the 0.2 versions with heartbeat and list at 0.3 too, the access-list tasks at 0.1 to 0.4', () => {
     expect(AGENT_DEVICE_TASK).toEqual({
       register: 'https://trusttasks.org/spec/device/register/0.2',
       heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
@@ -322,21 +324,25 @@ describe('the device tasks this phone speaks', () => {
       aclList02: 'https://trusttasks.org/spec/acl/list/0.2',
       aclRevoke02: 'https://trusttasks.org/spec/acl/revoke/0.2',
       aclList03: 'https://trusttasks.org/spec/acl/list/0.3',
+      aclList04: 'https://trusttasks.org/spec/acl/list/0.4',
+      aclRevoke03: 'https://trusttasks.org/spec/acl/revoke/0.3',
     })
   })
 })
 
-// Newest first (group 1b): v0.67.0 serves acl/list only at 0.3, agents before it only at 0.1. A refusal names only
-// the agent's dispatch table, which can leave out versions it answers at its edge, so each older version is asked in
-// turn: this 0.1 agent is asked 0.2, then 0.1, and 0.1 straight away after that (stepDownAgainstReleases.test.ts).
+// Newest first (group 1b): VTI main 887370a3b serves acl/list only at 0.4, v0.67.0 only at 0.3, agents before it only
+// at 0.1. A refusal names only the agent's dispatch table, which can leave out versions it answers at its edge, so each
+// older version is asked in turn: this 0.1 agent is asked 0.4, 0.3, 0.2, then 0.1, and 0.1 straight away after that
+// (stepDownAgainstReleases.test.ts).
 // (Over TSP a refused 0.2 once never reached the phone, al-phone 10-05 on v0.53/0.54: the case to watch.)
 describe('the access-list tasks, asked in the version agents serve', () => {
-  it('asks acl/list in 0.3 first, then 0.2, then 0.1, which it remembers', async () => {
+  it('asks acl/list in 0.4 first, then 0.3, 0.2 and 0.1, which it remembers', async () => {
     const { port, sent } = fakeAgent()
     await listAgentDevices(port)
     await listAgentDevices(port)
     const acl = sent.map((s) => s.type).filter((t) => t.includes('/acl/'))
     expect(acl).toEqual([
+      AGENT_DEVICE_TASK.aclList04,
       AGENT_DEVICE_TASK.aclList03,
       AGENT_DEVICE_TASK.aclList02,
       AGENT_DEVICE_TASK.aclList,
@@ -371,9 +377,14 @@ describe('the access-list tasks, asked in the version agents serve', () => {
       },
     })
     await expect(listAgentDevices(port)).rejects.toThrow('not allowed')
-    // 0.3 and 0.2 were refused as unsupported on the way down; 0.1's refusal is the answer, never retried.
+    // 0.4, 0.3 and 0.2 were refused as unsupported on the way down; 0.1's refusal is the answer, never retried.
     const acl = sent.map((s) => s.type).filter((t) => t.includes('/acl/list/'))
-    expect(acl).toEqual([AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList])
+    expect(acl).toEqual([
+      AGENT_DEVICE_TASK.aclList04,
+      AGENT_DEVICE_TASK.aclList03,
+      AGENT_DEVICE_TASK.aclList02,
+      AGENT_DEVICE_TASK.aclList,
+    ])
   })
 })
 

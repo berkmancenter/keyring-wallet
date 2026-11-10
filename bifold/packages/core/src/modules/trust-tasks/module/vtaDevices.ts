@@ -55,11 +55,17 @@ export const AGENT_DEVICE_TASK = {
   // 0.3, asked first: vta-service v0.67.0 serves acl/list only at 0.3 (the same entries as 0.2), and acl/revoke
   // only at 0.2; v0.60.0 to 0d3f268e only at 0.1.
   aclList03: 'https://trusttasks.org/spec/acl/list/0.3',
+  // list 0.4 and revoke 0.3, asked first: from VTI main afc06a431 (2026-11-10) the agent serves only these, with 0.2's
+  // payloads (AclEntry 0.3 adds `purposes`, which neither sends).
+  aclList04: 'https://trusttasks.org/spec/acl/list/0.4',
+  aclRevoke03: 'https://trusttasks.org/spec/acl/revoke/0.3',
 } as const
 
-/** acl/revoke/0.2 needs its narrowing said: a full removal is `{kind: "entry"}` (trust-tasks-tf ce07a039 acl/revoke/0.2). */
+/** acl/revoke/0.2 and 0.3 need their narrowing said: a full removal is `{kind: "entry"}` (trust-tasks-tf acl/revoke). */
 const revokePayload = (uri: string, subject: string) =>
-  uri === AGENT_DEVICE_TASK.aclRevoke02 ? { subject, revocation: { kind: 'entry' } } : { subject }
+  uri === AGENT_DEVICE_TASK.aclRevoke03 || uri === AGENT_DEVICE_TASK.aclRevoke02
+    ? { subject, revocation: { kind: 'entry' } }
+    : { subject }
 
 /** How often a running phone tells its agent it is still here. */
 export const HEARTBEAT_INTERVAL_MS = 5 * 60_000
@@ -153,8 +159,15 @@ function bindingFields(b: Json): Partial<AgentDevice> & Pick<AgentDevice, 'acces
 export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
   const [aclAnswer, rows] = await Promise.all([
     versionsFor(port.managerDid ?? port)
-      .ask('aclList', [AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList], (uri) =>
-        port.task<{ entries?: unknown }>(uri, {})
+      .ask(
+        'aclList',
+        [
+          AGENT_DEVICE_TASK.aclList04,
+          AGENT_DEVICE_TASK.aclList03,
+          AGENT_DEVICE_TASK.aclList02,
+          AGENT_DEVICE_TASK.aclList,
+        ],
+        (uri) => port.task<{ entries?: unknown }>(uri, {})
       )
       .then(({ answer }) => answer),
     deviceBindings(port),
@@ -236,7 +249,7 @@ export async function removeAgentDevice(
   }
   await versionsFor(port.managerDid ?? port).ask(
     'aclRevoke',
-    [AGENT_DEVICE_TASK.aclRevoke02, AGENT_DEVICE_TASK.aclRevoke],
+    [AGENT_DEVICE_TASK.aclRevoke03, AGENT_DEVICE_TASK.aclRevoke02, AGENT_DEVICE_TASK.aclRevoke],
     (uri) => port.task(uri, revokePayload(uri, device.did))
   )
   return { mode: wiped ? 'wiped' : 'revoked' }

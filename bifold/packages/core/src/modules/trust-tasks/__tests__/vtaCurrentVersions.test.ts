@@ -18,7 +18,13 @@ import { PHONE_SENDS } from '../module/approvalRules'
 import { approveResponseTypesFor, STEP_UP_TASK } from '../module/stepUp'
 import { forgetAllVersions } from '../module/taskVersions'
 import { VTA_TASK, VtaClient, vaultPayloadFor } from '../module/VtaClient'
-import { AGENT_DEVICE_TASK, heartbeat, listAgentDevices, renameThisDevice } from '../module/vtaDevices'
+import {
+  AGENT_DEVICE_TASK,
+  heartbeat,
+  listAgentDevices,
+  removeAgentDevice,
+  renameThisDevice,
+} from '../module/vtaDevices'
 import { credentialOfGet, fetchAgentCards, VAULT_GET, VAULT_GET_02 } from '../module/vtiCardVault'
 import { VtiRefusal } from '../module/vtiAgent'
 
@@ -207,16 +213,90 @@ describe('vault/credentials/get: 0.2, then 0.1', () => {
   })
 })
 
-describe('acl: list 0.3, the rest 0.2, then 0.1', () => {
-  it('lists at 0.3 first, and steps down to 0.1 on an agent before v0.67.0', async () => {
+describe('acl: list 0.4, the rest 0.3, then list 0.3 and the rest 0.2, then 0.1', () => {
+  it('lists at 0.4 first, and steps down to 0.1 on an agent before v0.67.0', async () => {
     const vta = client()
     const task = jest
       .spyOn(vta, 'task')
+      .mockRejectedValueOnce(notServed(VTA_TASK.aclList04))
       .mockRejectedValueOnce(notServed(VTA_TASK.aclList03))
       .mockRejectedValueOnce(notServed(VTA_TASK.aclList02))
       .mockResolvedValueOnce({ entries: [], truncated: false })
     await vta.listAcl()
-    expect(typesSent(task)).toEqual([VTA_TASK.aclList03, VTA_TASK.aclList02, VTA_TASK.aclList])
+    expect(typesSent(task)).toEqual([VTA_TASK.aclList04, VTA_TASK.aclList03, VTA_TASK.aclList02, VTA_TASK.aclList])
+  })
+
+  it("reads a 0.4 entry's purposes, and leaves them off a 0.2 entry or a malformed scope", async () => {
+    const vta = client()
+    jest.spyOn(vta, 'task').mockResolvedValueOnce({
+      entries: [
+        { subject: 'did:key:z6MkAny', role: 'admin', purposes: { scope: 'any' } },
+        { subject: 'did:key:z6MkListed', role: 'admin', purposes: { scope: 'listed', purposes: ['taskExecution'] } },
+        { subject: 'did:key:z6MkOld', role: 'admin' },
+        { subject: 'did:key:z6MkEmpty', role: 'admin', purposes: { scope: 'listed', purposes: [] } },
+        { subject: 'did:key:z6MkExtra', role: 'admin', purposes: { scope: 'any', purposes: ['analytics'] } },
+      ],
+    })
+    const entries = await vta.listAcl()
+    expect(entries.map((e) => e.purposes)).toEqual([
+      { scope: 'any' },
+      { scope: 'listed', purposes: ['taskExecution'] },
+      undefined,
+      undefined,
+      undefined,
+    ])
+  })
+
+  it('grants at 0.3 stating the purposes it is given, else any, on top of 0.2 entry', async () => {
+    const vta = client()
+    const task = jest
+      .spyOn(vta, 'task')
+      .mockResolvedValue({ entry: { subject: 'did:key:z6MkNew', role: 'admin', purposes: { scope: 'any' } } })
+    await vta.grantAdmin('did:key:z6MkNew', { label: 'Backup' })
+    await vta.grantAdmin('did:key:z6MkNew', { purposes: { scope: 'listed', purposes: ['taskExecution'] } })
+    expect(typesSent(task)).toEqual([VTA_TASK.aclGrant03, VTA_TASK.aclGrant03])
+    expect(task.mock.calls[0][1]).toEqual({
+      entry: {
+        subject: 'did:key:z6MkNew',
+        role: 'admin',
+        label: 'Backup',
+        act: { scope: 'all' },
+        keys: { scope: 'all' },
+        capabilities: { scope: 'ceiling' },
+        purposes: { scope: 'any' },
+      },
+    })
+    expect((task.mock.calls[1][1] as { entry: { purposes: unknown } }).entry.purposes).toEqual({
+      scope: 'listed',
+      purposes: ['taskExecution'],
+    })
+  })
+
+  it('states no purposes at 0.2, which has no such member (control: an agent from v0.67.0 to v0.79.0)', async () => {
+    const vta = client()
+    const task = jest
+      .spyOn(vta, 'task')
+      .mockRejectedValueOnce(notServed(VTA_TASK.aclGrant03))
+      .mockResolvedValueOnce({ entry: { subject: 'did:key:z6MkNew', role: 'admin' } })
+    await vta.grantAdmin('did:key:z6MkNew', { purposes: { scope: 'any' } })
+    expect(typesSent(task)).toEqual([VTA_TASK.aclGrant03, VTA_TASK.aclGrant02])
+    expect(task.mock.calls[1][1]).toEqual({
+      entry: {
+        subject: 'did:key:z6MkNew',
+        role: 'admin',
+        act: { scope: 'all' },
+        keys: { scope: 'all' },
+        capabilities: { scope: 'ceiling' },
+      },
+    })
+  })
+
+  it("revokes at 0.3 with 0.2's explicit removal, and reads its null entry as removed", async () => {
+    const vta = client()
+    const task = jest.spyOn(vta, 'task').mockResolvedValueOnce({ entry: null })
+    await expect(vta.revokeSubject('did:key:z6MkOld')).resolves.toBeUndefined()
+    expect(typesSent(task)).toEqual([VTA_TASK.aclRevoke03])
+    expect(task.mock.calls[0][1]).toEqual({ subject: 'did:key:z6MkOld', revocation: { kind: 'entry' } })
   })
 
   it('says a 0.3 page with a nextCursor is partial, as 0.1 and 0.2 say it with truncated', async () => {
@@ -226,10 +306,23 @@ describe('acl: list 0.3, the rest 0.2, then 0.1', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('answered a partial access list'))
   })
 
-  it('My devices lists the access list at 0.3 first', async () => {
+  it('My devices lists the access list at 0.4 first', async () => {
     const task = jest.fn(async (type: string) => (type.includes('/acl/') ? { entries: [] } : { devices: [] }))
     await listAgentDevices({ managerDid: 'did:key:z6MkAclList', task: task as never })
-    expect(task.mock.calls.map((c) => c[0]).find((t) => t.includes('/acl/list/'))).toBe(AGENT_DEVICE_TASK.aclList03)
+    expect(task.mock.calls.map((c) => c[0]).find((t) => t.includes('/acl/list/'))).toBe(AGENT_DEVICE_TASK.aclList04)
+  })
+
+  it('My devices removes at revoke 0.3 with the removal said, as at 0.2', async () => {
+    const task = jest.fn(async (_type: string, _payload?: unknown) => ({ entry: null }))
+    await removeAgentDevice({ managerDid: 'did:key:z6MkAclRevoke', task: task as never }, {
+      did: 'did:key:z6MkGone',
+      isThisPhone: false,
+      source: 'aclOnly',
+    } as never)
+    expect(task.mock.calls[0]).toEqual([
+      AGENT_DEVICE_TASK.aclRevoke03,
+      { subject: 'did:key:z6MkGone', revocation: { kind: 'entry' } },
+    ])
   })
 })
 
@@ -240,6 +333,10 @@ describe('the approval rules know every version the phone now sends about itself
     'vault/credentials/get/0.2',
     'policy/upsert/0.3',
     'acl/list/0.3',
+    'acl/list/0.4',
+    'acl/grant/0.3',
+    'acl/revoke/0.3',
+    'acl/update/0.3',
     'auth/step-up/approve-response/0.5',
     'auth/step-up/approve-response/0.7',
     'vta/webvh/dids/create/1.1',

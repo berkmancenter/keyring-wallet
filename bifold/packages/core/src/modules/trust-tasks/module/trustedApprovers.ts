@@ -50,7 +50,11 @@ export const TRUSTED_TASKS = [
     ],
     conditional: false,
   },
-  { key: 'addDevice', taskTypes: [`${SPEC}acl/grant/0.2`, `${SPEC}acl/grant/0.1`], conditional: true },
+  {
+    key: 'addDevice',
+    taskTypes: [`${SPEC}acl/grant/0.3`, `${SPEC}acl/grant/0.2`, `${SPEC}acl/grant/0.1`],
+    conditional: true,
+  },
   {
     key: 'changeApprovers',
     taskTypes: [`${SPEC}policy/upsert/0.3`, `${SPEC}policy/upsert/0.2`],

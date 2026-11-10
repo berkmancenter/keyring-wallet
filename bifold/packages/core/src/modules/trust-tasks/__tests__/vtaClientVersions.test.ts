@@ -149,11 +149,12 @@ describe('reporting the version in use', () => {
 })
 
 describe('the access list, against an agent that serves only 0.1 (v0.52.0 to 0d3f268e)', () => {
-  it('asks list in 0.3, then 0.2, then 0.1, and asks 0.1 straight away the next time', async () => {
+  it('asks list in 0.4, then 0.3, 0.2 and 0.1, and asks 0.1 straight away the next time', async () => {
     const { vta, sent } = agentServing(V01, () => ({ entries: [{ subject: PHONE, role: 'admin' }], truncated: false }))
     await expect(vta.listAcl()).resolves.toEqual([{ subject: PHONE, role: 'admin' }])
     await vta.listAcl()
     expect(sent().map((s) => s.type)).toEqual([
+      VTA_TASK.aclList04,
       VTA_TASK.aclList03,
       VTA_TASK.aclList02,
       VTA_TASK.aclList,
@@ -161,14 +162,18 @@ describe('the access list, against an agent that serves only 0.1 (v0.52.0 to 0d3
     ])
   })
 
-  it('grants in 0.1 with the 0.1 entry, after 0.2 is refused as unsupported', async () => {
+  it('grants in 0.1 with the 0.1 entry, after 0.3 and 0.2 are refused as unsupported', async () => {
     const { vta, sent } = agentServing(V01, (_t, p) => ({ entry: p.entry }))
     await expect(vta.grantAdmin(NEW_PHONE, { label: 'Keyring' })).resolves.toMatchObject({
       subject: NEW_PHONE,
       role: 'admin',
     })
-    expect(sent()[0].type).toBe(VTA_TASK.aclGrant02)
-    expect(sent().slice(1)).toEqual([
+    expect(
+      sent()
+        .slice(0, 2)
+        .map((s) => s.type)
+    ).toEqual([VTA_TASK.aclGrant03, VTA_TASK.aclGrant02])
+    expect(sent().slice(2)).toEqual([
       { type: VTA_TASK.aclGrant, payload: { entry: { subject: NEW_PHONE, role: 'admin', label: 'Keyring' } } },
     ])
   })
@@ -177,7 +182,7 @@ describe('the access list, against an agent that serves only 0.1 (v0.52.0 to 0d3
     const { vta, sent } = agentServing(V01, (_t, p) => ({ entry: { subject: p.subject, role: 'admin' } }))
     await vta.revokeSubject(NEW_PHONE)
     await vta.labelAclEntry(NEW_PHONE, '  Keyring — iPad  ')
-    expect(sent().filter((s) => !s.type.endsWith('/0.2'))).toEqual([
+    expect(sent().filter((s) => !/\/0\.[23]$/.test(s.type))).toEqual([
       { type: VTA_TASK.aclRevoke, payload: { subject: NEW_PHONE } },
       { type: VTA_TASK.aclUpdate, payload: { subject: NEW_PHONE, label: 'Keyring — iPad' } },
     ])
@@ -185,10 +190,11 @@ describe('the access list, against an agent that serves only 0.1 (v0.52.0 to 0d3
 })
 
 describe('the access list, against an agent that serves 0.2 (v0.67.0)', () => {
-  it('grants a full administrator with the authority 0.2 requires, in one message', async () => {
+  it('grants a full administrator with the authority 0.2 requires, in one message once 0.3 is refused', async () => {
     const { vta, sent } = agentServing(V02, (_t, p) => ({ entry: p.entry }))
     await vta.grantAdmin(NEW_PHONE, { label: 'Keyring' })
-    expect(sent()).toEqual([
+    expect(sent()[0].type).toBe(VTA_TASK.aclGrant03)
+    expect(sent().slice(1)).toEqual([
       {
         type: VTA_TASK.aclGrant02,
         payload: {
@@ -210,10 +216,11 @@ describe('the access list, against an agent that serves 0.2 (v0.67.0)', () => {
     })
   })
 
-  it('revokes with an explicit full removal and accepts the null entry 0.2 answers', async () => {
+  it('revokes with an explicit full removal and accepts the null entry 0.2 answers, once 0.3 is refused', async () => {
     const { vta, sent } = agentServing(V02, () => ({ entry: null }))
     await expect(vta.revokeSubject(NEW_PHONE)).resolves.toBeUndefined()
-    expect(sent()).toEqual([
+    expect(sent()[0].type).toBe(VTA_TASK.aclRevoke03)
+    expect(sent().slice(1)).toEqual([
       { type: VTA_TASK.aclRevoke02, payload: { subject: NEW_PHONE, revocation: { kind: 'entry' } } },
     ])
   })

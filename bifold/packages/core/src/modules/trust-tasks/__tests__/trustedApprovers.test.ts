@@ -52,9 +52,16 @@ describe('trusted approvers', () => {
   it('writes only the versions the agent dispatches, when it is known', () => {
     const row = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['addDevice'], [`${SPEC}acl/grant/0.2`])
     expect(row.rules.map((r) => r.taskType)).toEqual([`${SPEC}acl/grant/0.2`])
+    // VTI main 887370a3b dispatches acl/grant only at 0.3: the rule is written there, not for nothing.
+    const main = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['addDevice'], [`${SPEC}acl/grant/0.3`])
+    expect(main.rules.map((r) => r.taskType)).toEqual([`${SPEC}acl/grant/0.3`])
     // Unknown: every listed version.
     const all = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['addDevice'])
-    expect(all.rules.map((r) => r.taskType)).toEqual([`${SPEC}acl/grant/0.2`, `${SPEC}acl/grant/0.1`])
+    expect(all.rules.map((r) => r.taskType)).toEqual([
+      `${SPEC}acl/grant/0.3`,
+      `${SPEC}acl/grant/0.2`,
+      `${SPEC}acl/grant/0.1`,
+    ])
   })
 
   it('replaces its own rules rather than adding to them, and keeps each approver once', () => {

@@ -176,6 +176,13 @@ export const VTA_TASK = {
   aclUpdate02: 'https://trusttasks.org/spec/acl/update/0.2',
   /** 0.3 (vta-service #2324, in v0.67.0): 0.2's entries; `pageSize` is `limit`, `cursor`/`truncated` are `nextCursor`. */
   aclList03: 'https://trusttasks.org/spec/acl/list/0.3',
+  // grant/revoke/update 0.3 and list 0.4 (VTI main afc06a431, 2026-11-10; what the Farm and testers' agents run from
+  // that day): 0.2's payloads and list 0.3's, over AclEntry 0.3, which adds one REQUIRED member, `purposes`
+  // (trust-tasks-tf specs/acl/_shared/0.3). An agent from afc06a431 serves no older version of these.
+  aclList04: 'https://trusttasks.org/spec/acl/list/0.4',
+  aclGrant03: 'https://trusttasks.org/spec/acl/grant/0.3',
+  aclRevoke03: 'https://trusttasks.org/spec/acl/revoke/0.3',
+  aclUpdate03: 'https://trusttasks.org/spec/acl/update/0.3',
   // Only "Send me a test request" sends these (approvalRules.ts TEST_REQUEST_TASKS).
   contextsDelete: 'https://trusttasks.org/spec/vta/contexts/delete/1.0',
   /** 1.1 (trust-tasks-tf #967, vta-service 1afebe27): 1.0's payload plus `abandonHostCopies`, default false. */
@@ -214,10 +221,12 @@ export const VTA_TASK_VERSIONS = {
   // and v0.67.0 (#2323, #2324) only acl/{grant,revoke,update}/0.2 and acl/list/0.3. So one of them steps down on a
   // refusal whichever is asked first. That needs the refusal to reach the phone: over TSP a refused 0.2 once did
   // not (al-phone, 10-05), so a TSP-only agent before v0.67.0 is the case to watch.
-  aclList: [VTA_TASK.aclList03, VTA_TASK.aclList02, VTA_TASK.aclList],
-  aclGrant: [VTA_TASK.aclGrant02, VTA_TASK.aclGrant],
-  aclRevoke: [VTA_TASK.aclRevoke02, VTA_TASK.aclRevoke],
-  aclUpdate: [VTA_TASK.aclUpdate02, VTA_TASK.aclUpdate],
+  // From VTI main afc06a431 (2026-11-10) an agent serves only acl/list/0.4 and grant/revoke/update 0.3, while every
+  // tagged vta-service to v0.79.0 serves none of them: so the older rungs stay, and agents before it step down once.
+  aclList: [VTA_TASK.aclList04, VTA_TASK.aclList03, VTA_TASK.aclList02, VTA_TASK.aclList],
+  aclGrant: [VTA_TASK.aclGrant03, VTA_TASK.aclGrant02, VTA_TASK.aclGrant],
+  aclRevoke: [VTA_TASK.aclRevoke03, VTA_TASK.aclRevoke02, VTA_TASK.aclRevoke],
+  aclUpdate: [VTA_TASK.aclUpdate03, VTA_TASK.aclUpdate02, VTA_TASK.aclUpdate],
   // 0.2 first. The agents in use share no version: vta-service v0.60.0 to v0.66.0 serve only 0.1, and from
   // 0d3f268e (2026-10-28, #2313, what first.openvtc.net runs) only 0.2. So one of them steps down on a refusal
   // whichever is asked first, and 0.2 is where agents are going. This client sends only 0.1's members, which are a
@@ -301,8 +310,31 @@ export function vaultPayloadFor<P extends Record<string, unknown>>(uri: string, 
   return out as P
 }
 
-/** Is this one of the 0.2 access-list URIs, or acl/list/0.3 (the same entries; a revoke may answer `entry: null`)? */
-const isAcl02 = (uri: string) => /\/acl\/[a-z-]+\/0\.2$|\/acl\/list\/0\.3$/.test(uri)
+/**
+ * Is this an access-list URI in 0.2's shape: a 0.2 or 0.3 one, or acl/list/0.3 or 0.4 (the same entries; a revoke may
+ * answer `entry: null`)? 0.3 is 0.2 with `purposes` on the entry, which only a grant has to state.
+ */
+const isAcl02 = (uri: string) => /\/acl\/[a-z-]+\/0\.[23]$|\/acl\/list\/0\.4$/.test(uri)
+
+/** What an AclEntry 0.3 subject may use the content it reads for (trust-tasks-tf specs/acl/_shared/0.3 PurposeScope). */
+export type AclPurposes = { scope: 'any' } | { scope: 'listed'; purposes: string[] }
+
+/** An entry's `purposes`, read strictly: either shape exactly, or nothing (0.1 and 0.2 entries carry none). */
+function purposesFrom(value: unknown): { purposes?: AclPurposes } {
+  if (!value || typeof value !== 'object') return {}
+  const raw = value as Record<string, unknown>
+  if (raw.scope === 'any' && Object.keys(raw).length === 1) return { purposes: { scope: 'any' } }
+  const listed = raw.purposes
+  if (
+    raw.scope === 'listed' &&
+    Object.keys(raw).length === 2 &&
+    Array.isArray(listed) &&
+    listed.length > 0 &&
+    listed.every((p) => typeof p === 'string')
+  )
+    return { purposes: { scope: 'listed', purposes: [...(listed as string[])] } }
+  return {}
+}
 
 /**
  * A full administrator's authority as an `acl/_shared/0.2` entry spells it:
@@ -384,6 +416,8 @@ export interface VtaAclEntry {
   label?: string
   /** RFC 3339; absent means the row never expires. */
   expiresAt?: string
+  /** AclEntry 0.3's purpose scope; absent on a 0.1 or 0.2 entry, which grants every purpose but `modelTraining`. */
+  purposes?: AclPurposes
   createdAt?: string
   createdBy?: string
   /**
@@ -522,6 +556,7 @@ function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
     ...capabilityScopeFrom(raw),
     ...text('label'),
     ...text('expiresAt'),
+    ...purposesFrom(raw.purposes),
     ...text('createdAt'),
     ...text('createdBy'),
   }
@@ -2128,7 +2163,10 @@ export class VtaClient {
    * entry that expires no later than its own (VTI-ACL-053, vta-service
    * operations/acl.rs:388-403).
    */
-  async grantAdmin(did: string, options: { label?: string; expiresAt?: string } = {}): Promise<VtaAclEntry> {
+  async grantAdmin(
+    did: string,
+    options: { label?: string; expiresAt?: string; purposes?: AclPurposes } = {}
+  ): Promise<VtaAclEntry> {
     const label = options.label?.trim().slice(0, ACL_LABEL_MAX)
     const { uri, answer } = await this.versions.ask('aclGrant', VTA_TASK_VERSIONS.aclGrant, (type) =>
       this.task(type, {
@@ -2138,6 +2176,9 @@ export class VtaClient {
           ...(label ? { label } : {}),
           ...(options.expiresAt ? { expiresAt: options.expiresAt } : {}),
           ...(isAcl02(type) ? FULL_ADMIN_AUTHORITY_02 : {}),
+          // 0.3 REQUIRES the purposes, and an entry may state only purposes its writer's own entry grants (VTI-ACL-107):
+          // the caller passes this phone's own, else `any`, which every entry rewritten at afc06a431's boot holds.
+          ...(type === VTA_TASK.aclGrant03 ? { purposes: options.purposes ?? { scope: 'any' } } : {}),
         },
       })
     )

@@ -632,6 +632,28 @@ describe('adding a backup device', () => {
     expect(mockVta.acl.get(BACKUP)).toMatchObject({ role: 'admin' })
   })
 
+  // VTI main afc06a431: AclEntry 0.3 states `purposes`, and an entry may state only what its writer's own entry grants
+  // (VTI-ACL-107). The new device is given this phone's own, read from the same list as its expiry.
+  it.each([
+    ['states the purposes this phone holds', { scope: 'listed', purposes: ['taskExecution'] }],
+    ["states none when this phone's entry has none (a 0.1 or 0.2 agent; control)", undefined],
+  ])('%s', async (_name, purposes) => {
+    const { vta } = await linkedPhone({ confirmOwner: confirmed() })
+    const own = { subject: PHONE, role: 'admin', ...(purposes ? { purposes } : {}) }
+    const list = jest.spyOn(VtaClient.prototype, 'listAcl').mockResolvedValue([own as never])
+    const grant = jest
+      .spyOn(VtaClient.prototype, 'grantAdmin')
+      .mockResolvedValue({ subject: BACKUP, role: 'admin', label: 'Pixel 8' })
+    try {
+      await vta.addBackupDevice(agent, BACKUP, 'Pixel 8')
+      expect(grant).toHaveBeenCalledTimes(1)
+      expect(grant.mock.calls[0]).toEqual([BACKUP, { label: 'Pixel 8', ...(purposes ? { purposes } : {}) }])
+    } finally {
+      list.mockRestore()
+      grant.mockRestore()
+    }
+  })
+
   // IN-53 (226, a Farm-hosted agent): the session to the agent never came back,
   // and "Add as backup" spun for minutes with nothing listed. Past its deadline
   // the add gives up in words the screen already has ("didn't answer").

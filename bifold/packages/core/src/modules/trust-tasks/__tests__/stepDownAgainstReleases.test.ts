@@ -102,6 +102,20 @@ const V0D3F = {
   edge: V0_67.edge,
 }
 
+/**
+ * VTI main 887370a3b (untagged; the Farm, testers' own agents and First VTC run it from 2026-11-10, IN-648): acl/* only
+ * at list 0.4 and grant/revoke/update 0.3 (afc06a431, "ACL tasks 0.2 no longer served"; vta-sdk trust_tasks.rs
+ * ALL_URIS). Only the acl families are modelled at this commit: the rest are held as v0.68.0's and not asserted here.
+ */
+const MAIN_887370A3B: Model = {
+  table: [
+    ...V0_68.table.filter((u) => !u.includes('/acl/')),
+    `${SPEC}acl/list/0.4`,
+    ...['grant', 'revoke', 'update'].map((f) => `${SPEC}acl/${f}/0.3`),
+  ],
+  edge: [],
+}
+
 const familyOf = (uri: string) => uri.slice(0, uri.lastIndexOf('/') + 1)
 
 /** An agent as the model says; `asked` records every URI sent, in order. */
@@ -127,18 +141,23 @@ const LADDERS: Record<string, readonly string[]> = {
   ...VTA_TASK_VERSIONS,
   deviceList: [AGENT_DEVICE_TASK.list03, AGENT_DEVICE_TASK.list],
   deviceHeartbeat: [AGENT_DEVICE_TASK.heartbeat03, AGENT_DEVICE_TASK.heartbeat],
-  deviceAclList: [AGENT_DEVICE_TASK.aclList03, AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList],
-  deviceAclRevoke: [AGENT_DEVICE_TASK.aclRevoke02, AGENT_DEVICE_TASK.aclRevoke],
+  deviceAclList: [
+    AGENT_DEVICE_TASK.aclList04,
+    AGENT_DEVICE_TASK.aclList03,
+    AGENT_DEVICE_TASK.aclList02,
+    AGENT_DEVICE_TASK.aclList,
+  ],
+  deviceAclRevoke: [AGENT_DEVICE_TASK.aclRevoke03, AGENT_DEVICE_TASK.aclRevoke02, AGENT_DEVICE_TASK.aclRevoke],
   vaultCredentialsGet: [VAULT_GET_02, VAULT_GET],
   ...Object.fromEntries(STEP_UP_REQUEST_TYPES.map((t) => [`stepUpResponse:${t}`, approveResponseTypesFor(t)])),
 }
 
 /** What each ladder asks of a v0.65.0 agent, in order. The last is the one answered. */
 const ASKS_0_65: Record<string, string[]> = {
-  aclList: ['acl/list/0.3', 'acl/list/0.2', 'acl/list/0.1'],
-  aclGrant: ['acl/grant/0.2', 'acl/grant/0.1'],
-  aclRevoke: ['acl/revoke/0.2', 'acl/revoke/0.1'],
-  aclUpdate: ['acl/update/0.2', 'acl/update/0.1'],
+  aclList: ['acl/list/0.4', 'acl/list/0.3', 'acl/list/0.2', 'acl/list/0.1'],
+  aclGrant: ['acl/grant/0.3', 'acl/grant/0.2', 'acl/grant/0.1'],
+  aclRevoke: ['acl/revoke/0.3', 'acl/revoke/0.2', 'acl/revoke/0.1'],
+  aclUpdate: ['acl/update/0.3', 'acl/update/0.2', 'acl/update/0.1'],
   consentDecision: ['task-consent/decision/0.2', 'task-consent/decision/0.1'],
   vaultSignTrustTask: ['vault/sign-trust-task/0.2'],
   // 0.3 at the edge, as 275 sends today; before the fix the refusal's "0.1" took it straight to 0.1.
@@ -150,8 +169,8 @@ const ASKS_0_65: Record<string, string[]> = {
   // The gate's failure: before the fix, ['device/list/0.3'] and then the refusal.
   deviceList: ['device/list/0.3', 'device/list/0.2'],
   deviceHeartbeat: ['device/heartbeat/0.3', 'device/heartbeat/0.2'],
-  deviceAclList: ['acl/list/0.3', 'acl/list/0.2', 'acl/list/0.1'],
-  deviceAclRevoke: ['acl/revoke/0.2', 'acl/revoke/0.1'],
+  deviceAclList: ['acl/list/0.4', 'acl/list/0.3', 'acl/list/0.2', 'acl/list/0.1'],
+  deviceAclRevoke: ['acl/revoke/0.3', 'acl/revoke/0.2', 'acl/revoke/0.1'],
   vaultCredentialsGet: ['vault/credentials/get/0.2', 'vault/credentials/get/0.1'],
   contextsDelete: ['vta/contexts/delete/1.1', 'vta/contexts/delete/1.0'],
 }
@@ -206,12 +225,26 @@ describe('every ladder against a v0.65.0 agent (v0.60.0 to v0.66.0)', () => {
   })
 })
 
+/** The access-list ladders, which ask VTI main's acl versions first (afc06a431) and so step down once on a tag. */
+const ACL_FAMILIES = Object.keys(ASKS_0_65).filter((f) => LADDERS[f][0].includes('/acl/'))
+const NOT_ACL = Object.keys(ASKS_0_65).filter((f) => !ACL_FAMILIES.includes(f))
+
 describe('the same ladders against v0.68.0', () => {
-  it.each(Object.keys(ASKS_0_65))('%s is answered at its first ask by v0.68.0', async (family) => {
+  it.each(NOT_ACL)('%s is answered at its first ask by v0.68.0', async (family) => {
     const { asked, answer } = agent(V0_68)
     await new TaskVersions().ask(family, LADDERS[family], answer)
     expect(asked).toEqual([LADDERS[family][0]])
   })
+
+  it.each(ACL_FAMILIES)(
+    '%s steps down once on v0.68.0 (to v0.79.0), to the version it was asked in before',
+    async (family) => {
+      const { asked, answer } = agent(V0_68)
+      const { uri } = await new TaskVersions().ask(family, LADDERS[family], answer)
+      expect(asked).toEqual([LADDERS[family][0], LADDERS[family][1]])
+      expect(uri).toBe(LADDERS[family][1])
+    }
+  )
 
   it('a step-up to the approve-request it mints (0.5) is answered at the first ask, in approve-response 0.7', async () => {
     const family = `stepUpResponse:${STEP_UP_TASK.approveRequest05}`
@@ -222,10 +255,16 @@ describe('the same ladders against v0.68.0', () => {
 })
 
 describe('the same ladders against v0.67.0 and 0d3f268e', () => {
-  it.each(Object.keys(ASKS_0_65))('%s is answered at its first ask by v0.67.0', async (family) => {
+  it.each(NOT_ACL)('%s is answered at its first ask by v0.67.0', async (family) => {
     const { asked, answer } = agent(V0_67)
     await new TaskVersions().ask(family, LADDERS[family], answer)
     expect(asked).toEqual([LADDERS[family][0]])
+  })
+
+  it.each(ACL_FAMILIES)('%s steps down once on v0.67.0', async (family) => {
+    const { asked, answer } = agent(V0_67)
+    await new TaskVersions().ask(family, LADDERS[family], answer)
+    expect(asked).toEqual([LADDERS[family][0], LADDERS[family][1]])
   })
 
   it('0d3f268e: acl/* still steps down to 0.1 and contexts/delete to 1.0, everything else is answered first', async () => {
@@ -291,7 +330,7 @@ describe('My devices and the heartbeat, through the module, on a v0.65.0 agent',
     const { asked, port: p } = port(V0_65)
     await expect(listAgentDevices(p)).resolves.toEqual(expect.any(Array))
     expect(short(asked).sort()).toEqual(
-      ['acl/list/0.3', 'acl/list/0.2', 'acl/list/0.1', 'device/list/0.3', 'device/list/0.2'].sort()
+      ['acl/list/0.4', 'acl/list/0.3', 'acl/list/0.2', 'acl/list/0.1', 'device/list/0.3', 'device/list/0.2'].sort()
     )
   })
 
@@ -300,4 +339,29 @@ describe('My devices and the heartbeat, through the module, on a v0.65.0 agent',
     await heartbeat(p)
     expect(short(asked)).toEqual(['device/heartbeat/0.3', 'device/heartbeat/0.2'])
   })
+})
+
+describe('the access-list ladders against VTI main 887370a3b, which serves acl/* only at list 0.4 and the rest 0.3', () => {
+  it('names the six access-list ladders', () => {
+    expect(ACL_FAMILIES.sort()).toEqual(
+      ['aclGrant', 'aclList', 'aclRevoke', 'aclUpdate', 'deviceAclList', 'deviceAclRevoke'].sort()
+    )
+  })
+
+  it.each(ACL_FAMILIES)('%s is answered at its first ask', async (family) => {
+    const { asked, answer } = agent(MAIN_887370A3B)
+    const { uri } = await new TaskVersions().ask(family, LADDERS[family], answer)
+    expect(asked).toEqual([LADDERS[family][0]])
+    expect(uri).toMatch(/\/acl\/(list\/0\.4|(grant|revoke|update)\/0\.3)$/)
+  })
+
+  it.each(ACL_FAMILIES)(
+    '%s without its new rung is refused at every version it asks (the break testers hit, control)',
+    async (family) => {
+      const { asked, answer } = agent(MAIN_887370A3B)
+      const before = LADDERS[family].slice(1)
+      await expect(new TaskVersions().ask(family, before, answer)).rejects.toMatchObject({ code: 'unsupportedVersion' })
+      expect(asked).toEqual(before)
+    }
+  )
 })

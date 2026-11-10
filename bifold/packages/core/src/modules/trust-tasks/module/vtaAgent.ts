@@ -2487,7 +2487,13 @@ export class VtaAgentController {
         .listAcl()
         .then((entries) => entries.find((e) => mine.includes(e.subject)))
         .catch(() => undefined)
-      const grant = (expiresAt?: string) => client.grantAdmin(did, { label, ...(expiresAt ? { expiresAt } : {}) })
+      // The new device gets this phone's own purposes, which is the most it may be given (VTI-ACL-107).
+      const grant = (expiresAt?: string) =>
+        client.grantAdmin(did, {
+          label,
+          ...(expiresAt ? { expiresAt } : {}),
+          ...(own?.purposes ? { purposes: own.purposes } : {}),
+        })
       const entry = await grant(own?.expiresAt)
         .catch((error: unknown) => {
           const expiresAt = own?.expiresAt ? undefined : ownExpiryFromRefusal(error)
