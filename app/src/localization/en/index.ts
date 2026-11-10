@@ -202,7 +202,7 @@ const translation = {
     "EnableDidCommV2": "Enable DIDComm v2 (experimental)",
     "EnableSharedConnect": "Connect from a shared code (experimental)",
     "EnableSharedConnectInvite": "Show a code for others to scan (experimental; needs the switch above)",
-    "EnableTrustedApprovers": "Trusted approvers: someone you trust approves for you (experimental)",
+    "EnableTrustedApprovers": "Trusted approvers: someone you trust approves for you (experimental). Turn it on on both phones: while it's off, requests to be an approver are ignored.",
     "EnableLivePickup": "Live message pickup (WebSocket)",
     "Mediator": "Mediator",
     "CopyValue": "Copy",
