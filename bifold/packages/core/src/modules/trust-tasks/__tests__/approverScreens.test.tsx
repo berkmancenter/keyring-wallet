@@ -624,6 +624,19 @@ describe('who a held task waits on', () => {
     expect(tree.getByTestId(id(ApproverWaitNoteIds.open))).toBeTruthy()
   })
 
+  test("while held, it shows the request's code to read out to them; with no code, no code line (control)", async () => {
+    agentState({ awaitingConsentFor: PERSONA_MINT, awaitingConsentCode: '1c6d66' })
+    jest.spyOn(approverRole, 'approversWaitedOn').mockResolvedValue(['Jordan'])
+    const tree = await show(<ApproverWaitNote />)
+    expect(tree.getByTestId(id(ApproverWaitNoteIds.code))).toHaveTextContent(/Approver\.WaitCode/)
+    expect(tree.getByTestId(id(ApproverWaitNoteIds.code))).toHaveTextContent(/1c6d66/)
+    tree.unmount()
+    agentState({ awaitingConsentFor: PERSONA_MINT, awaitingConsentCode: undefined })
+    const none = await show(<ApproverWaitNote />)
+    expect(none.getByTestId(id(ApproverWaitNoteIds.waiting))).toBeTruthy()
+    expect(none.queryByTestId(id(ApproverWaitNoteIds.code))).toBeNull()
+  })
+
   test('a hold no approver of theirs covers shows nothing (control: the one above)', async () => {
     agentState({ awaitingConsentFor: PERSONA_MINT })
     jest.spyOn(approverRole, 'approversWaitedOn').mockResolvedValue([])

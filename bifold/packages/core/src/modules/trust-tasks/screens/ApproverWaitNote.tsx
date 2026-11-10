@@ -34,6 +34,7 @@ export const ApproverWaitNoteIds = {
   approved: 'ApproverApproved',
   notGiven: 'ApproverNotGiven',
   notGivenAction: 'ApproverNotGivenAction',
+  code: 'ApproverWaitCode',
 } as const
 
 /** How long "Approved by …" stays after the agent's notice. */
@@ -46,6 +47,11 @@ const ApproverWaitNote: React.FC = () => {
   const { agent } = useAgent()
   const { ColorPalette } = useTheme()
   const held = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().awaitingConsentFor)
+  // One code, for the one task named beside it. "Their screen shows the same one" is true only because at most one
+  // hold is pending at a time: VtaClient.task throws before onConsentPending when waitForConsent is false (every rooms
+  // task), and a waiting task holds the serial queue. Whoever lets a second waiting task run beside it (a
+  // waitForConsent: true outside that queue) makes this line false without any test failing; look here first.
+  const heldCode = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().awaitingConsentCode)
   const granted = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().consentGranted)
   const notGiven = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().consentNotGiven)
   const on = isTrustedApproversEnabled()
@@ -91,6 +97,7 @@ const ApproverWaitNote: React.FC = () => {
   const styles = StyleSheet.create({
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 6 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
+    code: { fontFamily: 'Menlo', letterSpacing: 2 },
   })
   const words = { names: who.join(t('Approver.NamesOr')), interpolation: { escapeValue: false } }
 
@@ -102,6 +109,16 @@ const ApproverWaitNote: React.FC = () => {
         <ThemedText style={styles.muted} testID={testIdWithKey(ApproverWaitNoteIds.open)}>
           {t('Approver.WaitMayNeedOpen', words)}
         </ThemedText>
+        {/* The code their card shows for this request (mock frame 5b), to read out if they ask. It says which request
+            this is, not who started it. */}
+        {heldCode ? (
+          <ThemedText testID={testIdWithKey(ApproverWaitNoteIds.code)}>
+            {t('Approver.WaitCode', words)}{' '}
+            <ThemedText variant="bold" style={styles.code} selectable>
+              {heldCode}
+            </ThemedText>
+          </ThemedText>
+        ) : null}
       </View>
     )
   }

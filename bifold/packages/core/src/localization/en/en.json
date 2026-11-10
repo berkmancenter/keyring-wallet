@@ -1128,7 +1128,7 @@
     "ForAgentTaskDoes": "{{asker}}'s agent didn't describe it. This task would {{action}}.",
     "ForAgentApproveIf": "Approve only if you know {{asker}} meant to do this.",
     "ForAgentOutcomeUnknown": "Keyring can't tell what this would do. Approve only if you know {{asker}} meant to do it.",
-    "ForAgentMatchCode": "This request's code:"
+    "ForAgentMatchCode": "{{asker}}'s phone shows the same code:"
   },
   "TabStack": {
     "Messages": "Message",
@@ -3683,6 +3683,7 @@
     "WaitingFor": "Waiting for {{names}}",
     "WaitHolding": "Your agent is holding this until {{names}} says yes.",
     "WaitMayNeedOpen": "{{names}}'s phone may not buzz. If not, {{names}} needs to open Keyring to answer.",
+    "WaitCode": "If {{names}} asks, read out this code. Their screen shows the same one:",
     "NamesOr": " or ",
     "ApprovedBy": "Approved by {{names}}",
     "NotGivenBy": "{{names}} didn't approve",

@@ -157,6 +157,12 @@ export interface VtaAgentState {
   /** A task of ours the VTA is holding for someone else's consent. */
   awaitingConsentFor?: string
   /**
+   * The comparison code of the request {@link awaitingConsentFor} waits on, derived as an approver's card derives it
+   * (consentCheck `consentMatchCode`), so the person can read it to their approver. It says which request, not who
+   * started it. Cleared with awaitingConsentFor.
+   */
+  awaitingConsentCode?: string
+  /**
    * The last task of ours the agent said someone approved (its `task-consent/granted` notice), and when: the hold
    * {@link awaitingConsentFor} named, released. Only a yes is told this way; a no or a lapse is not told at all.
    */
@@ -868,10 +874,19 @@ export class VtaAgentController {
         }
       },
       onInbound: (plaintext) => this.inbound(plaintext),
-      onConsentPending: ({ taskType }) =>
-        this.set({ awaitingConsentFor: taskType, consentGranted: undefined, consentNotGiven: undefined }),
+      onConsentPending: ({ taskType, payloadDigest }) =>
+        this.set({
+          awaitingConsentFor: taskType,
+          awaitingConsentCode: consentMatchCode(payloadDigest),
+          consentGranted: undefined,
+          consentNotGiven: undefined,
+        }),
       onConsentNotGiven: ({ taskType }) =>
-        this.set({ awaitingConsentFor: undefined, consentNotGiven: { taskType, at: Date.now() } }),
+        this.set({
+          awaitingConsentFor: undefined,
+          awaitingConsentCode: undefined,
+          consentNotGiven: { taskType, at: Date.now() },
+        }),
       onStepUp: (request, context) => this.askStepUp(request, context),
       onRepliesStalled: (stalled) => {
         if (this.current?.client === client) this.set({ repliesStalled: stalled })
@@ -1066,6 +1081,7 @@ export class VtaAgentController {
       managerDid: undefined,
       approvals: [],
       awaitingConsentFor: undefined,
+      awaitingConsentCode: undefined,
       consentGranted: undefined,
       consentNotGiven: undefined,
       error: undefined,
@@ -1503,6 +1519,7 @@ export class VtaAgentController {
       managerDid: undefined,
       approvals: [],
       awaitingConsentFor: undefined,
+      awaitingConsentCode: undefined,
       consentGranted: undefined,
       consentNotGiven: undefined,
       wakeBlockedByRule: undefined,
@@ -1978,10 +1995,10 @@ export class VtaAgentController {
       try {
         await client.rotateManagerKey()
         // An approval rule held the swap and then let it through: no longer waiting (UX-240-a).
-        this.set({ awaitingConsentFor: undefined })
+        this.set({ awaitingConsentFor: undefined, awaitingConsentCode: undefined })
       } catch (error) {
         // Held, refused or lost: the screen stops saying it waits for an approval.
-        this.set({ awaitingConsentFor: undefined })
+        this.set({ awaitingConsentFor: undefined, awaitingConsentCode: undefined })
         // Swapped, but the new key's sign-in failed: linked, and it reconnects (below).
         const swapDone = error instanceof SwapDoneSignInFailed
         if (!swapDone && !(await this.swapStillOpen(error, identities, vtaDid))) {
@@ -3559,6 +3576,7 @@ export class VtaAgentController {
       const taskType = this.state.awaitingConsentFor
       this.set({
         awaitingConsentFor: undefined,
+        awaitingConsentCode: undefined,
         consentNotGiven: undefined,
         ...(taskType ? { consentGranted: { taskType, at: Date.now() } } : {}),
       })

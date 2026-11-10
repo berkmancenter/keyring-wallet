@@ -1066,7 +1066,7 @@
     "ForAgentTaskDoes": "L'agent de {{asker}} ne l'a pas décrit. Cette tâche consisterait à {{action}}.",
     "ForAgentApproveIf": "N'approuvez que si vous savez que {{asker}} voulait le faire.",
     "ForAgentOutcomeUnknown": "Keyring ne peut pas dire ce que cela ferait. N'approuvez que si vous savez que {{asker}} voulait le faire.",
-    "ForAgentMatchCode": "Le code de cette demande :"
+    "ForAgentMatchCode": "Le téléphone de {{asker}} affiche le même code :"
   },
   "TabStack": {
     "Messages": "Messages",
@@ -3641,6 +3641,7 @@
     "WaitingFor": "En attente de {{names}}",
     "WaitHolding": "Votre agent retient ceci jusqu’à ce que {{names}} dise oui.",
     "WaitMayNeedOpen": "Le téléphone de {{names}} ne sonnera peut-être pas. Sinon, {{names}} doit ouvrir Keyring pour répondre.",
+    "WaitCode": "Si {{names}} vous le demande, lisez ce code. Son écran affiche le même :",
     "NamesOr": " ou ",
     "ApprovedBy": "Approuvé par {{names}}",
     "NotGivenBy": "{{names}} n'a pas approuvé",

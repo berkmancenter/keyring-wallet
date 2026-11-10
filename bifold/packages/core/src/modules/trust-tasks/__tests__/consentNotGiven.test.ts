@@ -7,6 +7,7 @@
  * apart, and the wait goes on as before.
  */
 import { VtaClient, consentNotGiven, consentPendingOf } from '../module/VtaClient'
+import { consentMatchCode } from '../module/consentCheck'
 import { VtaAgentController } from '../module/vtaAgent'
 import { deviceRefusalOf } from '../module/vtaOwner'
 import { VtiRefusal } from '../module/vtiAgent'
@@ -133,6 +134,22 @@ describe("what Sam's phone keeps", () => {
     expect(state.awaitingConsentFor).toBeUndefined()
     expect(state.consentNotGiven?.taskType).toBe(PERSONA_MINT)
     expect(state.consentNotGiven?.at).toBeGreaterThanOrEqual(before)
+  })
+
+  it("keeps the held request's code, derived as an approver's card derives it, and drops it when the hold ends", () => {
+    // Sam reads it to Jordan (mock frame 5b); one function makes both screens' codes, so they cannot differ.
+    const digest = 'zQmf5rfwvL4jQpuZwstydtxnz83Be8ZjvVCpVRavEnd1aCJ'
+    const vta = new VtaAgentController()
+    const o = options(vta)
+    o.onConsentPending({ taskType: PERSONA_MINT, payloadDigest: digest })
+    expect(vta.getState().awaitingConsentCode).toBe(consentMatchCode(digest))
+    expect(vta.getState().awaitingConsentCode).toMatch(/^[0-9a-f]{6}$/)
+    o.onConsentNotGiven({ taskType: PERSONA_MINT })
+    expect(vta.getState().awaitingConsentCode).toBeUndefined()
+    // A hold with no digest has no code (control).
+    o.onConsentPending({ taskType: PERSONA_MINT })
+    expect(vta.getState().awaitingConsentFor).toBe(PERSONA_MINT)
+    expect(vta.getState().awaitingConsentCode).toBeUndefined()
   })
 
   it('the next hold clears it (control: the one above)', () => {

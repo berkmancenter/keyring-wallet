@@ -52,10 +52,9 @@ export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) =>
   const action = outcome.from === 'unknown' && approval.taskType ? taskWords(approval.taskType, t) : undefined
   const subject = readableSubject(approval.subject)
   // Asked by someone else's agent (trusted approvers, T2): the words are about that person and their agent, never
-  // "your agent" or "you started this" (lab run, 11-10). The code is labelled as the request's own and carries no
-  // comparison instruction: no screen of the asker's shows it yet. Do not reach for the "both screens must show the
-  // same one" wording here until it does. The mocks (frame 5b) mean the asking phone to show the same code, so the
-  // two people can compare it out of band; that half is on the asking side (ApproverWaitNote).
+  // "your agent" or "you started this" (lab run, 11-10). The asking phone's waiting note shows the same code
+  // (ApproverWaitNote, mock frame 5b), so the two people can compare it out of band: the code says which request this
+  // is, not who started it.
   const asker = approval.forAgent ? approval.forAgent.asker || t('Approver.UnnamedContact') : undefined
   const forWords = { asker, interpolation: { escapeValue: false } }
   return (
