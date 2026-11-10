@@ -372,7 +372,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       test_builds: r.testBuilds ?? '', gate_smoke: r.gateSmoke ?? '', screens: JSON.stringify(r.screens ?? []),
     }
     // The screen check's handoff (the owner's pipeline: a quick simulator check of each changed screen after release).
-    writeFileSync('post-release-handoff.json', JSON.stringify({ sha: r.sha, ref: r.ref, bundles: r.bundles, sources: r.sources ?? {}, since: r.since, screens: r.screens ?? [], verdict: r.verdict, testBuilds: r.testBuilds, gateSmoke: r.gateSmoke }, null, 2))
+    // brake-watchdog.mjs reads its verdict, bundles, platforms and gateSmoke too: the brake's second path.
+    writeFileSync('post-release-handoff.json', JSON.stringify({ sha: r.sha, ref: r.ref, bundles: r.bundles, platforms: r.platforms ?? [], sources: r.sources ?? {}, since: r.since, screens: r.screens ?? [], verdict: r.verdict, testBuilds: r.testBuilds, gateSmoke: r.gateSmoke }, null, 2))
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(out).map(([k, v]) => `${k}=${v}\n`).join(''))
     if (process.env.GITHUB_STEP_SUMMARY) {
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, [

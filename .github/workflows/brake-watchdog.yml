@@ -1,0 +1,89 @@
+name: Brake watchdog
+
+# The brake's second path (scripts/ota/brake-watchdog.mjs says why). On 11-09 (278.9) a post-release run ended
+# smoke-red and GitHub never created its Brake job, so the release stayed live and nothing said so. This runs as its own
+# run after every post-release run completes, by which time that run's Brake job (if GitHub made one) has finished. It
+# brakes only when the verdict is smoke-red and no Brake job ran; when the Brake job ran and failed, or the verdict is
+# unreadable, it goes red and says so, and never brakes on that. WITHDRAW ONLY, exactly as the Brake job: the update
+# server's token, never the signing key, and nothing but scripts/ota/brake.mjs (rerun, then withdraw). brake-watchdog
+# .test.mjs holds it to that, and to the Brake job's own steps.
+
+run-name: Brake watchdog · ${{ github.event.workflow_run.display_title }}
+
+on:
+  workflow_run:
+    # post-release.yml's name, exactly: brake-watchdog.test.mjs reads it from that file.
+    workflows: ["Post-release smoke"]
+    types: [completed]
+
+permissions:
+  contents: read
+  # Reading the post-release run, its jobs and its handoff artifact; the brake's one re-run of the red smoke.
+  actions: write
+
+concurrency:
+  group: brake-watchdog-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  # ONE job, deliberately: a second job that needs this one is the very shape GitHub failed to create on 11-09.
+  watchdog:
+    name: Brake watchdog · ${{ github.event.workflow_run.head_branch }}
+    # A smoke-red post-release run always fails (post-release.mjs exits 2 on any verdict but none or green), so a green
+    # or skipped run has nothing to brake, and is not read: no ota deployment for every green release and dry run.
+    # brake-watchdog.test.mjs holds post-release.mjs's exit code to that.
+    if: ${{ !contains(fromJSON('["success","skipped"]'), github.event.workflow_run.conclusion) }}
+    runs-on: ubuntu-22.04
+    environment: ota
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.2
+
+      - name: Did the brake run?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POST_RELEASE_RUN: ${{ github.event.workflow_run.id }}
+        run: node scripts/ota/brake-watchdog.mjs check --post-release-run "$POST_RELEASE_RUN"
+
+      # From here on, the Brake job's own steps (post-release.yml), each gated on act.
+      - name: Re-run the red smoke once
+        id: rerun
+        if: ${{ steps.check.outputs.act == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GATE_SMOKE: ${{ steps.check.outputs.gate_smoke }}
+          PLATFORMS: ${{ steps.check.outputs.platforms }}
+        run: node scripts/ota/brake.mjs rerun --gate-smoke "$GATE_SMOKE" --platforms "$PLATFORMS"
+
+      - name: Check out the submodule for the install
+        if: ${{ steps.check.outputs.act == 'true' && steps.rerun.outputs.still_red == 'true' }}
+        run: git submodule update --init --depth 1 bifold
+
+      - name: Setup NodeJS
+        if: ${{ steps.check.outputs.act == 'true' && steps.rerun.outputs.still_red == 'true' }}
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Build bifold packages
+        if: ${{ steps.check.outputs.act == 'true' && steps.rerun.outputs.still_red == 'true' }}
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Install dependencies
+        if: ${{ steps.check.outputs.act == 'true' && steps.rerun.outputs.still_red == 'true' }}
+        run: yarn install --immutable
+
+      - name: Withdraw the release
+        if: ${{ steps.check.outputs.act == 'true' && steps.rerun.outputs.still_red == 'true' }}
+        env:
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          BUNDLES: ${{ steps.check.outputs.bundles }}
+          PLATFORMS: ${{ steps.check.outputs.platforms }}
+        run: node scripts/ota/brake.mjs withdraw --bundles "$BUNDLES" --platforms "$PLATFORMS"
