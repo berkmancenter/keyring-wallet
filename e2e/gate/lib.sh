@@ -266,24 +266,25 @@ c_members_deferred() {
 # JOIN_MEMBER) names the driver's member lines, as agents' R2_MEMBER|R6_MEMBER|R10_MEMBER. GATE_NOTICE_WAIT (s, default 60) caps the wait;
 # every adb call has its own 15 s deadline, so a dying emulator cannot hold the cleanup.
 c_members_remove_collected() {
-  local s=$1 why=$2 m since t0 n0 n wait=${GATE_NOTICE_WAIT:-60}; shift 2
-  # notices <since>: how many notice lines the phone has logged since <since> (its own clock, logcat -v epoch).
-  notices() { GALARM_STEPS=0 galarm 15 adb -s "$s" logcat -d -v epoch 2>/dev/null | awk -v t="$1" '$1+0 >= t && /\[VTI\] (applied|ignored) a removal notice/' | wc -l | tr -d ' '; }
+  local s=$1 why=$2 m t0 n0 n wait=${GATE_NOTICE_WAIT:-60}; shift 2
+  # notices: how many notice lines the phone's log holds now. Each member's removal is judged against the count just
+  # before it, so a line already there (an earlier member's notice) never passes for this one's.
+  # A failed read prints nothing (not "0"), so the caller can tell it from a log with no notice in it.
+  notices() { local o; o=$(GALARM_STEPS=0 galarm 15 adb -s "$s" logcat -d 2>/dev/null) || return 0
+    printf '%s\n' "$o" | grep -cE '\[VTI\] (applied|ignored) a removal notice'; }
   for m in $(grep -hoE "^(${NOTICE_TAGS:-JOIN_MEMBER}) did:[^ ]+" "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
     if [ -z "$(GALARM_STEPS=0 galarm 15 adb -s "$s" shell pidof "$BID" 2>/dev/null | tr -d '\r')" ]; then
       echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
       echo "NOTICE_NOT_COLLECTED $m app not running"; continue
     fi
     GALARM_STEPS=0 galarm 15 adb -s "$s" shell monkey -p "$BID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-    since=$(GALARM_STEPS=0 galarm 15 adb -s "$s" shell date +%s 2>/dev/null | tr -d '\r'); t0=$(date +%s)
-    # Without the phone's clock an older line could pass for this notice: count nothing rather than guess. A line
-    # already there (an earlier member's notice in the same second) is the baseline, so each member needs its own.
-    case $since in ''|*[!0-9]*) n0=; ;; *) n0=$(notices "$since") ;; esac
+    n0=$(notices); t0=$(date +%s)
     echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
-    [ -n "$n0" ] || { echo "NOTICE_NOT_COLLECTED $m no phone clock"; continue; }
+    # An unreadable log before the removal leaves nothing to compare with: count nothing rather than guess.
+    case $n0 in ''|*[!0-9]*) echo "NOTICE_NOT_COLLECTED $m log unreadable"; continue ;; esac
     n=$n0
     while [ $(( $(date +%s) - t0 )) -lt "$wait" ]; do
-      n=$(notices "$since"); [ "${n:-0}" -gt "$n0" ] && break
+      n=$(notices); [ "${n:-0}" -gt "$n0" ] && break
       sleep 1
     done
     if [ "${n:-0}" -gt "$n0" ]; then echo "NOTICE_COLLECTED $m $(( $(date +%s) - t0 ))"; else echo "NOTICE_NOT_COLLECTED $m none in ${wait} s"; fi

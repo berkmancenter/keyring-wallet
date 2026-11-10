@@ -22,12 +22,12 @@ const applied = (t) => `${t}.120  4321  4400 I ReactNativeJS: [VTI] applied a re
 const ignored = (t) => `${t}.500  4321  4400 W ReactNativeJS: [VTI] ignored a removal notice (already removed)`;
 
 /**
- * Runs the helper against a fake phone: `pid` ('' = the app is not running), `clock` (the phone's `date +%s`), and
- * `logcat` (what `logcat -d -v epoch` prints before any removal). `collects` is how many removals the phone answers by
- * logging a notice (`line`, one second after the clock): the fake removal appends it, as the real phone logs it after
+ * Runs the helper against a fake phone: `pid` ('' = the app is not running), `readable` (false = `logcat -d` fails), and
+ * `logcat` (what `logcat -d` prints before any removal). `collects` is how many removals the phone answers by
+ * logging a notice (`line`): the fake removal appends it, as the real phone logs it after
  * the removal. Returns the admin calls, the adb calls and what was printed.
  */
-function run({ pid = '4321', clock = String(CLOCK), logcat = '', wait = '2', out = `JOIN_MEMBER ${A}\n`, tags = '', collects = 1, line = applied(CLOCK + 1) } = {}) {
+function run({ pid = '4321', readable = true, logcat = '', wait = '2', out = `JOIN_MEMBER ${A}\n`, tags = '', collects = 1, line = applied(CLOCK + 1) } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'notice-'));
   try {
     writeFileSync(path.join(dir, 'leg.out'), out);
@@ -44,8 +44,7 @@ function run({ pid = '4321', clock = String(CLOCK), logcat = '', wait = '2', out
         echo "$*" >> ${JSON.stringify(adbs)}
         case "$*" in
           *"shell pidof"*) printf '%s\\r\\n' ${JSON.stringify(pid)} ;;
-          *"shell date +%s"*) printf '%s\\r\\n' ${JSON.stringify(clock)} ;;
-          *"logcat -d -v epoch"*) cat "$D/logcat" ;;
+          *"logcat -d"*) ${readable ? 'cat "$D/logcat"' : 'return 1'} ;;
         esac
       }
       ${helper}
@@ -86,9 +85,9 @@ test('control: an app that is not running cannot collect; the member is still re
   assert.ok(!r.adbs.some((a) => /logcat/.test(a)), 'nothing to read');
 });
 
-test('without the phone\'s clock nothing is counted (an older line could pass), and the member is still removed', () => {
-  const r = run({ clock: '' });
-  assert.match(r.printed, /^NOTICE_NOT_COLLECTED \S+ no phone clock$/m);
+test('an unreadable log before the removal: nothing is counted, and the member is still removed', () => {
+  const r = run({ readable: false });
+  assert.match(r.printed, /^NOTICE_NOT_COLLECTED \S+ log unreadable$/m);
   assert.equal(r.calls.length, 1);
 });
 
@@ -113,10 +112,6 @@ test('control: one notice for two members collects one; the first member\'s line
   assert.equal((r.printed.match(/^NOTICE_NOT_COLLECTED \S+ none in 2 s$/gm) ?? []).length, 1, r.printed);
 });
 
-test('control: a notice already logged in the removal\'s own second (an earlier one) is the baseline, not this one', () => {
-  const r = run({ logcat: `${applied(CLOCK)}\n${applied(CLOCK + 1)}\n`, collects: 0 });
-  assert.match(r.printed, /^NOTICE_NOT_COLLECTED \S+ none in 2 s$/m);
-});
 
 // The order inside each leg's fin(): the member is removed (and its notice waited for) before the app is uninstalled,
 // the emulator stopped and the phone's keys removed. No direct member-remove is left in those fins.
