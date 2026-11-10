@@ -40,3 +40,4 @@ Policy: digest weekly and at every phase boundary; never advance mid-phase.
 - **2026-10-23** · `affinidi-tdk-rs` a1611baa → 7609754e — #967, affinidi-tsp 0.3.0 (TSP 1.0). The mediator moved out of this repository in #949, so the watch list is now `crates/messaging/affinidi-tsp/`. The lab's mediator is built from its own checkout and does not move. **Re-run the reference ladder bottom-up.**
 
 - **2026-11-10** · `dtgwg-trust-tasks-tf` 7b6bb488 → 2a66a0351 — AclEntry 0.3 (purposes), acl/list/0.4 and acl/{grant,revoke,update}/0.3: what VTI main 887370a3b serves and bifold #1005 sends; the previous pin predated them, so #1005's payload checks had to read unpinned origin/main. **Re-run the reference ladder bottom-up.**
+- **2026-11-10** · `verifiable-trust-infrastructure` 49f5f1be → f7b78e29d — tag vta-service-v0.79.0 (vta-sdk 0.86.0), on Alberto's word; card-verify rebuilt against it in the same pull request. **Re-run the reference ladder bottom-up.**
