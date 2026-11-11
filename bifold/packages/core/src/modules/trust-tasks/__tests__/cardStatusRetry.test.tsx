@@ -89,8 +89,16 @@ const take = (s: ReturnType<typeof store>, fetchImpl: () => typeof fetch) => () 
     checkCard: (credential, issuer) => checkDeliveredCard({} as never, credential, issuer, { fetchImpl: fetchImpl() }),
   })
 
+/**
+ * The card above is valid from 2026-10-11 to 2026-11-11T17:00Z. Pin the clock inside that window, or every row
+ * after that instant reads an expired card and never reaches the status check (it went red on main at 17:00Z on
+ * 2026-11-11 with nothing changed).
+ */
+const INSIDE_VALIDITY = new Date('2026-10-20T12:00:00Z')
+
 beforeEach(() => {
   jest.useFakeTimers()
+  jest.setSystemTime(INSIDE_VALIDITY)
   clearStatusChecks()
 })
 afterEach(() => {
