@@ -14,9 +14,17 @@
  *     Reads that run's verdict (its post-release-handoff artifact) and its jobs, and decides (decide() below):
  *       brake  the verdict is smoke-red and no Brake job ran: this run brakes, with the same two steps the Brake job
  *              uses (brake.mjs rerun, then brake.mjs withdraw if still red). Writes act=true and what they need.
- *       none   not smoke-red, or the run's own Brake job ran to success. act=false, exit 0.
- *       alert  something a person must read: the Brake job ran and failed, the verdict is unreadable, or the run is too
- *              old to act on. act=false, exit 1, so this run is red and says why. It never brakes on an alert.
+ *       none   only for a verdict post-release.mjs passes on (PASSING_VERDICTS: none, green), or smoke-red whose own
+ *              Brake job ran to success. act=false, exit 0.
+ *       alert  something a person must read: any other verdict (smoke-incomplete, builds-red, one added later), the
+ *              Brake job ran and failed, the verdict is unreadable (or the run was cancelled or timed out before it
+ *              wrote one), or the run is too old to act on. act=false, exit 1, so this run is red and says why. It
+ *              never brakes on an alert.
+ *
+ * Who watches the watchdog: a person. It is a separate RUN, a different failure from 11-09's missing JOB, but if GitHub
+ * never creates this run either, nothing here says so. There is no scheduled sweep: after every publish the OTA lane
+ * reads the post-release run's verdict and its Brake job (and this run, when it is red), and post-release.mjs's own
+ * summary says in words when a smoke-red run shows no Brake job.
  *
  * Read only: every gh call here is a read or an artifact download. The only writes are brake.mjs's, in the steps after.
  */
@@ -28,19 +36,32 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
 import { downloadArtifact } from '../ci/download-artifact.mjs'
+import { PASSING_VERDICTS } from './post-release.mjs'
 
 // Older than this, a run is not acted on by itself: a re-run of the watchdog days later must not withdraw anything.
 export const MAX_AGE_MS = 6 * 60 * 60 * 1000
 export const BRAKE_JOB = /^Brake\b/
 export const HANDOFF = /^post-release-handoff-[0-9a-f]{40}$/
+// Why each failing verdict that is not a red is not braked, for the alert. A verdict missing here still alerts.
+export const NOT_BRAKED = Object.freeze({
+  'smoke-incomplete': 'a smoke job was never listed, so nobody verified this release; it is not a red, so the brake does not act on it',
+  'builds-red': "the released commit's Test builds were red, so it was never smoked; the brake deliberately does not act on builds (post-release.yml)",
+})
 
 /**
  * What to do about one finished post-release run. verdict: its handoff's verdict (undefined when unreadable).
  * brakeJobs: that run's jobs named Brake…, as GitHub lists them ({ status, conclusion }).
  */
-export function decide({ verdict, brakeJobs = [], ageMs = 0 }) {
-  if (verdict === undefined) return { action: 'alert', why: 'the post-release run left no readable verdict: read the run, the brake may not have acted' }
-  if (verdict !== 'smoke-red') return { action: 'none', why: `verdict ${verdict}: nothing to brake` }
+export function decide({ verdict, brakeJobs = [], ageMs = 0, runConclusion }) {
+  if (verdict === undefined) {
+    if (['cancelled', 'timed_out'].includes(runConclusion))
+      return { action: 'alert', why: `the post-release run ended ${runConclusion} before it wrote a verdict: nobody has checked this release, read it now` }
+    return { action: 'alert', why: 'the post-release run left no readable verdict: read the run, the brake may not have acted' }
+  }
+  // "Nothing to do" is this watchdog's permissive answer, so it is given only for the verdicts post-release.mjs itself
+  // passes on (the one list both read). Every other verdict but smoke-red is an alert: nobody has shown the release good.
+  if (PASSING_VERDICTS.includes(verdict)) return { action: 'none', why: `verdict ${verdict}: nothing to brake` }
+  if (verdict !== 'smoke-red') return { action: 'alert', why: `verdict ${verdict}: ${NOT_BRAKED[verdict] ?? 'a verdict this watchdog does not know'}. Nothing was withdrawn: read the run now` }
   const ran = brakeJobs.filter((j) => !['skipped', 'cancelled', null, undefined].includes(j.conclusion))
   if (ran.some((j) => j.conclusion === 'success')) return { action: 'none', why: 'smoke-red, and the run\'s own Brake job ran' }
   if (ran.length) return { action: 'alert', why: `smoke-red, and the run's Brake job ended ${ran.map((j) => j.conclusion).join(', ')}: the release may still be live, read it now` }
@@ -73,7 +94,7 @@ export async function check({ run, repo, gh = realGh, download = downloadArtifac
     unreadable = String(error.message).split('\n')[0]
   }
   const ageMs = now() - Date.parse(r.updated_at)
-  const d = decide({ verdict: handoff?.verdict, brakeJobs, ageMs })
+  const d = decide({ verdict: handoff?.verdict, brakeJobs, ageMs, runConclusion: r.conclusion })
   const platforms = Array.isArray(handoff?.platforms) ? handoff.platforms : (handoff?.bundles ?? []).map((b) => b.platform)
   return { ...d, unreadable, run: Number(run), sha: handoff?.sha, gateSmoke: handoff?.gateSmoke, bundles: handoff?.bundles ?? [], platforms, brakeJobs }
 }

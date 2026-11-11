@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-import { check, decide, MAX_AGE_MS } from './brake-watchdog.mjs'
+import { check, decide, MAX_AGE_MS, NOT_BRAKED } from './brake-watchdog.mjs'
+import { PASSING_VERDICTS } from './post-release.mjs'
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..')
 const read = (...p) => readFileSync(path.join(root, ...p), 'utf8')
@@ -34,15 +35,79 @@ test('smoke-red whose Brake job ran and failed: an alert for a person, never a s
   assert.match(d.why, /may still be live/)
 })
 
-// The controls: no verdict but smoke-red ever brakes, with or without a Brake job.
-for (const verdict of ['green', 'none', 'builds-red', 'smoke-incomplete']) {
-  test(`control: verdict ${verdict} never brakes, whatever the Brake job did`, () => {
-    for (const brakeJobs of [[], [{ status: 'completed', conclusion: 'skipped' }]]) assert.equal(decide({ verdict, brakeJobs }).action, 'none')
+// The controls: no verdict but smoke-red ever brakes, with or without a Brake job; and "nothing to do", this
+// watchdog's permissive answer, is given only for the verdicts post-release.mjs itself passes on.
+const SKIPPED_BRAKE = [[], [{ status: 'completed', conclusion: 'skipped' }]]
+for (const verdict of ['green', 'none']) {
+  test(`control: verdict ${verdict} (a passing verdict) never brakes and needs nothing`, () => {
+    for (const brakeJobs of SKIPPED_BRAKE) assert.equal(decide({ verdict, brakeJobs }).action, 'none')
   })
 }
 
+test('smoke-incomplete is an alert, not a quiet nothing: the smoke never finished, so nobody verified the release', () => {
+  for (const brakeJobs of SKIPPED_BRAKE) {
+    const d = decide({ verdict: 'smoke-incomplete', brakeJobs })
+    assert.equal(d.action, 'alert')
+    assert.match(d.why, /nobody verified this release/)
+    assert.match(d.why, /Nothing was withdrawn/)
+  }
+})
+
+test('builds-red is an alert, never a brake: the released commit was never smoked, and the brake does not act on builds', () => {
+  for (const brakeJobs of SKIPPED_BRAKE) {
+    const d = decide({ verdict: 'builds-red', brakeJobs })
+    assert.equal(d.action, 'alert')
+    assert.match(d.why, /never smoked/)
+  }
+})
+
+test('a verdict this watchdog has never heard of is an alert that names it, never nothing and never a brake', () => {
+  const d = decide({ verdict: 'smoke-purple', brakeJobs: [] })
+  assert.equal(d.action, 'alert')
+  assert.match(d.why, /verdict smoke-purple: a verdict this watchdog does not know/)
+})
+
+test('only none and green pass, one list for both: post-release.mjs exits 0 on PASSING_VERDICTS and decide() reads the same', () => {
+  assert.deepEqual([...PASSING_VERDICTS], ['none', 'green'])
+  assert.match(read('scripts', 'ota', 'post-release.mjs'), /process\.exitCode = PASSING_VERDICTS\.includes\(r\.verdict\) \? 0 : 2\n/)
+})
+
+// Every verdict post-release.mjs can write, read from its source, so a new one there forces a decision here.
+const verdictsInPostRelease = () => {
+  const src = read('scripts', 'ota', 'post-release.mjs')
+  const found = new Set([...src.matchAll(/verdict: '([a-z-]+)'/g)].map((m) => m[1]))
+  const named = src.split('\n').find((l) => /const name = verdict\.green \?/.test(l)) ?? ''
+  for (const m of named.matchAll(/'([a-z-]+)'/g)) found.add(m[1])
+  return found
+}
+
+test('the scan of post-release.mjs finds its verdicts (so the next row cannot pass on an empty list)', () => {
+  assert.deepEqual([...verdictsInPostRelease()].sort(), ['builds-red', 'green', 'none', 'smoke-incomplete', 'smoke-red'])
+})
+
+test('every verdict post-release.mjs writes is decided here: passing is nothing, smoke-red brakes, any other alerts with a written reason', () => {
+  for (const verdict of verdictsInPostRelease()) {
+    const d = decide({ verdict, brakeJobs: [] })
+    if (PASSING_VERDICTS.includes(verdict)) assert.equal(d.action, 'none', verdict)
+    else if (verdict === 'smoke-red') assert.equal(d.action, 'brake', verdict)
+    else {
+      assert.equal(d.action, 'alert', verdict)
+      assert.ok(NOT_BRAKED[verdict], `${verdict} has no reason in NOT_BRAKED`)
+    }
+  }
+})
+
 test('an unreadable verdict is an alert, never a brake and never a quiet nothing', () => {
   assert.equal(decide({ verdict: undefined, brakeJobs: [] }).action, 'alert')
+  assert.match(decide({ verdict: undefined, brakeJobs: [], runConclusion: 'failure' }).why, /no readable verdict/)
+})
+
+test('a post-release run cancelled or timed out before its verdict says so: nobody checked, not "unreadable"', () => {
+  for (const runConclusion of ['cancelled', 'timed_out']) {
+    const d = decide({ verdict: undefined, brakeJobs: [], runConclusion })
+    assert.equal(d.action, 'alert')
+    assert.match(d.why, new RegExp(`ended ${runConclusion} before it wrote a verdict: nobody has checked this release`))
+  }
 })
 
 test('a run older than six hours is not braked by itself: an alert', () => {
@@ -51,7 +116,7 @@ test('a run older than six hours is not braked by itself: an alert', () => {
 })
 
 // check(): reading a real run's shape. The fake gh answers the run, its jobs and its artifacts; download writes a file.
-const fakeRun = ({ verdict, jobs, path: wfPath = '.github/workflows/post-release.yml', updated = '2026-11-09T18:10:07Z', artifacts, platforms = ['ios', 'android'] }) => {
+const fakeRun = ({ verdict, jobs, path: wfPath = '.github/workflows/post-release.yml', updated = '2026-11-09T18:10:07Z', artifacts, platforms = ['ios', 'android'], conclusion = 'failure' }) => {
   const calls = []
   const gh = (...args) => {
     calls.push(args)
@@ -59,7 +124,7 @@ const fakeRun = ({ verdict, jobs, path: wfPath = '.github/workflows/post-release
     if (route.endsWith('/jobs?per_page=100')) return JSON.stringify({ jobs })
     if (route.endsWith('/artifacts?per_page=100'))
       return JSON.stringify({ artifacts: artifacts ?? [{ name: 'post-release-handoff-5d150fbb2270762cdfa4d493e55346726287c49c', expired: false }] })
-    return JSON.stringify({ id: 42668414326, path: wfPath, updated_at: updated })
+    return JSON.stringify({ id: 42668414326, path: wfPath, updated_at: updated, conclusion })
   }
   const download = async ({ dir }) => {
     mkdirSync(dir, { recursive: true })
@@ -94,6 +159,13 @@ test('check: no handoff artifact is an alert that names why', async () => {
   const f = fakeRun({ verdict: 'smoke-red', jobs: [SMOKE_FAILED], artifacts: [] })
   const r = await check({ run: '1', repo: 'o/r', gh: f.gh, download: f.download, now: at('2026-11-09T18:12:00Z'), dir: scratch() })
   assert.deepEqual([r.action, r.unreadable], ['alert', '0 post-release-handoff artifacts'])
+})
+
+test('check: a post-release run cancelled before its handoff alerts as cancelled, reading the run\'s own conclusion', async () => {
+  const f = fakeRun({ verdict: 'smoke-red', jobs: [SMOKE_FAILED], artifacts: [], conclusion: 'cancelled' })
+  const r = await check({ run: '1', repo: 'o/r', gh: f.gh, download: f.download, now: at('2026-11-09T18:12:00Z'), dir: scratch() })
+  assert.equal(r.action, 'alert')
+  assert.match(r.why, /ended cancelled before it wrote a verdict/)
 })
 
 test('check reads only the post-release-handoff-<sha> artifact, beside any other artifact of the run', async () => {
@@ -175,7 +247,7 @@ test('its brake steps are the Brake job\'s own, step for step (names and command
 
 test('the watchdog reads every run that can hold a red: post-release exits non-zero on any verdict but none or green', () => {
   assert.match(watchdog, /if: \$\{\{ !contains\(fromJSON\('\["success","skipped"\]'\), github\.event\.workflow_run\.conclusion\) \}\}/)
-  assert.match(read('scripts', 'ota', 'post-release.mjs'), /process\.exitCode = r\.verdict === 'none' \|\| r\.verdict === 'green' \? 0 : 2\n/)
+  assert.match(read('scripts', 'ota', 'post-release.mjs'), /process\.exitCode = PASSING_VERDICTS\.includes\(r\.verdict\) \? 0 : 2\n/)
 })
 
 test('the in-run Brake job still acts on a failed smoke job: always(), or a red (which fails the job) would skip it', () => {
