@@ -185,7 +185,7 @@ const translation = {
     "Demos": "Demos",
     "SetUpSediDemo": "Preparar a demo SEDI",
     "TurnOffSediDemo": "Desligar a demo SEDI",
-    "SediDemoDone": "Feito: aprovadores de confiança, aprovadores verificados pelo estado e o estado de teste estão ligados, com o cartão e a pessoa tutelada K0 neste telefone.",
+    "SediDemoDone": "Feito: aprovadores de confiança, aprovadores verificados pelo estado, o estado de teste, o cartão do estado e \"É você mesmo\" estão ligados, com o cartão e a pessoa tutelada K0 neste telefone.",
     "SediDemoOff": "Não feito: SEDI/KERI está desligado nesta versão.",
     "DemoStateHost": "Host do estado de demonstração",
     "DemoStateHostHint": "De onde o estado de demonstração é obtido durante os testes, por exemplo o nome de host de um túnel temporário. Usado só para o estado de demonstração, nunca para um real. Vazio: o cartão de demonstração é verificado com uma cópia neste telefone.",

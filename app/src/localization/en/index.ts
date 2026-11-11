@@ -212,7 +212,7 @@ const translation = {
     "Demos": "Demos",
     "SetUpSediDemo": "Set up the SEDI demo",
     "TurnOffSediDemo": "Turn off the SEDI demo",
-    "SediDemoDone": "Done: trusted approvers, state-verified approvers and the test state are on, with the K0 card and ward on this phone.",
+    "SediDemoDone": "Done: trusted approvers, state-verified approvers, the test state, the state card and Confirm it's you are on, with the K0 card and ward on this phone.",
     "SediDemoOff": "Not done: SEDI/KERI is turned off for this build.",
     "DemoStateHost": "Demo state host",
     "DemoStateHostHint": "Where the demo state is fetched from while testing, e.g. a temporary tunnel's hostname. Used only for the demo state, never a real one. Empty: the demo card is checked against a copy on this phone.",

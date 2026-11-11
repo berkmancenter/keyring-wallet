@@ -209,7 +209,7 @@ const translation = {
     "Demos": "Démos",
     "SetUpSediDemo": "Préparer la démo SEDI",
     "TurnOffSediDemo": "Arrêter la démo SEDI",
-    "SediDemoDone": "Fait : approbateurs de confiance, approbateurs vérifiés par l’État et État de test activés, avec la carte et la personne protégée K0 sur ce téléphone.",
+    "SediDemoDone": "Fait : approbateurs de confiance, approbateurs vérifiés par l’État, État de test, carte d’État et « C’est bien vous » activés, avec la carte et la personne protégée K0 sur ce téléphone.",
     "SediDemoOff": "Pas fait : SEDI/KERI est désactivé pour cette version.",
     "DemoStateHost": "Hôte de l'État de démo",
     "DemoStateHostHint": "D'où l'État de démo est récupéré pendant les tests, par exemple le nom d'hôte d'un tunnel temporaire. Utilisé seulement pour l'État de démo, jamais pour un vrai. Vide : la carte de démo est vérifiée avec une copie sur ce téléphone.",
