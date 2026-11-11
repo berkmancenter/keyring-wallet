@@ -189,6 +189,9 @@
     "ApproverAskError": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
     "ApproverAskStatus": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
     "ApproverAskedActions": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
+    "ApproverChange": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
+    "ApproverInForce": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
+    "ApproverInForceActions": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
     "ApproverNotGiven": ["src/modules/trust-tasks/screens/ApproverWaitNote.tsx"],
     "ApproverNotGivenAction": ["src/modules/trust-tasks/screens/ApproverWaitNote.tsx"],
     "ApproverOffer": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
@@ -2241,13 +2244,16 @@
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.ask"
     },
     {
-      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.asked"
-    },
-    {
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.cancel"
     },
     {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.change"
+    },
+    {
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.inForce"
     },
     {
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.pick(action)"
@@ -2263,6 +2269,9 @@
     },
     {
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.steppedDown"
+    },
+    {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "key"
     },
     {
       "src/modules/trust-tasks/screens/ApproverWaitNote.tsx": "ApproverWaitNoteIds.approved"

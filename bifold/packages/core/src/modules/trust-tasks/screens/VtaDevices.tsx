@@ -34,6 +34,7 @@ import { LostPhoneCard, type RotationSupport } from './LostPhoneCard'
 import { deviceViewOf } from './deviceWords'
 import { didHashKey } from './testIdKey'
 import { useRoomAboveTabBar } from './aboveTabBar'
+import ApproverWaitNote from './ApproverWaitNote'
 
 /**
  * A row's handle for tests: {@link didHashKey} of the device's whole DID. Not
@@ -181,6 +182,8 @@ const VtaDevices: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('AgentDeviceList')}>
+        {/* A held task waits here as anywhere: who it waits on (off with the trusted-approvers switch). */}
+        <ApproverWaitNote />
         <ThemedText>{t('Devices.Intro')}</ThemedText>
         <Button
           title={t('Devices.AddAnother')}

@@ -20,6 +20,7 @@ import { GenericRecordsTestRequestStore } from '../module/testRequestOutcome'
 import { DeviceActionRefused, OwnerNotConfirmed } from '../module/vtaOwner'
 import VtaAskMe from '../screens/VtaAskMe'
 import { setTrustedApproversEnabled } from '../module/trustedApproversFlag'
+import * as approverRole from '../approverRole'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -53,6 +54,20 @@ beforeEach(() => {
 })
 
 describe('Ask me before…', () => {
+  test('a rule change held for the approver says who it waits on, here too; nothing with the switch off (control: on)', async () => {
+    // The lab run, 11-10: turning on an "Ask me before…" rule was held for Jordan, and this screen said nothing.
+    jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(EMPTY_APPROVALS))
+    const real = vtaAgent.getState.bind(vtaAgent)
+    jest
+      .spyOn(vtaAgent, 'getState')
+      .mockImplementation(() => ({ ...real(), awaitingConsentFor: 'https://trusttasks.org/spec/policy/upsert/0.3' }))
+    jest.spyOn(approverRole, 'approversWaitedOn').mockResolvedValue(['Jordan'])
+    setTrustedApproversEnabled(true)
+    expect((await show()).getByTestId(id('ApproverWait'))).toBeTruthy()
+    setTrustedApproversEnabled(false)
+    expect((await show()).queryByTestId(id('ApproverWait'))).toBeNull()
+  })
+
   test('a switch per offered task, off; no test request until contexts/create is on', async () => {
     jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(EMPTY_APPROVALS))
     const tree = await show()

@@ -111,6 +111,9 @@ describe('a held task whose question changed', () => {
     const ended = deviceRefusalOf(consentNotGiven('https://trusttasks.org/spec/vta/acl/grant/1.0'))
     expect(ended.reason).toBe('notApproved')
     expect(ended.message).not.toMatch(/consentNotGiven|refused/)
+    // Never claims a no it cannot prove: it says the approver didn't approve, and names both endings.
+    expect(ended.message).toMatch(/didn't approve this/)
+    expect(ended.message).toMatch(/said no, or not answered in time/)
     expect(deviceRefusalOf(held('c-1')).reason).toBe('awaitingApproval')
   })
 })

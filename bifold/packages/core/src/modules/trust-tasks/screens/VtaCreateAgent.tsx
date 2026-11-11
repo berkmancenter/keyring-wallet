@@ -62,6 +62,7 @@ import { VtaCreateAgentIds, type VtaCreateAgentId } from './VtaCreateAgent.ids'
 import { useSafeHeaderHeight } from './VtaLink'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { linkFailureText } from './linkFailureWords'
+import ApproverWaitNote from './ApproverWaitNote'
 
 /**
  * A known agent host's website, to open from the intro. Never named on screen:
@@ -905,6 +906,8 @@ const VtaCreateAgent: React.FC = () => {
           onLayout={(e) => setViewportHeight(e.nativeEvent.layout.height)}
           testID={testIdWithKey(VtaCreateAgentIds.createScroll)}
         >
+          {/* A held task waits here as anywhere: who it waits on (off with the trusted-approvers switch). */}
+          <ApproverWaitNote />
           {body}
         </ScrollView>
         <View style={styles.actions}>{actions}</View>

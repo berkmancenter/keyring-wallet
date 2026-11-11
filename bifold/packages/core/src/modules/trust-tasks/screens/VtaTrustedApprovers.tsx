@@ -46,6 +46,7 @@ import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
 import { checkEnforcement, lastEnforcementCheck, type EnforcementCheck } from './approverEnforcementCheck'
 import { localDate } from './localTime'
 import { deviceErrorWords } from './VtaDevices'
+import ApproverWaitNote from './ApproverWaitNote'
 
 export const TrustedApproversIds = {
   screen: 'TrustedApprovers',
@@ -240,6 +241,8 @@ const VtaTrustedApprovers: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey(TrustedApproversIds.screen)}>
+        {/* A held task waits here as anywhere: who it waits on (off with the trusted-approvers switch). */}
+        <ApproverWaitNote />
         <ThemedText>{t('Approver.Intro')}</ThemedText>
         {error ? (
           <ThemedText style={styles.error} testID={testIdWithKey(TrustedApproversIds.error)}>

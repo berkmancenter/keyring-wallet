@@ -28,6 +28,8 @@ import {
   roleOfferAskOn,
   type RoleAction,
   type RoleOfferAsk,
+  writtenAsOf,
+  writtenActionsOf,
 } from '../approverRole'
 import { ROLE_ACTIONS } from '../approverRoleSpec'
 import { releaseWarn } from '../module/releaseLog'
@@ -46,6 +48,9 @@ export const ApproverAskRowIds = {
   cancel: 'ApproverPickCancel',
   asked: 'ApproverAskedActions',
   steppedDown: 'ApproverSteppedDown',
+  change: 'ApproverChange',
+  inForce: 'ApproverInForce',
+  inForceActions: 'ApproverInForceActions',
 } as const
 
 /** Always offered, never switched off here. */
@@ -131,8 +136,8 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
       {t(ask.written ? 'Approver.SteppedDownWritten' : 'Approver.SteppedDown', words)}
     </ThemedText>
   ) : null
-  const actionLines = (actions: readonly RoleAction[]) => (
-    <View testID={testIdWithKey(ApproverAskRowIds.asked)}>
+  const actionLines = (actions: readonly RoleAction[], key: string = ApproverAskRowIds.asked) => (
+    <View testID={testIdWithKey(key)}>
       {PICK_ORDER.filter((action) => actions.includes(action)).map((action) => (
         <ThemedText key={action}>{`• ${t(`Approver.Action.${action}`)}`}</ThemedText>
       ))}
@@ -197,9 +202,18 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
       </View>
     )
   } else if (state === 'open' && ask) {
-    // Mock frame 1c: sent, waiting.
+    // Mock frame 1c: sent, waiting. A re-offer ("Add to what … approves") also says what is still in force meanwhile.
+    // It can only ADD: the agent's rules name one shared set, so narrowing what one approver covers is not something
+    // a per-approver offer can do (a set-level action, not built).
+    const inForce = writtenAsOf(ask) ? writtenActionsOf(ask) : []
     body = (
       <View style={styles.card}>
+        {inForce.length ? (
+          <View testID={testIdWithKey(ApproverAskRowIds.inForce)}>
+            <ThemedText variant="bold">{t('Approver.StillApproves', words)}</ThemedText>
+            {actionLines(inForce, ApproverAskRowIds.inForceActions)}
+          </View>
+        ) : null}
         <ThemedText variant="bold" testID={testIdWithKey(ApproverAskRowIds.status)}>
           {t('Approver.Waiting', words)}
         </ThemedText>
@@ -215,15 +229,38 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
         />
       </View>
     )
-  } else if (state === 'accepted') {
-    body = <ThemedText testID={testIdWithKey(ApproverAskRowIds.status)}>{t('Approver.SaidYes', words)}</ThemedText>
-  } else if (ask?.written) {
-    body = (
+  } else if (state === 'accepted' || ask?.written) {
+    // After a yes, what they approve can be changed: a fresh offer with the picker set to today's actions. Nothing is
+    // deleted, and the rules already written on the agent stay until the new yes is added on Who approves.
+    const change = (
       <>
-        <ThemedText testID={testIdWithKey(ApproverAskRowIds.status)}>{t('Approver.IsApprover', words)}</ThemedText>
-        {steppedDown}
+        <Button
+          title={t('Approver.Change', words)}
+          buttonType={ButtonType.Tertiary}
+          onPress={() => {
+            setSaid(undefined)
+            setChosen(ask?.actions?.length ? [...ask.actions] : [...ROLE_ACTIONS])
+            setPicking(true)
+          }}
+          disabled={busy}
+          testID={testIdWithKey(ApproverAskRowIds.change)}
+        />
+        <ThemedText style={styles.muted}>{t('Approver.ChangeCaption', words)}</ThemedText>
       </>
     )
+    body =
+      state === 'accepted' ? (
+        <>
+          <ThemedText testID={testIdWithKey(ApproverAskRowIds.status)}>{t('Approver.SaidYes', words)}</ThemedText>
+          {change}
+        </>
+      ) : (
+        <>
+          <ThemedText testID={testIdWithKey(ApproverAskRowIds.status)}>{t('Approver.IsApprover', words)}</ThemedText>
+          {steppedDown}
+          {ask?.steppedDown ? null : change}
+        </>
+      )
   } else {
     // Mock frame 1a.
     body = (

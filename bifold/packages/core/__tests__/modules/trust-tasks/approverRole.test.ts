@@ -645,17 +645,73 @@ describe('stepping down', () => {
     }
   })
 
-  test('a step-down while an offer is still open changes nothing: there is no yes on that offer to take back', async () => {
+  // Re-signed by Jordan over an altered payload, so only the payload check can refuse it.
+  const resign = (signed: Record<string, unknown>, payload: Record<string, string>) => {
+    const altered: Record<string, unknown> = { ...signed, payload: { ...(signed.payload as object), ...payload } }
+    const { proof: _p, ...unsigned } = altered
+    return {
+      ...unsigned,
+      proof: {
+        type: 'DataIntegrityProof',
+        cryptosuite: 'eddsa-jcs-2022',
+        by: JORDAN.myRel,
+        over: JSON.stringify(unsigned),
+      },
+    }
+  }
+
+  test("Change, then Jordan steps down: the written approver is marked stepped down, the re-offer closes, and Who approves asks to remove them (review lane's sequence)", async () => {
+    const { sam, jordan } = await approving(true)
+    // Jordan steps down from the arrangement in force, which Sam's re-offer has not reached yet.
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    const stepDown = mockSent[0].document
+    // Sam taps "Change what Jordan approves": a new open offer, which must not overwrite who is written on the agent.
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
+    expect(await askOnSam(sam)).toMatchObject({ state: 'open', written: true, writtenAs: JORDAN_APPROVES_AS })
+    expect((await askOnSam(sam))?.acceptedAs).toBeUndefined()
+    expect(await approverNames(sam.agent)).toEqual({ [JORDAN_APPROVES_AS]: 'Jordan' })
+
+    await stepDownTo(sam, stepDown)
+    expect(await askOnSam(sam)).toMatchObject({ state: 'closed', written: true, steppedDown: expect.any(String) })
+    expect(await steppedDownApprovers(sam.agent)).toEqual([JORDAN_APPROVES_AS])
+    expect(sam.store.deleteById).not.toHaveBeenCalled()
+  })
+
+  test('during a re-offer, a step-down naming a DID that is neither written nor accepted changes nothing (control: the row above)', async () => {
     const { sam, jordan } = await approving(true)
     await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
     const stepDown = mockSent[0].document
-    // Sam asks again: the record is now an open offer, carrying the same approver as before.
     await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
-    const [record] = sam.store.records
-    record.content = { ...record.content, acceptedAs: JORDAN_APPROVES_AS }
+    await stepDownTo(sam, resign(stepDown, { approver: 'did:peer:2.someone-else' }))
+    expect(await askOnSam(sam)).toMatchObject({ state: 'open' })
+    expect((await askOnSam(sam))?.steppedDown).toBeUndefined()
+    expect(await steppedDownApprovers(sam.agent)).toEqual([])
+  })
+
+  test('a first offer still open counts no step-down: nothing is written for that contact (the in-flight crossing)', async () => {
+    const sam = phone(SAM)
+    const { jordan } = await approving(true)
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    const stepDown = mockSent[0].document
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
     await stepDownTo(sam, stepDown)
     expect(await askOnSam(sam)).toMatchObject({ state: 'open' })
     expect((await askOnSam(sam))?.steppedDown).toBeUndefined()
+  })
+
+  test("an answer to an offer that is no longer open is dropped, and says so in the log (Jordan steps down, then accepts Sam's re-offer)", async () => {
+    const { sam, jordan } = await approving(true)
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    const stepDown = mockSent[0].document
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
+    const reOffer = mockSent[mockSent.length - 1].document
+    await stepDownTo(sam, stepDown)
+    await deliver(jordan, reOffer)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    await deliver(sam)
+    // Sam's record keeps the step-down: safe-direction (less protection than Jordan believes, never more).
+    expect(await askOnSam(sam)).toMatchObject({ state: 'closed', steppedDown: expect.any(String) })
+    expect(sam.warned.filter((line) => line.includes('no longer open'))).toHaveLength(1)
   })
 
   test('with the switch off, nothing is sent and an arriving step-down changes nothing', async () => {

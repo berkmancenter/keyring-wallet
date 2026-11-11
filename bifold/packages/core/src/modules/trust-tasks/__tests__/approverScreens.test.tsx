@@ -211,6 +211,81 @@ describe("the contact's row", () => {
     expect(tree.getByTestId(id(ApproverAskRowIds.ask))).toBeTruthy()
   })
 
+  test("after a yes, what they approve can be changed: the picker opens on today's actions and Send makes a fresh offer (control: an open offer has no Change)", async () => {
+    linked(SAM_AGENT)
+    jest
+      .spyOn(approverRole, 'roleOfferAskOn')
+      .mockResolvedValue(
+        ask({ state: 'closed', acceptedAs: JORDAN, written: true, actions: ['joinCommunity', 'changeApprovers'] })
+      )
+    const offer = jest.spyOn(approverRole, 'offerApproverRole').mockResolvedValue('sent')
+    const tree = await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)
+    expect(tree.getByTestId(id(ApproverAskRowIds.status)).props.children).toBe('Approver.IsApprover')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id(ApproverAskRowIds.change)))
+    })
+    expect(offer).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id(ApproverAskRowIds.send)))
+    })
+    expect(offer).toHaveBeenCalledTimes(1)
+    expect([...offer.mock.calls[0][3]].sort()).toEqual(['changeApprovers', 'joinCommunity'])
+    // A yes not yet written can be changed too.
+    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(ask({ state: 'accepted', acceptedAs: JORDAN }))
+    expect(
+      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).getByTestId(id(ApproverAskRowIds.change))
+    ).toBeTruthy()
+    // Control: an offer still waiting has Ask again, not Change.
+    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(ask())
+    expect(
+      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).queryByTestId(id(ApproverAskRowIds.change))
+    ).toBeNull()
+  })
+
+  test('during a re-offer the row also says what is still in force (control: a first offer shows no such line)', async () => {
+    linked(SAM_AGENT)
+    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(
+      ask({
+        state: 'open',
+        actions: ['joinCommunity'],
+        written: true,
+        writtenAs: JORDAN,
+        writtenActions: ['shareCredential', 'changeApprovers'],
+      })
+    )
+    const tree = await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)
+    expect(tree.getByTestId(id(ApproverAskRowIds.inForce))).toHaveTextContent(/Approver\.StillApproves/)
+    const inForce = tree.getByTestId(id(ApproverAskRowIds.inForceActions))
+    expect(inForce).toHaveTextContent(/Approver\.Action\.shareCredential/)
+    expect(inForce).toHaveTextContent(/Approver\.Action\.changeApprovers/)
+    expect(inForce).not.toHaveTextContent(/joinCommunity/)
+    expect(tree.getByTestId(id(ApproverAskRowIds.status)).props.children).toBe('Approver.Waiting')
+    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(ask())
+    expect(
+      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).queryByTestId(id(ApproverAskRowIds.inForce))
+    ).toBeNull()
+  })
+
+  test('an approver who stepped down has no Change, and with the switch off there is no row at all', async () => {
+    linked(SAM_AGENT)
+    jest
+      .spyOn(approverRole, 'roleOfferAskOn')
+      .mockResolvedValue(
+        ask({ state: 'closed', acceptedAs: JORDAN, written: true, steppedDown: new Date().toISOString() })
+      )
+    expect(
+      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).queryByTestId(id(ApproverAskRowIds.change))
+    ).toBeNull()
+    jest
+      .spyOn(approverRole, 'roleOfferAskOn')
+      .mockResolvedValue(ask({ state: 'closed', acceptedAs: JORDAN, written: true }))
+    setTrustedApproversEnabled(false)
+    expect(
+      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).queryByTestId(id(ApproverAskRowIds.change))
+    ).toBeNull()
+    setTrustedApproversEnabled(true)
+  })
+
   test('says so when there is no relationship to ask over, or the ask did not go', async () => {
     linked(SAM_AGENT)
     jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(undefined)

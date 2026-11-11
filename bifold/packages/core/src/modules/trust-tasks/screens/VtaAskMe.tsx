@@ -39,6 +39,7 @@ import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
 
 import { deviceErrorWords } from './VtaDevices'
+import ApproverWaitNote from './ApproverWaitNote'
 
 /** A store write that failed, in the device log: the card then lasts only until the screen is left. */
 const notKept = (what: string) => (e: unknown) =>
@@ -176,6 +177,8 @@ const VtaAskMe: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('AskMe')}>
+        {/* A held task waits here as anywhere: who it waits on (off with the trusted-approvers switch). */}
+        <ApproverWaitNote />
         <ThemedText>{t('AskMe.Intro')}</ThemedText>
         <ThemedText style={styles.muted} testID={testIdWithKey('AskMeEnforcement')}>
           {t('AskMe.Enforcement')}

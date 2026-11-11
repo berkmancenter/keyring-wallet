@@ -130,7 +130,8 @@ const PLAIN_WORDS: Record<DeviceRefusalReason, string> = {
   stepUpDeclined: 'You declined the extra check, so your agent did not do this.',
   notConfirmed: "Keyring couldn't confirm it's you.",
   awaitingApproval: 'Your agent is waiting for someone else to approve this.',
-  notApproved: "It wasn't approved in time, so your agent didn't do it.",
+  notApproved:
+    "Your approver didn't approve this, so your agent didn't do it. They may have said no, or not answered in time.",
   notServed: "Your agent doesn't support asking before this, so nothing changed.",
   noAnswer: "Your agent didn't answer. Check the list before trying again.",
   unreachable: "Keyring couldn't reach your agent. Check your connection and try again.",
