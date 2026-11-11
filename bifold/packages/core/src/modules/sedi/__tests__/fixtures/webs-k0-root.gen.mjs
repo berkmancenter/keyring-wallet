@@ -3,7 +3,10 @@
 // bytes. Its JWK conversion is written here independently of ../../webs/document.ts (straight from @noble/curves), so
 // the committed did.json is a second derivation the resolver's own is checked against, not a copy of it.
 //
-// Run from packages/core:  node src/modules/sedi/__tests__/fixtures/webs-k0-root.gen.mjs
+// Run from packages/core:  node src/modules/sedi/__tests__/fixtures/webs-k0-root.gen.mjs [host[:port]] [outDir]
+// With no arguments it writes the committed fixtures (host example.org) under webs-k0-root/. With a host (e.g. a
+// temporary tunnel's) and an outDir it writes the same two files for that host's did:webs into outDir instead: did.json
+// names its DID, so it must be generated for the host that serves it.
 // Then `git diff --exit-code` on webs-k0-root/ must be clean unless kel-roy.cesr changed.
 /* eslint-disable no-console -- a run-once generator, run with node */
 import fs from 'node:fs'
@@ -11,7 +14,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { p256 } from '@noble/curves/nist.js'
 
-const HOST = 'example.org' // placeholder: the real host is Alberto's choice, and only the DID's host label changes
+const HOST = process.argv[2] ?? 'example.org' // placeholder unless a host is given; only the DID's host label changes
+const OUT_ROOT = process.argv[3]
 const PATH = ['keyring-demo-state']
 const here = path.dirname(fileURLToPath(import.meta.url))
 const kel = fs.readFileSync(path.join(here, 'k0-utah-v2', 'kel-roy.cesr'))
@@ -38,15 +42,16 @@ const jwk = (k) => {
   return { kid: k, kty: 'EC', crv: 'P-256', x: b64url(xy.slice(1, 33)), y: b64url(xy.slice(33, 65)) }
 }
 
-const websDid = ['did:webs', HOST, ...PATH, aid].join(':')
-const subject = ['did:web', HOST, ...PATH, aid].join(':')
+const label = HOST.replace(':', '%3A')
+const websDid = ['did:webs', label, ...PATH, aid].join(':')
+const subject = ['did:web', label, ...PATH, aid].join(':')
 const doc = {
   id: subject,
   verificationMethod: keys.map((k) => ({ id: `#${k}`, type: 'JsonWebKey', controller: subject, publicKeyJwk: jwk(k) })),
   service: [],
   alsoKnownAs: [websDid, `did:keri:${aid}`],
 }
-const out = path.join(here, 'webs-k0-root', HOST, ...PATH, aid)
+const out = OUT_ROOT ? path.join(OUT_ROOT, ...PATH, aid) : path.join(here, 'webs-k0-root', HOST, ...PATH, aid)
 fs.mkdirSync(out, { recursive: true })
 fs.writeFileSync(path.join(out, 'keri.cesr'), kel)
 fs.writeFileSync(path.join(out, 'did.json'), JSON.stringify(doc, null, 2) + '\n')

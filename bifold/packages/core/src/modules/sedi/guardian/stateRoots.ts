@@ -22,6 +22,12 @@ export interface StateRoot {
   /** What Who approves calls it: "Has a Guardian card from <name>". */
   name: string
   /**
+   * Where the root publishes its KEL (did:webs; sedi/webs). With it, a card's check reads the root's history from
+   * there, fetched on each open, and refuses as `stateNotResolved` when it cannot (never falls back to the card's own
+   * copy). Its last label must be `aid`. Without it, the card's copy is read, as before.
+   */
+  webs?: string
+  /**
    * A made-up state for demos and testing: Who approves shows a "Demo" pill beside the name. Set on the entry here,
    * never read from the card or inferred from the name.
    */
@@ -37,6 +43,9 @@ export const K0_TEST_ROOT: StateRoot = {
   aid: 'IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6',
   name: 'State of Example',
   demo: true,
+  // Where the demo state is fetched from: the host is a placeholder, replaced by the Developer "Demo state host"
+  // (sedi/webs/demoStateHost); with none set, the card's own copy is checked instead.
+  webs: 'did:webs:example.org:keyring-demo-state:IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6',
 }
 
 /**

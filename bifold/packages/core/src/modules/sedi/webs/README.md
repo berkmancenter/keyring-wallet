@@ -8,6 +8,24 @@ holder's presentation, so a holder cannot show the root's history cut short.
 
 It is behind the state-verified approvers switch (and so the SEDI/KERI remote kill), like the Guardian check.
 
+## One seam: `resolveRootKel(did)`
+
+The Guardian check and the screens call only `resolveRootKel(did)` (`./rootKel.ts`), which returns the verified bytes
+of the root's KEL, `{ ok: true, aid, kel }`, or a refusal. They never call `resolveWebs` directly. Ours is the
+default, an **interim for the 2026-11-14 demo**. Alberto said yes (IN-665) to the VTI maintainer's TypeScript did:webs
+resolver, for compatibility with the VTA/VTC work. It replaces ours with `setRootKelResolver(adapter)`, touching nothing
+else; `null` restores ours. An adapter must return the exact keri.cesr bytes it verified.
+
+Whatever resolver is behind the seam, the Guardian check replays those bytes again with this package's own reader
+(`../guardian`, `build()`), so a resolver's answer is never the only check. That replay keeps its own limits: notably,
+it refuses a KEL that declares witnesses (receipts are not read), even if the replacement accepted it. Reading receipts
+in our replay comes before a witnessed state root can verify here.
+
+On Who approves (`trust-tasks/guardianEvidence.ts`), each root a card names that has a `webs` DID on our list is
+resolved at most once per open, however many cards name it. Nothing is kept past the open, so a failure is never
+remembered. A root that does not resolve shows "Couldn't reach the state" (`stateNotResolved`, its own line), never
+"Couldn't verify" and never the card's own copy.
+
 ## What it checks
 
 1. The identifier: `did:webs:<host>[%3A<port>]:<path…>:<AID>`. Labels are Base64url/unreserved characters only, the AID

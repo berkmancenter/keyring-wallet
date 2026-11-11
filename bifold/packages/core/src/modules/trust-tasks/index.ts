@@ -71,6 +71,7 @@ export {
 } from './developerTestState'
 export { SEDI_KERI_REMOTE_OFF } from './module/sediKeriRemoteOff'
 export { setConfirmItsYouEnabled, isConfirmItsYouEnabled, CONFIRM_ITS_YOU_REMOTE_OFF } from './module/confirmItsYouFlag'
+export { setDemoStateHost, demoStateHost, demoStateHostProblem } from '../sedi/webs/demoStateHost'
 
 // 228 writer: DTG Credentials v1 shapes are written only when this is on (default off).
 export {

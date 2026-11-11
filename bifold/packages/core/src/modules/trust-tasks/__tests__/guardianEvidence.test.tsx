@@ -19,6 +19,8 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import * as guardianModule from '../../sedi/guardian'
 import * as stateRoots from '../../sedi/guardian/stateRoots'
+import * as websModule from '../../sedi/webs'
+import * as websResolve from '../../sedi/webs/resolve'
 import * as approverRole from '../approverRole'
 import {
   GUARDIAN_EVIDENCE_MAX_BYTES,
@@ -1441,5 +1443,341 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
       const on = await show(jordan)
       expect(on.getByTestId(testIdWithKey(TrustedApproversIds.cardStatus(CONN)))).toBeTruthy()
     })
+  })
+})
+
+// ---------------------------------------------------------------------------------------------------------------
+// A root that publishes its KEL at a did:webs (sedi/webs): read from there on each open, never the card's copy instead.
+
+describe('a root read from its did:webs', () => {
+  const WEBS_FX = join(__dirname, '..', '..', 'sedi', '__tests__', 'fixtures', 'webs-k0-root')
+  const ROOT = stateRoots.K0_TEST_ROOT.aid
+  const DID = `did:webs:example.org:keyring-demo-state:${ROOT}`
+  const BASE = `https://example.org/keyring-demo-state/${ROOT}`
+  const served = (f: string) =>
+    new Uint8Array(readFileSync(join(WEBS_FX, 'example.org', 'keyring-demo-state', ROOT, f)))
+  const id = (key: string) => testIdWithKey(key)
+  // No row here may reach the network: the platform fetch refuses unless a row puts its own in place.
+  const realFetch = global.fetch
+  beforeEach(() => {
+    global.fetch = jest.fn(async () => {
+      throw new Error('no network in tests')
+    }) as never
+  })
+  afterEach(() => {
+    global.fetch = realFetch
+    websModule.setDemoStateHost(null)
+  })
+
+  /** A fetch serving the K0 root's two artifacts, or throwing for every URL when `down`. Counts what was asked. */
+  const host = (down = false) => {
+    const asked: string[] = []
+    const f = jest.fn(async (url: string) => {
+      asked.push(url)
+      if (down) throw new Error('offline')
+      const body =
+        url === `${BASE}/keri.cesr` ? served('keri.cesr') : url === `${BASE}/did.json` ? served('did.json') : null
+      return {
+        ok: !!body,
+        status: body ? 200 : 404,
+        url,
+        headers: { get: () => null },
+        arrayBuffer: async () => (body ?? new Uint8Array()).slice().buffer as ArrayBuffer,
+      }
+    })
+    return Object.assign(f as unknown as websModule.WebsFetch, { asked })
+  }
+  /** This phone's list: the K0 root, publishing at DID. */
+  const rootAtWebs = () => {
+    // The K0 root is a demo root: it is fetched only with a Developer "Demo state host" in effect.
+    websModule.setDemoStateHost('example.org')
+    return jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([{ ...stateRoots.K0_TEST_ROOT, webs: DID }])
+  }
+
+  /** Sam's phone with Jordan's G-ok card kept (written, so it shows), and optionally Amy's too on a second connection. */
+  const kept = async (alsoAmy = false) => {
+    const sam = phone()
+    await setStateWard(sam.agent, SAM_WARD)
+    sam.ask({ state: 'closed', written: true, writtenAs: JORDAN })
+    await handleGuardianEvidence(sam.agent, sam.service, documentOf(card('G-ok')), context)
+    if (alsoAmy) {
+      const jordanRow = sam.rows.find((r) => r.tags.recordType === approverRole.ROLE_OFFER_ASK)!
+      const content = JSON.parse(JSON.stringify(jordanRow.content)) as Record<string, unknown> & {
+        guardian: GuardianOnAsk
+      }
+      sam.rows.push({
+        id: 'r-amy',
+        tags: { recordType: approverRole.ROLE_OFFER_ASK, connectionId: CONN2 },
+        content: { ...content, connectionId: CONN2, writtenAs: AMY, guardian: { ...content.guardian, approver: AMY } },
+      })
+    }
+    return sam
+  }
+
+  test('D1: the root resolves: the card is verified, and its two artifacts were fetched (control: D3, unreachable)', async () => {
+    const sam = await kept()
+    rootAtWebs()
+    const fetch = host()
+    expect(await guardianStandings(sam.agent, { fetch })).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true, fetchedFrom: 'example.org' },
+    })
+    expect(fetch.asked).toEqual([`${BASE}/keri.cesr`, `${BASE}/did.json`])
+  })
+
+  test('D2: one open fetches each root once, however many cards name it (control: D4, a new open fetches again)', async () => {
+    const sam = await kept(true)
+    rootAtWebs()
+    const fetch = host()
+    expect(await guardianStandings(sam.agent, { fetch })).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true, fetchedFrom: 'example.org' },
+      [AMY]: { kind: 'verified', state: 'State of Example', demo: true, fetchedFrom: 'example.org' },
+    })
+    expect(fetch.asked).toHaveLength(2)
+  })
+
+  test("D3: the root can't be reached: unreachable, its own kind, never verified from the card's copy (control: the same card with no did:webs is verified)", async () => {
+    const sam = await kept()
+    expect(await guardianStandings(sam.agent, { fetch: host(true) })).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true },
+    })
+    rootAtWebs()
+    expect(await guardianStandings(sam.agent, { fetch: host(true) })).toEqual({
+      [JORDAN]: { kind: 'unreachable', state: 'State of Example' },
+    })
+    expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: false, reason: 'stateNotResolved' })
+  })
+
+  test('D4: a failure is not remembered: the next open fetches again and verifies (control: D3)', async () => {
+    const sam = await kept()
+    rootAtWebs()
+    expect((await guardianStandings(sam.agent, { fetch: host(true) }))[JORDAN].kind).toBe('unreachable')
+    const fetch = host()
+    expect(await guardianStandings(sam.agent, { fetch })).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true, fetchedFrom: 'example.org' },
+    })
+    expect(fetch.asked).toHaveLength(2)
+  })
+
+  test('D5: switched off: nothing is fetched and nothing shows (control: D1)', async () => {
+    const sam = await kept()
+    rootAtWebs()
+    setStateVerifiedApproversEnabled(false)
+    const fetch = host()
+    expect(await guardianStandings(sam.agent, { fetch })).toEqual({})
+    expect(fetch.asked).toEqual([])
+  })
+
+  test('D6: a card whose chain does not name the root is not resolved against it (control: D1, G-ok names it)', async () => {
+    const sam = phone()
+    await setStateWard(sam.agent, SAM_WARD)
+    sam.ask({ state: 'closed', written: true, writtenAs: JORDAN })
+    await handleGuardianEvidence(sam.agent, sam.service, documentOf(card('G-untrusted')), context)
+    rootAtWebs()
+    const fetch = host()
+    expect(await guardianStandings(sam.agent, { fetch })).toEqual({
+      [JORDAN]: { kind: 'unverified', outcome: 'untrustedRoot' },
+    })
+    expect(fetch.asked).toEqual([])
+  })
+
+  test('D7: a card arriving while the root is unreachable is kept as stateNotResolved (control: D1)', async () => {
+    rootAtWebs()
+    const realFetch = global.fetch
+    global.fetch = jest.fn(async () => {
+      throw new Error('offline')
+    }) as never
+    try {
+      const sam = await arrives(card('G-ok'))
+      expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: false, reason: 'stateNotResolved' })
+    } finally {
+      global.fetch = realFetch
+    }
+  })
+
+  test('D8: the resolver throwing is checkFailed, never verified (control: D1)', async () => {
+    const sam = await kept()
+    rootAtWebs()
+    jest.spyOn(websResolve, 'resolveWebs').mockImplementation(() => {
+      throw new Error('boom')
+    })
+    expect(await guardianStandings(sam.agent, { fetch: host() })).toEqual({
+      [JORDAN]: { kind: 'unverified', outcome: 'checkFailed' },
+    })
+  })
+
+  test('D10: a replacement resolver behind the one seam is used, and our fetch is not (control: D1, ours)', async () => {
+    const sam = await kept()
+    rootAtWebs()
+    const fetch = host()
+    const replacement = jest.fn(async () => ({ ok: true as const, aid: ROOT, kel: served('keri.cesr') }))
+    expect(await guardianStandings(sam.agent, { fetch, resolveRootKel: replacement })).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true, fetchedFrom: 'example.org' },
+    })
+    expect(replacement).toHaveBeenCalledWith(DID)
+    expect(fetch.asked).toEqual([])
+  })
+
+  test("D11: a replacement's refusal is unreachable; its KEL is replayed again here, so a bad one is still refused (control: D10)", async () => {
+    const sam = await kept()
+    rootAtWebs()
+    const refusing = async () => ({ ok: false as const, reason: 'unreachable', detail: 'offline' })
+    expect((await guardianStandings(sam.agent, { resolveRootKel: refusing }))[JORDAN]).toEqual({
+      kind: 'unreachable',
+      state: 'State of Example',
+    })
+    const tampered = new TextEncoder().encode(
+      new TextDecoder('latin1').decode(served('keri.cesr')).replace('"s":"1"', '"s":"3"')
+    )
+    const lying = async () => ({ ok: true as const, aid: ROOT, kel: tampered })
+    expect((await guardianStandings(sam.agent, { resolveRootKel: lying }))[JORDAN]).toEqual({
+      kind: 'unverified',
+      outcome: 'kelNotReplaying',
+    })
+  })
+
+  test('D12: setRootKelResolver replaces it app-wide, so the screen path needs no change (control: null restores ours)', async () => {
+    const sam = await kept()
+    rootAtWebs()
+    const replacement = jest.fn(async () => ({ ok: true as const, aid: ROOT, kel: served('keri.cesr') }))
+    websModule.setRootKelResolver(replacement)
+    try {
+      expect(await guardianStandings(sam.agent)).toEqual({
+        [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true, fetchedFrom: 'example.org' },
+      })
+      expect(replacement).toHaveBeenCalledTimes(1)
+    } finally {
+      websModule.setRootKelResolver(null)
+    }
+    expect(await guardianStandings(sam.agent, { fetch: host(true) })).toEqual({
+      [JORDAN]: { kind: 'unreachable', state: 'State of Example' },
+    })
+  })
+
+  test("L1: a root fetched live: Who approves names the host it came from and says the alias check is not supported (control: from the card's copy, no such line)", async () => {
+    const sam = await kept()
+    ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => void) => require('react').useEffect(effect, []))
+    ;(useAgent as jest.Mock).mockReturnValue({ agent: sam.agent })
+    jest.spyOn(approverRole, 'approverNames').mockResolvedValue({ [JORDAN]: 'Jordan' })
+    jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue({
+      view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
+      version: 2,
+    } as TrustedApproversState)
+    const screen = async () => {
+      const tree = render(
+        <BasicAppContext>
+          <VtaTrustedApprovers />
+        </BasicAppContext>
+      )
+      await act(async () => undefined)
+      return tree
+    }
+    const copy = await screen()
+    expect(copy.getByTestId(id(TrustedApproversIds.guardianVerified(JORDAN)))).toBeTruthy()
+    expect(copy.queryByTestId(id(TrustedApproversIds.guardianFetchedLive(JORDAN)))).toBeNull()
+    copy.unmount()
+    rootAtWebs()
+    global.fetch = host() as never
+    const live = await screen()
+    expect(live.getByTestId(id(TrustedApproversIds.guardianFetchedLive(JORDAN))).props.children).toBe(
+      'Approver.GuardianFetchedLive'
+    )
+    expect(live.getByTestId(id(TrustedApproversIds.guardianVerified(JORDAN)))).toBeTruthy()
+  })
+
+  test("H6: with the Demo state host set, the root is fetched from THAT host and the line names it, never the DID's own (control: the placeholder host is never asked)", async () => {
+    const sam = await kept()
+    const TUNNEL = 'abc-def.trycloudflare.com'
+    const TBASE = `https://${TUNNEL}/keyring-demo-state/${ROOT}`
+    const asked: string[] = []
+    const tunnel = jest.fn(async (url: string) => {
+      asked.push(url)
+      // did.json names its own DID, so a host serves the one generated for it (the generator takes the host).
+      const doc = new TextEncoder().encode(
+        new TextDecoder().decode(served('did.json')).split('example.org').join(TUNNEL)
+      )
+      const body = url === `${TBASE}/keri.cesr` ? served('keri.cesr') : url === `${TBASE}/did.json` ? doc : null
+      return {
+        ok: !!body,
+        status: body ? 200 : 404,
+        url,
+        headers: { get: () => null },
+        arrayBuffer: async () => (body ?? new Uint8Array()).slice().buffer as ArrayBuffer,
+      }
+    }) as unknown as websModule.WebsFetch
+    rootAtWebs()
+    websModule.setDemoStateHost(TUNNEL)
+    expect(await guardianStandings(sam.agent, { fetch: tunnel })).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true, fetchedFrom: TUNNEL },
+    })
+    expect(asked.length).toBeGreaterThan(0)
+    expect(asked.every((u) => u.startsWith(`https://${TUNNEL}/`))).toBe(true)
+    expect(asked.some((u) => u.includes('example.org'))).toBe(false)
+  })
+
+  test("H7: no Demo state host: the demo root is checked from the card's copy, nothing is fetched, and the line says so (control: H6, fetched live)", async () => {
+    const sam = await kept()
+    const fetch = host()
+    expect(await guardianStandings(sam.agent, { fetch })).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true },
+    })
+    expect(fetch.asked).toHaveLength(0)
+    ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => void) => require('react').useEffect(effect, []))
+    ;(useAgent as jest.Mock).mockReturnValue({ agent: sam.agent })
+    jest.spyOn(approverRole, 'approverNames').mockResolvedValue({ [JORDAN]: 'Jordan' })
+    jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue({
+      view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
+      version: 2,
+    } as TrustedApproversState)
+    const tree = render(
+      <BasicAppContext>
+        <VtaTrustedApprovers />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    expect(tree.getByTestId(id(TrustedApproversIds.guardianDemoCopy(JORDAN))).props.children).toBe(
+      'Approver.GuardianDemoCopy'
+    )
+    expect(tree.queryByTestId(id(TrustedApproversIds.guardianFetchedLive(JORDAN)))).toBeNull()
+  })
+
+  test('L2: the live line, in every language, names the host and says the designated-alias check is not done (control: the key exists in all three)', () => {
+    const en = require('../../../localization/en/en.json').Approver.GuardianFetchedLive as string
+    const fr = require('../../../localization/fr/fr.json').Approver.GuardianFetchedLive as string
+    const pt = require('../../../localization/pt-br/pt-br.json').Approver.GuardianFetchedLive as string
+    for (const s of [en, fr, pt]) expect(s).toContain('{{host}}')
+    expect(en).toBe("Fetched live from {{host}}; the designated-alias check isn't supported yet.")
+    expect(fr).toMatch(/pas encore/)
+    expect(pt).toMatch(/ainda não/)
+  })
+
+  test('D9: Who approves says "Couldn\'t reach the state", not "Couldn\'t verify" and not verified (control: the state card line rows above)', async () => {
+    const sam = await kept()
+    rootAtWebs()
+    const realFetch = global.fetch
+    global.fetch = jest.fn(async () => {
+      throw new Error('offline')
+    }) as never
+    try {
+      ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => void) => require('react').useEffect(effect, []))
+      ;(useAgent as jest.Mock).mockReturnValue({ agent: sam.agent })
+      jest.spyOn(approverRole, 'approverNames').mockResolvedValue({ [JORDAN]: 'Jordan' })
+      jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue({
+        view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
+        version: 2,
+      } as TrustedApproversState)
+      const tree = render(
+        <BasicAppContext>
+          <VtaTrustedApprovers />
+        </BasicAppContext>
+      )
+      await act(async () => undefined)
+      expect(tree.getByTestId(id(TrustedApproversIds.guardianUnreachable(JORDAN))).props.children).toBe(
+        'Approver.GuardianStateUnreachable'
+      )
+      expect(tree.queryByTestId(id(TrustedApproversIds.guardianUnverified(JORDAN)))).toBeNull()
+      expect(tree.queryByTestId(id(TrustedApproversIds.guardianVerified(JORDAN)))).toBeNull()
+    } finally {
+      global.fetch = realFetch
+    }
   })
 })
