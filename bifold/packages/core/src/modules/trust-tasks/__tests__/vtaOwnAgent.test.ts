@@ -811,6 +811,34 @@ describe('adding a device from a phone whose own access lapses', () => {
     expect(added.expiresAt).toBe(HOUR)
   })
 
+  // VTI-ACL-107 (vta-service-v0.80.0 acl.rs; newer than our v0.79.0 pin): an entry may state only purposes its
+  // writer's own grants. A phone whose own list it couldn't read gives `any`, and an agent holding it to listed
+  // purposes refuses: said as beyond its own access.
+  it.each([
+    ['as the 0.3 tasks code it', { code: 'purposeOutsideDelegator', message: 'purposes outside your own' }],
+    [
+      'in the words of an older task',
+      {
+        code: 'permissionDenied',
+        message:
+          'purposes outside your own: ["any"] — an entry you write may state only purposes your own entry grants, and `any` never grants modelTraining (VTI-ACL-107)',
+      },
+    ],
+  ])("a grant beyond this phone's own purposes, refused %s, reads as beyond its own access", async (_how, refusal) => {
+    const { vta } = await linkedPhone()
+    mockVta.refuseNext.set(ACL_GRANT, refusal)
+    const failure = (await vta.addBackupDevice(agent, BACKUP).catch((e: unknown) => e)) as DeviceActionRefused
+    expect(failure.reason).toBe('beyondOwnAccess')
+    expect(failure.message).not.toMatch(/ACL|VTA|DID|did:|107|purpose/)
+  })
+
+  it('a refusal for another reason still reads as not permitted (control)', async () => {
+    const { vta } = await linkedPhone()
+    mockVta.refuseNext.set(ACL_GRANT, { code: 'permissionDenied', message: 'forbidden: not an admin' })
+    const failure = (await vta.addBackupDevice(agent, BACKUP).catch((e: unknown) => e)) as DeviceActionRefused
+    expect(failure.reason).toBe('notPermitted')
+  })
+
   it('a second refusal is said in plain words, and nothing is sent a third time', async () => {
     const { vta } = await linkedPhone()
     ownExpiry(HOUR)

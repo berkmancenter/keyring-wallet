@@ -173,6 +173,16 @@ export function deviceCodeIn(text: string): string | undefined {
 const SELF_DELETE = /cannot delete your own ACL entry/i
 /** Any of VTI-ACL-053's refusals: what the caller asked to write goes beyond its own entry (vta-service operations/acl.rs:340-403). */
 const OWN_ACCESS_BOUND = /VTI-ACL-053/
+/**
+ * VTI-ACL-107's refusal: an entry stating purposes beyond the writer's own (vta-service-v0.80.0, 71f64ab1b,
+ * operations/acl.rs `validate_purposes_within_caller`, "purposes outside your own … (VTI-ACL-107)"; added by afc06a431,
+ * VTI #2539, the breaking VTI-ACL-100 – 110 change). The 0.3 tasks answer it with the code `purposeOutsideDelegator`
+ * (acl_v0_3.rs), older ones as a forbidden with these words. It POST-DATES our VTI pin (vta-service-v0.79.0,
+ * f7b78e29d), which has none of it: only an agent at v0.80.0 or later refuses this way, so the pinned reference cannot
+ * exercise this branch. The agent bounds the grant either way: this only says why, in the same words as an expiry
+ * beyond this phone's own.
+ */
+const OWN_PURPOSES_BOUND = /VTI-ACL-107/
 /** VTI-ACL-053's refusal of a permanent entry from a caller whose own entry expires, with that expiry in epoch seconds (acl.rs:391-394). */
 const OWN_ENTRY_EXPIRES = /your entry expires at (\d+), so you cannot write a permanent one/
 
@@ -227,6 +237,11 @@ export function deviceRefusalOf(error: unknown): DeviceActionRefused {
   if (details.reason === 'conflict' && ALREADY_EXISTS.test(message)) return refusal('alreadyAdded')
   if (details.reason === 'not_found') return refusal('notFound')
   if (error.code === 'permissionDenied' && OWN_ACCESS_BOUND.test(message)) return refusal('beyondOwnAccess')
+  if (
+    error.code === 'purposeOutsideDelegator' ||
+    (error.code === 'permissionDenied' && OWN_PURPOSES_BOUND.test(message))
+  )
+    return refusal('beyondOwnAccess')
   if (error.code === 'permissionDenied') return refusal('notPermitted')
   // A refusal that did arrive is never "didn't answer" (al-phone, 10-05: an
   // add refused 422 four times read as silence): said as a refusal, with its
