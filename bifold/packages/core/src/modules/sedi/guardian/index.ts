@@ -37,6 +37,13 @@ export interface CheckOptions {
   /** The State roots this phone trusts (AIDs). */
   trustedRoots: string[]
   now?: Date
+  /**
+   * KEL streams fetched from their did:webs location and already verified there (../webs, resolveWebs). Each one is the
+   * history read for its prefix in place of a presented copy: a presented KEL for the same prefix must be the same
+   * history or an earlier part of it (a holder showing fewer events than the state publishes is the case this closes),
+   * and one that disagrees refuses the whole check. Never a source of trust: the roots are still `trustedRoots`.
+   */
+  resolvedKels?: Uint8Array[]
 }
 
 /**
@@ -77,10 +84,37 @@ const guarded: Digest = (code, bytes) => {
 }
 
 function build(material: ChainMaterial, options: CheckOptions): Built {
+  const resolved = new Map<string, Replay & { ok: true }>()
+  for (const bytes of options.resolvedKels ?? []) {
+    const r = replayKel(digest, bytes)
+    if (!r.ok)
+      return { ok: false, reason: 'kelNotReplaying', prefix: r.pre ?? '', detail: 'a resolved KEL does not replay' }
+    if (resolved.has(r.state.pre))
+      return {
+        ok: false,
+        reason: 'kelNotReplaying',
+        prefix: r.state.pre,
+        detail: `two resolved KELs claim ${r.state.pre}`,
+      }
+    resolved.set(r.state.pre, r)
+  }
   const kels = new Map<string, Replay>()
   for (const bytes of material.kels) {
     const r = replayKel(digest, bytes)
     if (r.ok) {
+      const published = resolved.get(r.state.pre)
+      if (published) {
+        // The presented history must be the published one, or an earlier part of it, event by event.
+        const shown = r.history.map((e) => e?.said)
+        const full = published.history.map((e) => e?.said)
+        if (shown.length > full.length || shown.some((s, i) => s !== full[i]))
+          return {
+            ok: false,
+            reason: 'kelNotReplaying',
+            prefix: r.state.pre,
+            detail: `the presented KEL for ${r.state.pre} disagrees with the one its did:webs publishes`,
+          }
+      }
       // Two presented KELs for one prefix contradict each other, as duplicity within one stream does: refused, never
       // resolved by which came last (a truncated copy beside the real one would otherwise choose the history read).
       if (kels.has(r.state.pre))
@@ -103,6 +137,8 @@ function build(material: ChainMaterial, options: CheckOptions): Built {
     const prefix = r.pre ?? ''
     return { ok: false, reason: 'kelNotReplaying', prefix, detail: `a presented KEL (${prefix}) does not replay` }
   }
+  // A resolved KEL is the history read for its prefix, whether or not a copy was presented.
+  for (const [pre, r] of resolved) kels.set(pre, r)
   // A registry or credential presented twice is refused the same way: one SAID, two presentations, never a winner.
   const tels = new Map<string, TelInput>()
   for (const t of material.tels) {

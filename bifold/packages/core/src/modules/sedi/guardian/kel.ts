@@ -9,7 +9,7 @@ import { blake3 } from '@noble/hashes/blake3.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 
 import { readKelStream } from '../cesr/reader'
-import { DIGESTS } from '../cesr/codes'
+import { DIGESTS, KEYS } from '../cesr/codes'
 import { b64Encode, keyCode } from '../cesr/qb64'
 import { verifySignature } from '../cesr/signatures'
 
@@ -129,6 +129,14 @@ export function replayKel(dig: Digest, bytes: Uint8Array): Replay {
     if (b.ilk === 'icp') {
       if (st) return fail('second inception')
       if (b.sn !== 0) return fail('icp sn must be 0')
+      // A key-code prefix is its inception key itself (basic prefix): exactly one key, equal to the prefix.
+      const prefixKey = DIGESTS[b.pre[0]] ? undefined : keyCode(b.pre)
+      if (prefixKey !== undefined) {
+        if (b.keys.length !== 1 || b.keys[0] !== b.pre) return fail('key-code prefix is not its own inception key')
+        // A non-transferable prefix (B, 1AAI) never rotates, so it commits to no next key.
+        if (!KEYS[prefixKey].transferable && (b.ndigs.length > 0 || (b.nt !== undefined && b.nt !== '0')))
+          return fail('non-transferable prefix commits to next keys')
+      }
       keys = b.keys
       ndigs = b.ndigs
       wits = b.backs
@@ -136,6 +144,9 @@ export function replayKel(dig: Digest, bytes: Uint8Array): Replay {
     } else {
       if (!st) return fail('event before inception')
       if (b.pre !== st.pre) return fail('wrong prefix')
+      // A non-transferable prefix's KEL is its inception alone (keripy refuses any later event for one).
+      const stKey = DIGESTS[st.pre[0]] ? undefined : keyCode(st.pre)
+      if (stKey !== undefined && !KEYS[stKey].transferable) return fail('non-transferable prefix has no later events')
       if (b.sn !== st.sn + 1) return fail(`out of order (have ${st.sn})`)
       if (b.prior !== st.said) return fail('prior digest does not match')
       if (b.ilk === 'rot') {

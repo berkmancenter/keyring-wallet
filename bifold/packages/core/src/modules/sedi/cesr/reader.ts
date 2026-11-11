@@ -34,6 +34,8 @@ export interface KelEvent {
   backs: string[]
   bn?: number
   kt: string
+  /** The next-key threshold as written ("nt"), when the event carries one. */
+  nt?: string
   seals?: Record<string, unknown>[]
 }
 
@@ -82,6 +84,7 @@ function bodyAt(bytes: Uint8Array, text: string, at: number): { ok: true; event:
     backs: strings(ked.b) ?? [],
     ...(hexInt(ked.bt) !== undefined ? { bn: hexInt(ked.bt) } : {}),
     kt: String(ked.kt ?? ''),
+    ...(ked.nt !== undefined ? { nt: String(ked.nt) } : {}),
     ...(Array.isArray(ked.a) ? { seals: ked.a as Record<string, unknown>[] } : {}),
   }
   return { ok: true, event, end: at + size }
