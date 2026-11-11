@@ -475,6 +475,11 @@ specific `profileId` instead of deleting every `RCardTemplate` record.
   not designed — revisit only if the "active profile, switched before connecting" model
   proves insufficient in practice (e.g., a user wants a specific existing contact to
   keep seeing a profile they've since made inactive for new connections).
+- **Updating cards that existing contacts already hold** is not built: contacts keep the
+  card they were issued (§1). A design is proposed in
+  [`2026-10-24-al.md`](./editable-multi-profile-plan/2026-10-24-al.md). It is an offer to send
+  an edit to the contacts who hold that profile (found through `sharedProfileId`), and a
+  receiver notice with "See what changed". It needs no protocol change. Not scheduled.
 - **User-facing wording** ("profile" vs. "card" vs. something else in translated
   strings) is not decided here — a copy/product decision, not an engineering one, and
   it does not block any implementation step above.
@@ -488,3 +493,4 @@ specific `profileId` instead of deleting every `RCardTemplate` record.
 | [`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md) | BAM | Reads `feat/prague-farm-membership`'s persona implementation and `dtgwg-cred-spec`'s latest `main` directly; supersedes §3's "open, blocked" framing with the resolved VTA architecture, the r-card/persona/VPC spec grounding, and the decided 1:1 profile↔persona link. Also supersedes §4.2's original "plain Settings row" entry point with the Profile-tab redesign, and records why §4.1's active-profile resolution needed a Credo tag rather than relying on `RCardState.activeProfileId` alone. |
 | [`2026-09-19-bam.md`](./editable-multi-profile-plan/2026-09-19-bam.md) | BAM | Resolves a narrower, read-only sibling of §4.3's deferred per-connection binding: which profile was shared with a contact, shown live on `ContactDetails` (falling back to a share-time label snapshot only once the profile is deleted), plus a delete-time warning on `MyProfiles` when a profile is still shared with contacts. Does not resolve §7's still-open per-connection binding item. |
 | [`2026-09-21-al.md`](./editable-multi-profile-plan/2026-09-21-al.md) | AL | Reads the 1:1 profile↔persona decision against upstream's persona/face model, published the same week (vti `a96fe02f`: faces on the VTA, per-context bindings, local faces by default, a correlation index). Proposes holding `linkedPersonaDid`, keeping the R-Card profile for wallet↔wallet, and using a context-local VTA face for what a community sees — Brendan's safety intent kept as a UX default rather than a data-model constraint. Proposal only; supersedes nothing. |
+| [`2026-10-24-al.md`](./editable-multi-profile-plan/2026-10-24-al.md) | AL | Proposes sending an edited card to contacts who already hold the old one. It records what already exists (the receiver auto-accepts and shows the newest card; `sharedProfileId` records which profile each contact got), and adds an opt-in update action, a per-contact version field, and a receiver notice with "See what changed". Proposal only; supersedes nothing. |
