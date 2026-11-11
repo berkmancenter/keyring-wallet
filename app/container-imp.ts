@@ -30,6 +30,8 @@ import {
   setStateVerifiedApproversEnabled,
   setTrustTestStateEnabled,
   setStateCardEnabled,
+  setDemoStateHost,
+  setConfirmItsYouEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -396,6 +398,8 @@ export class AppContainer implements Container {
         enableStateVerifiedApprovers,
         enableTrustTestState,
         enableStateCard,
+        demoStateHost,
+        enableConfirmItsYou,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -433,6 +437,14 @@ export class AppContainer implements Container {
         loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
         // As above: isStateCardEnabled() (with STATE_CARD_REMOTE_OFF and SEDI_KERI_REMOTE_OFF) is the only kill path.
         loadSwitch(BCLocalStorageKeys.EnableStateCard, (val) => (enableStateCard = val)),
+        // As above: bifold's isConfirmItsYouEnabled() (with its remote off and the umbrella) is the only kill path.
+        loadSwitch(BCLocalStorageKeys.EnableConfirmItsYou, (val) => (enableConfirmItsYou = val)),
+        // The saved Demo state host goes to bifold, which refuses a value that is not a bare public hostname and applies
+        // it only to demo roots and only while both switches hold: the saved text never redirects on its own.
+        (async () => {
+          const data = await this.storage.getValueForKey(BCLocalStorageKeys.DemoStateHost)
+          if (typeof data === 'string') demoStateHost = data
+        })(),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -464,6 +476,8 @@ export class AppContainer implements Container {
           enableStateVerifiedApprovers,
           enableTrustTestState,
           enableStateCard,
+          demoStateHost,
+          enableConfirmItsYou,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -480,6 +494,9 @@ export class AppContainer implements Container {
       setTrustTestStateEnabled(state.developer.enableTrustTestState)
       // Before Credentials first draws: the state card reads it at each render.
       setStateCardEnabled(state.developer.enableStateCard)
+      setDemoStateHost(state.developer.demoStateHost || null)
+      // Before an arriving "Confirm it's you" request is read: it is dropped while off.
+      setConfirmItsYouEnabled(state.developer.enableConfirmItsYou)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {

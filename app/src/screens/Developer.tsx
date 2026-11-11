@@ -27,6 +27,9 @@ import {
   setUpSediDemo,
   turnOffSediDemo,
   SEDI_KERI_REMOTE_OFF,
+  CONFIRM_ITS_YOU_REMOTE_OFF,
+  setConfirmItsYouEnabled,
+  setDemoStateHost,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -56,6 +59,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
   Alert,
   ActivityIndicator,
@@ -103,6 +107,8 @@ const Developer: React.FC = () => {
   )
   const [enableTrustTestState, setEnableTrustTestState] = useState(!!store.developer.enableTrustTestState)
   const [enableStateCard, setEnableStateCard] = useState(!!store.developer.enableStateCard)
+  const [enableConfirmItsYou, setEnableConfirmItsYou] = useState(!!store.developer.enableConfirmItsYou)
+  const [demoStateHostText, setDemoStateHostText] = useState(store.developer.demoStateHost ?? '')
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -437,6 +443,17 @@ const Developer: React.FC = () => {
     setEnableStateVerifiedApprovers(next)
   }
 
+  const toggleEnableConfirmItsYouSwitch = () => {
+    const next = !enableConfirmItsYou
+    dispatch({
+      type: BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU,
+      payload: [next],
+    })
+    // Read live: the contact page and an arriving request read it from the next render, no restart.
+    setConfirmItsYouEnabled(next)
+    setEnableConfirmItsYou(next)
+  }
+
   const toggleEnableTrustTestStateSwitch = () => {
     const next = !enableTrustTestState
     dispatch({
@@ -488,7 +505,9 @@ const Developer: React.FC = () => {
 
   /**
    * "Set up the SEDI demo": bifold turns the three switches on and keeps the K0 card and ward, or does nothing at all
-   * when a remote off holds; only a done set-up is saved here.
+   * when a remote off holds. Each result has its own message. The switches are saved on every result but 'remoteOff':
+   * after 'cardNotHeld' or 'wardNotSet' bifold HAS turned them on, so saving them keeps a restart from silently
+   * differing from what this screen shows. 'remoteOff' saves nothing: the feature is off for this build either way.
    */
   const runSediDemoSetup = async () => {
     if (!agent) {
@@ -497,17 +516,34 @@ const Developer: React.FC = () => {
     }
     try {
       const result = await setUpSediDemo(agent)
-      if (result === 'done') saveSediDemoSwitches(true)
-      Alert.alert(
-        t('Developer.SetUpSediDemo'),
-        t(result === 'done' ? 'Developer.SediDemoDone' : 'Developer.SediDemoOff')
-      )
+      if (result !== 'remoteOff') saveSediDemoSwitches(true)
+      const message = {
+        done: 'Developer.SediDemoDone',
+        remoteOff: 'Developer.SediDemoOff',
+        cardNotHeld: 'Developer.SediDemoCardNotHeld',
+        wardNotSet: 'Developer.SediDemoWardNotSet',
+      }[result]
+      Alert.alert(t('Developer.SetUpSediDemo'), t(message ?? 'Developer.SediDemoOff'))
     } catch (error) {
       Alert.alert(t('Developer.SetUpSediDemo'), `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
   /** "Turn off the SEDI demo": the three switches off, saved; nothing kept is deleted. */
+  /**
+   * "Demo state host": handed to bifold, which refuses anything that is not a bare public hostname (optionally with a
+   * port) and changes nothing then. Saved only when bifold took it, so a restart applies the same value.
+   */
+  const saveDemoStateHost = (text?: string) => {
+    const value = (text ?? demoStateHostText).trim()
+    const result = setDemoStateHost(value === '' ? null : value)
+    if (result === 'invalid') {
+      Alert.alert(t('Developer.DemoStateHost'), t('Developer.DemoStateHostInvalid'))
+      return
+    }
+    dispatch({ type: BCDispatchAction.SET_DEMO_STATE_HOST, payload: [result === 'cleared' ? '' : value.toLowerCase()] })
+  }
+
   const runSediDemoOff = () => {
     turnOffSediDemo()
     saveSediDemoSwitches(false)
@@ -1139,6 +1175,23 @@ const Developer: React.FC = () => {
           <>
             <View style={styles.sectionSeparator}></View>
             <SectionHeader icon={'slideshow'} title={t('Developer.Demos')} />
+            {/* Hidden while its own remote off (or, above, the umbrella) is set: a saved "on" can't bring it back. */}
+            {!CONFIRM_ITS_YOU_REMOTE_OFF.off && (
+              <SectionRow
+                title={t('Developer.EnableConfirmItsYou')}
+                accessibilityLabel={t('Developer.EnableConfirmItsYou')}
+                testID={testIdWithKey('ToggleEnableConfirmItsYou')}
+                onPress={toggleEnableConfirmItsYouSwitch}
+              >
+                <Switch
+                  trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+                  thumbColor={enableConfirmItsYou ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+                  ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+                  onValueChange={toggleEnableConfirmItsYouSwitch}
+                  value={enableConfirmItsYou}
+                />
+              </SectionRow>
+            )}
             <SectionRow
               title={t('Developer.SetUpSediDemo')}
               accessibilityLabel={t('Developer.SetUpSediDemo')}
@@ -1156,6 +1209,28 @@ const Developer: React.FC = () => {
               >
                 <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
               </SectionRow>
+            )}
+            {isTrustedApproversEnabled() && isStateVerifiedApproversEnabled() && (
+              <View style={{ paddingHorizontal: 25, paddingVertical: 12 }}>
+                <Text style={TextTheme.normal}>{t('Developer.DemoStateHost')}</Text>
+                <Text style={TextTheme.caption}>{t('Developer.DemoStateHostHint')}</Text>
+                <TextInput
+                  testID={testIdWithKey('DemoStateHost')}
+                  accessibilityLabel={t('Developer.DemoStateHost')}
+                  value={demoStateHostText}
+                  onChangeText={setDemoStateHostText}
+                  onEndEditing={(e) => saveDemoStateHost(e?.nativeEvent?.text)}
+                  onSubmitEditing={(e) => saveDemoStateHost(e?.nativeEvent?.text)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder="abc-def.trycloudflare.com"
+                  style={[
+                    TextTheme.normal,
+                    { borderBottomWidth: 1, borderColor: TextTheme.normal.color, paddingVertical: 6 },
+                  ]}
+                />
+              </View>
             )}
           </>
         )}

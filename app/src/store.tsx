@@ -57,6 +57,13 @@ export interface Developer {
    * setStateCardEnabled; needs neither approver switch (the card says when it can't be checked yet).
    */
   enableStateCard: boolean
+  /** Developer "Demo state host": where a demo state root's did:webs is fetched while testing; '' for none. */
+  demoStateHost: string
+  /**
+   * "Confirm it's you": ask a contact to confirm, with their phone's lock, that a call or message is really them.
+   * bifold's setConfirmItsYouEnabled; CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+   */
+  enableConfirmItsYou: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -81,6 +88,8 @@ enum DeveloperDispatchAction {
   TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
   TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
   TOGGLE_STATE_CARD = 'developer/toggleStateCard',
+  TOGGLE_CONFIRM_ITS_YOU = 'developer/toggleConfirmItsYou',
+  SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -160,6 +169,9 @@ const developerState: Developer = {
   enableTrustTestState: false,
   // Off by default: STATE_CARD_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on"; changing this default cannot.
   enableStateCard: false,
+  demoStateHost: '',
+  // Off by default, as above: CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+  enableConfirmItsYou: false,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -182,6 +194,8 @@ export enum BCLocalStorageKeys {
   EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
   EnableTrustTestState = 'EnableTrustTestState',
   EnableStateCard = 'EnableStateCard',
+  EnableConfirmItsYou = 'EnableConfirmItsYou',
+  DemoStateHost = 'DemoStateHost',
 }
 
 export const initialState: BCState = {
@@ -324,6 +338,22 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableStateCard }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableStateCard, developer.enableStateCard)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_CONFIRM_ITS_YOU: {
+      const enableConfirmItsYou: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableConfirmItsYou }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableConfirmItsYou, developer.enableConfirmItsYou)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.SET_DEMO_STATE_HOST: {
+      const demoStateHost: string = (action?.payload || []).pop() || ''
+      const developer = { ...state.developer, demoStateHost }
+
+      PersistentStorage.storeValueForKey<string>(BCLocalStorageKeys.DemoStateHost, developer.demoStateHost)
 
       return { ...state, developer }
     }
