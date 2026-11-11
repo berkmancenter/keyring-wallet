@@ -103,7 +103,7 @@ import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
 import { didOfKeyId, isAgentsOwnDid, isAgentsOwnPersona } from './agentOwnIdentity'
-import { besideQueue, inReadLane, VTA_HEARTBEAT_BESIDE, VTA_READ_LANE_SIZE } from './vtaReadLane'
+import { besideQueue, goesFirst, inReadLane, VTA_HEARTBEAT_BESIDE, VTA_READ_LANE_SIZE } from './vtaReadLane'
 import {
   DECLARATIVE_POLICY_ID,
   DECLARATIVE_POLICY_NAME,
@@ -896,6 +896,8 @@ interface QueuedTask {
   ticket: number
   type: string
   start: () => Promise<void>
+  /** Part of a member's own write: queued ahead of every task that isn't (`goesFirst`). */
+  first?: true
 }
 
 export class TspReplyBreaker {
@@ -1566,7 +1568,17 @@ export class VtaClient {
         void Promise.resolve().then(() => run().then(resolve, reject))
         return
       }
-      this.waiting.push({ ticket, type, start: () => run().then(resolve, reject) })
+      const queued: QueuedTask = { ticket, type, start: () => run().then(resolve, reject) }
+      // A member's own write goes ahead of what is queued, behind any other part of a write, in the order asked; what
+      // is on the wire runs on (vtaReadLane, goesFirst).
+      if (goesFirst(type, payload)) {
+        queued.first = true
+        const at = this.waiting.findIndex((t) => !t.first)
+        if (at >= 0) {
+          this.agent.config.logger.info(`${LOG_PREFIX} ${type} goes ahead of ${this.waiting.length - at} queued`)
+          this.waiting.splice(at, 0, queued)
+        } else this.waiting.push(queued)
+      } else this.waiting.push(queued)
       // One task at a time: one queued behind another says what it waits on, so a
       // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
       // A heartbeat beside the queue holds nothing: what is named is the other task on the wire, if there is one.
