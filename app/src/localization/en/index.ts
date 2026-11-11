@@ -207,6 +207,7 @@ const translation = {
     "EnableTrustTestState": "Trust the test state (K0), for testing only",
     "HoldK0TestGuardianCard": "Hold the test Guardian card (K0)",
     "BecomeK0TestWard": "I'm the test ward (K0)",
+    "EnableConfirmItsYou": "Confirm it's you: ask a contact to confirm a call or message is really them (demo). Turn it on on both phones.",
     "Demos": "Demos",
     "SetUpSediDemo": "Set up the SEDI demo",
     "TurnOffSediDemo": "Turn off the SEDI demo",

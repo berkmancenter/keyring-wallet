@@ -30,6 +30,7 @@ import {
   setStateVerifiedApproversEnabled,
   setTrustTestStateEnabled,
   setDemoStateHost,
+  setConfirmItsYouEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -396,6 +397,7 @@ export class AppContainer implements Container {
         enableStateVerifiedApprovers,
         enableTrustTestState,
         demoStateHost,
+        enableConfirmItsYou,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -431,6 +433,8 @@ export class AppContainer implements Container {
         // only kill paths, so every reader goes through them, never the saved value.
         loadSwitch(BCLocalStorageKeys.EnableStateVerifiedApprovers, (val) => (enableStateVerifiedApprovers = val)),
         loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
+        // As above: bifold's isConfirmItsYouEnabled() (with its remote off and the umbrella) is the only kill path.
+        loadSwitch(BCLocalStorageKeys.EnableConfirmItsYou, (val) => (enableConfirmItsYou = val)),
         // The saved Demo state host goes to bifold, which refuses a value that is not a bare public hostname and applies
         // it only to demo roots and only while both switches hold: the saved text never redirects on its own.
         (async () => {
@@ -468,6 +472,7 @@ export class AppContainer implements Container {
           enableStateVerifiedApprovers,
           enableTrustTestState,
           demoStateHost,
+          enableConfirmItsYou,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -483,6 +488,8 @@ export class AppContainer implements Container {
       setStateVerifiedApproversEnabled(state.developer.enableStateVerifiedApprovers)
       setTrustTestStateEnabled(state.developer.enableTrustTestState)
       setDemoStateHost(state.developer.demoStateHost || null)
+      // Before an arriving "Confirm it's you" request is read: it is dropped while off.
+      setConfirmItsYouEnabled(state.developer.enableConfirmItsYou)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {

@@ -54,6 +54,11 @@ export interface Developer {
   enableTrustTestState: boolean
   /** Developer "Demo state host": where a demo state root's did:webs is fetched while testing; '' for none. */
   demoStateHost: string
+  /**
+   * "Confirm it's you": ask a contact to confirm, with their phone's lock, that a call or message is really them.
+   * bifold's setConfirmItsYouEnabled; CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+   */
+  enableConfirmItsYou: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -77,6 +82,7 @@ enum DeveloperDispatchAction {
   TOGGLE_TRUSTED_APPROVERS = 'developer/toggleTrustedApprovers',
   TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
   TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
+  TOGGLE_CONFIRM_ITS_YOU = 'developer/toggleConfirmItsYou',
   SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
 }
 
@@ -156,6 +162,8 @@ const developerState: Developer = {
   // Off by default; it holds only while the two switches above hold, so their remote offs beat a saved "on" here too.
   enableTrustTestState: false,
   demoStateHost: '',
+  // Off by default, as above: CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+  enableConfirmItsYou: false,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -177,6 +185,7 @@ export enum BCLocalStorageKeys {
   EnableTrustedApprovers = 'EnableTrustedApprovers',
   EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
   EnableTrustTestState = 'EnableTrustTestState',
+  EnableConfirmItsYou = 'EnableConfirmItsYou',
   DemoStateHost = 'DemoStateHost',
 }
 
@@ -312,6 +321,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
         BCLocalStorageKeys.EnableTrustTestState,
         developer.enableTrustTestState
       )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_CONFIRM_ITS_YOU: {
+      const enableConfirmItsYou: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableConfirmItsYou }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableConfirmItsYou, developer.enableConfirmItsYou)
 
       return { ...state, developer }
     }

@@ -204,6 +204,7 @@ const translation = {
     "EnableTrustTestState": "Faire confiance à l'État de test (K0), pour les tests uniquement",
     "HoldK0TestGuardianCard": "Garder la carte de tuteur de test (K0)",
     "BecomeK0TestWard": "Je suis la personne protégée de test (K0)",
+    "EnableConfirmItsYou": "C'est bien vous : demander à un contact de confirmer qu'un appel ou un message vient bien de lui (démo). À activer sur les deux téléphones.",
     "Demos": "Démos",
     "SetUpSediDemo": "Préparer la démo SEDI",
     "TurnOffSediDemo": "Arrêter la démo SEDI",
