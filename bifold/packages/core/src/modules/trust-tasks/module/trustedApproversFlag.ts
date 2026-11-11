@@ -10,8 +10,11 @@
  * whatever was saved, so a switch once flipped on can always be turned off
  * again; it never turns it on.
  *
+ * SEDI_KERI_REMOTE_OFF (sediKeriRemoteOff.ts) turns it off too, with every other SEDI/KERI feature.
+ *
  * @module trust-tasks/module/trustedApproversFlag
  */
+import { SEDI_KERI_REMOTE_OFF } from './sediKeriRemoteOff'
 
 /** Set to true in a release to turn trusted approvers off for everyone, whatever was saved. */
 export const TRUSTED_APPROVERS_REMOTE_OFF: { off: boolean } = { off: false }
@@ -23,7 +26,7 @@ export function setTrustedApproversEnabled(enabled: boolean): void {
   trustedApproversEnabled = enabled
 }
 
-/** Switched on, and not turned off remotely. */
+/** Switched on, and turned off neither for this feature nor for SEDI/KERI as a whole. */
 export function isTrustedApproversEnabled(): boolean {
-  return trustedApproversEnabled && !TRUSTED_APPROVERS_REMOTE_OFF.off
+  return trustedApproversEnabled && !TRUSTED_APPROVERS_REMOTE_OFF.off && !SEDI_KERI_REMOTE_OFF.off
 }

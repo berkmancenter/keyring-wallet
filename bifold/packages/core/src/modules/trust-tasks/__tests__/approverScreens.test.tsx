@@ -15,6 +15,7 @@ import * as approverRole from '../approverRole'
 import { ROLE_ACTIONS } from '../approverRoleSpec'
 import ApproverOfferModal, { ApproverOfferIds, resetPutOff } from '../components/ApproverOfferModal'
 import { trustedApproversView } from '../module/trustedApprovers'
+import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import { TRUSTED_APPROVERS_REMOTE_OFF, setTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
 import { DeviceActionRefused } from '../module/vtaOwner'
@@ -67,6 +68,7 @@ beforeEach(() => {
   ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => void) => require('react').useEffect(effect, []))
   ;(useAgent as jest.Mock).mockReturnValue({ agent: AGENT })
   TRUSTED_APPROVERS_REMOTE_OFF.off = false
+  SEDI_KERI_REMOTE_OFF.off = false
   setTrustedApproversEnabled(true)
   approverRole.roleOfferPromptStore.clear()
   resetPutOff()
@@ -169,6 +171,23 @@ describe("the contact's row", () => {
     read.mockResolvedValue(ask({ state: 'closed', acceptedAs: JORDAN, written: true }))
     tree = await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)
     expect(tree.queryByTestId(id(ApproverAskRowIds.steppedDown))).toBeNull()
+  })
+
+  test('the SEDI/KERI umbrella alone hides it: its own switch on and not killed (control: umbrella off, it is there)', async () => {
+    // Off for a reason other than the feature's own switch: the lane-wide kill. #1013's rows pass with the feature
+    // switch off; this one passes only if the umbrella reaches the screen through isTrustedApproversEnabled.
+    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(undefined)
+    linked(SAM_AGENT)
+    setTrustedApproversEnabled(true)
+    TRUSTED_APPROVERS_REMOTE_OFF.off = false
+    SEDI_KERI_REMOTE_OFF.off = true
+    expect(
+      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).queryByTestId(id(ApproverAskRowIds.row))
+    ).toBeNull()
+    SEDI_KERI_REMOTE_OFF.off = false
+    expect(
+      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).getByTestId(id(ApproverAskRowIds.row))
+    ).toBeTruthy()
   })
 
   test('is not there with the switch off, turned off remotely, or with no linked agent (control: on and linked, it is)', async () => {

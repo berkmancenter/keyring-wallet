@@ -55,6 +55,12 @@ export {
   isTrustedApproversEnabled,
   TRUSTED_APPROVERS_REMOTE_OFF,
 } from './module/trustedApproversFlag'
+export {
+  setStateVerifiedApproversEnabled,
+  isStateVerifiedApproversEnabled,
+  STATE_VERIFIED_APPROVERS_REMOTE_OFF,
+} from './module/stateVerifiedApproversFlag'
+export { SEDI_KERI_REMOTE_OFF } from './module/sediKeriRemoteOff'
 
 // 228 writer: DTG Credentials v1 shapes are written only when this is on (default off).
 export {
