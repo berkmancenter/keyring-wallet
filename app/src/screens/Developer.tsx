@@ -15,6 +15,16 @@ import {
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
   setTrustedApproversEnabled,
+  setStateVerifiedApproversEnabled,
+  setTrustTestStateEnabled,
+  isTrustedApproversEnabled,
+  isStateVerifiedApproversEnabled,
+  isTrustTestStateEnabled,
+  holdK0TestGuardianCard,
+  becomeK0TestWard,
+  setUpSediDemo,
+  turnOffSediDemo,
+  SEDI_KERI_REMOTE_OFF,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -86,6 +96,10 @@ const Developer: React.FC = () => {
     !!store.developer.enableSharedConnectInvite
   )
   const [enableTrustedApprovers, setEnableTrustedApprovers] = useState(!!store.developer.enableTrustedApprovers)
+  const [enableStateVerifiedApprovers, setEnableStateVerifiedApprovers] = useState(
+    !!store.developer.enableStateVerifiedApprovers
+  )
+  const [enableTrustTestState, setEnableTrustTestState] = useState(!!store.developer.enableTrustTestState)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -407,6 +421,82 @@ const Developer: React.FC = () => {
     // Read live: the contact page, My agent and an arriving offer read it from the next render, no restart.
     setTrustedApproversEnabled(next)
     setEnableTrustedApprovers(next)
+  }
+
+  const toggleEnableStateVerifiedApproversSwitch = () => {
+    const next = !enableStateVerifiedApprovers
+    dispatch({
+      type: BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS,
+      payload: [next],
+    })
+    // Read live: an arriving Guardian card and Who approves read it at each check, no restart.
+    setStateVerifiedApproversEnabled(next)
+    setEnableStateVerifiedApprovers(next)
+  }
+
+  const toggleEnableTrustTestStateSwitch = () => {
+    const next = !enableTrustTestState
+    dispatch({
+      type: BCDispatchAction.TOGGLE_TRUST_TEST_STATE,
+      payload: [next],
+    })
+    // Read live: the next Guardian check trusts the K0 test root (or stops trusting it), no restart.
+    setTrustTestStateEnabled(next)
+    setEnableTrustTestState(next)
+  }
+
+  /** The two K0 Developer actions: each does nothing (and says so) unless "Trust the test state (K0)" holds. */
+  const runTestStateAction = async (title: string, action: typeof holdK0TestGuardianCard) => {
+    if (!agent) {
+      Alert.alert('Error', 'Agent not initialized')
+      return
+    }
+    try {
+      const result = await action(agent)
+      Alert.alert(title, result === 'done' ? 'Done.' : 'Not done: turn on Trust the test state (K0) first.')
+    } catch (error) {
+      Alert.alert(title, `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /** Keep the three SEDI demo switches as saved settings, as their own rows do, and show them. */
+  const saveSediDemoSwitches = (on: boolean) => {
+    for (const type of [
+      BCDispatchAction.TOGGLE_TRUSTED_APPROVERS,
+      BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS,
+      BCDispatchAction.TOGGLE_TRUST_TEST_STATE,
+    ])
+      dispatch({ type, payload: [on] })
+    setEnableTrustedApprovers(on)
+    setEnableStateVerifiedApprovers(on)
+    setEnableTrustTestState(on)
+  }
+
+  /**
+   * "Set up the SEDI demo": bifold turns the three switches on and keeps the K0 card and ward, or does nothing at all
+   * when a remote off holds; only a done set-up is saved here.
+   */
+  const runSediDemoSetup = async () => {
+    if (!agent) {
+      Alert.alert('Error', 'Agent not initialized')
+      return
+    }
+    try {
+      const result = await setUpSediDemo(agent)
+      if (result === 'done') saveSediDemoSwitches(true)
+      Alert.alert(
+        t('Developer.SetUpSediDemo'),
+        t(result === 'done' ? 'Developer.SediDemoDone' : 'Developer.SediDemoOff')
+      )
+    } catch (error) {
+      Alert.alert(t('Developer.SetUpSediDemo'), `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /** "Turn off the SEDI demo": the three switches off, saved; nothing kept is deleted. */
+  const runSediDemoOff = () => {
+    turnOffSediDemo()
+    saveSediDemoSwitches(false)
   }
 
   const toggleEnableLivePickupSwitch = () => {
@@ -959,6 +1049,84 @@ const Developer: React.FC = () => {
             value={enableTrustedApprovers}
           />
         </SectionRow>
+        {/* Each row below shows only while the switches above it hold (remote offs included), read live from bifold,
+            never from the saved values; the local state only makes the screen render again on a toggle. */}
+        {isTrustedApproversEnabled() && (
+          <SectionRow
+            title={t('Developer.EnableStateVerifiedApprovers')}
+            accessibilityLabel={t('Developer.EnableStateVerifiedApprovers')}
+            testID={testIdWithKey('ToggleEnableStateVerifiedApprovers')}
+            onPress={toggleEnableStateVerifiedApproversSwitch}
+          >
+            <Switch
+              trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+              thumbColor={enableStateVerifiedApprovers ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+              ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+              onValueChange={toggleEnableStateVerifiedApproversSwitch}
+              value={enableStateVerifiedApprovers}
+            />
+          </SectionRow>
+        )}
+        {isTrustedApproversEnabled() && isStateVerifiedApproversEnabled() && (
+          <SectionRow
+            title={t('Developer.EnableTrustTestState')}
+            accessibilityLabel={t('Developer.EnableTrustTestState')}
+            testID={testIdWithKey('ToggleEnableTrustTestState')}
+            onPress={toggleEnableTrustTestStateSwitch}
+          >
+            <Switch
+              trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+              thumbColor={enableTrustTestState ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+              ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+              onValueChange={toggleEnableTrustTestStateSwitch}
+              value={enableTrustTestState}
+            />
+          </SectionRow>
+        )}
+        {isTrustTestStateEnabled() && (
+          <>
+            <SectionRow
+              title={t('Developer.HoldK0TestGuardianCard')}
+              accessibilityLabel={t('Developer.HoldK0TestGuardianCard')}
+              testID={testIdWithKey('HoldK0TestGuardianCard')}
+              onPress={() => runTestStateAction(t('Developer.HoldK0TestGuardianCard'), holdK0TestGuardianCard)}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+            <SectionRow
+              title={t('Developer.BecomeK0TestWard')}
+              accessibilityLabel={t('Developer.BecomeK0TestWard')}
+              testID={testIdWithKey('BecomeK0TestWard')}
+              onPress={() => runTestStateAction(t('Developer.BecomeK0TestWard'), becomeK0TestWard)}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+          </>
+        )}
+        {!SEDI_KERI_REMOTE_OFF.off && (
+          <>
+            <View style={styles.sectionSeparator}></View>
+            <SectionHeader icon={'slideshow'} title={t('Developer.Demos')} />
+            <SectionRow
+              title={t('Developer.SetUpSediDemo')}
+              accessibilityLabel={t('Developer.SetUpSediDemo')}
+              testID={testIdWithKey('SetUpSediDemo')}
+              onPress={() => void runSediDemoSetup()}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+            {(enableTrustedApprovers || enableStateVerifiedApprovers || enableTrustTestState) && (
+              <SectionRow
+                title={t('Developer.TurnOffSediDemo')}
+                accessibilityLabel={t('Developer.TurnOffSediDemo')}
+                testID={testIdWithKey('TurnOffSediDemo')}
+                onPress={runSediDemoOff}
+              >
+                <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+              </SectionRow>
+            )}
+          </>
+        )}
         <View style={styles.sectionSeparator}></View>
         <SectionHeader icon={'bug-report'} title={'Diagnostics'} />
         <SectionRow
