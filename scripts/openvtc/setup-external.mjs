@@ -17,6 +17,8 @@ import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { pinState } from "./pinState.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../..");
 const externalDir = join(repoRoot, "external");
@@ -52,8 +54,22 @@ for (const [name, pin] of Object.entries(pins.repos)) {
   }
 
   const head = git(["rev-parse", "--short", "HEAD"], dir);
-  if (head === pin.sha) {
+  const resolved = (() => {
+    try {
+      return git(["rev-parse", "--verify", "--quiet", `${pin.sha}^{commit}`], dir);
+    } catch {
+      return undefined;
+    }
+  })();
+  const state = pinState({ head, headCommit: git(["rev-parse", "HEAD"], dir), pinSha: pin.sha, pinCommit: resolved });
+  if (state === "pinned") {
     console.log(`  ✓ ${name.padEnd(34)} ${pin.sha} (pinned)`);
+    continue;
+  }
+  // At the pin, but PINS.json spells it otherwise: said loudly, not checked out again (wallet #901, #902).
+  if (state === "misnamed") {
+    console.log(`  ! ${name.padEnd(34)} is at the pin, but PINS.json names it ${pin.sha}; git abbreviates it ${head}: write that`);
+    problems++;
     continue;
   }
 
