@@ -532,14 +532,15 @@ function shownBeside(ask: RoleOfferAsk, guardian: GuardianOnAsk): string | undef
 }
 
 /**
- * What a check on open read, as one string: the ward, the roots this build trusts (AID and the name we show), and
- * the card's exact stored text. Equal strings mean the check would read the same inputs; anything that differs,
+ * What a check on open read, as one string: the ward, the roots this build trusts (AID, the name we show, and whether
+ * the root is marked demo: a mark that moves must re-check, or a demo root could show no Demo pill), and the card's
+ * exact stored text. Equal strings mean the check would read the same inputs; anything that differs,
  * including a key order that changed, only makes the check run again. The card's text is compared whole, not
  * hashed: a hash would cost more than comparing ~14 KB and could only be less exact.
  */
 function checkInputs(evidence: GuardianEvidence, ward: string | null): string {
   const roots = trustedStateRoots()
-    .map((root) => `${root.aid}=${root.name}${root.demo ? '#demo' : ''}`)
+    .map((root) => JSON.stringify([root.aid, root.name, root.demo === true]))
     .sort()
   return JSON.stringify([ward, roots, evidenceOf(evidence)])
 }

@@ -788,6 +788,21 @@ describe('Who approves on open: the check runs again only when something it read
     expect(spy).toHaveBeenCalledTimes(2)
   })
 
+  test('a demo mark ADDED to a root: the next open checks again and shows the Demo pill (control: unmarked, no pill)', async () => {
+    // The direction that matters: a cached verdict without the mark would let a demo root read as a real state.
+    jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([{ aid: K0.aid, name: K0.name }])
+    const sam = await arrives(card('G-ok'))
+    const spy = checks()
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'State of Example' } })
+    await guardianStandings(sam.agent)
+    expect(spy).toHaveBeenCalledTimes(1)
+    jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([K0])
+    expect(await guardianStandings(sam.agent)).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true },
+    })
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
   test('the demo mark moved: the kept verdict is written back without it (control: unmoved, it keeps demo)', async () => {
     const sam = await arrives(card('G-ok'))
     await guardianStandings(sam.agent)
