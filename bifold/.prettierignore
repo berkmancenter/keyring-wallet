@@ -15,6 +15,10 @@ packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-vetter-schemas/*.js
 packages/core/src/modules/polls/__tests__/fixtures/polls-schemas/*.json
 packages/core/src/modules/rooms/__tests__/fixtures/rooms-schemas/**/*.json
 
+# The K0 SEDI/KERI kit's output and the cesr-ts reference read of it: byte-identical, since every SAID and signature
+# in them is over the exact bytes (see the README beside them). Reformatting them breaks the chain.
+packages/core/src/modules/sedi/__tests__/fixtures/**
+
 # Generated emoji data (one entry per line, by scripts/emoji/generate-emoji-data.mjs)
 # and the vendored Unicode/CLDR inputs it is built from. Reformatting either would
 # break the generator --check and the byte-identical sources.
