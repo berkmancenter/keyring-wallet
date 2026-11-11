@@ -29,6 +29,14 @@ import { openCommunityFrom } from '../modules/trust-tasks/screens/CommunityCardD
 import CommunityPassDetails from '../modules/trust-tasks/screens/CommunityPassDetails'
 import { toRawCredential } from '../modules/vrc/utils/rcardDisplayUtils'
 
+/**
+ * The state card (SEDI/KERI holder card, behind "State card (demo)"), loaded when the list first draws, never at this
+ * module's load: a suite that mocks what it reads must not fail just by importing this screen.
+ */
+const stateCard = (): typeof import('../modules/sedi/holder') =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+  require('../modules/sedi/holder')
+
 const ListCredentials: React.FC = () => {
   const { t } = useTranslation()
   const [store, dispatch] = useStore()
@@ -47,6 +55,8 @@ const ListCredentials: React.FC = () => {
   const { ColorPalette } = useTheme()
   const { start, stop } = useTour()
   const screenIsFocused = useIsFocused()
+  const { useHeldStateCard, StateCardPass } = stateCard()
+  const heldStateCard = useHeldStateCard(screenIsFocused)
   const {
     openIdState: { w3cCredentialRecords, sdJwtVcRecords, mdocVcRecords, isLoading: openIdLoading },
   } = useOpenIDCredentials()
@@ -329,18 +339,23 @@ const ListCredentials: React.FC = () => {
               onClose={close}
               liftFrom={open.liftFrom}
             />
-          ) : communityCards.length > 0 ? (
-            <PassStack
-              records={communityCards}
-              returning={returning}
-              onOpen={(record, index) => {
-                const key = cardKeyOf(record)
-                if (!key) return
-                // Measured before the list goes back to its top, so the pass lifts from where it was on screen.
-                setOpen({ key, liftFrom: liftFrom(index, scrolled.current) })
-                list.current?.scrollToOffset({ offset: 0, animated: false })
-              }}
-            />
+          ) : communityCards.length > 0 || heldStateCard ? (
+            <>
+              {communityCards.length > 0 ? (
+                <PassStack
+                  records={communityCards}
+                  returning={returning}
+                  onOpen={(record, index) => {
+                    const key = cardKeyOf(record)
+                    if (!key) return
+                    // Measured before the list goes back to its top, so the pass lifts from where it was on screen.
+                    setOpen({ key, liftFrom: liftFrom(index, scrolled.current) })
+                    list.current?.scrollToOffset({ offset: 0, animated: false })
+                  }}
+                />
+              ) : null}
+              {heldStateCard ? <StateCardPass view={heldStateCard} /> : null}
+            </>
           ) : null
         }
         renderItem={({ item: credential, index }) => {
@@ -362,7 +377,7 @@ const ListCredentials: React.FC = () => {
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }} testID="ListCredentialsLoading">
               <ActivityIndicator color={ColorPalette.brand.primary} />
             </View>
-          ) : communityCards.length > 0 ? null : (
+          ) : communityCards.length > 0 || heldStateCard ? null : (
             <CredentialEmptyList message={t('Credentials.EmptyList')} />
           )
         }

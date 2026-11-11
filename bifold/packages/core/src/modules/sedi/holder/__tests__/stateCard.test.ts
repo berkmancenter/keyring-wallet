@@ -1,0 +1,194 @@
+/**
+ * What the state card says, from the K0 test card this phone holds and its check (sedi/holder/stateCard). The rule
+ * under test: "Checks out" only from checkGuardianEvidence's `ok: true`; switched off, no root trusted and every
+ * refusal each say what stopped the check, never that it checks out.
+ *
+ * The real K0 card and the real verifier, with the real switches; only the words are a stand-in (`t` below writes the
+ * key and what it was given, so a row can see what was said and with what).
+ */
+import type { TFunction } from 'i18next'
+
+import { SEDI_KERI_REMOTE_OFF } from '../../../trust-tasks/module/sediKeriRemoteOff'
+import {
+  STATE_VERIFIED_APPROVERS_REMOTE_OFF,
+  setStateVerifiedApproversEnabled,
+} from '../../../trust-tasks/module/stateVerifiedApproversFlag'
+import { setTrustTestStateEnabled } from '../../../trust-tasks/module/trustTestStateFlag'
+import { setTrustedApproversEnabled } from '../../../trust-tasks/module/trustedApproversFlag'
+import type { GuardianEvidence } from '../../../trust-tasks/guardianEvidence'
+import { K0_TEST_GUARDIAN_CARD } from '../../guardian/k0TestCard'
+import { K0_TEST_ROOT } from '../../guardian/stateRoots'
+import { STATE_CARD_AS_OF, checkHeldCard, checkKeyOf, stateCardView, type HeldCheck } from '../stateCard'
+
+const t = ((key: string, extra?: Record<string, unknown>) => {
+  const { interpolation: _, ...given } = extra ?? {}
+  return Object.keys(given).length ? `${key}${JSON.stringify(given)}` : key
+}) as unknown as TFunction
+const day = (iso: string) => `day(${iso.slice(0, 10)})`
+const NOW = new Date('2026-11-12T12:00:00Z')
+const card: GuardianEvidence = K0_TEST_GUARDIAN_CARD
+const view = (check: HeldCheck, evidence: GuardianEvidence = card) => stateCardView(evidence, check, t, day)
+const checked = (evidence: GuardianEvidence = card, now = NOW) => checkHeldCard(evidence, now, () => undefined)
+
+const CHECKS_OUT = /^StateCard\.ChecksOut/
+const realDev = (global as { __DEV__?: boolean }).__DEV__
+// The K0 root's own `demo` as this build has it, put back after a row changes it.
+const realDemo = Object.getOwnPropertyDescriptor(K0_TEST_ROOT, 'demo')
+
+const switches = (sv: boolean, testState = true) => {
+  setTrustedApproversEnabled(true)
+  setStateVerifiedApproversEnabled(sv)
+  setTrustTestStateEnabled(testState)
+}
+
+beforeEach(() => switches(true))
+afterEach(() => {
+  switches(false, false)
+  STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = false
+  SEDI_KERI_REMOTE_OFF.off = false
+  ;(global as { __DEV__?: boolean }).__DEV__ = realDev
+  delete (K0_TEST_ROOT as { demo?: boolean }).demo
+  if (realDemo) Object.defineProperty(K0_TEST_ROOT, 'demo', realDemo)
+})
+
+describe('the state card: what it says', () => {
+  test('the K0 card, checked: "Checks out", as of the copy this phone holds, from the state on this list', () => {
+    const v = view(checked())
+    expect(v.tone).toBe('ok')
+    expect(v.status).toBe(`StateCard.ChecksOut{"asOf":"${STATE_CARD_AS_OF}"}`)
+    expect(v.title).toBe(K0_TEST_ROOT.name)
+    expect(v.guardianOf).toBe('StateCard.GuardianOf{"ward":"StateCard.YourContact"}')
+    expect(v.technical).toEqual({
+      holder: K0_TEST_GUARDIAN_CARD.holder,
+      root: K0_TEST_ROOT.aid,
+      said: K0_TEST_GUARDIAN_CARD.guardianSaid,
+      // As the card states it: dates are never parsed here (expiryParseGuard), only worded by the screen.
+      expires: '2030-11-10T00:00:00.000000+00:00',
+      result: 'valid',
+    })
+    expect(v.issued).toEqual({ label: 'StateCard.Issued', value: 'day(2026-11-10)' })
+    expect(v.validUntil).toEqual({ label: 'StateCard.ValidUntil', value: 'day(2030-11-10)' })
+  })
+
+  test('a demo root puts the cream "Demo" pill and the demo line on it', () => {
+    const v = view(checked())
+    expect(v.pill).toBe('StateCard.Demo')
+    expect(v.demoNote).toBe('StateCard.DemoNote')
+  })
+
+  test('the pill follows the root entry\'s own `demo`, not its name: demo false, no "Demo" (control above: K0 = demo)', () => {
+    ;(K0_TEST_ROOT as { demo?: boolean }).demo = false
+    const v = view(checked())
+    expect(v.tone).toBe('ok')
+    expect(v.pill).toBeUndefined()
+    // Still the K0 test card, so it still says it is a demo card.
+    expect(v.demoNote).toBe('StateCard.DemoNote')
+  })
+
+  test.each([
+    ['state-verified approvers off', () => setStateVerifiedApproversEnabled(false), 'switchedOff'],
+    ['the state-verified approvers remote off', () => (STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = true), 'switchedOff'],
+    ['the SEDI/KERI remote off', () => (SEDI_KERI_REMOTE_OFF.off = true), 'switchedOff'],
+    [
+      'no root trusted (a tester build without "Trust the test state (K0)")',
+      () => {
+        ;(global as { __DEV__?: boolean }).__DEV__ = false
+        setTrustTestStateEnabled(false)
+      },
+      'noRoots',
+    ],
+  ])('%s: not checked, says what to turn on, never "Checks out" (control: on, it checks out)', (_, off, why) => {
+    expect(view(checked()).status).toMatch(CHECKS_OUT)
+    off()
+    const v = view(checked())
+    expect(v.tone).toBe('notChecked')
+    expect(v.status).toBe('StateCard.SetupNeeded')
+    expect(v.status).not.toMatch(CHECKS_OUT)
+    expect(v.pill).toBe('StateCard.PillNotChecked')
+    expect(v.technical.root).toBeUndefined()
+    expect(v.technical.result).toBe(why)
+  })
+
+  test('an expired card: refused as expired, red pill, never "Checks out" (control: the day before, it checks out)', () => {
+    expect(view(checked(card, new Date('2030-11-09T00:00:00Z'))).status).toMatch(CHECKS_OUT)
+    const v = view(checked(card, new Date('2030-11-11T00:00:00Z')))
+    expect(v.tone).toBe('problem')
+    expect(v.technical.result).toBe('expired')
+    expect([v.status, v.pill]).toEqual(['StateCard.Expired', 'StateCard.PillExpired'])
+    expect(v.technical.root).toBeUndefined()
+  })
+
+  test('an edited card: refused, red pill, never "Checks out", and its dates still read from the card', () => {
+    const edited = {
+      ...card,
+      kels: [card.kels[0].replace(/.$/, (c) => (c === 'A' ? 'B' : 'A')), ...card.kels.slice(1)],
+    }
+    const v = view(checked(edited))
+    expect(v.tone).toBe('problem')
+    expect(v.status).not.toMatch(CHECKS_OUT)
+    expect(v.pill).toBe('StateCard.PillCouldNotVerify')
+    expect(v.title).toBe('StateCard.UnknownState')
+    expect(v.validUntil?.value).toBe('day(2030-11-10)')
+  })
+
+  const refused = (reason: string): HeldCheck => ({
+    checked: true,
+    verdict: { ok: false, reason, detail: 'x', checkedAt: NOW.toISOString() },
+  })
+  test.each([
+    ['revoked', 'StateCard.Revoked', 'StateCard.PillRevoked'],
+    ['expired', 'StateCard.Expired', 'StateCard.PillExpired'],
+    ['untrustedRoot', 'StateCard.Untrusted', 'StateCard.PillNotTrusted'],
+    ['statusNotCurrent', 'StateCard.StatusUnknown', 'StateCard.PillCouldNotVerify'],
+    ['telUnanchored', 'StateCard.StatusUnknown', 'StateCard.PillCouldNotVerify'],
+    ['kelNotReplaying', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
+    ['checkFailed', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
+    ['noWard', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
+    ['expiryUnreadable', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
+  ])('refused (%s): its words, a red pill, no state name, no root, no "Demo"', (reason, status, pill) => {
+    const v = view(refused(reason))
+    expect([v.tone, v.status, v.pill, v.title, v.technical.root]).toEqual([
+      'problem',
+      status,
+      pill,
+      'StateCard.UnknownState',
+      undefined,
+    ])
+    expect(v.technical.result).toBe(reason)
+  })
+
+  test('a card not the K0 test card, refused: no demo line (control: the K0 card refused keeps it)', () => {
+    expect(view(refused('revoked')).demoNote).toBe('StateCard.DemoNote')
+    expect(view(refused('revoked'), { ...card, guardianSaid: 'Eother' }).demoNote).toBeUndefined()
+  })
+
+  test('the check is keyed by the card and the switch it reads, so a change is checked again', () => {
+    const on = checkKeyOf(card)
+    expect(checkKeyOf(card)).toBe(on)
+    expect(checkKeyOf({ ...card, guardianSaid: 'Eother' })).not.toBe(on)
+    setStateVerifiedApproversEnabled(false)
+    expect(checkKeyOf(card)).not.toBe(on)
+  })
+
+  test('the key moves when the root list gains or loses a root (here: K0 trusted, then none)', () => {
+    const withK0 = checkKeyOf(card)
+    ;(global as { __DEV__?: boolean }).__DEV__ = false
+    setTrustTestStateEnabled(false)
+    expect(checkKeyOf(card)).not.toBe(withK0)
+    setTrustTestStateEnabled(true)
+    expect(checkKeyOf(card)).toBe(withK0)
+  })
+
+  test('the key moves when a root on the list is renamed, keeping its AID, so the card never keeps an old name', () => {
+    const before = checkKeyOf(card)
+    const name = K0_TEST_ROOT.name
+    try {
+      ;(K0_TEST_ROOT as { name: string }).name = 'Renamed state'
+      expect(checkKeyOf(card)).not.toBe(before)
+      expect(view(checked()).title).toBe('Renamed state')
+    } finally {
+      ;(K0_TEST_ROOT as { name: string }).name = name
+    }
+    expect(checkKeyOf(card)).toBe(before)
+  })
+})
