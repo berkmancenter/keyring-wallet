@@ -9,8 +9,9 @@ import {
   useStore,
   DispatchAction,
   useAnimatedComponents,
+  confirmBiometricKeychainAccess,
 } from '@bifold/core'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Alert, Linking, Platform, Switch, View } from 'react-native'
 import { check, PERMISSIONS, PermissionStatus, request, RESULTS } from 'react-native-permissions'
@@ -34,6 +35,10 @@ const Biometry: React.FC = () => {
   const [biometryEnabled, setBiometryEnabled] = useState(store.preferences.useBiometry)
   const [biometryAvailable, setBiometryAvailable] = useState(false)
   const [continueEnabled, setContinueEnabled] = useState(true)
+  // While Face ID is being confirmed the switch is disabled: it shows the check
+  // is running, and a second tap would start a second probe and fail the first.
+  const [confirming, setConfirming] = useState(false)
+  const confirmingRef = useRef(false)
   const { ButtonLoading } = useAnimatedComponents()
   const { Spacing } = useTheme()
 
@@ -105,7 +110,43 @@ const Biometry: React.FC = () => {
         showSettingsAlert(t('Biometry.AllowBiometricsTitle'), t('Biometry.AllowBiometricsDesc'))
         break
       case RESULTS.DENIED:
-        await onRequestSystemBiometrics(newValue)
+        // On iOS, react-native-permissions reports DENIED for Face ID when the
+        // OS says Face ID is usable but the library's own "already requested"
+        // flag is missing. A reinstall wipes that flag while iOS keeps the
+        // app's Face ID grant, and then request() never resolves: it waits for
+        // the app to become active again after an alert that iOS never shows.
+        // So instead of request(), read back a throwaway Face ID-protected
+        // keychain item: iOS asks for permission if it never has, then scans.
+        // Turn on only if Face ID really opened it, so Continue never stores
+        // the wallet key behind Face ID that cannot open it.
+        if (Platform.OS === 'ios' && supported_type === BIOMETRY_TYPE.FACE_ID) {
+          if (confirmingRef.current) {
+            break
+          }
+          confirmingRef.current = true
+          setConfirming(true)
+          let opened = false
+          try {
+            opened = await confirmBiometricKeychainAccess(
+              t('Biometry.UnlockPromptTitle'),
+              t('Biometry.UnlockPromptDescription')
+            )
+          } finally {
+            confirmingRef.current = false
+            setConfirming(false)
+          }
+          if (opened) {
+            setBiometryEnabled(newValue)
+          } else if ((await check(BIOMETRY_PERMISSION)) === RESULTS.BLOCKED) {
+            // Declined just now: say where to allow it, as for an earlier decline.
+            showSettingsAlert(t('Biometry.AllowBiometricsTitle'), t('Biometry.AllowBiometricsDesc'))
+          } else {
+            // Cancelled, a failed scan, locked out, or no answer: still off, say so.
+            Alert.alert(t('Biometry.NotConfirmedTitle'), t('Biometry.NotConfirmedDesc'))
+          }
+        } else {
+          await onRequestSystemBiometrics(newValue)
+        }
         break
       default:
         break
@@ -146,6 +187,7 @@ const Biometry: React.FC = () => {
           testID={testIdWithKey('ToggleBiometrics')}
           value={biometryEnabled}
           onValueChange={toggleSwitch}
+          disabled={confirming}
           trackColor={{ false: '#D9D9D9', true: '#A349A4' }}
           thumbColor="#FFFFFF"
         />
