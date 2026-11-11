@@ -42,6 +42,16 @@ export interface Developer {
    * person's agent, and approving for someone else's. bifold's setTrustedApproversEnabled.
    */
   enableTrustedApprovers: boolean
+  /**
+   * State-verified approvers (trusted-approver plan, stage 2, S1): an approver's state Guardian card, checked on the
+   * phone of the person they approve for. bifold's setStateVerifiedApproversEnabled; holds only with trusted approvers.
+   */
+  enableStateVerifiedApprovers: boolean
+  /**
+   * "Trust the test state (K0)": a tester build trusts the K0 test State root, so a K0 test card can verify. bifold's
+   * setTrustTestStateEnabled; holds only with trusted approvers and state-verified approvers both on.
+   */
+  enableTrustTestState: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -63,6 +73,8 @@ enum DeveloperDispatchAction {
   TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
   TOGGLE_SHARED_CONNECT_INVITE = 'developer/toggleSharedConnectInvite',
   TOGGLE_TRUSTED_APPROVERS = 'developer/toggleTrustedApprovers',
+  TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
+  TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -136,6 +148,10 @@ const developerState: Developer = {
   // Off by default. A saved choice wins on load. To turn it off for everyone, whatever was saved, use bifold's
   // TRUSTED_APPROVERS_REMOTE_OFF, which beats a saved "on"; changing this default cannot.
   enableTrustedApprovers: false,
+  // Off by default, as above: STATE_VERIFIED_APPROVERS_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+  enableStateVerifiedApprovers: false,
+  // Off by default; it holds only while the two switches above hold, so their remote offs beat a saved "on" here too.
+  enableTrustTestState: false,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -155,6 +171,8 @@ export enum BCLocalStorageKeys {
   EnableSharedConnect = 'EnableSharedConnect',
   EnableSharedConnectInvite = 'EnableSharedConnectInvite',
   EnableTrustedApprovers = 'EnableTrustedApprovers',
+  EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
+  EnableTrustTestState = 'EnableTrustTestState',
 }
 
 export const initialState: BCState = {
@@ -266,6 +284,28 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       PersistentStorage.storeValueForKey<boolean>(
         BCLocalStorageKeys.EnableTrustedApprovers,
         developer.enableTrustedApprovers
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS: {
+      const enableStateVerifiedApprovers: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableStateVerifiedApprovers }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableStateVerifiedApprovers,
+        developer.enableStateVerifiedApprovers
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_TRUST_TEST_STATE: {
+      const enableTrustTestState: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableTrustTestState }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableTrustTestState,
+        developer.enableTrustTestState
       )
 
       return { ...state, developer }

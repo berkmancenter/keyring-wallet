@@ -27,6 +27,8 @@ import {
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
   setTrustedApproversEnabled,
+  setStateVerifiedApproversEnabled,
+  setTrustTestStateEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -390,6 +392,8 @@ export class AppContainer implements Container {
         enableSharedConnect,
         enableSharedConnectInvite,
         enableTrustedApprovers,
+        enableStateVerifiedApprovers,
+        enableTrustTestState,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -421,6 +425,10 @@ export class AppContainer implements Container {
         // As above: bifold's isTrustedApproversEnabled() (with its remote off) is this flag's only kill path, so every
         // reader goes through it, never the saved value.
         loadSwitch(BCLocalStorageKeys.EnableTrustedApprovers, (val) => (enableTrustedApprovers = val)),
+        // As above: isStateVerifiedApproversEnabled() and isTrustTestStateEnabled() (with the remote offs) are the
+        // only kill paths, so every reader goes through them, never the saved value.
+        loadSwitch(BCLocalStorageKeys.EnableStateVerifiedApprovers, (val) => (enableStateVerifiedApprovers = val)),
+        loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -449,6 +457,8 @@ export class AppContainer implements Container {
           enableSharedConnect,
           enableSharedConnectInvite,
           enableTrustedApprovers,
+          enableStateVerifiedApprovers,
+          enableTrustTestState,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -460,6 +470,9 @@ export class AppContainer implements Container {
       setSharedConnectInviteEnabled(state.developer.enableSharedConnectInvite)
       // Before the agent's first message is read: an offer or an approver's request that arrives is dropped while off.
       setTrustedApproversEnabled(state.developer.enableTrustedApprovers)
+      // Before a Guardian card arrives or Who approves opens: both read these at each check.
+      setStateVerifiedApproversEnabled(state.developer.enableStateVerifiedApprovers)
+      setTrustTestStateEnabled(state.developer.enableTrustTestState)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {
