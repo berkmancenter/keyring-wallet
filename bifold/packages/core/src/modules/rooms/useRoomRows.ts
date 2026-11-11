@@ -60,6 +60,12 @@ export const ROWS_RETURN_FLOOR_MS = 60_000
 export const ROWS_FOCUS_FLOOR_MS = 10_000
 /** After a read that left a room unread, or failed: read again after each of these in turn, then wait as usual. */
 export const ROWS_RETRY_MS = [15_000, 30_000, 60_000] as const
+/**
+ * How many of Messages' rooms are watched at their hosts (live delivery, `real/roomWatches.ts`): the most recently
+ * active, while Messages is in view. The rest are read at {@link ROWS_POLL_MS} as before. An agent holds 64 watches a
+ * member and 256 in all; 32 leaves the room screen and other clients room (Alberto's word, L2, 11-11).
+ */
+export const ROWS_WATCHED_MAX = 32
 
 /** Where the newest post seen in each room is kept: by a hash of the room's ID. */
 export const ROOMS_SEEN_KEY = 'rooms.seenVersions'
@@ -122,6 +128,16 @@ interface Feed {
   /** How many Messages screens are in view: the poll runs only while one is. */
   inView: number
   listeners: Set<() => void>
+  /** The rooms the last listing showed, by room ID: a signal reads one of them alone. */
+  listed?: Map<string, RoomSummary & { communityDid: string }>
+  /** Rooms being read alone on a signal: one at a time each. */
+  readingAlone: Set<string>
+  /**
+   * Rooms signalled while a read of every room was out: read alone once it ends. That read may have read the room
+   * before its change, and the signal is spent (one arming, one signal), so dropping it would leave the change to the
+   * next two-minute read.
+   */
+  signalledWhileReading: Set<string>
 }
 
 const feed: Feed = {
@@ -132,6 +148,8 @@ const feed: Feed = {
   lastAsk: 0,
   inView: 0,
   listeners: new Set(),
+  readingAlone: new Set(),
+  signalledWhileReading: new Set(),
 }
 // The app's log, from the poll: one line per read, so a tester's report says when the rows came and why not.
 let log: ((line: string) => void) | undefined
@@ -326,6 +344,7 @@ async function readAll(service: RoomsService): Promise<void> {
         }
       }
     const rooms = listed.filter(shown)
+    if (feed.service === service) feed.listed = new Map(rooms.map((room) => [room.roomId, room]))
     // A community this listing skipped for now (a step kept its session as another identity: `heldBack`) keeps the
     // rows already read of it, as they were, until a listing reads it again. Without them its rooms and its chip went
     // from Messages at every such listing, so two communities seldom showed together (1 listing in 12, 277.11). By the
@@ -365,6 +384,7 @@ async function readAll(service: RoomsService): Promise<void> {
       if (feed.service !== service) return
       show()
     }
+    if (feed.service === service) watchActive(service)
     // A kept row is not this listing's: it neither asks a retry nor counts as not read, as it did not when it went.
     const reading = (feed.all ?? []).filter((row) => row.reading && !feed.keptRooms.has(row.roomId)).length
     const keptLine = feed.keptRooms.size > 0 ? `, ${feed.keptRooms.size} kept as read before` : ''
@@ -381,8 +401,88 @@ async function readAll(service: RoomsService): Promise<void> {
     publish()
     if (feed.again) {
       feed.again = false
+      // The read asked for reads every room; what was signalled meanwhile waits for it to end, then reads alone.
       refreshRoomRows()
+    } else readSignalledWhileReading(service)
+  }
+}
+
+/** The rooms signalled during a read of every room, each read alone now that it has ended (readOneOnSignal). */
+function readSignalledWhileReading(service: RoomsService): void {
+  if (feed.service !== service) return
+  const signalled = [...feed.signalledWhileReading]
+  feed.signalledWhileReading.clear()
+  for (const roomId of signalled) void readOneOnSignal(service, roomId)
+}
+
+/**
+ * While Messages is in view, the {@link ROWS_WATCHED_MAX} most recently active rooms read are armed at their hosts, from
+ * the newest version read, so a post in one reaches its row on the agent's signal rather than at the next two-minute
+ * read. Arming one already armed from that version sends nothing (roomWatches). Where the agent, the host or the release
+ * switch can't watch, nothing is armed and the rows read as before.
+ *
+ * The cap bounds what each call arms, not what stays armed: a room that leaves the top ones, or Messages closing, leaves
+ * its watch to lapse at its lease (a week) or fire once. Past the agent's 64 a member, it refuses with `limitReached`
+ * and that room is polled (roomWatches), so the cost of a residue is polling, never a missed post.
+ */
+function watchActive(service: RoomsService): void {
+  if (!service.watchRoom || feed.inView === 0 || AppState.currentState !== 'active') return
+  const byRoom = tracks.get(service)
+  if (!byRoom) return
+  const active = [...(feed.listed?.keys() ?? [])]
+    .flatMap((roomId) => {
+      const track = byRoom.get(roomId)
+      return track ? [{ roomId, track }] : []
+    })
+    .sort((a, b) => (b.track.at?.getTime() ?? -Infinity) - (a.track.at?.getTime() ?? -Infinity))
+    .slice(0, ROWS_WATCHED_MAX)
+  for (const { roomId, track } of active) service.watchRoom(roomId, track.newest)
+}
+
+/**
+ * A room's watch said it changed: read that room alone, show its row, and arm it again from what was read. One read at a
+ * time for each room. While a read of every room is out, the room is kept and read alone once that read ends, as any
+ * read asked for meanwhile is (`feed.again`): the pass may already have read it before the change.
+ *
+ * A signal is acted on whenever it comes, Messages in view or not, for as long as the watch armed in view lasts: it
+ * costs one read of a room the member is in. A read that fails leaves the room unarmed, on the two-minute read, which
+ * arms it again in view (watchActive); nothing retries it sooner.
+ */
+async function readOneOnSignal(service: RoomsService, roomId: string): Promise<void> {
+  const room = feed.listed?.get(roomId)
+  const byRoom = tracks.get(service)
+  if (feed.service !== service || !room || !byRoom) return
+  // Kept, never dropped: the signal is spent, so a change it names would otherwise wait for the two-minute read. During
+  // a pass, the pass's end reads it; during this room's own read (a read lane that runs reads side by side lets a pass
+  // re-arm it meanwhile), that read's end does.
+  if (feed.asking || feed.readingAlone.has(roomId)) {
+    feed.signalledWhileReading.add(roomId)
+    return
+  }
+  if (room.joined === false) return
+  feed.readingAlone.add(roomId)
+  try {
+    const track = await readRoom(service, room, byRoom.get(roomId))
+    if (feed.service !== service) return
+    byRoom.set(roomId, track)
+    const all = feed.all ?? []
+    const at = all.findIndex((row) => row.roomId === roomId)
+    if (at >= 0) {
+      const next = rowOf(room, track)
+      if (!sameRow(next, all[at])) {
+        feed.all = [...all.slice(0, at), next, ...all.slice(at + 1)]
+        showRows(service)
+        publish()
+      }
     }
+    service.watchRoom?.(roomId, track.newest)
+  } catch (e) {
+    log?.(`[Rooms:rows] ${logRef(roomId)} not read on its signal: ${failureCategory(e)}`)
+  } finally {
+    feed.readingAlone.delete(roomId)
+    // Signalled again while this read was out, and no pass is out to read it: read it again now.
+    if (!feed.asking && feed.service === service && feed.signalledWhileReading.delete(roomId))
+      void readOneOnSignal(service, roomId)
   }
 }
 
@@ -592,6 +692,9 @@ export function useRoomRowsPoll(
     feed.all = undefined
     feed.rows = undefined
     feed.keptRooms = new Set()
+    feed.listed = undefined
+    feed.readingAlone = new Set()
+    feed.signalledWhileReading = new Set()
     feed.failed = false
     feed.lastAsk = 0
     publish()
@@ -599,6 +702,12 @@ export function useRoomRowsPoll(
   }, [service, linked])
 
   useEffect(() => service?.onReadable?.(readInView), [service])
+
+  // A watched room's change, told by the agent: that row reads at once (watchActive arms them).
+  useEffect(() => {
+    if (!service || !linked) return
+    return service.onRoomChanged?.((roomId) => void readOneOnSignal(service, roomId))
+  }, [service, linked])
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
