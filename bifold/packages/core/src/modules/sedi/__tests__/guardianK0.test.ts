@@ -17,6 +17,7 @@ import {
   checkEdge,
   guardianIn,
   parseProof,
+  readExpiry,
   saidifyAcdcV2,
   socialIn,
   verifyAcdcV2,
@@ -955,4 +956,64 @@ describe('the entry points, behind the state-verified approvers switch', () => {
       }
     }
   )
+})
+
+describe('expiry: read one way, an unreadable expiry refuses (ac 11-11: Invalid Date compared false, so it passed)', () => {
+  // The signed fixtures can't carry a bad expiry without breaking their SAIDs (K19), so guardianIn/socialIn reach
+  // readExpiry only with readable ones (K05, K10, K13, K16); the unreadable cases are rows on readExpiry itself.
+  const now = new Date('2026-11-11T12:00:00Z')
+  const withA = (a: Record<string, unknown>) =>
+    ({ ...sadOf(said('G-ok')), a: { ...sadOf(said('G-ok')).a, ...a } }) as Sad
+  const noExpiry = () => {
+    const sad = sadOf(said('G-ok'))
+    const { expirationDate: _drop, ...a } = sad.a!
+    return { ...sad, a } as Sad
+  }
+  const reasonOf = (r: { ok: boolean; reason?: string }) => (r.ok ? 'valid' : r.reason)
+
+  it('K24: an unparseable expirationDate.value refuses as expiryUnreadable (control K24c)', () => {
+    expect(reasonOf(readExpiry(withA({ expirationDate: { value: 'not a date' } }), now))).toBe('expiryUnreadable')
+  })
+  it('K24c: control for K24: the real G-ok expirationDate (2030-11-10) reads and passes, carrying it', () => {
+    const r = readExpiry(sadOf(said('G-ok')), now)
+    expect(r.ok && r.expires?.startsWith('2030-11-10')).toBe(true)
+  })
+  it('K24b: an unparseable top-level `expires` (the Social form) refuses as expiryUnreadable (control K24bc)', () => {
+    expect(reasonOf(readExpiry(withA({ expirationDate: undefined, expires: 'soon' }), now))).toBe('expiryUnreadable')
+  })
+  it('K24bc: control for K24b: a readable future `expires` passes', () => {
+    expect(reasonOf(readExpiry(withA({ expirationDate: undefined, expires: '2027-01-01T00:00:00Z' }), now))).toBe(
+      'valid'
+    )
+  })
+  it.each([
+    ['an empty string', { expirationDate: { value: '' } }],
+    ['a number', { expirationDate: { value: 1893456000000 } }],
+    ['a block with no value', { expirationDate: {} }],
+    ['a bare string where the block belongs', { expirationDate: '2030-11-10T00:00:00Z' }],
+    ['null', { expirationDate: null }],
+  ])('K24d: an expiry that is %s refuses as expiryUnreadable, never "never expires"', (_name, a) => {
+    expect(reasonOf(readExpiry(withA(a), now))).toBe('expiryUnreadable')
+  })
+  it('K24e: a readable past date refuses as expired, not expiryUnreadable (the two reasons stay apart)', () => {
+    expect(reasonOf(readExpiry(withA({ expirationDate: { value: '2026-11-10T00:00:00Z' } }), now))).toBe('expired')
+  })
+  it('K24f: exactly now is expired (<=), a millisecond later is not', () => {
+    expect(reasonOf(readExpiry(withA({ expirationDate: { value: now.toISOString() } }), now))).toBe('expired')
+    const later = new Date(now.getTime() + 1).toISOString()
+    expect(reasonOf(readExpiry(withA({ expirationDate: { value: later } }), now))).toBe('valid')
+  })
+  it('K24g: no expiry field at all passes with none (control: K24c carries one)', () => {
+    const r = readExpiry(noExpiry(), now)
+    expect([r.ok, r.ok && r.expires]).toEqual([true, undefined])
+  })
+  it('K24h: both entry points read expiry through readExpiry: Guardian (K10) and Social (K16) refuse past it', () => {
+    const late = { ...ctx, now: new Date('2031-01-01T00:00:00Z') }
+    expect([
+      verdict(guardianIn(late, said('G-ok'), asJordan)),
+      verdict(socialIn(late, said('S2-social'), { ward: aids.sam })),
+      verdict(guardianIn(ctx, said('G-ok'), asJordan)),
+      verdict(socialIn(ctx, said('S2-social'), { ward: aids.sam })),
+    ]).toEqual(['expired', 'expired', 'valid', 'valid'])
+  })
 })

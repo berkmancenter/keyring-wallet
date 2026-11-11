@@ -36,6 +36,7 @@ export type RefusalReason =
   | 'wardMismatch'
   | 'untrustedRoot'
   | 'expired'
+  | 'expiryUnreadable'
   | 'wrongHolder'
   | 'edgeMissing'
   | 'edgeOperator'
@@ -332,8 +333,30 @@ export function checkEdge(
   return far
 }
 
-const expiryOf = (sad: Sad): string | undefined =>
-  (sad.a?.expirationDate as { value?: string } | undefined)?.value ?? (sad.a?.expires as string | undefined)
+/**
+ * The presented credential's expiry, read the one way both entry points use (guardianIn, socialIn).
+ *
+ * A credential that carries no expiry field passes with none. One that carries an expiry this phone can't read (not a
+ * string, empty, or a string Date can't parse) is refused as expiryUnreadable, never treated as "never expires":
+ * `new Date('nonsense') <= now` is false, so the bare comparison would let it through. "This expired" (expired) and
+ * "we can't tell when this expires" (expiryUnreadable) are different facts, so they are different reasons.
+ *
+ * This is the only place in sedi/ that parses a date: expiryParseGuard.test.ts fails on a parse anywhere else.
+ * Read on the presented credential only, for now: node() (intermediates, via checkEdge) reads no expiry yet.
+ */
+export function readExpiry(sad: Sad, now: Date): { ok: true; expires?: string } | Refusal {
+  const a = (sad.a ?? {}) as Record<string, unknown>
+  if (a.expirationDate === undefined && a.expires === undefined) return { ok: true }
+  const block = a.expirationDate
+  const fromBlock = typeof block === 'object' && block !== null ? (block as { value?: unknown }).value : undefined
+  const raw = fromBlock ?? a.expires
+  if (typeof raw !== 'string' || raw === '' || Number.isNaN(Date.parse(raw))) {
+    const shown = String(JSON.stringify(raw ?? block) ?? raw).slice(0, 64)
+    return refuse('expiryUnreadable', `its expiry can't be read: ${shown}`)
+  }
+  if (Date.parse(raw) <= now.getTime()) return refuse('expired', `expired ${raw}`)
+  return { ok: true, expires: raw }
+}
 
 export type GuardianResult =
   | { ok: true; guardian: string; ward: string; role: unknown; root: string; expires?: string }
@@ -350,15 +373,15 @@ export function guardianIn(
   const sad = g.sad
   if (sad.a?.i !== expect.guardian) return refuse('wrongHolder', `issued to ${sad.a?.i}, not ${expect.guardian}`)
   if (sad.a?.ward !== expect.ward) return refuse('wardMismatch', `names ward ${sad.a?.ward}, not ${expect.ward}`)
-  const exp = expiryOf(sad)
-  if (exp && new Date(exp) <= ctx.now) return refuse('expired', `expired ${exp}`)
+  const exp = readExpiry(sad, ctx.now)
+  if (!exp.ok) return exp
   const agent = checkEdge(ctx, sad, 'utahAgent', SEDI_SCHEMAS.issuingAgent)
   if (!agent.ok) return agent
   const unit = checkEdge(ctx, agent.sad, 'orgUnit', SEDI_SCHEMAS.orgUnit)
   if (!unit.ok) return unit
   if (!ctx.trustedRoots.has(unit.sad.i))
     return refuse('untrustedRoot', `chain ends at ${unit.sad.i}, not a trusted State root`)
-  return { ok: true, guardian: sad.a.i, ward: sad.a.ward, role: sad.a.role, root: unit.sad.i, expires: exp }
+  return { ok: true, guardian: sad.a.i, ward: sad.a.ward, role: sad.a.role, root: unit.sad.i, expires: exp.expires }
 }
 
 export type SocialResult = { ok: true; guardian: string; ward: string; root: string; expires?: string } | Refusal
@@ -368,15 +391,15 @@ export function socialIn(ctx: ChainContext, socialSaid: string, expect: { ward: 
   const s = node(ctx, socialSaid, SEDI_SCHEMAS.social)
   if (!s.ok) return s
   if (s.sad.a?.i !== expect.ward) return refuse('wrongHolder', `issued to ${s.sad.a?.i}, not ${expect.ward}`)
-  const exp = expiryOf(s.sad)
-  if (exp && new Date(exp) <= ctx.now) return refuse('expired', `expired ${exp}`)
+  const exp = readExpiry(s.sad, ctx.now)
+  if (!exp.ok) return exp
   const e = s.sad.e?.guardian
   if (!e) return refuse('edgeMissing', 'no guardian edge')
   const g = checkEdge(ctx, s.sad, 'guardian', SEDI_SCHEMAS.guardian)
   if (!g.ok) return g
   const gv = guardianIn(ctx, e.n, { guardian: s.sad.i, ward: expect.ward })
   if (!gv.ok) return gv
-  return { ok: true, guardian: s.sad.i, ward: expect.ward, root: gv.root, expires: exp }
+  return { ok: true, guardian: s.sad.i, ward: expect.ward, root: gv.root, expires: exp.expires }
 }
 
 /** Re-SAID a modified ACDC. Tests only: builds a well-formed credential that differs in one field. */
