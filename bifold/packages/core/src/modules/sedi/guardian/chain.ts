@@ -7,6 +7,11 @@
  * anyone, never reads `expirationDate`, and keeps no list of trusted roots. Those four decisions are the app's and are
  * made here, each a typed refusal.
  *
+ * Expiry is read on the presented credential only, for now (guardianIn / socialIn, through readExpiry): intermediates
+ * reached through checkEdge → node() are checked for revoked / not issued, never for expiry. Intermediate expiry is
+ * a planned follow-up and needs kit fixtures with expiring intermediates (K0's Guardians expire 2030-11-10;
+ * its unit and agent credentials carry no expiry).
+ *
  * Every result is { ok: true, ... } or { ok: false, reason, detail }; reasons are stable codes the phone can word.
  *
  * @module sedi/guardian/chain

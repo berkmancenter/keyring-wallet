@@ -20,6 +20,10 @@
  *
  * Every record here is changed in place, never deleted.
  *
+ * The check on open is memoised for this run of the app only (see {@link guardianStandings}): it runs again whenever
+ * anything it reads has moved, and never across a restart or an OTA, so a verdict from older verifier code is never
+ * reused.
+ *
  * @module trust-tasks/guardianEvidence
  */
 import { utils, type Agent } from '@credo-ts/core'
@@ -505,6 +509,61 @@ function shownBeside(ask: RoleOfferAsk, guardian: GuardianOnAsk): string | undef
   return undefined
 }
 
+/**
+ * What a check on open read, as one string: the ward, the roots this build trusts (AID and the name we show), and
+ * the card's exact stored text. Equal strings mean the check would read the same inputs; anything that differs,
+ * including a key order that changed, only makes the check run again. The card's text is compared whole, not
+ * hashed: a hash would cost more than comparing ~14 KB and could only be less exact.
+ */
+function checkInputs(evidence: GuardianEvidence, ward: string | null): string {
+  const roots = trustedStateRoots()
+    .map((root) => `${root.aid}=${root.name}`)
+    .sort()
+  return JSON.stringify([ward, roots, evidenceOf(evidence)])
+}
+
+/**
+ * The last check on open per ask record, for this run of the app only: never stored, so a restart or an OTA that
+ * changes the verifier checks every card again, and a verdict computed by older code is never reused.
+ */
+const lastChecks = new Map<string, { inputs: string; verdict: GuardianVerdict }>()
+
+/**
+ * Empty the in-memory memo (nothing stored is touched): the next open checks each card again, as after a restart.
+ * Tests only: rows use it to simulate a restart. Nothing in production calls it, and it is not exported from the package
+ * (a real restart empties the memo by itself). Don't wire it anywhere, or delete it as unused while rows use it.
+ */
+export function resetGuardianCheckMemo(): void {
+  lastChecks.clear()
+}
+
+/**
+ * A verdict that expires is reused only while its expiry is still ahead. The verifier refuses an unreadable expiry
+ * (bifold #1031, expiryUnreadable), so a valid verdict always carries a readable expiry or none; if one ever did
+ * not, `new Date(x) > now` is false for an unreadable x and the check runs again, which is the safe direction.
+ *
+ * The time trigger assumes the check reads only the PRESENTED credential's expiry, which is the `expires` a valid
+ * verdict carries (sedi/guardian/chain.ts guardianIn; intermediates go through node(), which never reads expiry). If
+ * intermediate expiry is ever checked, this must become the earliest expiry across the whole chain.
+ */
+const stillCurrent = (verdict: GuardianVerdict, now: Date) =>
+  verdict.ok !== true || verdict.expires === undefined || new Date(verdict.expires) > now
+
+/**
+ * The verdict on open: the memoised one if the check would read exactly the same inputs and it has not expired,
+ * else the check run now (and memoised). Reuse only ever returns a verdict the check itself gave for those inputs,
+ * so it cannot turn a refusal into valid.
+ */
+function verdictNow(agent: Agent, recordId: string, guardian: GuardianOnAsk, ward: string | null): GuardianVerdict {
+  const now = new Date()
+  const inputs = checkInputs(guardian.evidence, ward)
+  const last = lastChecks.get(recordId)
+  if (last && last.inputs === inputs && stillCurrent(last.verdict, now)) return last.verdict
+  const verdict = checkGuardianEvidence(guardian.evidence, ward, now, (m) => warn(agent, m))
+  lastChecks.set(recordId, { inputs, verdict })
+  return verdict
+}
+
 const sameVerdict = (a: GuardianVerdict | undefined, b: GuardianVerdict) =>
   !!a &&
   a.ok === b.ok &&
@@ -514,8 +573,11 @@ const sameVerdict = (a: GuardianVerdict | undefined, b: GuardianVerdict) =>
 
 /**
  * Who approves, on open: each kept card checked again now (expiry, the roots this build trusts, the ward set now),
- * by the approver DID it is shown beside. A verdict that changed is written back in place; if that write fails, the
- * fresh verdict is still what shows. Empty with either switch off, and an approver with no card has no entry.
+ * by the approver DID it is shown beside. The check runs on the JS thread, so it is memoised for this run of the app
+ * (see {@link verdictNow}): it runs again only when the ward, the trusted roots or the card's text moved, or a valid
+ * verdict's expiry has come, and always on the first open after a restart. A verdict that changed is written back in
+ * place; if that write fails, the fresh verdict is still what shows. Empty with either switch off, and an approver
+ * with no card has no entry.
  */
 export async function guardianStandings(agent: Agent): Promise<Record<string, GuardianStanding>> {
   if (!isOn()) return {}
@@ -528,7 +590,7 @@ export async function guardianStandings(agent: Agent): Promise<Record<string, Gu
     if (!guardian) continue
     const beside = shownBeside(ask, guardian)
     if (!beside) continue
-    const verdict = checkGuardianEvidence(guardian.evidence, ward, new Date(), (m) => warn(agent, m))
+    const verdict = verdictNow(agent, record.id, guardian, ward)
     if (!sameVerdict(guardian.verdict, verdict)) {
       record.content = { ...ask, guardian: { ...guardian, verdict } }
       await agent.genericRecords

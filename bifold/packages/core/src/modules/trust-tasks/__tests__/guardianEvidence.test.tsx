@@ -41,6 +41,7 @@ import {
   holdK0TestGuardianCard,
   stateWardOf,
   evidenceBytes,
+  resetGuardianCheckMemo,
   guardianStandings,
   handleGuardianEvidence,
   holdGuardianEvidence,
@@ -218,6 +219,8 @@ beforeEach(() => {
   cardQuestions.reset()
   approverRole.roleOfferPromptStore.clear()
   allOn()
+  // Each row is a fresh run of the app: record ids repeat across rows (r1, r2, …), so nothing memoised carries over.
+  resetGuardianCheckMemo()
 })
 afterAll(() => {
   setTrustedApproversEnabled(false)
@@ -544,6 +547,174 @@ describe('shown only beside the DID it was sent as, and checked again on open', 
     })
     const sam = await arrives(card('G-ok'))
     expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: false, reason: 'checkFailed' })
+  })
+})
+
+describe('Who approves on open: the check runs again only when something it reads moved', () => {
+  const checks = () => jest.spyOn(guardianModule, 'verifyGuardian')
+  const K0 = stateRoots.K0_TEST_ROOT
+  const validUntil = (expires: string) => ({
+    ok: true as const,
+    guardian: JORDAN_AID,
+    ward: SAM_WARD,
+    role: 'parent',
+    root: K0.aid,
+    expires,
+  })
+  const askRow = (sam: ReturnType<typeof phone>) =>
+    sam.rows.find((r) => r.tags.recordType === approverRole.ROLE_OFFER_ASK) as Row
+
+  test('nothing moved: the second open shows the kept verdict without checking (control: after a restart it checks)', async () => {
+    const sam = await arrives(card('G-ok'))
+    const spy = checks()
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'Test state (K0)' } })
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'Test state (K0)' } })
+    expect(spy).toHaveBeenCalledTimes(1)
+    resetGuardianCheckMemo()
+    await guardianStandings(sam.agent)
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  test.each([
+    [
+      'the ward',
+      async (sam: ReturnType<typeof phone>) => setStateWard(sam.agent, OTHER_WARD),
+      { kind: 'unverified', outcome: 'wardMismatch' },
+    ],
+    [
+      'the roots this build trusts',
+      async () => {
+        jest
+          .spyOn(stateRoots, 'trustedStateRoots')
+          .mockReturnValue([K0, { aid: prov.aids['mal-root'], name: 'Another state' }])
+      },
+      { kind: 'verified', state: 'Test state (K0)' },
+    ],
+    [
+      'the name we show for a trusted root',
+      async () => {
+        jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([{ aid: K0.aid, name: 'Renamed state' }])
+      },
+      { kind: 'verified', state: 'Renamed state' },
+    ],
+    [
+      "the card's stored text",
+      async (sam: ReturnType<typeof phone>) => {
+        const record = askRow(sam)
+        const ask = record.content as unknown as approverRole.RoleOfferAsk
+        record.content = { ...ask, guardian: { ...ask.guardian, evidence: card('G-revoked') } } as never
+      },
+      { kind: 'unverified', outcome: 'revoked' },
+    ],
+  ])('%s moved: the next open checks again (control: unmoved, it did not)', async (_, move, shown) => {
+    const sam = await arrives(card('G-ok'))
+    const spy = checks()
+    await guardianStandings(sam.agent)
+    await guardianStandings(sam.agent)
+    expect(spy).toHaveBeenCalledTimes(1)
+    await move(sam)
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: shown })
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  describe('a valid verdict that expires', () => {
+    afterEach(() => jest.useRealTimers())
+    const at = (iso: string) => jest.setSystemTime(new Date(iso))
+    const datesOnly = () =>
+      jest.useFakeTimers({
+        doNotFake: [
+          'nextTick',
+          'setImmediate',
+          'clearImmediate',
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+          'queueMicrotask',
+          'requestAnimationFrame',
+          'cancelAnimationFrame',
+          'requestIdleCallback',
+          'cancelIdleCallback',
+          'performance',
+          'hrtime',
+        ],
+      })
+
+    // K0's Guardian expires 2030-11-10; the check is stubbed to return a nearer expiry the faked clock (Date only) can cross.
+    test.each([
+      ['in the past', '2029-07-01T00:00:00Z', 2],
+      ['exactly now (expiry <= now)', '2029-06-01T00:00:00Z', 2],
+      ['still ahead', '2029-05-31T23:59:59Z', 1],
+    ])('a kept valid verdict expiring 2029-06-01 is %s (now %s): checked %i time(s) in all', async (_, now, runs) => {
+      const sam = await arrives(card('G-ok'))
+      datesOnly()
+      at('2029-01-01T00:00:00Z')
+      const spy = checks().mockReturnValue(validUntil('2029-06-01T00:00:00Z'))
+      await guardianStandings(sam.agent)
+      expect(spy).toHaveBeenCalledTimes(1)
+      at(now)
+      await guardianStandings(sam.agent)
+      expect(spy).toHaveBeenCalledTimes(runs)
+    })
+
+    test('an expiry that cannot be read is never reused (control: a readable one ahead is)', async () => {
+      const sam = await arrives(card('G-ok'))
+      const spy = checks().mockReturnValue(validUntil('not a date'))
+      await guardianStandings(sam.agent)
+      await guardianStandings(sam.agent)
+      expect(spy).toHaveBeenCalledTimes(2)
+      resetGuardianCheckMemo()
+      spy.mockClear().mockReturnValue(validUntil('2999-01-01T00:00:00Z'))
+      await guardianStandings(sam.agent)
+      await guardianStandings(sam.agent)
+      expect(spy).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  test('a kept refusal stays a refusal: reuse never shows valid (control: checked again, the same stub would)', async () => {
+    const sam = await arrives(card('G-revoked'))
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'unverified', outcome: 'revoked' } })
+    const spy = checks().mockReturnValue(validUntil('2999-01-01T00:00:00Z'))
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'unverified', outcome: 'revoked' } })
+    expect(spy).not.toHaveBeenCalled()
+    resetGuardianCheckMemo()
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'Test state (K0)' } })
+  })
+
+  test('a verdict stored by an earlier run is not reused: the first open checks (control: it was stored valid)', async () => {
+    const sam = await arrives(card('G-ok'))
+    expect(sam.askRecord().guardian?.verdict.ok).toBe(true)
+    const spy = checks().mockReturnValue({ ok: false, reason: 'revoked', detail: 'newer code refuses it' } as never)
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'unverified', outcome: 'revoked' } })
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: false, reason: 'revoked' })
+  })
+
+  test("a throw when it checks again reads couldn't verify, never the kept valid (control: unmoved, valid without a check)", async () => {
+    const sam = await arrives(card('G-ok'))
+    await guardianStandings(sam.agent)
+    const spy = checks().mockImplementation(() => {
+      throw new Error('boom')
+    })
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'Test state (K0)' } })
+    expect(spy).not.toHaveBeenCalled()
+    await setStateWard(sam.agent, OTHER_WARD)
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'unverified', outcome: 'checkFailed' } })
+    expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: false, reason: 'checkFailed' })
+  })
+
+  test('report only: how long an open takes for the K0 card, checked and reused (no threshold)', async () => {
+    const sam = await arrives(card('G-ok'))
+    const t0 = performance.now()
+    await guardianStandings(sam.agent)
+    const checked = performance.now() - t0
+    const t1 = performance.now()
+    await guardianStandings(sam.agent)
+    const reused = performance.now() - t1
+    // eslint-disable-next-line no-console
+    console.log(`[guardian open timing] K0 card: checked ${checked.toFixed(1)} ms, reused ${reused.toFixed(2)} ms`)
+    expect(checked).toBeGreaterThan(0)
   })
 })
 
