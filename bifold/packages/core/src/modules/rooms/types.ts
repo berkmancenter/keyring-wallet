@@ -526,7 +526,11 @@ export interface RoomsService {
    * (a {@link RecordUnopenedReason}); any other failure arrives as it came.
    */
   readNote(roomId: string, key: string): Promise<Note>
-  /** Several records, one promise each in the order asked: together where the agent can. Each settles as `readNote` would. */
+  /**
+   * Several records, together where the agent can. Returns exactly one promise per key, in the order asked: callers
+   * pair `answers[i]` with `keys[i]` (useRoomPosts), so the length and the order are part of the contract. Each settles
+   * as `readNote` would for its key.
+   */
   readNotes?(roomId: string, keys: readonly string[]): Promise<Note>[]
   /**
    * Ask to hear when `roomId` moves past `sinceVersion` (the newest version read), instead of polling it: where the
