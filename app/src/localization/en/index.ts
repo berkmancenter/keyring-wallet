@@ -207,6 +207,7 @@ const translation = {
     "EnableTrustTestState": "Trust the test state (K0), for testing only",
     "HoldK0TestGuardianCard": "Hold the test Guardian card (K0)",
     "BecomeK0TestWard": "I'm the test ward (K0)",
+    "EnableStateCard": "State card (demo): show the state Guardian card this phone holds in Credentials",
     "EnableLivePickup": "Live message pickup (WebSocket)",
     "Mediator": "Mediator",
     "CopyValue": "Copy",

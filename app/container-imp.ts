@@ -29,6 +29,7 @@ import {
   setTrustedApproversEnabled,
   setStateVerifiedApproversEnabled,
   setTrustTestStateEnabled,
+  setStateCardEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -394,6 +395,7 @@ export class AppContainer implements Container {
         enableTrustedApprovers,
         enableStateVerifiedApprovers,
         enableTrustTestState,
+        enableStateCard,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -429,6 +431,8 @@ export class AppContainer implements Container {
         // only kill paths, so every reader goes through them, never the saved value.
         loadSwitch(BCLocalStorageKeys.EnableStateVerifiedApprovers, (val) => (enableStateVerifiedApprovers = val)),
         loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
+        // As above: isStateCardEnabled() (with STATE_CARD_REMOTE_OFF and SEDI_KERI_REMOTE_OFF) is the only kill path.
+        loadSwitch(BCLocalStorageKeys.EnableStateCard, (val) => (enableStateCard = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -459,6 +463,7 @@ export class AppContainer implements Container {
           enableTrustedApprovers,
           enableStateVerifiedApprovers,
           enableTrustTestState,
+          enableStateCard,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -473,6 +478,8 @@ export class AppContainer implements Container {
       // Before a Guardian card arrives or Who approves opens: both read these at each check.
       setStateVerifiedApproversEnabled(state.developer.enableStateVerifiedApprovers)
       setTrustTestStateEnabled(state.developer.enableTrustTestState)
+      // Before Credentials first draws: the state card reads it at each render.
+      setStateCardEnabled(state.developer.enableStateCard)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {

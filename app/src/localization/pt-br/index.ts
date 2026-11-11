@@ -180,6 +180,7 @@ const translation = {
     "EnableTrustTestState": "Confiar no estado de teste (K0), só para testes",
     "HoldK0TestGuardianCard": "Guardar o cartão de guardião de teste (K0)",
     "BecomeK0TestWard": "Sou a pessoa tutelada de teste (K0)",
+    "EnableStateCard": "Cartão do estado (demo): mostrar em Credenciais o cartão de responsável que este telefone guarda",
     "EnableLivePickup": "Recebimento de mensagens ao vivo (WebSocket)",
     "Mediator": "Mediador",
     "CopyValue": "Copiar",
