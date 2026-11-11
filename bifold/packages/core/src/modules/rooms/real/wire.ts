@@ -350,6 +350,27 @@ export interface RecordMeta {
   updatedAt?: string
   title?: string
   author?: string
+  /**
+   * The host's own times and writer, passed through exactly as served (browse 0.4, read 0.2; the host's
+   * `rooms/records/list/0.6` and `get/0.3`). `createdAt`: when the host first stored the record, which no edit or
+   * curation moves. `createdBy`: who wrote its first version, never on a private room. `bodyStoredAt`: when the host
+   * stored the body now held. Absent where the agent or host predates them.
+   */
+  createdAt?: string
+  createdBy?: string
+  bodyStoredAt?: string
+}
+
+/** The host's times and writer on a listing's row or a read's record, each only where it is the type it must be. */
+const hostMeta = (r: Record<string, unknown>): Pick<RecordMeta, 'createdAt' | 'createdBy' | 'bodyStoredAt'> => {
+  const createdAt = str(r.createdAt)
+  const createdBy = str(r.createdBy)
+  const bodyStoredAt = str(r.bodyStoredAt)
+  return {
+    ...(createdAt ? { createdAt } : {}),
+    ...(createdBy?.startsWith('did:') ? { createdBy } : {}),
+    ...(bodyStoredAt ? { bodyStoredAt } : {}),
+  }
 }
 
 const STATUSES = ['active', 'deprecated', 'retracted'] as const
@@ -388,6 +409,7 @@ export function parseBrowse(payload: unknown): {
         updatedAt: str(r.updatedAt),
         title: str(r.title),
         author: str(r.author),
+        ...hostMeta(r),
       },
     ]
   })
@@ -726,6 +748,7 @@ function parseRecord(
     status,
     updatedAt: str(p.updatedAt),
     author: str(p.author),
+    ...hostMeta(p),
     title,
     body,
     check: hostCheckOf(p.verification),

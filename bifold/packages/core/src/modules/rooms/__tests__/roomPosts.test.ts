@@ -118,6 +118,59 @@ describe('newest first', () => {
     ])
     expect(order.map((n) => n.key)).toEqual(['b', 'a', 'd', 'c'])
   })
+
+  test('by when the host first stored it, where it says: an old message edited today stays where it was', () => {
+    const order = newestFirst([
+      { key: 'old-edited', createdAt: '2026-10-20T00:00:00Z', updatedAt: '2026-11-10T00:00:00Z', version: 9 },
+      { key: 'new', createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z', version: 4 },
+    ])
+    expect(order.map((n) => n.key)).toEqual(['new', 'old-edited'])
+  })
+
+  test('a page that mixes them (records the host stored before it kept createdAt): one order, each by its own time', () => {
+    const order = newestFirst([
+      // Stored before the host kept createdAt, edited yesterday: placed by that edit, as today.
+      { key: 'legacy-edited', updatedAt: '2026-11-09T00:00:00Z', version: 3 },
+      { key: 'old', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-11-10T00:00:00Z', version: 8 },
+      { key: 'new', createdAt: '2026-11-10T06:00:00.250Z', updatedAt: '2026-11-10T06:00:00.250Z', version: 9 },
+      { key: 'legacy', updatedAt: '2026-09-01T00:00:00+00:00', version: 1 },
+    ])
+    expect(order.map((n) => n.key)).toEqual(['new', 'legacy-edited', 'old', 'legacy'])
+    // The same set in any order sorts the same: it is one order, not one that depends on what it met first.
+    const reversed = newestFirst([...order].reverse())
+    expect(reversed.map((n) => n.key)).toEqual(order.map((n) => n.key))
+  })
+
+  test('two spellings of one instant place alike; a record with no time goes last', () => {
+    const order = newestFirst([
+      { key: 'none', version: 99 },
+      { key: 'offset', createdAt: '2026-11-10T07:00:00+01:00', version: 1 },
+      { key: 'later', createdAt: '2026-11-10T06:00:01Z', version: 2 },
+    ])
+    expect(order.map((n) => n.key)).toEqual(['later', 'offset', 'none'])
+  })
+
+  test('a time that cannot be read counts as absent: the next stands in, and none read at all goes last', () => {
+    const notes = [
+      { key: 'bad-created', createdAt: 'yesterday', updatedAt: '2026-11-05T00:00:00Z', version: 2 },
+      { key: 'good', createdAt: '2026-11-08T00:00:00Z', version: 3 },
+      { key: 'both-bad', createdAt: '2026-11-0', updatedAt: 'soon', version: 7 },
+      { key: 'none', version: 5 },
+      { key: 'older', createdAt: '2026-11-01T00:00:00Z', version: 1 },
+    ]
+    const order = newestFirst(notes).map((n) => n.key)
+    expect(order).toEqual(['good', 'bad-created', 'older', 'both-bad', 'none'])
+    // One order whatever it starts from: no comparison met NaN.
+    expect(newestFirst([...notes].reverse()).map((n) => n.key)).toEqual(order)
+  })
+
+  test('the same records with no createdAt (an agent before browse 0.4): by updatedAt, as before (control)', () => {
+    const order = newestFirst([
+      { key: 'old-edited', updatedAt: '2026-11-10T00:00:00Z', version: 9 },
+      { key: 'new', updatedAt: '2026-11-01T00:00:00Z', version: 4 },
+    ])
+    expect(order.map((n) => n.key)).toEqual(['old-edited', 'new'])
+  })
 })
 
 describe('a post as written', () => {

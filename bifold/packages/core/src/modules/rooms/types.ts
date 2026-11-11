@@ -171,6 +171,8 @@ export interface NoteSummary {
   createdAt?: string
   /** Who wrote the record's first version, as the host recorded it. Only where an agent serves it, never on a private room. */
   createdBy?: Identity
+  /** When the host stored the body now held (an edit moves it; a curation does not). Only where an agent serves it. */
+  bodyStoredAt?: string
   /** Upstream's curation state (`RecordMetadata.status`). `retracted` is a tombstone: no body. */
   status: 'active' | 'deprecated' | 'retracted'
   pinned: boolean

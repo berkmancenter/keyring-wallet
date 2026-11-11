@@ -220,5 +220,27 @@ export function withRepliesToReactions(posts: RoomPost[]): RoomPost[] {
 }
 
 /** Newest first: by time, then by version, so records with no time keep a stable order. */
-export const newestFirst = <T extends Pick<NoteSummary, 'updatedAt' | 'version'>>(notes: T[]): T[] =>
-  [...notes].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '') || b.version - a.version)
+/**
+ * Newest first, by when the host first stored each record (`createdAt`) where it says, else by its last change
+ * (`updatedAt`), as before: an edit or a curation does not move an old message to the top (chat plan §7 decision 3).
+ *
+ * One room's page can hold both kinds. A host serves no `createdAt` on a record it stored before it kept one, even after
+ * that record is edited, and never guesses it (vti-rooms `Record::created_at` at VTI 0.79). Each record still has exactly
+ * one time it is placed by, so this is one consistent order: a record from before is placed by its last change, as it
+ * was before `createdAt` existed, since nothing better is known of it. Times are compared as instants, not as text, so
+ * two spellings of one time (a fractional second, an offset) place alike. A time that can't be read counts as absent,
+ * so the next one stands in (a malformed `createdAt` falls back to `updatedAt`), and no comparison ever meets NaN, which
+ * would make the order depend on the sort's internals. One with no readable time at all goes last, by version.
+ */
+export const newestFirst = <T extends Pick<NoteSummary, 'updatedAt' | 'version'> & { createdAt?: string }>(
+  notes: T[]
+): T[] => {
+  const instant = (s: string | undefined) => (s === undefined ? NaN : Date.parse(s))
+  const at = (n: T) => {
+    const created = instant(n.createdAt)
+    if (!Number.isNaN(created)) return created
+    const updated = instant(n.updatedAt)
+    return Number.isNaN(updated) ? -Infinity : updated
+  }
+  return [...notes].sort((a, b) => (at(b) === at(a) ? b.version - a.version : at(b) > at(a) ? 1 : -1))
+}
