@@ -16,6 +16,7 @@ import {
   isTrustedApproversEnabled,
   setTrustedApproversEnabled,
 } from '../module/trustedApproversFlag'
+import { isTrustTestStateEnabled, setTrustTestStateEnabled } from '../module/trustTestStateFlag'
 
 const SWITCHES = [
   {
@@ -33,6 +34,7 @@ const SWITCHES = [
 ]
 
 afterEach(() => {
+  setTrustTestStateEnabled(false)
   SEDI_KERI_REMOTE_OFF.off = false
   for (const s of SWITCHES) {
     s.own.off = false
@@ -81,6 +83,10 @@ describe('the umbrella', () => {
       'isStateVerifiedApproversEnabled',
       'STATE_VERIFIED_APPROVERS_REMOTE_OFF',
       'SEDI_KERI_REMOTE_OFF',
+      'setTrustTestStateEnabled',
+      'isTrustTestStateEnabled',
+      'holdK0TestGuardianCard',
+      'becomeK0TestWard',
     ]
     for (const file of [join(__dirname, '..', 'index.ts'), join(__dirname, '..', '..', '..', 'index.ts')]) {
       const text = readFileSync(file, 'utf8')
@@ -91,5 +97,39 @@ describe('the umbrella', () => {
           true,
         ])
     }
+  })
+})
+
+describe('the "Trust the test state (K0)" setting', () => {
+  const bothOn = () => {
+    for (const s of SWITCHES) s.set(true)
+  }
+
+  it('is off until the app turns it on, even with both switches on', () => {
+    bothOn()
+    expect(isTrustTestStateEnabled()).toBe(false)
+    setTrustTestStateEnabled(true)
+    expect(isTrustTestStateEnabled()).toBe(true)
+  })
+
+  it('holds only while both switches are on (control: both on, it holds)', () => {
+    setTrustTestStateEnabled(true)
+    expect(isTrustTestStateEnabled()).toBe(false)
+    SWITCHES[0].set(true)
+    expect(isTrustTestStateEnabled()).toBe(false)
+    SWITCHES[1].set(true)
+    expect(isTrustTestStateEnabled()).toBe(true)
+  })
+
+  it.each([
+    ['trusted approvers turned off remotely', () => (TRUSTED_APPROVERS_REMOTE_OFF.off = true)],
+    ['state-verified approvers turned off remotely', () => (STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = true)],
+    ['the SEDI/KERI umbrella', () => (SEDI_KERI_REMOTE_OFF.off = true)],
+  ])('%s beats a saved "on" (control: without it, the setting holds)', (_, off) => {
+    bothOn()
+    setTrustTestStateEnabled(true)
+    expect(isTrustTestStateEnabled()).toBe(true)
+    off()
+    expect(isTrustTestStateEnabled()).toBe(false)
   })
 })

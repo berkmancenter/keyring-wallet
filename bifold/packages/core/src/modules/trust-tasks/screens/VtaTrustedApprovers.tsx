@@ -39,7 +39,17 @@ import {
   type RoleOfferAsk,
   type RoleOfferPrompt,
 } from '../approverRole'
+import {
+  cardConsents,
+  cardToShare,
+  guardianCardEvents,
+  guardianStandings,
+  shareGuardianCard,
+  type CardConsent,
+  type GuardianStanding,
+} from '../guardianEvidence'
 import { releaseWarn } from '../module/releaseLog'
+import { isStateVerifiedApproversEnabled } from '../module/stateVerifiedApproversFlag'
 import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
 
@@ -67,6 +77,12 @@ export const TrustedApproversIds = {
   check: 'TrustedApproversCheck',
   checkResult: 'TrustedApproversCheckResult',
   checkPrompt: 'TrustedApproversCheckPrompt',
+  guardianVerified: (did: string) => `TrustedApproverGuardianVerified_${did}`,
+  guardianUnverified: (did: string) => `TrustedApproverGuardianUnverified_${did}`,
+  guardianOutcome: (did: string) => `TrustedApproverGuardianOutcome_${did}`,
+  cardStatus: (connectionId: string) => `TrustedApproverCardStatus_${connectionId}`,
+  cardSend: (connectionId: string) => `TrustedApproverCardSend_${connectionId}`,
+  cardStop: (connectionId: string) => `TrustedApproverCardStop_${connectionId}`,
 } as const
 
 const VtaTrustedApprovers: React.FC = () => {
@@ -81,7 +97,12 @@ const VtaTrustedApprovers: React.FC = () => {
   const [confirming, setConfirming] = useState<string | undefined>()
   const [stepDownError, setStepDownError] = useState<string | undefined>()
   const [names, setNames] = useState<Record<string, string>>({})
+  /** Each approver's state Guardian card, checked again on this open (guardianEvidence.ts); none, no line. */
+  const [standings, setStandings] = useState<Record<string, GuardianStanding>>({})
   const [mine, setMine] = useState<RoleOfferPrompt[]>([])
+  /** On an approver's phone: the card it could share (none, no card lines) and its answer for each person. */
+  const [shareable, setShareable] = useState<{ state?: string } | undefined>()
+  const [consents, setConsents] = useState<Record<string, CardConsent>>({})
   const [error, setError] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
   const [on, setOn] = useState(isTrustedApproversEnabled)
@@ -104,8 +125,17 @@ const VtaTrustedApprovers: React.FC = () => {
     ]).catch(() => [[], {}, []] as [RoleOfferAsk[], Record<string, string>, RoleOfferPrompt[]])
     // Read on its own: a note that cannot be read must not blank the lists above.
     const stepped = await steppedDownApprovers(agent).catch(() => [] as string[])
+    // Also on its own. A card whose check fails is "couldn't verify" inside guardianStandings; this catch is for the
+    // records not being readable at all, which shows no line, so it never claims a card is valid.
+    const cards = await guardianStandings(agent).catch(() => ({}) as Record<string, GuardianStanding>)
+    // Unreadable answers read as none given, which sends nothing.
+    const share = await cardToShare(agent).catch(() => undefined)
+    const answers = await cardConsents(agent).catch(() => ({}) as Record<string, CardConsent>)
     setAccepted(yeses)
+    setShareable(share)
+    setConsents(answers)
     setSteppedDown(stepped)
+    setStandings(cards)
     setNames(known)
     setMine(approving)
   }, [agent])
@@ -137,9 +167,11 @@ const VtaTrustedApprovers: React.FC = () => {
     const refresh = () => void loadKept()
     approverRoleEvents.on('answered', refresh)
     approverRoleEvents.on('promptCleared', refresh)
+    guardianCardEvents.on('question', refresh)
     return () => {
       approverRoleEvents.off('answered', refresh)
       approverRoleEvents.off('promptCleared', refresh)
+      guardianCardEvents.off('question', refresh)
     }
   }, [loadKept])
 
@@ -208,6 +240,23 @@ const VtaTrustedApprovers: React.FC = () => {
     }
   }
 
+  /** Send my Guardian card to this person from now on (and now), or stop: the answer is kept either way. */
+  const onShare = async (prompt: RoleOfferPrompt, send: boolean) => {
+    if (!agent) return
+    setStepDownError(undefined)
+    setBusy(prompt.connectionId)
+    try {
+      await shareGuardianCard(agent, prompt.connectionId, send)
+    } catch (e) {
+      releaseWarn(
+        `[VTI] guardian card answer not kept (${(e as Error)?.name ?? 'error'}: ${(e as Error)?.message ?? e})`
+      )
+    } finally {
+      setBusy(undefined)
+      await loadKept()
+    }
+  }
+
   const onRemove = async (did: string) => {
     if (!agent || !state) return
     const written = await write(did, withoutApprover(state.view, did))
@@ -227,6 +276,59 @@ const VtaTrustedApprovers: React.FC = () => {
   const view = state?.view
   const actionList = (keys: readonly string[]) => keys.map((key) => t(`Approver.Action.${key}`)).join(', ')
   const nameOf = (did: string) => names[did] ?? t('Approver.Unnamed')
+  /**
+   * The state card line beside an approver: a card from a named state, as the contact showed it (what is checked is
+   * the chain they sent, as of what they sent, and not yet that it is their phone's), or couldn't verify with the
+   * outcome. No card (never asked, or they chose not to send it): no line.
+   */
+  const guardianLine = (did: string | undefined, name: string) => {
+    const standing = did && isStateVerifiedApproversEnabled() ? standings[did] : undefined
+    if (!did || !standing) return null
+    return standing.kind === 'verified' ? (
+      <View>
+        <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianVerified(did))}>
+          {t('Approver.GuardianHas', { state: standing.state, interpolation: { escapeValue: false } })}
+        </ThemedText>
+        <ThemedText style={styles.muted}>
+          {t('Approver.GuardianAsShown', { name, interpolation: { escapeValue: false } })}
+        </ThemedText>
+      </View>
+    ) : (
+      <View>
+        <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianUnverified(did))}>
+          {t('Approver.GuardianCouldNotVerify')}
+        </ThemedText>
+        <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianOutcome(did))}>
+          {t('Approver.GuardianOutcome', { outcome: standing.outcome, interpolation: { escapeValue: false } })}
+        </ThemedText>
+      </View>
+    )
+  }
+  /**
+   * On an approver's phone, for one person: whether this phone's Guardian card goes to them, and the button to change
+   * it. Only with a card held and both switches on (read again at render). Never answered reads as not sent.
+   */
+  const cardLine = (prompt: RoleOfferPrompt, asker: { asker: string; interpolation: { escapeValue: boolean } }) => {
+    if (!shareable || !isStateVerifiedApproversEnabled()) return null
+    const goes = consents[prompt.connectionId] === 'yes'
+    return (
+      <View>
+        <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.cardStatus(prompt.connectionId))}>
+          {t(goes ? 'Approver.CardSentTo' : 'Approver.CardNotSentTo', asker)}
+        </ThemedText>
+        {goes ? <ThemedText style={styles.muted}>{t('Approver.CardStopNote', asker)}</ThemedText> : null}
+        <Button
+          title={goes ? t('Approver.CardStop') : t('Approver.CardSendTo', asker)}
+          buttonType={ButtonType.Tertiary}
+          onPress={() => void onShare(prompt, !goes)}
+          disabled={busy !== undefined}
+          testID={testIdWithKey(
+            goes ? TrustedApproversIds.cardStop(prompt.connectionId) : TrustedApproversIds.cardSend(prompt.connectionId)
+          )}
+        />
+      </View>
+    )
+  }
   const waiting = accepted.filter((ask) => !view?.approvers.includes(ask.acceptedAs as string))
 
   if (!on || !isTrustedApproversEnabled())
@@ -260,6 +362,7 @@ const VtaTrustedApprovers: React.FC = () => {
             >
               <ThemedText variant="bold">{name}</ThemedText>
               <ThemedText style={styles.muted}>{t('Approver.Accepted')}</ThemedText>
+              {guardianLine(ask.acceptedAs, name)}
               <ThemedText>{actionList(ask.actions)}</ThemedText>
               <Button
                 title={t('Approver.Add', { name, interpolation: { escapeValue: false } })}
@@ -296,6 +399,7 @@ const VtaTrustedApprovers: React.FC = () => {
         {view?.approvers.map((did) => (
           <View key={did} style={styles.card} testID={testIdWithKey(TrustedApproversIds.approver(did))}>
             <ThemedText variant="bold">{nameOf(did)}</ThemedText>
+            {guardianLine(did, nameOf(did))}
             {steppedDown.includes(did) ? (
               <ThemedText testID={testIdWithKey(TrustedApproversIds.steppedDown(did))}>
                 {t('Approver.SteppedDownRemove', { name: nameOf(did), interpolation: { escapeValue: false } })}
@@ -389,6 +493,7 @@ const VtaTrustedApprovers: React.FC = () => {
                 </ThemedText>
                 <ThemedText style={styles.muted}>{t('Approver.YouApprove')}</ThemedText>
                 <ThemedText>{actionList(prompt.actions)}</ThemedText>
+                {cardLine(prompt, asker)}
                 {confirming === prompt.connectionId ? (
                   <>
                     <ThemedText variant="bold">{t('Approver.StepDownConfirmTitle', asker)}</ThemedText>

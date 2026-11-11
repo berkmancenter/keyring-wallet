@@ -129,3 +129,80 @@ export const STEP_DOWN_SPEC = {
     },
   },
 } as const
+
+/**
+ * An approver's phone sends the person's phone its state Guardian card (trusted-approver plan, stage 2, S1), after it
+ * said yes: the KERI/ACDC chain from a State root to the Guardian credential naming the person as ward, as inert text.
+ * One way and only told, like the step-down: the person's phone checks it on its own (sedi/guardian, verifyGuardian)
+ * and nothing answers it. A separate type rather than a field on the role-offer response, so the response's 0.1 shape
+ * is unchanged.
+ *
+ * It says only what the card says. The card names a KERI holder; nothing here proves the approver's phone controls
+ * that holder (that waits for the approver's own KERI identity, stage 3).
+ */
+export const GUARDIAN_EVIDENCE_TYPE_URI = 'https://keyring.appliedtechnologylab.org/spec/approver/guardian-evidence/0.1'
+
+/**
+ * The most evidence (kels, tels and creds, as UTF-8 JSON) sent or taken. The K0 chain (root → org → agent → Guardian:
+ * four KELs, three registries, three credentials) is 13,234 bytes of raw text; 64 KiB leaves room for a longer chain
+ * or rotated KELs, and refuses anything far past a real one, both before sending and on arrival.
+ */
+export const GUARDIAN_EVIDENCE_MAX_BYTES = 64 * 1024
+/** Per list: a chain longer than this is not one Keyring checks. */
+const EVIDENCE_MAX_ITEMS = 16
+
+/** The card: whose agent, the DID the approver said yes as, the Guardian credential, its holder, and the chain. */
+export interface GuardianEvidencePayload {
+  agent: string
+  approver: string
+  guardianSaid: string
+  holder: string
+  /** KEL streams, text-domain CESR. */
+  kels: string[]
+  tels: { ripText: string; updateTexts: string[] }[]
+  /** Each credential's proof: ACDC text followed by its state disclosure. */
+  creds: string[]
+  sentAt: string
+}
+
+const AID_PATTERN = '^[A-Za-z0-9_-]{44}$'
+const evidenceText = { type: 'string', minLength: 1, maxLength: GUARDIAN_EVIDENCE_MAX_BYTES } as const
+
+export const GUARDIAN_EVIDENCE_SPEC = {
+  typeUri: GUARDIAN_EVIDENCE_TYPE_URI,
+  isBearer: false,
+  isProofRequired: true,
+  isRecipientRequired: true,
+  payloadSchema: {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: GUARDIAN_EVIDENCE_TYPE_URI,
+    title: 'Approver Guardian Evidence — payload',
+    description:
+      "An approver's phone sends, over an established VRC relationship, the state Guardian credential chain naming the person as ward, for the person's phone to check.",
+    type: 'object',
+    additionalProperties: false,
+    required: ['agent', 'approver', 'guardianSaid', 'holder', 'kels', 'tels', 'creds', 'sentAt'],
+    properties: {
+      agent: { type: 'string', pattern: DID_PATTERN },
+      approver: { type: 'string', pattern: DID_PATTERN },
+      guardianSaid: { type: 'string', pattern: AID_PATTERN },
+      holder: { type: 'string', minLength: 1, maxLength: 64 },
+      kels: { type: 'array', minItems: 1, maxItems: EVIDENCE_MAX_ITEMS, items: evidenceText },
+      tels: {
+        type: 'array',
+        maxItems: EVIDENCE_MAX_ITEMS,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['ripText', 'updateTexts'],
+          properties: {
+            ripText: evidenceText,
+            updateTexts: { type: 'array', maxItems: EVIDENCE_MAX_ITEMS, items: evidenceText },
+          },
+        },
+      },
+      creds: { type: 'array', minItems: 1, maxItems: EVIDENCE_MAX_ITEMS, items: evidenceText },
+      sentAt: { type: 'string', format: 'date-time' },
+    },
+  },
+} as const

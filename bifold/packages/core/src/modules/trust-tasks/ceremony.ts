@@ -2070,6 +2070,18 @@ function registerBuiltinTrustTasks(): void {
     orchestration: { requiresDiscovery: false },
     handleRequest: handleRoleStepDown,
   })
+
+  // Keyring's own type (private authority): an approver's phone sends its state Guardian card after a yes. One way,
+  // nothing answers it; its handler does nothing unless both trusted approvers and state-verified approvers are on.
+  // Loaded on arrival, so the Guardian check (sedi/guardian) is not loaded with this module.
+  trustTaskRegistry.register({
+    typeUri: approverRoleSpec.GUARDIAN_EVIDENCE_TYPE_URI,
+    spec: approverRoleSpec.GUARDIAN_EVIDENCE_SPEC as never,
+    orchestration: { requiresDiscovery: false },
+    handleRequest: (...args: Parameters<typeof import('./guardianEvidence').handleGuardianEvidence>) =>
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+      (require('./guardianEvidence') as typeof import('./guardianEvidence')).handleGuardianEvidence(...args),
+  })
 }
 
 registerBuiltinTrustTasks()
