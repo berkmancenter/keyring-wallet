@@ -25,6 +25,8 @@ const externalDir = join(repoRoot, "external");
 const pins = JSON.parse(readFileSync(join(here, "PINS.json"), "utf8"));
 
 const STATUS_ONLY = process.argv.includes("--status");
+// Lets setup move a clone back to an older pin (pinState "rewind"); without it, that is said and left alone.
+const REWIND = process.argv.includes("--rewind");
 const ORG = "https://github.com/OpenVTC";
 
 const git = (args, cwd) =>
@@ -61,7 +63,22 @@ for (const [name, pin] of Object.entries(pins.repos)) {
       return undefined;
     }
   })();
-  const state = pinState({ head, headCommit: git(["rev-parse", "HEAD"], dir), pinSha: pin.sha, pinCommit: resolved });
+  const behind = (() => {
+    if (!resolved) return false;
+    try {
+      git(["merge-base", "--is-ancestor", resolved, "HEAD"], dir);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  const state = pinState({
+    head,
+    headCommit: git(["rev-parse", "HEAD"], dir),
+    pinSha: pin.sha,
+    pinCommit: resolved,
+    pinBehindHead: behind,
+  });
   if (state === "pinned") {
     console.log(`  ✓ ${name.padEnd(34)} ${pin.sha} (pinned)`);
     continue;
@@ -69,6 +86,13 @@ for (const [name, pin] of Object.entries(pins.repos)) {
   // At the pin, but PINS.json spells it otherwise: said loudly, not checked out again (wallet #901, #902).
   if (state === "misnamed") {
     console.log(`  ! ${name.padEnd(34)} is at the pin, but PINS.json names it ${pin.sha}; git abbreviates it ${head}: write that`);
+    problems++;
+    continue;
+  }
+  // Past the pin: checking it out moves the clone back, which is what setup run from a stale tree does (its
+  // PINS.json older than the clone). Said, and left alone, unless asked with --rewind.
+  if (state === "rewind" && !REWIND) {
+    console.log(`  ! ${name.padEnd(34)} is at ${head}, past the pin ${pin.sha}: is this tree's PINS.json current? --rewind moves it back`);
     problems++;
     continue;
   }
