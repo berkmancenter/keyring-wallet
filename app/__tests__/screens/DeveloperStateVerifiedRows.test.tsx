@@ -32,10 +32,14 @@ jest.mock('@bifold/react-hooks', () => ({
 }))
 const mockHold = jest.fn<Promise<string>, [unknown]>(async () => 'done')
 const mockWard = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockSetUp = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockTurnOff = jest.fn<void, []>()
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
   holdK0TestGuardianCard: (agent: unknown) => mockHold(agent),
   becomeK0TestWard: (agent: unknown) => mockWard(agent),
+  setUpSediDemo: (agent: unknown) => mockSetUp(agent),
+  turnOffSediDemo: () => mockTurnOff(),
 }))
 
 const ROWS = {
@@ -78,6 +82,8 @@ afterEach(() => {
   jest.restoreAllMocks()
   mockHold.mockClear()
   mockWard.mockClear()
+  mockSetUp.mockClear()
+  mockTurnOff.mockClear()
   set(false, false, false)
   TRUSTED_APPROVERS_REMOTE_OFF.off = false
   STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = false
@@ -137,5 +143,50 @@ describe('Developer: the state-verified approvers rows', () => {
     const { tree } = shown()
     await act(async () => fireEvent.press(tree.getByTestId(ROWS.hold)))
     expect((Alert.alert as jest.Mock).mock.calls[0][1]).toMatch(/^Not done/)
+  })
+})
+
+describe('Developer: "Set up the SEDI demo" in one tap', () => {
+  const DEMO = { setUp: testIdWithKey('SetUpSediDemo'), turnOff: testIdWithKey('TurnOffSediDemo') }
+  const has = (tree: ReturnType<typeof shown>['tree'], id: string) => tree.queryByTestId(id) !== null
+
+  test('the row shows with everything off, and no undo yet (control: the SEDI/KERI remote off hides both)', () => {
+    set(false, false, false)
+    const { tree } = shown()
+    expect(has(tree, DEMO.setUp)).toBe(true)
+    expect(has(tree, DEMO.turnOff)).toBe(false)
+    tree.unmount()
+    SEDI_KERI_REMOTE_OFF.off = true
+    const off = shown().tree
+    expect(has(off, DEMO.setUp)).toBe(false)
+    expect(has(off, DEMO.turnOff)).toBe(false)
+  })
+
+  test('a done set-up calls bifold with this agent, says so, and keeps the switches on: the undo appears', async () => {
+    set(false, false, false)
+    const { tree } = shown()
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
+    expect(mockSetUp).toHaveBeenCalledWith(mockAgent)
+    expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe('Developer.SediDemoDone')
+    expect(has(tree, DEMO.turnOff)).toBe(true)
+  })
+
+  test('a set-up bifold refuses (remote off) saves nothing and says so (control: the row above)', async () => {
+    set(false, false, false)
+    mockSetUp.mockResolvedValueOnce('remoteOff')
+    const { tree } = shown()
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
+    expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe('Developer.SediDemoOff')
+    expect(has(tree, DEMO.turnOff)).toBe(false)
+  })
+
+  test('the undo calls bifold and turns the saved switches off: the undo goes (control: set up, it shows)', async () => {
+    set(false, false, false)
+    const { tree } = shown()
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
+    expect(has(tree, DEMO.turnOff)).toBe(true)
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.turnOff)))
+    expect(mockTurnOff).toHaveBeenCalledTimes(1)
+    expect(has(tree, DEMO.turnOff)).toBe(false)
   })
 })
