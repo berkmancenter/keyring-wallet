@@ -726,9 +726,13 @@ describe('Who approves on open: the check runs again only when something it read
   test('nothing moved: the second open shows the kept verdict without checking (control: after a restart it checks)', async () => {
     const sam = await arrives(card('G-ok'))
     const spy = checks()
-    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'Test state (K0)' } })
+    expect(await guardianStandings(sam.agent)).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true },
+    })
     expect(spy).toHaveBeenCalledTimes(1)
-    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'Test state (K0)' } })
+    expect(await guardianStandings(sam.agent)).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true },
+    })
     expect(spy).toHaveBeenCalledTimes(1)
     resetGuardianCheckMemo()
     await guardianStandings(sam.agent)
@@ -748,7 +752,7 @@ describe('Who approves on open: the check runs again only when something it read
           .spyOn(stateRoots, 'trustedStateRoots')
           .mockReturnValue([K0, { aid: prov.aids['mal-root'], name: 'Another state' }])
       },
-      { kind: 'verified', state: 'Test state (K0)' },
+      { kind: 'verified', state: 'State of Example', demo: true },
     ],
     [
       'the name we show for a trusted root',
@@ -756,6 +760,13 @@ describe('Who approves on open: the check runs again only when something it read
         jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([{ aid: K0.aid, name: 'Renamed state' }])
       },
       { kind: 'verified', state: 'Renamed state' },
+    ],
+    [
+      'the demo mark on a trusted root',
+      async () => {
+        jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([{ aid: K0.aid, name: K0.name }])
+      },
+      { kind: 'verified', state: 'State of Example' },
     ],
     [
       "the card's stored text",
@@ -775,6 +786,17 @@ describe('Who approves on open: the check runs again only when something it read
     await move(sam)
     expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: shown })
     expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  test('the demo mark moved: the kept verdict is written back without it (control: unmoved, it keeps demo)', async () => {
+    const sam = await arrives(card('G-ok'))
+    await guardianStandings(sam.agent)
+    const kept = () => (askRow(sam).content as unknown as approverRole.RoleOfferAsk).guardian?.verdict
+    expect(kept()).toMatchObject({ ok: true, state: 'State of Example', demo: true })
+    jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([{ aid: K0.aid, name: K0.name }])
+    await guardianStandings(sam.agent)
+    expect(kept()).toMatchObject({ ok: true, state: 'State of Example' })
+    expect(kept()).not.toHaveProperty('demo')
   })
 
   describe('a valid verdict that expires', () => {
@@ -838,7 +860,9 @@ describe('Who approves on open: the check runs again only when something it read
     expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'unverified', outcome: 'revoked' } })
     expect(spy).not.toHaveBeenCalled()
     resetGuardianCheckMemo()
-    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'Test state (K0)' } })
+    expect(await guardianStandings(sam.agent)).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true },
+    })
   })
 
   test('a verdict stored by an earlier run is not reused: the first open checks (control: it was stored valid)', async () => {
@@ -856,7 +880,9 @@ describe('Who approves on open: the check runs again only when something it read
     const spy = checks().mockImplementation(() => {
       throw new Error('boom')
     })
-    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'verified', state: 'Test state (K0)' } })
+    expect(await guardianStandings(sam.agent)).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true },
+    })
     expect(spy).not.toHaveBeenCalled()
     await setStateWard(sam.agent, OTHER_WARD)
     expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'unverified', outcome: 'checkFailed' } })

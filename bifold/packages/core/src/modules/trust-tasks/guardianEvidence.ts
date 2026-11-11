@@ -539,7 +539,7 @@ function shownBeside(ask: RoleOfferAsk, guardian: GuardianOnAsk): string | undef
  */
 function checkInputs(evidence: GuardianEvidence, ward: string | null): string {
   const roots = trustedStateRoots()
-    .map((root) => `${root.aid}=${root.name}`)
+    .map((root) => `${root.aid}=${root.name}${root.demo ? '#demo' : ''}`)
     .sort()
   return JSON.stringify([ward, roots, evidenceOf(evidence)])
 }

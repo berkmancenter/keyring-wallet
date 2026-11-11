@@ -2,7 +2,7 @@
  * The K0 kit's Guardian card ("G-ok", Jordan as the guardian of Sam): the card the Developer action "Hold the test
  * Guardian card (K0)" puts on an approver's phone, so a tester build can send one. A test card from the keripy kit
  * (sedi/__tests__/fixtures/k0-utah-v2), copied here because a build does not ship the test fixtures; k0TestCard.test.ts
- * fails if it drifts from them. It verifies only on a phone that trusts the K0 test root, shown as "Test state (K0)".
+ * fails if it drifts from them. It verifies only on a phone that trusts the K0 test root, shown as "State of Example" with a Demo pill.
  *
  * Generated from the fixtures; do not edit by hand.
  *
