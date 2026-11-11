@@ -57,6 +57,7 @@ import { checkEnforcement, lastEnforcementCheck, type EnforcementCheck } from '.
 import { localDate } from './localTime'
 import { deviceErrorWords } from './VtaDevices'
 import ApproverWaitNote from './ApproverWaitNote'
+import { DemoPill } from '../components/DemoPill'
 
 export const TrustedApproversIds = {
   screen: 'TrustedApprovers',
@@ -78,6 +79,7 @@ export const TrustedApproversIds = {
   checkResult: 'TrustedApproversCheckResult',
   checkPrompt: 'TrustedApproversCheckPrompt',
   guardianVerified: (did: string) => `TrustedApproverGuardianVerified_${did}`,
+  guardianDemo: (did: string) => `TrustedApproverGuardianDemo_${did}`,
   guardianUnverified: (did: string) => `TrustedApproverGuardianUnverified_${did}`,
   guardianOutcome: (did: string) => `TrustedApproverGuardianOutcome_${did}`,
   cardStatus: (connectionId: string) => `TrustedApproverCardStatus_${connectionId}`,
@@ -286,9 +288,12 @@ const VtaTrustedApprovers: React.FC = () => {
     if (!did || !standing) return null
     return standing.kind === 'verified' ? (
       <View>
-        <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianVerified(did))}>
-          {t('Approver.GuardianHas', { state: standing.state, interpolation: { escapeValue: false } })}
-        </ThemedText>
+        <View style={styles.row}>
+          <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianVerified(did))}>
+            {t('Approver.GuardianHas', { state: standing.state, interpolation: { escapeValue: false } })}
+          </ThemedText>
+          {standing.demo ? <DemoPill testID={TrustedApproversIds.guardianDemo(did)} /> : null}
+        </View>
         <ThemedText style={styles.muted}>
           {t('Approver.GuardianAsShown', { name, interpolation: { escapeValue: false } })}
         </ThemedText>

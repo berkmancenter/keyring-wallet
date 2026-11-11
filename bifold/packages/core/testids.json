@@ -197,6 +197,7 @@
     "ApproverOffer": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
     "ApproverOfferBody": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
     "ApproverOfferCardAsk": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
+    "ApproverOfferCardAskDemo": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
     "ApproverOfferCardDont": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
     "ApproverOfferCardSend": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
     "ApproverOfferFaceId": ["src/modules/trust-tasks/components/ApproverOfferModal.tsx"],
@@ -2248,6 +2249,9 @@
     },
     {
       "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.yes"
+    },
+    {
+      "src/modules/trust-tasks/components/DemoPill.tsx": "testID"
     },
     {
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.again"

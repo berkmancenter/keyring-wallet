@@ -33,6 +33,7 @@ import {
   type RoleOfferPrompt,
 } from '../approverRole'
 import { cardQuestions, guardianCardEvents, shareGuardianCard, type CardQuestion } from '../guardianEvidence'
+import { DemoPill } from './DemoPill'
 import { releaseWarn } from '../module/releaseLog'
 import { ownerLockKind, type OwnerLockKind } from '../module/ownerConfirm'
 import { isStateVerifiedApproversEnabled } from '../module/stateVerifiedApproversFlag'
@@ -50,6 +51,7 @@ export const ApproverOfferIds = {
   failed: 'ApproverOfferFailed',
   faceId: 'ApproverOfferFaceId',
   cardAsk: 'ApproverOfferCardAsk',
+  cardAskDemo: 'ApproverOfferCardAskDemo',
   cardSend: 'ApproverOfferCardSend',
   cardDont: 'ApproverOfferCardDont',
 } as const
@@ -213,6 +215,7 @@ const ApproverOfferModal: React.FC = () => {
                         interpolation: { escapeValue: false },
                       })}
                 </ThemedText>
+                {asking.state && asking.demo ? <DemoPill testID={ApproverOfferIds.cardAskDemo} /> : null}
                 <ThemedText>
                   {t('Approver.CardAskBody', {
                     asker: asking.asker || t('Approver.UnnamedContact'),

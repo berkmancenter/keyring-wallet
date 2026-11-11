@@ -73,11 +73,11 @@ export type GuardianEvidence = Pick<GuardianEvidencePayload, 'guardianSaid' | 'h
 
 /**
  * What the last check said. `ok: true` only from verifyGuardian's valid result on a root this build trusts, and its
- * `state` is the name on this phone's list, never one the sender gave. Every other outcome is a refusal, kept with
- * its reason for the details line and the log.
+ * `state` is the name on this phone's list, never one the sender gave, and `demo` is that list entry's demo mark.
+ * Every other outcome is a refusal, kept with its reason for the details line and the log.
  */
 export type GuardianVerdict =
-  | { ok: true; root: string; state: string; checkedAt: string; expires?: string }
+  | { ok: true; root: string; state: string; demo?: true; checkedAt: string; expires?: string }
   | { ok: false; reason: string; detail: string; checkedAt: string }
 
 /** Kept on the offer's record (RoleOfferAsk.guardian): the card a contact sent, as whom, and the last verdict. */
@@ -93,7 +93,9 @@ export interface GuardianOnAsk {
  * not verify, with the outcome. An approver who sent no card (never asked, or chose not to) has no standing at all, so
  * no line: not sharing is a choice, never shown as a failed check.
  */
-export type GuardianStanding = { kind: 'verified'; state: string } | { kind: 'unverified'; outcome: string }
+export type GuardianStanding =
+  | { kind: 'verified'; state: string; demo?: true }
+  | { kind: 'unverified'; outcome: string }
 
 const OFF = 'state-verified approvers are switched off on this phone (Settings › Developer)'
 const warn = (agent: Pick<Agent, 'config'>, message: string) => agent.config?.logger?.warn(`${LOG_PREFIX} ${message}`)
@@ -153,6 +155,7 @@ export function checkGuardianEvidence(
       ok: true,
       root: root.aid,
       state: root.name,
+      ...(root.demo ? { demo: true as const } : {}),
       checkedAt,
       ...(result.expires ? { expires: result.expires } : {}),
     }
@@ -317,6 +320,8 @@ export interface CardQuestion {
   asker: string
   /** The state named on this phone's own list for the card's root, if it is on the list. */
   state?: string
+  /** That list entry's demo mark ("Demo" pill beside the name). */
+  demo?: true
 }
 
 class CardQuestionStore {
@@ -341,18 +346,24 @@ export const cardQuestions = new CardQuestionStore()
 /** 'question': a question was added or answered. */
 export const guardianCardEvents = new EventEmitter()
 
-/** The state this phone's own list names for the card's root, if the root is on the list; never the card's word. */
-function stateNameOf(evidence: GuardianEvidence): string | undefined {
-  return trustedStateRoots().find((root) => evidence.kels.some((kel) => kel.includes(`"i":"${root.aid}"`)))?.name
+/**
+ * The state this phone's own list names for the card's root, and that entry's demo mark, if the root is on the list;
+ * never the card's word.
+ */
+function stateOf(evidence: GuardianEvidence): { state?: string; demo?: true } {
+  const root = trustedStateRoots().find((known) => evidence.kels.some((kel) => kel.includes(`"i":"${known.aid}"`)))
+  if (!root) return {}
+  return root.demo ? { state: root.name, demo: true } : { state: root.name }
 }
 
 /** The card this phone could share, and the state it is from: none with either switch off or no card held. */
-export async function cardToShare(agent: Pick<Agent, 'genericRecords'>): Promise<{ state?: string } | undefined> {
+export async function cardToShare(
+  agent: Pick<Agent, 'genericRecords'>
+): Promise<{ state?: string; demo?: true } | undefined> {
   if (!isOn()) return undefined
   const held = await heldGuardianEvidence(agent)
   if (!held) return undefined
-  const state = stateNameOf(held)
-  return state ? { state } : {}
+  return stateOf(held)
 }
 
 export type CardAfterYesResult = EvidenceSendResult | 'declined' | 'asked' | 'notApproving'
@@ -374,8 +385,7 @@ export async function guardianCardAfterYes(
   const consent = await cardConsentOn(agent, prompt.connectionId)
   if (consent === 'yes') return sendGuardianEvidence(agent, prompt.connectionId, prompt.agentDid, approverDid)
   if (consent === 'no') return 'declined'
-  const state = stateNameOf(held)
-  cardQuestions.set({ connectionId: prompt.connectionId, asker: prompt.asker, ...(state ? { state } : {}) })
+  cardQuestions.set({ connectionId: prompt.connectionId, asker: prompt.asker, ...stateOf(held) })
   guardianCardEvents.emit('question', { connectionId: prompt.connectionId })
   return 'asked'
 }
@@ -412,8 +422,20 @@ export type TestStateActionResult = 'done' | 'off'
  * state-verified approvers are both on, and no remote off is set).
  */
 export async function holdK0TestGuardianCard(agent: Pick<Agent, 'genericRecords'>): Promise<TestStateActionResult> {
+  return (await keepK0TestGuardianCard(agent)) === 'done' ? 'done' : 'off'
+}
+
+/**
+ * Why holdK0TestGuardianCard did or did not keep the card: 'off' (the test state is not trusted) and 'tooLarge' (the
+ * card is over GUARDIAN_EVIDENCE_MAX_BYTES) are different facts, which the one-tap "Set up the SEDI demo" reports
+ * apart. holdK0TestGuardianCard keeps its two results for its Developer row; this is not exported from the package.
+ */
+export type K0CardKeepResult = TestStateActionResult | 'tooLarge'
+
+/** holdK0TestGuardianCard, saying which of 'off' and 'tooLarge' stopped it. */
+export async function keepK0TestGuardianCard(agent: Pick<Agent, 'genericRecords'>): Promise<K0CardKeepResult> {
   if (!isTrustTestStateEnabled()) return 'off'
-  return (await holdGuardianEvidence(agent, K0_TEST_GUARDIAN_CARD)) === 'held' ? 'done' : 'off'
+  return (await holdGuardianEvidence(agent, K0_TEST_GUARDIAN_CARD)) === 'held' ? 'done' : 'tooLarge'
 }
 
 /**
@@ -568,7 +590,7 @@ const sameVerdict = (a: GuardianVerdict | undefined, b: GuardianVerdict) =>
   !!a &&
   a.ok === b.ok &&
   (a.ok === true && b.ok === true
-    ? a.root === b.root && a.state === b.state && a.expires === b.expires
+    ? a.root === b.root && a.state === b.state && a.demo === b.demo && a.expires === b.expires
     : a.ok === false && b.ok === false && a.reason === b.reason && a.detail === b.detail)
 
 /**
@@ -598,7 +620,9 @@ export async function guardianStandings(agent: Agent): Promise<Record<string, Gu
         .catch((e: unknown) => warn(agent, `could not keep a new verdict: ${(e as Error)?.message ?? e}`))
     }
     standings[beside] =
-      verdict.ok === true ? { kind: 'verified', state: verdict.state } : { kind: 'unverified', outcome: verdict.reason }
+      verdict.ok === true
+        ? { kind: 'verified', state: verdict.state, ...(verdict.demo ? { demo: true as const } : {}) }
+        : { kind: 'unverified', outcome: verdict.reason }
   }
   return standings
 }

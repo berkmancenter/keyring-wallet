@@ -6,8 +6,10 @@
  * A release trusts none: empty, so nothing verifies and every card reads "Couldn't verify the state card", unless the
  * Developer setting "Trust the test state (K0)" is on (trustTestStateFlag.ts, which holds only while trusted approvers
  * and state-verified approvers are both on). A Developer build (`__DEV__`) trusts the K0 test root without it. Either
- * way it is the K0 test root only, the keripy kit the tests check against (sedi/__tests__/fixtures/k0-utah-v2), and it
- * is always named as the test state. Real State roots come from did:webs (IN-619), not from this list.
+ * way it is the K0 test root only, the keripy kit the tests check against (sedi/__tests__/fixtures/k0-utah-v2). It is
+ * named "State of Example", a made-up state, and marked `demo`, so Who approves shows a "Demo" pill beside the name:
+ * never a real state's name, and never a pill inferred from the name. Real State roots come from did:webs (IN-619),
+ * not from this list, and are never marked demo.
  *
  * @module sedi/guardian/stateRoots
  */
@@ -19,13 +21,23 @@ export interface StateRoot {
   aid: string
   /** What Who approves calls it: "Has a Guardian card from <name>". */
   name: string
+  /**
+   * A made-up state for demos and testing: Who approves shows a "Demo" pill beside the name. Set on the entry here,
+   * never read from the card or inferred from the name.
+   */
+  demo?: true
 }
 
 /**
  * The K0 kit's State root ("roy"): a test root, trusted in Developer builds or with "Trust the test state (K0)" on.
- * Its name says so, never a real state's: Who approves reads "Has a Guardian card from Test state (K0)".
+ * Named as a made-up state, never a real one's, and marked demo: Who approves reads "Has a Guardian card from State of
+ * Example" with a "Demo" pill beside the name (Alberto, 2026-11-11).
  */
-export const K0_TEST_ROOT: StateRoot = { aid: 'IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6', name: 'Test state (K0)' }
+export const K0_TEST_ROOT: StateRoot = {
+  aid: 'IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6',
+  name: 'State of Example',
+  demo: true,
+}
 
 /**
  * The K0 kit's ward ("sam"): what a Developer sets as this phone's ward to check K0 cards. Not a binding to the
@@ -39,6 +51,14 @@ export const K0_TEST_WARD = 'IFDf7z58Wp19EQ-EjCviVU2sgmFnjecWqCEaNsAz8lq6'
  */
 export function stateRootsFor(developerBuild: boolean, trustTestState: boolean): StateRoot[] {
   return developerBuild || trustTestState ? [K0_TEST_ROOT] : []
+}
+
+/**
+ * Whether `aid` is a root this phone's own list marks as demo, so a screen (Who approves, the holder's state card)
+ * shows the "Demo" pill from the entry, never from a card's word or the name. False for any root not on the list.
+ */
+export function isDemoStateRoot(aid: string): boolean {
+  return [K0_TEST_ROOT].some((root) => root.aid === aid && root.demo === true)
 }
 
 /** The roots this build trusts (read at each check, never at load). */
