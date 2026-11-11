@@ -25,3 +25,13 @@ this repository's `main`, and checks the download's sha256. Any mismatch fails
 the job, so a pin bump or a checker change without a rebuild can never pass with
 a stale checker. **After a VTI pin bump or a change to either checker, run
 `build.sh --publish` and commit `DIST.json`.**
+
+**What this does and does not prove.** The chain detects staleness: the
+downloaded binary matches the sha256 committed in `DIST.json`, and the sources
+and pin have not moved since that build. It does not prove the binary was
+compiled from those sources; the trust root is whoever can publish the release
+asset and commit `DIST.json`. That fits a test oracle, but it is not a
+supply-chain attestation.
+
+**After every rebuild, commit the new `DIST.json`.** Until it is on `main`, the
+job fails on the sha256 or the digest, by design.
