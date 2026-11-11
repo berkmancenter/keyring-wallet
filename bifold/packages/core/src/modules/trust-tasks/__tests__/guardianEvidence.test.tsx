@@ -19,6 +19,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import * as guardianModule from '../../sedi/guardian'
 import * as stateRoots from '../../sedi/guardian/stateRoots'
+import { STATE_CARD_REMOTE_OFF, isStateCardEnabled, setStateCardEnabled } from '../../sedi/holder/stateCardFlag'
 import * as websModule from '../../sedi/webs'
 import * as websResolve from '../../sedi/webs/resolve'
 import * as approverRole from '../approverRole'
@@ -64,7 +65,12 @@ import {
   setTrustedApproversEnabled,
 } from '../module/trustedApproversFlag'
 import { isTrustTestStateEnabled, setTrustTestStateEnabled } from '../module/trustTestStateFlag'
-import { setUpSediDemo, turnOffSediDemo } from '../developerTestState'
+import {
+  CONFIRM_ITS_YOU_REMOTE_OFF,
+  isConfirmItsYouEnabled,
+  setConfirmItsYouEnabled,
+} from '../module/confirmItsYouFlag'
+import { sediDemoHiddenByKill, setUpSediDemo, turnOffSediDemo } from '../developerTestState'
 import * as evidenceModule from '../guardianEvidence'
 import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
 import ApproverOfferModal, { ApproverOfferIds } from '../components/ApproverOfferModal'
@@ -500,16 +506,37 @@ describe('Developer action: "Set up the SEDI demo" in one tap, and "Turn off the
     setTrustedApproversEnabled(false)
     setStateVerifiedApproversEnabled(false)
     setTrustTestStateEnabled(false)
+    setStateCardEnabled(false)
+    setConfirmItsYouEnabled(false)
   }
-  const states = () => [isTrustedApproversEnabled(), isStateVerifiedApproversEnabled(), isTrustTestStateEnabled()]
-  beforeEach(allSwitchesOff)
-  afterEach(() => setTrustTestStateEnabled(false))
+  // The five switches the one-tap turns on, in order: trusted approvers, state-verified approvers, the test state, the
+  // holder's state card, and Confirm it's you.
+  const states = () => [
+    isTrustedApproversEnabled(),
+    isStateVerifiedApproversEnabled(),
+    isTrustTestStateEnabled(),
+    isStateCardEnabled(),
+    isConfirmItsYouEnabled(),
+  ]
+  beforeEach(() => {
+    STATE_CARD_REMOTE_OFF.off = false
+    CONFIRM_ITS_YOU_REMOTE_OFF.off = false
+    allSwitchesOff()
+  })
+  afterEach(() => {
+    STATE_CARD_REMOTE_OFF.off = false
+    CONFIRM_ITS_YOU_REMOTE_OFF.off = false
+    setTrustTestStateEnabled(false)
+    setStateCardEnabled(false)
+    setConfirmItsYouEnabled(false)
+  })
 
-  test('from everything off: all three switches on, the K0 card held and the K0 ward set (control: before it, all off)', async () => {
-    expect(states()).toEqual([false, false, false])
+  test('from everything off: all five switches on (the state card and the Confirm switch too), the K0 card held and the K0 ward set (control: before it, all off)', async () => {
+    expect(states()).toEqual([false, false, false, false, false])
     const phoneA = phone()
     expect(await setUpSediDemo(phoneA.agent)).toBe('done')
-    expect(states()).toEqual([true, true, true])
+    expect(states()).toEqual([true, true, true, true, true])
+    expect(sediDemoHiddenByKill()).toEqual([])
     expect(await heldGuardianEvidence(phoneA.agent)).toEqual(card('G-ok'))
     expect(await stateWardOf(phoneA.agent)).toBe(SAM_WARD)
   })
@@ -527,11 +554,11 @@ describe('Developer action: "Set up the SEDI demo" in one tap, and "Turn off the
       allOn()
       allSwitchesOff()
       // The kill above is cleared by allOn; the switches it would have turned on must still be off, and nothing kept.
-      expect(states()).toEqual([false, false, false])
+      expect(states()).toEqual([false, false, false, false, false])
       expect(await heldGuardianEvidence(phoneA.agent)).toBeUndefined()
       expect(await stateWardOf(phoneA.agent)).toBeNull()
       expect(await setUpSediDemo(phoneA.agent)).toBe('done')
-      expect(states()).toEqual([true, true, true])
+      expect(states()).toEqual([true, true, true, true, true])
     }
   )
 
@@ -540,22 +567,72 @@ describe('Developer action: "Set up the SEDI demo" in one tap, and "Turn off the
     const phoneA = phone()
     await setUpSediDemo(phoneA.agent)
     SEDI_KERI_REMOTE_OFF.off = false
-    expect(states()).toEqual([false, false, false])
+    expect(states()).toEqual([false, false, false, false, false])
   })
 
-  test('the undo turns the three switches off and deletes nothing: the card and ward stay kept (control: set up, all on)', async () => {
+  test('the undo turns the five switches off (the state card and the Confirm switch too) and deletes nothing: the card and ward stay kept (control: set up, all on)', async () => {
     const phoneA = phone()
     await setUpSediDemo(phoneA.agent)
-    expect(states()).toEqual([true, true, true])
+    expect(states()).toEqual([true, true, true, true, true])
     turnOffSediDemo()
-    expect(states()).toEqual([false, false, false])
+    expect(states()).toEqual([false, false, false, false, false])
     expect(phoneA.rows.filter((r) => r.tags.recordType === GUARDIAN_EVIDENCE_HELD)).toHaveLength(1)
     expect(await stateWardOf(phoneA.agent)).toBe(SAM_WARD)
   })
 
-  test.todo(
-    'the one-tap and its undo also set the holder state-card switch (setStateCardEnabled, feat/sedi-holder-card)'
-  )
+  test('the one-tap turns the holder state card on, and the undo turns it off (control: before the tap, it is off)', async () => {
+    expect(isStateCardEnabled()).toBe(false)
+    expect(await setUpSediDemo(phone().agent)).toBe('done')
+    expect(isStateCardEnabled()).toBe(true)
+    turnOffSediDemo()
+    expect(isStateCardEnabled()).toBe(false)
+  })
+
+  test("the state card's own remote off does not stop the setup: doneSomeHidden naming the card, the others visible; cleared, it shows (control: the umbrella stops it)", async () => {
+    STATE_CARD_REMOTE_OFF.off = true
+    const phoneA = phone()
+    expect(await setUpSediDemo(phoneA.agent)).toBe('doneSomeHidden')
+    expect(sediDemoHiddenByKill()).toEqual(['stateCard'])
+    expect(states()).toEqual([true, true, true, false, true])
+    expect(await heldGuardianEvidence(phoneA.agent)).toEqual(card('G-ok'))
+    STATE_CARD_REMOTE_OFF.off = false
+    expect(isStateCardEnabled()).toBe(true)
+    allSwitchesOff()
+    SEDI_KERI_REMOTE_OFF.off = true
+    expect(await setUpSediDemo(phone().agent)).toBe('remoteOff')
+    SEDI_KERI_REMOTE_OFF.off = false
+    expect(states()).toEqual([false, false, false, false, false])
+  })
+
+  test("the one-tap turns Confirm it's you on, and the undo turns it off (control: before the tap, it is off)", async () => {
+    expect(isConfirmItsYouEnabled()).toBe(false)
+    expect(await setUpSediDemo(phone().agent)).toBe('done')
+    expect(isConfirmItsYouEnabled()).toBe(true)
+    turnOffSediDemo()
+    expect(isConfirmItsYouEnabled()).toBe(false)
+  })
+
+  test("Confirm it's you's own remote off does not stop the setup: doneSomeHidden naming it, the others visible; cleared, it is on", async () => {
+    CONFIRM_ITS_YOU_REMOTE_OFF.off = true
+    expect(await setUpSediDemo(phone().agent)).toBe('doneSomeHidden')
+    expect(sediDemoHiddenByKill()).toEqual(['confirmItsYou'])
+    expect(states()).toEqual([true, true, true, true, false])
+    CONFIRM_ITS_YOU_REMOTE_OFF.off = false
+    expect(isConfirmItsYouEnabled()).toBe(true)
+    expect(sediDemoHiddenByKill()).toEqual([])
+  })
+
+  test('both peripheral remote offs: doneSomeHidden naming both, the approvers demo still set up (control: none set, done)', async () => {
+    STATE_CARD_REMOTE_OFF.off = true
+    CONFIRM_ITS_YOU_REMOTE_OFF.off = true
+    expect(await setUpSediDemo(phone().agent)).toBe('doneSomeHidden')
+    expect(sediDemoHiddenByKill()).toEqual(['stateCard', 'confirmItsYou'])
+    expect(states()).toEqual([true, true, true, false, false])
+    STATE_CARD_REMOTE_OFF.off = false
+    CONFIRM_ITS_YOU_REMOTE_OFF.off = false
+    allSwitchesOff()
+    expect(await setUpSediDemo(phone().agent)).toBe('done')
+  })
 
   // Each way the one-tap can stop is its own result (ac, #1033): a card over the size cap is not "a release turned
   // this off". The steps are reached through the module object (developerTestState requires it lazily), so a spy on
@@ -573,7 +650,7 @@ describe('Developer action: "Set up the SEDI demo" in one tap, and "Turn off the
       jest.spyOn(evidenceModule, 'keepK0TestGuardianCard').mockResolvedValue('tooLarge')
       const phoneA = phone()
       expect(await setUpSediDemo(phoneA.agent)).toBe('cardNotHeld')
-      expect(states()).toEqual([true, true, true])
+      expect(states()).toEqual([true, true, true, true, true])
       expect(await heldGuardianEvidence(phoneA.agent)).toBeUndefined()
       expect(await stateWardOf(phoneA.agent)).toBe(SAM_WARD)
     })
@@ -590,7 +667,7 @@ describe('Developer action: "Set up the SEDI demo" in one tap, and "Turn off the
       jest.spyOn(evidenceModule, 'becomeK0TestWard').mockRejectedValue(new Error('storage'))
       const phoneA = phone()
       expect(await setUpSediDemo(phoneA.agent)).toBe('wardNotSet')
-      expect(states()).toEqual([true, true, true])
+      expect(states()).toEqual([true, true, true, true, true])
       expect(await heldGuardianEvidence(phoneA.agent)).toEqual(card('G-ok'))
       expect(await stateWardOf(phoneA.agent)).toBeNull()
       jest.restoreAllMocks()
@@ -612,7 +689,7 @@ describe('Developer action: "Set up the SEDI demo" in one tap, and "Turn off the
       })
       expect(await setUpSediDemo(phone().agent)).toBe('remoteOff')
       SEDI_KERI_REMOTE_OFF.off = false
-      expect(states()).toEqual([true, true, true])
+      expect(states()).toEqual([true, true, true, true, true])
       jest.restoreAllMocks()
       allSwitchesOff()
       expect(await setUpSediDemo(phone().agent)).toBe('done')

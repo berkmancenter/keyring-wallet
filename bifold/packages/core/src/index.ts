@@ -294,6 +294,7 @@ export {
   becomeK0TestWard,
   setUpSediDemo,
   turnOffSediDemo,
+  sediDemoHiddenByKill,
   SEDI_KERI_REMOTE_OFF,
   setConfirmItsYouEnabled,
   isConfirmItsYouEnabled,

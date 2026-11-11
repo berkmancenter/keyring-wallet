@@ -66,8 +66,10 @@ export {
   becomeK0TestWard,
   setUpSediDemo,
   turnOffSediDemo,
+  sediDemoHiddenByKill,
   type TestStateActionResult,
   type SediDemoSetupResult,
+  type SediDemoHiddenFeature,
 } from './developerTestState'
 export { SEDI_KERI_REMOTE_OFF } from './module/sediKeriRemoteOff'
 export { setConfirmItsYouEnabled, isConfirmItsYouEnabled, CONFIRM_ITS_YOU_REMOTE_OFF } from './module/confirmItsYouFlag'
