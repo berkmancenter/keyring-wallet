@@ -3846,6 +3846,11 @@
     "CredentialId": "Credential (SAID)",
     "Expires": "Expires",
     "CheckResult": "Check result",
-    "NotKnown": "Not known: the check didn't finish"
+    "NotKnown": "Not known: the check didn't finish",
+    "AsOfPublished": "as of the state's published record",
+    "Checking": "Checking the card with the state…",
+    "PillChecking": "Checking",
+    "NotReached": "Couldn't reach the state to check this card. It isn't checked against the copy on this phone instead. Try again later.",
+    "PillNotReached": "Couldn't reach"
   }
 }

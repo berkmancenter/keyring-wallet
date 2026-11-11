@@ -3804,6 +3804,11 @@
     "CredentialId": "Attestation (SAID)",
     "Expires": "Expire le",
     "CheckResult": "Résultat de la vérification",
-    "NotKnown": "Inconnu : la vérification n'a pas abouti"
+    "NotKnown": "Inconnu : la vérification n'a pas abouti",
+    "AsOfPublished": "d'après le registre publié par l'État",
+    "Checking": "Vérification de la carte auprès de l'État…",
+    "PillChecking": "Vérification",
+    "NotReached": "Impossible de joindre l'État pour vérifier cette carte. Elle n'est pas vérifiée à la place d'après la copie de ce téléphone. Réessayez plus tard.",
+    "PillNotReached": "Injoignable"
   }
 }

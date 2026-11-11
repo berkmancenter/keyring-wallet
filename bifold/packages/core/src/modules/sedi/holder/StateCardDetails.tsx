@@ -104,7 +104,12 @@ export const StateCardDetails: React.FC<StateCardDetailsProps> = ({ view, onClos
         </View>
         {view.tone === 'ok' ? (
           <ThemedText style={styles.note} testID={testIdWithKey('StateCardWhatChecked')}>
-            {t('StateCard.WhatChecked', { asOf: t('StateCard.AsOfHeldCopy') })}
+            {t('StateCard.WhatChecked', { asOf: view.asOf, interpolation: { escapeValue: false } })}
+          </ThemedText>
+        ) : null}
+        {view.tone === 'ok' && view.source ? (
+          <ThemedText style={styles.note} testID={testIdWithKey('StateCardSource')}>
+            {view.source}
           </ThemedText>
         ) : null}
         {view.demoNote ? (

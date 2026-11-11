@@ -4,30 +4,48 @@
  * Checked as its holder: there is no ward and no own KERI identifier on this phone yet (stage 3), so the ward and the
  * holder the check expects are read from the card itself, and those two checks prove nothing here. What a "Checks out"
  * does prove, and all it may claim: the card's chain verifies to a State root on this phone's list, and the card is
- * neither revoked nor expired, {@link STATE_CARD_AS_OF} (the copy this phone holds, not a live read of the state).
+ * neither revoked nor expired, as of what the check read: the state's published record when its root was fetched live
+ * ({@link STATE_CARD_AS_OF_LIVE}), else the copy this phone holds ({@link STATE_CARD_AS_OF}).
  *
- * Never "Checks out" unless checkGuardianEvidence returned `ok: true`: switched off, no root trusted, and every
- * refusal each say what stopped the check instead.
+ * The check is checkGuardianEvidenceResolving: a root on this phone's list that publishes at a did:webs is fetched and
+ * checked against what it publishes, and one that can't be reached refuses as `stateNotResolved` (never the card's own
+ * copy instead). It is asynchronous, so until it answers the card says it is checking.
  *
- * Pure apart from the switches it reads at the call: the same card, switches and clock give the same words.
+ * Never "Checks out" unless that check returned `ok: true`: checking, switched off, no root trusted, and every
+ * refusal each say what they are instead.
+ *
+ * Pure apart from the switches it reads at the call: the same card, switches, clock and answer give the same words.
  *
  * @module sedi/holder/stateCard
  */
 import type { TFunction } from 'i18next'
 
-import { checkGuardianEvidence, type GuardianEvidence, type GuardianVerdict } from '../../trust-tasks/guardianEvidence'
+import {
+  checkGuardianEvidenceResolving,
+  type GuardianEvidence,
+  type GuardianVerdict,
+} from '../../trust-tasks/guardianEvidence'
 import { isStateVerifiedApproversEnabled } from '../../trust-tasks/module/stateVerifiedApproversFlag'
 import { K0_TEST_GUARDIAN_CARD } from '../guardian/k0TestCard'
 import { isDemoStateRoot, trustedStateRoots } from '../guardian/stateRoots'
+import { websDidToFetch } from '../webs/demoStateHost'
+
+/** How far a "Checks out" reaches when the check read the copy this phone holds. */
+export const STATE_CARD_AS_OF = 'StateCard.AsOfHeldCopy'
+/** How far it reaches when the root was fetched live: the state's published record. */
+export const STATE_CARD_AS_OF_LIVE = 'StateCard.AsOfPublished'
 
 /**
- * How far a "Checks out" reaches, in one place: the copy this phone holds. Once the root keys come from a live
- * did:webs resolve, this key's words become "as of the state's published record", a one-line change.
+ * The outcome of checking the held card: not checked (and why), still checking (the live fetch has not answered), or
+ * the check's verdict.
  */
-export const STATE_CARD_AS_OF = 'StateCard.AsOfHeldCopy'
+export type HeldCheck =
+  | { checked: false; why: 'switchedOff' | 'noRoots' }
+  | { checked: 'pending' }
+  | { checked: true; verdict: GuardianVerdict }
 
-/** The outcome of checking the held card: not checked (and why), or checkGuardianEvidence's verdict. */
-export type HeldCheck = { checked: false; why: 'switchedOff' | 'noRoots' } | { checked: true; verdict: GuardianVerdict }
+/** The check runs into this seam so a row can answer for the network (the check's own `deps`). */
+export type HeldCheckDeps = Parameters<typeof checkGuardianEvidenceResolving>[4]
 
 /** The Guardian credential itself (its ACDC, without the attachment), found by its SAID; undefined if not readable. */
 function guardianCredentialOf(evidence: GuardianEvidence): Record<string, unknown> | undefined {
@@ -56,35 +74,57 @@ const attributesOf = (evidence: GuardianEvidence) =>
 const dateText = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined)
 
 /**
- * Check the held card. Not run at all while state-verified approvers is off or no root is trusted (the verifier would
- * only refuse, and the person is told what to turn on instead). Otherwise checkGuardianEvidence, which never throws,
- * against the ward and holder the card names (see the module's note).
+ * Why the held card can't be checked on this phone now, if it can't: state-verified approvers off, or no root trusted
+ * (the verifier would only refuse, and the person is told what to turn on instead). Read at the call, synchronously.
  */
-export function checkHeldCard(evidence: GuardianEvidence, now: Date, onThrow: (message: string) => void): HeldCheck {
+export function heldCardUncheckable(): HeldCheck | undefined {
   if (!isStateVerifiedApproversEnabled()) return { checked: false, why: 'switchedOff' }
   if (trustedStateRoots().length === 0) return { checked: false, why: 'noRoots' }
-  const ward = attributesOf(evidence).ward
-  return {
-    checked: true,
-    verdict: checkGuardianEvidence(evidence, typeof ward === 'string' && ward ? ward : null, now, onThrow),
-  }
+  return undefined
 }
 
 /**
- * What a check depends on besides the card: when this changes, the card is checked again. Each root by its AID and
- * its name, since the title the card shows is the name on the kept verdict: a root renamed on this list (as K0 was,
- * "Test state (K0)" to "State of Example") must not leave the old name on a card already checked.
+ * Check the held card: not run at all when {@link heldCardUncheckable} says so; otherwise
+ * checkGuardianEvidenceResolving, which never throws, against the ward and holder the card names (see the module's
+ * note). Its root is fetched live when it publishes at a did:webs.
+ */
+export async function checkHeldCard(
+  evidence: GuardianEvidence,
+  now: Date,
+  onThrow: (message: string) => void,
+  deps?: HeldCheckDeps
+): Promise<HeldCheck> {
+  const uncheckable = heldCardUncheckable()
+  if (uncheckable) return uncheckable
+  const ward = attributesOf(evidence).ward
+  const verdict = await checkGuardianEvidenceResolving(
+    evidence,
+    typeof ward === 'string' && ward ? ward : null,
+    now,
+    onThrow,
+    deps
+  )
+  return { checked: true, verdict }
+}
+
+/**
+ * What a check depends on besides the card: when this changes, the card is checked again. Each root by its AID, its
+ * name, and the did:webs it would be fetched from now. The name, since the title the card shows is the name on the
+ * kept verdict: a root renamed on this list (as K0 was, "Test state (K0)" to "State of Example") must not leave the
+ * old name on a card already checked. The did:webs, since it decides whether the check reads the state live or the
+ * copy here: a Developer "Demo state host" set or cleared must not leave a copy's verdict saying it was fetched live,
+ * or the reverse.
  */
 export const checkKeyOf = (evidence: GuardianEvidence): string =>
   [
     evidence.guardianSaid,
     isStateVerifiedApproversEnabled() ? 'sv' : '-',
     trustedStateRoots()
-      .map((root) => `${root.aid}=${root.name}`)
+      .map((root) => `${root.aid}=${root.name}=${websDidToFetch(root) ?? ''}`)
       .join(','),
   ].join('|')
 
-export type StateCardTone = 'ok' | 'notChecked' | 'problem'
+export type StateCardTone = 'ok' | 'checking' | 'notChecked' | 'problem'
 
 export interface StateCardView {
   /** The state's name on this phone's list, once the card checks out; else a plain "State card". */
@@ -97,6 +137,13 @@ export interface StateCardView {
   status: string
   /** The pill on the pass: "Demo" (cream) when it checks out from a demo root, else the problem in a word or two. */
   pill?: string
+  /** How far a "Checks out" reaches, for the details' "what was checked" line: live, or the copy here. */
+  asOf: string
+  /**
+   * Where a "Checks out" came from, in Who approves' own words: "Fetched live from <host>…", or for a demo root read
+   * from the copy here, "Demo: checked against a copy on this phone." Only beside a "Checks out".
+   */
+  source?: string
   /** "Demo card, loaded on this phone; not issued by a real state", for a demo card. */
   demoNote?: string
   issued?: { label: string; value: string }
@@ -116,6 +163,9 @@ function refusalWords(reason: string, words: Words): { status: string; pill: str
       return { status: words('StateCard.Expired'), pill: words('StateCard.PillExpired') }
     case 'untrustedRoot':
       return { status: words('StateCard.Untrusted'), pill: words('StateCard.PillNotTrusted') }
+    // Its own words: the state's published record could not be read, and the copy here is never used instead.
+    case 'stateNotResolved':
+      return { status: words('StateCard.NotReached'), pill: words('StateCard.PillNotReached') }
     case 'notIssued':
     case 'statusNotCurrent':
     case 'noStateDisclosure':
@@ -136,16 +186,25 @@ export function stateCardView(
 ): StateCardView {
   const words: Words = (key, extra = {}) => t(key, { ...extra, interpolation: { escapeValue: false } }) as string
   const a = attributesOf(evidence)
-  const verdict = check.checked ? check.verdict : undefined
+  const verdict = check.checked === true ? check.verdict : undefined
   const ok = verdict?.ok === true ? verdict : undefined
   // One answer to "is this a demo root", the one Who approves and the card question use (stateRoots).
   const demo = ok ? isDemoStateRoot(ok.root) : false
-  const asOf = words(STATE_CARD_AS_OF)
+  const asOf = words(ok?.fetchedFrom ? STATE_CARD_AS_OF_LIVE : STATE_CARD_AS_OF)
+  const source = ok?.fetchedFrom
+    ? words('Approver.GuardianFetchedLive', { host: ok.fetchedFrom })
+    : demo
+      ? words('Approver.GuardianDemoCopy')
+      : undefined
 
   let tone: StateCardTone
   let status: string
   let pill: string | undefined
-  if (!check.checked) {
+  if (check.checked === 'pending') {
+    tone = 'checking'
+    status = words('StateCard.Checking')
+    pill = words('StateCard.PillChecking')
+  } else if (check.checked === false) {
     tone = 'notChecked'
     status = words('StateCard.SetupNeeded')
     pill = words('StateCard.PillNotChecked')
@@ -176,6 +235,8 @@ export function stateCardView(
     tone,
     status,
     pill,
+    asOf,
+    source,
     demoNote,
     issued,
     validUntil,
@@ -184,7 +245,16 @@ export function stateCardView(
       root: ok?.root,
       said: evidence.guardianSaid,
       expires: untilIso,
-      result: !check.checked ? check.why : ok ? 'valid' : verdict?.ok === false ? verdict.reason : 'checkFailed',
+      result:
+        check.checked === 'pending'
+          ? 'checking'
+          : check.checked === false
+            ? check.why
+            : ok
+              ? 'valid'
+              : verdict?.ok === false
+                ? verdict.reason
+                : 'checkFailed',
     },
     accessibilityLabel: [title, kind, guardianOf, pill, issued && `${issued.label} ${issued.value}`]
       .filter(Boolean)

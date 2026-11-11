@@ -18,7 +18,19 @@ import { setTrustedApproversEnabled } from '../../../trust-tasks/module/trustedA
 import type { GuardianEvidence } from '../../../trust-tasks/guardianEvidence'
 import { K0_TEST_GUARDIAN_CARD } from '../../guardian/k0TestCard'
 import { K0_TEST_ROOT } from '../../guardian/stateRoots'
-import { STATE_CARD_AS_OF, checkHeldCard, checkKeyOf, stateCardView, type HeldCheck } from '../stateCard'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
+import { setDemoStateHost } from '../../webs/demoStateHost'
+import type { RootKel } from '../../webs/rootKel'
+import {
+  STATE_CARD_AS_OF,
+  STATE_CARD_AS_OF_LIVE,
+  checkHeldCard,
+  checkKeyOf,
+  stateCardView,
+  type HeldCheck,
+} from '../stateCard'
 
 const t = ((key: string, extra?: Record<string, unknown>) => {
   const { interpolation: _, ...given } = extra ?? {}
@@ -41,8 +53,17 @@ const switches = (sv: boolean, testState = true) => {
   setTrustTestStateEnabled(testState)
 }
 
-beforeEach(() => switches(true))
+// No row may reach the network: the platform fetch refuses unless a row puts a resolver in place.
+const realFetch = global.fetch
+beforeEach(() => {
+  switches(true)
+  global.fetch = jest.fn(async () => {
+    throw new Error('no network in tests')
+  }) as never
+})
 afterEach(() => {
+  global.fetch = realFetch
+  setDemoStateHost(null)
   switches(false, false)
   STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = false
   SEDI_KERI_REMOTE_OFF.off = false
@@ -52,8 +73,8 @@ afterEach(() => {
 })
 
 describe('the state card: what it says', () => {
-  test('the K0 card, checked: "Checks out", as of the copy this phone holds, from the state on this list', () => {
-    const v = view(checked())
+  test('the K0 card, checked: "Checks out", as of the copy this phone holds, from the state on this list', async () => {
+    const v = view(await checked())
     expect(v.tone).toBe('ok')
     expect(v.status).toBe(`StateCard.ChecksOut{"asOf":"${STATE_CARD_AS_OF}"}`)
     expect(v.title).toBe(K0_TEST_ROOT.name)
@@ -70,17 +91,37 @@ describe('the state card: what it says', () => {
     expect(v.validUntil).toEqual({ label: 'StateCard.ValidUntil', value: 'day(2030-11-10)' })
   })
 
-  test('a demo root puts the cream "Demo" pill and the demo line on it', () => {
-    const v = view(checked())
+  test('a demo root puts the cream "Demo" pill and the demo line on it', async () => {
+    const v = view(await checked())
     expect(v.pill).toBe('StateCard.Demo')
     expect(v.demoNote).toBe('StateCard.DemoNote')
   })
 
-  test('the pill follows the root entry\'s own `demo`, not its name: demo false, no "Demo" (control above: K0 = demo)', () => {
+  test('the pill follows the root entry\'s own `demo`, not its name: demo false, no "Demo" (control above: K0 = demo)', async () => {
     ;(K0_TEST_ROOT as { demo?: boolean }).demo = false
-    const v = view(checked())
+    // Not a demo root, K0 is a real one now: fetched at its own did:webs, so the state answers here.
+    const kel = new Uint8Array(
+      readFileSync(
+        join(
+          __dirname,
+          '..',
+          '..',
+          '__tests__',
+          'fixtures',
+          'webs-k0-root',
+          'example.org',
+          'keyring-demo-state',
+          K0_TEST_ROOT.aid,
+          'keri.cesr'
+        )
+      )
+    )
+    const resolveRootKel = jest.fn(async () => ({ ok: true as const, aid: K0_TEST_ROOT.aid, kel }))
+    const v = view(await checkHeldCard(card, NOW, () => undefined, { resolveRootKel }))
+    expect(resolveRootKel).toHaveBeenCalledTimes(1)
     expect(v.tone).toBe('ok')
     expect(v.pill).toBeUndefined()
+    expect(v.source).toBe('Approver.GuardianFetchedLive{"host":"example.org"}')
     // Still the K0 test card, so it still says it is a demo card.
     expect(v.demoNote).toBe('StateCard.DemoNote')
   })
@@ -97,10 +138,10 @@ describe('the state card: what it says', () => {
       },
       'noRoots',
     ],
-  ])('%s: not checked, says what to turn on, never "Checks out" (control: on, it checks out)', (_, off, why) => {
-    expect(view(checked()).status).toMatch(CHECKS_OUT)
+  ])('%s: not checked, says what to turn on, never "Checks out" (control: on, it checks out)', async (_, off, why) => {
+    expect(view(await checked()).status).toMatch(CHECKS_OUT)
     off()
-    const v = view(checked())
+    const v = view(await checked())
     expect(v.tone).toBe('notChecked')
     expect(v.status).toBe('StateCard.SetupNeeded')
     expect(v.status).not.toMatch(CHECKS_OUT)
@@ -109,21 +150,21 @@ describe('the state card: what it says', () => {
     expect(v.technical.result).toBe(why)
   })
 
-  test('an expired card: refused as expired, red pill, never "Checks out" (control: the day before, it checks out)', () => {
-    expect(view(checked(card, new Date('2030-11-09T00:00:00Z'))).status).toMatch(CHECKS_OUT)
-    const v = view(checked(card, new Date('2030-11-11T00:00:00Z')))
+  test('an expired card: refused as expired, red pill, never "Checks out" (control: the day before, it checks out)', async () => {
+    expect(view(await checked(card, new Date('2030-11-09T00:00:00Z'))).status).toMatch(CHECKS_OUT)
+    const v = view(await checked(card, new Date('2030-11-11T00:00:00Z')))
     expect(v.tone).toBe('problem')
     expect(v.technical.result).toBe('expired')
     expect([v.status, v.pill]).toEqual(['StateCard.Expired', 'StateCard.PillExpired'])
     expect(v.technical.root).toBeUndefined()
   })
 
-  test('an edited card: refused, red pill, never "Checks out", and its dates still read from the card', () => {
+  test('an edited card: refused, red pill, never "Checks out", and its dates still read from the card', async () => {
     const edited = {
       ...card,
       kels: [card.kels[0].replace(/.$/, (c) => (c === 'A' ? 'B' : 'A')), ...card.kels.slice(1)],
     }
-    const v = view(checked(edited))
+    const v = view(await checked(edited))
     expect(v.tone).toBe('problem')
     expect(v.status).not.toMatch(CHECKS_OUT)
     expect(v.pill).toBe('StateCard.PillCouldNotVerify')
@@ -145,7 +186,8 @@ describe('the state card: what it says', () => {
     ['checkFailed', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
     ['noWard', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
     ['expiryUnreadable', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
-  ])('refused (%s): its words, a red pill, no state name, no root, no "Demo"', (reason, status, pill) => {
+    ['stateNotResolved', 'StateCard.NotReached', 'StateCard.PillNotReached'],
+  ])('refused (%s): its words, a red pill, no state name, no root, no "Demo"', async (reason, status, pill) => {
     const v = view(refused(reason))
     expect([v.tone, v.status, v.pill, v.title, v.technical.root]).toEqual([
       'problem',
@@ -157,12 +199,12 @@ describe('the state card: what it says', () => {
     expect(v.technical.result).toBe(reason)
   })
 
-  test('a card not the K0 test card, refused: no demo line (control: the K0 card refused keeps it)', () => {
+  test('a card not the K0 test card, refused: no demo line (control: the K0 card refused keeps it)', async () => {
     expect(view(refused('revoked')).demoNote).toBe('StateCard.DemoNote')
     expect(view(refused('revoked'), { ...card, guardianSaid: 'Eother' }).demoNote).toBeUndefined()
   })
 
-  test('the check is keyed by the card and the switch it reads, so a change is checked again', () => {
+  test('the check is keyed by the card and the switch it reads, so a change is checked again', async () => {
     const on = checkKeyOf(card)
     expect(checkKeyOf(card)).toBe(on)
     expect(checkKeyOf({ ...card, guardianSaid: 'Eother' })).not.toBe(on)
@@ -170,7 +212,7 @@ describe('the state card: what it says', () => {
     expect(checkKeyOf(card)).not.toBe(on)
   })
 
-  test('the key moves when the root list gains or loses a root (here: K0 trusted, then none)', () => {
+  test('the key moves when the root list gains or loses a root (here: K0 trusted, then none)', async () => {
     const withK0 = checkKeyOf(card)
     ;(global as { __DEV__?: boolean }).__DEV__ = false
     setTrustTestStateEnabled(false)
@@ -179,16 +221,98 @@ describe('the state card: what it says', () => {
     expect(checkKeyOf(card)).toBe(withK0)
   })
 
-  test('the key moves when a root on the list is renamed, keeping its AID, so the card never keeps an old name', () => {
+  test('the key moves when a root on the list is renamed, keeping its AID, so the card never keeps an old name', async () => {
     const before = checkKeyOf(card)
     const name = K0_TEST_ROOT.name
     try {
       ;(K0_TEST_ROOT as { name: string }).name = 'Renamed state'
       expect(checkKeyOf(card)).not.toBe(before)
-      expect(view(checked()).title).toBe('Renamed state')
+      expect(view(await checked()).title).toBe('Renamed state')
     } finally {
       ;(K0_TEST_ROOT as { name: string }).name = name
     }
     expect(checkKeyOf(card)).toBe(before)
+  })
+})
+
+describe('the state card: checking, and checked live', () => {
+  /** The K0 root's KEL as its demo host serves it (the fixture #1038's rows read). */
+  const servedKel = () =>
+    new Uint8Array(
+      readFileSync(
+        join(
+          __dirname,
+          '..',
+          '..',
+          '__tests__',
+          'fixtures',
+          'webs-k0-root',
+          'example.org',
+          'keyring-demo-state',
+          K0_TEST_ROOT.aid,
+          'keri.cesr'
+        )
+      )
+    )
+  const live = (answer: (did: string) => Promise<RootKel>) => {
+    // Takes the did:webs it is asked for, as a RootKelResolver does, so a row can read what was fetched.
+    const resolveRootKel = jest.fn((did: string) => answer(did))
+    const check = (evidence: GuardianEvidence = card) =>
+      checkHeldCard(evidence, NOW, () => undefined, { resolveRootKel })
+    return { resolveRootKel, check }
+  }
+
+  test('while checking: says so with a cream "Checking" pill, never "Checks out", no state name, no source', () => {
+    const v = view({ checked: 'pending' })
+    expect([v.tone, v.status, v.pill, v.title]).toEqual([
+      'checking',
+      'StateCard.Checking',
+      'StateCard.PillChecking',
+      'StateCard.UnknownState',
+    ])
+    expect(v.status).not.toMatch(CHECKS_OUT)
+    expect([v.technical.root, v.source, v.technical.result]).toEqual([undefined, undefined, 'checking'])
+  })
+
+  test('with a demo state host: fetched live, "as of the state\'s published record", and says from where', async () => {
+    setDemoStateHost('example.org')
+    const { resolveRootKel, check } = live(async () => ({ ok: true, aid: K0_TEST_ROOT.aid, kel: servedKel() }))
+    const v = view(await check())
+    expect(resolveRootKel).toHaveBeenCalledTimes(1)
+    expect(resolveRootKel.mock.calls[0][0]).toContain('did:webs:example.org:')
+    expect(v.status).toBe(`StateCard.ChecksOut{"asOf":"${STATE_CARD_AS_OF_LIVE}"}`)
+    expect(v.asOf).toBe(STATE_CARD_AS_OF_LIVE)
+    expect(v.source).toBe('Approver.GuardianFetchedLive{"host":"example.org"}')
+    expect(v.pill).toBe('StateCard.Demo')
+  })
+
+  test('with no demo state host: the copy here, never fetched, and says so (control above: with a host, fetched)', async () => {
+    const { resolveRootKel, check } = live(async () => ({ ok: true, aid: K0_TEST_ROOT.aid, kel: servedKel() }))
+    const v = view(await check())
+    expect(resolveRootKel).not.toHaveBeenCalled()
+    expect(v.status).toBe(`StateCard.ChecksOut{"asOf":"${STATE_CARD_AS_OF}"}`)
+    expect(v.source).toBe('Approver.GuardianDemoCopy')
+  })
+
+  test('a state that can\'t be reached: its own words and red pill, never "Checks out", never the copy instead', async () => {
+    setDemoStateHost('example.org')
+    const { check } = live(async () => ({ ok: false, reason: 'unreachable', detail: 'offline' }))
+    const v = view(await check())
+    expect([v.tone, v.status, v.pill, v.technical.result]).toEqual([
+      'problem',
+      'StateCard.NotReached',
+      'StateCard.PillNotReached',
+      'stateNotResolved',
+    ])
+    expect(v.status).not.toMatch(CHECKS_OUT)
+    expect([v.source, v.technical.root]).toEqual([undefined, undefined])
+  })
+
+  test("the key moves when a demo state host is set or cleared, so a copy's verdict never reads as live, or back", () => {
+    const copy = checkKeyOf(card)
+    setDemoStateHost('example.org')
+    expect(checkKeyOf(card)).not.toBe(copy)
+    setDemoStateHost(null)
+    expect(checkKeyOf(card)).toBe(copy)
   })
 })

@@ -3720,6 +3720,11 @@
     "CredentialId": "Credencial (SAID)",
     "Expires": "Vence em",
     "CheckResult": "Resultado da verificação",
-    "NotKnown": "Desconhecido: a verificação não terminou"
+    "NotKnown": "Desconhecido: a verificação não terminou",
+    "AsOfPublished": "segundo o registro publicado pelo estado",
+    "Checking": "Verificando o cartão com o estado…",
+    "PillChecking": "Verificando",
+    "NotReached": "Não foi possível falar com o estado para verificar este cartão. Ele não é verificado pela cópia deste telefone no lugar. Tente de novo mais tarde.",
+    "PillNotReached": "Sem resposta"
   }
 }

@@ -7,7 +7,9 @@
  * where heldGuardianEvidence reads it.
  */
 import { useCredentials, useAgent } from '@bifold/react-hooks'
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/react-native'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import React from 'react'
 
 import { BasicAppContext } from '../../../../../__tests__/helpers/app'
@@ -20,9 +22,12 @@ import { setTrustTestStateEnabled } from '../../../trust-tasks/module/trustTestS
 import { setTrustedApproversEnabled } from '../../../trust-tasks/module/trustedApproversFlag'
 import { K0_TEST_GUARDIAN_CARD } from '../../guardian/k0TestCard'
 import { K0_TEST_ROOT } from '../../guardian/stateRoots'
+import { setDemoStateHost } from '../../webs/demoStateHost'
+import { setRootKelResolver, type RootKel } from '../../webs/rootKel'
 import StateCardDetails from '../StateCardDetails'
 import StateCardPass from '../StateCardPass'
-import { checkHeldCard, stateCardView } from '../stateCard'
+import { stateCardView } from '../stateCard'
+import { useHeldStateCard } from '../useHeldStateCard'
 import { STATE_CARD_REMOTE_OFF, setStateCardEnabled } from '../stateCardFlag'
 
 jest.mock('react-native-localize', () => {})
@@ -54,10 +59,43 @@ const screen = () => (
     <ListCredentials />
   </BasicAppContext>
 )
+/** Let the held-card read and the check's promises run (the check is asynchronous). */
+const settle = () =>
+  act(async () => {
+    for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0))
+  })
 async function wallet() {
   const tree = render(screen())
-  await act(async () => undefined)
+  await settle()
   return tree
+}
+
+/** The K0 root's KEL as its demo host serves it (the fixture #1038's rows read). */
+const servedKel = () =>
+  new Uint8Array(
+    readFileSync(
+      join(
+        __dirname,
+        '..',
+        '..',
+        '__tests__',
+        'fixtures',
+        'webs-k0-root',
+        'example.org',
+        'keyring-demo-state',
+        K0_TEST_ROOT.aid,
+        'keri.cesr'
+      )
+    )
+  )
+const SERVED: () => RootKel = () => ({ ok: true, aid: K0_TEST_ROOT.aid, kel: servedKel() })
+/** A live state that answers only when a row says so: each fetch waits on its own answer. */
+function stateAnswersLater() {
+  const waiting: ((r: RootKel) => void)[] = []
+  const resolver = jest.fn(() => new Promise<RootKel>((resolve) => waiting.push(resolve)))
+  setDemoStateHost('example.org')
+  setRootKelResolver(resolver)
+  return { resolver, answer: (i: number, r: RootKel) => waiting[i](r) }
 }
 const shown = (tree: ReturnType<typeof render>) => tree.queryByTestId(id('StateCard')) !== null
 
@@ -73,8 +111,18 @@ beforeEach(() => {
   setStateCardEnabled(true)
   holds(true)
 })
+// No row may reach the network: the platform fetch refuses unless a row puts a resolver in place.
+const realFetch = global.fetch
+beforeEach(() => {
+  global.fetch = jest.fn(async () => {
+    throw new Error('no network in tests')
+  }) as never
+})
 afterEach(() => {
+  global.fetch = realFetch
   jest.restoreAllMocks()
+  setRootKelResolver(null)
+  setDemoStateHost(null)
   agent.genericRecords.findAllByQuery.mockImplementation(realQuery)
   setStateCardEnabled(false)
   STATE_CARD_REMOTE_OFF.off = false
@@ -172,14 +220,73 @@ describe('the state card in Credentials', () => {
     try {
       ;(K0_TEST_ROOT as { name: string }).name = 'Renamed state'
       tree.rerender(screen())
+      // A rename moves the key, so the card is checked again (checking, then the new name).
+      await settle()
       expect(tree.getByTestId(id('CommunityPassTitle')).props.children).toBe('Renamed state')
     } finally {
       ;(K0_TEST_ROOT as { name: string }).name = name
     }
   })
 
+  test('checking a live state: a cream "Checking", never "Checks out", until it answers; then where it came from', async () => {
+    const state = stateAnswersLater()
+    const tree = await wallet()
+    expect(tree.getByTestId(id('CommunityPassLapsing')).props.children).toBe('StateCard.PillChecking')
+    fireEvent.press(tree.getByTestId(id('CommunityPass')))
+    await waitFor(() => expect(tree.getByTestId(id('StateCardDetails'))).toBeTruthy())
+    expect(tree.getByTestId(id('StateCardStatus')).props.children).toBe('StateCard.Checking')
+    expect(tree.queryByTestId(id('StateCardWhatChecked'))).toBeNull()
+    expect(tree.queryByTestId(id('StateCardSource'))).toBeNull()
+    state.answer(0, SERVED())
+    await settle()
+    expect(tree.getByTestId(id('StateCardStatus')).props.children).toBe('StateCard.ChecksOut')
+    expect(tree.getByTestId(id('StateCardSource')).props.children).toBe('Approver.GuardianFetchedLive')
+    expect(state.resolver).toHaveBeenCalledTimes(1)
+  })
+
+  test('the switch turned off while checking: nothing shows, the late answer is dropped, and on again it checks anew', async () => {
+    const state = stateAnswersLater()
+    const tree = await wallet()
+    // Off with no render before the answer (a remote off landing mid-check): the answer is dropped on its way in.
+    setStateCardEnabled(false)
+    state.answer(0, SERVED())
+    await settle()
+    tree.rerender(screen())
+    expect(shown(tree)).toBe(false)
+    setStateCardEnabled(true)
+    tree.rerender(screen())
+    await settle()
+    // Not the dropped answer: a new check, still waiting.
+    expect(tree.getByTestId(id('CommunityPassLapsing')).props.children).toBe('StateCard.PillChecking')
+    expect(state.resolver).toHaveBeenCalledTimes(2)
+  })
+
+  test('the card left the screen while checking: the late answer lands nowhere, and coming back checks anew', async () => {
+    const state = stateAnswersLater()
+    const errors = jest.spyOn(console, 'error')
+    const first = await wallet()
+    first.unmount()
+    state.answer(0, SERVED())
+    await settle()
+    expect(errors).not.toHaveBeenCalledWith(expect.stringMatching(/unmounted|not wrapped in act/))
+    const again = await wallet()
+    expect(again.getByTestId(id('CommunityPassLapsing')).props.children).toBe('StateCard.PillChecking')
+    expect(state.resolver).toHaveBeenCalledTimes(2)
+  })
+
+  test('a live state that can\'t be reached: its own red "Couldn\'t reach", never "Checks out"', async () => {
+    const state = stateAnswersLater()
+    const tree = await wallet()
+    state.answer(0, { ok: false, reason: 'unreachable', detail: 'offline' })
+    await settle()
+    expect(tree.getByTestId(id('CommunityPassStatus')).props.children).toBe('StateCard.PillNotReached')
+    fireEvent.press(tree.getByTestId(id('CommunityPass')))
+    await waitFor(() => expect(tree.getByTestId(id('StateCardDetails'))).toBeTruthy())
+    expect(tree.getByTestId(id('StateCardStatus')).props.children).toBe('StateCard.NotReached')
+  })
+
   test('the chain is checked once for the card, not on each render of the list', async () => {
-    const check = jest.spyOn(guardianEvidence, 'checkGuardianEvidence')
+    const check = jest.spyOn(guardianEvidence, 'checkGuardianEvidenceResolving')
     const tree = await wallet()
     for (let i = 0; i < 3; i++) tree.rerender(screen())
     expect(shown(tree)).toBe(true)
@@ -187,11 +294,47 @@ describe('the state card in Credentials', () => {
   })
 })
 
+describe('the state card’s hook', () => {
+  test('an answer that arrives while Credentials is out of focus (still mounted) is kept, and shows on return', async () => {
+    const state = stateAnswersLater()
+    const hook = renderHook(({ focused }: { focused: boolean }) => useHeldStateCard(focused), {
+      initialProps: { focused: true },
+    })
+    await settle()
+    expect(hook.result.current?.tone).toBe('checking')
+    hook.rerender({ focused: false })
+    state.answer(0, SERVED())
+    await settle()
+    hook.rerender({ focused: true })
+    await settle()
+    expect(hook.result.current?.tone).toBe('ok')
+    expect(state.resolver).toHaveBeenCalledTimes(1)
+  })
+
+  test('a return to Credentials re-reads the card (a new object) but does not check it again', async () => {
+    const check = jest.spyOn(guardianEvidence, 'checkGuardianEvidenceResolving')
+    const hook = renderHook(({ focused }: { focused: boolean }) => useHeldStateCard(focused), {
+      initialProps: { focused: true },
+    })
+    await settle()
+    expect(hook.result.current?.tone).toBe('ok')
+    const reads = heldQueries()
+    for (const focused of [false, true, false, true]) {
+      hook.rerender({ focused })
+      await settle()
+    }
+    // Read again on each return (the control: the card was re-read), checked once.
+    expect(heldQueries()).toBe(reads + 2)
+    expect(check).toHaveBeenCalledTimes(1)
+    expect(hook.result.current?.tone).toBe('ok')
+  })
+})
+
 describe('the state card’s details, alone', () => {
   const view = () =>
     stateCardView(
       K0_TEST_GUARDIAN_CARD,
-      checkHeldCard(K0_TEST_GUARDIAN_CARD, new Date(), () => undefined),
+      { checked: false, why: 'switchedOff' },
       ((k: string) => k) as never,
       (iso) => iso
     )
