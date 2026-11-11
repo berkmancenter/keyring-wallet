@@ -3,7 +3,7 @@
 #   farm-health.sh                 # every resource below
 # Per runner VTA: pnm health (resolve, auth, mediator, DIDComm + TSP ping), and
 # whether a DID host is registered. Per VTC: /health version, REST manifest
-# (criteria, name), and — vti #1698 — whether GET /v1/community/did-qr.svg is a
+# 0.4 (criteria with their admission, name), and — vti #1698 — whether GET /v1/community/did-qr.svg is a
 # QR that decodes to exactly the VTC's DID.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -48,8 +48,10 @@ vtc() { # name base did
   local ver; ver=$(python3 -c 'import sys,json; print(json.loads(sys.argv[1]).get("version","?"))' "$health" 2>/dev/null)
   [ -n "$ver" ] && [ "$ver" != "?" ] && ok "/health version $ver" || bad "/health unreadable: ${health:0:80}"
   local m; m=$(curl -s -m 20 -X POST "$base/v1/trust-tasks" -H 'content-type: application/json' \
-    -d "{\"id\":\"urn:uuid:$(uuidgen)\",\"type\":\"https://trusttasks.org/spec/vtc/join-requests/manifest/0.2\",\"threadId\":\"urn:uuid:$(uuidgen)\",\"payload\":{},\"issuer\":\"$did\",\"recipient\":\"$did\",\"issuedAt\":\"$(date -u +%FT%TZ)\"}")
-  python3 -c 'import sys,json; d=json.loads(sys.argv[1]); p=d.get("payload",{}); print("  ✓ manifest: criteria", [c["id"] for c in p.get("criteria",[])], "name", (p.get("branding") or {}).get("displayName"))' "$m" 2>/dev/null || bad "manifest unreadable: ${m:0:80}"
+    -d "{\"id\":\"urn:uuid:$(uuidgen)\",\"type\":\"https://trusttasks.org/spec/vtc/join-requests/manifest/0.4\",\"threadId\":\"urn:uuid:$(uuidgen)\",\"payload\":{},\"issuer\":\"$did\",\"recipient\":\"$did\",\"issuedAt\":\"$(date -u +%FT%TZ)\"}")
+  # An error reply (e.g. unsupportedVersion) has no criteria key; reading it as [] once reported "criteria []" for
+  # communities whose criteria were invited / member-credential / review. So a reply without criteria fails.
+  python3 -c 'import sys,json; d=json.loads(sys.argv[1]); p=d.get("payload",{}); c=p["criteria"]; print("  ✓ manifest: criteria", [x["id"]+"("+x.get("admission","?")+")" for x in c], "name", (p.get("branding") or {}).get("displayName"))' "$m" 2>/dev/null || bad "manifest unreadable: ${m:0:120}"
   local code; code=$(curl -s -m 15 -o "$TMP/qr.svg" -w "%{http_code} %{content_type}" "$base/v1/community/did-qr.svg")
   if [[ "$code" == 200*svg* ]]; then
     rsvg-convert -w 600 -b white "$TMP/qr.svg" -o "$TMP/qr.png" 2>/dev/null
@@ -60,12 +62,16 @@ vtc() { # name base did
   fi
 }
 
-# The Farm was wiped and rebuilt on 2026-09-29/30: these are the farm2-* runners.
+# The Farm was wiped and rebuilt on 2026-09-29/30: the farm3-* runners. keyring-test-vtc and farm-runner-nohost did not
+# survive it, and keyring-test-vtc's host no longer resolves (2026-10-26). The test communities since 2026-10-26 are
+# keyring-community-a and keyring-community-b, each with its own runner VTA (pnm slugs farm3-runner-a and -b).
 vta farm3-runner-prague yes
 vta farm3-runner-uiux yes
 vta farm3-runner-openvtc yes
-# keyring-test-vtc and farm-runner-nohost did not survive the reset. Added back when recreated:
-#   vtc keyring-test-vtc <base> <did>
-#   vta <nohost slug> no
+vta farm3-runner-a yes
+vtc keyring-community-a https://vtc-keyring-community-a.ic3.dev did:webvh:QmSfS3RxJbDn6WVDL6JYpTtXmkqRexTVugHqUfhaddpiNF:dids-keyring-runner-a.ic3.dev:keyring-community-a-vtc
+vta farm3-runner-b yes
+vtc keyring-community-b https://vtc-keyring-community-b.ic3.dev did:webvh:QmRES31bePU3yAsCgs7HKY81i6ihNvxpFCVRNXkFGqvYee:dids-keyring-runner-b.ic3.dev:keyring-community-b-vtc
+# A runner without a DID host, for the no-host case, is still to be recreated: vta <nohost slug> no
 echo; [ "$fails" -eq 0 ] && echo "farm-health: all good" || echo "farm-health: $fails problem(s)"
 exit "$fails"
