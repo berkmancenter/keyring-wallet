@@ -25,6 +25,7 @@ import { isRoomRecordSendingOn } from '../recordSendingSwitch'
 import { afterLeavingCommunity } from '../roomsLeave'
 
 import type { RoomsBackend, RoomsCommunity, RoomsUploadBackend } from './agentRoomsService'
+import { storedConsentHolds } from './consentHolds'
 import { createRoomDoors } from './files/door'
 import { senderResolver } from './files/senderDocuments'
 import { createOpenedCopy, releaseOpenedCopy } from './files/openedCopy'
@@ -91,8 +92,19 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
   return {
     runsOn: agent,
     agentLinked: () => vtaAgent.agentAddress() !== undefined,
+    // A rooms task this agent held for consent is not sent to it again for a day (consentHolds.ts): by the agent linked
+    // at each ask, so another agent linked later starts clear.
+    consentHolds: storedConsentHolds(() => vtaAgent.agentAddress()),
     agentServedTypes: async () => (await vtaAgent.roomsClient(agent))?.supportedTypes(),
-    agentTask: async (type, payload) => (await client()).task(type, payload),
+    agentTask: async (type, payload, options) =>
+      (await client()).task(
+        type,
+        payload,
+        options?.timeoutMs,
+        undefined,
+        undefined,
+        options?.waitForConsent === undefined ? undefined : { waitForConsent: options.waitForConsent }
+      ),
 
     // The communities this phone holds a membership in under the agent it acts with now, as the
     // persona that holds it. A membership the community has ended (its removal notice) is left out.

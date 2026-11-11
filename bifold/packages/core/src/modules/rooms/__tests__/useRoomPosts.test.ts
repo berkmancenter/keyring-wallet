@@ -115,6 +115,31 @@ const open = async (service: RoomsService, live = true) => {
   return hook
 }
 
+describe('a page of reads', () => {
+  test('goes to a service that can batch as one ask, each post from its own answer, and one failure holds only itself', async () => {
+    const { service } = roomWith([note('a', 1), note('b', 2), note('c', 3)])
+    const readNotes = jest.fn((_roomId: string, keys: readonly string[]) =>
+      keys.map((key) => (key === 'b' ? Promise.reject(new Error('not read')) : service.readNote(ROOM, key)))
+    )
+    service.readNote.mockClear()
+    const { result } = await open(Object.assign(service, { readNotes }))
+    expect(readNotes).toHaveBeenCalledTimes(1)
+    expect(readNotes.mock.calls[0][1]).toEqual(['c', 'b', 'a'])
+    // Only the two the batching service passed on: the page asked for no read of its own.
+    expect(service.readNote.mock.calls.map(([, key]) => key)).toEqual(['c', 'a'])
+    const posts = result.current.posts ?? []
+    expect(posts.map((p) => p.key)).toEqual(['c', 'b', 'a'])
+    expect(posts.find((p) => p.key === 'a')?.text).toBeTruthy()
+  })
+
+  test('a service that cannot batch is asked one read per post, as before (control)', async () => {
+    const { service } = roomWith([note('a', 1), note('b', 2)])
+    expect((service as { readNotes?: unknown }).readNotes).toBeUndefined()
+    await open(service)
+    expect(service.readNote).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('a room in view', () => {
   test('asks every ten seconds from the newest version held, and a new post appears on top, the only one read', async () => {
     const { service, write } = roomWith([note('a', 1), note('b', 2)])

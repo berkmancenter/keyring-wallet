@@ -43,7 +43,10 @@ type Requirement =
 export const ROOMS_REQUIREMENTS: Record<RoomsOperation, Requirement> = {
   listMyRooms: { from: 'agent', anyOf: [`${SPEC}rooms/keys/list/0.2`, `${SPEC}rooms/keys/list/0.1`] },
   getRoom: { from: 'agent', anyOf: [`${SPEC}rooms/keys/list/0.2`, `${SPEC}rooms/keys/list/0.1`] },
-  listNotes: { from: 'agent', anyOf: [`${SPEC}rooms/keys/browse/0.3`, `${SPEC}rooms/keys/browse/0.1`] },
+  listNotes: {
+    from: 'agent',
+    anyOf: [`${SPEC}rooms/keys/browse/0.4`, `${SPEC}rooms/keys/browse/0.3`, `${SPEC}rooms/keys/browse/0.1`],
+  },
   readNote: { from: 'agent', anyOf: [`${SPEC}rooms/keys/read/0.1`] },
   // The agent signs host-bound requests as the member's persona (rooms/keys/act), at any version the client sends:
   // the set is the ladder itself, so a version added there is asked for here too.

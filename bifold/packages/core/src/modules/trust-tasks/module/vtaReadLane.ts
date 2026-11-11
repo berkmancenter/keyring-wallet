@@ -11,8 +11,10 @@
  * ROLLBACK: set {@link VTA_READ_LANE_SIZE} to 1 (an OTA can ship that alone). With 1, every task runs one at a time in
  * the order asked, exactly as before the lane (vtaClientReadLane.test.ts proves the two the same).
  *
- * Upstream has no batch read (`rooms/keys/read/0.1` takes one key; upstream-findings VTI-88), which would replace this
- * and spare the agent the parallel host fetches.
+ * `rooms/keys/read/0.2` takes up to 32 keys, and an agent that serves it is sent a page's reads together; the lane
+ * still holds for that task and for an agent that doesn't. 0.2 is declared `mutating` where 0.1 is `none`, for the repair
+ * either may make: the agent makes it under one lock per member (vta-service room_read.rs), so side by side is as safe as
+ * it was, and a read's answer still doesn't depend on the order.
  *
  * @module trust-tasks/module/vtaReadLane
  */
@@ -26,10 +28,12 @@ export const VTA_READ_LANE_SIZE = 3
  *
  * What may share the lane, not what is sent: browse 0.2 is held here, and the ladder (`browseType`) sends 0.3 or 0.1.
  *
- * @versionCoverage rooms/keys/browse
+ * @versionCoverage rooms/keys/browse rooms/keys/read
  */
 export const VTA_READ_LANE_TYPES: ReadonlySet<string> = new Set([
+  'https://trusttasks.org/spec/rooms/keys/read/0.2',
   'https://trusttasks.org/spec/rooms/keys/read/0.1',
+  'https://trusttasks.org/spec/rooms/keys/browse/0.4',
   'https://trusttasks.org/spec/rooms/keys/browse/0.3',
   'https://trusttasks.org/spec/rooms/keys/browse/0.2',
   'https://trusttasks.org/spec/rooms/keys/browse/0.1',

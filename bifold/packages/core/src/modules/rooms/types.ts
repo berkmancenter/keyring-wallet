@@ -524,6 +524,8 @@ export interface RoomsService {
    * (a {@link RecordUnopenedReason}); any other failure arrives as it came.
    */
   readNote(roomId: string, key: string): Promise<Note>
+  /** Several records, one promise each in the order asked: together where the agent can. Each settles as `readNote` would. */
+  readNotes?(roomId: string, keys: readonly string[]): Promise<Note>[]
   /** For logs: how many records one page of a room could not open, by reason (`other` for any other failure). */
   noteUnread?(roomId: string, counts: Readonly<Record<string, number>>): void
   prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview>

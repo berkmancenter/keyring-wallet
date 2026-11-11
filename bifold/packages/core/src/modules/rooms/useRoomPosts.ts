@@ -355,8 +355,11 @@ export function useRoomPosts(
     let drawn = readSoFar().length
     // How many of this round's reads failed, by reason: one log line for the round, never which records.
     const notOpened: Record<string, number> = {}
-    const asks = unread.map((summary) =>
-      service.readNote(roomId, summary.key).then(
+    const keys = unread.map((summary) => summary.key)
+    // Together where the service can (one batch), else one read each, as before; each answer is handled on its own.
+    const answers = service.readNotes?.(roomId, keys) ?? keys.map((key) => service.readNote(roomId, key))
+    const asks = unread.map((summary, i) =>
+      answers[i].then(
         (note) => {
           read.set(readKey(summary), note)
           unopened.delete(readKey(summary))

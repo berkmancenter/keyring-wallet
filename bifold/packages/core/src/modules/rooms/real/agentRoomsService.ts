@@ -34,6 +34,8 @@ import { deriveCapabilities, deriveRoomCapabilities } from '../capabilities'
 import { inertFlags, toInertText } from '../inertText'
 import { chatMessageText, reactionValueOfBody } from '../roomPosts'
 import { newThrowawayKey } from '../../trust-tasks/module/oobSignIn'
+import { consentPendingOf } from '../../trust-tasks/module/VtaClient'
+import { VtiRefusal } from '../../trust-tasks/module/vtiAgent'
 import { roomRef } from '../roomRef'
 import { holdsTwoAuthorities, permanentRefusal } from '../postRefusal'
 import { failureCategory, logRef } from '../roomsLogWords'
@@ -72,6 +74,7 @@ import {
   RoomsUnavailable,
 } from '../types'
 
+import type { ConsentHolds } from './consentHolds'
 import { OPEN_FILE_BYTES, openRoomFile, type OpenFileCopy } from './files/open'
 import { checkSender, type ResolveSender } from './files/sender'
 import { TextSenderCount } from './files/textSenderCount'
@@ -102,6 +105,7 @@ import {
   parseOffers,
   parsePut,
   parseRead,
+  parseReadBatch,
   parseSealed,
   parseVaultQuery,
   recordUnopenedReason,
@@ -140,7 +144,12 @@ export interface RoomsBackend {
   /** The agent's `trust-task-discovery` answer; undefined when it could not be asked. */
   agentServedTypes(): Promise<readonly string[] | undefined>
   /** Send a Trust Task to the person's own agent; resolves with the response payload. */
-  agentTask(type: string, payload: Record<string, unknown>): Promise<unknown>
+  agentTask(
+    type: string,
+    payload: Record<string, unknown>,
+    /** `waitForConsent: false`: a task held for consent is refused at once, instead of waiting for the grant. */
+    options?: { timeoutMs?: number; waitForConsent?: boolean }
+  ): Promise<unknown>
   communities(): Promise<RoomsCommunity[]>
   /** Send a Trust Task to a community as this phone's persona for it; resolves with the response payload. */
   communityTask(communityDid: string, type: string, payload: Record<string, unknown>): Promise<unknown>
@@ -190,6 +199,11 @@ export interface RoomsBackend {
    * is asked, so a release that turns sending off has it off everywhere; tests set it themselves.
    */
   readonly recordSending?: boolean
+  /**
+   * When the agent last held a rooms task for consent, kept across launches (consentHolds.ts): a task it held is not
+   * sent to it again for a day. Absent (a backend with nowhere to keep it): a hold stops that task for this session only.
+   */
+  readonly consentHolds?: ConsentHolds
 }
 
 /** The picked file, and the room host's HTTPS Trust Task door, which an upload's single-use key sends to. */
@@ -337,6 +351,15 @@ const listedKey = (roomId: string, key: string) => `${roomId}\n${key}`
  */
 export const MAX_OPENED_RECORDS = 500
 
+/** The most keys one read may name (`rooms/keys/read/0.2`, *Why 32*). */
+export const READ_BATCH_MAX = 32
+
+/**
+ * How long a batch is waited for. An agent stops starting keys at 15 s, then finishes the key it began and a repair
+ * (vta-service room_read.rs `Budget`), so a task's usual 30 s can run out on an answer on its way. Upstream's SDK waits this.
+ */
+export const READ_BATCH_TIMEOUT_MS = 60_000
+
 // The services that hold opened records. When the wallet locks or the person logs out, each forgets them and the set
 // is emptied, so it never keeps a service alive past a lock; a service joins again the next time it keeps a record.
 const holdingOpened = new Set<{ dropOpenedRecords(): void }>()
@@ -404,6 +427,8 @@ export class AgentRoomsService implements RoomsService {
   private listingInFlight = new Map<string, Promise<NoteList>>()
   /** A record's read being asked now, by room and key: every caller that reads it meanwhile waits for the same one. */
   private readsInFlight = new Map<string, Promise<OpenedRecord>>()
+  /** A batch was refused for being a batch (readBatches): this session reads one at a time, as before. */
+  private batchRefused = false
   /** How many times opened records were dropped (a lock, a leave): a read asked before the last one is not kept. */
   private drops = 0
   /** Each room's `recordMembers`, for the epoch it was read at: a writer may rely on it until the epoch moves. */
@@ -878,12 +903,185 @@ export class AgentRoomsService implements RoomsService {
     if (parts.length) this.backend.warn(`rooms: ${logRef(roomId)} records not opened on this page: ${parts.join(', ')}`)
   }
 
+  /**
+   * Several records, one promise each, in the order asked. Where the agent serves batches, the ones not held and not
+   * already being read go out together, and each promise is the one `readNote` would give: a read of one of them from
+   * anywhere else shares the batch's answer. Anywhere else, one `readNote` each, exactly as before.
+   */
+  public readNotes(roomId: string, keys: readonly string[]): Promise<Note>[] {
+    const batchType = this.batchReadType()
+    if (batchType) {
+      const wanted = [...new Set(keys)].filter(
+        (key) => !this.openedNow(roomId, key) && !this.readsInFlight.has(listedKey(roomId, key))
+      )
+      // One record is one read: read 0.1 answers it as ever, and the batch's class (readBatches) has no part in it.
+      if (wanted.length > 1) this.startBatch(batchType, roomId, wanted)
+    }
+    return keys.map((key) => this.readNote(roomId, key))
+  }
+
+  /**
+   * The `rooms/keys/read` a batch goes out as: the newest the agent serves that takes one. Nothing below 0.2 does, so
+   * with none of them, or once this session has had a batch refused, there is no batch. A hold the agent met in the
+   * last day (consentHolds.ts) is asked in startBatch, which can wait for storage: it stops the batch too.
+   *
+   * @versionLadder rooms/keys/read
+   */
+  private batchReadType(): string | undefined {
+    if (this.batchRefused) return undefined
+    const served = this.served?.types ?? []
+    return [ROOMS_TASK.keysRead02].find((t) => served.includes(t))
+  }
+
+  private startBatch(type: string, roomId: string, keys: string[]): void {
+    const answers = this.requireInRoom(roomId, 'readNote').then(async (room) =>
+      (await this.heldRecently(type)) ? this.readEach(room, roomId, keys) : this.readBatches(type, room, roomId, keys)
+    )
+    for (const key of keys) {
+      const k = listedKey(roomId, key)
+      const asked = answers
+        .then((settled) => {
+          const answer = settled.get(key)
+          if (answer instanceof Error) throw answer
+          if (!answer) throw new Error(`the agent's answer for note ${key} could not be read`)
+          return answer
+        })
+        .finally(() => {
+          if (this.readsInFlight.get(k) === asked) this.readsInFlight.delete(k)
+        })
+      // The readNote this is for may refuse first (requireInRoom) and never come to wait on it.
+      asked.catch(() => undefined)
+      this.readsInFlight.set(k, asked)
+    }
+    holdingOpened.add(this)
+  }
+
+  /** Each of `keys` read on its own, at 0.1, every answer its own: what a batch that can't go out does instead. */
+  private async readEach(room: KnownRoom, roomId: string, keys: string[]): Promise<Map<string, OpenedRecord | Error>> {
+    const settled = new Map<string, OpenedRecord | Error>()
+    await Promise.all(
+      keys.map((key) =>
+        this.readRecord(room, roomId, key).then(
+          (opened) => settled.set(key, opened),
+          (alone: unknown) => settled.set(key, alone instanceof Error ? alone : new Error(String(alone)))
+        )
+      )
+    )
+    return settled
+  }
+
+  /**
+   * Did the agent hold `type` for consent in the last day? Asked as the task is about to go out, against the clock then
+   * (no timer: consentHolds.ts). Storage that can't be read answers yes: the batch is an optimisation, an approval
+   * request is not its to raise.
+   */
+  private async heldRecently(type: string): Promise<boolean> {
+    const holds = this.backend.consentHolds
+    if (!holds) return false
+    const held = await holds.heldRecently(type, this.now()).catch(() => true)
+    if (held) this.backend.warn(`rooms: ${type} held for consent by this agent in the last day: read one at a time`)
+    return held
+  }
+
+  /**
+   * Reads `keys` in batches (`rooms/keys/read/0.2`), each key's answer its own. Only what the agent did not come to is
+   * asked again (`notAttempted`), so this reads what is new and is never a poll; a batch that came to nothing stops.
+   *
+   * Read 0.2 is declared `mutating` where 0.1 is declared `none`, for the same repair (one reader serves both: vta-service
+   * room_read.rs), and that class is what an agent's policy sees. So a rule set on it holds a batch where it never held a
+   * single read, and a person opening a room must not wait for an approval they were never asked for: a held batch is
+   * refused at once, and like any batch refused whole, what is left is read one at a time at 0.1, as before, and this
+   * session asks no more batches. A refusal for the room itself comes back the same way, from each read.
+   */
+  private async readBatches(
+    type: string,
+    room: KnownRoom,
+    roomId: string,
+    keys: string[]
+  ): Promise<Map<string, OpenedRecord | Error>> {
+    const drops = this.drops
+    const settled = new Map<string, OpenedRecord | Error>()
+    let left = keys
+    while (left.length > 0) {
+      const asked = left.slice(0, READ_BATCH_MAX)
+      // A line per batch, so a report shows which read went out: nothing else on the agent path names a task's type.
+      this.backend.warn(`rooms: ${logRef(roomId)} read ${asked.length} keys in one ${type}`)
+      let answers: ReturnType<typeof parseReadBatch>
+      try {
+        answers = parseReadBatch(
+          await this.backend.agentTask(
+            type,
+            { roomId, host: room.host, keys: asked },
+            { timeoutMs: READ_BATCH_TIMEOUT_MS, waitForConsent: false }
+          ),
+          (s) => this.backend.decodeBase64Url(s)
+        )
+      } catch (e) {
+        if (refusalCode(e) === undefined) {
+          // No answer, not a refusal: as a read with no answer, these wait for the next try.
+          for (const key of left) settled.set(key, e instanceof Error ? e : new Error(String(e)))
+          return settled
+        }
+        // Not being a member of this room says nothing about the next room's batch.
+        if (refusalCode(e) !== 'notAMember') this.batchRefused = true
+        // Held: the agent has already asked its approvers. Kept, so neither this session nor the next asks again today.
+        // Best effort: a write that fails leaves this session stopped (batchRefused) but the next launch unwarned, which
+        // is still better than failing the reads the person is waiting on. The kept row is what protects the approver.
+        const held = consentPendingOf(e) !== undefined
+        if (held) await this.backend.consentHolds?.noteHeld(type, this.now()).catch(() => undefined)
+        this.backend.warn(
+          `rooms: ${logRef(roomId)} ${type} refused (${failureCategory(e)}): ${left.length} keys read one at a time${
+            held && this.backend.consentHolds
+              ? ', and no more batches to this agent for a day'
+              : this.batchRefused
+                ? ', and no more batches this session'
+                : ''
+          }`
+        )
+        for (const [key, answer] of await this.readEach(room, roomId, left)) settled.set(key, answer)
+        return settled
+      }
+      const notReached: string[] = []
+      await Promise.all(
+        asked.map(async (key) => {
+          const answer = answers?.get(key)
+          if (!answer) return
+          if (!('code' in answer)) {
+            settled.set(key, await this.kept(roomId, answer, drops))
+            return
+          }
+          const refusal = new VtiRefusal(
+            answer.code,
+            answer.message ?? `the read of ${key} was refused`,
+            answer.details
+          )
+          if (refusalCode(refusal) === 'notAttempted') notReached.push(key)
+          else settled.set(key, refusal)
+        })
+      )
+      if (notReached.length === asked.length) {
+        for (const key of asked) settled.set(key, new Error(`the agent came to none of a batch that held ${key}`))
+        left = left.slice(asked.length)
+        continue
+      }
+      left = [...notReached, ...left.slice(asked.length)]
+    }
+    return settled
+  }
+
   private async readRecord(room: KnownRoom, roomId: string, key: string): Promise<OpenedRecord> {
     const drops = this.drops
-    const opened = parseRead(await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key }), (s) =>
-      this.backend.decodeBase64Url(s)
+    const opened = parseRead(
+      // version-pinned: one record, as ever; 0.2 is sent only for a batch (readBatches says why)
+      await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key }),
+      (s) => this.backend.decodeBase64Url(s)
     )
     if (!opened) throw new Error(`the agent's answer for note ${key} could not be read`)
+    return this.kept(roomId, opened, drops)
+  }
+
+  /** What every read does with its answer: checks who shared a file, and keeps the record unless a lock came first. */
+  private async kept(roomId: string, opened: OpenedRecord, drops: number): Promise<OpenedRecord> {
     await this.noteSender(roomId, opened)
     // An answer that arrives after the lock answers its caller, but is not kept: the lock forgot what was read.
     if (drops !== this.drops) return opened
@@ -1322,13 +1520,17 @@ export class AgentRoomsService implements RoomsService {
 
   /**
    * The newest `rooms/keys/browse` the agent serves. 0.3 asks the same and answers the same, plus the room's
-   * `lastPrune`, which `listNotes` passes on; an agent that lists neither is asked 0.1, as before 0.3.
+   * `lastPrune`, which `listNotes` passes on; 0.4 adds what a host stamps on each row, which nothing reads yet. An
+   * agent that lists none of them is asked 0.1, as before 0.3.
    *
    * @versionLadder rooms/keys/browse
    */
   private browseType(): string {
     const served = this.served?.types ?? []
-    return [ROOMS_TASK.keysBrowse03, ROOMS_TASK.keysBrowse].find((t) => served.includes(t)) ?? ROOMS_TASK.keysBrowse
+    return (
+      [ROOMS_TASK.keysBrowse04, ROOMS_TASK.keysBrowse03, ROOMS_TASK.keysBrowse].find((t) => served.includes(t)) ??
+      ROOMS_TASK.keysBrowse
+    )
   }
 
   /** The newest `rooms/keys/act` the agent serves, if any. */
@@ -1955,6 +2157,7 @@ export class AgentRoomsService implements RoomsService {
   private async versionOf(room: KnownRoom, key: string): Promise<number | undefined> {
     try {
       return parseRead(
+        // version-pinned: one record's version, as ever; 0.2 is sent only for a batch (readBatches says why)
         await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId: room.roomId, host: room.host, key }),
         (s) => this.backend.decodeBase64Url(s)
       )?.version
@@ -2008,6 +2211,7 @@ export class AgentRoomsService implements RoomsService {
       if (!read) {
         try {
           read = parseRead(
+            // version-pinned: one record, as ever; 0.2 is sent only for a batch (readBatches says why)
             await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key: record.key }),
             (s) => this.backend.decodeBase64Url(s)
           )

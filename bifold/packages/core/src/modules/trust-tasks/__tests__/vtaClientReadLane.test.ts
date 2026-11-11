@@ -117,7 +117,8 @@ describe('the read lane', () => {
     expect(inReadLane(BROWSE)).toBe(true)
     expect(inReadLane('https://trusttasks.org/spec/rooms/keys/browse/0.2')).toBe(true)
     expect(inReadLane(WRITE)).toBe(false)
-    expect(inReadLane('https://trusttasks.org/spec/rooms/keys/read/0.2')).toBe(false)
+    expect(inReadLane('https://trusttasks.org/spec/rooms/keys/read/0.2')).toBe(true)
+    expect(inReadLane('https://trusttasks.org/spec/rooms/keys/browse/0.4')).toBe(true)
   })
 
   it('stays shut until a reply comes back threaded: the first reads go one at a time', async () => {
