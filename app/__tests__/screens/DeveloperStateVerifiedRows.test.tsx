@@ -180,6 +180,23 @@ describe('Developer: "Set up the SEDI demo" in one tap', () => {
     expect(has(tree, DEMO.turnOff)).toBe(false)
   })
 
+  // bifold says which step stopped the set-up (#1033); each has its own message, and since bifold has already turned
+  // the switches on, they are saved, so a restart matches this screen (control: the remote-off row above saves nothing).
+  test.each([
+    ['cardNotHeld', 'Developer.SediDemoCardNotHeld'],
+    ['wardNotSet', 'Developer.SediDemoWardNotSet'],
+  ])(
+    'a set-up that stopped at a step (%s) says which, and keeps the switches on: the undo appears',
+    async (result, message) => {
+      set(false, false, false)
+      mockSetUp.mockResolvedValueOnce(result)
+      const { tree } = shown()
+      await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
+      expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe(message)
+      expect(has(tree, DEMO.turnOff)).toBe(true)
+    }
+  )
+
   test('the undo calls bifold and turns the saved switches off: the undo goes (control: set up, it shows)', async () => {
     set(false, false, false)
     const { tree } = shown()
