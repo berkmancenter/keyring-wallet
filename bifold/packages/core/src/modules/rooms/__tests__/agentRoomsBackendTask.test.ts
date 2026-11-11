@@ -60,3 +60,30 @@ describe('consentHolds', () => {
     expect(await createAgentRoomsBackend(agent).consentHolds?.heldRecently(READ02, T0 + 1)).toBe(true)
   })
 })
+
+describe('liveDelivery', () => {
+  // Off unless the backend says true (agentRoomsService), so losing this wiring would turn live delivery off for
+  // everyone, quietly: every room would poll. And the release's kill must reach it.
+  const { ROOMS_LIVE_DELIVERY } = jest.requireActual('../liveDeliverySwitch') as {
+    ROOMS_LIVE_DELIVERY: { on: boolean; remoteOff: boolean }
+  }
+  afterEach(() => {
+    ROOMS_LIVE_DELIVERY.on = true
+    ROOMS_LIVE_DELIVERY.remoteOff = false
+  })
+
+  test('the real backend says on, as the release ships it', () => {
+    expect(createAgentRoomsBackend(agent).liveDelivery).toBe(true)
+  })
+
+  test("the release's remote off turns it off, read at each ask, whatever on says", () => {
+    const backend = createAgentRoomsBackend(agent)
+    ROOMS_LIVE_DELIVERY.remoteOff = true
+    expect(backend.liveDelivery).toBe(false)
+  })
+
+  test('a release that switches it off: off', () => {
+    ROOMS_LIVE_DELIVERY.on = false
+    expect(createAgentRoomsBackend(agent).liveDelivery).toBe(false)
+  })
+})

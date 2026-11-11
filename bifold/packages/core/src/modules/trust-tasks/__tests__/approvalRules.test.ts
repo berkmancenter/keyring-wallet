@@ -252,9 +252,12 @@ describe('the phone never sends an offered task', () => {
 
   it('every task the client sends its agent is on the list of what the phone sends', () => {
     // A rule set elsewhere on one that is missing would hold the phone without the screen saying so.
-    const { VTA_TASK } = jest.requireActual('../module/VtaClient') as { VTA_TASK: Record<string, string> }
-    // Pushed by the agent, never sent to it (VtaClient UNSOLICITED).
-    const received = new Set([VTA_TASK.consentRequest, VTA_TASK.consentGranted])
+    const { VTA_TASK, UNSOLICITED } = jest.requireActual('../module/VtaClient') as {
+      VTA_TASK: Record<string, string>
+      UNSOLICITED: ReadonlySet<string>
+    }
+    // Pushed by the agent, never sent to it: the client's own list of them.
+    const received = UNSOLICITED
     const unlisted = Object.values(VTA_TASK).filter(
       (uri) =>
         !received.has(uri) && !PHONE_SENDS.includes(uri) && !(TEST_REQUEST_TASKS as readonly string[]).includes(uri)
@@ -265,9 +268,10 @@ describe('the phone never sends an offered task', () => {
   // A rooms read, write or watch goes to the agent too, from the rooms backend rather than the client's own list.
   const ROOMS_REAL = join(__dirname, '..', '..', 'rooms', 'real')
   // What the phone asks its own agent: `rooms/keys` and `vault`. A host's and a community's tasks (`rooms/records`,
-  // `rooms/blobs`, `vtc`) never pass the agent's policy gate. `rooms/keys/changed` is pushed by the agent, never sent:
-  // should it ever join ROOMS_TASK (to parse it), take it out here, or the first test below fails for the wrong reason.
-  const toAgent = (uri: string) => /\/spec\/(rooms\/keys|vault)\//.test(uri) && !uri.includes('/rooms/keys/changed/')
+  // `rooms/blobs`, `vtc`) never pass the agent's policy gate. The one rooms/keys type the agent pushes rather than takes
+  // (`rooms/keys/changed`) is VtaClient's, not ROOMS_TASK's, so this needs no exception; the last row below keeps it
+  // off the list.
+  const toAgent = (uri: string) => /\/spec\/(rooms\/keys|vault)\//.test(uri)
   const roomsTypes = () => {
     const { ROOMS_TASK } = jest.requireActual('../../rooms/real/wire') as { ROOMS_TASK: Record<string, string> }
     const { UPLOAD_TASK } = jest.requireActual('../../rooms/real/files/upload') as {
@@ -309,10 +313,12 @@ describe('the phone never sends an offered task', () => {
     const sites = walk(ROOMS_REAL).flatMap((file) => {
       const src = readFileSync(file, 'utf8')
       return [
-        ...[...src.matchAll(/\.agentTask\(\s*([^,]+?)\s*,/g)].map((m) => m[1].trim()),
-        ...[...src.matchAll(new RegExp(String.raw`\.agentStep\(\s*${arg},\s*${arg},\s*([^,]+?)\s*,`, 'g'))].map((m) =>
-          m[1].trim()
-        ),
+        ...[...src.matchAll(/\.agentTask\s*(?:<[^>]*>)?\s*\(\s*([^,]+?)\s*,/g)].map((m) => m[1].trim()),
+        ...[
+          ...src.matchAll(
+            new RegExp(String.raw`\.agentStep\s*(?:<[^>]*>)?\s*\(\s*${arg},\s*${arg},\s*([^,]+?)\s*,`, 'g')
+          ),
+        ].map((m) => m[1].trim()),
       ]
     })
     expect(sites.length).toBeGreaterThan(12)

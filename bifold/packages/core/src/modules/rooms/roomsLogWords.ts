@@ -100,9 +100,12 @@ const LOGGED_REFUSAL_CODES = new Set([
   'keyPackageRequired',
   'lastAdmin',
   'limitExceeded',
+  // rooms/keys/watch/0.1 (VTA 0.79): a watch past the agent's bound, and a member the caller may not act as.
+  'limitReached',
   'listInvalid',
   'locationMismatch',
   'memberLimitsUnavailable',
+  'memberNotPrincipal',
   'memberUsageUnavailable',
   'noAuthority',
   'noGroup',
@@ -191,6 +194,13 @@ const LOGGED_REFUSAL_REASONS = new Set([
 ])
 
 const loggedCode = (code: string | undefined): string => (code && LOGGED_REFUSAL_CODES.has(code) ? code : 'other')
+
+/**
+ * A bare refusal code, as an answer names one inside it rather than as an error (a watch's per-room `refused`, a host's
+ * `hostCode`), in the form a log line may repeat: its last segment where it is on the list, else `other`.
+ */
+export const loggedRefusalCode = (code: string | undefined): string =>
+  loggedCode(code === undefined ? undefined : code.slice(code.lastIndexOf(':') + 1))
 
 /** A refusal's `details.reason`, where it is on the closed list; else nothing. */
 function loggedReason(e: unknown): string | undefined {

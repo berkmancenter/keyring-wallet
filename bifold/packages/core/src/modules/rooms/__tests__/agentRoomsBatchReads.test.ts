@@ -321,11 +321,18 @@ describe('each key answered on its own', () => {
     expect(b.status).toBe('rejected')
   })
 
-  test('an answer with no results fails every key', async () => {
+  test('an answer with no results fails every key, and the log says the answer had none', async () => {
     const setup = await listed(setUp(() => record('a')))
     const settled = await Promise.allSettled(setup.service.readNotes(ROOM, ['a', 'b']))
     expect(settled.map((s) => s.status)).toEqual(['rejected', 'rejected'])
     expect(setup.batches()).toHaveLength(1)
+    expect(setup.lines().slice(-1)[0]).toMatch(/answered with no results: 2 keys not read$/)
+  })
+
+  test('an answer with results says nothing of the kind (control)', async () => {
+    const setup = await listed(setUp(allRecords))
+    await Promise.all(setup.service.readNotes(ROOM, ['a', 'b']))
+    expect(setup.lines().filter((l) => l.includes('no results'))).toEqual([])
   })
 
   test('a key the agent answers but nobody asked is not kept', async () => {

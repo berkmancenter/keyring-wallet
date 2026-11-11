@@ -18,6 +18,24 @@ import type { Note, RecordFeatures, RecordWrite, Room as RoomRecord, RoomsServic
 let mockService: RoomsService | undefined
 let mockParams: Record<string, string> | undefined
 jest.mock('../useRoomsService', () => ({ useRoomsService: () => mockService }))
+// The real posts hook, with what Room tells it of the member's own writes recorded on the way through.
+const mockAwaitWrites = jest.fn()
+jest.mock('../useRoomPosts', () => {
+  const actual = jest.requireActual('../useRoomPosts')
+  return {
+    ...actual,
+    useRoomPosts: (...args: unknown[]) => {
+      const posts = actual.useRoomPosts(...args)
+      return {
+        ...posts,
+        awaitWrites: (written: unknown) => {
+          mockAwaitWrites(written)
+          posts.awaitWrites(written)
+        },
+      }
+    },
+  }
+})
 jest.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 100 }))
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
@@ -338,6 +356,30 @@ describe('with sending on', () => {
       expect(tree.getByTestId(id('RoomPostReactions'))).toBeTruthy()
       await act(async () => send.answer({ key: 'r-new', version: 1 }))
       expect(tree.getByTestId(id('RoomPostReactions'))).toBeTruthy()
+    })
+
+    test("Room tells the posts of the member's own write once it succeeds, so a watched room keeps its 10 s poll", async () => {
+      const send = held()
+      const s = service([post('m1', 'Hi all')], { sendRecord: send.sendRecord })
+      const tree = open(s)
+      await waitFor(() => expect(s.recordFeaturesIn).toHaveBeenCalled())
+      await longPress(tree, 'm1')
+      await press(tree, 'ChatReaction-0')
+      // On its way: nothing written yet, so nothing awaited.
+      expect(mockAwaitWrites).not.toHaveBeenCalledWith([expect.anything()])
+      await act(async () => send.answer({ key: 'r-new', version: 1 }))
+      expect(mockAwaitWrites).toHaveBeenLastCalledWith([{ key: 'r-new', version: 1 }])
+    })
+
+    test('a write that fails is never awaited (control)', async () => {
+      const send = held()
+      const s = service([post('m1', 'Hi all')], { sendRecord: send.sendRecord })
+      const tree = open(s)
+      await waitFor(() => expect(s.recordFeaturesIn).toHaveBeenCalled())
+      await longPress(tree, 'm1')
+      await press(tree, 'ChatReaction-0')
+      await act(async () => send.refuse(new Error('agent not reached')))
+      expect(mockAwaitWrites).not.toHaveBeenCalledWith([expect.anything()])
     })
 
     test('a reaction that fails is taken back, and says so', async () => {

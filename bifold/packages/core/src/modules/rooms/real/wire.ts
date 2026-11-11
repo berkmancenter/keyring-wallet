@@ -28,6 +28,10 @@ export const ROOMS_TASK = {
   keysBrowse03: `${SPEC}rooms/keys/browse/0.3`,
   keysBrowse: `${SPEC}rooms/keys/browse/0.1`,
   keysRead02: `${SPEC}rooms/keys/read/0.2`,
+  // A watch on rooms at one host, as the member: the agent arms `rooms/watch` there and passes the host's one signal on
+  // as `rooms/keys/changed/0.1` (VTI #2457/#2461/#2463, trust-tasks-tf #1036/#1040; VTA 0.77, VTC 0.24). Declared
+  // `Mutating`, as read 0.2 is: a hold of it is kept for a day (consentHolds.ts).
+  keysWatch01: `${SPEC}rooms/keys/watch/0.1`,
   keysRead: `${SPEC}rooms/keys/read/0.1`,
   membershipsList: `${SPEC}vtc/rooms/memberships/list/0.1`,
   // 0.4 renames a renewal's `renews` to `renewsAt` (VTC 0.16 serves only 0.4; 0.15 serves 0.2 and 0.4); 0.3 adds the
@@ -757,4 +761,58 @@ export function hostCheckOf(verification: unknown): HostCheck {
   if (agreed.some(Boolean) && !unknown.some(Boolean))
     return { verdict: 'consistent', detail: 'every check made agreed' }
   return { verdict: 'unverified', detail: 'some checks could not be made (a first read, or no anchor published)' }
+}
+
+/** What became of one room's watch (`rooms/keys/watch/0.1` `RoomWatchOutcome`). */
+export interface RoomWatchOutcome {
+  roomId: string
+  armed: boolean
+  /** When an armed watch lapses if it has not fired. */
+  expiresAt?: string
+  /** Why it was not armed: `notAMember`, `actionNotHeld`, `limitReached`, `hostUnreachable`, `hostRefused`, … */
+  refused?: string
+  /** The host's own code, when `refused` is `hostRefused`. */
+  hostCode?: string
+}
+
+/** A `rooms/keys/watch/0.1` answer: one outcome per room asked, in order. Throws on anything else. */
+export function parseWatch(answer: unknown): { member: string; host: string; watches: RoomWatchOutcome[] } {
+  const a = obj(answer)
+  const member = str(a?.member)
+  const host = str(a?.host)
+  const watches = a?.watches
+  if (!member || !host || !Array.isArray(watches)) throw new Error('rooms: the agent answered a watch with no outcomes')
+  return {
+    member,
+    host,
+    watches: watches.map((w) => {
+      const o = obj(w)
+      const roomId = str(o?.roomId)
+      if (!roomId || typeof o?.armed !== 'boolean') throw new Error('rooms: a watch outcome names no room or no state')
+      return {
+        roomId,
+        armed: o.armed,
+        ...(str(o.expiresAt) ? { expiresAt: str(o.expiresAt) } : {}),
+        ...(str(o.refused) ? { refused: str(o.refused) } : {}),
+        ...(str(o.hostCode) ? { hostCode: str(o.hostCode) } : {}),
+      }
+    }),
+  }
+}
+
+/**
+ * A room's change signal (`rooms/keys/changed/0.1`, VtaClient VTA_TASK.roomsKeysChanged, where its type is matched), or
+ * undefined when the payload is not one.
+ */
+export function parseChanged(
+  payload: unknown
+): { roomId: string; member: string; host: string; latestVersion: number } | undefined {
+  const p = obj(payload)
+  const roomId = str(p?.roomId)
+  const member = str(p?.member)
+  const host = str(p?.host)
+  const latestVersion = p?.latestVersion
+  if (!roomId || !member || !host || typeof latestVersion !== 'number' || !Number.isInteger(latestVersion))
+    return undefined
+  return { roomId, member, host, latestVersion }
 }

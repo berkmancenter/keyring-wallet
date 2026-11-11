@@ -205,6 +205,13 @@ const Room: React.FC = () => {
   )
   // A reaction, edit or withdrawal the member just asked for, laid over the posts until the room's list carries it.
   const pendingWrites = usePendingWrites(feed.posts)
+  // The member's own writes that succeeded but have not landed in the posts: the room keeps its 10 s poll for them, so a
+  // lost signal never leaves a reaction off the screen past its overlay (useRoomPosts awaitWrites).
+  const { awaitWrites } = feed
+  useEffect(
+    () => awaitWrites(pendingWrites.writes.flatMap((w) => (w.written ? [w.written] : []))),
+    [awaitWrites, pendingWrites.writes]
+  )
   const posts = useMemo(
     () => (feed.posts ? withPendingWrites(feed.posts, pendingWrites.writes) : undefined),
     [feed.posts, pendingWrites.writes]

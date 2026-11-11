@@ -160,6 +160,12 @@ export const VTA_TASK = {
   /** decision/0.2 adds only OPTIONAL members; a 0.1 decision re-typed as 0.2 means the same (trust-tasks-tf ce07a039 task-consent/decision/0.2 spec.md:122-124). */
   consentDecision02: 'https://trusttasks.org/spec/task-consent/decision/0.2',
   consentGranted: 'https://trusttasks.org/spec/task-consent/granted/0.1',
+  /**
+   * Pushed by the agent, never sent: a room watched with `rooms/keys/watch/0.1` changed at its host (vta-service
+   * `room_key_watch.rs`, trust-tasks-tf #1040). It names the room, the member, the host and the host's `latestVersion`
+   * and nothing about what changed. Its type is matched here and only here; rooms reads the payload (wire.ts parseChanged).
+   */
+  roomsKeysChanged: 'https://trusttasks.org/spec/rooms/keys/changed/0.1',
   aclSwapKey: 'https://trusttasks.org/spec/acl/swap-key/0.1',
   // The canonical ACL family (vta-sdk trust_tasks.rs:222-260), each gated by
   // `require_manage()` (vta-service trust_tasks/acl.rs:27-55, 57-84, 207-234).
@@ -825,7 +831,13 @@ export function activeSwapTestHook(): VtaSwapTestHook {
 type Probe = { kind: 'live' } | { kind: 'refused'; detail: string } | { kind: 'unknown'; detail: string }
 
 /** Documents the agent sends of its own accord: never the answer to a task this client asked. */
-const UNSOLICITED = new Set<string>([VTA_TASK.consentRequest, VTA_TASK.consentGranted, ...STEP_UP_REQUEST_TYPES])
+export const UNSOLICITED: ReadonlySet<string> = new Set<string>([
+  VTA_TASK.consentRequest,
+  VTA_TASK.consentGranted,
+  // A room's change signal can arrive while a task is out: it is that room's, never the task's answer.
+  VTA_TASK.roomsKeysChanged,
+  ...STEP_UP_REQUEST_TYPES,
+])
 
 /** Persona mints running now, by VTA and community (see `ensurePersona`). */
 const personasInFlight = new Map<string, Promise<VtiPersona>>()

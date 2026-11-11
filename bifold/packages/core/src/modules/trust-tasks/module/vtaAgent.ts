@@ -3560,9 +3560,35 @@ export class VtaAgentController {
     await current?.client.disconnect().catch(() => undefined)
   }
 
+  /** Who hears a room's change signal (`rooms/keys/changed/0.1`): the rooms service, while one runs. */
+  private readonly roomSignals = new Set<(payload: Record<string, unknown>) => void>()
+
+  /**
+   * Hear each `rooms/keys/changed/0.1` the linked agent pushes, with its payload as sent. What it may do is the
+   * listener's to decide: the rooms service acts only on one that names a watch it armed, and at most by reading that
+   * room once. Returns the way to stop hearing them.
+   */
+  onRoomSignal(listener: (payload: Record<string, unknown>) => void): () => void {
+    this.roomSignals.add(listener)
+    return () => this.roomSignals.delete(listener)
+  }
+
   private inbound(plaintext: DidCommV2PlaintextMessage) {
     // The answer to a decision sent to another person's agent is that wait's, never a request.
     if (takeForeignReply(plaintext)) return
+    const body = plaintext.body as { type?: unknown; payload?: unknown } | undefined
+    if (body?.type === VTA_TASK.roomsKeysChanged) {
+      const payload = body.payload
+      if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return
+      for (const listener of [...this.roomSignals]) {
+        try {
+          listener(payload as Record<string, unknown>)
+        } catch {
+          // One listener's failure is its own; the signal still reaches the rest.
+        }
+      }
+      return
+    }
     const kept = keepManagerMessage(plaintext, Date.now())
     if (kept && 'approval' in kept) {
       const { approval } = kept

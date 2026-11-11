@@ -75,6 +75,7 @@ import {
 } from '../types'
 
 import type { ConsentHolds } from './consentHolds'
+import { RoomWatches } from './roomWatches'
 import { OPEN_FILE_BYTES, openRoomFile, type OpenFileCopy } from './files/open'
 import { checkSender, type ResolveSender } from './files/sender'
 import { TextSenderCount } from './files/textSenderCount'
@@ -204,6 +205,16 @@ export interface RoomsBackend {
    * sent to it again for a day. Absent (a backend with nowhere to keep it): a hold stops that task for this session only.
    */
   readonly consentHolds?: ConsentHolds
+  /**
+   * Hear the agent's room change signals (`rooms/keys/changed/0.1`), as pushed. Returns the way to stop hearing. Absent:
+   * no signal arrives, and every room is polled.
+   */
+  onRoomSignal?(listener: (payload: Record<string, unknown>) => void): () => void
+  /**
+   * Lets rooms be watched and their signals read (live delivery). The real backend reads it from the release's switch
+   * (`liveDeliverySwitch.ts`) each time it is asked. Anything but `true`, absent included, is off: every room polls.
+   */
+  readonly liveDelivery?: boolean
 }
 
 /** The picked file, and the room host's HTTPS Trust Task door, which an upload's single-use key sends to. */
@@ -411,6 +422,10 @@ export class AgentRoomsService implements RoomsService {
   /** Counts the accepts and leaves: a listing asked before one is neither joined nor kept after it. */
   private roomsChanged = 0
   private rooms = new Map<string, KnownRoom>()
+  /** Rooms watched at their hosts, so a room in view is told of a change rather than polled (roomWatches.ts). */
+  private readonly watches: RoomWatches
+  private readonly changedListeners = new Set<(roomId: string) => void>()
+  private stopSignals?: () => void
   private offers = new Map<string, { community: RoomsCommunity; offer: OfferRecord }>()
   private previews = new Map<string, { offerId: string; at: number }>()
   private writes = new Map<string, { roomId: string; draft: WriteDraft; at: number; replacedVersion?: number }>()
@@ -458,6 +473,15 @@ export class AgentRoomsService implements RoomsService {
     options: AgentRoomsOptions = {}
   ) {
     this.now = options.now ?? (() => Date.now())
+    this.watches = new RoomWatches({
+      served: () => this.served?.types,
+      agentTask: (type, payload, opts) => this.backend.agentTask(type, payload, opts),
+      consentHolds: backend.consentHolds,
+      now: () => this.now(),
+      warn: (line) => this.backend.warn(line),
+      logRef,
+      on: () => this.backend.liveDelivery === true,
+    })
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
     // Before any room can open: a killed app's copy of a file does not wait for the next file to be opened. Once per
     // launch: no transfer exists before the first service, and that latch is what keeps a later service from sweeping one.
@@ -1041,10 +1065,15 @@ export class AgentRoomsService implements RoomsService {
         for (const [key, answer] of await this.readEach(room, roomId, left)) settled.set(key, answer)
         return settled
       }
+      // An answer with no `results` reads as no answer for any key, so say so, as every other branch here does: the
+      // keys' own failures ("could not be read") would otherwise be all a report shows.
+      if (!answers)
+        this.backend.warn(`rooms: ${logRef(roomId)} ${type} answered with no results: ${asked.length} keys not read`)
       const notReached: string[] = []
       await Promise.all(
         asked.map(async (key) => {
           const answer = answers?.get(key)
+          // Left unsettled: startBatch fails this key's read ("could not be read"), as for a key the answer leaves out.
           if (!answer) return
           if (!('code' in answer)) {
             settled.set(key, await this.kept(roomId, answer, drops))
@@ -1189,7 +1218,37 @@ export class AgentRoomsService implements RoomsService {
   }
 
   /** Drop every opened record and listed version (the wallet locked, or the person logged out). */
+  public watchRoom(roomId: string, sinceVersion: number): void {
+    const room = this.rooms.get(roomId)
+    if (!room?.community || !room.host || room.standing !== 'member') return
+    this.watches.want(roomId, room.community.personaDid, room.host, sinceVersion)
+  }
+
+  public roomWatched(roomId: string): boolean {
+    return this.watches.watched(roomId)
+  }
+
+  public onRoomChanged(listener: (roomId: string) => void): () => void {
+    this.changedListeners.add(listener)
+    // Signals are heard while someone listens: each one is a room to read, and with no screen there is none.
+    if (!this.stopSignals && this.backend.onRoomSignal)
+      this.stopSignals = this.backend.onRoomSignal((payload) => {
+        const roomId = this.watches.signal(payload)
+        if (!roomId) return
+        this.backend.warn(`rooms: ${logRef(roomId)} changed, its watch says: read it`)
+        for (const heard of [...this.changedListeners]) heard(roomId)
+      })
+    return () => {
+      this.changedListeners.delete(listener)
+      if (this.changedListeners.size === 0) {
+        this.stopSignals?.()
+        this.stopSignals = undefined
+      }
+    }
+  }
+
   public dropOpenedRecords(): void {
+    this.watches.forget()
     this.opened.clear()
     this.listed.clear()
     // A read asked before the lock is not joined after it, nor kept when it answers.
@@ -1223,6 +1282,7 @@ export class AgentRoomsService implements RoomsService {
       if (room.communityDid === communityDid) {
         this.rooms.delete(id)
         this.dropRoomReads(id)
+        this.watches.cancel(id)
       }
   }
 

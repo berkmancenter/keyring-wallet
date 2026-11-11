@@ -75,6 +75,18 @@ describe('a message the agent sends of its own accord, while a task waits for it
     }
   })
 
+  it("so does a room's change signal, which carries no thread: it is the room's, never the task's answer", () => {
+    const { onInbound, resolve, deliver, internals } = waitingClient()
+    const signal = message({
+      type: VTA_TASK.roomsKeysChanged,
+      payload: { roomId: 'did:webvh:room:a', member: 'did:key:me', host: 'did:webvh:host', latestVersion: 4 },
+    })
+    deliver(signal)
+    expect(onInbound).toHaveBeenCalledWith(signal)
+    expect(resolve).not.toHaveBeenCalled()
+    expect(internals.pendings.size).toBe(1)
+  })
+
   it('an answer is still the answer', () => {
     const { onInbound, resolve, deliver } = waitingClient()
     const answer = reply({ type: 'https://trusttasks.org/spec/acl/list/0.1', payload: { entries: [] } })

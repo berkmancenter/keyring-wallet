@@ -8,6 +8,7 @@ import { act, renderHook } from '@testing-library/react-native'
 import { AppState } from 'react-native'
 
 import { toInertText } from '../inertText'
+import { PENDING_WRITE_MAX_MS } from '../pendingRecordWrites'
 import { isChatPost, type RoomPost } from '../roomPosts'
 import { RoomsRefused, type Note, type NoteList, type NoteSummary, type RoomsService } from '../types'
 import { useInViewAndActive } from '../useInViewAndActive'
@@ -17,6 +18,7 @@ import {
   POLL_SKIPS_AFTER_FAILURE,
   POSTS_PAGE,
   ROOM_POLL_MS,
+  ROOM_WATCHED_POLL_MS,
   type RoomPosts,
   useRoomPosts,
 } from '../useRoomPosts'
@@ -361,6 +363,154 @@ describe('a room in view', () => {
 // rooms/keys/browse 0.3 passes on the room's `lastPrune`. A prune removes records outright, so a poll from the newest
 // version held never mentions them: a `lastPrune.version` above what this phone has synced means rebuild from a full
 // listing and drop what it no longer holds (browse 0.3 spec, "a caller that keeps its own copy of the room").
+/** A service that can watch: armed by watchRoom, spent by a signal, as the agent's watches are. */
+const watchable = <S extends RoomsService>(service: S, { arms = true }: { arms?: boolean } = {}) => {
+  let armed = false
+  const listeners = new Set<(roomId: string) => void>()
+  const watchRoom = jest.fn((_roomId: string, _since: number) => {
+    if (arms) armed = true
+  })
+  return {
+    service: Object.assign(service, {
+      watchRoom,
+      roomWatched: (roomId: string) => roomId === ROOM && armed,
+      onRoomChanged: (listener: (roomId: string) => void) => {
+        listeners.add(listener)
+        return () => void listeners.delete(listener)
+      },
+    }),
+    watchRoom,
+    listeners,
+    /** The agent passes the host's signal on: the watch is spent. */
+    signal: async (roomId = ROOM) => {
+      if (roomId === ROOM) armed = false
+      await act(async () => {
+        for (const l of [...listeners]) l(roomId)
+      })
+      await flush()
+    },
+  }
+}
+
+describe('a room watched at its host', () => {
+  test('is armed after its first listing, from the newest version held', async () => {
+    const { service } = roomWith([note('a', 1), note('b', 2)])
+    const w = watchable(service)
+    await open(w.service)
+    expect(w.watchRoom).toHaveBeenCalledWith(ROOM, 2)
+  })
+
+  test('watched: no timed poll every ten seconds; one at two minutes, for a signal lost', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    await open(w.service)
+    for (let i = 0; i < ROOM_WATCHED_POLL_MS / ROOM_POLL_MS - 1; i++) await tick()
+    expect(polls(service)).toHaveLength(0)
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+  })
+
+  test('a signal reads the room at once, a new post shows, and the watch is armed again from it', async () => {
+    const { service, write } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const { result } = await open(w.service)
+    write(note('b', 2))
+    await w.signal()
+    expect(polls(service)).toHaveLength(1)
+    expect(polls(service)[0][1]).toEqual({ sinceVersion: 1 })
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+    expect(w.watchRoom).toHaveBeenLastCalledWith(ROOM, 2)
+  })
+
+  test('a signal for another room reads nothing here (control)', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    await open(w.service)
+    await w.signal('did:webvh:r:other')
+    expect(polls(service)).toHaveLength(0)
+  })
+
+  test('a watch that could not be armed: polled every ten seconds, as before (control)', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { arms: false })
+    await open(w.service)
+    expect(w.watchRoom).toHaveBeenCalled()
+    await tick()
+    await tick()
+    expect(polls(service)).toHaveLength(2)
+  })
+
+  test("a signal's read arms the watch again, so the ten-second ticks wait again", async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { arms: true })
+    await open(w.service)
+    await w.signal()
+    expect(polls(service)).toHaveLength(1)
+    // The read after the signal armed it again (watchRoom), so the ten-second ticks wait again.
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+  })
+
+  test('out of view: not armed, and no signal is listened for', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    await open(w.service, false)
+    expect(w.watchRoom).not.toHaveBeenCalled()
+    expect(w.listeners.size).toBe(0)
+  })
+
+  test('closing the room stops listening for its signals', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const hook = await open(w.service)
+    expect(w.listeners.size).toBe(1)
+    hook.unmount()
+    expect(w.listeners.size).toBe(0)
+  })
+})
+
+describe("the member's own write in a watched room (with pendingRecordWrites)", () => {
+  // The overlay for the member's own write ends PENDING_WRITE_MAX_MS after it succeeds. Within that, a poll must carry
+  // the write even if the host's signal for it is lost (never re-sent), so the watched room's 120 s wait is not held.
+  const polledWithin = Math.floor((PENDING_WRITE_MAX_MS - 1) / ROOM_POLL_MS)
+
+  test("awaited and its signal lost: the next 10 s poll carries it, inside the overlay's life", async () => {
+    expect(polledWithin).toBeGreaterThanOrEqual(1)
+    const { service, write } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const { result } = await open(w.service)
+    expect(w.service.roomWatched(ROOM)).toBe(true)
+    write(note('b', 2, { author: ME }))
+    act(() => result.current.awaitWrites([{ key: 'b', version: 2 }]))
+    for (let i = 0; i < polledWithin; i++) await tick()
+    expect(polls(service).length).toBeGreaterThanOrEqual(1)
+    expect(result.current.posts?.map((p) => p.key)).toContain('b')
+  })
+
+  test('a write that failed is not awaited: the watched room waits its 120 s as before (control)', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const { result } = await open(w.service)
+    act(() => result.current.awaitWrites([]))
+    for (let i = 0; i < polledWithin; i++) await tick()
+    expect(polls(service)).toHaveLength(0)
+  })
+
+  test('once it has landed (nothing awaited), the wait comes back', async () => {
+    const { service, write } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const { result } = await open(w.service)
+    write(note('b', 2, { author: ME }))
+    act(() => result.current.awaitWrites([{ key: 'b', version: 2 }]))
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+    act(() => result.current.awaitWrites([]))
+    await tick()
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+  })
+})
+
 describe('a room pruned while it is open', () => {
   const keys = (posts?: { key: string }[]) => posts?.map((p) => p.key)
 

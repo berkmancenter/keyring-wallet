@@ -526,6 +526,15 @@ export interface RoomsService {
   readNote(roomId: string, key: string): Promise<Note>
   /** Several records, one promise each in the order asked: together where the agent can. Each settles as `readNote` would. */
   readNotes?(roomId: string, keys: readonly string[]): Promise<Note>[]
+  /**
+   * Ask to hear when `roomId` moves past `sinceVersion` (the newest version read), instead of polling it: where the
+   * agent and the room's host can watch, the room is armed at its host. Returns at once; nothing is said if it can't.
+   */
+  watchRoom?(roomId: string, sinceVersion: number): void
+  /** True while `roomId` has a watch armed: its timed poll can wait, and a change comes through `onRoomChanged`. */
+  roomWatched?(roomId: string): boolean
+  /** Hear each room a watch said changed: read it once. Returns the way to stop hearing. */
+  onRoomChanged?(listener: (roomId: string) => void): () => void
   /** For logs: how many records one page of a room could not open, by reason (`other` for any other failure). */
   noteUnread?(roomId: string, counts: Readonly<Record<string, number>>): void
   prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview>
