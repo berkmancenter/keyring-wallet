@@ -52,6 +52,8 @@ export interface Developer {
    * setTrustTestStateEnabled; holds only with trusted approvers and state-verified approvers both on.
    */
   enableTrustTestState: boolean
+  /** Developer "Demo state host": where a demo state root's did:webs is fetched while testing; '' for none. */
+  demoStateHost: string
 }
 
 export interface DismissPersonCredentialOffer {
@@ -75,6 +77,7 @@ enum DeveloperDispatchAction {
   TOGGLE_TRUSTED_APPROVERS = 'developer/toggleTrustedApprovers',
   TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
   TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
+  SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -152,6 +155,7 @@ const developerState: Developer = {
   enableStateVerifiedApprovers: false,
   // Off by default; it holds only while the two switches above hold, so their remote offs beat a saved "on" here too.
   enableTrustTestState: false,
+  demoStateHost: '',
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -173,6 +177,7 @@ export enum BCLocalStorageKeys {
   EnableTrustedApprovers = 'EnableTrustedApprovers',
   EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
   EnableTrustTestState = 'EnableTrustTestState',
+  DemoStateHost = 'DemoStateHost',
 }
 
 export const initialState: BCState = {
@@ -307,6 +312,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
         BCLocalStorageKeys.EnableTrustTestState,
         developer.enableTrustTestState
       )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.SET_DEMO_STATE_HOST: {
+      const demoStateHost: string = (action?.payload || []).pop() || ''
+      const developer = { ...state.developer, demoStateHost }
+
+      PersistentStorage.storeValueForKey<string>(BCLocalStorageKeys.DemoStateHost, developer.demoStateHost)
 
       return { ...state, developer }
     }

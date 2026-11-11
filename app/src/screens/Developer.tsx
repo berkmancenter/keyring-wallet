@@ -25,6 +25,7 @@ import {
   setUpSediDemo,
   turnOffSediDemo,
   SEDI_KERI_REMOTE_OFF,
+  setDemoStateHost,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -54,6 +55,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
   Alert,
   ActivityIndicator,
@@ -100,6 +102,7 @@ const Developer: React.FC = () => {
     !!store.developer.enableStateVerifiedApprovers
   )
   const [enableTrustTestState, setEnableTrustTestState] = useState(!!store.developer.enableTrustTestState)
+  const [demoStateHostText, setDemoStateHostText] = useState(store.developer.demoStateHost ?? '')
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -499,6 +502,20 @@ const Developer: React.FC = () => {
   }
 
   /** "Turn off the SEDI demo": the three switches off, saved; nothing kept is deleted. */
+  /**
+   * "Demo state host": handed to bifold, which refuses anything that is not a bare public hostname (optionally with a
+   * port) and changes nothing then. Saved only when bifold took it, so a restart applies the same value.
+   */
+  const saveDemoStateHost = (text?: string) => {
+    const value = (text ?? demoStateHostText).trim()
+    const result = setDemoStateHost(value === '' ? null : value)
+    if (result === 'invalid') {
+      Alert.alert(t('Developer.DemoStateHost'), t('Developer.DemoStateHostInvalid'))
+      return
+    }
+    dispatch({ type: BCDispatchAction.SET_DEMO_STATE_HOST, payload: [result === 'cleared' ? '' : value.toLowerCase()] })
+  }
+
   const runSediDemoOff = () => {
     turnOffSediDemo()
     saveSediDemoSwitches(false)
@@ -1129,6 +1146,28 @@ const Developer: React.FC = () => {
               >
                 <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
               </SectionRow>
+            )}
+            {isTrustedApproversEnabled() && isStateVerifiedApproversEnabled() && (
+              <View style={{ paddingHorizontal: 25, paddingVertical: 12 }}>
+                <Text style={TextTheme.normal}>{t('Developer.DemoStateHost')}</Text>
+                <Text style={TextTheme.caption}>{t('Developer.DemoStateHostHint')}</Text>
+                <TextInput
+                  testID={testIdWithKey('DemoStateHost')}
+                  accessibilityLabel={t('Developer.DemoStateHost')}
+                  value={demoStateHostText}
+                  onChangeText={setDemoStateHostText}
+                  onEndEditing={(e) => saveDemoStateHost(e?.nativeEvent?.text)}
+                  onSubmitEditing={(e) => saveDemoStateHost(e?.nativeEvent?.text)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder="abc-def.trycloudflare.com"
+                  style={[
+                    TextTheme.normal,
+                    { borderBottomWidth: 1, borderColor: TextTheme.normal.color, paddingVertical: 6 },
+                  ]}
+                />
+              </View>
             )}
           </>
         )}

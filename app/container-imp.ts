@@ -29,6 +29,7 @@ import {
   setTrustedApproversEnabled,
   setStateVerifiedApproversEnabled,
   setTrustTestStateEnabled,
+  setDemoStateHost,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -394,6 +395,7 @@ export class AppContainer implements Container {
         enableTrustedApprovers,
         enableStateVerifiedApprovers,
         enableTrustTestState,
+        demoStateHost,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -429,6 +431,12 @@ export class AppContainer implements Container {
         // only kill paths, so every reader goes through them, never the saved value.
         loadSwitch(BCLocalStorageKeys.EnableStateVerifiedApprovers, (val) => (enableStateVerifiedApprovers = val)),
         loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
+        // The saved Demo state host goes to bifold, which refuses a value that is not a bare public hostname and applies
+        // it only to demo roots and only while both switches hold: the saved text never redirects on its own.
+        (async () => {
+          const data = await this.storage.getValueForKey(BCLocalStorageKeys.DemoStateHost)
+          if (typeof data === 'string') demoStateHost = data
+        })(),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -459,6 +467,7 @@ export class AppContainer implements Container {
           enableTrustedApprovers,
           enableStateVerifiedApprovers,
           enableTrustTestState,
+          demoStateHost,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -473,6 +482,7 @@ export class AppContainer implements Container {
       // Before a Guardian card arrives or Who approves opens: both read these at each check.
       setStateVerifiedApproversEnabled(state.developer.enableStateVerifiedApprovers)
       setTrustTestStateEnabled(state.developer.enableTrustTestState)
+      setDemoStateHost(state.developer.demoStateHost || null)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {
