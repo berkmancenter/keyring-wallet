@@ -30,6 +30,8 @@ import {
   CONFIRM_ITS_YOU_REMOTE_OFF,
   setConfirmItsYouEnabled,
   setDemoStateHost,
+  demoStateHost,
+  sediDemoHiddenByKill,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -525,11 +527,28 @@ const Developer: React.FC = () => {
       if (result !== 'remoteOff') saveSediDemoSwitches(true)
       const message = {
         done: 'Developer.SediDemoDone',
+        doneSomeHidden: 'Developer.SediDemoDone',
         remoteOff: 'Developer.SediDemoOff',
         cardNotHeld: 'Developer.SediDemoCardNotHeld',
         wardNotSet: 'Developer.SediDemoWardNotSet',
       }[result]
-      Alert.alert(t('Developer.SetUpSediDemo'), t(message ?? 'Developer.SediDemoOff'))
+      const lines = [t(message ?? 'Developer.SediDemoOff')]
+      if (result === 'done' || result === 'doneSomeHidden') {
+        // Where the demo state will be checked from: the Demo state host in effect (bifold's, read now), or a warning
+        // that without one the card is checked against the copy on this phone.
+        const host = demoStateHost()
+        lines.push(host ? t('Developer.SediDemoHost', { host }) : t('Developer.SediDemoNoHost'))
+      }
+      // Alert only, from this tap's result: the screen keeps no line about what is hidden. Which features are hidden
+      // is read live from bifold here, never remembered.
+      if (result === 'doneSomeHidden') {
+        const hidden = {
+          stateCard: 'Developer.SediDemoHiddenStateCard',
+          confirmItsYou: 'Developer.SediDemoHiddenConfirmItsYou',
+        }
+        for (const feature of sediDemoHiddenByKill()) lines.push(t(hidden[feature]))
+      }
+      Alert.alert(t('Developer.SetUpSediDemo'), lines.join('\n\n'))
     } catch (error) {
       Alert.alert(t('Developer.SetUpSediDemo'), `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
