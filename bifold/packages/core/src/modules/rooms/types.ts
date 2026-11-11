@@ -485,6 +485,11 @@ export interface RecordFeatures {
   canSeal: boolean
   /** The profile could not be read, as opposed to listing nothing. */
   unresolved: boolean
+  /**
+   * The room's current profile no longer permits replies or reactions, the agent still seals, and this phone saw them
+   * permitted before (`recordsWereOn`): at `epoch`, where it was known. Absent for every other reason they are off.
+   */
+  wereOn?: { epoch?: number }
 }
 
 export interface RoomsService {

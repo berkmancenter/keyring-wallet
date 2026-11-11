@@ -3349,6 +3349,7 @@
     "PostWithdrawn": "Message withdrawn",
     "PostWithdrawnMine": "You withdrew this message",
     "RecordsNotOn": "Replies and reactions aren't on in this room yet.",
+    "RecordsTurnedOff": "Replies and reactions were on in this room and are off now. A room admin's change can turn them off.",
     "Editing": "Editing your message",
     "EditCancel": "Cancel the edit",
     "ReplyCancel": "Cancel the reply",

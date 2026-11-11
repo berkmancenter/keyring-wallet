@@ -15,7 +15,8 @@
  *
  * A long press on a post offers Copy. Where sending is on and the room takes them (useRecordSending), it also offers a
  * reaction, a reply, and on the member's own message an edit or a withdrawal; where sending is on and the room takes
- * neither, the sheet says they aren't on in this room yet. A file or photo with no words has nothing to copy or edit:
+ * neither, the sheet says they aren't on in this room yet, or, in a room this phone saw take them, that they were on
+ * and are off now (`RecordFeatures.wereOn`). A file or photo with no words has nothing to copy or edit:
  * its sheet offers a reaction and a reply where the room takes them, and otherwise says they aren't on here yet. A post
  * that carries a file is never edited (an edit writes new words alone, and would drop the file); the member's own may
  * be withdrawn, with words or without, as their message may. A reaction or a change shows once the room has stored it.
@@ -283,9 +284,14 @@ const Room: React.FC = () => {
   const notSent = useCallback(
     (e: unknown, words: string) => {
       if (e instanceof Error && e.name === 'RecordMembersNotPermitted') {
-        // The refusal says what the room takes now (`RecordMembersNotPermitted.features`): the sheet follows it.
-        learn((e as Error & { features?: RecordFeatures }).features)
-        Toast.show({ type: ToastType.Error, text1: t('Rooms.RecordsNotOn') as string })
+        // The refusal says what the room takes now (`RecordMembersNotPermitted.features`): the sheet follows it, and so
+        // do the words, for a room this phone saw take them (`RecordFeatures.wereOn`).
+        const told = (e as Error & { features?: RecordFeatures }).features
+        learn(told)
+        Toast.show({
+          type: ToastType.Error,
+          text1: t(told?.wereOn ? 'Rooms.RecordsTurnedOff' : 'Rooms.RecordsNotOn') as string,
+        })
         return
       }
       const refusal = permanentRefusal(e)
@@ -709,7 +715,13 @@ const Room: React.FC = () => {
                 }
               : undefined
           }
-          notice={records.notOn || nothingToOffer ? (t('Rooms.RecordsNotOn') as string) : undefined}
+          notice={
+            records.wereOn
+              ? (t('Rooms.RecordsTurnedOff') as string)
+              : records.notOn || nothingToOffer
+                ? (t('Rooms.RecordsNotOn') as string)
+                : undefined
+          }
         />
         <EmojiPickerSheet
           visible={!!pickerFor}

@@ -37,6 +37,8 @@ import { newThrowawayKey } from '../../trust-tasks/module/oobSignIn'
 import { roomRef } from '../roomRef'
 import { holdsTwoAuthorities, permanentRefusal } from '../postRefusal'
 import { failureCategory, logRef } from '../roomsLogWords'
+import { takesRepliesOrReactions } from '../recordPermits'
+import { keepRecordsOn, recordsWereOnAt } from '../recordsWereOn'
 import type {
   AgentGrant,
   CommunityRoomMember,
@@ -110,7 +112,7 @@ import {
   type HeldRoom,
   type OfferRecord,
   type OpenedRecord,
-  parseProfileRecordMembers,
+  parseProfileRead,
   type RecordMembers,
   type RenewalRecord,
   type RoomMembershipRecord,
@@ -405,7 +407,9 @@ export class AgentRoomsService implements RoomsService {
   /** How many times opened records were dropped (a lock, a leave): a read asked before the last one is not kept. */
   private drops = 0
   /** Each room's `recordMembers`, for the epoch it was read at: a writer may rely on it until the epoch moves. */
-  private recordMembers = new Map<string, { epoch: number; listed: string[] }>()
+  private recordMembers = new Map<string, { epoch: number; listed: string[]; current: boolean }>()
+  /** Rooms whose dropped replies and reactions were logged this run: once per room and member until a lock. */
+  private recordsDroppedSaid = new Set<string>()
   /** The log-only count of text posts' signatures; made on the first post read, by a build that fetches documents. */
   private textSenders?: TextSenderCount
   /** Renewals stored this run, by room and issue time: a renewal stays listed until the authority it renews lapses. */
@@ -993,6 +997,7 @@ export class AgentRoomsService implements RoomsService {
     // A read asked before the lock is not joined after it, nor kept when it answers.
     this.readsInFlight.clear()
     this.recordMembers.clear()
+    this.recordsDroppedSaid.clear()
     this.drops++
     this.textSenders?.lock()
   }
@@ -1620,21 +1625,65 @@ export class AgentRoomsService implements RoomsService {
       (held) => held.find((h) => h.roomId === room.roomId && (!h.member || h.member === community.personaDid))?.epoch,
       () => undefined
     )
+    const member = community.personaDid
     const kept = this.recordMembers.get(k)
     if (kept && epoch !== undefined && kept.epoch === epoch)
-      return said('kept from this epoch', { listed: kept.listed, canSeal, unresolved: false })
+      return said(
+        'kept from this epoch',
+        await this.noticeRecordsOn(room.roomId, member, epoch, kept, {
+          listed: kept.listed,
+          canSeal,
+          unresolved: false,
+        })
+      )
     try {
-      const listed = parseProfileRecordMembers(
+      const profile = parseProfileRead(
         await this.backend.agentTask(ROOMS_TASK.keysProfileRead, { roomId: room.roomId, host })
       )
+      const { listed } = profile
+      const current = profile.status === 'found' && !profile.stale
       if (epoch !== undefined) {
-        this.recordMembers.set(k, { epoch, listed })
+        this.recordMembers.set(k, { epoch, listed, current })
         holdingOpened.add(this)
       }
-      return said('read', { listed, canSeal, unresolved: false })
+      return said(
+        'read',
+        await this.noticeRecordsOn(room.roomId, member, epoch, { current }, { listed, canSeal, unresolved: false })
+      )
     } catch (e) {
       return said(`not read (${failureCategory(e)})`, { listed: [], canSeal, unresolved: true })
     }
+  }
+
+  /**
+   * Notes a room whose replies or reactions this phone saw on and that no longer takes them (`recordsWereOn`). A
+   * profile that permits them (only a `found` one can: it lists members) keeps that they're on. One read at the room's
+   * current epoch that permits neither, while the agent still seals, says they were on: never a stale profile, none at
+   * all, one that can't be read, or an agent that stops sealing, which keep today's "not on yet". It changes only the
+   * words: what may be sent is decided from the same features either way.
+   */
+  private async noticeRecordsOn(
+    roomId: string,
+    member: string,
+    epoch: number | undefined,
+    profile: { current: boolean },
+    features: RecordFeatures
+  ): Promise<RecordFeatures> {
+    if (takesRepliesOrReactions(features)) {
+      await keepRecordsOn(roomId, member, epoch).catch(() => undefined)
+      return features
+    }
+    if (!profile.current || !features.canSeal) return features
+    const at = await recordsWereOnAt(roomId, member).catch(() => undefined)
+    if (at === undefined) return features
+    const said = `${roomId}\n${member}`
+    if (!this.recordsDroppedSaid.has(said)) {
+      this.recordsDroppedSaid.add(said)
+      this.backend.warn(
+        `rooms: ${logRef(roomId)} record members dropped since ${at === null ? 'an earlier epoch' : `epoch ${at}`}`
+      )
+    }
+    return { ...features, wereOn: at === null ? {} : { epoch: at } }
   }
 
   /**

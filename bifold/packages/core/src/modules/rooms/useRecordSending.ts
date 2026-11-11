@@ -8,12 +8,14 @@
  * - the room: Keyring writes these only in an attributed room the member has joined.
  * - the room's profile: a writer may use a member only when the profile lists it and the member's agent seals it.
  *
- * With sending on and a room that doesn't take them, the screen says so ("aren't on in this room yet").
+ * With sending on and a room that doesn't take them, the screen says so ("aren't on in this room yet"), or, for a room
+ * this phone saw take them, that they were on and are off now (`RecordFeatures.wereOn`, `recordsWereOn`).
  *
  * @module rooms/useRecordSending
  */
 import { useCallback, useEffect, useState } from 'react'
 
+import { NEEDS, permits, takesRepliesOrReactions } from './recordPermits'
 import type { RoomPost } from './roomPosts'
 import type { RecordFeatures, RecordWrite, Room, RoomsService } from './types'
 
@@ -28,6 +30,8 @@ export interface RecordSending {
   typedMessages: boolean
   /** On, read, and the room takes neither replies nor reactions: the sheet says they aren't on here yet. */
   notOn: boolean
+  /** Not on, in a room this phone saw take them: the sheet says they were on and are off now, instead. */
+  wereOn: boolean
   /** Whether the member may edit or withdraw this post of theirs. */
   canChange: (post: RoomPost) => boolean
   send: (write: RecordWrite) => Promise<{ key: string; version: number }>
@@ -37,16 +41,6 @@ export interface RecordSending {
    */
   learn: (features?: RecordFeatures) => void
 }
-
-/** What a member needs listed, and sealed, for each write (`messageMembers`, `keptMembers`, a reaction's members). */
-const NEEDS = {
-  reply: ['inReplyTo'],
-  reaction: ['kind', 'inReplyTo', 'writtenAt'],
-  typed: ['kind'],
-} as const
-
-const permits = (features: RecordFeatures | undefined, members: readonly string[]): boolean =>
-  !!features && features.canSeal && members.every((m) => features.listed.includes(m))
 
 const NOT_SENT = (): Promise<never> => Promise.reject(new Error('record sending is not on here'))
 
@@ -112,7 +106,8 @@ export function useRecordSending(service: RoomsService | undefined, room: Room |
     replies,
     reactions,
     typedMessages,
-    notOn: !!read && !replies && !reactions,
+    notOn: !!read && !takesRepliesOrReactions(read),
+    wereOn: !!read && !takesRepliesOrReactions(read) && !!read.wereOn,
     canChange,
     send,
     learn,

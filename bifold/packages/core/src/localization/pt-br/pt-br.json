@@ -3223,6 +3223,7 @@
     "PostWithdrawn": "Mensagem retirada",
     "PostWithdrawnMine": "Você retirou esta mensagem",
     "RecordsNotOn": "Respostas e reações ainda não estão ativadas nesta sala.",
+    "RecordsTurnedOff": "Respostas e reações estavam ativadas nesta sala e agora estão desativadas. Uma alteração feita por um administrador da sala pode desativá-las.",
     "Editing": "Editando sua mensagem",
     "EditCancel": "Cancelar a edição",
     "ReplyCancel": "Cancelar a resposta",

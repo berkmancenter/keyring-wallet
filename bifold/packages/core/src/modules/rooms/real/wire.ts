@@ -589,10 +589,30 @@ export function recordMembersOf(body: Record<string, unknown> | undefined): Reco
  * cleared one, one that lists none, or an answer that doesn't read: each means nothing may be written.
  */
 export function parseProfileRecordMembers(payload: unknown): string[] {
+  return parseProfileRead(payload).listed
+}
+
+/**
+ * A `rooms/keys/profile/read/0.1` answer: what the room's profile lists, and whether it is the profile of the room's
+ * current epoch. `stale` is the agent's own word: the profile it returned was found below the epoch the reader is at
+ * (VTI `room_profile.rs` `Resolution`). An answer that names no status the spec does reads as `unreadable`.
+ */
+export interface ProfileRead {
+  status: 'found' | 'cleared' | 'absent' | 'unreadable'
+  stale: boolean
+  listed: string[]
+}
+
+export function parseProfileRead(payload: unknown): ProfileRead {
   const p = obj(payload)
-  if (p?.status !== 'found') return []
-  const listed = obj(p.profile)?.recordMembers
-  return Array.isArray(listed) ? listed.filter((m): m is string => typeof m === 'string') : []
+  const status = p?.status === 'found' || p?.status === 'cleared' || p?.status === 'absent' ? p.status : 'unreadable'
+  if (status !== 'found') return { status, stale: false, listed: [] }
+  const listed = obj(p?.profile)?.recordMembers
+  return {
+    status,
+    stale: p?.stale === true,
+    listed: Array.isArray(listed) ? listed.filter((m): m is string => typeof m === 'string') : [],
+  }
 }
 
 /** One opened record (`rooms/keys/read`). The body is decoded text, or the open room's cleartext as JSON text. */

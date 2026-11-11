@@ -184,6 +184,28 @@ describe('with sending on', () => {
     expect(tree.queryByTestId(id('ChatReactionBar'))).toBeNull()
   })
 
+  test('a room this phone saw take them, now listing neither, says they were on and are off now', async () => {
+    const s = service([post('m1', 'Hi all')], {
+      features: { listed: [], canSeal: true, unresolved: false, wereOn: { epoch: 3 } },
+    })
+    const tree = open(s)
+    await waitFor(() => expect(s.recordFeaturesIn).toHaveBeenCalledWith(ROOM))
+    await longPress(tree, 'm1')
+    expect(tree.getByTestId(id('ChatMessageActionsNotice'))).toHaveTextContent('Rooms.RecordsTurnedOff')
+    expect(tree.getByTestId(id('ChatActionCopy'))).toBeTruthy()
+    expect(tree.queryByTestId(id('ChatReactionBar'))).toBeNull()
+    expect(tree.queryByTestId(id('ChatActionReply'))).toBeNull()
+  })
+
+  test('a room that still takes them says nothing of having been on (control)', async () => {
+    const s = service([post('m1', 'Hi all')], { features: { ...EVERYTHING, wereOn: { epoch: 3 } } })
+    const tree = open(s)
+    await waitFor(() => expect(s.recordFeaturesIn).toHaveBeenCalled())
+    await longPress(tree, 'm1')
+    expect(tree.getByTestId(id('ChatReactionBar'))).toBeTruthy()
+    expect(tree.queryByTestId(id('ChatMessageActionsNotice'))).toBeNull()
+  })
+
   test('an agent that does not seal them offers neither, whatever the profile lists', async () => {
     const s = service([post('m1', 'Hi all')], { features: { ...EVERYTHING, canSeal: false } })
     const tree = open(s)
@@ -314,6 +336,28 @@ describe('with sending on', () => {
     expect(tree.queryByTestId(id('ChatReactionBar'))).toBeNull()
     // Told, so not asked again.
     expect(s.recordFeaturesIn).toHaveBeenCalledTimes(1)
+  })
+
+  test('a write refused in a room this phone saw take them says they were on, in the toast and then the sheet', async () => {
+    const show = jest.spyOn(Toast, 'show')
+    const s = service([post('m1', 'Hi all')], {
+      sendRecord: async () => {
+        throw Object.assign(new Error('this room cannot take kind'), {
+          name: 'RecordMembersNotPermitted',
+          refused: ['kind'],
+          features: { listed: [], canSeal: true, unresolved: false, wereOn: { epoch: 3 } },
+        })
+      },
+    })
+    const tree = open(s)
+    await waitFor(() => expect(s.recordFeaturesIn).toHaveBeenCalledTimes(1))
+    await longPress(tree, 'm1')
+    await press(tree, 'ChatReaction-0')
+    await waitFor(() => expect(show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Rooms.RecordsTurnedOff' })))
+    await longPress(tree, 'm1')
+    await waitFor(() =>
+      expect(tree.getByTestId(id('ChatMessageActionsNotice'))).toHaveTextContent('Rooms.RecordsTurnedOff')
+    )
   })
 
   test('a refusal that says nothing of the room reads its profile again', async () => {

@@ -2,12 +2,14 @@
  * Replies and reactions, as the writer's rule allows them (`real/recordWrites.ts`, `sendRecord`): nothing is sealed or
  * sent unless the room's profile lists what a body uses, and a build where sending isn't switched on sends nothing.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
 import { AgentRoomsService, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
 import { RecordMembersNotPermitted, RecordSendingOff, type RecordWrite } from '../real/recordWrites'
 import { ROOMS_TASK } from '../real/wire'
+import { RECORDS_ON_KEPT_KEY, resetRecordsOnKept } from '../recordsWereOn'
 import { NOTE_BODY_MAX, RoomsRefused, RoomsUnavailable } from '../types'
 
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
@@ -145,6 +147,12 @@ const expectNothingWritten = (s: ReturnType<typeof setup>) => {
 
 const send = (s: ReturnType<typeof setup>, write: RecordWrite) => s.service.sendRecord(ROOM, write)
 
+// What this phone saw on (`recordsWereOn`) is kept across services, as across launches: each test starts with none.
+beforeEach(async () => {
+  await AsyncStorage.setItem(RECORDS_ON_KEPT_KEY, '{}')
+  resetRecordsOnKept()
+})
+
 describe('what a room lets its member write', () => {
   it('says in the log which part of the rule decided, by the spec’s words only (control: each way it can go)', async () => {
     const warnings = (s: ReturnType<typeof setup>) =>
@@ -238,6 +246,102 @@ describe('what a room lets its member write', () => {
     const s = setup({ served: SERVED.filter((t) => t !== ROOMS_TASK.keysSeal03 && t !== ROOMS_TASK.keysProfileRead) })
     expect(await s.service.recordFeaturesIn(ROOM)).toEqual({ listed: [], canSeal: false, unresolved: false })
     expect(s.tasks(ROOMS_TASK.keysProfileRead)).toHaveLength(0)
+  })
+})
+
+describe('a room whose replies and reactions were on', () => {
+  const found = (listed: string[], extra: Record<string, unknown> = {}) => ({
+    roomId: ROOM,
+    status: 'found',
+    profile: { name: 'Room', recordMembers: listed },
+    ...extra,
+  })
+  const dropped = (s: ReturnType<typeof setup>) =>
+    (s.warn.mock.calls as string[][]).map(([line]) => line).filter((line) => line.includes('dropped'))
+
+  /** A room seen taking them at epoch 3, then answering `next` at epoch 4. */
+  const seenOnThen = (next: () => unknown, o: Setup = {}) => {
+    let answer: () => unknown = () => found(ALL)
+    const s = setup({ ...o, profile: () => answer() })
+    return {
+      s,
+      next: async () => {
+        await s.service.recordFeaturesIn(ROOM)
+        s.state.epoch = 4
+        answer = next
+        return s.service.recordFeaturesIn(ROOM)
+      },
+    }
+  }
+
+  it('says they were on, at the epoch they were seen on, and logs it once by epoch alone', async () => {
+    const { s, next } = seenOnThen(() => found([]))
+    expect(await next()).toEqual({ listed: [], canSeal: true, unresolved: false, wereOn: { epoch: 3 } })
+    // The same epoch again is the profile already held: still said, logged once.
+    expect((await s.service.recordFeaturesIn(ROOM)).wereOn).toEqual({ epoch: 3 })
+    expect(dropped(s)).toEqual([expect.stringMatching(/^rooms: \S+ record members dropped since epoch 3$/)])
+  })
+
+  it('remembers it across a relaunch, and a lock logs it again', async () => {
+    const first = setup({ listed: ALL })
+    await first.service.recordFeaturesIn(ROOM)
+    resetRecordsOnKept()
+    const later = setup({ listed: [] })
+    expect((await later.service.recordFeaturesIn(ROOM)).wereOn).toEqual({ epoch: 3 })
+    later.service.dropOpenedRecords()
+    await later.service.recordFeaturesIn(ROOM)
+    expect(dropped(later)).toHaveLength(2)
+  })
+
+  it('a room seen with replies alone counts as seen on (control: the same rule the sheet uses)', async () => {
+    await setup({ listed: ['inReplyTo'] }).service.recordFeaturesIn(ROOM)
+    expect((await setup({ listed: [] }).service.recordFeaturesIn(ROOM)).wereOn).toEqual({ epoch: 3 })
+  })
+
+  it('a room seen listing only what neither needs is not seen on (control)', async () => {
+    await setup({ listed: ['kind', 'writtenAt'] }).service.recordFeaturesIn(ROOM)
+    expect((await setup({ listed: [] }).service.recordFeaturesIn(ROOM)).wereOn).toBeUndefined()
+  })
+
+  it.each([
+    ['a stale profile', () => found([], { stale: true })],
+    ['no profile', () => ({ roomId: ROOM, status: 'absent' })],
+    ['a cleared profile', () => ({ roomId: ROOM, status: 'cleared' })],
+    ['an answer with no status', () => ({ roomId: ROOM, profile: { recordMembers: [] } })],
+    [
+      'a profile that cannot be read',
+      () => {
+        throw new Error('hostUnreachable')
+      },
+    ],
+    ['a profile that still permits them', () => found(['inReplyTo'])],
+  ])('%s keeps the words of today, and logs nothing of it (control)', async (_what, next) => {
+    const { s, next: then } = seenOnThen(next)
+    expect((await then()).wereOn).toBeUndefined()
+    expect(dropped(s)).toEqual([])
+  })
+
+  it('an agent that stops sealing keeps the words of today (control)', async () => {
+    await setup({ listed: ALL }).service.recordFeaturesIn(ROOM)
+    const noSeal = setup({ listed: [], served: SERVED.filter((t) => t !== ROOMS_TASK.keysSeal03) })
+    expect((await noSeal.service.recordFeaturesIn(ROOM)).wereOn).toBeUndefined()
+  })
+
+  it('a room never seen on keeps the words of today (control)', async () => {
+    const s = setup({ listed: [] })
+    expect((await s.service.recordFeaturesIn(ROOM)).wereOn).toBeUndefined()
+    expect(dropped(s)).toEqual([])
+  })
+
+  it('still sends nothing it would not have: a reply in such a room is refused, saying they were on', async () => {
+    const { s, next } = seenOnThen(() => found([]))
+    await next()
+    const error = await send(s, { type: 'message', body: 'yes', inReplyTo: { key: 'm1', version: 2 } }).catch(
+      (e: unknown) => e
+    )
+    expect(error).toBeInstanceOf(RecordMembersNotPermitted)
+    expect((error as RecordMembersNotPermitted).features.wereOn).toEqual({ epoch: 3 })
+    expectNothingWritten(s)
   })
 })
 

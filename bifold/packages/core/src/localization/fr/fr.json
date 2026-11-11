@@ -3307,6 +3307,7 @@
     "PostWithdrawn": "Message retiré",
     "PostWithdrawnMine": "Vous avez retiré ce message",
     "RecordsNotOn": "Les réponses et les réactions ne sont pas encore activées dans ce salon.",
+    "RecordsTurnedOff": "Les réponses et les réactions étaient activées dans ce salon et ne le sont plus. Une modification faite par un administrateur du salon peut les désactiver.",
     "Editing": "Modification de votre message",
     "EditCancel": "Annuler la modification",
     "ReplyCancel": "Annuler la réponse",
