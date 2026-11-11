@@ -239,3 +239,20 @@ test('a green smoke job on the second page of the jobs list: not re-run, nothing
   assert.deepEqual([r.stillRed, r.rerun], [false, false])
   assert.equal(calls.some((c) => c[0] === 'run'), false)
 })
+
+test('a job list that cannot be read whole (an error object on page 2): an error that says so, no re-run, nothing withdrawn', async () => {
+  const calls = []
+  const gh = (...args) => {
+    calls.push(args)
+    if (args[0] === 'run') return ''
+    const route = String(args[1])
+    if (route.includes('/jobs?per_page=100&page=1')) return JSON.stringify({ total_count: 101, jobs: [...Array.from({ length: 98 }, (_, i) => ({ name: `Which build #${i}`, conclusion: 'success' })), IOS_OK, ANDROID_OK] })
+    if (route.includes('/jobs?per_page=100&page=2')) return JSON.stringify({ message: 'Server Error' })
+    return JSON.stringify({ id: 601, run_attempt: 1, status: 'completed' })
+  }
+  await assert.rejects(
+    rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => {}, log: () => {} }),
+    /gate-smoke 601 before the re-run: its job list could not be read whole \(page 2 of the job list came back without jobs\) after every re-read: NOTHING was withdrawn/
+  )
+  assert.equal(calls.some((c) => c[0] === 'run'), false)
+})

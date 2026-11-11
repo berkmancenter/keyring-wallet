@@ -602,29 +602,80 @@ const PAGED_ANDROID = { name: 'Android smoke (ubuntu-latest, KVM) · 5d150fbb', 
 test('a judged job on the second page is read: green, where the first page alone said ios missing', () => {
   const pages = [[...filler(99), PAGED_ANDROID], [PAGED_IOS]]
   const { api, routes } = pagedApi(pages, 101)
-  const jobs = readAllJobs(api, 'o/r', 601)
+  const { jobs, complete } = readAllJobs(api, 'o/r', 601)
   assert.equal(jobs.length, 101)
+  assert.equal(complete, true)
   assert.deepEqual(routes, ['repos/o/r/actions/runs/601/jobs?per_page=100&page=1', 'repos/o/r/actions/runs/601/jobs?per_page=100&page=2'])
   assert.equal(smokeVerdict(jobs).green, true)
   // The control: the one-page read this replaces.
   assert.deepEqual(smokeVerdict(pages[0]).rows, [{ platform: 'ios', conclusion: 'missing' }, { platform: 'android', conclusion: 'success' }])
 })
 
-test('a short first page is the whole list: one read', () => {
+test('a short first page is the whole list: one read, complete', () => {
   const { api, routes } = pagedApi([[PAGED_IOS, PAGED_ANDROID]], 2)
-  assert.equal(readAllJobs(api, 'o/r', 601).length, 2)
+  assert.deepEqual(readAllJobs(api, 'o/r', 601), { jobs: [PAGED_IOS, PAGED_ANDROID], complete: true })
   assert.equal(routes.length, 1)
 })
 
 test('a full page that reaches total_count is the whole list: no empty second read', () => {
   const { api, routes } = pagedApi([filler(100)], 100)
-  assert.equal(readAllJobs(api, 'o/r', 601).length, 100)
+  const r = readAllJobs(api, 'o/r', 601)
+  assert.deepEqual([r.jobs.length, r.complete], [100, true])
   assert.equal(routes.length, 1)
 })
 
-test('the reads are bounded: a list that never ends stops after JOB_PAGES pages', () => {
-  const api = () => ({ jobs: filler(100) })
-  assert.equal(readAllJobs(api, 'o/r', 601).length, 100 * JOB_PAGES)
+test('with no total_count, a short page ends the list: complete', () => {
+  const pages = [filler(100), [PAGED_IOS]]
+  const r = readAllJobs((route) => ({ jobs: pages[Number(new URL(`https://x/${route}`).searchParams.get('page')) - 1] ?? [] }), 'o/r', 601)
+  assert.deepEqual([r.jobs.length, r.complete], [101, true])
+})
+
+// Never silently short: each way a read ends before the whole list says so.
+test('an error object on page 2 (no jobs list) is an INCOMPLETE read, not page 1 passed off as the whole list', () => {
+  const api = (route) => (route.endsWith('page=1') ? { total_count: 101, jobs: [...filler(99), PAGED_ANDROID] } : { message: 'Server Error' })
+  const r = readAllJobs(api, 'o/r', 601)
+  assert.equal(r.complete, false)
+  assert.equal(r.jobs.length, 100)
+  assert.match(r.why, /page 2 of the job list came back without jobs/)
+})
+
+test('the page cap reached under total_count is an INCOMPLETE read', () => {
+  const api = () => ({ total_count: 100 * JOB_PAGES + 1, jobs: filler(100) })
+  const r = readAllJobs(api, 'o/r', 601)
+  assert.deepEqual([r.jobs.length, r.complete], [100 * JOB_PAGES, false])
+  assert.match(r.why, new RegExp(`read ${100 * JOB_PAGES} of ${100 * JOB_PAGES + 1} jobs in ${JOB_PAGES} pages`))
+})
+
+test('the reads are bounded: a list that never ends stops after JOB_PAGES pages, and says it is incomplete', () => {
+  const r = readAllJobs(() => ({ jobs: filler(100) }), 'o/r', 601)
+  assert.deepEqual([r.jobs.length, r.complete], [100 * JOB_PAGES, false])
+})
+
+test('a short page that leaves the count under total_count is an INCOMPLETE read', () => {
+  const r = readAllJobs(() => ({ total_count: 5, jobs: [PAGED_IOS] }), 'o/r', 601)
+  assert.deepEqual([r.complete, r.why], [false, 'read 1 of 5 jobs'])
+})
+
+// The verdict never judges a partial list green.
+test('an incomplete read with both judged jobs green is NOT green: read again, and incomplete if it stays partial', async () => {
+  const logs = []
+  const v = await readSmokeVerdict({ readJobs: () => ({ jobs: [PAGED_IOS, PAGED_ANDROID], complete: false, why: 'read 2 of 9 jobs' }), sleep: async () => {}, log: (l) => logs.push(l), attempts: 3 })
+  assert.deepEqual([v.green, v.incomplete, v.unread], [false, true, 'read 2 of 9 jobs'])
+  assert.equal(logs.length, 2)
+  assert.match(logs[0], /the job list is incomplete \(read 2 of 9 jobs\)/)
+})
+
+test('control: an incomplete read followed by a whole one is green', async () => {
+  const reads = [{ jobs: [PAGED_IOS], complete: false, why: 'x' }, { jobs: [PAGED_IOS, PAGED_ANDROID], complete: true }]
+  let n = 0
+  const v = await readSmokeVerdict({ readJobs: () => reads[Math.min(n++, 1)], sleep: async () => {}, attempts: 3 })
+  assert.deepEqual([v.green, v.incomplete], [true, false])
+})
+
+test('a listed red in an incomplete read is still red at once (as with an absent job, 11-09): a listed red is real', async () => {
+  let n = 0
+  const v = await readSmokeVerdict({ readJobs: () => (n++, { jobs: [{ ...PAGED_ANDROID, conclusion: 'failure' }], complete: false, why: 'x' }), sleep: async () => {}, attempts: 3 })
+  assert.deepEqual([v.green, v.incomplete, n], [false, false, 1])
 })
 
 test('postRelease reads the smoke run page by page (its readJobs is readAllJobs)', () => {
