@@ -19,7 +19,8 @@
  * and are off now (`RecordFeatures.wereOn`). A file or photo with no words has nothing to copy or edit:
  * its sheet offers a reaction and a reply where the room takes them, and otherwise says they aren't on here yet. A post
  * that carries a file is never edited (an edit writes new words alone, and would drop the file); the member's own may
- * be withdrawn, with words or without, as their message may. A reaction or a change shows once the room has stored it.
+ * be withdrawn, with words or without, as their message may. A reaction or a change shows at once, and the room's own
+ * list takes over once it has stored it; one that fails is taken back, and the screen says why (pendingRecordWrites).
  *
  * The screen is the chat alone (rooms in Messages, R2, chat B). The header opens the room's details (RoomInfo), and
  * from there its files, its notes (titled records and the markers of removed ones, which the chat leaves out) and its
@@ -85,6 +86,7 @@ import { useRoomDraft } from '../useRoomDraft'
 import { type PendingPost, useRoomSend } from '../useRoomSend'
 import { useRoomsService } from '../useRoomsService'
 import { useRoomThread } from '../useRoomThread'
+import { isPendingRecordKey, usePendingWrites, withPendingWrites } from '../pendingRecordWrites'
 import { useRecordSending } from '../useRecordSending'
 
 const NO_LISTINGS: readonly RoomListing[] = []
@@ -201,8 +203,14 @@ const Room: React.FC = () => {
     inView,
     isChatPost
   )
+  // A reaction, edit or withdrawal the member just asked for, laid over the posts until the room's list carries it.
+  const pendingWrites = usePendingWrites(feed.posts)
+  const posts = useMemo(
+    () => (feed.posts ? withPendingWrites(feed.posts, pendingWrites.writes) : undefined),
+    [feed.posts, pendingWrites.writes]
+  )
   // What the records say about each other: reactions, the quotes above replies, and who wrote a record first.
-  const thread = useRoomThread(service, roomId, room?.actingAs, feed.posts)
+  const thread = useRoomThread(service, roomId, room?.actingAs, posts)
   // The post a long press is on, and the post whose chips were tapped.
   const [actionFor, setActionFor] = useState<RoomPost>()
   const [reactionsFor, setReactionsFor] = useState<readonly RoomReactionTally[]>()
@@ -279,6 +287,8 @@ const Room: React.FC = () => {
   const floating = useFloatingDay()
   const { send: outboxSend } = outbox
   const { send: sendRecord, learn, typedMessages } = records
+  const { track } = pendingWrites
+  const actingAs = room?.actingAs
   const { refresh } = feed
   // A write refused or failed: said in the words a post uses. A room that no longer takes it is read again.
   const notSent = useCallback(
@@ -309,7 +319,9 @@ const Room: React.FC = () => {
         const target = editing
         const body = text.trim()
         if (!body) return false
-        return sendRecord({ type: 'edit', key: target.key, body }).then(
+        return track({ type: 'edit', key: target.key, body, at: new Date().toISOString() }, () =>
+          sendRecord({ type: 'edit', key: target.key, body })
+        ).then(
           () => {
             setEditing(undefined)
             refresh()
@@ -331,7 +343,7 @@ const Room: React.FC = () => {
       }
       return sending
     },
-    [outboxSend, editing, replyTo, typedMessages, sendRecord, refresh, notSent]
+    [outboxSend, editing, replyTo, typedMessages, sendRecord, refresh, notSent, track]
   )
   /**
    * One reaction per person, as in chat: a new value rewrites the member's reaction to this post, the value they already
@@ -343,29 +355,45 @@ const Room: React.FC = () => {
       const value = reactionValueOfBody(emoji)
       if (!value) return
       const held = thread.mine.get(target.key) ?? []
+      // One change at a time on a post: a reaction still on its way has no record to rewrite or take back yet.
+      if (held.some((r) => isPendingRecordKey(r.key))) return
       const same = held.filter((r) => r.value === value)
       try {
-        if (same.length > 0) for (const r of same) await sendRecord({ type: 'withdraw', key: r.key })
-        else if (held.length > 0) await sendRecord({ type: 'changeReaction', key: held[0].key, value: emoji })
-        else await sendRecord({ type: 'reaction', value: emoji, target: { key: target.key, version: target.version } })
+        if (same.length > 0)
+          await Promise.all(
+            same.map((r) => track({ type: 'withdraw', key: r.key }, () => sendRecord({ type: 'withdraw', key: r.key })))
+          )
+        else if (held.length > 0)
+          await track({ type: 'changeReaction', key: held[0].key, value: emoji }, () =>
+            sendRecord({ type: 'changeReaction', key: held[0].key, value: emoji })
+          )
+        else {
+          const write = {
+            type: 'reaction',
+            value: emoji,
+            target: { key: target.key, version: target.version },
+          } as const
+          if (actingAs) await track({ ...write, author: actingAs }, () => sendRecord(write))
+          else await sendRecord(write)
+        }
         refresh()
       } catch (e) {
         notSent(e, 'Chat.ReactionNotSent')
       }
     },
-    [thread.mine, sendRecord, refresh, notSent]
+    [thread.mine, sendRecord, refresh, notSent, track, actingAs]
   )
   const withdraw = useCallback(
     async (target: RoomPost) => {
       setWithdrawing(undefined)
       try {
-        await sendRecord({ type: 'withdraw', key: target.key })
+        await track({ type: 'withdraw', key: target.key }, () => sendRecord({ type: 'withdraw', key: target.key }))
         refresh()
       } catch (e) {
         notSent(e, 'Rooms.WithdrawNotSent')
       }
     },
-    [sendRecord, refresh, notSent]
+    [sendRecord, refresh, notSent, track]
   )
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -454,9 +482,9 @@ const Room: React.FC = () => {
   const canAttach =
     roomCapabilities.uploadFile.status === 'available' && roomCapabilities.listFiles.status === 'available'
   // Titled records and removed ones are the room's notes, on their own screen; the chat shows the rest.
-  const chatPosts = feed.posts?.filter(isChatPost)
+  const chatPosts = posts?.filter(isChatPost)
   // The notes the chat leaves out, said under an empty chat: a note from the web page read as an empty room (IN-434).
-  const notesHere = feed.posts?.filter(isNoteMarker) ?? []
+  const notesHere = posts?.filter(isNoteMarker) ?? []
   // In a chat with messages, a note is one line at its time (RoomNoteMarker). In a chat with none, the card below says it.
   const hasMessages = !!chatPosts?.length || pendingPosts.length > 0
   const items = hasMessages
