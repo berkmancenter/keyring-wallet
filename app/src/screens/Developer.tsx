@@ -22,6 +22,8 @@ import {
   isTrustTestStateEnabled,
   holdK0TestGuardianCard,
   becomeK0TestWard,
+  setStateCardEnabled,
+  STATE_CARD_REMOTE_OFF,
   setUpSediDemo,
   turnOffSediDemo,
   SEDI_KERI_REMOTE_OFF,
@@ -100,6 +102,7 @@ const Developer: React.FC = () => {
     !!store.developer.enableStateVerifiedApprovers
   )
   const [enableTrustTestState, setEnableTrustTestState] = useState(!!store.developer.enableTrustTestState)
+  const [enableStateCard, setEnableStateCard] = useState(!!store.developer.enableStateCard)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -443,6 +446,17 @@ const Developer: React.FC = () => {
     // Read live: the next Guardian check trusts the K0 test root (or stops trusting it), no restart.
     setTrustTestStateEnabled(next)
     setEnableTrustTestState(next)
+  }
+
+  const toggleEnableStateCardSwitch = () => {
+    const next = !enableStateCard
+    dispatch({
+      type: BCDispatchAction.TOGGLE_STATE_CARD,
+      payload: [next],
+    })
+    // Read live: Credentials shows or hides the card on its next render, no restart.
+    setStateCardEnabled(next)
+    setEnableStateCard(next)
   }
 
   /** The two K0 Developer actions: each does nothing (and says so) unless "Trust the test state (K0)" holds. */
@@ -1102,6 +1116,24 @@ const Developer: React.FC = () => {
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
             </SectionRow>
           </>
+        )}
+        {/* "State card (demo)" needs neither approver switch, so it is not under them; a remote off (its own or the
+            SEDI/KERI one) hides the row, since the switch could do nothing. */}
+        {!STATE_CARD_REMOTE_OFF.off && !SEDI_KERI_REMOTE_OFF.off && (
+          <SectionRow
+            title={t('Developer.EnableStateCard')}
+            accessibilityLabel={t('Developer.EnableStateCard')}
+            testID={testIdWithKey('ToggleEnableStateCard')}
+            onPress={toggleEnableStateCardSwitch}
+          >
+            <Switch
+              trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+              thumbColor={enableStateCard ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+              ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+              onValueChange={toggleEnableStateCardSwitch}
+              value={enableStateCard}
+            />
+          </SectionRow>
         )}
         {!SEDI_KERI_REMOTE_OFF.off && (
           <>

@@ -52,6 +52,11 @@ export interface Developer {
    * setTrustTestStateEnabled; holds only with trusted approvers and state-verified approvers both on.
    */
   enableTrustTestState: boolean
+  /**
+   * "State card (demo)": the person holding a state Guardian card sees it in Credentials. bifold's
+   * setStateCardEnabled; needs neither approver switch (the card says when it can't be checked yet).
+   */
+  enableStateCard: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -75,6 +80,7 @@ enum DeveloperDispatchAction {
   TOGGLE_TRUSTED_APPROVERS = 'developer/toggleTrustedApprovers',
   TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
   TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
+  TOGGLE_STATE_CARD = 'developer/toggleStateCard',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -152,6 +158,8 @@ const developerState: Developer = {
   enableStateVerifiedApprovers: false,
   // Off by default; it holds only while the two switches above hold, so their remote offs beat a saved "on" here too.
   enableTrustTestState: false,
+  // Off by default: STATE_CARD_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on"; changing this default cannot.
+  enableStateCard: false,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -173,6 +181,7 @@ export enum BCLocalStorageKeys {
   EnableTrustedApprovers = 'EnableTrustedApprovers',
   EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
   EnableTrustTestState = 'EnableTrustTestState',
+  EnableStateCard = 'EnableStateCard',
 }
 
 export const initialState: BCState = {
@@ -307,6 +316,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
         BCLocalStorageKeys.EnableTrustTestState,
         developer.enableTrustTestState
       )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_STATE_CARD: {
+      const enableStateCard: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableStateCard }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableStateCard, developer.enableStateCard)
 
       return { ...state, developer }
     }
