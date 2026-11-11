@@ -29,7 +29,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
-import { smokeVerdict } from './post-release.mjs'
+import { readSmokeVerdict } from './post-release.mjs'
 
 // The only things this module may do to a bundle. A test holds it to this.
 export const BRAKE_ACTIONS = Object.freeze(['withdraw'])
@@ -66,7 +66,12 @@ export async function rerunAndJudge({ gateSmoke, repo, platforms, gh = realGh, s
   const api = (route) => JSON.parse(gh('api', route))
   const before = api(`repos/${repo}/actions/runs/${gateSmoke}`)
   if (before.status !== 'completed') throw new Error(`gate-smoke ${gateSmoke} is still ${before.status}`)
-  const first = smokeVerdict(api(`repos/${repo}/actions/runs/${gateSmoke}/jobs?per_page=100`).jobs, platforms)
+  const readJobs = () => api(`repos/${repo}/actions/runs/${gateSmoke}/jobs?per_page=100`).jobs
+  // A job that is never listed is not a red one (278.9, 11-09): re-read, and refuse to act on a smoke that can't be read.
+  const unreadable = (rows, when) =>
+    new Error(`gate-smoke ${gateSmoke} ${when}: no ${rows.filter((r) => r.conclusion === 'missing').map((r) => r.platform).join(', ')} job listed after every re-read: NOTHING was withdrawn, and the release is still live`)
+  const first = await readSmokeVerdict({ readJobs, platforms, sleep, log })
+  if (first.incomplete) throw unreadable(first.rows, 'before the re-run')
   if (first.green) return { stillRed: false, rows: first.rows, rerun: false }
   gh('run', 'rerun', String(gateSmoke), '--failed', '-R', repo)
   log(`gate-smoke ${gateSmoke} red (${first.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}): re-running its failed jobs once`)
@@ -79,7 +84,8 @@ export async function rerunAndJudge({ gateSmoke, repo, platforms, gh = realGh, s
     r = api(`repos/${repo}/actions/runs/${gateSmoke}`)
     if (r.run_attempt > before.run_attempt && r.status === 'completed') break
   }
-  const again = smokeVerdict(api(`repos/${repo}/actions/runs/${gateSmoke}/jobs?per_page=100`).jobs, platforms)
+  const again = await readSmokeVerdict({ readJobs, platforms, sleep, log })
+  if (again.incomplete) throw unreadable(again.rows, 'after the re-run')
   log(`gate-smoke ${gateSmoke} re-run: ${again.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}`)
   return { stillRed: !again.green, rows: again.rows, rerun: true }
 }
