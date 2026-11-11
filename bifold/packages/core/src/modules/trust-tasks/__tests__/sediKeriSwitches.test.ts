@@ -5,6 +5,11 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
+import {
+  CONFIRM_ITS_YOU_REMOTE_OFF,
+  isConfirmItsYouEnabled,
+  setConfirmItsYouEnabled,
+} from '../module/confirmItsYouFlag'
 import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import {
   STATE_VERIFIED_APPROVERS_REMOTE_OFF,
@@ -30,6 +35,12 @@ const SWITCHES = [
     set: setStateVerifiedApproversEnabled,
     is: isStateVerifiedApproversEnabled,
     own: STATE_VERIFIED_APPROVERS_REMOTE_OFF,
+  },
+  {
+    name: "Confirm it's you",
+    set: setConfirmItsYouEnabled,
+    is: isConfirmItsYouEnabled,
+    own: CONFIRM_ITS_YOU_REMOTE_OFF,
   },
 ]
 
@@ -72,9 +83,9 @@ describe('the umbrella', () => {
   it('kills every SEDI/KERI switch at once (control: each still answers for itself without it)', () => {
     for (const s of SWITCHES) s.set(true)
     SEDI_KERI_REMOTE_OFF.off = true
-    expect(SWITCHES.map((s) => s.is())).toEqual([false, false])
+    expect(SWITCHES.map((s) => s.is())).toEqual(SWITCHES.map(() => false))
     SEDI_KERI_REMOTE_OFF.off = false
-    expect(SWITCHES.map((s) => s.is())).toEqual([true, true])
+    expect(SWITCHES.map((s) => s.is())).toEqual(SWITCHES.map(() => true))
   })
 
   it('every switch and kill is exported from the trust-tasks index and the package index', () => {
@@ -82,6 +93,9 @@ describe('the umbrella', () => {
       'setStateVerifiedApproversEnabled',
       'isStateVerifiedApproversEnabled',
       'STATE_VERIFIED_APPROVERS_REMOTE_OFF',
+      'setConfirmItsYouEnabled',
+      'isConfirmItsYouEnabled',
+      'CONFIRM_ITS_YOU_REMOTE_OFF',
       'SEDI_KERI_REMOTE_OFF',
       'setTrustTestStateEnabled',
       'isTrustTestStateEnabled',

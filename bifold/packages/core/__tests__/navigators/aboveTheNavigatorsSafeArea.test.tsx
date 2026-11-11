@@ -56,6 +56,7 @@ jest.mock('../../src/contexts/auth', () => ({
 import { ActivityProvider } from '../../src/contexts/activity'
 import { BiometricConfirmationProvider } from '../../src/contexts/biometric-confirmation'
 import ApproverOfferModal from '../../src/modules/trust-tasks/components/ApproverOfferModal'
+import ConfirmItsYouModal from '../../src/modules/trust-tasks/components/ConfirmItsYouModal'
 import CredentialExchangeQueryModal from '../../src/modules/trust-tasks/components/CredentialExchangeQueryModal'
 import ContinuityCheckModal from '../../src/modules/vrc/components/ContinuityCheckModal'
 import LateStepReadyModal from '../../src/modules/vrc/components/LateStepReadyModal'
@@ -63,6 +64,8 @@ import LocalityPreflightModal from '../../src/modules/vrc/components/LocalityPre
 import RelationshipProposalModal from '../../src/modules/vrc/components/RelationshipProposalModal'
 import { roleOfferPromptStore } from '../../src/modules/trust-tasks/approverRole'
 import { setTrustedApproversEnabled } from '../../src/modules/trust-tasks/module/trustedApproversFlag'
+import { confirmPromptStore } from '../../src/modules/trust-tasks/confirmItsYou'
+import { setConfirmItsYouEnabled } from '../../src/modules/trust-tasks/module/confirmItsYouFlag'
 
 /**
  * Everything RootStack renders inside `if (shouldRenderMainStack && agent)`:
@@ -75,6 +78,7 @@ const ABOVE_THE_NAVIGATORS = [
   'AgentProvider',
   'ApproverOfferModal',
   'BiometricConfirmationProvider',
+  'ConfirmItsYouModal',
   'ContinuityCheckModal',
   'CredentialExchangeQueryModal',
   'LateStepReadyModal',
@@ -126,6 +130,7 @@ describe('what RootStack mounts above the navigators', () => {
     ['LocalityPreflightModal', LocalityPreflightModal],
     ['CredentialExchangeQueryModal', CredentialExchangeQueryModal],
     ['ApproverOfferModal', ApproverOfferModal],
+    ['ConfirmItsYouModal', ConfirmItsYouModal],
   ])('%s', (_name, Component) => {
     it('mounts with no safe-area provider in scope', () => {
       // BasicAppContext carries the container, the three agent-backed providers
@@ -177,6 +182,33 @@ describe('what RootStack mounts above the navigators', () => {
     } finally {
       roleOfferPromptStore.clear()
       setTrustedApproversEnabled(false)
+    }
+  })
+
+  it('mounts ConfirmItsYouModal SHOWING a request with no safe-area provider in scope', () => {
+    // Its row above renders nothing (the switch is off by default). Here the switch is on and a request waits.
+    setConfirmItsYouEnabled(true)
+    confirmPromptStore.set({
+      open: true,
+      connectionId: 'conn-guard',
+      asker: 'Sam',
+      note: 'Is this you calling?',
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      request: { payload: { challenge: 'x'.repeat(43) } },
+      receivedAt: new Date().toISOString(),
+    })
+    try {
+      const view = render(
+        <BasicAppContext>
+          <ActivityProvider>
+            <ConfirmItsYouModal />
+          </ActivityProvider>
+        </BasicAppContext>
+      )
+      expect(view.UNSAFE_root.findAllByType(Modal).length).toBeGreaterThan(0)
+    } finally {
+      confirmPromptStore.clear()
+      setConfirmItsYouEnabled(false)
     }
   })
 

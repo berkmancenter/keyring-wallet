@@ -69,6 +69,8 @@ import * as continuitySpec from '../vrc/contacts/continuitySpec'
 import { handleContinuityRequest, handleContinuityResponse } from '../vrc/contacts/continuity'
 import * as approverRoleSpec from './approverRoleSpec'
 import { handleRoleOfferRequest, handleRoleOfferResponse, handleRoleStepDown } from './approverRole'
+import * as confirmItsYouSpec from './confirmItsYouSpec'
+import { handleConfirmRequest, handleConfirmResponse } from './confirmItsYou'
 import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
 import { setupChatInbound } from '../chat/inbound'
@@ -2069,6 +2071,17 @@ function registerBuiltinTrustTasks(): void {
     spec: approverRoleSpec.STEP_DOWN_SPEC as never,
     orchestration: { requiresDiscovery: false },
     handleRequest: handleRoleStepDown,
+  })
+
+  // Keyring's own type (private authority): one person asks a contact to confirm, with their phone's lock, that a call
+  // or message in their name is really them. Its handlers do nothing while the Confirm it's you switch is off.
+  trustTaskRegistry.register({
+    typeUri: confirmItsYouSpec.TYPE_URI,
+    spec: confirmItsYouSpec.SPEC as never,
+    responseSpec: confirmItsYouSpec.RESPONSE_SPEC as never,
+    orchestration: { requiresDiscovery: false },
+    handleRequest: handleConfirmRequest,
+    handleResponse: handleConfirmResponse,
   })
 
   // Keyring's own type (private authority): an approver's phone sends its state Guardian card after a yes. One way,

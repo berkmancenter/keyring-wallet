@@ -34,6 +34,9 @@ import { formInputFromTemplate, profileLabel } from '../types/rcard'
 import { testIdWithKey } from '../../../utils/testable'
 import { DidDetails } from '../../trust-tasks/screens/DidDetails'
 import ApproverAskRow from '../../trust-tasks/screens/ApproverAskRow'
+import ConfirmItsYouRow from '../../trust-tasks/screens/ConfirmItsYouRow'
+import { isConfirmItsYouEnabled } from '../../trust-tasks/module/confirmItsYouFlag'
+import { isTrustedApproversEnabled } from '../../trust-tasks/module/trustedApproversFlag'
 import { ContactLinks, loadContactLinks, relationshipsOfContact } from '../contacts/contactLinks'
 import { separateContact } from '../contacts/mergeContacts'
 import { connectionToOpen } from '../contacts/messageRows'
@@ -463,9 +466,19 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
               <DidDetails did={contact.issuer.id} testIdStem="ContactRelationship" />
             </View>
           </View>
-          {/* Asking this contact to approve for me: shown only with the trusted-approvers switch on. */}
-          <ApproverAskRow connectionId={connectionId} name={displayName || t('Approver.UnnamedContact')} />
         </View>
+
+        {/* Safety (mock GVGac4je… frame 1): confirming a call or message is really this contact, then asking them to
+            approve for me. Each row is shown only with its own switch on; the heading only when one of them is. */}
+        {isConfirmItsYouEnabled() || isTrustedApproversEnabled() ? (
+          <View style={styles.section} testID={testIdWithKey('ContactSafety')}>
+            <ThemedText style={styles.sectionLabel} accessibilityRole="header">
+              {t('ConfirmItsYou.SafetyTitle')}
+            </ThemedText>
+            <ConfirmItsYouRow connectionId={connectionId} name={displayName || t('Approver.UnnamedContact')} />
+            <ApproverAskRow connectionId={connectionId} name={displayName || t('Approver.UnnamedContact')} />
+          </View>
+        ) : null}
 
         {/* 4. Contact: whether it is one person's merged exchanges (with Separate beside it), what you share with
             them, and what their card says. */}

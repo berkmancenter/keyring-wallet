@@ -14,6 +14,7 @@ import RelationshipProposalModal from '../modules/vrc/components/RelationshipPro
 import LateStepReadyModal from '../modules/vrc/components/LateStepReadyModal'
 import ContinuityCheckModal from '../modules/vrc/components/ContinuityCheckModal'
 import ApproverOfferModal from '../modules/trust-tasks/components/ApproverOfferModal'
+import ConfirmItsYouModal from '../modules/trust-tasks/components/ConfirmItsYouModal'
 import LocalityPreflightModal from '../modules/vrc/components/LocalityPreflightModal'
 import CredentialExchangeQueryModal from '../modules/trust-tasks/components/CredentialExchangeQueryModal'
 import { useStore } from '../contexts/store'
@@ -107,6 +108,7 @@ const RootStack: React.FC = () => {
                   <LateStepReadyModal />
                   <ContinuityCheckModal />
                   <ApproverOfferModal />
+                  <ConfirmItsYouModal />
                   <LocalityPreflightModal />
                   <CredentialExchangeQueryModal />
                 </ActivityProvider>

@@ -15,6 +15,7 @@ import { MainContainer } from '../../../../src/container-impl'
 import { StoreProvider, defaultReducer } from '../../../../src/contexts/store'
 import { testDefaultState } from '../../../contexts/store'
 import { buildRCardTemplate } from '../../../../src/modules/vrc/types/rcard'
+import { setConfirmItsYouEnabled } from '../../../../src/modules/trust-tasks/module/confirmItsYouFlag'
 
 // ContactDetails resolves TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER via
 // useServices, so every render needs a real container in context — the same
@@ -749,6 +750,28 @@ describe('ContactDetails Screen', () => {
       await relationshipRead()
       expect(queryByText('ContactDetails.LinkedProfile')).toBeNull()
       expect(queryByTestId('LinkedProfileCard')).toBeNull()
+    })
+  })
+
+  describe('the Safety section', () => {
+    afterEach(() => setConfirmItsYouEnabled(false))
+
+    test("with Confirm it's you on, the Safety heading shows; off, there is no Safety section at all", async () => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+
+      const off = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+      expect(await off.findByText('Alice Smith')).toBeTruthy()
+      await relationshipRead()
+      expect(off.queryByTestId(testIdWithKey('ContactSafety'))).toBeNull()
+      off.unmount()
+
+      setConfirmItsYouEnabled(true)
+      const on = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+      expect(await on.findByText('Alice Smith')).toBeTruthy()
+      await relationshipRead()
+      expect(on.getByTestId(testIdWithKey('ContactSafety'))).toBeTruthy()
+      expect(on.getByText('ConfirmItsYou.SafetyTitle')).toBeTruthy()
     })
   })
 })

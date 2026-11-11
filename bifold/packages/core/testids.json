@@ -409,6 +409,29 @@
     "ConfirmButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmDeclineButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmDeleteProfileButton": ["src/components/modals/CommonRemoveModal.tsx"],
+    "ConfirmItsYou": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouAskAgain": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouAsked": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouCancelCompose": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouCancelRequest": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouCounter": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouDone": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouEarlier": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouExpiresIn": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouFailed": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouItsMe": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouLock": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouNotMe": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouNotNow": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouNote": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouOpen": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouSaid": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouSend": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouSent": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouSheet": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouSheetNote": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouStatus": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouSteps": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmRemoveButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConnectCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectMyAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -446,6 +469,7 @@
     "ContactRemoveMergedBody": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactRemoveMergedConfirm": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactRemoveMergedSeparate": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactSafety": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactSeparate": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactSeparateBack": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactSeparateConfirm": ["src/modules/vrc/components/ContactMergeSection.tsx"],
@@ -2251,6 +2275,33 @@
       "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.yes"
     },
     {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.done"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.failed"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.itsMe"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.lock"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.notMe"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.notNow"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.note"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.sent"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.sheet"
+    },
+    {
       "src/modules/trust-tasks/components/DemoPill.tsx": "testID"
     },
     {
@@ -2312,6 +2363,48 @@
     },
     {
       "src/modules/trust-tasks/screens/CommunityMark.tsx": "VtiCommunityIds.markIcon"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.askAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.asked"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.cancelCompose"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.cancelRequest"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.counter"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.earlier"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.expiresIn"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.note"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.open"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.row"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.said"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.send"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.status"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.steps"
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Copy`"
