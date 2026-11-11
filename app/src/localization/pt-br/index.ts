@@ -185,6 +185,8 @@ const translation = {
     "TurnOffSediDemo": "Desligar a demo SEDI",
     "SediDemoDone": "Feito: aprovadores de confiança, aprovadores verificados pelo estado e o estado de teste estão ligados, com o cartão e a pessoa tutelada K0 neste telefone.",
     "SediDemoOff": "Não feito: SEDI/KERI está desligado nesta versão.",
+    "SediDemoCardNotHeld": "Não feito: não foi possível guardar o cartão de teste K0 neste telefone. Os interruptores estão ligados; tente de novo ou desligue-os.",
+    "SediDemoWardNotSet": "Não feito: não foi possível definir a pessoa tutelada de teste K0 neste telefone. Os interruptores estão ligados; tente de novo ou desligue-os.",
     "EnableLivePickup": "Recebimento de mensagens ao vivo (WebSocket)",
     "Mediator": "Mediador",
     "CopyValue": "Copiar",

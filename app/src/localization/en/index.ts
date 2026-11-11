@@ -212,6 +212,8 @@ const translation = {
     "TurnOffSediDemo": "Turn off the SEDI demo",
     "SediDemoDone": "Done: trusted approvers, state-verified approvers and the test state are on, with the K0 card and ward on this phone.",
     "SediDemoOff": "Not done: SEDI/KERI is turned off for this build.",
+    "SediDemoCardNotHeld": "Not done: the K0 test card couldn't be kept on this phone. The switches are on; try again, or turn them off.",
+    "SediDemoWardNotSet": "Not done: the K0 test ward couldn't be set on this phone. The switches are on; try again, or turn them off.",
     "EnableLivePickup": "Live message pickup (WebSocket)",
     "Mediator": "Mediator",
     "CopyValue": "Copy",

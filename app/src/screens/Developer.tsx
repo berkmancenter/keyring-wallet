@@ -474,7 +474,9 @@ const Developer: React.FC = () => {
 
   /**
    * "Set up the SEDI demo": bifold turns the three switches on and keeps the K0 card and ward, or does nothing at all
-   * when a remote off holds; only a done set-up is saved here.
+   * when a remote off holds. Each result has its own message. The switches are saved on every result but 'remoteOff':
+   * after 'cardNotHeld' or 'wardNotSet' bifold HAS turned them on, so saving them keeps a restart from silently
+   * differing from what this screen shows. 'remoteOff' saves nothing: the feature is off for this build either way.
    */
   const runSediDemoSetup = async () => {
     if (!agent) {
@@ -483,11 +485,14 @@ const Developer: React.FC = () => {
     }
     try {
       const result = await setUpSediDemo(agent)
-      if (result === 'done') saveSediDemoSwitches(true)
-      Alert.alert(
-        t('Developer.SetUpSediDemo'),
-        t(result === 'done' ? 'Developer.SediDemoDone' : 'Developer.SediDemoOff')
-      )
+      if (result !== 'remoteOff') saveSediDemoSwitches(true)
+      const message = {
+        done: 'Developer.SediDemoDone',
+        remoteOff: 'Developer.SediDemoOff',
+        cardNotHeld: 'Developer.SediDemoCardNotHeld',
+        wardNotSet: 'Developer.SediDemoWardNotSet',
+      }[result]
+      Alert.alert(t('Developer.SetUpSediDemo'), t(message ?? 'Developer.SediDemoOff'))
     } catch (error) {
       Alert.alert(t('Developer.SetUpSediDemo'), `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
