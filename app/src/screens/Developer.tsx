@@ -24,6 +24,8 @@ import {
   becomeK0TestWard,
   setStateCardEnabled,
   STATE_CARD_REMOTE_OFF,
+  setUpSediDemo,
+  turnOffSediDemo,
   SEDI_KERI_REMOTE_OFF,
   vtaAgent,
 } from '@bifold/core'
@@ -469,6 +471,46 @@ const Developer: React.FC = () => {
     } catch (error) {
       Alert.alert(title, `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
+  }
+
+  /** Keep the three SEDI demo switches as saved settings, as their own rows do, and show them. */
+  const saveSediDemoSwitches = (on: boolean) => {
+    for (const type of [
+      BCDispatchAction.TOGGLE_TRUSTED_APPROVERS,
+      BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS,
+      BCDispatchAction.TOGGLE_TRUST_TEST_STATE,
+    ])
+      dispatch({ type, payload: [on] })
+    setEnableTrustedApprovers(on)
+    setEnableStateVerifiedApprovers(on)
+    setEnableTrustTestState(on)
+  }
+
+  /**
+   * "Set up the SEDI demo": bifold turns the three switches on and keeps the K0 card and ward, or does nothing at all
+   * when a remote off holds; only a done set-up is saved here.
+   */
+  const runSediDemoSetup = async () => {
+    if (!agent) {
+      Alert.alert('Error', 'Agent not initialized')
+      return
+    }
+    try {
+      const result = await setUpSediDemo(agent)
+      if (result === 'done') saveSediDemoSwitches(true)
+      Alert.alert(
+        t('Developer.SetUpSediDemo'),
+        t(result === 'done' ? 'Developer.SediDemoDone' : 'Developer.SediDemoOff')
+      )
+    } catch (error) {
+      Alert.alert(t('Developer.SetUpSediDemo'), `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /** "Turn off the SEDI demo": the three switches off, saved; nothing kept is deleted. */
+  const runSediDemoOff = () => {
+    turnOffSediDemo()
+    saveSediDemoSwitches(false)
   }
 
   const toggleEnableLivePickupSwitch = () => {
@@ -1092,6 +1134,30 @@ const Developer: React.FC = () => {
               value={enableStateCard}
             />
           </SectionRow>
+        )}
+        {!SEDI_KERI_REMOTE_OFF.off && (
+          <>
+            <View style={styles.sectionSeparator}></View>
+            <SectionHeader icon={'slideshow'} title={t('Developer.Demos')} />
+            <SectionRow
+              title={t('Developer.SetUpSediDemo')}
+              accessibilityLabel={t('Developer.SetUpSediDemo')}
+              testID={testIdWithKey('SetUpSediDemo')}
+              onPress={() => void runSediDemoSetup()}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+            {(enableTrustedApprovers || enableStateVerifiedApprovers || enableTrustTestState) && (
+              <SectionRow
+                title={t('Developer.TurnOffSediDemo')}
+                accessibilityLabel={t('Developer.TurnOffSediDemo')}
+                testID={testIdWithKey('TurnOffSediDemo')}
+                onPress={runSediDemoOff}
+              >
+                <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+              </SectionRow>
+            )}
+          </>
         )}
         <View style={styles.sectionSeparator}></View>
         <SectionHeader icon={'bug-report'} title={'Diagnostics'} />
