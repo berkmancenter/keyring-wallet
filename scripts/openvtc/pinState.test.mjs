@@ -6,7 +6,8 @@ import { pinState } from './pinState.mjs';
 
 const FULL = '439a03335eae64638fbdfa0c5d45bae9bbbc715f';
 const OTHER = 'f7b78e29dfa0fc79d125eba5970cce66d82b53d5';
-const at = (o) => pinState({ head: '439a03335', headCommit: FULL, ...o });
+// At the pin, setup computes pinBehindHead true too (a commit is its own ancestor): the rows say what it says.
+const at = (o) => pinState({ head: '439a03335', headCommit: FULL, pinBehindHead: true, ...o });
 
 test('the pin named as git abbreviates it, at HEAD: pinned', () => {
   assert.equal(at({ pinSha: '439a03335', pinCommit: FULL }), 'pinned');
