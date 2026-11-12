@@ -15,7 +15,11 @@ import { MainContainer } from '../../../../src/container-impl'
 import { StoreProvider, defaultReducer } from '../../../../src/contexts/store'
 import { testDefaultState } from '../../../contexts/store'
 import { buildRCardTemplate } from '../../../../src/modules/vrc/types/rcard'
-import { setConfirmItsYouEnabled } from '../../../../src/modules/trust-tasks/module/confirmItsYouFlag'
+import * as confirmItsYou from '../../../../src/modules/trust-tasks/confirmItsYou'
+import {
+  CONFIRM_ITS_YOU_REMOTE_OFF,
+  setConfirmItsYouEnabled,
+} from '../../../../src/modules/trust-tasks/module/confirmItsYouFlag'
 
 // ContactDetails resolves TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER via
 // useServices, so every render needs a real container in context — the same
@@ -772,6 +776,63 @@ describe('ContactDetails Screen', () => {
       await relationshipRead()
       expect(on.getByTestId(testIdWithKey('ContactSafety'))).toBeTruthy()
       expect(on.getByText('ConfirmItsYou.SafetyTitle')).toBeTruthy()
+    })
+  })
+
+  describe('the "Confirm with <name>" button', () => {
+    const withConnection = () =>
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue({
+        connectionId: 'test-connection-123',
+        myRelationshipDid: generateTestDid('myrel'),
+        counterpartyRelationshipDid: generateTestDid('theirrel'),
+      })
+    const page = async () => {
+      const tree = render(<ContactDetails {...createRouteParams({ issuer: TEST_CONTACTS.alice.issuer })} />, {
+        wrapper: TestContainerWrapper,
+      })
+      expect(await tree.findByText('Alice Smith')).toBeTruthy()
+      await relationshipRead()
+      await act(async () => undefined)
+      return tree
+    }
+    beforeEach(() => {
+      jest.spyOn(confirmItsYou, 'confirmAsksOn').mockResolvedValue([])
+    })
+    afterEach(() => {
+      CONFIRM_ITS_YOU_REMOTE_OFF.off = false
+      setConfirmItsYouEnabled(false)
+    })
+
+    test('on, with a relationship: a full-width button on the page AND the Safety row (control: the row is kept)', async () => {
+      withConnection()
+      setConfirmItsYouEnabled(true)
+      const tree = await page()
+      expect(tree.getByTestId(testIdWithKey('ConfirmItsYouButton'))).toBeTruthy()
+      expect(tree.getByTestId(testIdWithKey('ConfirmItsYouOpen'))).toBeTruthy()
+    })
+
+    test.each([
+      ['the switch off', () => setConfirmItsYouEnabled(false)],
+      [
+        'its remote off',
+        () => {
+          setConfirmItsYouEnabled(true)
+          CONFIRM_ITS_YOU_REMOTE_OFF.off = true
+        },
+      ],
+    ])('%s: no button on the page (control: on, above)', async (_name, off) => {
+      withConnection()
+      off()
+      const tree = await page()
+      expect(tree.queryByTestId(testIdWithKey('ConfirmItsYouButton'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('ConfirmItsYouOpen'))).toBeNull()
+    })
+
+    test('on, with no relationship to ask over: no button', async () => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+      setConfirmItsYouEnabled(true)
+      const tree = await page()
+      expect(tree.queryByTestId(testIdWithKey('ConfirmItsYouButton'))).toBeNull()
     })
   })
 })

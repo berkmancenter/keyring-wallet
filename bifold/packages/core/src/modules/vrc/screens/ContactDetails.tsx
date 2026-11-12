@@ -219,6 +219,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     chipText: { fontSize: 13, lineHeight: 18, fontWeight: '600', color: CHIP_TEXT },
     // The sections: rows on the screen's ground under a small label, as the chat and rooms screens do.
     section: { marginTop: 20 },
+    confirmWith: { marginTop: 16 },
     sectionLabel: {
       fontSize: 12,
       fontWeight: '700',
@@ -398,6 +399,18 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           hardwareSigned={hwVerified}
           onMessage={messageConnectionId ? handleViewMessages : undefined}
         />
+
+        {/* "Confirm with <name>": the full-width way to start Confirm it's you (the Safety row below stays). Behind the
+            same switch here AND inside the component, so either guard alone keeps it hidden. */}
+        {isConfirmItsYouEnabled() ? (
+          <View style={styles.confirmWith}>
+            <ConfirmItsYouRow
+              variant="button"
+              connectionId={connectionId}
+              name={displayName || t('Approver.UnnamedContact')}
+            />
+          </View>
+        ) : null}
 
         {/* 2. How you know them: cards and witness records, newest first. */}
         <RelationshipLayers name={displayName} layers={layers} />

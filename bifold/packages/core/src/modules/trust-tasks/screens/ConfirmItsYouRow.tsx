@@ -4,14 +4,20 @@
  * them. The row then says where the request stands:
  *  - waiting: don't act on the call yet; it can be cancelled here (here only: a late answer is then ignored);
  *  - confirmed, with the contact's phone lock, at the time their signed answer gives;
- *  - not them: a full alert, with what to do now;
+ *  - not them: one solid red card, with what to do now inside it (the phone vibrated once when the answer landed:
+ *    confirmItsYou.ts, never here, so a re-open or a re-render does not vibrate again);
  *  - no answer in time: ask again, which sends a new request.
  * The last few requests stay listed under Earlier.
  *
  * Person to person: no agent is needed, only the relationship this phone already has with the contact.
  *
- * Shown only while the "Confirm it's you" switch is on (confirmItsYouFlag.ts), read at every render, so switching it
- * off (or a remote off) takes the row away on the next render.
+ * Two forms of the same thing, each its own gate: `variant="row"` (the default) is the Safety section's row, with the
+ * request's status; `variant="button"` is the contact page's full-width "Confirm with {{name}}" button, which opens the
+ * same note-and-send form in place and hides while a request waits (the status shows in the Safety row).
+ *
+ * Shown only while the "Confirm it's you" switch is on (confirmItsYouFlag.ts: the switch AND no remote off), read at
+ * every render by THIS component, so switching it off (or a remote off) takes either form away on the next render, and
+ * a parent that forgets to guard still shows nothing. Never labelled a demo.
  *
  * @module trust-tasks/screens/ConfirmItsYouRow
  */
@@ -42,6 +48,7 @@ import { releaseWarn } from '../module/releaseLog'
 export const ConfirmItsYouRowIds = {
   row: 'ConfirmItsYou',
   open: 'ConfirmItsYouOpen',
+  button: 'ConfirmItsYouButton',
   note: 'ConfirmItsYouNote',
   counter: 'ConfirmItsYouCounter',
   send: 'ConfirmItsYouSend',
@@ -53,6 +60,7 @@ export const ConfirmItsYouRowIds = {
   cancelRequest: 'ConfirmItsYouCancelRequest',
   askAgain: 'ConfirmItsYouAskAgain',
   steps: 'ConfirmItsYouSteps',
+  alarm: 'ConfirmItsYouAlarm',
   earlier: 'ConfirmItsYouEarlier',
 } as const
 
@@ -73,9 +81,11 @@ interface Props {
   connectionId: string | null
   /** The contact's name, as the page shows it. */
   name: string
+  /** 'row' (default): the Safety row with the status. 'button': the contact page's full-width start button. */
+  variant?: 'row' | 'button'
 }
 
-const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name }) => {
+const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name, variant = 'row' }) => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const { ColorPalette, Inputs } = useTheme()
@@ -172,7 +182,7 @@ const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name }) => {
     alarm: { backgroundColor: ColorPalette.semantic.error, borderRadius: 14, padding: 18, gap: 10 },
     alarmText: { color: ColorPalette.grayscale.white },
     alarmBig: { color: ColorPalette.grayscale.white, fontSize: 24, lineHeight: 30, fontWeight: 'bold' },
-    steps: { borderWidth: 2, borderColor: ColorPalette.semantic.error, borderRadius: 12, padding: 12, gap: 6 },
+    steps: { borderTopWidth: 1, borderTopColor: ColorPalette.grayscale.white, paddingTop: 10, gap: 6 },
     quote: {
       borderWidth: 1,
       borderColor: ColorPalette.grayscale.lightGrey,
@@ -250,29 +260,30 @@ const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name }) => {
           </View>
         )
       case 'notMe':
+        // One solid red card, white words, what to do now inside it: nothing about it reads as grey or as confirmed.
         return (
-          <>
-            <View style={styles.alarm} accessibilityRole="alert">
-              <ThemedText style={styles.alarmBig} testID={testIdWithKey(ConfirmItsYouRowIds.status)}>
-                {t('ConfirmItsYou.NotThemTitle', n)}
-              </ThemedText>
-              <ThemedText style={styles.alarmText} variant="bold">
-                {t('ConfirmItsYou.NotThemBody')}
-              </ThemedText>
-              <ThemedText style={styles.alarmText}>
-                {t(
-                  namedLock(ask.confirmedWith) ? 'ConfirmItsYou.NotThemSigned' : 'ConfirmItsYou.NotThemSignedOnPhone',
-                  at(ask)
-                )}
-              </ThemedText>
-            </View>
+          <View style={styles.alarm} accessibilityRole="alert" testID={testIdWithKey(ConfirmItsYouRowIds.alarm)}>
+            <ThemedText style={styles.alarmBig} testID={testIdWithKey(ConfirmItsYouRowIds.status)}>
+              {t('ConfirmItsYou.NotThemTitle', n)}
+            </ThemedText>
+            <ThemedText style={styles.alarmText} variant="bold">
+              {t('ConfirmItsYou.NotThemBody')}
+            </ThemedText>
+            <ThemedText style={styles.alarmText}>
+              {t(
+                namedLock(ask.confirmedWith) ? 'ConfirmItsYou.NotThemSigned' : 'ConfirmItsYou.NotThemSignedOnPhone',
+                at(ask)
+              )}
+            </ThemedText>
             <View style={styles.steps} testID={testIdWithKey(ConfirmItsYouRowIds.steps)}>
-              <ThemedText variant="bold">{t('ConfirmItsYou.WhatToDo')}</ThemedText>
-              <ThemedText>• {t('ConfirmItsYou.StepHangUp')}</ThemedText>
-              <ThemedText>• {t('ConfirmItsYou.StepCallBack', n)}</ThemedText>
-              <ThemedText>• {t('ConfirmItsYou.StepNoCodes')}</ThemedText>
+              <ThemedText style={styles.alarmText} variant="bold">
+                {t('ConfirmItsYou.WhatToDo')}
+              </ThemedText>
+              <ThemedText style={styles.alarmText}>• {t('ConfirmItsYou.StepHangUp')}</ThemedText>
+              <ThemedText style={styles.alarmText}>• {t('ConfirmItsYou.StepCallBack', n)}</ThemedText>
+              <ThemedText style={styles.alarmText}>• {t('ConfirmItsYou.StepNoCodes')}</ThemedText>
             </View>
-          </>
+          </View>
         )
       case 'expired':
         return (
@@ -313,13 +324,10 @@ const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name }) => {
       style={styles.entry}
       onPress={() => setComposing(true)}
       accessibilityRole="button"
-      accessibilityLabel={t('ConfirmItsYou.Title')}
+      accessibilityLabel={t('ConfirmItsYou.Title', n)}
       testID={testIdWithKey(ConfirmItsYouRowIds.open)}
     >
-      <View style={styles.headRow}>
-        <ThemedText variant="bold">{t('ConfirmItsYou.Title')}</ThemedText>
-        <ThemedText style={styles.muted}>{t('ConfirmItsYou.DemoChip')}</ThemedText>
-      </View>
+      <ThemedText variant="bold">{t('ConfirmItsYou.Title', n)}</ThemedText>
       <ThemedText style={styles.muted}>{t('ConfirmItsYou.Subtitle', n)}</ThemedText>
     </Pressable>
   )
@@ -363,6 +371,32 @@ const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name }) => {
       />
     </View>
   )
+
+  if (variant === 'button') {
+    // The contact page's start button: the same form, opened in place. While a request waits it steps aside, so it
+    // never invites a second request on top of one still open; the Safety row says where that one stands.
+    if (composing)
+      return (
+        <View style={styles.row}>
+          {compose}
+          {said ? (
+            <ThemedText style={styles.error} testID={testIdWithKey(ConfirmItsYouRowIds.said)}>
+              {said}
+            </ThemedText>
+          ) : null}
+        </View>
+      )
+    if (newestStatus === 'waiting') return null
+    return (
+      <Button
+        title={t('ConfirmItsYou.Title', n)}
+        accessibilityLabel={t('ConfirmItsYou.Title', n)}
+        buttonType={ButtonType.Primary}
+        onPress={() => setComposing(true)}
+        testID={testIdWithKey(ConfirmItsYouRowIds.button)}
+      />
+    )
+  }
 
   return (
     <View style={styles.row} testID={testIdWithKey(ConfirmItsYouRowIds.row)}>

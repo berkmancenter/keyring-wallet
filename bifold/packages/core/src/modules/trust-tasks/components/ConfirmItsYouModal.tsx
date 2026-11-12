@@ -1,12 +1,18 @@
 /**
- * "{{asker}} asks: is this really you?": the asked phone's half of Confirm it's you (confirmItsYou.ts; mocks
+ * "{{asker}} asks you to confirm": the asked phone's half of Confirm it's you (confirmItsYou.ts; mocks
  * GVGac4je… frames 3a–3c, 5). Shown when a contact's request arrives, verified under the relationship this phone has
  * with them, and never one that failed that check or is past its time.
  *
- * The note is shown exactly as the asker typed it, as plain text. "Yes, it's me" and "No, that wasn't me" both ask for
+ * The note is shown exactly as the asker typed it, as plain text. "Confirm" and "No, that wasn't me" both ask for
  * the phone's own lock first (Face ID, fingerprint, or the phone's PIN or passcode): not confirmed, nothing is sent and
  * the request stays. Once sent, the sheet says what was sent and when. Not now sends nothing and hides the request
  * until the app starts again (it is kept, and comes back then while it is still open).
+ *
+ * When the request's time runs out with the sheet up, the sheet stays and says "This request has expired", with no
+ * way left to answer, until Close (the same when an answer is tried just after the time ran out). Local only: nothing
+ * is sent and no message says so. What this phone cannot know, it does not claim: the asker's Cancel is local to the
+ * asker's phone (confirmItsYou.ts cancelConfirmRequest sends nothing), so a cancelled request still reads as open here
+ * until its time runs out, and only then as expired. A request that ran out while no sheet was up is not shown at all.
  *
  * Self-contained: mounted once at the root beside ApproverOfferModal. With the switch off it shows nothing and brings
  * nothing back; the switch is read at every render.
@@ -42,6 +48,8 @@ export const ConfirmItsYouModalIds = {
   sheet: 'ConfirmItsYouSheet',
   note: 'ConfirmItsYouSheetNote',
   itsMe: 'ConfirmItsYouItsMe',
+  expired: 'ConfirmItsYouExpired',
+  close: 'ConfirmItsYouClose',
   notMe: 'ConfirmItsYouNotMe',
   notNow: 'ConfirmItsYouNotNow',
   lock: 'ConfirmItsYouLock',
@@ -69,6 +77,12 @@ const ownerCheck: ConfirmTheOwner = (reason) => (ownerCheckForTests ?? confirmOw
 
 const firstShown = () => confirmPromptStore.list().find((prompt) => !putOff.has(prompt.connectionId))
 
+/**
+ * The same rule as confirmItsYou.ts's pastDue. The negation is deliberate: an unreadable or missing expiresAt parses
+ * to NaN, and NaN must read as past due (never as still open). `Date.parse(x) <= Date.now()` would read NaN as open.
+ */
+const pastDue = (expiresAt: string | null | undefined) => !(Date.parse(String(expiresAt)) > Date.now())
+
 const timeOf = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 interface Sent {
@@ -89,6 +103,8 @@ const ConfirmItsYouModal: React.FC = () => {
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
   const [lockKind, setLockKind] = useState<OwnerLockKind>('unknown')
+  // The request whose time ran out while it was on screen: kept to say so, with nothing left to answer.
+  const [expired, setExpired] = useState<ConfirmPrompt | null>(null)
 
   // Only for the hint's words ("Either answer asks for Face ID"); the answer reads the lock again when it is sent. Off,
   // nothing runs, not even the keychain probe.
@@ -119,11 +135,15 @@ const ConfirmItsYouModal: React.FC = () => {
     }
   }, [on])
 
-  // A clock: a request left open on screen goes away when its time is up, with no event to say so.
+  // A clock: a request left open on screen says it has expired when its time is up, with no event to say so.
   useEffect(() => {
     if (!on || !prompt) return
     const untilDue = Math.max(0, Date.parse(prompt.expiresAt) - Date.now()) + 50
-    const timer = setTimeout(() => setPrompt(firstShown()), untilDue)
+    const timer = setTimeout(() => {
+      setExpired(prompt)
+      setSaid(null)
+      setPrompt(undefined)
+    }, untilDue)
     return () => clearTimeout(timer)
   }, [on, prompt])
 
@@ -151,7 +171,11 @@ const ConfirmItsYouModal: React.FC = () => {
           setSent({ asker: words.asker, decision, at: new Date(), ...(named ? { lock: named } : {}) })
         else if (result === 'unavailable') setSaid(t('ConfirmItsYou.NoLock'))
         else if (result === 'failed') setSaid(t('ConfirmItsYou.Failed'))
-        else if (result === 'gone' || result === 'off') setPrompt(firstShown())
+        else if (result === 'gone' && pastDue(prompt.expiresAt)) {
+          // Answered just after the time ran out: say so, rather than the sheet vanishing under the tap.
+          setExpired(prompt)
+          setPrompt(undefined)
+        } else if (result === 'gone' || result === 'off') setPrompt(firstShown())
         // 'cancelled': the person chose not to at the lock prompt; nothing failed, the request simply stays.
       } catch (error) {
         releaseWarn(
@@ -177,7 +201,12 @@ const ConfirmItsYouModal: React.FC = () => {
     setPrompt(firstShown())
   }, [])
 
-  if (!on || (!prompt && !sent)) return null
+  const close = useCallback(() => {
+    setExpired(null)
+    setPrompt(firstShown())
+  }, [])
+
+  if (!on || (!prompt && !sent && !expired)) return null
 
   const styles = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -188,7 +217,6 @@ const ConfirmItsYouModal: React.FC = () => {
       borderTopLeftRadius: 20,
     },
     container: { paddingHorizontal: 24, paddingBottom: 24, paddingTop: 24, gap: 12 },
-    headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
     quote: {
       borderWidth: 1,
       borderColor: ColorPalette.grayscale.lightGrey,
@@ -236,15 +264,39 @@ const ConfirmItsYouModal: React.FC = () => {
         testID={testIdWithKey(ConfirmItsYouModalIds.done)}
       />
     </>
+  ) : expired ? (
+    (() => {
+      const words = { asker: expired.asker || t('Approver.UnnamedContact'), interpolation: { escapeValue: false } }
+      return (
+        <>
+          <ThemedText style={styles.muted}>{t('ConfirmItsYou.From', words)}</ThemedText>
+          <ThemedText
+            variant="headingThree"
+            accessibilityRole="header"
+            testID={testIdWithKey(ConfirmItsYouModalIds.expired)}
+          >
+            {t('ConfirmItsYou.ExpiredPromptTitle')}
+          </ThemedText>
+          <View style={styles.quote}>
+            <ThemedText style={styles.muted}>{t('ConfirmItsYou.TheirNote', words)}</ThemedText>
+            <ThemedText style={styles.muted}>{expired.note}</ThemedText>
+          </View>
+          <ThemedText>{t('ConfirmItsYou.ExpiredPromptBody', words)}</ThemedText>
+          <Button
+            title={t('ConfirmItsYou.Close')}
+            buttonType={ButtonType.Primary}
+            onPress={close}
+            testID={testIdWithKey(ConfirmItsYouModalIds.close)}
+          />
+        </>
+      )
+    })()
   ) : prompt ? (
     (() => {
       const words = { asker: prompt.asker || t('Approver.UnnamedContact'), interpolation: { escapeValue: false } }
       return (
         <>
-          <View style={styles.headRow}>
-            <ThemedText style={styles.muted}>{t('ConfirmItsYou.From', words)}</ThemedText>
-            <ThemedText style={styles.muted}>{t('ConfirmItsYou.DemoChip')}</ThemedText>
-          </View>
+          <ThemedText style={styles.muted}>{t('ConfirmItsYou.From', words)}</ThemedText>
           <ThemedText variant="headingThree" accessibilityRole="header">
             {t('ConfirmItsYou.PromptTitle', words)}
           </ThemedText>
