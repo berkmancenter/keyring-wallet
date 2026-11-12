@@ -43,6 +43,7 @@ import {
   cardConsents,
   cardToShare,
   guardianCardEvents,
+  guardianDemoStates,
   guardianSourceKey,
   guardianStandings,
   shareGuardianCard,
@@ -59,6 +60,9 @@ import { localClock, localDate } from './localTime'
 import { deviceErrorWords } from './VtaDevices'
 import ApproverWaitNote from './ApproverWaitNote'
 import { DemoPill } from '../components/DemoPill'
+import { demoStateHost } from '../../sedi/webs/demoStateHost'
+
+import { Mark, StatusPill, Zone } from './approver/ApproverZones'
 
 export const TrustedApproversIds = {
   screen: 'TrustedApprovers',
@@ -92,7 +96,21 @@ export const TrustedApproversIds = {
   cardStatus: (connectionId: string) => `TrustedApproverCardStatus_${connectionId}`,
   cardSend: (connectionId: string) => `TrustedApproverCardSend_${connectionId}`,
   cardStop: (connectionId: string) => `TrustedApproverCardStop_${connectionId}`,
+  // The at-a-glance layout (B, 11-12): the header pill, the three boxes, and the state's "Check again".
+  pill: (did: string) => `TrustedApproverPill_${did}`,
+  checkedBox: (did: string) => `TrustedApproverChecked_${did}`,
+  stateBox: (did: string) => `TrustedApproverStateBox_${did}`,
+  needsBox: (did: string) => `TrustedApproverNeeds_${did}`,
+  mark: (did: string) => `TrustedApproverMark_${did}`,
+  noCard: (did: string) => `TrustedApproverNoCard_${did}`,
+  checkAgain: (did: string) => `TrustedApproverCheckAgain_${did}`,
+  triedAgain: (did: string) => `TrustedApproverTriedAgain_${did}`,
 } as const
+
+/** A card the check found revoked, in any of its three ways (its own revocation, the issuer's or the state's record). */
+const REVOKED = ['revoked', 'revokedInIssuerRecord', 'revokedInStateRecord']
+const isRevoked = (standing: GuardianStanding | undefined) =>
+  standing?.kind === 'unverified' && REVOKED.includes(standing.outcome)
 
 const VtaTrustedApprovers: React.FC = () => {
   const { t } = useTranslation()
@@ -108,6 +126,8 @@ const VtaTrustedApprovers: React.FC = () => {
   const [names, setNames] = useState<Record<string, string>>({})
   /** Each approver's state Guardian card, checked again on this open (guardianEvidence.ts); none, no line. */
   const [standings, setStandings] = useState<Record<string, GuardianStanding>>({})
+  /** For an approver whose card names a demo root on this phone's list: that root's name (the state's box). */
+  const [demoStates, setDemoStates] = useState<Record<string, string>>({})
   const [mine, setMine] = useState<RoleOfferPrompt[]>([])
   /** On an approver's phone: the card it could share (none, no card lines) and its answer for each person. */
   const [shareable, setShareable] = useState<{ state?: string } | undefined>()
@@ -121,6 +141,8 @@ const VtaTrustedApprovers: React.FC = () => {
   )
   /** Who was just added: the screen then offers the check (never runs it). */
   const [justAdded, setJustAdded] = useState<string | undefined>()
+  /** When "Check again" last ran on this open, so a state still unreachable says it was tried again, and when. */
+  const [triedAgainAt, setTriedAgainAt] = useState<string | undefined>()
 
   const wordsFor = useCallback((e: unknown) => deviceErrorWords(e, t), [t])
 
@@ -137,6 +159,8 @@ const VtaTrustedApprovers: React.FC = () => {
     // Also on its own. A card whose check fails is "couldn't verify" inside guardianStandings; this catch is for the
     // records not being readable at all, which shows no line, so it never claims a card is valid.
     const cards = await guardianStandings(agent).catch(() => ({}) as Record<string, GuardianStanding>)
+    // Unreadable reads as none: no state box, so a card is never drawn as a demo state's without the list saying so.
+    const demos = await guardianDemoStates(agent).catch(() => ({}) as Record<string, string>)
     // Unreadable answers read as none given, which sends nothing.
     const share = await cardToShare(agent).catch(() => undefined)
     const answers = await cardConsents(agent).catch(() => ({}) as Record<string, CardConsent>)
@@ -145,6 +169,7 @@ const VtaTrustedApprovers: React.FC = () => {
     setConsents(answers)
     setSteppedDown(stepped)
     setStandings(cards)
+    setDemoStates(demos)
     setNames(known)
     setMine(approving)
   }, [agent])
@@ -222,6 +247,24 @@ const VtaTrustedApprovers: React.FC = () => {
     }
   }
 
+  /**
+   * "Check again" on a state that couldn't be reached (B5): every kept card is checked again now, as on an open. What
+   * shows is whatever that check says: still unreachable (with the time of this try), or a verified card whose line
+   * names where it was fetched from and, for our own earlier live result reused, when (guardianSourceKey). A copy on
+   * this phone is never shown as a fresh check: an unreachable root is never checked against the card's copy.
+   */
+  const onCheckAgain = async () => {
+    if (!agent) return
+    setBusy('checkAgain')
+    try {
+      setStandings(await guardianStandings(agent).catch(() => ({}) as Record<string, GuardianStanding>))
+      setDemoStates(await guardianDemoStates(agent).catch(() => ({}) as Record<string, string>))
+      setTriedAgainAt(new Date().toISOString())
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
   const onNotNow = async (ask: RoleOfferAsk) => {
     if (!agent) return
     await closeRoleOffer(agent, ask.connectionId, false).catch(() => undefined)
@@ -276,7 +319,9 @@ const VtaTrustedApprovers: React.FC = () => {
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 20, gap: 16 },
-    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 6 },
+    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 10 },
+    header: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+    name: { flexShrink: 1 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     error: { color: ColorPalette.semantic.error },
     muted: { color: ColorPalette.grayscale.mediumGrey },
@@ -285,92 +330,207 @@ const VtaTrustedApprovers: React.FC = () => {
   const view = state?.view
   const actionList = (keys: readonly string[]) => keys.map((key) => t(`Approver.Action.${key}`)).join(', ')
   const nameOf = (did: string) => names[did] ?? t('Approver.Unnamed')
+  /** The standing shown for an approver: none with the state-verified switch off, or for one with no card. */
+  const standingFor = (did: string | undefined) =>
+    did && isStateVerifiedApproversEnabled() ? standings[did] : undefined
+
   /**
-   * The state card line beside an approver: a card from a named state, as the contact showed it (what is checked is
-   * the chain they sent, as of what they sent, and not yet that it is their phone's), or couldn't verify with the
-   * outcome. No card (never asked, or they chose not to send it): no line. A root whose did:webs could not be reached
-   * on this open: "Couldn't reach the state", its own line, never "Couldn't verify" (the card was not checked) and
-   * never verified (nothing falls back to the card's own copy).
+   * The header pill beside an approver's name, in the state card's own words (B3): Checks out, Couldn't reach,
+   * Revoked or Couldn't verify; "No state card" for an approver who sent none (a choice, never a failed check). None
+   * with the state-verified switch off. Never a Demo pill: that belongs to the state's box.
    */
-  const guardianLine = (did: string | undefined, name: string) => {
-    const standing = did && isStateVerifiedApproversEnabled() ? standings[did] : undefined
-    if (!did || !standing) return null
-    if (standing.kind === 'unreachable')
+  const pillFor = (did: string | undefined) => {
+    if (!did || !isStateVerifiedApproversEnabled()) return null
+    const standing = standings[did]
+    const [tone, words] = !standing
+      ? (['quiet', t('Approver.PillNoCard')] as const)
+      : standing.kind === 'verified'
+        ? (['ok', t('Approver.PillChecksOut')] as const)
+        : standing.kind === 'unreachable'
+          ? (['unknown', t('StateCard.PillNotReached')] as const)
+          : isRevoked(standing)
+            ? (['bad', t('StateCard.PillRevoked')] as const)
+            : (['bad', t('StateCard.PillCouldNotVerify')] as const)
+    return <StatusPill tone={tone} words={words} testID={TrustedApproversIds.pill(did)} />
+  }
+
+  /** Where a verified card was checked from: fetched live (and when, for a reused result), or the demo copy. */
+  const sourceLine = (did: string, standing: Extract<GuardianStanding, { kind: 'verified' }>) =>
+    standing.fetchedFrom ? (
+      <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianFetchedLive(did))}>
+        {/* Which line: guardianSourceKey decides (root and issuers live, or the root only), with the "at <time>"
+            variant for our own earlier live result reused because the host just failed, never "just now". */}
+        {t(guardianSourceKey(standing) ?? 'Approver.GuardianFetchedLive', {
+          host: standing.fetchedFrom,
+          ...(standing.fetchedAt ? { time: localClock(standing.fetchedAt) } : {}),
+          interpolation: { escapeValue: false },
+        })}
+      </ThemedText>
+    ) : standing.demo ? (
+      <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianDemoCopy(did))}>
+        {t('Approver.GuardianDemoCopy')}
+      </ThemedText>
+    ) : null
+
+  /**
+   * Box 1, "What Keyring checked", for an approver with a card (none with the state-verified switch off; an approver
+   * with no card gets one plain line instead). Each line keeps the testID it always had:
+   * - verified: a tick for the card, and an open ring for what isn't checked yet (that it is their phone's);
+   * - a root whose did:webs could not be reached on this open: "Couldn't reach the state", never "Couldn't verify"
+   *   (the card was not checked) and never verified (nothing falls back to the card's own copy), with "Check again";
+   * - revoked, in its own words (the card's own revocation, or the issuer's or state's published record);
+   * - otherwise "Couldn't verify", with the outcome.
+   * For a demo root, where it was checked from goes in the state's box (box 2); otherwise here.
+   */
+  const checkedBox = (did: string | undefined, name: string) => {
+    if (!did || !isStateVerifiedApproversEnabled()) return null
+    const standing = standings[did]
+    const named = { name, interpolation: { escapeValue: false } }
+    if (!standing)
       return (
-        <View>
-          <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianUnreachable(did))}>
-            {t('Approver.GuardianStateUnreachable')}
-          </ThemedText>
-          <ThemedText style={styles.muted}>
-            {t('Approver.GuardianStateUnreachableHint', {
-              state: standing.state,
-              interpolation: { escapeValue: false },
-            })}
-          </ThemedText>
-        </View>
-      )
-    // A card that carries its own revocation: its own words, never the generic "Couldn't verify" (it was checked, and
-    // the check found the card revoked).
-    if (standing.kind === 'unverified' && standing.outcome === 'revoked')
-      return (
-        <View>
-          <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianRevoked(did))}>
-            {t('Approver.GuardianRevoked')}
-          </ThemedText>
-        </View>
-      )
-    return standing.kind === 'verified' ? (
-      <View>
-        <View style={styles.row}>
-          <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianVerified(did))}>
-            {t('Approver.GuardianHas', { state: standing.state, interpolation: { escapeValue: false } })}
-          </ThemedText>
-          {standing.demo ? <DemoPill testID={TrustedApproversIds.guardianDemo(did)} /> : null}
-        </View>
-        <ThemedText style={styles.muted}>
-          {t('Approver.GuardianAsShown', { name, interpolation: { escapeValue: false } })}
+        <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.noCard(did))}>
+          {t('Approver.NoCardNote', named)}
         </ThemedText>
-        {standing.fetchedFrom ? (
-          <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianFetchedLive(did))}>
-            {/* Which line: guardianSourceKey decides (root and issuers live, or the root only), with the "at <time>"
-                variant for our own earlier live result reused because the host just failed, never "just now". */}
-            {t(guardianSourceKey(standing) ?? 'Approver.GuardianFetchedLive', {
-              host: standing.fetchedFrom,
-              ...(standing.fetchedAt ? { time: localClock(standing.fetchedAt) } : {}),
-              interpolation: { escapeValue: false },
-            })}
-          </ThemedText>
-        ) : standing.demo ? (
-          <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianDemoCopy(did))}>
-            {t('Approver.GuardianDemoCopy')}
-          </ThemedText>
-        ) : null}
-      </View>
-    ) : standing.outcome === 'revokedInIssuerRecord' || standing.outcome === 'revokedInStateRecord' ? (
-      // A revocation the card itself left out, found in a published record (a live fetch): its own line, never the
-      // generic "couldn't verify", and naming whose record carried it, the issuer's or the state's own.
-      <View>
-        {standing.outcome === 'revokedInStateRecord' ? (
-          <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianRevokedState(did))}>
-            {t('Approver.GuardianRevokedState')}
-          </ThemedText>
+      )
+    const mark = TrustedApproversIds.mark(did)
+    return (
+      <Zone kind="checked" title={t('Approver.CheckedTitle')} testID={TrustedApproversIds.checkedBox(did)}>
+        {standing.kind === 'verified' ? (
+          <>
+            <Mark kind="pass" testID={mark}>
+              <View style={styles.row}>
+                <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianVerified(did))}>
+                  {t('Approver.GuardianHas', { state: standing.state, interpolation: { escapeValue: false } })}
+                </ThemedText>
+              </View>
+              {standing.demo ? null : sourceLine(did, standing)}
+            </Mark>
+            <Mark kind="gap">
+              <ThemedText style={styles.muted}>{t('Approver.GuardianAsShown', named)}</ThemedText>
+            </Mark>
+          </>
+        ) : standing.kind === 'unreachable' ? (
+          <Mark kind="warn" testID={mark}>
+            <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianUnreachable(did))}>
+              {t('Approver.GuardianStateUnreachable')}
+            </ThemedText>
+            <ThemedText style={styles.muted}>
+              {t('Approver.GuardianStateUnreachableHint', {
+                state: standing.state,
+                interpolation: { escapeValue: false },
+              })}
+            </ThemedText>
+            {triedAgainAt ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.triedAgain(did))}>
+                {t('Approver.TriedAgainAt', { time: localClock(triedAgainAt) })}
+              </ThemedText>
+            ) : null}
+            <Button
+              title={t('Approver.CheckAgain')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => void onCheckAgain()}
+              disabled={busy !== undefined}
+              testID={testIdWithKey(TrustedApproversIds.checkAgain(did))}
+            >
+              {busy === 'checkAgain' ? <ActivityIndicator color={ColorPalette.brand.primary} /> : undefined}
+            </Button>
+          </Mark>
+        ) : isRevoked(standing) ? (
+          <Mark kind="fail" testID={mark}>
+            {standing.outcome === 'revokedInStateRecord' ? (
+              <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianRevokedState(did))}>
+                {t('Approver.GuardianRevokedState')}
+              </ThemedText>
+            ) : standing.outcome === 'revokedInIssuerRecord' ? (
+              <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianRevokedIssuer(did))}>
+                {t('Approver.GuardianRevokedIssuer')}
+              </ThemedText>
+            ) : (
+              <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianRevoked(did))}>
+                {t('Approver.GuardianRevoked')}
+              </ThemedText>
+            )}
+            <ThemedText style={styles.muted}>{t('Approver.RevokedMeans')}</ThemedText>
+          </Mark>
         ) : (
-          <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianRevokedIssuer(did))}>
-            {t('Approver.GuardianRevokedIssuer')}
-          </ThemedText>
+          <Mark kind="fail" testID={mark}>
+            <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianUnverified(did))}>
+              {t('Approver.GuardianCouldNotVerify')}
+            </ThemedText>
+            <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianOutcome(did))}>
+              {t('Approver.GuardianOutcome', { outcome: standing.outcome, interpolation: { escapeValue: false } })}
+            </ThemedText>
+          </Mark>
         )}
-      </View>
-    ) : (
-      <View>
-        <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianUnverified(did))}>
-          {t('Approver.GuardianCouldNotVerify')}
-        </ThemedText>
-        <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianOutcome(did))}>
-          {t('Approver.GuardianOutcome', { outcome: standing.outcome, interpolation: { escapeValue: false } })}
-        </ThemedText>
-      </View>
+      </Zone>
     )
   }
+
+  /**
+   * Box 2, the demo state's own box: only for a root this phone's list marks demo (stateRoots.ts `demo`: on a
+   * verified standing, or for any other standing from guardianDemoStates; never read from the card or the name). Titled with the state's name and the Demo pill (its testID
+   * as before), saying it is a test state and, for a verified card, where it was checked from (the tunnel's host when
+   * fetched live, or the copy on this phone). Unreachable: names the Demo state host this phone fetches from.
+   */
+  const stateBox = (did: string | undefined) => {
+    const standing = standingFor(did)
+    if (!did || !standing) return null
+    // Verified: the check's own `demo` (from the root list). Unreachable (the card is ours, only the live fetch failed)
+    // or revoked (it checked up to the revocation): the root list's entry the card names. Any other refusal (a bad
+    // signature, the wrong ward, an untrusted root): no box, since the root it names is only the card's own unchecked
+    // claim, and a state's name must never sit beside a forged card as if it vouched for it (SEDI lane, 11-12).
+    const state =
+      standing.kind === 'verified'
+        ? standing.demo
+          ? standing.state
+          : undefined
+        : standing.kind === 'unreachable' || isRevoked(standing)
+          ? demoStates[did]
+          : undefined
+    if (!state) return null
+    const host = demoStateHost()
+    return (
+      <Zone
+        kind="state"
+        title={state}
+        beside={<DemoPill testID={TrustedApproversIds.guardianDemo(did)} />}
+        testID={TrustedApproversIds.stateBox(did)}
+      >
+        <ThemedText style={styles.muted}>
+          {standing.kind === 'unreachable'
+            ? host
+              ? t('Approver.DemoStateUnreachableHost', { state, host, interpolation: { escapeValue: false } })
+              : t('Approver.DemoStateIs', { state, interpolation: { escapeValue: false } })
+            : standing.kind === 'unverified' && isRevoked(standing)
+              ? t('Approver.DemoStateRevoked', { state, interpolation: { escapeValue: false } })
+              : t('Approver.DemoStateIs', { state, interpolation: { escapeValue: false } })}
+        </ThemedText>
+        {standing.kind === 'verified' ? sourceLine(did, standing) : null}
+      </Zone>
+    )
+  }
+
+  /** Box 3: what the agent won't do without this person's yes (or would not, once they are added). */
+  const needsBox = (did: string, name: string, keys: readonly string[], opts: { added: boolean }) => (
+    <Zone
+      kind="needs"
+      title={t(opts.added ? 'Approver.NeedsTitle' : 'Approver.NeedsTitleOnceAdded', {
+        name,
+        interpolation: { escapeValue: false },
+      })}
+      testID={TrustedApproversIds.needsBox(did)}
+    >
+      {opts.added && isRevoked(standingFor(did)) ? (
+        <ThemedText style={styles.muted}>
+          {t('Approver.RevokedStillWaits', { name, interpolation: { escapeValue: false } })}
+        </ThemedText>
+      ) : null}
+      {keys.map((key) => (
+        <ThemedText key={key}>{`\u00B7 ${t(`Approver.Action.${key}`)}`}</ThemedText>
+      ))}
+    </Zone>
+  )
+
   /**
    * On an approver's phone, for one person: whether this phone's Guardian card goes to them, and the button to change
    * it. Only with a card held and both switches on (read again at render). Never answered reads as not sent.
@@ -427,10 +587,16 @@ const VtaTrustedApprovers: React.FC = () => {
               style={styles.card}
               testID={testIdWithKey(TrustedApproversIds.accepted(ask.connectionId))}
             >
-              <ThemedText variant="bold">{name}</ThemedText>
+              <View style={styles.header}>
+                <ThemedText variant="bold" style={styles.name}>
+                  {name}
+                </ThemedText>
+                {pillFor(ask.acceptedAs)}
+              </View>
               <ThemedText style={styles.muted}>{t('Approver.Accepted')}</ThemedText>
-              {guardianLine(ask.acceptedAs, name)}
-              <ThemedText>{actionList(ask.actions)}</ThemedText>
+              {checkedBox(ask.acceptedAs, name)}
+              {stateBox(ask.acceptedAs)}
+              {needsBox(ask.acceptedAs ?? ask.connectionId, name, ask.actions, { added: false })}
               <Button
                 title={t('Approver.Add', { name, interpolation: { escapeValue: false } })}
                 buttonType={ButtonType.Primary}
@@ -465,20 +631,24 @@ const VtaTrustedApprovers: React.FC = () => {
         ) : null}
         {view?.approvers.map((did) => (
           <View key={did} style={styles.card} testID={testIdWithKey(TrustedApproversIds.approver(did))}>
-            <ThemedText variant="bold">{nameOf(did)}</ThemedText>
-            {guardianLine(did, nameOf(did))}
+            <View style={styles.header}>
+              <ThemedText variant="bold" style={styles.name}>
+                {nameOf(did)}
+              </ThemedText>
+              {pillFor(did)}
+            </View>
+            {checkedBox(did, nameOf(did))}
+            {stateBox(did)}
             {steppedDown.includes(did) ? (
               <ThemedText testID={testIdWithKey(TrustedApproversIds.steppedDown(did))}>
                 {t('Approver.SteppedDownRemove', { name: nameOf(did), interpolation: { escapeValue: false } })}
               </ThemedText>
             ) : null}
-            <ThemedText style={styles.muted}>
-              {t('Approver.Covers', { name: nameOf(did), interpolation: { escapeValue: false } })}
-            </ThemedText>
-            <ThemedText>{actionList(view.keys)}</ThemedText>
+            {needsBox(did, nameOf(did), view.keys, { added: true })}
             <Button
               title={t('Approver.Remove', { name: nameOf(did), interpolation: { escapeValue: false } })}
-              buttonType={ButtonType.Secondary}
+              // A revoked card leaves the agent waiting for them until removed (B6): Remove turns solid red.
+              buttonType={isRevoked(standingFor(did)) ? ButtonType.Critical : ButtonType.Secondary}
               onPress={() => void onRemove(did)}
               disabled={busy !== undefined}
               testID={testIdWithKey(TrustedApproversIds.remove(did))}
