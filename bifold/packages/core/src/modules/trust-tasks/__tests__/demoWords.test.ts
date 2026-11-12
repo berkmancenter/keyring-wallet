@@ -1,5 +1,5 @@
 /**
- * What a demo audience reads on Ask me and Who approves says "practice" or names a made-up state, never "test"
+ * What a demo audience reads on Ask me and Who approves says "practice" or names the demo state, never "test"
  * (Alberto, 2026-11-11: "remove the word test and just make sure it looks good"). The one exception is the name of
  * the context the practice request makes on the agent, "Keyring test request": it is the agent's own label, quoted so
  * a person can find it there, and VtaClient sends it as is.
@@ -43,9 +43,16 @@ describe('demo words: no "test" in what a demo audience reads', () => {
     expect(TEST_WORD['en/en'].test(quoting[0][1])).toBe(true)
   })
 
-  test('the button reads "Try it: send yourself a request", and the K0 state is named as a made-up state', () => {
+  test('the button reads "Try it: send yourself a request", and the K0 state is named "State of Utah"', () => {
     expect(strings('en/en')['AskMe.Test']).toBe('Try it: send yourself a request')
-    expect(K0_TEST_ROOT.name).toBe('State of Example')
+    expect(K0_TEST_ROOT.name).toBe('State of Utah')
     expect(/test/i.test(K0_TEST_ROOT.name)).toBe(false)
+  })
+
+  test('the K0 state keeps its Demo mark, and the holder card says the state it names did not issue it', () => {
+    // A real state's name is shown only with the Demo pill and this line (Alberto, 2026-11-12).
+    expect(K0_TEST_ROOT.demo).toBe(true)
+    const all = JSON.parse(readFileSync(join(__dirname, '..', '..', '..', 'localization', 'en/en.json'), 'utf8'))
+    expect(all.StateCard.DemoNote).toBe(`Demo card, loaded on this phone; not issued by the ${K0_TEST_ROOT.name}`)
   })
 })

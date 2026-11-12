@@ -111,7 +111,7 @@ export async function checkHeldCard(
 /**
  * What a check depends on besides the card: when this changes, the card is checked again. Each root by its AID, its
  * name, and the did:webs it would be fetched from now. The name, since the title the card shows is the name on the
- * kept verdict: a root renamed on this list (as K0 was, "Test state (K0)" to "State of Example") must not leave the
+ * kept verdict: a root renamed on this list (as K0 was, "Test state (K0)" to "State of Example", then to "State of Utah") must not leave the
  * old name on a card already checked. The did:webs, since it decides whether the check reads the state live or the
  * copy here: a Developer "Demo state host" set or cleared must not leave a copy's verdict saying it was fetched live,
  * or the reverse.
@@ -145,7 +145,7 @@ export interface StateCardView {
    * from the copy here, "Demo: checked against a copy on this phone." Only beside a "Checks out".
    */
   source?: string
-  /** "Demo card, loaded on this phone; not issued by a real state", for a demo card. */
+  /** "Demo card, loaded on this phone; not issued by the State of Utah", for a demo card (the K0 kit's). */
   demoNote?: string
   issued?: { label: string; value: string }
   validUntil?: { label: string; value: string }

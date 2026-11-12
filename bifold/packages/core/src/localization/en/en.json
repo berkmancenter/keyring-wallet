@@ -3833,7 +3833,7 @@
     "AsOfHeldCopy": "as of the copy this phone holds",
     "ChecksOut": "Checks out, {{asOf}}",
     "WhatChecked": "What was checked: the card leads back to a state this phone trusts, and it isn't revoked or expired, {{asOf}}. It doesn't yet link the card to this phone.",
-    "DemoNote": "Demo card, loaded on this phone; not issued by a real state",
+    "DemoNote": "Demo card, loaded on this phone; not issued by the State of Utah",
     "SetupNeeded": "Can't check on this phone yet: turn on State-verified approvers and Trust the test state (K0)",
     "Revoked": "The card shows it was revoked",
     "Expired": "This card has expired.",

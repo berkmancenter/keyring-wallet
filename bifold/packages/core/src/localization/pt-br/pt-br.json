@@ -3707,7 +3707,7 @@
     "AsOfHeldCopy": "segundo a cópia que este telefone guarda",
     "ChecksOut": "Confere, {{asOf}}",
     "WhatChecked": "O que foi verificado: o cartão remonta a um estado em que este telefone confia, e não está revogado nem vencido, {{asOf}}. Ainda não liga o cartão a este telefone.",
-    "DemoNote": "Cartão de demonstração, carregado neste telefone; não emitido por um estado real",
+    "DemoNote": "Cartão de demonstração, carregado neste telefone; não emitido pelo Estado de Utah",
     "SetupNeeded": "Ainda não dá para verificar neste telefone: ative State-verified approvers e Trust the test state (K0)",
     "Revoked": "O cartão mostra que foi revogado",
     "Expired": "Este cartão venceu.",

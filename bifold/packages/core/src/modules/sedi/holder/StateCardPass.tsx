@@ -28,7 +28,7 @@ const STATE_COLOUR = '#34496A'
 const monogramOf = (name: string): string =>
   name
     .split(/\s+/)
-    // Words that start with a capital letter (one that has a lower case): "State of Example" is SE.
+    // Words that start with a capital letter (one that has a lower case): "State of Utah" is SU.
     .filter((word) => word && word[0] !== word[0].toLowerCase())
     .map((word) => word[0])
     .join('')

@@ -5,8 +5,8 @@
  *
  * It holds only while trusted approvers and state-verified approvers are both on, so either switch, its remote off,
  * or SEDI_KERI_REMOTE_OFF turns it off too; none of them turns it on. It adds the K0 test root and nothing else
- * (sedi/guardian/stateRoots.ts), and a card checked against that root is always shown as the made-up "State of
- * Example" with a "Demo" pill, never as a real state.
+ * (sedi/guardian/stateRoots.ts), and a card checked against that root is always shown as "State of Utah" with a
+ * "Demo" pill, and the holder card says it was not issued by the State of Utah.
  *
  * @module trust-tasks/module/trustTestStateFlag
  */

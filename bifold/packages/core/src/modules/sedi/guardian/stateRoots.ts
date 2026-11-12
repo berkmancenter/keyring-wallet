@@ -7,9 +7,10 @@
  * Developer setting "Trust the test state (K0)" is on (trustTestStateFlag.ts, which holds only while trusted approvers
  * and state-verified approvers are both on). A Developer build (`__DEV__`) trusts the K0 test root without it. Either
  * way it is the K0 test root only, the keripy kit the tests check against (sedi/__tests__/fixtures/k0-utah-v2). It is
- * named "State of Example", a made-up state, and marked `demo`, so Who approves shows a "Demo" pill beside the name:
- * never a real state's name, and never a pill inferred from the name. Real State roots come from did:webs (IN-619),
- * not from this list, and are never marked demo.
+ * named "State of Utah" and marked `demo`, so Who approves shows a "Demo" pill beside the name, never a pill inferred
+ * from the name. The kit is SEDI's Utah test material (k0-utah-v2), not anything Utah issued: the Demo pill and the
+ * holder card's "not issued by the State of Utah" say so. Real State roots come from did:webs (IN-619), not from this
+ * list, and are never marked demo.
  *
  * @module sedi/guardian/stateRoots
  */
@@ -28,20 +29,22 @@ export interface StateRoot {
    */
   webs?: string
   /**
-   * A made-up state for demos and testing: Who approves shows a "Demo" pill beside the name. Set on the entry here,
-   * never read from the card or inferred from the name.
+   * A test root for demos and testing, not a state's own root (even when named after one): Who approves shows a
+   * "Demo" pill beside the name. Set on the entry here, never read from the card or inferred from the name.
    */
   demo?: true
 }
 
 /**
  * The K0 kit's State root ("roy"): a test root, trusted in Developer builds or with "Trust the test state (K0)" on.
- * Named as a made-up state, never a real one's, and marked demo: Who approves reads "Has a Guardian card from State of
- * Example" with a "Demo" pill beside the name (Alberto, 2026-11-11).
+ * Marked demo: Who approves reads "Has a Guardian card from State of Utah" with a "Demo" pill beside the name. It was
+ * the made-up "State of Example" (Alberto, 2026-11-11); Alberto chose "State of Utah" on 2026-11-12, after his hand
+ * run of 278.16, since the kit is SEDI's Utah test material. The Demo pill stays, and the holder card says it was not
+ * issued by the State of Utah.
  */
 export const K0_TEST_ROOT: StateRoot = {
   aid: 'IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6',
-  name: 'State of Example',
+  name: 'State of Utah',
   demo: true,
   // Where the demo state is fetched from: the host is a placeholder, replaced by the Developer "Demo state host"
   // (sedi/webs/demoStateHost); with none set, the card's own copy is checked instead.

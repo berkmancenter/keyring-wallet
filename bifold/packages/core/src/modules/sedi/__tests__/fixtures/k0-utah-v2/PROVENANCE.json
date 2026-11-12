@@ -699,5 +699,5 @@
     "tel-unit-issued.json": "e6e0aaf85b5df77d8f3756c756326568704a33e3e652f152f296f18275ea1bd1",
     "tel-unit-rip.json": "b75c37cdbd562bfdcce0e52e56c28f9e8c9663d7c5e61561f4419833b09e1952"
   },
-  "note": "Test material only. Made-up 'State of Example'; upstream SEDI schemas are evolving test values; no conformance claim."
+  "note": "Test material only. SEDI's Utah test material (k0-utah-v2), shown in-app as 'State of Utah' with a Demo pill; not issued by the State of Utah. Upstream SEDI schemas are evolving test values; no conformance claim."
 }

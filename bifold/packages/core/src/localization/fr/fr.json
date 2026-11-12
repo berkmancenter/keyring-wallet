@@ -3791,7 +3791,7 @@
     "AsOfHeldCopy": "d'après la copie que ce téléphone détient",
     "ChecksOut": "Vérifiée, {{asOf}}",
     "WhatChecked": "Ce qui a été vérifié : la carte remonte à un État auquel ce téléphone fait confiance, et elle n'est ni révoquée ni expirée, {{asOf}}. Elle n'est pas encore liée à ce téléphone.",
-    "DemoNote": "Carte de démonstration, chargée sur ce téléphone ; non délivrée par un véritable État",
+    "DemoNote": "Carte de démonstration, chargée sur ce téléphone ; non délivrée par l’État de l’Utah",
     "SetupNeeded": "Impossible de vérifier sur ce téléphone pour l'instant : activez State-verified approvers et Trust the test state (K0)",
     "Revoked": "La carte indique qu’elle a été révoquée",
     "Expired": "Cette carte a expiré.",
