@@ -115,7 +115,12 @@ jobs:
             fi
             echo "$sum  $out" | shasum -a 256 -c -
             chmod +x "$out"
-            "$out" --help >/dev/null 2>&1 || true
+            # Prove the download executes on this runner: with no arguments each
+            # checker prints its usage line (and exits 2, so the exit code proves nothing).
+            if ! "$out" 2>&1 | grep -q "^usage: $name "; then
+              echo "::error::$name did not print its usage line (\"usage: $name ...\"): it may not run on this runner, or its usage line in main.rs changed"
+              exit 1
+            fi
             echo "$name: $url ($sum)"
           done
 
