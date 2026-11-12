@@ -203,6 +203,8 @@ const translation = {
     "EnableStateVerifiedApprovers": "Approbateurs vérifiés par l'État : vérifier la carte de tuteur d'un approbateur (expérimental)",
     "EnableTrustTestState": "Faire confiance à l'État de test (K0), pour les tests uniquement",
     "HoldK0TestGuardianCard": "Garder la carte de tuteur de test (K0)",
+    "HoldK0RevokedTestCard": "Garder la carte de tuteur révoquée de test (K0)",
+    "HoldK0RevokedOmittedCard": "Garder la carte révoquée sans sa révocation (K0)",
     "BecomeK0TestWard": "Je suis la personne protégée de test (K0)",
     "EnableStateCard": "Carte d’État (démo) : afficher dans Justificatifs la carte de tuteur que ce téléphone détient",
     "EnableConfirmItsYou": "C'est bien vous : demander à un contact de confirmer qu'un appel ou un message vient bien de lui (démo). À activer sur les deux téléphones.",

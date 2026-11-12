@@ -21,6 +21,8 @@ import {
   isStateVerifiedApproversEnabled,
   isTrustTestStateEnabled,
   holdK0TestGuardianCard,
+  holdK0RevokedOmittedCard,
+  holdK0RevokedTestCard,
   becomeK0TestWard,
   setStateCardEnabled,
   STATE_CARD_REMOTE_OFF,
@@ -478,15 +480,27 @@ const Developer: React.FC = () => {
     setEnableStateCard(next)
   }
 
-  /** The two K0 Developer actions: each does nothing (and says so) unless "Trust the test state (K0)" holds. */
-  const runTestStateAction = async (title: string, action: typeof holdK0TestGuardianCard) => {
+  /** The K0 Developer actions: each does nothing (and says so) unless "Trust the test state (K0)" holds. */
+  // bifold's K0 actions answer 'done' or 'off'; the revoked-without-its-revocation card (#1045) can also answer
+  // 'tooLarge' (over the Guardian card's size cap), which is said as itself, never as "turn on the test state".
+  const runTestStateAction = async (
+    title: string,
+    action: (forAgent: NonNullable<typeof agent>) => Promise<'done' | 'off' | 'tooLarge'>
+  ) => {
     if (!agent) {
       Alert.alert('Error', 'Agent not initialized')
       return
     }
     try {
       const result = await action(agent)
-      Alert.alert(title, result === 'done' ? 'Done.' : 'Not done: turn on Trust the test state (K0) first.')
+      Alert.alert(
+        title,
+        result === 'done'
+          ? 'Done.'
+          : result === 'tooLarge'
+          ? 'Not done: the card is too large to keep on this phone.'
+          : 'Not done: turn on Trust the test state (K0) first.'
+      )
     } catch (error) {
       Alert.alert(title, `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
@@ -1165,6 +1179,22 @@ const Developer: React.FC = () => {
               accessibilityLabel={t('Developer.HoldK0TestGuardianCard')}
               testID={testIdWithKey('HoldK0TestGuardianCard')}
               onPress={() => runTestStateAction(t('Developer.HoldK0TestGuardianCard'), holdK0TestGuardianCard)}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+            <SectionRow
+              title={t('Developer.HoldK0RevokedTestCard')}
+              accessibilityLabel={t('Developer.HoldK0RevokedTestCard')}
+              testID={testIdWithKey('HoldK0RevokedTestCard')}
+              onPress={() => runTestStateAction(t('Developer.HoldK0RevokedTestCard'), holdK0RevokedTestCard)}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+            <SectionRow
+              title={t('Developer.HoldK0RevokedOmittedCard')}
+              accessibilityLabel={t('Developer.HoldK0RevokedOmittedCard')}
+              testID={testIdWithKey('HoldK0RevokedOmittedCard')}
+              onPress={() => runTestStateAction(t('Developer.HoldK0RevokedOmittedCard'), holdK0RevokedOmittedCard)}
             >
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
             </SectionRow>
