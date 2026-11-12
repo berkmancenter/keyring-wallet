@@ -13,7 +13,7 @@ import {
   setTrustedApproversEnabled,
   testIdWithKey,
 } from '@bifold/core'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 import { Alert } from 'react-native'
 
@@ -30,11 +30,11 @@ jest.mock('@bifold/react-hooks', () => ({
   ...jest.requireActual('@bifold/react-hooks'),
   useAgent: () => ({ agent: mockAgent }),
 }))
-const mockHold = jest.fn<Promise<string>, [unknown]>(async () => 'done')
-const mockWard = jest.fn<Promise<string>, [unknown]>(async () => 'done')
-const mockRevoked = jest.fn<Promise<string>, [unknown]>(async () => 'done')
-const mockOmitted = jest.fn<Promise<string>, [unknown]>(async () => 'done')
-const mockSetUp = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockHold = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
+const mockWard = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
+const mockRevoked = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
+const mockOmitted = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
+const mockSetUp = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
 const mockTurnOff = jest.fn<void, []>()
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
@@ -42,7 +42,8 @@ jest.mock('@bifold/core', () => ({
   becomeK0TestWard: (agent: unknown) => mockWard(agent),
   holdK0RevokedTestCard: (agent: unknown) => mockRevoked(agent),
   holdK0RevokedOmittedCard: (agent: unknown) => mockOmitted(agent),
-  setUpSediDemo: (agent: unknown) => mockSetUp(agent),
+  setUpSediDemoAsGuardian: (agent: unknown) => mockSetUp(agent, 'guardian'),
+  setUpSediDemoAsPerson: (agent: unknown) => mockSetUp(agent, 'person'),
   turnOffSediDemo: () => mockTurnOff(),
 }))
 
@@ -187,18 +188,30 @@ describe('Developer: the state-verified approvers rows', () => {
 })
 
 describe('Developer: "Set up the SEDI demo" in one tap', () => {
-  const DEMO = { setUp: testIdWithKey('SetUpSediDemo'), turnOff: testIdWithKey('TurnOffSediDemo') }
+  const DEMO = {
+    setUp: testIdWithKey('SetUpSediDemoGuardian'),
+    person: testIdWithKey('SetUpSediDemoPerson'),
+    turnOff: testIdWithKey('TurnOffSediDemo'),
+  }
   const has = (tree: ReturnType<typeof shown>['tree'], id: string) => tree.queryByTestId(id) !== null
+  /** The result kept on the screen, line by line (C1: no alert). */
+  const resultLines = (tree: ReturnType<typeof shown>['tree']) =>
+    within(tree.getByTestId(testIdWithKey('SediDemoResult')))
+      .getAllByText(/./)
+      .map((n) => n.props.children)
+      .join('\n\n')
 
   test('the row shows with everything off, and no undo yet (control: the SEDI/KERI remote off hides both)', () => {
     set(false, false, false)
     const { tree } = shown()
     expect(has(tree, DEMO.setUp)).toBe(true)
+    expect(has(tree, DEMO.person)).toBe(true)
     expect(has(tree, DEMO.turnOff)).toBe(false)
     tree.unmount()
     SEDI_KERI_REMOTE_OFF.off = true
     const off = shown().tree
     expect(has(off, DEMO.setUp)).toBe(false)
+    expect(has(off, DEMO.person)).toBe(false)
     expect(has(off, DEMO.turnOff)).toBe(false)
   })
 
@@ -206,9 +219,10 @@ describe('Developer: "Set up the SEDI demo" in one tap', () => {
     set(false, false, false)
     const { tree } = shown()
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
-    expect(mockSetUp).toHaveBeenCalledWith(mockAgent)
+    expect(mockSetUp).toHaveBeenCalledWith(mockAgent, 'guardian')
     // The done line, then where the state is checked from (no Demo state host here; see DeveloperOneTapMessage).
-    expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe('Developer.SediDemoDone\n\nDeveloper.SediDemoNoHost')
+    expect(resultLines(tree)).toBe('Developer.SediDemoGuardianDone\n\nDeveloper.SediDemoNoHost')
+    expect(Alert.alert).not.toHaveBeenCalled()
     expect(has(tree, DEMO.turnOff)).toBe(true)
   })
 
@@ -217,7 +231,7 @@ describe('Developer: "Set up the SEDI demo" in one tap', () => {
     mockSetUp.mockResolvedValueOnce('remoteOff')
     const { tree } = shown()
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
-    expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe('Developer.SediDemoOff')
+    expect(resultLines(tree)).toBe('Developer.SediDemoOff')
     expect(has(tree, DEMO.turnOff)).toBe(false)
   })
 
@@ -233,7 +247,7 @@ describe('Developer: "Set up the SEDI demo" in one tap', () => {
       mockSetUp.mockResolvedValueOnce(result)
       const { tree } = shown()
       await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
-      expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe(message)
+      expect(resultLines(tree)).toBe(message)
       expect(has(tree, DEMO.turnOff)).toBe(true)
     }
   )
@@ -243,8 +257,11 @@ describe('Developer: "Set up the SEDI demo" in one tap', () => {
     const { tree } = shown()
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
     expect(has(tree, DEMO.turnOff)).toBe(true)
+    expect(has(tree, testIdWithKey('SediDemoResult'))).toBe(true)
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.turnOff)))
     expect(mockTurnOff).toHaveBeenCalledTimes(1)
     expect(has(tree, DEMO.turnOff)).toBe(false)
+    // The kept result goes with it (control: it showed after the set-up).
+    expect(has(tree, testIdWithKey('SediDemoResult'))).toBe(false)
   })
 })
