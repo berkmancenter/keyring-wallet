@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 import { dumpSource, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestIdByCoordinates, waitForTestId } from "./lib/driver.js";
-import { handleBiometricConfirmIfPresent, pasteLinkFromHome } from "./lib/flows.js";
+import { CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, pasteLinkFromHome } from "./lib/flows.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
 
@@ -143,7 +143,7 @@ try {
     await (await waitForTestId(d, askId, 15000)).click();
     await waitForTestId(d, "JoinMakeIdentity", 30000);
     await tapTestIdByCoordinates(d, "JoinAsContinue");
-    await handleBiometricConfirmIfPresent(d);
+    await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
     await waitForTestId(d, "JoinStanding", 240000);
     log(`after the ask: "${await text(d, "JoinStandingText")}"`);
     let request;
@@ -215,7 +215,7 @@ try {
       if (now.includes("JoinAsContinue") && !process.env.NO_CONTINUE) {
         const tapped = await tapTestIdByCoordinates(d, "JoinAsContinue", 3000).then(() => true, () => false);
         if (tapped) {
-          await handleBiometricConfirmIfPresent(d);
+          await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
           log("tapped Continue on the identity step");
         } else log("Continue was gone before the tap (no tap sent)");
       }
@@ -239,7 +239,7 @@ try {
     await (await waitForTestId(d, ask, 30000)).click();
     await waitForTestId(d, "JoinMakeIdentity", 30000);
     await tapTestIdByCoordinates(d, "JoinAsContinue");
-    await handleBiometricConfirmIfPresent(d);
+    await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
     const t1 = Date.now();
     await waitForTestId(d, "JoinStanding", 240000);
     const pending = await text(d, "JoinStandingText");

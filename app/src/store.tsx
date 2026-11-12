@@ -30,6 +30,40 @@ export interface Developer {
   enableDidCommV2: boolean
   /** Mediator pickup over a live WebSocket instead of polling (utils/livePickup.ts). */
   enableLivePickup: boolean
+  /** Connecting from a code someone shared (shared-connect, keyring-wallet #853): bifold's setSharedConnectEnabled. */
+  enableSharedConnect: boolean
+  /**
+   * Showing a shared-connect code for someone else to scan ("Show a code", plan WP9): bifold's
+   * setSharedConnectInviteEnabled. Only takes effect while enableSharedConnect is on too.
+   */
+  enableSharedConnectInvite: boolean
+  /**
+   * Trusted approvers (docs/plans/trusted-approver-plan.md): naming someone to approve sensitive actions on this
+   * person's agent, and approving for someone else's. bifold's setTrustedApproversEnabled.
+   */
+  enableTrustedApprovers: boolean
+  /**
+   * State-verified approvers (trusted-approver plan, stage 2, S1): an approver's state Guardian card, checked on the
+   * phone of the person they approve for. bifold's setStateVerifiedApproversEnabled; holds only with trusted approvers.
+   */
+  enableStateVerifiedApprovers: boolean
+  /**
+   * "Trust the test state (K0)": a tester build trusts the K0 test State root, so a K0 test card can verify. bifold's
+   * setTrustTestStateEnabled; holds only with trusted approvers and state-verified approvers both on.
+   */
+  enableTrustTestState: boolean
+  /**
+   * "State card (demo)": the person holding a state Guardian card sees it in Credentials. bifold's
+   * setStateCardEnabled; needs neither approver switch (the card says when it can't be checked yet).
+   */
+  enableStateCard: boolean
+  /** Developer "Demo state host": where a demo state root's did:webs is fetched while testing; '' for none. */
+  demoStateHost: string
+  /**
+   * "Confirm it's you": ask a contact to confirm, with their phone's lock, that a call or message is really them.
+   * bifold's setConfirmItsYouEnabled; CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+   */
+  enableConfirmItsYou: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -48,6 +82,14 @@ enum DeveloperDispatchAction {
   TOGGLE_TSP_CARRIAGE = 'developer/toggleTspCarriage',
   TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
   TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
+  TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
+  TOGGLE_SHARED_CONNECT_INVITE = 'developer/toggleSharedConnectInvite',
+  TOGGLE_TRUSTED_APPROVERS = 'developer/toggleTrustedApprovers',
+  TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
+  TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
+  TOGGLE_STATE_CARD = 'developer/toggleStateCard',
+  TOGGLE_CONFIRM_ITS_YOU = 'developer/toggleConfirmItsYou',
+  SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -112,6 +154,24 @@ const developerState: Developer = {
   // turns it on for a review build with no code change. A value saved from
   // Developer options wins over this at startup (container-imp.ts).
   enableLivePickup: Config.LIVE_MESSAGE_PICKUP === 'true',
+  // On for everyone. A saved choice, off included, wins on load (container-imp.ts).
+  enableSharedConnect: true,
+  // On for everyone from 278.6 (WP9's live run passed on 2026-11-07). This default is the one place it is turned on.
+  // A saved choice wins on load, so someone who switched it off keeps it off. To turn it off for everyone, use
+  // bifold's SHARED_CONNECT_REMOTE_OFF.invite, which beats a saved "on"; changing this default cannot.
+  enableSharedConnectInvite: true,
+  // Off by default. A saved choice wins on load. To turn it off for everyone, whatever was saved, use bifold's
+  // TRUSTED_APPROVERS_REMOTE_OFF, which beats a saved "on"; changing this default cannot.
+  enableTrustedApprovers: false,
+  // Off by default, as above: STATE_VERIFIED_APPROVERS_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+  enableStateVerifiedApprovers: false,
+  // Off by default; it holds only while the two switches above hold, so their remote offs beat a saved "on" here too.
+  enableTrustTestState: false,
+  // Off by default: STATE_CARD_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on"; changing this default cannot.
+  enableStateCard: false,
+  demoStateHost: '',
+  // Off by default, as above: CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+  enableConfirmItsYou: false,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -128,6 +188,14 @@ export enum BCLocalStorageKeys {
   EnableTspCarriage = 'EnableTspCarriage',
   EnableDidCommV2 = 'EnableDidCommV2',
   EnableLivePickup = 'EnableLivePickup',
+  EnableSharedConnect = 'EnableSharedConnect',
+  EnableSharedConnectInvite = 'EnableSharedConnectInvite',
+  EnableTrustedApprovers = 'EnableTrustedApprovers',
+  EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
+  EnableTrustTestState = 'EnableTrustTestState',
+  EnableStateCard = 'EnableStateCard',
+  EnableConfirmItsYou = 'EnableConfirmItsYou',
+  DemoStateHost = 'DemoStateHost',
 }
 
 export const initialState: BCState = {
@@ -210,6 +278,82 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableLivePickup }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableLivePickup, developer.enableLivePickup)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_SHARED_CONNECT: {
+      const enableSharedConnect: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableSharedConnect }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableSharedConnect, developer.enableSharedConnect)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_SHARED_CONNECT_INVITE: {
+      const enableSharedConnectInvite: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableSharedConnectInvite }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableSharedConnectInvite,
+        developer.enableSharedConnectInvite
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_TRUSTED_APPROVERS: {
+      const enableTrustedApprovers: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableTrustedApprovers }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableTrustedApprovers,
+        developer.enableTrustedApprovers
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS: {
+      const enableStateVerifiedApprovers: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableStateVerifiedApprovers }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableStateVerifiedApprovers,
+        developer.enableStateVerifiedApprovers
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_TRUST_TEST_STATE: {
+      const enableTrustTestState: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableTrustTestState }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableTrustTestState,
+        developer.enableTrustTestState
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_STATE_CARD: {
+      const enableStateCard: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableStateCard }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableStateCard, developer.enableStateCard)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_CONFIRM_ITS_YOU: {
+      const enableConfirmItsYou: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableConfirmItsYou }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableConfirmItsYou, developer.enableConfirmItsYou)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.SET_DEMO_STATE_HOST: {
+      const demoStateHost: string = (action?.payload || []).pop() || ''
+      const developer = { ...state.developer, demoStateHost }
+
+      PersistentStorage.storeValueForKey<string>(BCLocalStorageKeys.DemoStateHost, developer.demoStateHost)
 
       return { ...state, developer }
     }
