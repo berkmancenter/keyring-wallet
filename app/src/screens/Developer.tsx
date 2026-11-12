@@ -519,6 +519,7 @@ const Developer: React.FC = () => {
       if (result !== 'remoteOff') saveSediDemoSwitches(true)
       const message = {
         done: 'Developer.SediDemoDone',
+        doneSomeHidden: 'Developer.SediDemoDone',
         remoteOff: 'Developer.SediDemoOff',
         cardNotHeld: 'Developer.SediDemoCardNotHeld',
         wardNotSet: 'Developer.SediDemoWardNotSet',
