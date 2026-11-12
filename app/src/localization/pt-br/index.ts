@@ -180,6 +180,7 @@ const translation = {
     "EnableTrustTestState": "Confiar no estado de teste (K0), só para testes",
     "HoldK0TestGuardianCard": "Guardar o cartão de guardião de teste (K0)",
     "HoldK0RevokedTestCard": "Guardar o cartão de guardião revogado de teste (K0)",
+    "HoldK0RevokedOmittedCard": "Guardar o cartão revogado sem a sua revogação (K0)",
     "BecomeK0TestWard": "Sou a pessoa tutelada de teste (K0)",
     "EnableStateCard": "Cartão do estado (demo): mostrar em Credenciais o cartão de responsável que este telefone guarda",
     "EnableConfirmItsYou": "É você mesmo: pedir a um contato que confirme que uma ligação ou mensagem é mesmo dele (demo). Ative nos dois telefones.",
