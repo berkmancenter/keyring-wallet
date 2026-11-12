@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.44 — 2026-09-24.** A living document: every finding here was measured
+**Version 1.45 — 2026-10-08.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1873,6 +1873,8 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q23 | Could a client remove its own ACL entry when it stops using an agent, so unlinking leaves nothing behind? | `delete_acl` refuses the caller's own entry (409 *cannot delete your own ACL entry*) whatever its role, and no self-service verb removes one; `swap_acl` only rotates. Keyring's Unlink therefore forgets the key on the phone and says the entry stays until the agent's owner removes it. [Details](#question-details). |
 | VTI-Q24 | Could a vetter that refuses an applicant's Vetting Card tell the applicant, instead of only logging it? | openvtc's vetter logs *vetting card refused* and answers nothing, so the applicant reads "Card sent — the vetter is checking" and the vetter's screen stays on "waiting for their card". Neither side can see why. [Details](#question-details). |
 | VTI-Q25 | Can a community offer admission by invitation OR by vetting? And can an admin admit an applicant who is waiting for vetting? | A community that publishes any vetting criterion requires vetting of everyone. An invitation neither bypasses it nor can be chosen as the criterion, although the manifest lists both as if either would do. `decide` refuses a Deferred request, so an admin cannot admit that applicant either. [Details](#question-details). |
+| VTI-Q26 | Does upstream intend a community to accept KERI or vLEI-style credentials, such as an organization's legal identity or role credential, as vetting evidence or as proof of who operates a community? | Communities are bare DIDs today and the only identity evidence is a person's self-asserted `name.legal`; the vetting methods are a closed set. Keyring would verify such credentials issued by others, and would raise any schema or delegation change here first. [Details](#question-details). |
+
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2176,10 +2178,35 @@ vets. Keyring's harness checks the community's answer. The cause of Keyring
 showing "member" was ours, and it is fixed. This question is only about what a
 community can offer.
 
+**VTI-Q26 — can a community accept KERI or vLEI-style credentials?**
+(a) Communities are identified by bare DIDs, and the only identity evidence a
+vetting card carries is a person's own `name.legal` claim. Nothing lets a
+community show it is operated by a verified legal entity, and nothing lets a
+member present an organization-issued role credential as vetting evidence. We
+would like to know whether either is intended, and in which form: the join
+criterion's accepted methods are a closed list (`inPerson`, `video`,
+`priorAcquaintance`), so a credential-based method would be a schema change that
+only upstream can make. We are not asking for one yet; we want to know whether
+it is wanted before we design anything against it.
+Two layers, in increasing cost to upstream:
+- display and trust only: a community's did:webvh linked to an organization's
+  identifier (an alias, or a credential the controller signs), verified by the
+  client before a person submits anything. No upstream change;
+- a vetting method or a delegation kind that names such a credential.
+(b) Not a measured behaviour; there is nothing to reproduce.
+(c) At `openvtc` `ed13d29`, `docs/design/vetting-process.md` (`acceptedMethods`
+and its table); at `dtgwg-cred-spec` `94af2d8`, `spec/intro.md` ("Future
+versions may generalize to other VID types (such as X.509 certificates or KERI
+AIDs)") and `design-notes/delegation-design-time-window.md`, which prefers
+short-lived delegation where KERI-style chains rely on registries and status.
+(d) Keyring builds nothing against it. If a client verifies such credentials
+later, it will only verify ones issued by others and will not issue its own.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.45 | 2026-10-08 | **VTI-Q26** (new): whether upstream intends communities to accept KERI or vLEI-style credentials as vetting evidence or as proof of who operates a community. A question, not a defect; read from source at openvtc `ed13d29` and dtgwg-cred-spec `94af2d8`. |
 | 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
 | 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
 | 1.42 | 2026-09-24 | **VTI-25 resolved as ours.** Traced from source at `460e0ebb` and `a96fe02f`: the `allow` reply carries the card inline on every transport, and the two `credential-exchange/issue` pushes are awaited inside the submit, so they arrive *before* the reply. Keyring took the first message after a send as the reply until keyring-bifold `4eddfbd2` (09-17). No upstream change asked; not re-measured live. |
