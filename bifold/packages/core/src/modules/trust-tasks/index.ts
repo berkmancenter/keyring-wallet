@@ -63,6 +63,7 @@ export {
 export { setTrustTestStateEnabled, isTrustTestStateEnabled } from './module/trustTestStateFlag'
 export {
   holdK0TestGuardianCard,
+  holdK0RevokedOmittedCard,
   holdK0RevokedTestCard,
   becomeK0TestWard,
   setUpSediDemo,

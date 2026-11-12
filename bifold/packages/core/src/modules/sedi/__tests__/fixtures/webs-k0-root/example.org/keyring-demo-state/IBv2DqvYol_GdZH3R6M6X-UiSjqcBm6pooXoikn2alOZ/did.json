@@ -1,0 +1,22 @@
+{
+  "id": "did:web:example.org:keyring-demo-state:IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ",
+  "verificationMethod": [
+    {
+      "id": "#1AAJAzHRG5Mje-pEqMcF2TQWIl417xlSAG38EQar6E_ljH7X",
+      "type": "JsonWebKey",
+      "controller": "did:web:example.org:keyring-demo-state:IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ",
+      "publicKeyJwk": {
+        "kid": "1AAJAzHRG5Mje-pEqMcF2TQWIl417xlSAG38EQar6E_ljH7X",
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "MdEbkyN76kSoxwXZNBYiXjXvGVIAbfwRBqvoT-WMftc",
+        "y": "rsN-MzdBY-HomSLN_u4d9zXEzS060XJNIHHUmGaBvY0"
+      }
+    }
+  ],
+  "service": [],
+  "alsoKnownAs": [
+    "did:webs:example.org:keyring-demo-state:IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ",
+    "did:keri:IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ"
+  ]
+}

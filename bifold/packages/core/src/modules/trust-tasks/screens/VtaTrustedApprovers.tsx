@@ -43,6 +43,7 @@ import {
   cardConsents,
   cardToShare,
   guardianCardEvents,
+  guardianSourceKey,
   guardianStandings,
   shareGuardianCard,
   type CardConsent,
@@ -81,6 +82,8 @@ export const TrustedApproversIds = {
   guardianVerified: (did: string) => `TrustedApproverGuardianVerified_${did}`,
   guardianDemo: (did: string) => `TrustedApproverGuardianDemo_${did}`,
   guardianUnverified: (did: string) => `TrustedApproverGuardianUnverified_${did}`,
+  guardianRevokedIssuer: (did: string) => `TrustedApproverGuardianRevokedIssuer_${did}`,
+  guardianRevokedState: (did: string) => `TrustedApproverGuardianRevokedState_${did}`,
   guardianRevoked: (did: string) => `TrustedApproverGuardianRevoked_${did}`,
   guardianOutcome: (did: string) => `TrustedApproverGuardianOutcome_${did}`,
   guardianUnreachable: (did: string) => `TrustedApproverGuardianUnreachable_${did}`,
@@ -329,23 +332,33 @@ const VtaTrustedApprovers: React.FC = () => {
         </ThemedText>
         {standing.fetchedFrom ? (
           <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianFetchedLive(did))}>
-            {standing.fetchedAt
-              ? // Our own earlier live result, reused because the host just failed: it says when, never "just now".
-                t('Approver.GuardianFetchedLiveAt', {
-                  host: standing.fetchedFrom,
-                  time: localClock(standing.fetchedAt),
-                  interpolation: { escapeValue: false },
-                })
-              : t('Approver.GuardianFetchedLive', {
-                  host: standing.fetchedFrom,
-                  interpolation: { escapeValue: false },
-                })}
+            {/* Which line: guardianSourceKey decides (root and issuers live, or the root only), with the "at <time>"
+                variant for our own earlier live result reused because the host just failed, never "just now". */}
+            {t(guardianSourceKey(standing) ?? 'Approver.GuardianFetchedLive', {
+              host: standing.fetchedFrom,
+              ...(standing.fetchedAt ? { time: localClock(standing.fetchedAt) } : {}),
+              interpolation: { escapeValue: false },
+            })}
           </ThemedText>
         ) : standing.demo ? (
           <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianDemoCopy(did))}>
             {t('Approver.GuardianDemoCopy')}
           </ThemedText>
         ) : null}
+      </View>
+    ) : standing.outcome === 'revokedInIssuerRecord' || standing.outcome === 'revokedInStateRecord' ? (
+      // A revocation the card itself left out, found in a published record (a live fetch): its own line, never the
+      // generic "couldn't verify", and naming whose record carried it, the issuer's or the state's own.
+      <View>
+        {standing.outcome === 'revokedInStateRecord' ? (
+          <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianRevokedState(did))}>
+            {t('Approver.GuardianRevokedState')}
+          </ThemedText>
+        ) : (
+          <ThemedText testID={testIdWithKey(TrustedApproversIds.guardianRevokedIssuer(did))}>
+            {t('Approver.GuardianRevokedIssuer')}
+          </ThemedText>
+        )}
       </View>
     ) : (
       <View>

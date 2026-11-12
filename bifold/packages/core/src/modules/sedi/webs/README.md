@@ -66,6 +66,35 @@ Every refusal has its own reason:
 
 `verifyGuardianWithWebs` turns any of them into `stateNotResolved` and never falls back to a presented or stored copy.
 
+## A demo root's chain issuers are fetched too (guardianEvidence `checkGuardianEvidenceResolving`)
+
+A credential's revocation is anchored in its ISSUER's key history: the K0 org unit's in the root's (Roy), the issuing
+agent's in the org unit's (Deb), and the Guardian card's in the issuing agent's (Sue). Fetching only the root would
+leave the card's own copy of Deb's and Sue's histories as the only word on whether the agent or the card was revoked,
+and a copy can stop before the revocation (the "as shown by the holder" bound). So for a DEMO root (isDemoStateRoot,
+read live) with a Demo state host in effect, the check also resolves every issuer the card's credentials name,
+through the same seam (`resolveRootKel`) and the same five-minute reuse (`lastLive`, keyed by each fetched did:webs),
+from `did:webs:<host>:keyring-demo-state:<AID>`: the demo publishes the whole chain under one path on one host.
+
+- All of them go to the check as `resolvedKels`, so the completeness check (F1) reads the PUBLISHED issuer histories.
+  A presented copy that is an earlier part of one is fine (the completeness check then decides); one that disagrees,
+  or is longer, refuses the check (`kelNotReplaying`).
+- An issuer whose history cannot be fetched refuses the check as `stateNotResolved` ("Couldn't reach the state"),
+  never the card's copy instead.
+- A revocation the card's own copy does not show but a published history does is named by the history that carried
+  it: `revokedInIssuerRecord` ("The issuer's published record shows it was revoked") or `revokedInStateRecord`
+  ("The state's published record shows it was revoked"). A card carrying its own revocation stays `revoked`.
+- A REAL root's issuers are NOT fetched: only the root is on our list with a did:webs, and a real state's units and
+  agents would need their own did:webs for this. For a real state the issuers' histories still come from the card.
+
+What is proven, by what the card does:
+
+| the card does                                     | result                                                                                                                                                          |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| carries its revocation                            | `revoked` ("The card shows it was revoked")                                                                                                                     |
+| omits the revocation, keeps the issuer KEL's seal | `statusNotCurrent` (bifold #1047 proves it end to end)                                                                                                          |
+| omits both, consistently                          | passes offline; caught only by a LIVE fetch of the issuer's published KEL: done here for demo roots, NOT for real roots, whose issuers still come from the card |
+
 ## What it does not check (not a full did:webs resolver)
 
 - **Designated-alias attestations.** The did:webs specification's resolver requires a valid, unrevoked

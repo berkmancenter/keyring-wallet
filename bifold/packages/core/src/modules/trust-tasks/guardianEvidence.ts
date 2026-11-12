@@ -32,7 +32,8 @@ import { EventEmitter } from 'events'
 import { verifyGuardian, type ChainMaterial } from '../sedi/guardian'
 import { K0_REVOKED_TEST_GUARDIAN_CARD } from '../sedi/guardian/k0RevokedTestCard'
 import { K0_TEST_GUARDIAN_CARD } from '../sedi/guardian/k0TestCard'
-import { K0_TEST_WARD, trustedStateRoots, type StateRoot } from '../sedi/guardian/stateRoots'
+import { K0_REVOKED_OMITTED_CARD } from '../sedi/guardian/k0RevokedOmittedCard'
+import { K0_TEST_WARD, isDemoStateRoot, trustedStateRoots, type StateRoot } from '../sedi/guardian/stateRoots'
 import {
   ourRootKelResolver,
   parseWebsDid,
@@ -103,6 +104,12 @@ export type GuardianVerdict =
        */
       fetchedAt?: string
       reused?: true
+      /**
+       * Set only when, besides the root, every issuer in the card's chain was fetched live too (a demo root; the org
+       * unit's and issuing agent's histories, where the agent's credential and the card itself are anchored). Absent
+       * when only the root's history was fetched and the issuers' came from the card: the screen then says so.
+       */
+      fetchedIssuers?: true
     }
   | { ok: false; reason: string; detail: string; checkedAt: string }
 
@@ -125,7 +132,7 @@ export interface GuardianOnAsk {
  * Kept apart from `unverified` so the screen says "Couldn't reach the state", not that the card failed a check.
  */
 export type GuardianStanding =
-  | { kind: 'verified'; state: string; demo?: true; fetchedFrom?: string; fetchedAt?: string }
+  | { kind: 'verified'; state: string; demo?: true; fetchedFrom?: string; fetchedAt?: string; fetchedIssuers?: true }
   | { kind: 'unverified'; outcome: string }
   | { kind: 'unreachable'; state: string }
 
@@ -238,9 +245,43 @@ function websRootsFor(evidence: GuardianEvidence, roots: StateRoot[]): (StateRoo
 }
 
 /**
+ * The issuers of the credentials a card presents, other than `root`: for the K0 chain the org unit (who issued the
+ * agent credential) and the issuing agent (who issued the Guardian card). A credential's revocation is anchored in its
+ * issuer's key history, so these are the histories that say whether the card or its agent was revoked. A credential
+ * whose text cannot be read is skipped here; the check itself refuses it.
+ */
+function chainIssuersOf(evidence: GuardianEvidence, root: string): string[] {
+  const issuers = new Set<string>()
+  for (const text of evidence.creds) {
+    try {
+      const i = (JSON.parse(text.slice(0, text.lastIndexOf('}') + 1)) as { i?: unknown }).i
+      if (typeof i === 'string' && i !== root) issuers.add(i)
+    } catch {
+      // unreadable: the chain check refuses it
+    }
+  }
+  return [...issuers]
+}
+
+/**
+ * The did:webs of an intermediate in a DEMO root's chain: the root's fetched did:webs (host and path as fetched) with
+ * the intermediate's AID in place of the root's. The demo publishes the whole K0 chain under one path on one host.
+ */
+const intermediateDid = (rootDid: string, aid: string) => rootDid.slice(0, rootDid.lastIndexOf(':') + 1) + aid
+
+/**
  * The check, with every listed root the card names that publishes at a did:webs read from there first. If one does
  * not resolve, the verdict is `stateNotResolved` (its own reason; never the card's own copy instead). With no such
  * root it is exactly {@link checkGuardianEvidence}. Never throws, and never returns `ok: true` from a catch.
+ *
+ * For a DEMO root (isDemoStateRoot, read live) the chain's INTERMEDIATES are fetched too, from the same host and path:
+ * the org unit's and the issuing agent's key histories, where the agent's credential and the Guardian card itself are
+ * anchored, issued and revoked. So a card whose own copy leaves out its revocation is refused when the published
+ * history anchors it: `revokedInIssuerRecord` ("The issuer's published record shows it was revoked") when an issuer's
+ * history carried the seal, `revokedInStateRecord` ("The state's published record…") when the root's own did. An
+ * intermediate that cannot be fetched refuses as `stateNotResolved`, never the card's copy instead. A REAL root's
+ * intermediates are not fetched: only the root publishes at a did:webs on our list, so for a real state this still
+ * reads the issuers' histories from the card (a real state's units and agents would need their own did:webs).
  */
 export async function checkGuardianEvidenceResolving(
   evidence: GuardianEvidence,
@@ -255,8 +296,12 @@ export async function checkGuardianEvidenceResolving(
     if (!ward || roots.length === 0) return checkWith(evidence, ward, now, onThrow, [])
     const resolves = deps.resolves ?? new Map()
     const resolvedKels: Uint8Array[] = []
+    // The roots' own published histories, apart: a revocation found live is named by WHICH history carried it.
+    const rootKels: Uint8Array[] = []
     const fetchedFrom = new Map<string, string>()
     const reusedFrom = new Map<string, string>()
+    // The roots whose chain issuers were fetched live too (demo roots); for any other, the issuers came from the card.
+    const issuersFetched = new Set<string>()
     for (const root of roots) {
       const did = root.webs
       let pending = resolves.get(did)
@@ -275,18 +320,68 @@ export async function checkGuardianEvidenceResolving(
           checkedAt,
         }
       resolvedKels.push(r.kel)
+      rootKels.push(r.kel)
       // The host of the DID that was fetched, so the screen names where it came from, never a host it did not use.
       const parsed = parseWebsDid(did)
       if (parsed.ok) fetchedFrom.set(root.aid, parsed.value.host)
       // A reused earlier result says so, with its time: the screen must not show it as fetched just now.
       if ('reused' in r && r.reused) reusedFrom.set(root.aid, r.fetchedAt)
+      if (isDemoStateRoot(root.aid) !== true) continue
+      // A demo root: its chain's intermediates from the same host and path, each through the same seam and reuse.
+      for (const aid of chainIssuersOf(evidence, root.aid)) {
+        const idid = intermediateDid(did, aid)
+        let ipending = resolves.get(idid)
+        if (!ipending) {
+          ipending = resolveRootKelReusing(idid, resolverFor(deps), now)
+          resolves.set(idid, ipending)
+        }
+        const ir = await ipending
+        if (!ir.ok)
+          return {
+            ok: false,
+            reason: 'stateNotResolved',
+            detail: `${root.name}: issuer ${aid}: ${ir.reason}: ${ir.detail}`,
+            checkedAt,
+          }
+        if (ir.aid !== aid)
+          return {
+            ok: false,
+            reason: 'stateNotResolved',
+            detail: `${root.name}: the did:webs for issuer ${aid} names another AID`,
+            checkedAt,
+          }
+        resolvedKels.push(ir.kel)
+        // The oldest reused fetch in the chain is the one the screen names: the result is no fresher than that.
+        if ('reused' in ir && ir.reused) {
+          const was = reusedFrom.get(root.aid)
+          if (!was || ir.fetchedAt < was) reusedFrom.set(root.aid, ir.fetchedAt)
+        }
+      }
+      issuersFetched.add(root.aid)
     }
     // The full check runs on the KEL either way, fresh or reused, with today's ward, roots and card text.
     const verdict = checkWith(evidence, ward, now, onThrow, resolvedKels)
+    // A status the card's own copy does not show, but the published histories do, is a revocation the card left out,
+    // apart from a card that carries its own revocation ('revoked'). It is named by the history that carried it: the
+    // state root's own (the org unit's credential: "The state's published record…") or an issuer's in its chain (the
+    // agent's or the Guardian card itself: "The issuer's published record…").
+    if (verdict.ok !== true && verdict.reason === 'statusNotCurrent') {
+      const ownCopy = checkWith(evidence, ward, now, onThrow, [])
+      if (ownCopy.ok === true || ownCopy.reason !== 'statusNotCurrent') {
+        const rootOnly = checkWith(evidence, ward, now, onThrow, rootKels)
+        const fromRoot = rootOnly.ok !== true && rootOnly.reason === 'statusNotCurrent'
+        return { ...verdict, reason: fromRoot ? 'revokedInStateRecord' : 'revokedInIssuerRecord' }
+      }
+    }
     const host = verdict.ok === true ? fetchedFrom.get(verdict.root) : undefined
     if (!host || verdict.ok !== true) return verdict
     const at = reusedFrom.get(verdict.root)
-    return { ...verdict, fetchedFrom: host, ...(at ? { fetchedAt: at, reused: true as const } : {}) }
+    return {
+      ...verdict,
+      fetchedFrom: host,
+      ...(at ? { fetchedAt: at, reused: true as const } : {}),
+      ...(issuersFetched.has(verdict.root) ? { fetchedIssuers: true as const } : {}),
+    }
   } catch (e) {
     const message = `the check stopped on an error: ${(e as Error)?.message ?? String(e)}`
     onThrow(message)
@@ -566,6 +661,19 @@ export async function keepK0TestGuardianCard(agent: Pick<Agent, 'genericRecords'
 }
 
 /**
+ * Developer action "Hold the revoked card without its revocation (K0)", on an approver's phone: keep the K0 kit's
+ * revoked Guardian card with its revocation left out (sedi/guardian/k0RevokedOmittedCard) as the card this phone sends
+ * after a yes, in place of whatever card it held. For the demo of a revocation caught from the state's published
+ * record: against its own copy it reads as issued; with a Demo state host in effect, the person's phone fetches the
+ * issuing agent's published history and refuses it. Does nothing unless "Trust the test state (K0)" holds.
+ */
+export async function holdK0RevokedOmittedCard(agent: Pick<Agent, 'genericRecords'>): Promise<K0CardKeepResult> {
+  if (!isTrustTestStateEnabled()) return 'off'
+  // 'tooLarge' kept apart from 'off' (the same split as keepK0TestGuardianCard): two facts, never one result.
+  return (await holdGuardianEvidence(agent, K0_REVOKED_OMITTED_CARD)) === 'held' ? 'done' : 'tooLarge'
+}
+
+/**
  * Developer action "Hold the revoked test card (K0)", on an approver's phone: keep the K0 kit's REVOKED Guardian card,
  * carried with its revocation, as the card this phone sends after a yes. The person's phone then refuses it as revoked
  * ("The card shows it was revoked"). It replaces any card held. Does nothing unless "Trust the test state (K0)" holds,
@@ -743,6 +851,27 @@ async function verdictNow(
   return verdict
 }
 
+/**
+ * Which "fetched live" line a verified standing gets, as a translation key (or none: checked from the card's copy).
+ * The full line ("Fetched live from <host>…") only when the root AND every issuer in its chain were fetched live
+ * (`fetchedIssuers`); with only the root fetched, the line says the issuers' records came from the card. Each has its
+ * "at <time>" variant for our own earlier live result reused (sedi/webs/lastLive). One place decides, so the screen
+ * and the guard row that holds it read the same answer.
+ */
+export function guardianSourceKey(
+  standing: Extract<GuardianStanding, { kind: 'verified' }>
+):
+  | 'Approver.GuardianFetchedLive'
+  | 'Approver.GuardianFetchedLiveAt'
+  | 'Approver.GuardianFetchedRootLive'
+  | 'Approver.GuardianFetchedRootLiveAt'
+  | null {
+  if (!standing.fetchedFrom) return null
+  if (standing.fetchedIssuers)
+    return standing.fetchedAt ? 'Approver.GuardianFetchedLiveAt' : 'Approver.GuardianFetchedLive'
+  return standing.fetchedAt ? 'Approver.GuardianFetchedRootLiveAt' : 'Approver.GuardianFetchedRootLive'
+}
+
 /** A verdict as Who approves shows it. `stateNotResolved` has its own kind, named by the root on our list. */
 function standingOf(verdict: GuardianVerdict, evidence: GuardianEvidence): GuardianStanding {
   if (verdict.ok === true)
@@ -752,6 +881,7 @@ function standingOf(verdict: GuardianVerdict, evidence: GuardianEvidence): Guard
       ...(verdict.demo ? { demo: true as const } : {}),
       ...(verdict.fetchedFrom ? { fetchedFrom: verdict.fetchedFrom } : {}),
       ...(verdict.fetchedAt ? { fetchedAt: verdict.fetchedAt } : {}),
+      ...(verdict.fetchedIssuers ? { fetchedIssuers: true as const } : {}),
     }
   if (verdict.reason === 'stateNotResolved')
     return { kind: 'unreachable', state: websRootsFor(evidence, trustedStateRoots())[0]?.name ?? '' }
@@ -767,7 +897,9 @@ const sameVerdict = (a: GuardianVerdict | undefined, b: GuardianVerdict) =>
       a.demo === b.demo &&
       a.expires === b.expires &&
       a.fetchedFrom === b.fetchedFrom &&
-      a.fetchedAt === b.fetchedAt
+      a.fetchedAt === b.fetchedAt &&
+      // The screen reads it (which "fetched live" line), so a verdict differing only in it is written back.
+      a.fetchedIssuers === b.fetchedIssuers
     : a.ok === false && b.ok === false && a.reason === b.reason && a.detail === b.detail)
 
 /**

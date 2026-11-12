@@ -89,12 +89,35 @@ const servedKel = () =>
     )
   )
 const SERVED: () => RootKel = () => ({ ok: true, aid: K0_TEST_ROOT.aid, kel: servedKel() })
+/** The KEL the demo host serves for an AID of the K0 chain (the root, the org unit or the issuing agent). */
+const chainKel = (aid: string) =>
+  new Uint8Array(
+    readFileSync(
+      join(
+        __dirname,
+        '..',
+        '..',
+        '__tests__',
+        'fixtures',
+        'webs-k0-root',
+        'example.org',
+        'keyring-demo-state',
+        aid,
+        'keri.cesr'
+      )
+    )
+  )
 /** A live state that answers only when a row says so: each fetch waits on its own answer. */
 function stateAnswersLater() {
   const waiting: ((r: RootKel) => void)[] = []
   const resolver = jest.fn(() => new Promise<RootKel>((resolve) => waiting.push(resolve)))
   setDemoStateHost('example.org')
-  setRootKelResolver(resolver)
+  // Only the ROOT's fetch waits on the row (and is counted); a demo root's chain issuers, which the check also fetches
+  // (sedi/webs README), answer at once with the KEL the host publishes for them. Test isolation only.
+  setRootKelResolver((did: string) => {
+    const aid = did.slice(did.lastIndexOf(':') + 1)
+    return aid === K0_TEST_ROOT.aid ? resolver() : Promise.resolve({ ok: true as const, aid, kel: chainKel(aid) })
+  })
   return { resolver, answer: (i: number, r: RootKel) => waiting[i](r) }
 }
 const shown = (tree: ReturnType<typeof render>) => tree.queryByTestId(id('StateCard')) !== null

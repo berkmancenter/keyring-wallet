@@ -256,11 +256,37 @@ describe('the state card: checking, and checked live', () => {
         )
       )
     )
+  /** The KEL the demo host serves for an AID of the K0 chain (the root, the org unit or the issuing agent). */
+  const chainKel = (aid: string) =>
+    new Uint8Array(
+      readFileSync(
+        join(
+          __dirname,
+          '..',
+          '..',
+          '__tests__',
+          'fixtures',
+          'webs-k0-root',
+          'example.org',
+          'keyring-demo-state',
+          aid,
+          'keri.cesr'
+        )
+      )
+    )
   const live = (answer: (did: string) => Promise<RootKel>) => {
-    // Takes the did:webs it is asked for, as a RootKelResolver does, so a row can read what was fetched.
+    // Takes the did:webs it is asked for, as a RootKelResolver does, so a row can read what was fetched. Only the
+    // ROOT's fetch is the row's to answer (and counted); a demo root's chain issuers, which the check also fetches
+    // (sedi/webs README), are answered with the KEL the host publishes for them. Test isolation only.
     const resolveRootKel = jest.fn((did: string) => answer(did))
+    const dispatch = (did: string) => {
+      const aid = did.slice(did.lastIndexOf(':') + 1)
+      return aid === K0_TEST_ROOT.aid
+        ? resolveRootKel(did)
+        : Promise.resolve({ ok: true as const, aid, kel: chainKel(aid) })
+    }
     const check = (evidence: GuardianEvidence = card) =>
-      checkHeldCard(evidence, NOW, () => undefined, { resolveRootKel })
+      checkHeldCard(evidence, NOW, () => undefined, { resolveRootKel: dispatch })
     return { resolveRootKel, check }
   }
 
