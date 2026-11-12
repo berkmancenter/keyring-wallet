@@ -65,6 +65,8 @@ export class RoomWatches {
   private readonly watches = new Map<string, Watch>()
   /** Rooms waiting to be armed, by member and host: each group goes as one request. */
   private readonly wanted = new Map<string, Map<string, number>>()
+  /** The last reason said for not arming before a request (switch off, task not served or not known yet). */
+  private unwatchedSaid?: string
   /** Why no watch goes out this session (the agent refused the task itself); undefined while they may. */
   private stopped?: string
   private chain: Promise<void> = Promise.resolve()
@@ -79,7 +81,25 @@ export class RoomWatches {
    * already. Returns at once; the request goes after any still out.
    */
   want(roomId: string, member: string, host: string, sinceVersion: number): void {
-    if (!this.deps.on() || this.stopped || !(this.deps.served() ?? []).includes(ROOMS_TASK.keysWatch01)) return
+    // Stopped is said once, when the refusal came in; the other reasons are said here, each once until a
+    // want passes all three checks (on, what the agent serves known, the task in it): a reason back after that is said again.
+    if (this.stopped) return
+    const served = this.deps.served()
+    const unwatched = !this.deps.on()
+      ? 'live delivery is off'
+      : served === undefined
+        ? 'what the agent serves is not known yet'
+        : !served.includes(ROOMS_TASK.keysWatch01)
+          ? 'the agent does not serve rooms/keys/watch/0.1'
+          : undefined
+    if (unwatched) {
+      if (this.unwatchedSaid !== unwatched) {
+        this.unwatchedSaid = unwatched
+        this.deps.warn(`rooms: no room is watched (${unwatched}): they are polled`)
+      }
+      return
+    }
+    this.unwatchedSaid = undefined
     const held = this.watches.get(roomId)
     if (held && held.member === member && held.host === host) {
       if (held.state === 'polled') return

@@ -93,6 +93,75 @@ describe('arming', () => {
     expect(s.agentTask).not.toHaveBeenCalled()
   })
 
+  // Why a room isn't watched is in the log once, not once per room or per listing: a report with no watch line said
+  // nothing of why (IN-679).
+  const unwatchedLines = (warn: jest.Mock) =>
+    warn.mock.calls.map(([line]) => line as string).filter((line) => line.startsWith('rooms: no room is watched'))
+
+  test.each([
+    [
+      'the agent does not serve the task',
+      { served: [ROOMS_TASK.keysRead] },
+      'the agent does not serve rooms/keys/watch/0.1',
+    ],
+    ['what it serves is not known yet', { served: null }, 'what the agent serves is not known yet'],
+    ['the release switch is off', { on: () => false }, 'live delivery is off'],
+  ])('%s: said once, by kind, however many rooms and listings want a watch', async (_, over, why) => {
+    const s = setUp(over)
+    s.watches.want('room:1', MEMBER, HOST, 4)
+    s.watches.want('room:2', MEMBER, HOST_B, 4)
+    s.watches.want('room:1', MEMBER, HOST, 5)
+    await s.watches.idle()
+    expect(unwatchedLines(s.warn)).toEqual([`rooms: no room is watched (${why}): they are polled`])
+    // No room, member or host in it (log privacy rule).
+    expect(unwatchedLines(s.warn)[0]).not.toMatch(/room:|persona|host:/)
+  })
+
+  test('a new reason is said again, and so is the same one once a want passed in between', async () => {
+    let served: string[] | null = null
+    let on = true
+    const warn = jest.fn()
+    const watches = new RoomWatches({
+      served: () => served ?? undefined,
+      agentTask: jest.fn(async (_type: string, payload: Record<string, unknown>) =>
+        armedAll(payload as unknown as Payload)
+      ),
+      now: () => T0,
+      warn,
+      logRef: (id) => id.slice(-6),
+      on: () => on,
+    })
+    watches.want('room:1', MEMBER, HOST, 4)
+    served = [ROOMS_TASK.keysRead]
+    watches.want('room:1', MEMBER, HOST, 4)
+    served = [ROOMS_TASK.keysWatch01]
+    watches.want('room:1', MEMBER, HOST, 4)
+    await watches.idle()
+    on = false
+    watches.want('room:2', MEMBER, HOST, 4)
+    on = true
+    watches.want('room:3', MEMBER, HOST, 4)
+    await watches.idle()
+    on = false
+    watches.want('room:4', MEMBER, HOST, 4)
+    expect(
+      unwatchedLines(warn).map((line) => line.replace(/^rooms: no room is watched \((.*)\): they are polled$/, '$1'))
+    ).toEqual([
+      'what the agent serves is not known yet',
+      'the agent does not serve rooms/keys/watch/0.1',
+      'live delivery is off',
+      'live delivery is off',
+    ])
+  })
+
+  test('served and on: no such line, and the watch is armed (control)', async () => {
+    const s = setUp()
+    s.watches.want('room:1', MEMBER, HOST, 4)
+    await s.watches.idle()
+    expect(unwatchedLines(s.warn)).toEqual([])
+    expect(s.watches.watched('room:1')).toBe(true)
+  })
+
   test('rooms at one host go in one request, each from its version, for a week, never waiting for consent', async () => {
     const s = setUp()
     s.watches.want('room:1', MEMBER, HOST, 4)
