@@ -424,6 +424,16 @@ export async function heldGuardianEvidence(
   return held?.guardianSaid ? evidenceOf(held) : undefined
 }
 
+/**
+ * Hold no card on this phone (Developer setup "as the person": the person's phone holds no card, so no state card
+ * shows there). The held record is overwritten with no card in it, never deleted, exactly as holding another card
+ * replaces it; heldGuardianEvidence then finds none. Cards already sent stay with whoever has them.
+ */
+export async function holdNoGuardianEvidence(agent: Pick<Agent, 'genericRecords'>): Promise<void> {
+  const [existing] = (await agent.genericRecords.findAllByQuery({ recordType: GUARDIAN_EVIDENCE_HELD })) ?? []
+  if (existing) await keepOne(agent, GUARDIAN_EVIDENCE_HELD, { noneSince: new Date().toISOString() })
+}
+
 export type EvidenceSendResult = 'sent' | 'off' | 'none' | 'tooLarge' | 'noRelationship'
 
 /**
@@ -710,6 +720,16 @@ export async function stateWardOf(agent: Pick<Agent, 'genericRecords'>): Promise
   const [record] = (await agent.genericRecords.findAllByQuery({ recordType: STATE_WARD })) ?? []
   const ward = (record?.content as { ward?: unknown } | undefined)?.ward
   return typeof ward === 'string' && ward.length > 0 ? ward : null
+}
+
+/**
+ * Set no ward on this phone (Developer setup "as the guardian": the guardian's phone is not the person the card
+ * names). The ward record is overwritten with an empty ward, never deleted; stateWardOf then reads null, so no card
+ * received here verifies.
+ */
+export async function unsetStateWard(agent: Pick<Agent, 'genericRecords'>): Promise<void> {
+  const [existing] = (await agent.genericRecords.findAllByQuery({ recordType: STATE_WARD })) ?? []
+  if (existing) await keepOne(agent, STATE_WARD, { ward: '', unsetAt: new Date().toISOString() })
 }
 
 const dropped = (agent: Agent, connectionId: string, why: string) =>

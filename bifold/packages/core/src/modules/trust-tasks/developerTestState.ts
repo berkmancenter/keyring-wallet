@@ -66,9 +66,10 @@ export type SediDemoHiddenFeature = 'stateCard' | 'confirmItsYou'
  * Which of the one-tap's features a release has turned off with its own remote off, read live at each call (never
  * remembered from a setup): the switch underneath is on, but the feature will not show while that kill is set.
  */
-export function sediDemoHiddenByKill(): SediDemoHiddenFeature[] {
+export function sediDemoHiddenByKill(side?: 'guardian' | 'person'): SediDemoHiddenFeature[] {
   const hidden: SediDemoHiddenFeature[] = []
-  if (STATE_CARD_REMOTE_OFF.off) hidden.push('stateCard')
+  // The person's side turns the state card off itself, so its kill hides nothing there.
+  if (STATE_CARD_REMOTE_OFF.off && side !== 'person') hidden.push('stateCard')
   if (CONFIRM_ITS_YOU_REMOTE_OFF.off) hidden.push('confirmItsYou')
   return hidden
 }
@@ -124,6 +125,99 @@ export async function setUpSediDemo(agent: Pick<Agent, 'genericRecords'>): Promi
   if (card !== 'done') return 'cardNotHeld'
   if (ward !== 'done') return 'wardNotSet'
   return sediDemoHiddenByKill().length > 0 ? 'doneSomeHidden' : 'done'
+}
+
+/**
+ * What "Set up as the guardian" or "Set up as the person" did. The same facts as {@link SediDemoSetupResult}, plus the
+ * clean-up each side does of the other side's state:
+ * - 'done': this side's switches set, its K0 step done, and the other side's left-over (a ward, or a held card) unset;
+ * - 'doneSomeHidden': 'done', but a feature this side uses is off by its own remote off; sediDemoHiddenByKill(side)
+ *   names which;
+ * - 'remoteOff': a remote off or the SEDI/KERI umbrella is set (found before anything is touched, or landed during
+ *   the steps);
+ * - 'cardNotHeld' (guardian): the K0 card was not kept (over the size cap, or storage failed);
+ * - 'wardNotCleared' (guardian): the card was kept, but a ward left on this phone could not be unset;
+ * - 'wardNotSet' (person): the K0 ward was not set (storage failed);
+ * - 'cardNotRemoved' (person): the ward was set, but a card held on this phone could not be put away.
+ */
+export type SediDemoSideResult = SediDemoSetupResult | 'cardNotRemoved' | 'wardNotCleared'
+
+/** The four switches both sides turn on; the state card is the one that differs. */
+function switchesOn(stateCard: boolean): void {
+  setTrustedApproversEnabled(true)
+  setStateVerifiedApproversEnabled(true)
+  setTrustTestStateEnabled(true)
+  setStateCardEnabled(stateCard)
+  setConfirmItsYouEnabled(true)
+}
+
+/** The side's two steps, both attempted, with the first failure named (a kill landing meanwhile wins over either). */
+async function runSide(
+  side: 'guardian' | 'person',
+  first: () => Promise<unknown>,
+  firstFailed: SediDemoSideResult,
+  second: () => Promise<unknown>,
+  secondFailed: SediDemoSideResult
+): Promise<SediDemoSideResult> {
+  const a = await attempt(first)
+  const b = await attempt(second)
+  if (anyKill() || !isTrustTestStateEnabled()) return 'remoteOff'
+  if (a !== 'done') return firstFailed
+  if (b !== 'done') return secondFailed
+  return sediDemoHiddenByKill(side).length > 0 ? 'doneSomeHidden' : 'done'
+}
+
+/**
+ * Developer action "Set up as the guardian" (Jordan's phone): the five switches on (trusted approvers, state-verified
+ * approvers, "Trust the test state (K0)", "State card (demo)" and "Confirm it's you"), the K0 Guardian card kept as
+ * the card this phone sends after a yes, and any ward on this phone unset (this phone is not the person the card
+ * names). Both steps are attempted; the card is reported first.
+ *
+ * The same kill rules as {@link setUpSediDemo}: with a remote off or the umbrella set before it starts it does nothing
+ * at all; a kill landing during the steps wins. The state card's and Confirm it's you's own remote offs do not stop
+ * it: the result is then 'doneSomeHidden'. Any result other than 'done' after the start means the five switches HAVE
+ * ALREADY BEEN TURNED ON and stay on.
+ */
+export async function setUpSediDemoAsGuardian(agent: Pick<Agent, 'genericRecords'>): Promise<SediDemoSideResult> {
+  if (anyKill()) return 'remoteOff'
+  switchesOn(true)
+  if (!isTrustTestStateEnabled()) return 'remoteOff'
+  return runSide(
+    'guardian',
+    () => guardianEvidence().keepK0TestGuardianCard(agent),
+    'cardNotHeld',
+    async () => {
+      await guardianEvidence().unsetStateWard(agent)
+      return 'done'
+    },
+    'wardNotCleared'
+  )
+}
+
+/**
+ * Developer action "Set up as the person" (Sam's phone): four switches on (trusted approvers, state-verified approvers,
+ * "Trust the test state (K0)" and "Confirm it's you") with "State card (demo)" turned OFF, the K0 ward set (Sam), and
+ * any Guardian card held on this phone put away (overwritten, not deleted), so no state card shows here. Both steps
+ * are attempted; the ward is reported first.
+ *
+ * The same kill rules as {@link setUpSediDemoAsGuardian}. The state card's own remote off hides nothing here (the card
+ * is off on this side), so only Confirm it's you's makes it 'doneSomeHidden'. Any result other than 'done' after the
+ * start means the switches HAVE ALREADY BEEN SET (four on, the state card off) and stay so.
+ */
+export async function setUpSediDemoAsPerson(agent: Pick<Agent, 'genericRecords'>): Promise<SediDemoSideResult> {
+  if (anyKill()) return 'remoteOff'
+  switchesOn(false)
+  if (!isTrustTestStateEnabled()) return 'remoteOff'
+  return runSide(
+    'person',
+    () => becomeK0TestWard(agent),
+    'wardNotSet',
+    async () => {
+      await guardianEvidence().holdNoGuardianEvidence(agent)
+      return 'done'
+    },
+    'cardNotRemoved'
+  )
 }
 
 /**

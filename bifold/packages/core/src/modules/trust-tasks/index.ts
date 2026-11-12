@@ -67,10 +67,13 @@ export {
   holdK0RevokedTestCard,
   becomeK0TestWard,
   setUpSediDemo,
+  setUpSediDemoAsGuardian,
+  setUpSediDemoAsPerson,
   turnOffSediDemo,
   sediDemoHiddenByKill,
   type TestStateActionResult,
   type SediDemoSetupResult,
+  type SediDemoSideResult,
   type SediDemoHiddenFeature,
 } from './developerTestState'
 export { SEDI_KERI_REMOTE_OFF } from './module/sediKeriRemoteOff'
