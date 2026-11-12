@@ -12,6 +12,26 @@ import {
   clearTestContacts,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
+  setSharedConnectEnabled,
+  setSharedConnectInviteEnabled,
+  setTrustedApproversEnabled,
+  setStateVerifiedApproversEnabled,
+  setTrustTestStateEnabled,
+  isTrustedApproversEnabled,
+  isStateVerifiedApproversEnabled,
+  isTrustTestStateEnabled,
+  holdK0TestGuardianCard,
+  becomeK0TestWard,
+  setStateCardEnabled,
+  STATE_CARD_REMOTE_OFF,
+  setUpSediDemo,
+  turnOffSediDemo,
+  SEDI_KERI_REMOTE_OFF,
+  CONFIRM_ITS_YOU_REMOTE_OFF,
+  setConfirmItsYouEnabled,
+  setDemoStateHost,
+  demoStateHost,
+  sediDemoHiddenByKill,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -41,6 +61,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
   Alert,
   ActivityIndicator,
@@ -78,6 +99,18 @@ const Developer: React.FC = () => {
   const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
   const [enableLivePickup, setEnableLivePickup] = useState(!!store.developer.enableLivePickup)
+  const [enableSharedConnect, setEnableSharedConnect] = useState(!!store.developer.enableSharedConnect)
+  const [enableSharedConnectInvite, setEnableSharedConnectInvite] = useState(
+    !!store.developer.enableSharedConnectInvite
+  )
+  const [enableTrustedApprovers, setEnableTrustedApprovers] = useState(!!store.developer.enableTrustedApprovers)
+  const [enableStateVerifiedApprovers, setEnableStateVerifiedApprovers] = useState(
+    !!store.developer.enableStateVerifiedApprovers
+  )
+  const [enableTrustTestState, setEnableTrustTestState] = useState(!!store.developer.enableTrustTestState)
+  const [enableStateCard, setEnableStateCard] = useState(!!store.developer.enableStateCard)
+  const [enableConfirmItsYou, setEnableConfirmItsYou] = useState(!!store.developer.enableConfirmItsYou)
+  const [demoStateHostText, setDemoStateHostText] = useState(store.developer.demoStateHost ?? '')
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -366,6 +399,179 @@ const Developer: React.FC = () => {
     // relationship invitations read the flag live (isDidCommV2Enabled).
     setDidCommV2Enabled(next)
     setEnableDidCommV2(next)
+  }
+
+  const toggleEnableSharedConnectSwitch = () => {
+    const next = !enableSharedConnect
+    dispatch({
+      type: BCDispatchAction.TOGGLE_SHARED_CONNECT,
+      payload: [next],
+    })
+    // Read live: the next code scanned, pasted or opened is routed by it, no restart.
+    setSharedConnectEnabled(next)
+    setEnableSharedConnect(next)
+  }
+
+  const toggleEnableSharedConnectInviteSwitch = () => {
+    const next = !enableSharedConnectInvite
+    dispatch({
+      type: BCDispatchAction.TOGGLE_SHARED_CONNECT_INVITE,
+      payload: [next],
+    })
+    // Read live: the QR sheet offers "Show a code" from the next time it opens, no restart.
+    setSharedConnectInviteEnabled(next)
+    setEnableSharedConnectInvite(next)
+  }
+
+  const toggleEnableTrustedApproversSwitch = () => {
+    const next = !enableTrustedApprovers
+    dispatch({
+      type: BCDispatchAction.TOGGLE_TRUSTED_APPROVERS,
+      payload: [next],
+    })
+    // Read live: the contact page, My agent and an arriving offer read it from the next render, no restart.
+    setTrustedApproversEnabled(next)
+    setEnableTrustedApprovers(next)
+  }
+
+  const toggleEnableStateVerifiedApproversSwitch = () => {
+    const next = !enableStateVerifiedApprovers
+    dispatch({
+      type: BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS,
+      payload: [next],
+    })
+    // Read live: an arriving Guardian card and Who approves read it at each check, no restart.
+    setStateVerifiedApproversEnabled(next)
+    setEnableStateVerifiedApprovers(next)
+  }
+
+  const toggleEnableConfirmItsYouSwitch = () => {
+    const next = !enableConfirmItsYou
+    dispatch({
+      type: BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU,
+      payload: [next],
+    })
+    // Read live: the contact page and an arriving request read it from the next render, no restart.
+    setConfirmItsYouEnabled(next)
+    setEnableConfirmItsYou(next)
+  }
+
+  const toggleEnableTrustTestStateSwitch = () => {
+    const next = !enableTrustTestState
+    dispatch({
+      type: BCDispatchAction.TOGGLE_TRUST_TEST_STATE,
+      payload: [next],
+    })
+    // Read live: the next Guardian check trusts the K0 test root (or stops trusting it), no restart.
+    setTrustTestStateEnabled(next)
+    setEnableTrustTestState(next)
+  }
+
+  const toggleEnableStateCardSwitch = () => {
+    const next = !enableStateCard
+    dispatch({
+      type: BCDispatchAction.TOGGLE_STATE_CARD,
+      payload: [next],
+    })
+    // Read live: Credentials shows or hides the card on its next render, no restart.
+    setStateCardEnabled(next)
+    setEnableStateCard(next)
+  }
+
+  /** The two K0 Developer actions: each does nothing (and says so) unless "Trust the test state (K0)" holds. */
+  const runTestStateAction = async (title: string, action: typeof holdK0TestGuardianCard) => {
+    if (!agent) {
+      Alert.alert('Error', 'Agent not initialized')
+      return
+    }
+    try {
+      const result = await action(agent)
+      Alert.alert(title, result === 'done' ? 'Done.' : 'Not done: turn on Trust the test state (K0) first.')
+    } catch (error) {
+      Alert.alert(title, `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /** Keep the three SEDI demo switches as saved settings, as their own rows do, and show them. */
+  // The five switches the one-tap turns on in bifold (bifold #1041: the state card and Confirm it's you joined the
+  // three), saved here so a restart matches what bifold holds.
+  const saveSediDemoSwitches = (on: boolean) => {
+    for (const type of [
+      BCDispatchAction.TOGGLE_TRUSTED_APPROVERS,
+      BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS,
+      BCDispatchAction.TOGGLE_TRUST_TEST_STATE,
+      BCDispatchAction.TOGGLE_STATE_CARD,
+      BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU,
+    ])
+      dispatch({ type, payload: [on] })
+    setEnableTrustedApprovers(on)
+    setEnableStateVerifiedApprovers(on)
+    setEnableTrustTestState(on)
+    setEnableStateCard(on)
+    setEnableConfirmItsYou(on)
+  }
+
+  /**
+   * "Set up the SEDI demo": bifold turns the five switches on and keeps the K0 card and ward, or does nothing at all
+   * when a remote off holds. Each result has its own message. The switches are saved on every result but 'remoteOff':
+   * after 'cardNotHeld' or 'wardNotSet' bifold HAS turned them on, so saving them keeps a restart from silently
+   * differing from what this screen shows. 'remoteOff' saves nothing: the feature is off for this build either way.
+   */
+  const runSediDemoSetup = async () => {
+    if (!agent) {
+      Alert.alert('Error', 'Agent not initialized')
+      return
+    }
+    try {
+      const result = await setUpSediDemo(agent)
+      if (result !== 'remoteOff') saveSediDemoSwitches(true)
+      const message = {
+        done: 'Developer.SediDemoDone',
+        doneSomeHidden: 'Developer.SediDemoDone',
+        remoteOff: 'Developer.SediDemoOff',
+        cardNotHeld: 'Developer.SediDemoCardNotHeld',
+        wardNotSet: 'Developer.SediDemoWardNotSet',
+      }[result]
+      const lines = [t(message ?? 'Developer.SediDemoOff')]
+      if (result === 'done' || result === 'doneSomeHidden') {
+        // Where the demo state will be checked from: the Demo state host in effect (bifold's, read now), or a warning
+        // that without one the card is checked against the copy on this phone.
+        const host = demoStateHost()
+        lines.push(host ? t('Developer.SediDemoHost', { host }) : t('Developer.SediDemoNoHost'))
+      }
+      // Alert only, from this tap's result: the screen keeps no line about what is hidden. Which features are hidden
+      // is read live from bifold here, never remembered.
+      if (result === 'doneSomeHidden') {
+        const hidden = {
+          stateCard: 'Developer.SediDemoHiddenStateCard',
+          confirmItsYou: 'Developer.SediDemoHiddenConfirmItsYou',
+        }
+        for (const feature of sediDemoHiddenByKill()) lines.push(t(hidden[feature]))
+      }
+      Alert.alert(t('Developer.SetUpSediDemo'), lines.join('\n\n'))
+    } catch (error) {
+      Alert.alert(t('Developer.SetUpSediDemo'), `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /** "Turn off the SEDI demo": the five switches off, saved; nothing kept is deleted. */
+  /**
+   * "Demo state host": handed to bifold, which refuses anything that is not a bare public hostname (optionally with a
+   * port) and changes nothing then. Saved only when bifold took it, so a restart applies the same value.
+   */
+  const saveDemoStateHost = (text?: string) => {
+    const value = (text ?? demoStateHostText).trim()
+    const result = setDemoStateHost(value === '' ? null : value)
+    if (result === 'invalid') {
+      Alert.alert(t('Developer.DemoStateHost'), t('Developer.DemoStateHostInvalid'))
+      return
+    }
+    dispatch({ type: BCDispatchAction.SET_DEMO_STATE_HOST, payload: [result === 'cleared' ? '' : value.toLowerCase()] })
+  }
+
+  const runSediDemoOff = () => {
+    turnOffSediDemo()
+    saveSediDemoSwitches(false)
   }
 
   const toggleEnableLivePickupSwitch = () => {
@@ -857,6 +1063,7 @@ const Developer: React.FC = () => {
           title={t('Developer.EnableTspCarriage')}
           accessibilityLabel={t('Developer.EnableTspCarriage')}
           testID={testIdWithKey('ToggleEnableTspCarriage')}
+          showRowSeparator
           // The row toggles too: iOS hides the Switch behind the accessible row
           // from automation (same fix as the DIDComm v2 row, 2026-09-14).
           onPress={toggleEnableTspCarriageSwitch}
@@ -869,6 +1076,193 @@ const Developer: React.FC = () => {
             value={enableTspCarriage}
           />
         </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableSharedConnect')}
+          accessibilityLabel={t('Developer.EnableSharedConnect')}
+          testID={testIdWithKey('ToggleEnableSharedConnect')}
+          showRowSeparator
+          // The row toggles too: iOS hides the Switch behind the accessible row
+          // from automation (same fix as the DIDComm v2 row, 2026-09-14).
+          onPress={toggleEnableSharedConnectSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableSharedConnect ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableSharedConnectSwitch}
+            value={enableSharedConnect}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableSharedConnectInvite')}
+          accessibilityLabel={t('Developer.EnableSharedConnectInvite')}
+          testID={testIdWithKey('ToggleEnableSharedConnectInvite')}
+          showRowSeparator
+          // The row toggles too, as the shared-connect row above (iOS hides the Switch from automation).
+          onPress={toggleEnableSharedConnectInviteSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableSharedConnectInvite ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableSharedConnectInviteSwitch}
+            value={enableSharedConnectInvite}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableTrustedApprovers')}
+          accessibilityLabel={t('Developer.EnableTrustedApprovers')}
+          testID={testIdWithKey('ToggleEnableTrustedApprovers')}
+          // The row toggles too, as the rows above (iOS hides the Switch from automation).
+          onPress={toggleEnableTrustedApproversSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableTrustedApprovers ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableTrustedApproversSwitch}
+            value={enableTrustedApprovers}
+          />
+        </SectionRow>
+        {/* Each row below shows only while the switches above it hold (remote offs included), read live from bifold,
+            never from the saved values; the local state only makes the screen render again on a toggle. */}
+        {isTrustedApproversEnabled() && (
+          <SectionRow
+            title={t('Developer.EnableStateVerifiedApprovers')}
+            accessibilityLabel={t('Developer.EnableStateVerifiedApprovers')}
+            testID={testIdWithKey('ToggleEnableStateVerifiedApprovers')}
+            onPress={toggleEnableStateVerifiedApproversSwitch}
+          >
+            <Switch
+              trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+              thumbColor={enableStateVerifiedApprovers ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+              ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+              onValueChange={toggleEnableStateVerifiedApproversSwitch}
+              value={enableStateVerifiedApprovers}
+            />
+          </SectionRow>
+        )}
+        {isTrustedApproversEnabled() && isStateVerifiedApproversEnabled() && (
+          <SectionRow
+            title={t('Developer.EnableTrustTestState')}
+            accessibilityLabel={t('Developer.EnableTrustTestState')}
+            testID={testIdWithKey('ToggleEnableTrustTestState')}
+            onPress={toggleEnableTrustTestStateSwitch}
+          >
+            <Switch
+              trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+              thumbColor={enableTrustTestState ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+              ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+              onValueChange={toggleEnableTrustTestStateSwitch}
+              value={enableTrustTestState}
+            />
+          </SectionRow>
+        )}
+        {isTrustTestStateEnabled() && (
+          <>
+            <SectionRow
+              title={t('Developer.HoldK0TestGuardianCard')}
+              accessibilityLabel={t('Developer.HoldK0TestGuardianCard')}
+              testID={testIdWithKey('HoldK0TestGuardianCard')}
+              onPress={() => runTestStateAction(t('Developer.HoldK0TestGuardianCard'), holdK0TestGuardianCard)}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+            <SectionRow
+              title={t('Developer.BecomeK0TestWard')}
+              accessibilityLabel={t('Developer.BecomeK0TestWard')}
+              testID={testIdWithKey('BecomeK0TestWard')}
+              onPress={() => runTestStateAction(t('Developer.BecomeK0TestWard'), becomeK0TestWard)}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+          </>
+        )}
+        {/* "State card (demo)" needs neither approver switch, so it is not under them; a remote off (its own or the
+            SEDI/KERI one) hides the row, since the switch could do nothing. */}
+        {!STATE_CARD_REMOTE_OFF.off && !SEDI_KERI_REMOTE_OFF.off && (
+          <SectionRow
+            title={t('Developer.EnableStateCard')}
+            accessibilityLabel={t('Developer.EnableStateCard')}
+            testID={testIdWithKey('ToggleEnableStateCard')}
+            onPress={toggleEnableStateCardSwitch}
+          >
+            <Switch
+              trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+              thumbColor={enableStateCard ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+              ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+              onValueChange={toggleEnableStateCardSwitch}
+              value={enableStateCard}
+            />
+          </SectionRow>
+        )}
+        {!SEDI_KERI_REMOTE_OFF.off && (
+          <>
+            <View style={styles.sectionSeparator}></View>
+            <SectionHeader icon={'slideshow'} title={t('Developer.Demos')} />
+            {/* Hidden while its own remote off (or, above, the umbrella) is set: a saved "on" can't bring it back. */}
+            {!CONFIRM_ITS_YOU_REMOTE_OFF.off && (
+              <SectionRow
+                title={t('Developer.EnableConfirmItsYou')}
+                accessibilityLabel={t('Developer.EnableConfirmItsYou')}
+                testID={testIdWithKey('ToggleEnableConfirmItsYou')}
+                onPress={toggleEnableConfirmItsYouSwitch}
+              >
+                <Switch
+                  trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+                  thumbColor={enableConfirmItsYou ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+                  ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+                  onValueChange={toggleEnableConfirmItsYouSwitch}
+                  value={enableConfirmItsYou}
+                />
+              </SectionRow>
+            )}
+            <SectionRow
+              title={t('Developer.SetUpSediDemo')}
+              accessibilityLabel={t('Developer.SetUpSediDemo')}
+              testID={testIdWithKey('SetUpSediDemo')}
+              onPress={() => void runSediDemoSetup()}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+            {(enableTrustedApprovers ||
+              enableStateVerifiedApprovers ||
+              enableTrustTestState ||
+              enableStateCard ||
+              enableConfirmItsYou) && (
+              <SectionRow
+                title={t('Developer.TurnOffSediDemo')}
+                accessibilityLabel={t('Developer.TurnOffSediDemo')}
+                testID={testIdWithKey('TurnOffSediDemo')}
+                onPress={runSediDemoOff}
+              >
+                <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+              </SectionRow>
+            )}
+            {isTrustedApproversEnabled() && isStateVerifiedApproversEnabled() && (
+              <View style={{ paddingHorizontal: 25, paddingVertical: 12 }}>
+                <Text style={TextTheme.normal}>{t('Developer.DemoStateHost')}</Text>
+                <Text style={TextTheme.caption}>{t('Developer.DemoStateHostHint')}</Text>
+                <TextInput
+                  testID={testIdWithKey('DemoStateHost')}
+                  accessibilityLabel={t('Developer.DemoStateHost')}
+                  value={demoStateHostText}
+                  onChangeText={setDemoStateHostText}
+                  onEndEditing={(e) => saveDemoStateHost(e?.nativeEvent?.text)}
+                  onSubmitEditing={(e) => saveDemoStateHost(e?.nativeEvent?.text)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder="abc-def.trycloudflare.com"
+                  style={[
+                    TextTheme.normal,
+                    { borderBottomWidth: 1, borderColor: TextTheme.normal.color, paddingVertical: 6 },
+                  ]}
+                />
+              </View>
+            )}
+          </>
+        )}
         <View style={styles.sectionSeparator}></View>
         <SectionHeader icon={'bug-report'} title={'Diagnostics'} />
         <SectionRow

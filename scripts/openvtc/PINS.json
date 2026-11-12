@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-23",
+  "updated": "2026-11-10",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "49f5f1be",
-      "commitDate": "2026-10-07",
-      "pinnedOn": "2026-10-07",
-      "why": "Tag VTI-Eucalyptus (vta-service 0.56.0, vta-sdk 0.64.2), the release milestone after Dogwood. vta-sdk here accepts only the DTG v1 shapes (vetted/1 StatementCredential, role VAC); card-verify moved to them in the same pull request.",
+      "sha": "f7b78e29d",
+      "commitDate": "2026-11-09",
+      "pinnedOn": "2026-11-10",
+      "why": "Tag vta-service-v0.79.0 (vta-sdk 0.86.0, affinidi-tsp 0.3.0), the newest tagged release; the Farm, testers' agents and First VTC run untagged main 887370a3b (2026-11-10) beyond it. card-verify moved to this vta-sdk and to its Cargo.lock versions in the same pull request.",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
@@ -30,7 +30,7 @@
     },
     "verifiable-trust-infrastructure-v047": {
       "url": "https://github.com/OpenVTC/verifiable-trust-infrastructure.git",
-      "sha": "439a0333",
+      "sha": "439a03335",
       "commitDate": "2026-10-01",
       "pinnedOn": "2026-10-01",
       "why": "A second, separate clone of VTI at tag vta-service-v0.47.0 (DTG Credentials v1, #1859): card-verify-v047 is built from it so bifold's vti-conformance job can have vta-sdk 0.58 judge the vetted/1 statement Keyring writes behind its off-by-default flag (228). The main pin above, its clone and the frozen lab do not move with it.",
@@ -93,10 +93,10 @@
     },
     "dtgwg-trust-tasks-tf": {
       "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
-      "sha": "7b6bb488",
-      "commitDate": "2026-10-05",
-      "pinnedOn": "2026-10-07",
-      "why": "Tag trust-tasks-v0.27.7, the trust-tasks-rs version VTI vta-service-v0.55.0 builds with. Publishes the hidden-vetting task specs (vtc/vetting/hidden/{publish,show,withdraw}/0.1, vtc/vetting/pcs-challenge/0.1), vtc/vetting/vetters/event-mode/0.1, and the hidden path in vetting/attestation/0.1, so they can be cited and used as fixtures at a pin.",
+      "sha": "2a66a0351",
+      "commitDate": "2026-11-10",
+      "pinnedOn": "2026-11-10",
+      "why": "AclEntry 0.3 (purposes), acl/list/0.4 and acl/{grant,revoke,update}/0.3: what VTI main 887370a3b serves and bifold #1005 sends; the previous pin predated them, so #1005's payload checks had to read unpinned origin/main",
       "watch": [
         "SPEC.md",
         "specs/_framework/",
