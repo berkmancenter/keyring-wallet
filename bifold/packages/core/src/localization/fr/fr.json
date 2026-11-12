@@ -3742,6 +3742,7 @@
     "GuardianStateUnreachable": "Impossible de joindre l'État",
     "GuardianStateUnreachableHint": "Impossible de joindre {{state}} pour vérifier cette carte. Elle sera vérifiée à nouveau la prochaine fois que vous ouvrirez cet écran.",
     "GuardianFetchedLive": "Récupéré en direct depuis {{host}} ; la vérification des alias désignés n'est pas encore prise en charge.",
+    "GuardianFetchedLiveAt": "Récupéré en direct depuis {{host}} à {{time}} ; {{host}} est injoignable pour le moment. La vérification des alias désignés n'est pas encore prise en charge.",
     "GuardianDemoCopy": "Démo : vérifiée avec une copie sur ce téléphone.",
     "CardAskTitle": "Envoyer aussi votre carte de tuteur de {{state}} à {{asker}} ?",
     "CardAskTitleNoState": "Envoyer aussi votre carte de tuteur à {{asker}} ?",

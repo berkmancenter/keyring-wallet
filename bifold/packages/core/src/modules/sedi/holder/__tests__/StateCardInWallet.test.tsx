@@ -100,6 +100,8 @@ function stateAnswersLater() {
 const shown = (tree: ReturnType<typeof render>) => tree.queryByTestId(id('StateCard')) !== null
 
 beforeEach(() => {
+  // As after a restart: no row inherits a kept live result (sedi/webs/lastLive), whatever order the rows run in.
+  guardianEvidence.resetGuardianCheckMemo()
   mockUseOpenId.mockReturnValue({
     openIdState: { w3cCredentialRecords: [], sdJwtVcRecords: [], mdocVcRecords: [], isLoading: false },
   })

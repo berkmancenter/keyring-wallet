@@ -98,3 +98,10 @@ the MacBook; it builds the Rust workspace):
 
     cd external/affinidi-tdk-rs/crates/identity/did-methods/did-webs
     # a scratch example that reads the two files and prints resolve_from_artifacts' result
+
+## Reusing our own last live result (lastLive.ts)
+
+If a fetch of a root's did:webs fails, the Guardian check may use this phone's own last successful fetch of the SAME
+did:webs (host and AID) if it is under five minutes old, and runs the whole check again on it. It never reuses a
+failure and never uses a card's copy. The screen says "Fetched live from <host> at <time>". The cost: while the host
+is unreachable, a rotation or revocation published after that fetch can take up to five minutes to show.

@@ -41,6 +41,7 @@ import {
   type WebsFetch,
 } from '../sedi/webs'
 import { websDidToFetch } from '../sedi/webs/demoStateHost'
+import { resetLiveResolutions, resolveRootKelReusing, type LiveRootKel } from '../sedi/webs/lastLive'
 
 import {
   ROLE_OFFER_ASK,
@@ -95,6 +96,12 @@ export type GuardianVerdict =
       expires?: string
       /** The host the root's KEL was actually fetched from on this check (its did:webs), when it was fetched live. */
       fetchedFrom?: string
+      /**
+       * Set only when that fetch is our own earlier live result reused because the host just failed (sedi/webs/lastLive,
+       * within five minutes): when that earlier fetch was made. Absent on a fresh fetch.
+       */
+      fetchedAt?: string
+      reused?: true
     }
   | { ok: false; reason: string; detail: string; checkedAt: string }
 
@@ -117,7 +124,7 @@ export interface GuardianOnAsk {
  * Kept apart from `unverified` so the screen says "Couldn't reach the state", not that the card failed a check.
  */
 export type GuardianStanding =
-  | { kind: 'verified'; state: string; demo?: true; fetchedFrom?: string }
+  | { kind: 'verified'; state: string; demo?: true; fetchedFrom?: string; fetchedAt?: string }
   | { kind: 'unverified'; outcome: string }
   | { kind: 'unreachable'; state: string }
 
@@ -203,10 +210,11 @@ function checkWith(
 
 /** The one record of `recordType`, its content replaced; saved the first time. */
 /**
- * One open's did:webs resolutions, by DID: each root is fetched at most once per open, however many cards name it, and
- * nothing is kept past the open (a failure is never remembered, and so never stands in for a later check).
+ * One open's did:webs resolutions, by DID: each root is fetched at most once per open, however many cards name it.
+ * Past the open, only our own last SUCCESSFUL live result is kept, for five minutes (sedi/webs/lastLive); a failure is
+ * never remembered, and so never stands in for a later check.
  */
-export type WebsResolves = Map<string, Promise<RootKel>>
+export type WebsResolves = Map<string, Promise<RootKel | LiveRootKel>>
 
 /**
  * Which resolver a check uses: one passed in, else ours over a passed-in fetch, else the app-wide seam
@@ -247,11 +255,12 @@ export async function checkGuardianEvidenceResolving(
     const resolves = deps.resolves ?? new Map()
     const resolvedKels: Uint8Array[] = []
     const fetchedFrom = new Map<string, string>()
+    const reusedFrom = new Map<string, string>()
     for (const root of roots) {
       const did = root.webs
       let pending = resolves.get(did)
       if (!pending) {
-        pending = resolverFor(deps)(did)
+        pending = resolveRootKelReusing(did, resolverFor(deps), now)
         resolves.set(did, pending)
       }
       const r = await pending
@@ -268,10 +277,15 @@ export async function checkGuardianEvidenceResolving(
       // The host of the DID that was fetched, so the screen names where it came from, never a host it did not use.
       const parsed = parseWebsDid(did)
       if (parsed.ok) fetchedFrom.set(root.aid, parsed.value.host)
+      // A reused earlier result says so, with its time: the screen must not show it as fetched just now.
+      if ('reused' in r && r.reused) reusedFrom.set(root.aid, r.fetchedAt)
     }
+    // The full check runs on the KEL either way, fresh or reused, with today's ward, roots and card text.
     const verdict = checkWith(evidence, ward, now, onThrow, resolvedKels)
     const host = verdict.ok === true ? fetchedFrom.get(verdict.root) : undefined
-    return host && verdict.ok === true ? { ...verdict, fetchedFrom: host } : verdict
+    if (!host || verdict.ok !== true) return verdict
+    const at = reusedFrom.get(verdict.root)
+    return { ...verdict, fetchedFrom: host, ...(at ? { fetchedAt: at, reused: true as const } : {}) }
   } catch (e) {
     const message = `the check stopped on an error: ${(e as Error)?.message ?? String(e)}`
     onThrow(message)
@@ -666,12 +680,14 @@ function checkInputs(evidence: GuardianEvidence, ward: string | null): string {
 const lastChecks = new Map<string, { inputs: string; verdict: GuardianVerdict }>()
 
 /**
- * Empty the in-memory memo (nothing stored is touched): the next open checks each card again, as after a restart.
+ * Empty the in-memory memo and the kept live did:webs results (nothing stored is touched): the next open checks each
+ * card again and fetches every root fresh, as after a restart.
  * Tests only: rows use it to simulate a restart. Nothing in production calls it, and it is not exported from the package
  * (a real restart empties the memo by itself). Don't wire it anywhere, or delete it as unused while rows use it.
  */
 export function resetGuardianCheckMemo(): void {
   lastChecks.clear()
+  resetLiveResolutions()
 }
 
 /**
@@ -690,8 +706,10 @@ const stillCurrent = (verdict: GuardianVerdict, now: Date) =>
  * The verdict on open: the memoised one if the check would read exactly the same inputs and it has not expired,
  * else the check run now (and memoised). Reuse only ever returns a verdict the check itself gave for those inputs,
  * so it cannot turn a refusal into valid. The exception: a card whose root publishes at a did:webs is never
- * memoised. It is resolved again on every open (once per open), so a root's rotation or revocation shows at once
- * and "couldn't reach the state" is never reused.
+ * memoised. It is resolved again on every open (once per open), and "couldn't reach the state" is never reused. A
+ * root's rotation or revocation shows on the next open while its host answers; while its host is unreachable, our
+ * own last successful fetch (under five minutes old) stands in, so such a change can take up to five minutes to show
+ * (sedi/webs/lastLive). Its verdict then says when that fetch was made.
  */
 async function verdictNow(
   agent: Agent,
@@ -721,6 +739,7 @@ function standingOf(verdict: GuardianVerdict, evidence: GuardianEvidence): Guard
       state: verdict.state,
       ...(verdict.demo ? { demo: true as const } : {}),
       ...(verdict.fetchedFrom ? { fetchedFrom: verdict.fetchedFrom } : {}),
+      ...(verdict.fetchedAt ? { fetchedAt: verdict.fetchedAt } : {}),
     }
   if (verdict.reason === 'stateNotResolved')
     return { kind: 'unreachable', state: websRootsFor(evidence, trustedStateRoots())[0]?.name ?? '' }
@@ -735,7 +754,8 @@ const sameVerdict = (a: GuardianVerdict | undefined, b: GuardianVerdict) =>
       a.state === b.state &&
       a.demo === b.demo &&
       a.expires === b.expires &&
-      a.fetchedFrom === b.fetchedFrom
+      a.fetchedFrom === b.fetchedFrom &&
+      a.fetchedAt === b.fetchedAt
     : a.ok === false && b.ok === false && a.reason === b.reason && a.detail === b.detail)
 
 /**

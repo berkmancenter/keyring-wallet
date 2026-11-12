@@ -21,6 +21,7 @@ import * as guardianModule from '../../sedi/guardian'
 import * as stateRoots from '../../sedi/guardian/stateRoots'
 import { STATE_CARD_REMOTE_OFF, isStateCardEnabled, setStateCardEnabled } from '../../sedi/holder/stateCardFlag'
 import * as websModule from '../../sedi/webs'
+import * as lastLive from '../../sedi/webs/lastLive'
 import * as websResolve from '../../sedi/webs/resolve'
 import * as approverRole from '../approverRole'
 import {
@@ -1725,9 +1726,14 @@ describe('a root read from its did:webs', () => {
     } finally {
       websModule.setRootKelResolver(null)
     }
-    expect(await guardianStandings(sam.agent, { fetch: host(true) })).toEqual({
+    // Forget the replacement's success (as a restart would), so the control shows our resolver is the one asked;
+    // otherwise its result would rightly be reused for five minutes (sedi/webs/lastLive).
+    resetGuardianCheckMemo()
+    const ours = host(true)
+    expect(await guardianStandings(sam.agent, { fetch: ours })).toEqual({
       [JORDAN]: { kind: 'unreachable', state: 'State of Example' },
     })
+    expect(ours.asked.length).toBeGreaterThan(0)
   })
 
   test("L1: a root fetched live: Who approves names the host it came from and says the alias check is not supported (control: from the card's copy, no such line)", async () => {
@@ -1856,5 +1862,173 @@ describe('a root read from its did:webs', () => {
     } finally {
       global.fetch = realFetch
     }
+  })
+
+  // ---------------------------------------------------------------------------------------------------------------
+  // Reusing our own last LIVE result for five minutes when the host fails (sedi/webs/lastLive). Never a failure, never
+  // the card's copy, never another host's; the whole check runs again on the reused KEL.
+
+  describe('our own last live result, reused for five minutes when the host fails', () => {
+    const T0 = new Date('2026-11-14T15:00:00.000Z')
+    const at = (ms: number) => jest.setSystemTime(new Date(T0.getTime() + ms))
+    beforeEach(() =>
+      jest.useFakeTimers({
+        now: T0,
+        doNotFake: [
+          'nextTick',
+          'setImmediate',
+          'clearImmediate',
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+          'queueMicrotask',
+          'requestAnimationFrame',
+          'cancelAnimationFrame',
+          'requestIdleCallback',
+          'cancelIdleCallback',
+          'hrtime',
+          'performance',
+        ],
+      })
+    )
+    afterEach(() => jest.useRealTimers())
+    const FRESH = { kind: 'verified', state: 'State of Example', demo: true, fetchedFrom: 'example.org' }
+
+    test('U1: a success, then a failure under five minutes later: our earlier result, saying when (control: the first open is fresh, no time)', async () => {
+      const sam = await kept()
+      rootAtWebs()
+      expect(await guardianStandings(sam.agent, { fetch: host() })).toEqual({ [JORDAN]: FRESH })
+      at(4 * 60 * 1000)
+      expect(await guardianStandings(sam.agent, { fetch: host(true) })).toEqual({
+        [JORDAN]: { ...FRESH, fetchedAt: T0.toISOString() },
+      })
+      expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: true, reused: true, fetchedAt: T0.toISOString() })
+    })
+
+    test('U2: exactly at five minutes it is not reused: "Couldn\'t reach the state" (control: one millisecond before, it is)', async () => {
+      const sam = await kept()
+      rootAtWebs()
+      await guardianStandings(sam.agent, { fetch: host() })
+      at(5 * 60 * 1000 - 1)
+      expect((await guardianStandings(sam.agent, { fetch: host(true) }))[JORDAN]).toEqual({
+        ...FRESH,
+        fetchedAt: T0.toISOString(),
+      })
+      at(5 * 60 * 1000)
+      expect((await guardianStandings(sam.agent, { fetch: host(true) }))[JORDAN]).toEqual({
+        kind: 'unreachable',
+        state: 'State of Example',
+      })
+    })
+
+    test('U3: past five minutes: "Couldn\'t reach the state" (control: U1, under five)', async () => {
+      const sam = await kept()
+      rootAtWebs()
+      await guardianStandings(sam.agent, { fetch: host() })
+      at(6 * 60 * 1000)
+      expect((await guardianStandings(sam.agent, { fetch: host(true) }))[JORDAN].kind).toBe('unreachable')
+    })
+
+    test('U4: a failure with no earlier success: "Couldn\'t reach the state", and a failure is never kept (control: U1)', async () => {
+      const sam = await kept()
+      rootAtWebs()
+      expect((await guardianStandings(sam.agent, { fetch: host(true) }))[JORDAN].kind).toBe('unreachable')
+      at(60 * 1000)
+      expect((await guardianStandings(sam.agent, { fetch: host(true) }))[JORDAN].kind).toBe('unreachable')
+    })
+
+    test('U5: a success, then a success: fresh both times, with no time and no reuse mark (control: U1)', async () => {
+      const sam = await kept()
+      rootAtWebs()
+      await guardianStandings(sam.agent, { fetch: host() })
+      at(60 * 1000)
+      expect(await guardianStandings(sam.agent, { fetch: host() })).toEqual({ [JORDAN]: FRESH })
+      expect(sam.askRecord().guardian?.verdict).not.toHaveProperty('reused')
+    })
+
+    test("U6: the host changed (a new tunnel), then a failure: another host's result is never reused (control: same host, U1)", async () => {
+      const sam = await kept()
+      rootAtWebs()
+      await guardianStandings(sam.agent, { fetch: host() })
+      websModule.setDemoStateHost('other-tunnel.trycloudflare.com')
+      at(60 * 1000)
+      expect((await guardianStandings(sam.agent, { fetch: host() }))[JORDAN]).toEqual({
+        kind: 'unreachable',
+        state: 'State of Example',
+      })
+    })
+
+    test("U7: the reused KEL is checked again with today's inputs: a ward that moved refuses it (control: U1, ward unchanged)", async () => {
+      const sam = await kept()
+      rootAtWebs()
+      await guardianStandings(sam.agent, { fetch: host() })
+      await setStateWard(sam.agent, OTHER_WARD)
+      at(60 * 1000)
+      expect((await guardianStandings(sam.agent, { fetch: host(true) }))[JORDAN]).toEqual({
+        kind: 'unverified',
+        outcome: 'wardMismatch',
+      })
+    })
+
+    test('U8: the line for a reused result says when, never just "fetched live" (control: a fresh one has no time)', async () => {
+      const sam = await kept()
+      rootAtWebs()
+      ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => void) => require('react').useEffect(effect, []))
+      ;(useAgent as jest.Mock).mockReturnValue({ agent: sam.agent })
+      jest.spyOn(approverRole, 'approverNames').mockResolvedValue({ [JORDAN]: 'Jordan' })
+      jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue({
+        view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
+        version: 2,
+      } as TrustedApproversState)
+      const screen = async () => {
+        const tree = render(
+          <BasicAppContext>
+            <VtaTrustedApprovers />
+          </BasicAppContext>
+        )
+        await act(async () => undefined)
+        return tree
+      }
+      const realFetch = global.fetch
+      try {
+        global.fetch = host() as never
+        const fresh = await screen()
+        expect(fresh.getByTestId(id(TrustedApproversIds.guardianFetchedLive(JORDAN))).props.children).toBe(
+          'Approver.GuardianFetchedLive'
+        )
+        fresh.unmount()
+        at(60 * 1000)
+        global.fetch = host(true) as never
+        const reused = await screen()
+        expect(reused.getByTestId(id(TrustedApproversIds.guardianFetchedLive(JORDAN))).props.children).toBe(
+          'Approver.GuardianFetchedLiveAt'
+        )
+      } finally {
+        global.fetch = realFetch
+      }
+    })
+
+    test('U9: with a switch off nothing is reused and what was kept is dropped (control: U1, switches on)', async () => {
+      const ok = jest.fn(async () => ({ ok: true as const, aid: ROOT, kel: new Uint8Array([1]) }))
+      const down = jest.fn(async () => ({ ok: false as const, reason: 'unreachable', detail: 'offline' }))
+      expect(await lastLive.resolveRootKelReusing(DID, ok, T0)).toMatchObject({ ok: true, reused: false })
+      setStateVerifiedApproversEnabled(false)
+      expect(await lastLive.resolveRootKelReusing(DID, down, new Date(T0.getTime() + 1000))).toMatchObject({
+        ok: false,
+      })
+      setStateVerifiedApproversEnabled(true)
+      expect(await lastLive.resolveRootKelReusing(DID, down, new Date(T0.getTime() + 2000))).toMatchObject({
+        ok: false,
+      })
+    })
+
+    test('U10: the line in every language names the host and the time (control: the key exists in all three)', () => {
+      for (const f of ['en/en.json', 'fr/fr.json', 'pt-br/pt-br.json']) {
+        const s = require(`../../../localization/${f}`).Approver.GuardianFetchedLiveAt as string
+        expect(s).toContain('{{host}}')
+        expect(s).toContain('{{time}}')
+      }
+    })
   })
 })

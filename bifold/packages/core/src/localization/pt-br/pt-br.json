@@ -3658,6 +3658,7 @@
     "GuardianStateUnreachable": "Não foi possível contatar o estado",
     "GuardianStateUnreachableHint": "Não foi possível contatar {{state}} para verificar este cartão. Ele será verificado de novo na próxima vez que você abrir esta tela.",
     "GuardianFetchedLive": "Obtido ao vivo de {{host}}; a verificação de aliases designados ainda não é suportada.",
+    "GuardianFetchedLiveAt": "Obtido ao vivo de {{host}} às {{time}}; {{host}} não pode ser alcançado agora. A verificação de aliases designados ainda não é suportada.",
     "GuardianDemoCopy": "Demonstração: verificado com uma cópia neste telefone.",
     "CardAskTitle": "Enviar também seu cartão de tutor de {{state}} para {{asker}}?",
     "CardAskTitleNoState": "Enviar também seu cartão de tutor para {{asker}}?",

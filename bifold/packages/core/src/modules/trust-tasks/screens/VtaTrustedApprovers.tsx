@@ -54,7 +54,7 @@ import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
 
 import { checkEnforcement, lastEnforcementCheck, type EnforcementCheck } from './approverEnforcementCheck'
-import { localDate } from './localTime'
+import { localClock, localDate } from './localTime'
 import { deviceErrorWords } from './VtaDevices'
 import ApproverWaitNote from './ApproverWaitNote'
 import { DemoPill } from '../components/DemoPill'
@@ -318,7 +318,17 @@ const VtaTrustedApprovers: React.FC = () => {
         </ThemedText>
         {standing.fetchedFrom ? (
           <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianFetchedLive(did))}>
-            {t('Approver.GuardianFetchedLive', { host: standing.fetchedFrom, interpolation: { escapeValue: false } })}
+            {standing.fetchedAt
+              ? // Our own earlier live result, reused because the host just failed: it says when, never "just now".
+                t('Approver.GuardianFetchedLiveAt', {
+                  host: standing.fetchedFrom,
+                  time: localClock(standing.fetchedAt),
+                  interpolation: { escapeValue: false },
+                })
+              : t('Approver.GuardianFetchedLive', {
+                  host: standing.fetchedFrom,
+                  interpolation: { escapeValue: false },
+                })}
           </ThemedText>
         ) : standing.demo ? (
           <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianDemoCopy(did))}>

@@ -3784,6 +3784,7 @@
     "GuardianStateUnreachable": "Couldn't reach the state",
     "GuardianStateUnreachableHint": "{{state}} couldn't be reached to check this card. It's checked again the next time you open this screen.",
     "GuardianFetchedLive": "Fetched live from {{host}}; the designated-alias check isn't supported yet.",
+    "GuardianFetchedLiveAt": "Fetched live from {{host}} at {{time}}; {{host}} can't be reached right now. The designated-alias check isn't supported yet.",
     "GuardianDemoCopy": "Demo: checked against a copy on this phone.",
     "CardAskTitle": "Also send your Guardian card from {{state}} to {{asker}}?",
     "CardAskTitleNoState": "Also send your Guardian card to {{asker}}?",

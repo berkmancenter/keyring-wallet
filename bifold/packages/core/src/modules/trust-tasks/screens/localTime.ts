@@ -12,7 +12,7 @@
  * @module trust-tasks/screens/localTime
  */
 
-import { absoluteDate, appDateWords, dateTime, phoneUses24HourClock } from '../../../utils/localDay'
+import { absoluteDate, appDateWords, dateTime, phoneUses24HourClock, timeLabel } from '../../../utils/localDay'
 
 const readable = (iso: string): Date | undefined => {
   const ms = Date.parse(iso)
@@ -29,4 +29,10 @@ export function localDate(iso: string): string {
 export function localDateTime(iso: string): string {
   const at = readable(iso)
   return at ? dateTime(at, appDateWords(), phoneUses24HourClock()) : iso
+}
+
+/** "14:30" (or "2:30 PM"): the local wall clock only, by the phone's 12/24-hour setting. Unreadable comes back as it was. */
+export function localClock(iso: string): string {
+  const at = readable(iso)
+  return at ? timeLabel(at, appDateWords(), phoneUses24HourClock()) : iso
 }

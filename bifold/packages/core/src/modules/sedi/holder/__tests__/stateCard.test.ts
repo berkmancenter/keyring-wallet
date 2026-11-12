@@ -15,7 +15,7 @@ import {
 } from '../../../trust-tasks/module/stateVerifiedApproversFlag'
 import { setTrustTestStateEnabled } from '../../../trust-tasks/module/trustTestStateFlag'
 import { setTrustedApproversEnabled } from '../../../trust-tasks/module/trustedApproversFlag'
-import type { GuardianEvidence } from '../../../trust-tasks/guardianEvidence'
+import { resetGuardianCheckMemo, type GuardianEvidence } from '../../../trust-tasks/guardianEvidence'
 import { K0_TEST_GUARDIAN_CARD } from '../../guardian/k0TestCard'
 import { K0_TEST_ROOT } from '../../guardian/stateRoots'
 import { readFileSync } from 'fs'
@@ -56,6 +56,8 @@ const switches = (sv: boolean, testState = true) => {
 // No row may reach the network: the platform fetch refuses unless a row puts a resolver in place.
 const realFetch = global.fetch
 beforeEach(() => {
+  // As after a restart: no row inherits a kept live result (sedi/webs/lastLive), whatever order the rows run in.
+  resetGuardianCheckMemo()
   switches(true)
   global.fetch = jest.fn(async () => {
     throw new Error('no network in tests')
