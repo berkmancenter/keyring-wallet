@@ -30,10 +30,10 @@ const mockTurnOff = jest.fn<void, []>()
 const mockSetConfirm = jest.fn<void, [boolean]>()
 /** The four K0 test-state actions, each its own mock, so a row reaching the wrong one fails. */
 const mockK0 = {
-  holdK0TestGuardianCard: jest.fn<Promise<string>, [unknown, string]>(async () => 'done'),
-  holdK0RevokedTestCard: jest.fn<Promise<string>, [unknown, string]>(async () => 'done'),
-  holdK0RevokedOmittedCard: jest.fn<Promise<string>, [unknown, string]>(async () => 'done'),
-  becomeK0TestWard: jest.fn<Promise<string>, [unknown, string]>(async () => 'done'),
+  holdK0TestGuardianCard: jest.fn<Promise<string>, [unknown]>(async () => 'done'),
+  holdK0RevokedTestCard: jest.fn<Promise<string>, [unknown]>(async () => 'done'),
+  holdK0RevokedOmittedCard: jest.fn<Promise<string>, [unknown]>(async () => 'done'),
+  becomeK0TestWard: jest.fn<Promise<string>, [unknown]>(async () => 'done'),
 }
 // The K0 rows show only while "Trust the test state (K0)" holds: on here, so the rows are on screen to tap.
 let mockTrustTestState = true

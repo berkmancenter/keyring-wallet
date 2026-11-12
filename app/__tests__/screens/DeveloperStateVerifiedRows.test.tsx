@@ -30,10 +30,10 @@ jest.mock('@bifold/react-hooks', () => ({
   ...jest.requireActual('@bifold/react-hooks'),
   useAgent: () => ({ agent: mockAgent }),
 }))
-const mockHold = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
-const mockWard = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
-const mockRevoked = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
-const mockOmitted = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
+const mockHold = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockWard = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockRevoked = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockOmitted = jest.fn<Promise<string>, [unknown]>(async () => 'done')
 const mockSetUp = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
 const mockTurnOff = jest.fn<void, []>()
 jest.mock('@bifold/core', () => ({
