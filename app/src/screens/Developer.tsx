@@ -21,6 +21,7 @@ import {
   isStateVerifiedApproversEnabled,
   isTrustTestStateEnabled,
   holdK0TestGuardianCard,
+  holdK0RevokedTestCard,
   becomeK0TestWard,
   setStateCardEnabled,
   STATE_CARD_REMOTE_OFF,
@@ -478,7 +479,7 @@ const Developer: React.FC = () => {
     setEnableStateCard(next)
   }
 
-  /** The two K0 Developer actions: each does nothing (and says so) unless "Trust the test state (K0)" holds. */
+  /** The K0 Developer actions: each does nothing (and says so) unless "Trust the test state (K0)" holds. */
   const runTestStateAction = async (title: string, action: typeof holdK0TestGuardianCard) => {
     if (!agent) {
       Alert.alert('Error', 'Agent not initialized')
@@ -1165,6 +1166,14 @@ const Developer: React.FC = () => {
               accessibilityLabel={t('Developer.HoldK0TestGuardianCard')}
               testID={testIdWithKey('HoldK0TestGuardianCard')}
               onPress={() => runTestStateAction(t('Developer.HoldK0TestGuardianCard'), holdK0TestGuardianCard)}
+            >
+              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+            </SectionRow>
+            <SectionRow
+              title={t('Developer.HoldK0RevokedTestCard')}
+              accessibilityLabel={t('Developer.HoldK0RevokedTestCard')}
+              testID={testIdWithKey('HoldK0RevokedTestCard')}
+              onPress={() => runTestStateAction(t('Developer.HoldK0RevokedTestCard'), holdK0RevokedTestCard)}
             >
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
             </SectionRow>

@@ -32,12 +32,14 @@ jest.mock('@bifold/react-hooks', () => ({
 }))
 const mockHold = jest.fn<Promise<string>, [unknown]>(async () => 'done')
 const mockWard = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockRevoked = jest.fn<Promise<string>, [unknown]>(async () => 'done')
 const mockSetUp = jest.fn<Promise<string>, [unknown]>(async () => 'done')
 const mockTurnOff = jest.fn<void, []>()
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
   holdK0TestGuardianCard: (agent: unknown) => mockHold(agent),
   becomeK0TestWard: (agent: unknown) => mockWard(agent),
+  holdK0RevokedTestCard: (agent: unknown) => mockRevoked(agent),
   setUpSediDemo: (agent: unknown) => mockSetUp(agent),
   turnOffSediDemo: () => mockTurnOff(),
 }))
@@ -46,6 +48,7 @@ const ROWS = {
   stateVerified: testIdWithKey('ToggleEnableStateVerifiedApprovers'),
   testState: testIdWithKey('ToggleEnableTrustTestState'),
   hold: testIdWithKey('HoldK0TestGuardianCard'),
+  revoked: testIdWithKey('HoldK0RevokedTestCard'),
   ward: testIdWithKey('BecomeK0TestWard'),
 }
 
@@ -62,8 +65,8 @@ const shown = () => {
     rows: Object.fromEntries(Object.entries(ROWS).map(([k, id]) => [k, tree.queryByTestId(id) !== null])),
   }
 }
-const none = { stateVerified: false, testState: false, hold: false, ward: false }
-const all = { stateVerified: true, testState: true, hold: true, ward: true }
+const none = { stateVerified: false, testState: false, hold: false, revoked: false, ward: false }
+const all = { stateVerified: true, testState: true, hold: true, revoked: true, ward: true }
 
 const set = (ta: boolean, sv: boolean, ts: boolean) => {
   setTrustedApproversEnabled(ta)
@@ -82,6 +85,7 @@ afterEach(() => {
   jest.restoreAllMocks()
   mockHold.mockClear()
   mockWard.mockClear()
+  mockRevoked.mockClear()
   mockSetUp.mockClear()
   mockTurnOff.mockClear()
   set(false, false, false)
@@ -91,7 +95,7 @@ afterEach(() => {
 })
 
 describe('Developer: the state-verified approvers rows', () => {
-  test('all off: none of the four rows (control: all on, all four)', () => {
+  test('all off: none of the five rows (control: all on, all five)', () => {
     set(false, false, false)
     expect(shown().rows).toEqual(none)
     set(true, true, true)
@@ -121,7 +125,7 @@ describe('Developer: the state-verified approvers rows', () => {
       { ...none, stateVerified: true },
     ],
     ['SEDI/KERI', () => (SEDI_KERI_REMOTE_OFF.off = true), none],
-  ])('the %s remote off hides what it kills, even with all switched on (control: all on, all four)', (_, off, rows) => {
+  ])('the %s remote off hides what it kills, even with all switched on (control: all on, all five)', (_, off, rows) => {
     set(true, true, true)
     off()
     expect(shown().rows).toEqual(rows)
@@ -135,6 +139,20 @@ describe('Developer: the state-verified approvers rows', () => {
     expect(mockHold).toHaveBeenCalledWith(mockAgent)
     expect(mockWard).toHaveBeenCalledWith(mockAgent)
     expect((Alert.alert as jest.Mock).mock.calls.map((c) => c[1])).toEqual(['Done.', 'Done.'])
+  })
+
+  test('"Hold the revoked test card (K0)" calls bifold with this agent and says done (control: refused, it says not done)', async () => {
+    set(true, true, true)
+    const { tree } = shown()
+    await act(async () => fireEvent.press(tree.getByTestId(ROWS.revoked)))
+    expect(mockRevoked).toHaveBeenCalledWith(mockAgent)
+    expect(mockHold).not.toHaveBeenCalled()
+    mockRevoked.mockResolvedValueOnce('off')
+    await act(async () => fireEvent.press(tree.getByTestId(ROWS.revoked)))
+    expect((Alert.alert as jest.Mock).mock.calls.map((c) => c[1])).toEqual([
+      'Done.',
+      'Not done: turn on Trust the test state (K0) first.',
+    ])
   })
 
   test('an action that bifold refuses says so, not "Done."', async () => {

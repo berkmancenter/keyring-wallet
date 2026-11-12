@@ -206,6 +206,7 @@ const translation = {
     "EnableStateVerifiedApprovers": "State-verified approvers: check an approver's state Guardian card (experimental)",
     "EnableTrustTestState": "Trust the test state (K0), for testing only",
     "HoldK0TestGuardianCard": "Hold the test Guardian card (K0)",
+    "HoldK0RevokedTestCard": "Hold the revoked test card (K0)",
     "BecomeK0TestWard": "I'm the test ward (K0)",
     "EnableStateCard": "State card (demo): show the state Guardian card this phone holds in Credentials",
     "EnableConfirmItsYou": "Confirm it's you: ask a contact to confirm a call or message is really them (demo). Turn it on on both phones.",
