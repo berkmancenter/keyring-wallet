@@ -3793,7 +3793,7 @@
     "WhatChecked": "Ce qui a été vérifié : la carte remonte à un État auquel ce téléphone fait confiance, et elle n'est ni révoquée ni expirée, {{asOf}}. Elle n'est pas encore liée à ce téléphone.",
     "DemoNote": "Carte de démonstration, chargée sur ce téléphone ; non délivrée par un véritable État",
     "SetupNeeded": "Impossible de vérifier sur ce téléphone pour l'instant : activez State-verified approvers et Trust the test state (K0)",
-    "Revoked": "L'État a révoqué cette carte.",
+    "Revoked": "La carte indique qu’elle a été révoquée",
     "Expired": "Cette carte a expiré.",
     "Untrusted": "Elle ne vient pas d'un État auquel ce téléphone fait confiance.",
     "StatusUnknown": "Le registre de l'État pour cette carte ne peut pas être confirmé à partir de la copie que ce téléphone détient.",
@@ -3815,6 +3815,8 @@
     "Checking": "Vérification de la carte auprès de l'État…",
     "PillChecking": "Vérification",
     "NotReached": "Impossible de joindre l'État pour vérifier cette carte. Elle n'est pas vérifiée à la place d'après la copie de ce téléphone. Réessayez plus tard.",
-    "PillNotReached": "Injoignable"
+    "PillNotReached": "Injoignable",
+    "RevokedIssuer": "Le registre publié par l’émetteur indique qu’elle a été révoquée",
+    "RevokedState": "Le registre publié par l’État indique qu’elle a été révoquée"
   }
 }

@@ -16,6 +16,8 @@ import {
 import { setTrustTestStateEnabled } from '../../../trust-tasks/module/trustTestStateFlag'
 import { setTrustedApproversEnabled } from '../../../trust-tasks/module/trustedApproversFlag'
 import { resetGuardianCheckMemo, type GuardianEvidence } from '../../../trust-tasks/guardianEvidence'
+import { K0_REVOKED_OMITTED_CARD } from '../../guardian/k0RevokedOmittedCard'
+import { K0_REVOKED_TEST_GUARDIAN_CARD } from '../../guardian/k0RevokedTestCard'
 import { K0_TEST_GUARDIAN_CARD } from '../../guardian/k0TestCard'
 import { K0_TEST_ROOT } from '../../guardian/stateRoots'
 import { readFileSync } from 'fs'
@@ -123,7 +125,8 @@ describe('the state card: what it says', () => {
     expect(resolveRootKel).toHaveBeenCalledTimes(1)
     expect(v.tone).toBe('ok')
     expect(v.pill).toBeUndefined()
-    expect(v.source).toBe('Approver.GuardianFetchedLive{"host":"example.org"}')
+    // A real root: only its own record is fetched, so the line says the issuers' records came from the card.
+    expect(v.source).toBe('Approver.GuardianFetchedRootLive{"host":"example.org"}')
     // Still the K0 test card, so it still says it is a demo card.
     expect(v.demoNote).toBe('StateCard.DemoNote')
   })
@@ -189,6 +192,8 @@ describe('the state card: what it says', () => {
     ['noWard', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
     ['expiryUnreadable', 'StateCard.Broken', 'StateCard.PillCouldNotVerify'],
     ['stateNotResolved', 'StateCard.NotReached', 'StateCard.PillNotReached'],
+    ['revokedInIssuerRecord', 'StateCard.RevokedIssuer', 'StateCard.PillRevoked'],
+    ['revokedInStateRecord', 'StateCard.RevokedState', 'StateCard.PillRevoked'],
   ])('refused (%s): its words, a red pill, no state name, no root, no "Demo"', async (reason, status, pill) => {
     const v = view(refused(reason))
     expect([v.tone, v.status, v.pill, v.title, v.technical.root]).toEqual([
@@ -343,4 +348,97 @@ describe('the state card: checking, and checked live', () => {
     setDemoStateHost(null)
     expect(checkKeyOf(card)).toBe(copy)
   })
+
+  const fetched = (extra: object): HeldCheck => ({
+    checked: true,
+    verdict: {
+      ok: true,
+      root: K0_TEST_ROOT.aid,
+      state: K0_TEST_ROOT.name,
+      demo: true,
+      checkedAt: NOW.toISOString(),
+      fetchedFrom: 'example.org',
+      ...extra,
+    },
+  })
+  const clock = (iso: string) => `clock(${iso})`
+  const AT = '2026-11-12T11:58:00Z'
+  test.each([
+    ['root and issuers fetched, fresh', { fetchedIssuers: true }, 'Approver.GuardianFetchedLive{"host":"example.org"}'],
+    [
+      'root and issuers fetched, reused',
+      { fetchedIssuers: true, fetchedAt: AT, reused: true },
+      `Approver.GuardianFetchedLiveAt{"host":"example.org","time":"clock(${AT})"}`,
+    ],
+    ['only the root fetched, fresh', {}, 'Approver.GuardianFetchedRootLive{"host":"example.org"}'],
+    [
+      'only the root fetched, reused',
+      { fetchedAt: AT, reused: true },
+      `Approver.GuardianFetchedRootLiveAt{"host":"example.org","time":"clock(${AT})"}`,
+    ],
+  ])("%s: the line Who approves shows (guardianSourceKey), and the status is the full check's", (_, extra, line) => {
+    const v = stateCardView(card, fetched(extra), t, day, clock)
+    expect(v.source).toBe(line)
+    expect(v.status).toBe(`StateCard.ChecksOut{"asOf":"${STATE_CARD_AS_OF_LIVE}"}`)
+  })
+
+  test('the root answers but an issuer in its chain can\'t be reached: "Couldn\'t reach", never "Checks out"', async () => {
+    setDemoStateHost('example.org')
+    const resolveRootKel = jest.fn(async (did: string) => {
+      const aid = did.slice(did.lastIndexOf(':') + 1)
+      return aid === K0_TEST_ROOT.aid
+        ? { ok: true as const, aid, kel: chainKel(aid) }
+        : { ok: false as const, reason: 'unreachable', detail: 'offline' }
+    })
+    const v = view(await checkHeldCard(card, NOW, () => undefined, { resolveRootKel }))
+    expect(resolveRootKel.mock.calls.length).toBeGreaterThan(1)
+    expect([v.tone, v.status, v.pill]).toEqual(['problem', 'StateCard.NotReached', 'StateCard.PillNotReached'])
+    expect(v.status).not.toMatch(CHECKS_OUT)
+  })
+
+  test('the real card that CARRIES its revocation (#1044): "The card shows it was revoked", from its own copy', async () => {
+    const v = view(await checked(K0_REVOKED_TEST_GUARDIAN_CARD as GuardianEvidence))
+    expect([v.tone, v.status, v.pill, v.technical.result]).toEqual([
+      'problem',
+      'StateCard.Revoked',
+      'StateCard.PillRevoked',
+      'revoked',
+    ])
+    expect(v.status).not.toMatch(CHECKS_OUT)
+  })
+
+  test("the real card that leaves out its revocation: the issuer's published record shows it (control: from its own copy, it checks out)", async () => {
+    const omitted = K0_REVOKED_OMITTED_CARD as GuardianEvidence
+    const all = jest.fn(async (did: string) => {
+      const aid = did.slice(did.lastIndexOf(':') + 1)
+      return { ok: true as const, aid, kel: chainKel(aid) }
+    })
+    // Control: no host, so the card's own copy, which leaves the revocation out, is all there is to read.
+    expect(view(await checkHeldCard(omitted, NOW, () => undefined, { resolveRootKel: all })).status).toMatch(CHECKS_OUT)
+    setDemoStateHost('example.org')
+    const v = view(await checkHeldCard(omitted, NOW, () => undefined, { resolveRootKel: all }))
+    expect([v.tone, v.status, v.pill, v.technical.result]).toEqual([
+      'problem',
+      'StateCard.RevokedIssuer',
+      'StateCard.PillRevoked',
+      'revokedInIssuerRecord',
+    ])
+  })
+})
+
+describe('the state card: the same revocation words as Who approves, in every language', () => {
+  test.each(['en', 'fr', 'pt-br'])(
+    '%s: StateCard.Revoked / RevokedIssuer / RevokedState equal Approver.GuardianRevoked / RevokedIssuer / RevokedState',
+    (lang) => {
+      const words = JSON.parse(
+        readFileSync(join(__dirname, '..', '..', '..', '..', 'localization', lang, `${lang}.json`), 'utf8')
+      ) as Record<string, Record<string, string>>
+      expect([words.StateCard.Revoked, words.StateCard.RevokedIssuer, words.StateCard.RevokedState]).toEqual([
+        words.Approver.GuardianRevoked,
+        words.Approver.GuardianRevokedIssuer,
+        words.Approver.GuardianRevokedState,
+      ])
+      expect(words.StateCard.RevokedIssuer).toBeTruthy()
+    }
+  )
 })

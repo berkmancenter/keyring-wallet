@@ -3835,7 +3835,7 @@
     "WhatChecked": "What was checked: the card leads back to a state this phone trusts, and it isn't revoked or expired, {{asOf}}. It doesn't yet link the card to this phone.",
     "DemoNote": "Demo card, loaded on this phone; not issued by a real state",
     "SetupNeeded": "Can't check on this phone yet: turn on State-verified approvers and Trust the test state (K0)",
-    "Revoked": "The state has revoked this card.",
+    "Revoked": "The card shows it was revoked",
     "Expired": "This card has expired.",
     "Untrusted": "It isn't from a state this phone trusts.",
     "StatusUnknown": "The state's record of this card can't be confirmed from the copy this phone holds.",
@@ -3857,6 +3857,8 @@
     "Checking": "Checking the card with the state…",
     "PillChecking": "Checking",
     "NotReached": "Couldn't reach the state to check this card. It isn't checked against the copy on this phone instead. Try again later.",
-    "PillNotReached": "Couldn't reach"
+    "PillNotReached": "Couldn't reach",
+    "RevokedIssuer": "The issuer's published record shows it was revoked",
+    "RevokedState": "The state's published record shows it was revoked"
   }
 }

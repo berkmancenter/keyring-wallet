@@ -20,6 +20,7 @@ import { SEDI_KERI_REMOTE_OFF } from '../../../trust-tasks/module/sediKeriRemote
 import { setStateVerifiedApproversEnabled } from '../../../trust-tasks/module/stateVerifiedApproversFlag'
 import { setTrustTestStateEnabled } from '../../../trust-tasks/module/trustTestStateFlag'
 import { setTrustedApproversEnabled } from '../../../trust-tasks/module/trustedApproversFlag'
+import { K0_REVOKED_OMITTED_CARD } from '../../guardian/k0RevokedOmittedCard'
 import { K0_TEST_GUARDIAN_CARD } from '../../guardian/k0TestCard'
 import { K0_TEST_ROOT } from '../../guardian/stateRoots'
 import { setDemoStateHost } from '../../webs/demoStateHost'
@@ -46,11 +47,11 @@ const heldQueries = () =>
     ([q]) => (q as { recordType?: string })?.recordType === guardianEvidence.GUARDIAN_EVIDENCE_HELD
   ).length
 
-/** The phone holds the K0 card (as "Hold the test Guardian card (K0)" leaves it), or nothing. */
-function holds(held: boolean) {
+/** The phone holds the K0 card (as "Hold the test Guardian card (K0)" leaves it), another card, or nothing. */
+function holds(held: boolean, card: object = K0_TEST_GUARDIAN_CARD) {
   agent.genericRecords.findAllByQuery.mockImplementation(async (query: { recordType?: string }) =>
     held && query?.recordType === guardianEvidence.GUARDIAN_EVIDENCE_HELD
-      ? [{ content: { ...K0_TEST_GUARDIAN_CARD, heldAt: '2026-11-11T00:00:00Z' } }]
+      ? [{ content: { ...card, heldAt: '2026-11-11T00:00:00Z' } }]
       : []
   )
 }
@@ -308,6 +309,21 @@ describe('the state card in Credentials', () => {
     fireEvent.press(tree.getByTestId(id('CommunityPass')))
     await waitFor(() => expect(tree.getByTestId(id('StateCardDetails'))).toBeTruthy())
     expect(tree.getByTestId(id('StateCardStatus')).props.children).toBe('StateCard.NotReached')
+  })
+
+  test('the real card that leaves out its revocation, checked live: a red "Revoked", the issuer\'s record named', async () => {
+    holds(true, K0_REVOKED_OMITTED_CARD)
+    setDemoStateHost('example.org')
+    setRootKelResolver(async (did: string) => {
+      const aid = did.slice(did.lastIndexOf(':') + 1)
+      return { ok: true as const, aid, kel: chainKel(aid) }
+    })
+    const tree = await wallet()
+    expect(tree.getByTestId(id('CommunityPassStatus')).props.children).toBe('StateCard.PillRevoked')
+    fireEvent.press(tree.getByTestId(id('CommunityPass')))
+    await waitFor(() => expect(tree.getByTestId(id('StateCardDetails'))).toBeTruthy())
+    expect(tree.getByTestId(id('StateCardStatus')).props.children).toBe('StateCard.RevokedIssuer')
+    expect(tree.queryByTestId(id('StateCardWhatChecked'))).toBeNull()
   })
 
   test('the chain is checked once for the card, not on each render of the list', async () => {

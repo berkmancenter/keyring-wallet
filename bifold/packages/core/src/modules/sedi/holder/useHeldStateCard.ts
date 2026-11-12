@@ -24,7 +24,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { heldGuardianEvidence, type GuardianEvidence } from '../../trust-tasks/guardianEvidence'
-import { localDate } from '../../trust-tasks/screens/localTime'
+import { localClock, localDate } from '../../trust-tasks/screens/localTime'
 
 import {
   checkHeldCard,
@@ -92,5 +92,5 @@ export function useHeldStateCard(focused: boolean): StateCardView | undefined {
 
   if (!on || !held || !key) return undefined
   const check = uncheckable ?? (answer?.key === key ? answer.check : PENDING)
-  return stateCardView(held, check, t, localDate)
+  return stateCardView(held, check, t, localDate, localClock)
 }
