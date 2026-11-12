@@ -28,29 +28,47 @@ publish=0
 pin_of() { node -e "process.stdout.write(require('$openvtc/PINS.json').repos['$1'].sha)"; }
 vti="$(pin_of verifiable-trust-infrastructure)"
 vti047="$(pin_of verifiable-trust-infrastructure-v047)"
-tag="card-verify-dist-${vti:0:9}-${vti047:0:9}"
+# The tag names both pins AND the checkers' sources, so every distinct build gets
+# its own release: a rebuild after a checker change never replaces the binaries
+# bifold main is still downloading before the new DIST.json lands.
+digest_cv="$(node "$here/digest.mjs" "$openvtc/card-verify" "$vti")"
+digest_047="$(node "$here/digest.mjs" "$openvtc/card-verify-v047" "$vti047")"
+src="$(printf '%s\n%s\n' "$digest_cv" "$digest_047" | shasum -a 256 | cut -c1-8)"
+tag="card-verify-dist-${vti:0:9}-${vti047:0:9}-$src"
 repo="berkmancenter/keyring-wallet"
+if [ "$publish" = 1 ] && gh release view "$tag" -R "$repo" >/dev/null 2>&1; then
+  echo "build.sh: release $tag already exists for these exact pins and sources; DIST.json on main should already name it. Not replacing its binaries." >&2
+  exit 1
+fi
 out="${CARD_VERIFY_DIST_OUT:-$HOME/.keyring-gate/cvbuild/dist/$tag}"
 mkdir -p "$out"
 
 export MACOSX_DEPLOYMENT_TARGET=14.0
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
+target_root="${CARGO_TARGET_ROOT:-$HOME/.keyring-gate/cvbuild}"
+floor_kb=$(( ${CARD_VERIFY_DISK_FLOOR_GIB:-8} * 1024 * 1024 ))
 # trust-tasks-rs 0.37.2 alone takes most of a 16-24 GB Mac's memory to compile,
 # and macOS swaps to the same disk: on 11-11 a build here took the disk from 11
-# to under 4 GiB in 20 minutes. Run it as the machine's only heavy job; this
-# watchdog stops the build if free disk falls below the floor.
-target_root="${CARGO_TARGET_ROOT:-$HOME/.keyring-gate/cvbuild}"
-floor_gib="${CARD_VERIFY_DISK_FLOOR_GIB:-8}"
-( while sleep 20; do
-    free_kb="$(df -k / | awk 'NR==2{print $4}')"
-    if [ "$free_kb" -lt $((floor_gib * 1024 * 1024)) ]; then
-      echo "build.sh: free disk under ${floor_gib} GiB, stopping the build" >&2
-      pkill -TERM -f "$target_root/target-" || true
-      exit 0
+# to under 4 GiB in 20 minutes. Run it as the machine's only heavy job. The loop
+# below watches cargo's own pid and, once free disk falls under the floor, keeps
+# stopping cargo and its compilers until cargo is gone, then fails the build.
+build_checker() { # <name> <target dir>
+  ( cd "$openvtc/$1" && CARGO_TARGET_DIR="$2" exec cargo build --release --locked ) &
+  local pid=$! stopped=0 tries=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$stopped" = 1 ] || [ "$(df -k / | awk 'NR==2{print $4}')" -lt "$floor_kb" ]; then
+      [ "$stopped" = 1 ] || echo "build.sh: free disk under the floor, stopping the build of $1" >&2
+      stopped=1; tries=$((tries + 1))
+      sig=TERM; [ "$tries" -gt 6 ] && sig=KILL
+      pkill "-$sig" -P "$pid" 2>/dev/null || true
+      kill "-$sig" "$pid" 2>/dev/null || true
     fi
-  done ) &
-watchdog=$!
-trap 'kill $watchdog 2>/dev/null || true' EXIT
+    sleep 5
+  done
+  local rc=0; wait "$pid" || rc=$?
+  [ "$stopped" = 0 ] || { echo "build.sh: $1 stopped for low disk; nothing written" >&2; exit 1; }
+  [ "$rc" = 0 ] || exit "$rc"
+}
 
 entries=()
 for name in card-verify card-verify-v047; do
@@ -58,7 +76,7 @@ for name in card-verify card-verify-v047; do
   head="$(git -C "$root/external/$clone" rev-parse HEAD)"
   case "$head" in "$pin"*) ;; *) echo "build.sh: external/$clone is at $head, not the pin $pin; run setup-external.mjs from an up-to-date tree" >&2; exit 1;; esac
   target="$target_root/target-$name"
-  ( cd "$openvtc/$name" && CARGO_TARGET_DIR="$target" cargo build --release --locked )
+  build_checker "$name" "$target"
   bin="$target/release/$name"
   # Only system libraries: a Homebrew or local dylib would not exist on the runner.
   if otool -L "$bin" | tail -n +2 | awk '{print $1}' | grep -vE '^(/usr/lib/|/System/Library/)'; then
@@ -66,7 +84,7 @@ for name in card-verify card-verify-v047; do
   fi
   cp "$bin" "$out/$name"
   sha="$(shasum -a 256 "$out/$name" | awk '{print $1}')"
-  digest="$(node "$here/digest.mjs" "$openvtc/$name" "$pin")"
+  if [ "$name" = card-verify ]; then digest="$digest_cv"; else digest="$digest_047"; fi
   url="https://github.com/$repo/releases/download/$tag/$name"
   entries+=("\"$name\": {\"vtiPin\": \"$pin\", \"sourceDigest\": \"$digest\", \"sha256\": \"$sha\", \"url\": \"$url\", \"target\": \"aarch64-apple-darwin\", \"minMacOS\": \"$MACOSX_DEPLOYMENT_TARGET\"}")
 done
@@ -87,11 +105,7 @@ node -e "JSON.parse(require('fs').readFileSync('$here/DIST.json','utf8'))"
 echo "wrote $here/DIST.json ($tag)"
 
 if [ "$publish" = 1 ]; then
-  if gh release view "$tag" -R "$repo" >/dev/null 2>&1; then
-    gh release upload "$tag" "$out/card-verify" "$out/card-verify-v047" -R "$repo" --clobber
-  else
-    gh release create "$tag" "$out/card-verify" "$out/card-verify-v047" -R "$repo" --prerelease --target main \
-      --title "card-verify $tag" --notes "Prebuilt VTI checkers for bifold's conformance job (macOS arm64). Not an app release. See scripts/openvtc/card-verify-dist/."
-  fi
+  gh release create "$tag" "$out/card-verify" "$out/card-verify-v047" -R "$repo" --prerelease --target main \
+    --title "card-verify $tag" --notes "Prebuilt VTI checkers for bifold's conformance job (macOS arm64). Not an app release. See scripts/openvtc/card-verify-dist/."
   echo "published $tag"
 fi

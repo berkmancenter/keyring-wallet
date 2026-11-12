@@ -10,12 +10,17 @@ release asset of this repository, and the job downloads them.
 
 - `build.sh` builds both checkers at the pins in `../PINS.json`, checks they link
   only system libraries, and writes `DIST.json`. `--publish` also creates the
-  release `card-verify-dist-<vti>-<v047>` and uploads the binaries. It needs a
-  checkout whose `external/` clones are at the pins, and it is a heavy job: run it
-  as the machine's only one (a disk watchdog stops it below 8 GiB free, since
-  macOS swaps to the same disk).
+  release `card-verify-dist-<vti>-<v047>-<sources>`, where `<sources>` is a short
+  hash of both checkers' source digests, so every distinct build gets its own
+  release and never replaces binaries that `main` still downloads. It refuses to
+  publish over an existing release. It needs a checkout whose `external/` clones
+  are at the pins, and it is a heavy job: run it as the machine's only one (it
+  watches cargo's own process and stops the build below 8 GiB free, since macOS
+  swaps to the same disk).
 - `digest.mjs` computes a checker's source digest: the VTI pin plus the hash of
-  `Cargo.toml`, `Cargo.lock` and every file under `src/`.
+  every file in the checker's directory except the inert ones it names
+  (`README.md`, `check-keyring-card.sh`, `target/`). A new build input such as a
+  `build.rs` or a `rust-toolchain.toml` is covered without changing it.
 - `DIST.json` records, per checker, the VTI pin, the source digest, the sha256
   and the download URL.
 
