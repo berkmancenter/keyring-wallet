@@ -208,6 +208,12 @@ const Developer: React.FC = () => {
     showRowSeparator?: boolean
     subContent?: React.JSX.Element
     onPress?: () => void
+    /**
+     * An action row (an arrow, no switch): the whole row, its words included, takes the tap, not only the arrow
+     * (Alberto needed two taps on "Set up the SEDI demo" in 278.16). Never for a switch row: a Switch inside a
+     * pressable row could toggle twice.
+     */
+    wholeRow?: boolean
   }
   const SectionRow = ({
     title,
@@ -217,21 +223,36 @@ const Developer: React.FC = () => {
     children,
     showRowSeparator,
     subContent,
+    wholeRow,
   }: SectionRowProps) => (
     <>
       <View style={styles.section}>
-        <View style={{ flexDirection: 'row' }}>
-          <Text style={styles.rowTitle}>{title}</Text>
+        {wholeRow ? (
           <Pressable
             onPress={onPress}
             accessible={true}
+            accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
             testID={testID}
-            style={styles.sectionRow}
+            style={{ flexDirection: 'row' }}
           >
-            {children}
+            <Text style={styles.rowTitle}>{title}</Text>
+            <View style={styles.sectionRow}>{children}</View>
           </Pressable>
-        </View>
+        ) : (
+          <View style={{ flexDirection: 'row' }}>
+            <Text style={styles.rowTitle}>{title}</Text>
+            <Pressable
+              onPress={onPress}
+              accessible={true}
+              accessibilityLabel={accessibilityLabel}
+              testID={testID}
+              style={styles.sectionRow}
+            >
+              {children}
+            </Pressable>
+          </View>
+        )}
         {subContent}
       </View>
       {showRowSeparator && (
@@ -1178,6 +1199,7 @@ const Developer: React.FC = () => {
               title={t('Developer.HoldK0TestGuardianCard')}
               accessibilityLabel={t('Developer.HoldK0TestGuardianCard')}
               testID={testIdWithKey('HoldK0TestGuardianCard')}
+              wholeRow
               onPress={() => runTestStateAction(t('Developer.HoldK0TestGuardianCard'), holdK0TestGuardianCard)}
             >
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
@@ -1186,6 +1208,7 @@ const Developer: React.FC = () => {
               title={t('Developer.HoldK0RevokedTestCard')}
               accessibilityLabel={t('Developer.HoldK0RevokedTestCard')}
               testID={testIdWithKey('HoldK0RevokedTestCard')}
+              wholeRow
               onPress={() => runTestStateAction(t('Developer.HoldK0RevokedTestCard'), holdK0RevokedTestCard)}
             >
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
@@ -1194,6 +1217,7 @@ const Developer: React.FC = () => {
               title={t('Developer.HoldK0RevokedOmittedCard')}
               accessibilityLabel={t('Developer.HoldK0RevokedOmittedCard')}
               testID={testIdWithKey('HoldK0RevokedOmittedCard')}
+              wholeRow
               onPress={() => runTestStateAction(t('Developer.HoldK0RevokedOmittedCard'), holdK0RevokedOmittedCard)}
             >
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
@@ -1202,6 +1226,7 @@ const Developer: React.FC = () => {
               title={t('Developer.BecomeK0TestWard')}
               accessibilityLabel={t('Developer.BecomeK0TestWard')}
               testID={testIdWithKey('BecomeK0TestWard')}
+              wholeRow
               onPress={() => runTestStateAction(t('Developer.BecomeK0TestWard'), becomeK0TestWard)}
             >
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
@@ -1251,6 +1276,7 @@ const Developer: React.FC = () => {
               title={t('Developer.SetUpSediDemo')}
               accessibilityLabel={t('Developer.SetUpSediDemo')}
               testID={testIdWithKey('SetUpSediDemo')}
+              wholeRow
               onPress={() => void runSediDemoSetup()}
             >
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
@@ -1264,6 +1290,7 @@ const Developer: React.FC = () => {
                 title={t('Developer.TurnOffSediDemo')}
                 accessibilityLabel={t('Developer.TurnOffSediDemo')}
                 testID={testIdWithKey('TurnOffSediDemo')}
+                wholeRow
                 onPress={runSediDemoOff}
               >
                 <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
