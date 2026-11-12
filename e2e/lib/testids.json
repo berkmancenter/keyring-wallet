@@ -1521,6 +1521,7 @@
     "StateCardClose": ["src/modules/sedi/holder/StateCardDetails.tsx"],
     "StateCardDemoNote": ["src/modules/sedi/holder/StateCardDetails.tsx"],
     "StateCardDetails": ["src/modules/sedi/holder/StateCardDetails.tsx"],
+    "StateCardSource": ["src/modules/sedi/holder/StateCardDetails.tsx"],
     "StateCardStatus": ["src/modules/sedi/holder/StateCardDetails.tsx"],
     "StateCardTechnical": ["src/modules/sedi/holder/StateCardDetails.tsx"],
     "StateCardTechnicalRows": ["src/modules/sedi/holder/StateCardDetails.tsx"],
