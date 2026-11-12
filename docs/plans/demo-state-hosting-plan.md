@@ -26,7 +26,7 @@ It does not change the resolver, the Guardian check or any trust decision.
 **Companions (review index):**
 
 - [`2026-11-12-al.md`](./demo-state-hosting-plan/2026-11-12-al.md): the evidence behind the host choice (the tunnel's
-  rate limits, GitHub Pages' fixed cache, the wallet host today), and the questions still open with the SEDI lane.
+  rate limits, GitHub Pages' fixed cache, the wallet host today), and the SEDI lane's answers that set §4 and §5.
 
 ## 1. What the host serves
 
@@ -166,31 +166,57 @@ so a host that has drifted shows up before a demo, not during one.
 
 ## 4. Real issuance and live revocation
 
-**Conditional on the SEDI lane's design, which comes after the Sunday 2026-11-15 demo and isn't settled.** This section
-states only what that work needs from the host. The questions it leaves open are in the companion.
+**The SEDI lane builds this after the Sunday 2026-11-15 demo.** Its shape is settled (companion, "SEDI lane answers");
+the work is not started. This section states what it needs from the host and from the app.
 
-- **A new demo state with kept keys (K1).** K0's keys were thrown away when the kit was made, so nothing new can be
-  issued or revoked under it. K1 is a root, an org unit and an issuing agent whose keys are kept. Each one must meet
-  §1.1:
-  - P-256;
-  - no witnesses;
-  - no delegation;
-  - single-signature thresholds.
+- **A second demo state with kept keys (K1), beside K0.** K0's keys were thrown away when the kit was made, so nothing
+  new can be issued or revoked under it. K1 is made the same way and has the same shape:
+  - The kit's own tooling, copied: keripy at the same pin (`7143832`, 2.1.0-dev1), `e2e/k0k3/k0/run_k0.sh` and a
+    `gen_k1.py` copied from `gen_k0.py`.
+  - The same chain: the state root, then (Unit) the org unit, then (Agent) the issuing agent, then (Guardian) the
+    guardian, who (Social) names the ward. The chain is built from ACDC edges, not from delegated AIDs.
+  - The same profile, exactly as the K0 kit's `PROVENANCE.json` declares it, including its declared deviations:
+    - P-256 keys (`1AAJ`);
+    - SHA2-256 prefixes and next-key digests;
+    - Blake3 event, ACDC and TEL SAIDs;
+    - no witnesses (`toad` 0);
+    - one key, `kt` 1.
 
-  K1 is still ours, not a state's, so the phone's list marks it `demo` and Who approves shows the Demo pill.
-- **The keys never reach the host, the repository or a tunnel.** Where they live is the owner's decision (§8). The
-  machine that holds them runs the issuance tool and the generator, and hands only the published tree to §3.2.
-- **Issuing a card:**
-  1. The issuing agent anchors the credential in its log.
-  2. Its `keri.cesr` grows by one event, and is republished.
-  3. Its `did.json` changes only if a key rotates.
-- **Revoking a card live:**
-  1. The issuer anchors the revocation and republishes.
-  2. On the next open of Who approves, the phone fetches the issuer's published log.
-  3. The phone shows "The issuer's published record shows it was revoked" (`revokedInIssuerRecord`). It does so even if
-     the card's own copy stops before the revocation (keyring-bifold#1045).
+    The verifier is tested against exactly that shape, so K1 does not "fix" any of it. It meets §1.1 as it stands.
+  - It writes `kel-<name>.cesr` files, which are what the generator's `--kels` reads (§3.1).
 
-  How quickly it shows:
+  K1 is still ours, not a state's, so the phone's list marks it `demo` and Who approves shows the Demo pill. Its name is
+  the owner's choice (§8). K0 is never replaced: it stays the fixed fixture the verifier is tested against, and the
+  offline copy.
+- **The keys stay on the operator's machine.** That machine runs the issuance tool and the generator, and hands only
+  the public tree to §3.2. Issuing and revoking never run on the host, and never go over a tunnel. Which machine it is,
+  and how its keys are backed up, is the owner's decision (§8).
+- **Getting the card to the guardian's phone is a new step.** The existing carriage (guardian-evidence/0.1,
+  keyring-bifold#1027) runs from the approver to the person, not from the issuer to the guardian, and K0's card is
+  bundled in the build (`holdGuardianEvidence`). For the demos, a Developer step "Get the Guardian card from \<host\>"
+  fetches the published card (its ACDC and its TEL) from K1's host. It keeps the card through `holdGuardianEvidence`, so
+  the existing check applies unchanged. The host then also serves the card files, in a layout that step's design sets,
+  under the same tree and the same headers (§1.1).
+
+  **Rejected:**
+  - Bundling a K1 card in an OTA, as K0's is. It isn't issuance.
+  - A real IPEX grant to the phone. It needs a KERI agent on the phone (keri-holder plan, stage 3), which comes after
+    these demos.
+- **The ward is still a Developer setting.** The card's issuee is a ward AID keripy made, which isn't on the phone. The
+  person's setup sets K1's ward as it sets K0's today, not bound to the person (keri-holder plan KH-P3).
+- **Revoking a card live, from the issuer's log.** In the K0 kit, a card's revocation is a TEL `brv` in that card's
+  own registry (one registry per card, a declared deviation), anchored by an event in the issuing agent's log. A live
+  revocation is therefore one TEL event plus one anchoring event:
+  1. Only the issuing agent's `keri.cesr` is republished.
+  2. On the next open of Who approves, the phone fetches that log.
+  3. It shows "The issuer's published record shows it was revoked" (`revokedInIssuerRecord`), from the anchor alone,
+     even when the card's own copy stops before the revocation (keyring-bifold#1045).
+
+  **This plan promises that line, and only that line.** "The card shows it was revoked" would need the phone to hold
+  the `brv` itself: the TEL's revoked state published as well, and the card fetched again. That is a separate choice,
+  not part of this plan.
+
+  How quickly the revocation shows:
   - With `no-store` (§1.1), at the next open.
   - If the host was unreachable at that open: up to five minutes, while the phone reuses its own earlier success. The
     screen labels that result "Fetched live from \<host\> at \<time\>".
@@ -201,20 +227,37 @@ states only what that work needs from the host. The questions it leaves open are
 
 None of this touches the resolver or the Guardian check.
 
-- **A1. The one-tap demo setup fills the host.** "Set up the SEDI demo" writes the permanent host into "Demo state
-  host" **when the field is empty**, and leaves a typed value (a tunnel test's) alone. The field keeps its meaning:
-  - it says where demo roots are fetched from;
-  - clearing it means "check against the copy on this phone";
-  - a real root ignores it (`sedi/webs/demoStateHost.ts`).
+- **A1. The Developer "Demo state host" applies to K0 only.** Today it replaces the host of every root the list marks
+  `demo` (`sedi/webs/demoStateHost.ts`). It moves to an explicit mark on the entry, set on K0 alone. K0 keeps the field
+  exactly as today: a typed host (a tunnel test, or the permanent host typed by hand) is fetched, and an empty field
+  means "check against the copy on this phone".
+- **A2. The K1 root on the phone's list.** It goes beside K0 in `sedi/guardian/stateRoots.ts`, with:
+  - its own AID and name;
+  - `demo: true`;
+  - its did:webs on the permanent host, **fixed in the entry**.
 
-  **Rejected:** making the demo root's own did:webs the permanent host, and fetching it when the field is empty. That
-  changes what an empty field means. The "Demo: checked against a copy on this phone" line would no longer be true of
-  an empty field, and a phone with the switches on would start fetching without anyone choosing to.
-- **A2. The K1 root on the phone's list**, after §4. It goes beside K0 in `sedi/guardian/stateRoots.ts`, with
-  `demo: true` and its did:webs on the permanent host. It is trusted on the same terms as K0: in a Developer build, or
-  with "Trust the test state" on. K0 stays for the fixtures, the tests and tunnel runs.
-- **Delivery.** Both are JavaScript-only. `scripts/release/tier.mjs` grades the change (`ota` or `ota-strict`), and the
-  OTA ships only on the owner's word, as always.
+  It is always fetched from that did:webs, and the free-text field never redirects it. It is trusted on the same terms
+  as K0: in a Developer build, or with "Trust the test state" on.
+- **A3. The setups choose a kit.** The guardian's and the person's one-tap setups take a choice of K0 or K1. K0 stays
+  the default until K1 has checked live on both phones.
+- **A4. "Get the Guardian card from \<host\>"**, the Developer step in §4.
+- **Delivery.** All of these are JavaScript-only. `scripts/release/tier.mjs` grades the change (`ota` or `ota-strict`),
+  and the OTA ships only on the owner's word, as always.
+
+**Why K1's host is fixed (security).** The field is free text: anyone at the phone can type any public hostname into
+it. Applying it to K1 would let a typed host stand in for the state's own, and the screen would still name that host
+as the state's record. The trust anchor wouldn't move (the AID on the list, whose log must replay), but the host's
+answer is exactly what live revocation rests on. A host that serves a log cut short before a revocation would hide
+that revocation. So the state's host comes only from the phone's own list, and the field stays a test tool for the
+kit nothing is issued under.
+
+**Rejected:**
+- **The one-tap setup fills "Demo state host" when the field is empty.** It collides with "an empty field means the
+  copy": a tester who clears the field on purpose gets it filled again on the next tap. Making it work would need a
+  third, saved "cleared on purpose" state. A2's fixed host makes it unnecessary.
+- **Fetching a demo root's own did:webs whenever the field is empty.** This changes what an empty field means for K0.
+  "Demo: checked against a copy on this phone" would no longer be true, and a phone with the switches on would start
+  fetching without anyone choosing to.
 
 ## 6. What it costs
 
@@ -226,8 +269,8 @@ None of this touches the resolver or the Guardian check.
 | Caddy site block, headers, deploy directory | About ½ day, including a check on a local Caddy before the real host. |
 | Generator `--kels`, manifest, swap publish | About ½ day. |
 | Live check (§3.3) with its control | About ½ day. |
-| A1 (one-tap fills the host), rows and a mutant | About ½ day plus review. |
-| K1 and the issuance tool (§4) | The SEDI lane's estimate: about 3 to 3½ days, plus 1 to 1½ days for live revocation. |
+| A1 (the field applies to K0 only), rows and a mutant | About ½ day plus review. |
+| K1, the issuance tool, A2–A4 (§4, §5) | The SEDI lane's estimate: about 3 to 3½ days, plus 1 to 1½ days for live revocation. |
 
 The estimates are this lane's. They aren't measured.
 
@@ -258,15 +301,16 @@ Each step starts on the owner's word where §8 says so.
    - Work: deploy the site block and publish K0's six files.
    - Done when the live check passes against the real hostname from outside our network.
 5. **S5. A1 in the app.**
-   - Done when rows prove each of these, and a mutant that always overwrites is killed:
-     - an empty field is filled;
-     - a typed host is kept;
-     - with the switches off nothing is fetched.
-   - On two phones, Who approves reads "Fetched live from \<host\>" with no host typed.
-6. **S6. K1 and live revocation** (§4, the SEDI lane, after the Sunday demo).
-   - Done when, on two phones:
-     - a card issued under K1 checks live;
-     - after the issuer revokes it, the next open reads "The issuer's published record shows it was revoked";
+   - Done when rows prove each of these, and a mutant that applies the field to every demo root is killed:
+     - with a host typed, K0 is fetched from it;
+     - with a host typed, a root without the mark is fetched from its own did:webs, never from the typed host;
+     - with the field empty, K0 is checked against the copy;
+     - with the switches off, nothing is fetched.
+6. **S6. K1 and live revocation** (§4, A2–A4: the SEDI lane, after the Sunday demo).
+   - Done when, on two phones, with the kit set to K1 and no host typed:
+     - "Get the Guardian card" holds K1's card;
+     - Who approves reads "Fetched live from \<host\>";
+     - after the issuer revokes the card, the next open reads "The issuer's published record shows it was revoked";
      - the live check passes on the republished tree.
 
 The quick-tunnel runbook stays as it is for ad hoc tests. Nothing in it is removed.
@@ -278,14 +322,15 @@ The quick-tunnel runbook stays as it is for ad hoc tests. Nothing in it is remov
 - **Deploying the site block to the real host**, and who may publish to it.
 - **Where K1's keys live.** Who holds them, on what machine, and how they are backed up. They are never committed,
   never on the host and never sent over a tunnel.
-- **A1**: the one-tap setup filling the host.
-- **Shipping A1 and A2** (an OTA, graded by `tier.mjs`).
+- **K1's name** on the phone's list.
+- **A1–A4** (§5), and shipping them (an OTA, graded by `tier.mjs`).
+- **Switching the setups' default to K1**, once it has checked live on both phones.
 - **Each live revocation run** in a demo, since it publishes.
 
 **Blocked on:**
 
 - the owner, for everything above;
-- the SEDI lane, for the K1 design (§4), after the Sunday demo.
+- the SEDI lane, for building K1 and A2–A4 (§4, §5), after the Sunday demo.
 
 Nothing is blocked on an outside party, except the DNS record if the owner's DNS is managed elsewhere.
 
