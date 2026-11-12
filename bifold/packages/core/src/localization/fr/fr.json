@@ -3738,6 +3738,7 @@
     "GuardianAsShown": "Telle que présentée par {{name}}. Pas encore liée à son téléphone.",
     "DemoPill": "Démo",
     "GuardianCouldNotVerify": "Impossible de vérifier la carte de l’État",
+    "GuardianRevoked": "La carte indique qu’elle a été révoquée",
     "GuardianOutcome": "Détails : {{outcome}}",
     "GuardianStateUnreachable": "Impossible de joindre l'État",
     "GuardianStateUnreachableHint": "Impossible de joindre {{state}} pour vérifier cette carte. Elle sera vérifiée à nouveau la prochaine fois que vous ouvrirez cet écran.",

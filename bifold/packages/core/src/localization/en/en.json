@@ -3780,6 +3780,7 @@
     "GuardianAsShown": "As shown by {{name}}. Not yet linked to their phone.",
     "DemoPill": "Demo",
     "GuardianCouldNotVerify": "Couldn't verify the state card",
+    "GuardianRevoked": "The card shows it was revoked",
     "GuardianOutcome": "Details: {{outcome}}",
     "GuardianStateUnreachable": "Couldn't reach the state",
     "GuardianStateUnreachableHint": "{{state}} couldn't be reached to check this card. It's checked again the next time you open this screen.",

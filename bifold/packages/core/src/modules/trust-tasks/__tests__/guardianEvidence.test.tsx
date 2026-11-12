@@ -43,6 +43,7 @@ import {
   checkGuardianEvidence,
   heldGuardianEvidence,
   holdK0TestGuardianCard,
+  holdK0RevokedTestCard,
   stateWardOf,
   evidenceBytes,
   resetGuardianCheckMemo,
@@ -461,6 +462,7 @@ describe('Developer actions: "Hold the test Guardian card (K0)" and "I\'m the te
     off()
     const jordan = phone()
     expect(await holdK0TestGuardianCard(jordan.agent)).toBe('off')
+    expect(await holdK0RevokedTestCard(jordan.agent)).toBe('off')
     expect(await heldGuardianEvidence(jordan.agent)).toBeUndefined()
     const sam = phone()
     expect(await becomeK0TestWard(sam.agent)).toBe('off')
@@ -473,12 +475,50 @@ describe('Developer actions: "Hold the test Guardian card (K0)" and "I\'m the te
     expect(await stateWardOf(sam.agent)).toBe(SAM_WARD)
   })
 
+  test('"Hold the revoked test card (K0)" holds the K0 revoked card WITH its revocation, replacing the ok card (control: the ok card first)', async () => {
+    const jordan = phone()
+    expect(await holdK0TestGuardianCard(jordan.agent)).toBe('done')
+    expect(await heldGuardianEvidence(jordan.agent)).toEqual(card('G-ok'))
+    expect(await holdK0RevokedTestCard(jordan.agent)).toBe('done')
+    expect(await heldGuardianEvidence(jordan.agent)).toEqual(card('G-revoked'))
+  })
+
+  test('a tester build: Jordan holds the revoked test card, and Sam refuses it as revoked (control: the ok card verifies)', async () => {
+    g.__DEV__ = false
+    const sam = phone()
+    await becomeK0TestWard(sam.agent)
+    sam.ask()
+    const jordan = phone()
+    await holdK0RevokedTestCard(jordan.agent)
+    await handleGuardianEvidence(
+      sam.agent,
+      sam.service,
+      documentOf((await heldGuardianEvidence(jordan.agent))!),
+      context
+    )
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'unverified', outcome: 'revoked' } })
+    const control = phone()
+    await becomeK0TestWard(control.agent)
+    control.ask()
+    await holdK0TestGuardianCard(jordan.agent)
+    await handleGuardianEvidence(
+      control.agent,
+      control.service,
+      documentOf((await heldGuardianEvidence(jordan.agent))!),
+      context
+    )
+    expect(await guardianStandings(control.agent)).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'State of Example', demo: true },
+    })
+  })
+
   test('as the package exports them, the actions are the same and gated the same (control: on, they act)', async () => {
     const exported = jest.requireActual('../developerTestState') as typeof import('../developerTestState')
     setTrustTestStateEnabled(false)
     const jordan = phone()
     const sam = phone()
     expect(await exported.holdK0TestGuardianCard(jordan.agent)).toBe('off')
+    expect(await exported.holdK0RevokedTestCard(jordan.agent)).toBe('off')
     expect(await exported.becomeK0TestWard(sam.agent)).toBe('off')
     setTrustTestStateEnabled(true)
     expect(await exported.holdK0TestGuardianCard(jordan.agent)).toBe('done')
@@ -1146,11 +1186,21 @@ describe('Who approves: the state card line', () => {
     expect(tree.queryByTestId(id(TrustedApproversIds.guardianDemo(JORDAN)))).toBeNull()
   })
 
-  test("a revoked card: couldn't verify, with the outcome, and never verified (control: the row above)", async () => {
+  test('a card carrying its revocation: "The card shows it was revoked", never "Couldn\'t verify" and never verified (control: the valid row above)', async () => {
     const tree = await showFor(await writtenWith(card('G-revoked')))
+    expect(tree.getByTestId(id(TrustedApproversIds.guardianRevoked(JORDAN))).props.children).toBe(
+      'Approver.GuardianRevoked'
+    )
+    expect(tree.queryByTestId(id(TrustedApproversIds.guardianUnverified(JORDAN)))).toBeNull()
+    expect(tree.queryByText('Approver.GuardianCouldNotVerify')).toBeNull()
+    expect(tree.queryByTestId(id(TrustedApproversIds.guardianVerified(JORDAN)))).toBeNull()
+  })
+
+  test('any other refusal keeps "Couldn\'t verify" with its outcome, not the revoked words (control: the revoked row above)', async () => {
+    const tree = await showFor(await writtenWith(card('G-untrusted')))
     expect(tree.getByTestId(id(TrustedApproversIds.guardianUnverified(JORDAN)))).toBeTruthy()
     expect(tree.getByTestId(id(TrustedApproversIds.guardianOutcome(JORDAN)))).toBeTruthy()
-    expect(tree.queryByTestId(id(TrustedApproversIds.guardianVerified(JORDAN)))).toBeNull()
+    expect(tree.queryByTestId(id(TrustedApproversIds.guardianRevoked(JORDAN)))).toBeNull()
   })
 
   test('no card: no line at all (control: the rows above)', async () => {
