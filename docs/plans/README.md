@@ -28,6 +28,7 @@ protocol we use to agree on them.
 | [community-polls-plan.md](./community-polls-plan.md) | A member votes in a community's polls and elections from the phone, with blind tickets, as a voter only. Companion: [research](./community-polls-plan/2026-11-02-al.md). | Proposed |
 | [rooms-chat-plan.md](./rooms-chat-plan.md) | A room's conversation on the shared record format (trust-tasks-tf #1027): replies, reactions, withdrawn messages and edits. Reader-safe first, then reading rules, display, batch reads and writing, each with what it waits on. | Accepted, building |
 | [relationship-over-tsp-plan.md](./relationship-over-tsp-plan.md) | The peer-to-peer relationship ceremony without a prior DIDComm connection: a shared-connect trigger link carries the inviter's peer DID, the scanner proposes, five documents follow with a proof on each, over the TSP binding with DIDComm v2 allowed. Work packages, the minimal one-way demo for the 7-10 November 2026 Interop Builder Weekend, cuts, risks. Companion: [notes](./relationship-over-tsp-plan/2026-11-05-bam.md). | **Draft** for review by Alberto Leon; not to merge before his review. Nothing built |
+| [one-scan-and-vtc-sign-in-plan.md](./one-scan-and-vtc-sign-in-plan.md) | The Farm's one-scan VTA slot claim and the VTC member portal's QR sign-in, aligned: order, key custody, one link router and the one-way trigger model, lifetimes, phases, who builds what. Optional and additive; blocks nothing. | Proposal |
 
 ## Why documents instead of only pull-request threads
 
