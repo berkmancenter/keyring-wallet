@@ -30,6 +30,8 @@ import {
   CONFIRM_ITS_YOU_REMOTE_OFF,
   setConfirmItsYouEnabled,
   setDemoStateHost,
+  demoStateHost,
+  sediDemoHiddenByKill,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -491,20 +493,26 @@ const Developer: React.FC = () => {
   }
 
   /** Keep the three SEDI demo switches as saved settings, as their own rows do, and show them. */
+  // The five switches the one-tap turns on in bifold (bifold #1041: the state card and Confirm it's you joined the
+  // three), saved here so a restart matches what bifold holds.
   const saveSediDemoSwitches = (on: boolean) => {
     for (const type of [
       BCDispatchAction.TOGGLE_TRUSTED_APPROVERS,
       BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS,
       BCDispatchAction.TOGGLE_TRUST_TEST_STATE,
+      BCDispatchAction.TOGGLE_STATE_CARD,
+      BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU,
     ])
       dispatch({ type, payload: [on] })
     setEnableTrustedApprovers(on)
     setEnableStateVerifiedApprovers(on)
     setEnableTrustTestState(on)
+    setEnableStateCard(on)
+    setEnableConfirmItsYou(on)
   }
 
   /**
-   * "Set up the SEDI demo": bifold turns the three switches on and keeps the K0 card and ward, or does nothing at all
+   * "Set up the SEDI demo": bifold turns the five switches on and keeps the K0 card and ward, or does nothing at all
    * when a remote off holds. Each result has its own message. The switches are saved on every result but 'remoteOff':
    * after 'cardNotHeld' or 'wardNotSet' bifold HAS turned them on, so saving them keeps a restart from silently
    * differing from what this screen shows. 'remoteOff' saves nothing: the feature is off for this build either way.
@@ -524,13 +532,29 @@ const Developer: React.FC = () => {
         cardNotHeld: 'Developer.SediDemoCardNotHeld',
         wardNotSet: 'Developer.SediDemoWardNotSet',
       }[result]
-      Alert.alert(t('Developer.SetUpSediDemo'), t(message ?? 'Developer.SediDemoOff'))
+      const lines = [t(message ?? 'Developer.SediDemoOff')]
+      if (result === 'done' || result === 'doneSomeHidden') {
+        // Where the demo state will be checked from: the Demo state host in effect (bifold's, read now), or a warning
+        // that without one the card is checked against the copy on this phone.
+        const host = demoStateHost()
+        lines.push(host ? t('Developer.SediDemoHost', { host }) : t('Developer.SediDemoNoHost'))
+      }
+      // Alert only, from this tap's result: the screen keeps no line about what is hidden. Which features are hidden
+      // is read live from bifold here, never remembered.
+      if (result === 'doneSomeHidden') {
+        const hidden = {
+          stateCard: 'Developer.SediDemoHiddenStateCard',
+          confirmItsYou: 'Developer.SediDemoHiddenConfirmItsYou',
+        }
+        for (const feature of sediDemoHiddenByKill()) lines.push(t(hidden[feature]))
+      }
+      Alert.alert(t('Developer.SetUpSediDemo'), lines.join('\n\n'))
     } catch (error) {
       Alert.alert(t('Developer.SetUpSediDemo'), `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
-  /** "Turn off the SEDI demo": the three switches off, saved; nothing kept is deleted. */
+  /** "Turn off the SEDI demo": the five switches off, saved; nothing kept is deleted. */
   /**
    * "Demo state host": handed to bifold, which refuses anything that is not a bare public hostname (optionally with a
    * port) and changes nothing then. Saved only when bifold took it, so a restart applies the same value.
@@ -1201,7 +1225,11 @@ const Developer: React.FC = () => {
             >
               <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
             </SectionRow>
-            {(enableTrustedApprovers || enableStateVerifiedApprovers || enableTrustTestState) && (
+            {(enableTrustedApprovers ||
+              enableStateVerifiedApprovers ||
+              enableTrustTestState ||
+              enableStateCard ||
+              enableConfirmItsYou) && (
               <SectionRow
                 title={t('Developer.TurnOffSediDemo')}
                 accessibilityLabel={t('Developer.TurnOffSediDemo')}

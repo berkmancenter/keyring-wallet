@@ -167,7 +167,8 @@ describe('Developer: "Set up the SEDI demo" in one tap', () => {
     const { tree } = shown()
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
     expect(mockSetUp).toHaveBeenCalledWith(mockAgent)
-    expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe('Developer.SediDemoDone')
+    // The done line, then where the state is checked from (no Demo state host here; see DeveloperOneTapMessage).
+    expect((Alert.alert as jest.Mock).mock.calls[0][1]).toBe('Developer.SediDemoDone\n\nDeveloper.SediDemoNoHost')
     expect(has(tree, DEMO.turnOff)).toBe(true)
   })
 
