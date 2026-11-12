@@ -485,7 +485,7 @@ const Developer: React.FC = () => {
   // 'tooLarge' (over the Guardian card's size cap), which is said as itself, never as "turn on the test state".
   const runTestStateAction = async (
     title: string,
-    action: (agent: NonNullable<typeof agent>) => Promise<'done' | 'off' | 'tooLarge'>
+    action: (forAgent: NonNullable<typeof agent>) => Promise<'done' | 'off' | 'tooLarge'>
   ) => {
     if (!agent) {
       Alert.alert('Error', 'Agent not initialized')
