@@ -483,6 +483,35 @@ describe('Developer actions: "Hold the test Guardian card (K0)" and "I\'m the te
     expect(await heldGuardianEvidence(jordan.agent)).toEqual(card('G-revoked'))
   })
 
+  test('a revoked card whose bundle omits its revocation is refused as statusNotCurrent: the issuer KEL anchors the omitted update (control: the full revoked card is refused as revoked)', async () => {
+    g.__DEV__ = false
+    const full = card('G-revoked')
+    // The omission: G-revoked's status log cut to its issuance, with the issued-state proof, as a holder could send it.
+    const omitted: GuardianEvidence = {
+      ...full,
+      tels: [full.tels[0], full.tels[1], tel('G-revoked', ['issued'])],
+      creds: [full.creds[0], full.creds[1], text('acdc-G-revoked-issued-proofed.cesr')],
+    }
+    const omittedVerdict = checkGuardianEvidence(omitted, SAM_WARD, new Date(), () => undefined)
+    expect(omittedVerdict).toMatchObject({ ok: false, reason: 'statusNotCurrent' })
+    // Sue's KEL, which comes with the card itself, still carries the seal for the n=2 update the bundle left out.
+    expect((omittedVerdict as { detail: string }).detail).toMatch(
+      /anchors registry events to n=2, the newest presented is n=1/
+    )
+    const sam = phone()
+    await becomeK0TestWard(sam.agent)
+    sam.ask()
+    await handleGuardianEvidence(sam.agent, sam.service, documentOf(omitted), context)
+    expect(await guardianStandings(sam.agent)).toEqual({
+      [JORDAN]: { kind: 'unverified', outcome: 'statusNotCurrent' },
+    })
+    // Control: the full revoked card, revocation included, is refused as revoked.
+    expect(checkGuardianEvidence(full, SAM_WARD, new Date(), () => undefined)).toMatchObject({
+      ok: false,
+      reason: 'revoked',
+    })
+  })
+
   test('a tester build: Jordan holds the revoked test card, and Sam refuses it as revoked (control: the ok card verifies)', async () => {
     g.__DEV__ = false
     const sam = phone()

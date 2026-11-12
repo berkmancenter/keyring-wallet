@@ -8,6 +8,8 @@ import { join } from 'path'
 import { K0_REVOKED_TEST_GUARDIAN_CARD } from '../guardian/k0RevokedTestCard'
 import { K0_TEST_GUARDIAN_CARD } from '../guardian/k0TestCard'
 import { K0_TEST_ROOT, K0_TEST_WARD } from '../guardian/stateRoots'
+import { GUARDIAN_EVIDENCE_MAX_BYTES } from '../../trust-tasks/approverRoleSpec'
+import { evidenceBytes } from '../../trust-tasks/guardianEvidence'
 
 const FX = join(__dirname, 'fixtures', 'k0-utah-v2')
 const text = (f: string) => readFileSync(join(FX, f), 'utf8')
@@ -64,5 +66,22 @@ describe('the K0 revoked test Guardian card', () => {
       c.tels[2].updateTexts.map((u) => (JSON.parse(u) as { n: string }).n)
     expect(updates(K0_REVOKED_TEST_GUARDIAN_CARD)).toEqual(['1', '2'])
     expect(updates(K0_TEST_GUARDIAN_CARD)).toEqual(['1'])
+  })
+})
+
+describe('both shipped K0 cards and the cap', () => {
+  // A card over GUARDIAN_EVIDENCE_MAX_BYTES makes its Developer action answer 'off' (the same result as "the test
+  // state isn't trusted"), so growth past the cap would be silent. Holding both well under half of it here turns that
+  // into a named failure, measured exactly as the cap measures (evidenceBytes).
+  test.each([
+    ['the ok card (G-ok)', K0_TEST_GUARDIAN_CARD],
+    ['the revoked card (G-revoked)', K0_REVOKED_TEST_GUARDIAN_CARD],
+  ])('%s is under half of the cap', (name, c) => {
+    const bytes = evidenceBytes(c)
+    const half = GUARDIAN_EVIDENCE_MAX_BYTES / 2
+    if (!(bytes < half))
+      throw new Error(`${name} is ${bytes} bytes; half the ${GUARDIAN_EVIDENCE_MAX_BYTES}-byte cap is ${half}`)
+    expect(bytes).toBeLessThan(half)
+    expect(bytes).toBeGreaterThan(0)
   })
 })
