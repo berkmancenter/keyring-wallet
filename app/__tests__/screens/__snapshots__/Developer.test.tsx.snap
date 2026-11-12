@@ -1267,11 +1267,43 @@ exports[`Developer Screen screen renders correctly 1`] = `
         }
       >
         <View
+          accessibilityLabel="Developer.SetUpSediDemo"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
           style={
             {
               "flexDirection": "row",
             }
           }
+          testID="com.ariesbifold:id/SetUpSediDemo"
         >
           <Text
             style={
@@ -1288,36 +1320,6 @@ exports[`Developer Screen screen renders correctly 1`] = `
             Developer.SetUpSediDemo
           </Text>
           <View
-            accessibilityLabel="Developer.SetUpSediDemo"
-            accessibilityState={
-              {
-                "busy": undefined,
-                "checked": undefined,
-                "disabled": undefined,
-                "expanded": undefined,
-                "selected": undefined,
-              }
-            }
-            accessibilityValue={
-              {
-                "max": undefined,
-                "min": undefined,
-                "now": undefined,
-                "text": undefined,
-              }
-            }
-            accessible={true}
-            collapsable={false}
-            focusable={true}
-            onBlur={[Function]}
-            onClick={[Function]}
-            onFocus={[Function]}
-            onResponderGrant={[Function]}
-            onResponderMove={[Function]}
-            onResponderRelease={[Function]}
-            onResponderTerminate={[Function]}
-            onResponderTerminationRequest={[Function]}
-            onStartShouldSetResponder={[Function]}
             style={
               {
                 "alignItems": "center",
@@ -1325,7 +1327,6 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 "justifyContent": "space-between",
               }
             }
-            testID="com.ariesbifold:id/SetUpSediDemo"
           >
             <Text
               allowFontScaling={false}
