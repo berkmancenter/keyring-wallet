@@ -301,7 +301,7 @@ export function splitSocial(
  * (revoked, couldn't reach the state, couldn't verify), with that card's own reason.
  */
 export type SocialVerdict =
-  | { ok: true; root: string; state: string; demo?: true; checkedAt: string; expires?: string }
+  | { ok: true; root: string; state: string; demo?: true; test?: true; checkedAt: string; expires?: string }
   | { ok: false; reason: string; detail: string; checkedAt: string; underCard?: true }
 
 /** The first prefix a KEL stream's text names (its inception's `i`), or undefined. */
@@ -356,6 +356,7 @@ export function checkSocialAuthorization(
       root: guardian.root,
       state: guardian.state,
       ...(guardian.demo ? { demo: true as const } : {}),
+      ...(guardian.test ? { test: true as const } : {}),
       checkedAt,
       ...(r.expires ? { expires: r.expires } : {}),
     }

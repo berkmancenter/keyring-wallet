@@ -1,8 +1,9 @@
 /**
  * The state card in Credentials (SEDI/KERI holder card): the Guardian card this phone holds, drawn as the wallet's
  * community pass (CommunityPass, unchanged) with the state's name, "Guardian of your contact", its dates, and a pill:
- * cream "Demo" for a card that checks out from a demo root, cream "Not checked" while it can't be checked here, red
- * for a refusal. Pressed, its details open over the Wallet (./StateCardDetails).
+ * cream "Demo" for a card that checks out from a demo root, "Test" for the K0 preload (drawn grey, never the state's
+ * blue, Alberto 2026-11-13), cream "Not checked" while it can't be checked here, red for a refusal. Pressed, its details
+ * open over the Wallet (./StateCardDetails).
  *
  * Gated at render: with "State card (demo)" off it draws nothing, and the details close.
  *
@@ -23,7 +24,9 @@ import type { StateCardView } from './stateCard'
 import { isStateCardEnabled } from './stateCardFlag'
 
 /** A state's pass colour: a dark slate white text reads on, the same for every state until states publish a look. */
-const STATE_COLOUR = '#34496A'
+export const STATE_COLOUR = '#34496A'
+/** The K0 preload's pass colour: a mid grey, so the Developer test card never looks like the state office's card. */
+export const TEST_COLOUR = '#6B6F76'
 
 const monogramOf = (name: string): string =>
   name
@@ -52,7 +55,12 @@ export function stateCardFace(view: StateCardView): PassFace {
 export function stateCardBrand(view: StateCardView): Known<CommunityBrand> {
   return {
     known: true,
-    value: { color: STATE_COLOUR, pattern: 'rings', monogram: monogramOf(view.title), fromAccent: false },
+    value: {
+      color: view.test ? TEST_COLOUR : STATE_COLOUR,
+      pattern: 'rings',
+      monogram: monogramOf(view.title),
+      fromAccent: false,
+    },
   }
 }
 

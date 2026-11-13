@@ -15,6 +15,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { ButtonType } from '../../../components/buttons/Button-api'
 import { testIdWithKey } from '../../../utils/testable'
 import * as demoHost from '../../sedi/webs/demoStateHost'
+import * as stateRoots from '../../sedi/guardian/stateRoots'
 import { K0_TEST_ROOT } from '../../sedi/guardian/stateRoots'
 import * as approverRole from '../approverRole'
 import * as guardianEvidence from '../guardianEvidence'
@@ -325,9 +326,18 @@ describe('guardianDemoStates: the demo root a kept card names, from the list onl
   const agentWith = (records: unknown[]) =>
     ({ genericRecords: { findAllByQuery: jest.fn(async () => records) } }) as never
 
+  test('guardianTestStates: the K0 root is marked test (control: the same root unmarked has no entry)', async () => {
+    const records = [recordWith(`kel of ${K0_TEST_ROOT.aid}`)]
+    expect(await guardianEvidence.guardianTestStates(agentWith(records))).toEqual({ [JORDAN]: true })
+    // The mark is the list entry's own: unmarked, the same card is still a demo state's, but not a test one.
+    jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([{ ...K0_TEST_ROOT, test: undefined }])
+    expect(await guardianEvidence.guardianTestStates(agentWith(records))).toEqual({})
+    expect(await guardianEvidence.guardianDemoStates(agentWith(records))).toEqual({ [JORDAN]: K0_TEST_ROOT.name })
+  })
+
   test('a card naming the K0 root reads as its name (control: a card naming no listed root has no entry)', async () => {
     expect(await guardianEvidence.guardianDemoStates(agentWith([recordWith(`kel of ${K0_TEST_ROOT.aid}`)]))).toEqual({
-      [JORDAN]: UTAH,
+      [JORDAN]: K0_TEST_ROOT.name,
     })
     expect(await guardianEvidence.guardianDemoStates(agentWith([recordWith('kel of some other root')]))).toEqual({})
   })
@@ -348,7 +358,7 @@ describe('guardianDemoStates: the demo root a kept card names, from the list onl
       const elsewhere = recordWith('kel of some other root', {}, where)
       expect(await guardianEvidence.guardianDemoStates(agentWith([elsewhere]))).toEqual({})
       const inKel = recordWith(`kel of ${K0_TEST_ROOT.aid}`, {}, where)
-      expect(await guardianEvidence.guardianDemoStates(agentWith([inKel]))).toEqual({ [JORDAN]: UTAH })
+      expect(await guardianEvidence.guardianDemoStates(agentWith([inKel]))).toEqual({ [JORDAN]: K0_TEST_ROOT.name })
     }
   )
 
@@ -356,4 +366,43 @@ describe('guardianDemoStates: the demo root a kept card names, from the list onl
     setStateVerifiedApproversEnabled(false)
     expect(await guardianEvidence.guardianDemoStates(agentWith([recordWith(`kel of ${K0_TEST_ROOT.aid}`)]))).toEqual({})
   })
+})
+
+describe('Who approves: the K0 preload reads "Test", never "Demo" or "State of Utah" (Alberto, 2026-11-13)', () => {
+  const VERIFIED_TEST: GuardianStanding = { kind: 'verified', state: K0_TEST_ROOT.name, demo: true, test: true }
+
+  test('verified K0: the box is "Example State" with the Test label and the test words (control: a demo root reads Demo)', async () => {
+    const tree = await show(VERIFIED_TEST)
+    const box = tree.getByTestId(id(Ids.stateBox(JORDAN)))
+    expect(within(box).getByText('Example State')).toBeTruthy()
+    expect(within(box).getByText('Approver.TestPill')).toBeTruthy()
+    expect(within(box).getByText('Approver.TestStateIs')).toBeTruthy()
+    expect(within(box).queryByText('Approver.DemoPill')).toBeNull()
+    expect(tree.queryByText(/State of Utah/)).toBeNull()
+    const demo = await show(VERIFIED_DEMO)
+    const demoBox = demo.getByTestId(id(Ids.stateBox(JORDAN)))
+    expect(within(demoBox).getByText('Approver.DemoPill')).toBeTruthy()
+    expect(within(demoBox).getByText('Approver.DemoStateIs')).toBeTruthy()
+    expect(within(demoBox).queryByText('Approver.TestPill')).toBeNull()
+  })
+
+  test.each([
+    ['unreachable', { kind: 'unreachable', state: K0_TEST_ROOT.name } as GuardianStanding, 'Approver.TestStateIs'],
+    ['revoked', REVOKED('revoked'), 'Approver.TestStateRevoked'],
+  ] as const)(
+    '%s K0: the list entry marks it test, so the box says Test (control: unmarked, Demo)',
+    async (_, standing, words) => {
+      const tests = jest.spyOn(guardianEvidence, 'guardianTestStates').mockResolvedValue({ [JORDAN]: true })
+      const tree = await show(standing, K0_TEST_ROOT.name)
+      const box = tree.getByTestId(id(Ids.stateBox(JORDAN)))
+      expect(within(box).getByText('Approver.TestPill')).toBeTruthy()
+      expect(within(box).getByText(words)).toBeTruthy()
+      expect(tree.queryByText(/State of Utah/)).toBeNull()
+      tests.mockResolvedValue({})
+      const unmarked = await show(standing, K0_TEST_ROOT.name)
+      const plain = unmarked.getByTestId(id(Ids.stateBox(JORDAN)))
+      expect(within(plain).getByText('Approver.DemoPill')).toBeTruthy()
+      expect(within(plain).queryByText('Approver.TestPill')).toBeNull()
+    }
+  )
 })

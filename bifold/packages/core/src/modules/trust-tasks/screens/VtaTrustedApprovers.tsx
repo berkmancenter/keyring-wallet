@@ -45,6 +45,7 @@ import {
   cardToShare,
   guardianCardEvents,
   guardianDemoStates,
+  guardianTestStates,
   guardianSourceKey,
   shareGuardianCard,
   type CardConsent,
@@ -136,6 +137,8 @@ const VtaTrustedApprovers: React.FC = () => {
   const [socials, setSocials] = useState<Record<string, SocialStanding>>({})
   /** For an approver whose card names a demo root on this phone's list: that root's name (the state's box). */
   const [demoStates, setDemoStates] = useState<Record<string, string>>({})
+  /** Those whose root the list marks `test` (the K0 preload): the box shows "Test" and the test words. */
+  const [testStates, setTestStates] = useState<Record<string, true>>({})
   const [mine, setMine] = useState<RoleOfferPrompt[]>([])
   /** On an approver's phone: the card it could share (none, no card lines) and its answer for each person. */
   const [shareable, setShareable] = useState<{ state?: string; k1?: true } | undefined>()
@@ -172,6 +175,8 @@ const VtaTrustedApprovers: React.FC = () => {
     )
     // Unreadable reads as none: no state box, so a card is never drawn as a demo state's without the list saying so.
     const demos = await guardianDemoStates(agent).catch(() => ({}) as Record<string, string>)
+    // Unreadable reads as none: a demo box then says "Demo", never "Test" for a root the list did not mark.
+    const tests = await guardianTestStates(agent).catch(() => ({}) as Record<string, true>)
     // Unreadable answers read as none given, which sends nothing.
     const share = await cardToShare(agent).catch(() => undefined)
     const answers = await cardConsents(agent).catch(() => ({}) as Record<string, CardConsent>)
@@ -182,6 +187,7 @@ const VtaTrustedApprovers: React.FC = () => {
     setStandings(both.cards)
     setSocials(both.social)
     setDemoStates(demos)
+    setTestStates(tests)
     setNames(known)
     setMine(approving)
   }, [agent])
@@ -268,6 +274,7 @@ const VtaTrustedApprovers: React.FC = () => {
       setStandings(both.cards)
       setSocials(both.social)
       setDemoStates(await guardianDemoStates(agent).catch(() => ({}) as Record<string, string>))
+      setTestStates(await guardianTestStates(agent).catch(() => ({}) as Record<string, true>))
       setTriedAgainAt(new Date().toISOString())
     } finally {
       setBusy(undefined)
@@ -405,7 +412,7 @@ const VtaTrustedApprovers: React.FC = () => {
       </View>
     ) : standing.demo ? (
       <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianDemoCopy(did))}>
-        {t('Approver.GuardianDemoCopy')}
+        {t(standing.test ? 'Approver.GuardianTestCopy' : 'Approver.GuardianDemoCopy')}
       </ThemedText>
     ) : null
 
@@ -562,22 +569,35 @@ const VtaTrustedApprovers: React.FC = () => {
           ? demoStates[did]
           : undefined
     if (!state) return null
+    // The test mark, as the state itself was read: a verified standing's own, else the list entry the card names.
+    const test = standing.kind === 'verified' ? standing.test === true : testStates[did] === true
+    const words = test
+      ? {
+          is: 'Approver.TestStateIs',
+          unreachable: 'Approver.TestStateUnreachableHost',
+          revoked: 'Approver.TestStateRevoked',
+        }
+      : {
+          is: 'Approver.DemoStateIs',
+          unreachable: 'Approver.DemoStateUnreachableHost',
+          revoked: 'Approver.DemoStateRevoked',
+        }
     const host = demoStateHost()
     return (
       <Zone
         kind="state"
         title={state}
-        beside={<DemoPill testID={TrustedApproversIds.guardianDemo(did)} />}
+        beside={<DemoPill testID={TrustedApproversIds.guardianDemo(did)} test={test} />}
         testID={TrustedApproversIds.stateBox(did)}
       >
         <ThemedText style={styles.muted}>
           {standing.kind === 'unreachable'
             ? host
-              ? t('Approver.DemoStateUnreachableHost', { state, host, interpolation: { escapeValue: false } })
-              : t('Approver.DemoStateIs', { state, interpolation: { escapeValue: false } })
+              ? t(words.unreachable, { state, host, interpolation: { escapeValue: false } })
+              : t(words.is, { state, interpolation: { escapeValue: false } })
             : standing.kind === 'unverified' && isRevoked(standing)
-              ? t('Approver.DemoStateRevoked', { state, interpolation: { escapeValue: false } })
-              : t('Approver.DemoStateIs', { state, interpolation: { escapeValue: false } })}
+              ? t(words.revoked, { state, interpolation: { escapeValue: false } })
+              : t(words.is, { state, interpolation: { escapeValue: false } })}
         </ThemedText>
         {standing.kind === 'verified' ? sourceLine(did, standing) : null}
       </Zone>

@@ -359,9 +359,11 @@ export {
   vtaAgent,
 } from './modules/trust-tasks'
 export { setStateCardEnabled, isStateCardEnabled, STATE_CARD_REMOTE_OFF } from './modules/sedi/holder/stateCardFlag'
-// The SEDI State roots' demo mark, for screens that show the "Demo" pill (Who approves, the holder's state card).
+// The SEDI State roots' demo and test marks, for screens that show the "Demo" or "Test" label (Who approves, the
+// holder's state card).
 export {
   isDemoStateRoot,
+  isTestStateRoot,
   K0_TEST_ROOT,
   K1_NAME,
   K1_ROOT_AID,

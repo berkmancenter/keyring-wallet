@@ -205,8 +205,10 @@ describe('the words for a host that came with the card', () => {
   it('W03: K1 is "State of Utah" with its Demo mark, and its card says the State of Utah did not issue it', () => {
     stateRoots.k1SettingsForTests.reset()
     expect(stateRoots.k1Root()).toMatchObject({ name: 'State of Utah', demo: true })
+    // Never the K0 preload's grey "Test" (Alberto, 2026-11-13): K1 keeps "Demo" and the blue card.
+    expect(stateRoots.k1Root()?.test).toBeUndefined()
     expect(en.StateCard.DemoNoteOffice).toBe(
-      'Demo card, issued by a demo state office; not issued by the State of Utah'
+      'Demo card, issued by the State of Utah demo office. Not issued by the State of Utah.'
     )
   })
 })

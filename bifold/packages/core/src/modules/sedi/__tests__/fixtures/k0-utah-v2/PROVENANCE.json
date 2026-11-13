@@ -48,9 +48,7 @@
       "regk": "EA6_YiKz_zTp-awJ0mJBTQwOHNKGeaydL0xMGQpR2QLh",
       "schema": "EBbOpBe0lP_epHhakeiXdOmeal3leDfLRf0PAItsanoQ",
       "issuee": "IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "agent": {
       "said": "EMD1mmYiNCghkOL1P1Y_8hEw-s7WiqT9bH0qY0SBarKG",
@@ -58,9 +56,7 @@
       "regk": "EL72FbaqZwTusDf_b9ia6o30grWmJAO6HkQQvq5mE0pG",
       "schema": "EGx4BLclkjhaK1501guyBifxuTTJLwuK61InBTdkKF7v",
       "issuee": "IDTFZ-B3B25INJli8AtIDcYRyZpwcfE7sNYaS4ISbZjx",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "G-ok": {
       "said": "EE77k2PeUVmo7nPAEjvZ-R-8G3UsxLbmaOM__tG3I6PC",
@@ -68,9 +64,7 @@
       "regk": "EAUsTxG8EXQqCE9pdJp0dwupuVgOfiGsrIOk_kf6HtH2",
       "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
       "issuee": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "G-revoked": {
       "said": "EBZbDGyRj3r3IzC77kZwtGVMl0HfmwwTfaAo3h47ZtsS",
@@ -78,10 +72,7 @@
       "regk": "EOQot8nMnPI6XeqUnk5fcziJ8vwRmHk33umCdfZTKdHu",
       "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
       "issuee": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
-      "states": [
-        "issued",
-        "revoked"
-      ]
+      "states": ["issued", "revoked"]
     },
     "G-otherward": {
       "said": "ELGk99h13IZdns4QLZP28uGXX-FhqPjazjfxazrmEZru",
@@ -89,9 +80,7 @@
       "regk": "EIbMxwTbNsAeQ9Bg727CyTGOHZGqTVbJN97cohwgtkfo",
       "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
       "issuee": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "G-nontrans-issuee": {
       "said": "ELTt8gtS-ds0QUgT_jUSe_T07fqTtsOblMuy-9DVBHgb",
@@ -99,9 +88,7 @@
       "regk": "EE3QqhTlWc-1BYbhd4khvehrNbVC1CQqoL_v0S5JkHzt",
       "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
       "issuee": "1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "G-nontrans-ed25519-issuee": {
       "said": "ENEa9KRLIHQgq580aG9FhwN4aYKqu8aebE5lf_oc1Cxc",
@@ -109,9 +96,7 @@
       "regk": "EKbABQZTX3JCvrShKS0uTj4bZioQAvdKJuhFsxC3Sb6e",
       "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
       "issuee": "BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "mal-unit": {
       "said": "EBxjtMtwj2FVDe0LE7lR_Yaz986259BGQ1EDOD1VWrEy",
@@ -119,9 +104,7 @@
       "regk": "EL93WH1ZOjBs5cIsaJ4D9zzKZc59S2Hz_VAwwjGfI9CS",
       "schema": "EBbOpBe0lP_epHhakeiXdOmeal3leDfLRf0PAItsanoQ",
       "issuee": "IL-s_XaqPPnHE90Ij8HOeLOhf2Ko-l1EtxEEsiEihBZF",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "mal-agent": {
       "said": "EObMIYs8Wxhm54jDnf1nC62G1IMvHHgSuUW9FDj2hK9p",
@@ -129,9 +112,7 @@
       "regk": "EMe-fODc65TjGcqLNdDoB-rhJNnGnHO0cKum0lUevIFA",
       "schema": "EGx4BLclkjhaK1501guyBifxuTTJLwuK61InBTdkKF7v",
       "issuee": "IF86yzxGueA0lXgtBWCGXCp4QCoggtPpd0tTLubW3W-6",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "G-untrusted": {
       "said": "ECmPiBi5JKCZADTBXJq72zEiI39fwn9yjVuV8-b32UTS",
@@ -139,9 +120,7 @@
       "regk": "ENyamTZWreIe1LxR6WHF8Q8YpbqPBKgggDqywc_RbQ6d",
       "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
       "issuee": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     },
     "S2-social": {
       "said": "EMGfZcZgHU4CyeLIWukpVK_DyQk5olsJuTgNlfweFtYB",
@@ -149,9 +128,7 @@
       "regk": "EHV0k7fX3tEGxGW0Ml3luDK0ykqEI-sTXQ-2cxXiKznx",
       "schema": "EB8MUTKRg8284YPduyhDgUVvNM192-247KcRaXhIxoni",
       "issuee": "IFDf7z58Wp19EQ-EjCviVU2sgmFnjecWqCEaNsAz8lq6",
-      "states": [
-        "issued"
-      ]
+      "states": ["issued"]
     }
   },
   "tel": [
@@ -388,9 +365,7 @@
       "saidCodes": {
         "acdc": "E",
         "attr": "E",
-        "tel": [
-          "E"
-        ],
+        "tel": ["E"],
         "schema": "E"
       },
       "acdcVerstr": "ACDCCAACAAJSONAASI.",
@@ -518,9 +493,7 @@
       "sueHasHolderKel": false,
       "admitSigner": "1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7",
       "attachmentHead": "-CAj-MAi1AAI",
-      "sueNotices": [
-        "/exn/ipex/grant"
-      ],
+      "sueNotices": ["/exn/ipex/grant"],
       "log": [
         "INFO: (unformattable log record: not enough arguments for format string) 'Cueing keystate retrieval: missing KEL for sender=%s, current_sn=%s, error=%s' ('1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7', None)",
         "ERROR: GroupParsator error post extraction of msg+atc : Sender KEL unavailable for 1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7"
@@ -536,10 +509,7 @@
         "INFO: AID 1AAI...eyT7: Added to KEL icp at sn=0 valid event SAID=EAZiLGyPj1n04PHuRD-il9XjV_pmab5cw7vl3jsZHPTR"
       ],
       "log": [],
-      "sueNotices": [
-        "/exn/ipex/grant",
-        "/exn/ipex/admit"
-      ],
+      "sueNotices": ["/exn/ipex/grant", "/exn/ipex/admit"],
       "falseReturns": []
     },
     {
@@ -561,10 +531,7 @@
       "sueHasHolderKel": false,
       "admitSigner": "BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd",
       "attachmentHead": "-CAi-MAhBO06",
-      "sueNotices": [
-        "/exn/ipex/admit",
-        "/exn/ipex/grant"
-      ],
+      "sueNotices": ["/exn/ipex/admit", "/exn/ipex/grant"],
       "log": [
         "INFO: (unformattable log record: not enough arguments for format string) 'Cueing keystate retrieval: missing KEL for sender=%s, current_sn=%s, error=%s' ('BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd', None)",
         "ERROR: GroupParsator error post extraction of msg+atc : Sender KEL unavailable for BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd"
@@ -580,10 +547,7 @@
         "INFO: AID BO06...mLtd: Added to KEL icp at sn=0 valid event SAID=EIqSxKD66do6kItUoPNNPtESlXaBbS0mP0b-28WTYjfn"
       ],
       "log": [],
-      "sueNotices": [
-        "/exn/ipex/grant",
-        "/exn/ipex/admit"
-      ],
+      "sueNotices": ["/exn/ipex/grant", "/exn/ipex/admit"],
       "falseReturns": []
     },
     {
@@ -605,10 +569,7 @@
       "sueHasHolderKel": true,
       "admitSigner": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
       "attachmentHead": "-CAv-XAuIIJf",
-      "sueNotices": [
-        "/exn/ipex/grant",
-        "/exn/ipex/admit"
-      ],
+      "sueNotices": ["/exn/ipex/grant", "/exn/ipex/admit"],
       "log": [],
       "falseReturns": []
     },
@@ -699,5 +660,5 @@
     "tel-unit-issued.json": "e6e0aaf85b5df77d8f3756c756326568704a33e3e652f152f296f18275ea1bd1",
     "tel-unit-rip.json": "b75c37cdbd562bfdcce0e52e56c28f9e8c9663d7c5e61561f4419833b09e1952"
   },
-  "note": "Test material only. SEDI's Utah test material (k0-utah-v2), shown in-app as 'State of Utah' with a Demo pill; not issued by the State of Utah. Upstream SEDI schemas are evolving test values; no conformance claim."
+  "note": "Test material only. SEDI's Utah test material (k0-utah-v2), shown in-app as 'Example State' with a Test label; not issued by anyone. Upstream SEDI schemas are evolving test values; no conformance claim."
 }

@@ -7,13 +7,14 @@
  * card", unless the Developer setting "Trust the test state (K0)" is on (trustTestStateFlag.ts, which holds only while
  * trusted approvers and state-verified approvers are both on). A Developer build (`__DEV__`) trusts the K0 test root
  * without it. Either way it is the K0 test root only, the keripy kit the tests check against
- * (sedi/__tests__/fixtures/k0-utah-v2). It is named "State of Utah" and marked `demo`, so Who approves shows a "Demo"
- * pill beside the name, never a pill inferred from the name. The kit is SEDI's Utah test material (k0-utah-v2), not anything Utah issued: the Demo pill and the
- * holder card's "not issued by the State of Utah" say so. Real State roots come from did:webs (IN-619), not from this
- * list, and are never marked demo.
+ * (sedi/__tests__/fixtures/k0-utah-v2). It is named "Example State" and marked `test` (and `demo`), so Who approves and
+ * the holder's card show a grey "Test" label beside the name, never one inferred from the name, and the card says it
+ * was loaded on this phone and issued by no one. Real State roots come from did:webs (IN-619), not from this list,
+ * and are never marked demo or test.
  *
  * K1, the demo state a local state office issues from, is trusted with trusted approvers and state-verified approvers
- * on, once its root AID is filled in, and marked demo too: it is a test issuer, not a government. Where it is fetched
+ * on, once its root AID is filled in, and marked demo: it is named "State of Utah" with the "Demo" pill and its card
+ * says it was not issued by the State of Utah. It is a demo issuer, not a government. Where it is fetched
  * from is {@link K1_WEBS_HOST}. Trust rests on the root AID (self-certifying: no host can forge its KEL); a host can
  * only withhold, by failing to answer or serving an older KEL that leaves out a revocation's anchor.
  *
@@ -41,6 +42,14 @@ export interface StateRoot {
    */
   demo?: true
   /**
+   * The Developer test root, a fallback loaded on this phone (the K0 kit), not a state's root nor a state office's: Who
+   * approves and the holder's card show a grey "Test" label in place of "Demo", and the card says it was issued by no
+   * one. Set on the K0 entry only (Alberto, 2026-11-13). Like `demo`, set here, never read from a card or the name. A
+   * `test` root is also `demo`, so everything a demo root does (its intermediates fetched live, the Developer "Demo
+   * state host") is unchanged; only its label and words differ.
+   */
+  test?: true
+  /**
    * Whether the Developer "Demo state host" may put another host in place of this root's (sedi/webs/demoStateHost): a
    * temporary tunnel for the K0 kit, which has no host of its own. Set on the K0 entry only. A root without it is
    * always fetched at its own did:webs, host and path as written here (K1's with a fixed K1_WEBS_HOST).
@@ -56,15 +65,17 @@ export interface StateRoot {
 
 /**
  * The K0 kit's State root ("roy"): a test root, trusted in Developer builds or with "Trust the test state (K0)" on.
- * Marked demo: Who approves reads "Has a Guardian card from State of Utah" with a "Demo" pill beside the name. It was
- * the made-up "State of Example" (Alberto, 2026-11-11); Alberto chose "State of Utah" on 2026-11-12, after his hand
- * run of 278.16, since the kit is SEDI's Utah test material. The Demo pill stays, and the holder card says it was not
- * issued by the State of Utah.
+ * Named "Example State" and marked `test`: Who approves reads "Has a Guardian card from Example State" with a grey
+ * "Test" label, and the holder's card is grey and says "Test card, loaded on this phone. Not issued by anyone." It was
+ * the made-up "State of Example" (Alberto, 2026-11-11), then "State of Utah" with a Demo pill (2026-11-12). On
+ * 2026-11-13 Alberto said "Yes" to keeping "State of Utah" for K1, the state office's demo state, and showing this
+ * Developer preload as a test card, so the two can never be mistaken for each other on screen.
  */
 export const K0_TEST_ROOT: StateRoot = {
   aid: 'IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6',
-  name: 'State of Utah',
+  name: 'Example State',
   demo: true,
+  test: true,
   demoHost: true,
   // Where the demo state is fetched from: the host is a placeholder, replaced by the Developer "Demo state host"
   // (sedi/webs/demoStateHost); with none set, the card's own copy is checked instead.
@@ -91,6 +102,15 @@ export function stateRootsFor(developerBuild: boolean, trustTestState: boolean):
  */
 export function isDemoStateRoot(aid: string): boolean {
   return [K0_TEST_ROOT, k1Root()].some((root) => !!root && root.aid === aid && root.demo === true)
+}
+
+/**
+ * Whether `aid` is a root this phone's own list marks as a test root (the K0 preload), so a screen shows the grey
+ * "Test" label and the test words in place of "Demo", from the entry, never from a card's word or the name. False for
+ * any root not on the list, and for K1.
+ */
+export function isTestStateRoot(aid: string): boolean {
+  return [K0_TEST_ROOT, k1Root()].some((root) => !!root && root.aid === aid && root.test === true)
 }
 
 /**
@@ -134,7 +154,7 @@ export const K1_WEBS_HOST: K1WebsHost = 'fromCard'
  */
 export const K1_ROOT_AID = 'IIOfwtkpq00RMwoUH8346kzNKq877GJXQStI6Dyg66Bs'
 
-/** What K1 is called on this phone (Alberto, 2026-11-13), with its Demo pill: a test issuer, not the State of Utah. */
+/** What K1 is called on this phone (Alberto, 2026-11-13), with its Demo pill: a demo issuer, not the State of Utah. */
 export const K1_NAME = 'State of Utah'
 
 /** The path K1's identifiers are published under, after the host: did:webs:<host>:keyring-demo-state:<AID>. */

@@ -105,6 +105,8 @@ export type GuardianVerdict =
       root: string
       state: string
       demo?: true
+      /** That list entry's test mark (the K0 preload): a grey "Test" label in place of "Demo". */
+      test?: true
       checkedAt: string
       expires?: string
       /** The host the root's KEL was actually fetched from on this check (its did:webs), when it was fetched live. */
@@ -174,6 +176,7 @@ export type GuardianStanding =
       kind: 'verified'
       state: string
       demo?: true
+      test?: true
       fetchedFrom?: string
       fetchedAt?: string
       fetchedIssuers?: true
@@ -253,6 +256,7 @@ function checkWith(
       root: root.aid,
       state: root.name,
       ...(root.demo ? { demo: true as const } : {}),
+      ...(root.test ? { test: true as const } : {}),
       checkedAt,
       ...(result.expires ? { expires: result.expires } : {}),
     }
@@ -756,6 +760,8 @@ export interface CardQuestion {
   state?: string
   /** That list entry's demo mark ("Demo" pill beside the name). */
   demo?: true
+  /** That list entry's test mark: the grey "Test" label in place of "Demo". */
+  test?: true
 }
 
 class CardQuestionStore {
@@ -784,10 +790,14 @@ export const guardianCardEvents = new EventEmitter()
  * The state this phone's own list names for the card's root, and that entry's demo mark, if the root is on the list;
  * never the card's word.
  */
-function stateOf(evidence: GuardianEvidence): { state?: string; demo?: true } {
+function stateOf(evidence: GuardianEvidence): { state?: string; demo?: true; test?: true } {
   const root = trustedStateRoots().find((known) => evidence.kels.some((kel) => kel.includes(`"i":"${known.aid}"`)))
   if (!root) return {}
-  return root.demo ? { state: root.name, demo: true } : { state: root.name }
+  return {
+    state: root.name,
+    ...(root.demo ? { demo: true as const } : {}),
+    ...(root.test ? { test: true as const } : {}),
+  }
 }
 
 /** The card this phone could share, and the state it is from: none with either switch off or no card held. */
@@ -807,7 +817,7 @@ export function isK1Card(evidence: GuardianEvidence): boolean {
  */
 export async function cardToShare(
   agent: Pick<Agent, 'genericRecords'>
-): Promise<{ state?: string; demo?: true; k1?: true } | undefined> {
+): Promise<{ state?: string; demo?: true; test?: true; k1?: true } | undefined> {
   if (!isOn()) return undefined
   const held = await heldGuardianEvidence(agent)
   if (!held) return undefined
@@ -1058,7 +1068,7 @@ function shownBeside(ask: RoleOfferAsk, guardian: GuardianOnAsk): string | undef
  */
 function checkInputs(evidence: GuardianEvidence, ward: string | null): string {
   const roots = trustedStateRoots()
-    .map((root) => JSON.stringify([root.aid, root.name, root.demo === true]))
+    .map((root) => JSON.stringify([root.aid, root.name, root.demo === true, root.test === true]))
     .sort()
   return JSON.stringify([ward, roots, evidenceOf(evidence)])
 }
@@ -1161,6 +1171,7 @@ function standingOf(verdict: GuardianVerdict, evidence: GuardianEvidence, stateH
       kind: 'verified',
       state: verdict.state,
       ...(verdict.demo ? { demo: true as const } : {}),
+      ...(verdict.test ? { test: true as const } : {}),
       ...(verdict.fetchedFrom ? { fetchedFrom: verdict.fetchedFrom } : {}),
       ...(verdict.fetchedAt ? { fetchedAt: verdict.fetchedAt } : {}),
       ...(verdict.fetchedIssuers ? { fetchedIssuers: true as const } : {}),
@@ -1179,6 +1190,7 @@ const sameVerdict = (a: GuardianVerdict | undefined, b: GuardianVerdict) =>
     ? a.root === b.root &&
       a.state === b.state &&
       a.demo === b.demo &&
+      a.test === b.test &&
       a.expires === b.expires &&
       a.fetchedFrom === b.fetchedFrom &&
       a.fetchedAt === b.fetchedAt &&
@@ -1224,7 +1236,7 @@ const sameSocial = (a: SocialVerdict | undefined, b: SocialVerdict) =>
   !!a &&
   a.ok === b.ok &&
   (a.ok === true && b.ok === true
-    ? a.root === b.root && a.state === b.state && a.demo === b.demo && a.expires === b.expires
+    ? a.root === b.root && a.state === b.state && a.demo === b.demo && a.test === b.test && a.expires === b.expires
     : a.ok === false && b.ok === false && a.reason === b.reason && a.detail === b.detail && a.underCard === b.underCard)
 
 /**
@@ -1281,11 +1293,11 @@ export async function approverCardStandings(
  * pill, from it. Read from the list's own entry, never from the card's word or inferred from the name; a card whose
  * root is not on the list, or not demo, has no entry. Empty with either switch off. Runs no check.
  */
-export async function guardianDemoStates(agent: Pick<Agent, 'genericRecords'>): Promise<Record<string, string>> {
+async function demoRootsBeside(agent: Pick<Agent, 'genericRecords'>): Promise<Record<string, StateRoot>> {
   if (!isOn()) return {}
   const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK })) ?? []
   const roots = trustedStateRoots().filter((root) => isDemoStateRoot(root.aid))
-  const named: Record<string, string> = {}
+  const named: Record<string, StateRoot> = {}
   for (const record of records) {
     const ask = record.content as unknown as RoleOfferAsk
     const guardian = ask?.guardian
@@ -1299,7 +1311,25 @@ export async function guardianDemoStates(agent: Pick<Agent, 'genericRecords'>): 
     // any other refusal. Making it structural (one helper with websRootsFor) is backlog (ac, 11-12).
     const kels = JSON.stringify(guardian.evidence.kels)
     const root = roots.find((r) => kels.includes(r.aid))
-    if (root) named[beside] = root.name
+    if (root) named[beside] = root
   }
   return named
+}
+
+export async function guardianDemoStates(agent: Pick<Agent, 'genericRecords'>): Promise<Record<string, string>> {
+  const roots = await demoRootsBeside(agent)
+  return Object.fromEntries(Object.entries(roots).map(([beside, root]) => [beside, root.name]))
+}
+
+/**
+ * The approvers {@link guardianDemoStates} names whose root the list marks `test` (the K0 preload): their state box
+ * shows the grey "Test" label and the test words in place of "Demo". Read from the list's entry, never the name.
+ */
+export async function guardianTestStates(agent: Pick<Agent, 'genericRecords'>): Promise<Record<string, true>> {
+  const roots = await demoRootsBeside(agent)
+  return Object.fromEntries(
+    Object.entries(roots)
+      .filter(([, root]) => root.test === true)
+      .map(([beside]) => [beside, true as const])
+  )
 }

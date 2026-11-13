@@ -215,7 +215,9 @@ const ApproverOfferModal: React.FC = () => {
                         interpolation: { escapeValue: false },
                       })}
                 </ThemedText>
-                {asking.state && asking.demo ? <DemoPill testID={ApproverOfferIds.cardAskDemo} /> : null}
+                {asking.state && asking.demo ? (
+                  <DemoPill testID={ApproverOfferIds.cardAskDemo} test={asking.test === true} />
+                ) : null}
                 <ThemedText>
                   {t('Approver.CardAskBody', {
                     asker: asking.asker || t('Approver.UnnamedContact'),

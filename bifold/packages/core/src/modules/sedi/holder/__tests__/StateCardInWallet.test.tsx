@@ -163,7 +163,7 @@ describe('the state card in Credentials', () => {
     const tree = await wallet()
     expect(shown(tree)).toBe(true)
     expect(tree.getByTestId(id('CommunityPassTitle')).props.children).toBe(K0_TEST_ROOT.name)
-    expect(tree.getByTestId(id('CommunityPassLapsing')).props.children).toBe('StateCard.Demo')
+    expect(tree.getByTestId(id('CommunityPassLapsing')).props.children).toBe('StateCard.Test')
     expect(tree.queryByText('Credentials.EmptyList')).toBeNull()
   })
 
@@ -209,7 +209,7 @@ describe('the state card in Credentials', () => {
     await waitFor(() => expect(tree.getByTestId(id('StateCardDetails'))).toBeTruthy())
     expect(tree.getByTestId(id('StateCardStatus')).props.children).toBe('StateCard.ChecksOut')
     expect(tree.getByTestId(id('StateCardWhatChecked'))).toBeTruthy()
-    expect(tree.getByTestId(id('StateCardDemoNote')).props.children).toBe('StateCard.DemoNote')
+    expect(tree.getByTestId(id('StateCardDemoNote')).props.children).toBe('StateCard.TestNote')
     expect(tree.queryByTestId(id('StateCardTechnicalRows'))).toBeNull()
     fireEvent.press(tree.getByTestId(id('StateCardTechnical')))
     const rows = tree.getByTestId(id('StateCardTechnicalRows'))

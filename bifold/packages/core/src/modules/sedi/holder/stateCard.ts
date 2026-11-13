@@ -28,7 +28,7 @@ import {
 } from '../../trust-tasks/guardianEvidence'
 import { isStateVerifiedApproversEnabled } from '../../trust-tasks/module/stateVerifiedApproversFlag'
 import { K0_TEST_GUARDIAN_CARD } from '../guardian/k0TestCard'
-import { isDemoStateRoot, k1Root, trustedStateRoots } from '../guardian/stateRoots'
+import { isDemoStateRoot, isTestStateRoot, k1Root, trustedStateRoots } from '../guardian/stateRoots'
 import { websDidToFetch } from '../webs/demoStateHost'
 
 /** How far a "Checks out" reaches when the check read the copy this phone holds. */
@@ -112,9 +112,10 @@ export async function checkHeldCard(
 
 /**
  * What a check depends on besides the card: when this changes, the card is checked again. Each root by its AID, its
- * name, and the did:webs it would be fetched from now. The name, since the title the card shows is the name on the
- * kept verdict: a root renamed on this list (as K0 was, "Test state (K0)" to "State of Example", then to "State of Utah") must not leave the
- * old name on a card already checked. The did:webs, since it decides whether the check reads the state live or the
+ * name, its test mark, and the did:webs it would be fetched from now. The name and the mark, since the title and label
+ * the card shows come from the kept verdict: a root renamed or re-marked on this list (as K0 was, "Test state (K0)" to
+ * "State of Example", then "State of Utah", then "Example State" marked test) must not leave the old name or label on
+ * a card already checked. The did:webs, since it decides whether the check reads the state live or the
  * copy here: a Developer "Demo state host" set or cleared must not leave a copy's verdict saying it was fetched live,
  * or the reverse.
  */
@@ -123,7 +124,7 @@ export const checkKeyOf = (evidence: GuardianEvidence): string =>
     evidence.guardianSaid,
     isStateVerifiedApproversEnabled() ? 'sv' : '-',
     trustedStateRoots()
-      .map((root) => `${root.aid}=${root.name}=${websDidToFetch(root) ?? ''}`)
+      .map((root) => `${root.aid}=${root.name}=${root.test === true ? 'test' : ''}=${websDidToFetch(root) ?? ''}`)
       .join(','),
   ].join('|')
 
@@ -138,8 +139,13 @@ export interface StateCardView {
   tone: StateCardTone
   /** The status in a sentence, for the details. */
   status: string
-  /** The pill on the pass: "Demo" (cream) when it checks out from a demo root, else the problem in a word or two. */
+  /**
+   * The pill on the pass: "Demo" (cream) when it checks out from a demo root, "Test" from the test root (the K0
+   * preload), else the problem in a word or two.
+   */
   pill?: string
+  /** The K0 preload (a root the list marks `test`, or the K0 card itself): the pass is drawn grey, not the state's blue. */
+  test?: true
   /** How far a "Checks out" reaches, for the details' "what was checked" line: live, or the copy here. */
   asOf: string
   /**
@@ -147,7 +153,10 @@ export interface StateCardView {
    * from the copy here, "Demo: checked against a copy on this phone." Only beside a "Checks out".
    */
   source?: string
-  /** "Demo card, loaded on this phone; not issued by the State of Utah", for a demo card (the K0 kit's). */
+  /**
+   * What the card says it is: "Test card, loaded on this phone. Not issued by anyone." for the K0 preload, "Demo card,
+   * issued by the State of Utah demo office. Not issued by the State of Utah." for a card from the state office (K1).
+   */
   demoNote?: string
   issued?: { label: string; value: string }
   validUntil?: { label: string; value: string }
@@ -201,6 +210,8 @@ export function stateCardView(
   const ok = verdict?.ok === true ? verdict : undefined
   // One answer to "is this a demo root", the one Who approves and the card question use (stateRoots).
   const demo = ok ? isDemoStateRoot(ok.root) : false
+  // The test root (the K0 preload), from the same list: its label and words say "Test", never "Demo".
+  const testRoot = ok ? isTestStateRoot(ok.root) : false
   // The host the state office's QR named is said to be that, never "the state's published record" (K1 'fromCard').
   const asOf = words(
     ok?.fetchedFrom ? (ok.hostFromCard ? STATE_CARD_AS_OF_QR_HOST : STATE_CARD_AS_OF_LIVE) : STATE_CARD_AS_OF
@@ -236,7 +247,7 @@ export function stateCardView(
       : sourceKey
         ? words(sourceKey, { host: ok?.fetchedFrom, ...(ok?.fetchedAt ? { time: localClock(ok.fetchedAt) } : {}) })
         : demo
-          ? words('Approver.GuardianDemoCopy')
+          ? words(testRoot ? 'Approver.GuardianTestCopy' : 'Approver.GuardianDemoCopy')
           : undefined
 
   let tone: StateCardTone
@@ -253,7 +264,7 @@ export function stateCardView(
   } else if (ok) {
     tone = 'ok'
     status = words('StateCard.ChecksOut', { asOf })
-    pill = demo ? words('StateCard.Demo') : undefined
+    pill = testRoot ? words('StateCard.Test') : demo ? words('StateCard.Demo') : undefined
   } else {
     tone = 'problem'
     ;({ status, pill } = refusalWords(verdict?.ok === false ? verdict.reason : 'checkFailed', words))
@@ -271,11 +282,15 @@ export function stateCardView(
   // the State of Utah did not issue it), whatever its check said.
   const k1 = k1Root()
   const fromOffice = !!k1 && (ok?.root === k1.aid || evidence.creds.some((cred) => cred.includes(k1.aid)))
+  // The K0 preload is a test card whatever its check said: the test root's own, or the K0 card itself.
+  const testCard = !fromOffice && (testRoot || evidence.guardianSaid === K0_TEST_GUARDIAN_CARD.guardianSaid)
   const demoNote = fromOffice
     ? words('StateCard.DemoNoteOffice')
-    : demo || evidence.guardianSaid === K0_TEST_GUARDIAN_CARD.guardianSaid
-      ? words('StateCard.DemoNote')
-      : undefined
+    : testCard
+      ? words('StateCard.TestNote')
+      : demo
+        ? words('StateCard.DemoNote')
+        : undefined
 
   return {
     title,
@@ -287,6 +302,7 @@ export function stateCardView(
     asOf,
     source,
     demoNote,
+    ...(testCard ? { test: true as const } : {}),
     issued,
     validUntil,
     technical: {
