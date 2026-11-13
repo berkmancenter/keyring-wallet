@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Demo State Office</title>
+    <link rel="stylesheet" href="officer.css" />
+  </head>
+  <body>
+    <div class="banner" role="note">
+      <strong>State of Utah (Demo)</strong>: a test office for Keyring. Not a
+      real government service. Cards issued here are demo cards. Not issued by
+      the State of Utah.
+    </div>
+
+    <header class="top">
+      <div class="wrap top-row">
+        <div>
+          <p class="eyebrow">Officer screen · this computer only</p>
+          <h1>Guardian cards</h1>
+        </div>
+        <p class="health" id="health" aria-live="polite">Not connected</p>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <section class="panel" id="token-panel" aria-labelledby="token-title">
+        <h2 id="token-title">Officer token</h2>
+        <p class="hint">
+          Printed by the issuer when it started. It stays in this tab only, and
+          is gone when the tab closes.
+        </p>
+        <form id="token-form" class="row">
+          <label class="field grow">
+            <span>Token</span>
+            <input
+              id="token"
+              name="token"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              required
+            />
+          </label>
+          <button type="submit" class="btn">Connect</button>
+        </form>
+        <p class="said" id="token-said" role="status"></p>
+      </section>
+
+      <section
+        class="panel"
+        id="issue-panel"
+        aria-labelledby="issue-title"
+        hidden
+      >
+        <h2 id="issue-title">Issue a Guardian card</h2>
+        <p class="hint">
+          Ask each person to open Keyring and show their code. Scan it or paste
+          it here.
+        </p>
+        <form id="issue-form" class="grid" novalidate>
+          <label class="field">
+            <span>Guardian's code</span>
+            <input
+              id="holder"
+              name="holder"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="B…"
+              required
+            />
+            <small class="err" id="holder-err"></small>
+          </label>
+          <label class="field">
+            <span>Ward's code</span>
+            <input
+              id="ward"
+              name="ward"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="B…"
+              required
+            />
+            <small class="err" id="ward-err"></small>
+          </label>
+          <label class="field">
+            <span>Note for this screen <em>(never published)</em></span>
+            <input
+              id="label"
+              name="label"
+              autocomplete="off"
+              maxlength="80"
+              placeholder="e.g. demo pair 1"
+            />
+          </label>
+          <label class="field">
+            <span>Valid for (days)</span>
+            <input
+              id="validDays"
+              name="validDays"
+              type="number"
+              min="1"
+              max="3650"
+              value="365"
+              inputmode="numeric"
+            />
+            <small class="err" id="validDays-err"></small>
+          </label>
+          <div class="actions">
+            <button type="submit" class="btn" id="issue-btn">Issue card</button>
+          </div>
+        </form>
+        <p class="said" id="issue-said" role="status"></p>
+      </section>
+
+      <section
+        class="panel result"
+        id="result"
+        hidden
+        aria-labelledby="result-title"
+      >
+        <h2 id="result-title">Card issued</h2>
+        <div class="result-row">
+          <figure class="qr-box">
+            <img
+              id="result-qr"
+              alt="QR code for the guardian to scan with Keyring"
+              width="240"
+              height="240"
+            />
+            <figcaption>The guardian scans this with Keyring</figcaption>
+          </figure>
+          <div class="result-text">
+            <p class="big" id="result-state"></p>
+            <p id="result-publish"></p>
+            <dl class="facts">
+              <dt>Pick-up page</dt>
+              <dd>
+                <code id="result-pickup"></code>
+                <button type="button" class="link" data-copy="result-pickup">
+                  Copy
+                </button>
+              </dd>
+              <dt>Keyring link</dt>
+              <dd>
+                <code id="result-offer"></code>
+                <button type="button" class="link" data-copy="result-offer">
+                  Copy
+                </button>
+              </dd>
+              <dt>Issued</dt>
+              <dd id="result-issued"></dd>
+              <dt>Valid until</dt>
+              <dd id="result-expires"></dd>
+              <dt>Card ID</dt>
+              <dd><code id="result-id"></code></dd>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="panel"
+        id="list-panel"
+        hidden
+        aria-labelledby="list-title"
+      >
+        <div class="row between">
+          <h2 id="list-title">Cards issued</h2>
+          <button type="button" class="btn quiet" id="refresh">Refresh</button>
+        </div>
+        <p class="said" id="list-said" role="status"></p>
+        <ul class="cards" id="cards"></ul>
+        <p class="empty" id="empty" hidden>No cards issued yet.</p>
+      </section>
+    </main>
+
+    <footer class="wrap foot">
+      Demo only. The signing keys stay on this computer; this page never sees
+      them.
+    </footer>
+
+    <template id="card-row">
+      <li class="card">
+        <div class="card-main">
+          <p class="card-label"></p>
+          <p class="card-codes"></p>
+          <p class="card-dates"></p>
+        </div>
+        <div class="card-side">
+          <span class="pill"></span>
+          <button type="button" class="btn danger revoke">Revoke…</button>
+          <div class="confirm" hidden>
+            <p>
+              Revoke this card? The guardian's phone sees it revoked the next
+              time it checks.
+            </p>
+            <div class="row">
+              <button type="button" class="btn danger yes">Revoke</button>
+              <button type="button" class="btn quiet no">Keep it</button>
+            </div>
+          </div>
+        </div>
+      </li>
+    </template>
+
+    <script src="officer.js"></script>
+  </body>
+</html>

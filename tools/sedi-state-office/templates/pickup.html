@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+    />
+    <title>Your Guardian card · Demo</title>
+    <!-- Pick-up page for one Guardian card, rendered by the issuer on issue. Placeholders and the rules for filling them: README.md beside this file. -->
+    <style>
+      :root {
+        --bg: #f4f5f6;
+        --panel: #fff;
+        --fg: #1d2125;
+        --muted: #5b636b;
+        --line: #d7dbdf;
+        --accent: #1f5f7a;
+        --accent-fg: #fff;
+        --banner-bg: #3b3f44;
+        --banner-fg: #fff;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #15181b;
+          --panel: #1e2226;
+          --fg: #e7eaed;
+          --muted: #a3abb3;
+          --line: #353b41;
+          --accent: #6fb3cf;
+          --accent-fg: #0b1a20;
+          --banner-bg: #2a2e33;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          17px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+      }
+      .banner {
+        background: var(--banner-bg);
+        color: var(--banner-fg);
+        padding: 10px 16px;
+        text-align: center;
+        font-size: 14px;
+      }
+      main {
+        max-width: 520px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .eyebrow {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 2px 0 0;
+        font-size: 26px;
+        line-height: 1.25;
+        text-wrap: balance;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        text-align: center;
+      }
+      .qr {
+        background: #fff;
+        padding: 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        width: 280px;
+        max-width: 100%;
+      }
+      .qr svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 10px 22px;
+        border-radius: 10px;
+        background: var(--accent);
+        color: var(--accent-fg);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 4px 12px;
+        margin: 0;
+        font-size: 14px;
+        text-align: left;
+        width: 100%;
+      }
+      dt {
+        color: var(--muted);
+      }
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      ol {
+        margin: 0;
+        padding-left: 20px;
+        text-align: left;
+        font-size: 15px;
+      }
+      footer {
+        color: var(--muted);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="banner" role="note">
+      <strong>{{stateName}} (Demo)</strong>: a test issuer for Keyring, not a
+      government service. This is a demo card. {{notIssuedBy}}
+    </div>
+    <main>
+      <div>
+        <p class="eyebrow">{{stateName}} · Demo</p>
+        <h1>Your Guardian card is ready</h1>
+      </div>
+      <section class="panel" aria-label="Pick up your card">
+        <div
+          class="qr"
+          role="img"
+          aria-label="QR code to open this card in Keyring"
+        >
+          {{qrSvg}}
+        </div>
+        <a class="btn" href="{{offerUrl}}">Open in Keyring</a>
+        <p class="muted">
+          On another device, scan the code with Keyring instead.
+        </p>
+        <ol>
+          <li>Open Keyring on the phone you showed your code from.</li>
+          <li>Scan this code, or tap Open in Keyring.</li>
+          <li>
+            Keyring checks the card and keeps it only if it was issued to that
+            phone.
+          </li>
+        </ol>
+      </section>
+      <dl>
+        <dt>Issued</dt>
+        <dd>{{issuedAt}}</dd>
+        <dt>Valid until</dt>
+        <dd>{{expiresAt}}</dd>
+        <dt>Card file</dt>
+        <dd><a href="{{pickupJsonUrl}}">{{pickupJsonUrl}}</a></dd>
+        <dt>Status</dt>
+        <dd><a href="{{statusJsonUrl}}">Check the current status</a></dd>
+      </dl>
+      <footer>
+        Published by a demo issuer at {{host}}. Nothing on this page names you;
+        the card itself is checked by Keyring.
+      </footer>
+    </main>
+  </body>
+</html>
