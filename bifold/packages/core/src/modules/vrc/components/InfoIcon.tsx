@@ -1,21 +1,18 @@
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAgent } from '@bifold/react-hooks'
 import { View, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
-import { RootStackParams, Screens, Stacks } from '../../../types/navigators'
+import { RootStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
-import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
-import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
 import { useTheme } from '../../../contexts/theme'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import CommonRemoveModal from '../../../components/modals/CommonRemoveModal'
 import { ModalUsage } from '../../../types/remove'
 import { useDeleteContact } from '../hooks/useDeleteContact'
-import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
+import { useChatContact } from '../hooks/useChatContact'
 
 import IconButton, { ButtonLocation } from '../../../components/buttons/IconButton'
 import DisappearingMessagesSheet from '../../../components/chat/DisappearingMessagesSheet'
@@ -29,12 +26,9 @@ interface InfoIconProps {
 const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
   const navigation = useNavigation<StackNavigationProp<RootStackParams>>()
   const { t } = useTranslation()
-  const { agent } = useAgent()
   const { ColorPalette } = useTheme()
-  const [issuerDid, setIssuerDid] = useState<string | null>(null)
-  const [issuerName, setIssuerName] = useState<string | null>(null)
-  const [issuerEmail, setIssuerEmail] = useState<string | undefined>(undefined)
-  const [issuerOrganization, setIssuerOrganization] = useState<string | undefined>(undefined)
+  // Their relationship and contact page, as the chat header's title opens it too (useChatContact).
+  const { issuerDid, viewContact } = useChatContact(connectionId)
   const [menuVisible, setMenuVisible] = useState(false)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 })
   const [isRemoveModalDisplayed, setIsRemoveModalDisplayed] = useState(false)
@@ -43,50 +37,6 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
   const [disappearingVisible, setDisappearingVisible] = useState(false)
   const clearChat = useClearChat()
   const name = useConnectionDisplayName(connectionId)
-  const {
-    openIdState: { w3cCredentialRecords },
-  } = useOpenIDCredentials()
-
-  // Helper function to format issuer name with fallback
-  const formatIssuerName = useCallback(
-    (_issuerId: string, issuerName?: string): string =>
-      // Not a piece of the DID in the name's place (#12).
-      issuerName || t('ContactDetails.UnnamedContact'),
-    [t]
-  )
-
-  // Look up the counterparty's relationship DID for this connection
-  // This is the DID used as issuer.id in VRC credentials, needed for navigation consistency
-  useEffect(() => {
-    const lookupIssuer = async () => {
-      if (!agent) return
-
-      try {
-        const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
-        const allRecords = await repository.getAll(agent.context)
-        const record = allRecords.find((r) => r.connectionId === connectionId)
-
-        // Use counterpartyRelationshipDid as this matches the credential's issuer.id
-        if (record?.counterpartyRelationshipDid) {
-          const counterpartyRelationshipDid = record.counterpartyRelationshipDid
-          setIssuerDid(counterpartyRelationshipDid)
-
-          // Contact info source: received RCard first, then legacy VRC issuer
-          // object fields (pre-RCard-separation exchanges)
-          const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, counterpartyRelationshipDid)
-
-          setIssuerName(formatIssuerName(counterpartyRelationshipDid, displayInfo.name))
-          setIssuerEmail(displayInfo.email)
-          setIssuerOrganization(displayInfo.organization)
-        }
-      } catch (_error) {
-        /* ignore lookup failure */
-      }
-    }
-
-    lookupIssuer()
-  }, [agent, connectionId, w3cCredentialRecords, formatIssuerName])
-
   const handleMenuOpen = useCallback(() => {
     if (buttonRef.current) {
       buttonRef.current.measureInWindow((x, y, width, height) => {
@@ -107,22 +57,8 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
 
   const handleViewContact = useCallback(() => {
     setMenuVisible(false)
-    if (issuerDid && issuerName) {
-      navigation.navigate(Stacks.ContactStack, {
-        screen: Screens.ContactDetails,
-        params: {
-          contact: {
-            issuer: {
-              id: issuerDid,
-              name: issuerName,
-              email: issuerEmail,
-              organization: issuerOrganization,
-            },
-          },
-        },
-      })
-    }
-  }, [navigation, issuerDid, issuerName, issuerEmail, issuerOrganization])
+    viewContact?.()
+  }, [viewContact])
 
   const handleDisappearing = useCallback(() => {
     setMenuVisible(false)

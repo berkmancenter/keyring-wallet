@@ -317,6 +317,7 @@
     "ChatDisappearingSave": ["src/components/chat/Chat.ids.ts"],
     "ChatDisappearingSheet": ["src/components/chat/Chat.ids.ts"],
     "ChatHeaderTitle": ["src/modules/vrc/components/ChatHeaderTitle.tsx"],
+    "ChatHeaderViewContact": ["src/modules/vrc/components/ChatHeaderTitle.tsx"],
     "ChatMessageActions": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageActionsBackdrop": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageActionsNotice": ["src/components/chat/Chat.ids.ts"],
