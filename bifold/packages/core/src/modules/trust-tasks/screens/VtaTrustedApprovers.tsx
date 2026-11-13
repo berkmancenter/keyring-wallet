@@ -66,7 +66,7 @@ import { demoStateHost } from '../../sedi/webs/demoStateHost'
 import { StateOfficeEntry } from '../../sedi/identity/StateOfficeCodes'
 
 import { Mark, StatusPill, Zone } from './approver/ApproverZones'
-import { EnforcementCheckCard } from './approver/EnforcementCheckCard'
+import { EnforcementCheckIds } from './approver/EnforcementCheckCard'
 import { guardianReasonKeys } from './approver/guardianReasonWords'
 
 export const TrustedApproversIds = {
@@ -762,14 +762,12 @@ const VtaTrustedApprovers: React.FC = () => {
         {view && view.approvers.length > 0 ? (
           <ThemedText style={styles.muted}>{t('Approver.RemoveNeedsYes')}</ThemedText>
         ) : null}
-        {/* The practice request, one shared card (Developer › Demos shows it too). Here only once there is someone to
-            approve; it holds this screen's buttons while it runs, and waits while they write. */}
-        {view && view.approvers.length > 0 ? (
-          <EnforcementCheckCard
-            justAdded={justAdded}
-            hostBusy={busy !== undefined && busy !== 'check'}
-            onBusy={(running) => setBusy(running ? 'check' : undefined)}
-          />
+        {/* The practice request lives on Developer › Demos (B7 step 3); right after an add, this says where it is. It
+            runs nothing from here. */}
+        {justAdded ? (
+          <ThemedText variant="bold" testID={testIdWithKey(EnforcementCheckIds.checkPrompt)}>
+            {t('Approver.CheckAfterAdd', { name: justAdded, interpolation: { escapeValue: false } })}
+          </ThemedText>
         ) : null}
         {view?.heldElsewhere.length ? (
           <ThemedText style={styles.muted}>

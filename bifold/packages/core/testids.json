@@ -3179,6 +3179,9 @@
       "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.waitingForPhone"
     },
     {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "EnforcementCheckIds.checkPrompt"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.accepted(ask.connectionId)"
     },
     {
@@ -3882,9 +3885,6 @@
     },
     {
       "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.check"
-    },
-    {
-      "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.checkPrompt"
     },
     {
       "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.checkResult"

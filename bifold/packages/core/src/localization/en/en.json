@@ -3761,7 +3761,7 @@
     "RemoveNeedsYes": "Your agent may ask your approvers before it removes one.",
     "Check": "Check that your agent waits for them",
     "CheckHint": "Keyring sends your agent a practice request that only this phone is asked about, never your approvers. Your agent should hold it.",
-    "CheckAfterAdd": "{{name}} is added. Check that your agent will wait for their yes:",
+    "CheckAfterAdd": "{{name}} is added. To check that your agent waits for their yes, use the practice request in Settings › Developer › Demos.",
     "CheckHeld": "Your agent waits for your approver's yes. The practice request is in Requests, and you can decline it.",
     "CheckNotOn": "Approvals aren't switched on where your agent is hosted, so your approver won't be asked yet.",
     "CheckNeedsTestRule": "To check, first turn on \"{{task}}\" in \"Ask me before…\".",

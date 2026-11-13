@@ -3635,7 +3635,7 @@
     "RemoveNeedsYes": "Seu agente pode consultar seus aprovadores antes de remover um.",
     "Check": "Verificar se seu agente espera por eles",
     "CheckHint": "O Keyring envia ao seu agente um pedido de prática sobre o qual só este telefone é consultado, nunca seus aprovadores. Seu agente deve retê-lo.",
-    "CheckAfterAdd": "{{name}} foi adicionado. Verifique se seu agente vai esperar o sim dessa pessoa:",
+    "CheckAfterAdd": "{{name}} foi adicionado. Para verificar se seu agente espera o sim dessa pessoa, use a solicitação de prática em Configurações › Desenvolvedor › Demos.",
     "CheckHeld": "Seu agente espera o sim do seu aprovador. O pedido de prática está em Pedidos, e você pode recusá-lo.",
     "CheckNotOn": "As aprovações não estão ativadas onde seu agente está hospedado, então seu aprovador ainda não será consultado.",
     "CheckNeedsTestRule": "Para verificar, primeiro ative \"{{task}}\" em \"Pergunte antes…\".",

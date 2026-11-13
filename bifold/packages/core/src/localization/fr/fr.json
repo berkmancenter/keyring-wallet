@@ -3719,7 +3719,7 @@
     "RemoveNeedsYes": "Votre agent peut demander à vos approbateurs avant d’en retirer un.",
     "Check": "Vérifier que votre agent les attend",
     "CheckHint": "Keyring envoie à votre agent une demande d’essai sur laquelle seul ce téléphone est consulté, jamais vos approbateurs. Votre agent devrait la retenir.",
-    "CheckAfterAdd": "{{name}} est ajouté. Vérifiez que votre agent attendra son accord :",
+    "CheckAfterAdd": "{{name}} est ajouté. Pour vérifier que votre agent attend son accord, utilisez la demande d’essai dans Paramètres › Développeur › Démos.",
     "CheckHeld": "Votre agent attend l'accord de votre approbateur. La demande d’essai est dans Demandes, et vous pouvez la refuser.",
     "CheckNotOn": "Les approbations ne sont pas activées là où votre agent est hébergé, donc votre approbateur ne sera pas encore consulté.",
     "CheckNeedsTestRule": "Pour vérifier, activez d'abord « {{task}} » dans « Me demander avant… ».",

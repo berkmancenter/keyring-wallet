@@ -3,9 +3,9 @@
  * can show. It runs a live probe with side effects, so only on a tap, never on open or focus; the last result for
  * this agent this session shows until the next tap.
  *
- * Who approves shows it under its approvers; Developer › Demos shows it too (B7, Alberto 11-12: "move the practice
- * request to Developer"), so the move never leaves the app without it. Renders nothing with the trusted-approvers
- * switch off (or its remote off), read at each render, wherever it is placed.
+ * Shown on Developer › Demos only (B7, Alberto 11-12: "move the practice request to Developer"). Who approves no
+ * longer shows it; after an add it says where the check is (Approver.CheckAfterAdd, under `checkPrompt`). Renders
+ * nothing with the trusted-approvers switch off (or its remote off), read at each render, wherever it is placed.
  *
  * @module trust-tasks/screens/approver/EnforcementCheckCard
  */
@@ -22,7 +22,10 @@ import { isTrustedApproversEnabled } from '../../module/trustedApproversFlag'
 import { vtaAgent } from '../../module/vtaAgent'
 import { checkEnforcement, lastEnforcementCheck, type EnforcementCheck } from '../approverEnforcementCheck'
 
-/** The IDs this card has always rendered under on Who approves (the strings are kept; only this object holds them). */
+/**
+ * The IDs this card has always rendered under (the strings are kept; only this object holds them). `checkPrompt` is now
+ * Who approves' line after an add, pointing here; the card itself no longer renders it.
+ */
 export const EnforcementCheckIds = {
   check: 'TrustedApproversCheck',
   checkResult: 'TrustedApproversCheckResult',
@@ -30,15 +33,13 @@ export const EnforcementCheckIds = {
 } as const
 
 export interface EnforcementCheckCardProps {
-  /** Who was just added on Who approves: the card then offers the check by name (it never runs it). */
-  justAdded?: string
   /** The host screen is writing something: the button waits, as every other button there does. */
   hostBusy?: boolean
   /** Told when the probe starts and ends, so the host screen can hold its own buttons meanwhile. */
   onBusy?: (busy: boolean) => void
 }
 
-export const EnforcementCheckCard: React.FC<EnforcementCheckCardProps> = ({ justAdded, hostBusy, onBusy }) => {
+export const EnforcementCheckCard: React.FC<EnforcementCheckCardProps> = ({ hostBusy, onBusy }) => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const { ColorPalette } = useTheme()
@@ -67,11 +68,6 @@ export const EnforcementCheckCard: React.FC<EnforcementCheckCardProps> = ({ just
       style={{ backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 6 }}
       testID={testIdWithKey(EnforcementCheckIds.check)}
     >
-      {justAdded ? (
-        <ThemedText variant="bold" testID={testIdWithKey(EnforcementCheckIds.checkPrompt)}>
-          {t('Approver.CheckAfterAdd', { name: justAdded, interpolation: { escapeValue: false } })}
-        </ThemedText>
-      ) : null}
       <ThemedText style={{ color: ColorPalette.grayscale.mediumGrey }}>{t('Approver.CheckHint')}</ThemedText>
       <Button
         title={t('Approver.Check')}
