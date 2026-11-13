@@ -34,7 +34,7 @@ import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/pay
 
 import { vrcFlowStore } from '../../vrc/witnessStatusStore'
 import { setEncounterConsentHandler } from '../ceremony'
-import { digestMultibase } from '../documentProof'
+import { digestBytesEqual, digestMultibase } from '../documentProof'
 import { extendedCode, rejectWith } from '../services/TrustTasksService'
 
 import { didPrefix } from './didPrefix'
@@ -214,7 +214,8 @@ export class SharedConnectInviterCeremony implements InviterCeremony {
     if (this.gotReceipt) return
     if (!(await this.verifyFrom(document))) return this.log('dropped a receipt whose proof did not verify')
     const digest = (document.payload as { vrcDigestMultibase?: string } | undefined)?.vrcDigestMultibase
-    if (digest !== this.ownDigest) return this.log('receipt digest matches no delivery of ours')
+    if (!digest || !this.ownDigest || !digestBytesEqual(digest, this.ownDigest))
+      return this.log('receipt digest matches no delivery of ours')
     if (!(await this.deps.validate(issue.RESPONSE_SPEC, document))) return this.log('dropped a nonconforming receipt')
     await this.deps.retain(document, 'response').catch(() => undefined)
     this.gotReceipt = true
@@ -232,7 +233,7 @@ export class SharedConnectInviterCeremony implements InviterCeremony {
       return null
     }
     const vc = (document.payload as { vrc?: Record<string, unknown> } | undefined)?.vrc
-    const digest = vc ? digestMultibase(vc) : undefined
+    const computed = vc ? digestMultibase(vc) : undefined
     const claimed = (document.payload as { vrcDigestMultibase?: string } | undefined)?.vrcDigestMultibase
     const reason = !vc
       ? 'payload carries no credential'
@@ -240,18 +241,35 @@ export class SharedConnectInviterCeremony implements InviterCeremony {
         ? 'credential issuer is not the proposer relationship DID'
         : vcSubjectId(vc) !== this.myRelationshipDid
           ? 'credential subject is not this party relationship DID'
-          : claimed !== undefined && claimed !== digest
+          : claimed !== undefined && !digestBytesEqual(claimed, computed as string)
             ? 'credential digest does not match'
             : !(await this.deps.verifyVrc(vc))
               ? 'credential proof did not verify'
               : undefined
-    if (reason) {
+    // Digests are equal when their decoded bytes are (§4.9.3); the receipt echoes the sender's own spelling.
+    const digest = claimed ?? computed
+    let storeFailure: string | undefined
+    if (!reason) {
+      try {
+        await this.deps.storeVrc(vc as Record<string, unknown>)
+      } catch (error) {
+        // Not receipted: a receipt says the credential is held, and it is not.
+        this.agent.config.logger.error(
+          `${ENCOUNTER_LOG_PREFIX} inviter: the received credential could not be stored: ${
+            error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+          }`
+        )
+        storeFailure = 'credential could not be stored'
+      }
+    }
+    const refusalReason = reason ?? storeFailure
+    if (refusalReason) {
       // The scanner's VRC is refused in words it can act on: it is a party to this exchange, not a stranger.
       const refusal = await this.deps.sign(
         this.decorate(
           rejectWith(document as never, this.newId(), {
             code: extendedCode(issue.TYPE_URI, 'notAccepted'),
-            message: reason,
+            message: refusalReason,
             retryable: false,
           }) as unknown as Record<string, unknown>,
           6
@@ -264,7 +282,6 @@ export class SharedConnectInviterCeremony implements InviterCeremony {
       await this.finish('unknown')
       return null
     }
-    await this.deps.storeVrc(vc as Record<string, unknown>)
     const receipt = await this.deps.sign(
       this.build(`${issue.TYPE_URI}#response`, 6, { vrcDigestMultibase: digest as string })
     )

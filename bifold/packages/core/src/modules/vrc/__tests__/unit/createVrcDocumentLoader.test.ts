@@ -1,4 +1,4 @@
-import { createVrcDocumentLoader } from '../../createVrcDocumentLoader'
+import { createVrcDocumentLoader, RLTP_CONTEXT_V1_URL } from '../../createVrcDocumentLoader'
 import {
   DTG_CONTEXT_URL,
   DTG_CONTEXT_DOCUMENT,
@@ -99,6 +99,14 @@ describe('createVrcDocumentLoader', () => {
         documentUrl: REGISTRY_DTG_CONTEXT_URL,
         document: REGISTRY_DTG_CONTEXT_DOCUMENT,
       })
+    })
+
+    it('should resolve the unpublished RLTP context locally, never over the network', async () => {
+      const fetchSpy = jest.spyOn(global, 'fetch')
+      const result = await documentLoader(RLTP_CONTEXT_V1_URL)
+      expect(result.document).toEqual({ '@context': {} })
+      expect(fetchSpy).not.toHaveBeenCalled()
+      fetchSpy.mockRestore()
     })
 
     it('should resolve the hardware-evidence context URL locally (offline, no network)', async () => {

@@ -8,7 +8,7 @@ import { TypedArrayEncoder } from '@credo-ts/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 
-import { digestMultibase, jcsCanonicalize, verifyDocumentProof } from '../documentProof'
+import { digestBytesEqual, digestMultibase, jcsCanonicalize, verifyDocumentProof } from '../documentProof'
 
 describe('jcsCanonicalize', () => {
   test('orders members lexicographically and strips insignificant whitespace', () => {
@@ -71,9 +71,7 @@ describe('verifyDocumentProof', () => {
   const fakeAgent = {
     dids: {
       resolveDidDocument: async () => ({
-        verificationMethod: [
-          { id: verificationMethodId, type: 'Multikey', controller, publicKeyMultibase: multikey },
-        ],
+        verificationMethod: [{ id: verificationMethodId, type: 'Multikey', controller, publicKeyMultibase: multikey }],
       }),
     },
   } as never
@@ -131,5 +129,48 @@ describe('verifyDocumentProof', () => {
       ;(d.proof as Record<string, unknown>).cryptosuite = 'eddsa-rdfc-2022'
     })
     expect(await verifyDocumentProof(fakeAgent, doc, controller)).toBe(false)
+  })
+})
+
+describe('digestBytesEqual', () => {
+  const z = digestMultibase({ a: 1 })
+  const bytes = Buffer.from(TypedArrayEncoder.fromBase58(z.slice(1)))
+  const u = `u${bytes.toString('base64url')}`
+  const paddedU = `U${bytes.toString('base64url')}${'='.repeat((4 - (bytes.toString('base64url').length % 4)) % 4)}`
+
+  test('is true for one digest spelled base58btc and base64url, padded or not', () => {
+    expect(u).not.toBe(z)
+    expect(digestBytesEqual(z, u)).toBe(true)
+    expect(digestBytesEqual(u, z)).toBe(true)
+    expect(digestBytesEqual(z, paddedU)).toBe(true)
+    expect(digestBytesEqual(z, z)).toBe(true)
+  })
+
+  test('is false for a different digest, whatever the spelling', () => {
+    const other = digestMultibase({ a: 2 })
+    const otherU = `u${Buffer.from(TypedArrayEncoder.fromBase58(other.slice(1))).toString('base64url')}`
+    expect(digestBytesEqual(z, other)).toBe(false)
+    expect(digestBytesEqual(z, otherU)).toBe(false)
+  })
+
+  test('is false, not a throw, for strings that do not decode', () => {
+    expect(digestBytesEqual(z, 'u!!!!')).toBe(false)
+    expect(digestBytesEqual(z, '')).toBe(false)
+    expect(digestBytesEqual('zWrong', z)).toBe(false)
+  })
+
+  test('is false when both sides decode to no bytes, even spelled alike', () => {
+    // Control: a valid pair still matches, so the rows below fail on the guard, not on a broken decoder.
+    expect(digestBytesEqual(u, paddedU)).toBe(true)
+    expect(digestBytesEqual('u', 'u')).toBe(false)
+    expect(digestBytesEqual('U', 'U==')).toBe(false)
+    expect(digestBytesEqual('uA', 'uB')).toBe(false)
+    expect(digestBytesEqual('uA', 'uA')).toBe(false)
+    expect(digestBytesEqual('z', 'z')).toBe(false)
+  })
+
+  test('is false for base64url one character past a whole group, which no encoder writes', () => {
+    // Five characters carry three whole bytes and six stray bits; dropping the stray character would make these equal.
+    expect(digestBytesEqual('uAAAAA', 'uAAAAB')).toBe(false)
   })
 })

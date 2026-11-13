@@ -52,6 +52,22 @@ export const DTG_CREDENTIALS_V1_CONTEXT_URL = 'https://firstperson.network/crede
 export const DTG_CREDENTIALS_V1_STAND_IN: Record<string, unknown> = Object.freeze({ '@context': {} })
 
 /**
+ * The context the Real Life Trust Protocol (RLTP) encounter credential names:
+ * `https://real-life.org/rltp/v1`. It is not published: the URL answers 301 to
+ * an HTML page (checked 2026-11-08), so Credo's expansion on store failed with
+ * "Dereferencing a URL did not result in a valid JSON-LD object" and the run-3
+ * exchange with Anton's CLI ended `credential could not be stored`.
+ *
+ * Stands in as an EMPTY context, as for the community-card context above: the
+ * RLTP subject members (ceremony, challenge, enactmentBinding, channel) expand
+ * under VCDM 2.0's issuer-dependent `@vocab`, and the credential's JCS proof
+ * does not depend on it. Replace with the RLTP group's document, byte for byte,
+ * once one is published. Served for the exact URL only.
+ */
+export const RLTP_CONTEXT_V1_URL = 'https://real-life.org/rltp/v1'
+export const RLTP_CONTEXT_V1_STAND_IN: Record<string, unknown> = Object.freeze({ '@context': {} })
+
+/**
  * Maps verification method types to their required JSON-LD contexts
  */
 const VERIFICATION_METHOD_CONTEXTS: Record<string, string[]> = {
@@ -149,6 +165,9 @@ export function createVrcDocumentLoader(agentContext: AgentContext) {
     // Handle custom VRC context URLs
     if (normalizedUrl === DTG_CREDENTIALS_V1_CONTEXT_URL) {
       return { contextUrl: null, documentUrl: url, document: DTG_CREDENTIALS_V1_STAND_IN }
+    }
+    if (url === RLTP_CONTEXT_V1_URL) {
+      return { contextUrl: null, documentUrl: url, document: RLTP_CONTEXT_V1_STAND_IN }
     }
     if (url === DTG_CONTEXT_URL) {
       return { contextUrl: null, documentUrl: url, document: DTG_CONTEXT_DOCUMENT }

@@ -1,4 +1,5 @@
 /** The scanner's shared-connect session against a scripted fake inviter (plan WP6, WP7, WP10, WP13 local rung). */
+import { MultiBaseEncoder } from '@credo-ts/core'
 import * as issue from '@openvtc/trust-tasks/vrc/relationships/issue/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
 
@@ -20,7 +21,7 @@ const MY_VID = 'did:peer:2.myVid'
 const THEIR_REL = 'did:peer:0inviterRel'
 const MY_REL = 'did:peer:0myRel'
 
-const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn() }
+const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() }
 const agent = { config: { logger } } as never
 
 const encounter = (over: Partial<EncounterRecord> = {}): EncounterRecord => ({
@@ -244,6 +245,64 @@ describe('the scanner session', () => {
     const receipt = inviter.receiptFor(sent[2]) as Record<string, any>
     await session.handle({ ...receipt, id: 'rc2', payload: { vrcDigestMultibase: 'zWrong' } })
     expect(session.outcome).toBeUndefined()
+  })
+
+  describe('digest spelling and a credential that will not store', () => {
+    /** The same digest, spelled base64url where ours is base58btc (§4.9.3: equal as decoded bytes). */
+    const respell = (digest: string) => `u${Buffer.from(MultiBaseEncoder.decode(digest).data).toString('base64url')}`
+
+    it('accepts an issue whose stated digest is spelled differently, and echoes the sender spelling in the receipt', async () => {
+      const { session, sent, stored } = setup()
+      await session.start()
+      const inviter = fromInviter(sent[0])
+      const theirs = respell(digestMultibase(inviter.vc))
+      expect(theirs).not.toBe(digestMultibase(inviter.vc))
+      await session.handle(inviter.response)
+      await session.handle({ ...inviter.issue, payload: { vrc: inviter.vc, vrcDigestMultibase: theirs } })
+      expect(stored).toEqual([inviter.vc])
+      expect((sent[1].payload as { vrcDigestMultibase: string }).vrcDigestMultibase).toBe(theirs)
+    })
+
+    it('completes on a receipt whose digest of ours is spelled differently', async () => {
+      const { session, sent } = setup()
+      await session.start()
+      const inviter = fromInviter(sent[0])
+      await session.handle(inviter.response)
+      await session.handle(inviter.issue)
+      const receipt = inviter.receiptFor(sent[2]) as Record<string, any>
+      const ours = receipt.payload.vrcDigestMultibase as string
+      await session.handle({ ...receipt, payload: { vrcDigestMultibase: respell(ours) } })
+      await expect(session.finished).resolves.toBe('completed')
+    })
+
+    it('still refuses a stated digest that is a different digest', async () => {
+      const { session, sent, stored } = setup()
+      await session.start()
+      const inviter = fromInviter(sent[0])
+      await session.handle(inviter.response)
+      const other = respell(digestMultibase({ other: true }))
+      await session.handle({ ...inviter.issue, payload: { vrc: inviter.vc, vrcDigestMultibase: other } })
+      expect(stored).toEqual([])
+      expect(sent[sent.length - 1].type).toContain('/trust-task-error/')
+    })
+
+    it('logs why the store failed, refuses, and sends no receipt', async () => {
+      const { session, sent } = setup({
+        storeVrc: async () => {
+          throw new Error('unsupported context')
+        },
+      })
+      await session.start()
+      const inviter = fromInviter(sent[0])
+      await session.handle(inviter.response)
+      await session.handle(inviter.issue)
+      expect(sent.some((d) => String(d.type).endsWith('#response') && String(d.type).includes('issue'))).toBe(false)
+      expect(sent[sent.length - 1].type).toContain('/trust-task-error/')
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('could not be stored: Error: unsupported context')
+      )
+      await expect(session.finished).resolves.toBe('refused')
+    })
   })
 
   describe('timeouts and expiry', () => {

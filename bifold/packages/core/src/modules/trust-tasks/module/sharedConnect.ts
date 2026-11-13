@@ -37,7 +37,7 @@ import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDi
 import { getOrCreateRelationshipDid } from '../../vrc/vrc-manager'
 import { vrcFlowStore } from '../../vrc/witnessStatusStore'
 import { getTrustTasksService } from '../ceremony'
-import { digestMultibase, verifyDocumentProof } from '../documentProof'
+import { digestBytesEqual, digestMultibase, verifyDocumentProof } from '../documentProof'
 import { extendedCode, rejectWith } from '../services/TrustTasksService'
 
 import { didPrefix } from './didPrefix'
@@ -365,10 +365,25 @@ export class SharedConnectSession {
     if (vcSubjectId(vc) !== this.myRelationshipDid)
       return refuse('credential subject is not this party relationship DID')
     if (!(await this.deps.verifyVrc(vc))) return refuse('credential proof did not verify')
-    const digest = digestMultibase(vc)
+    const computed = digestMultibase(vc)
     const claimed = (document.payload as { vrcDigestMultibase?: string }).vrcDigestMultibase
-    if (claimed !== undefined && claimed !== digest) return refuse('credential digest does not match')
-    await this.deps.storeVrc(vc)
+    // Digests are equal when their DECODED bytes are (§4.9.3): a peer may spell the same digest base64url where
+    // we spell it base58btc. The receipt echoes the sender's own spelling, so a peer that compares strings still
+    // finds its digest in it.
+    if (claimed !== undefined && !digestBytesEqual(claimed, computed)) return refuse('credential digest does not match')
+    const digest = claimed ?? computed
+    try {
+      await this.deps.storeVrc(vc)
+    } catch (error) {
+      // Not receipted: a receipt says the credential is held, and it is not. Said aloud, so the exchange ends in
+      // words the other side can read instead of a silence.
+      this.agent.config.logger.error(
+        `${ENCOUNTER_LOG_PREFIX} the received credential could not be stored: ${
+          error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+        }`
+      )
+      return refuse('credential could not be stored')
+    }
     const receipt = await this.deps.sign(
       this.decorate(
         {
@@ -423,7 +438,7 @@ export class SharedConnectSession {
       return
     }
     const digest = (document.payload as { vrcDigestMultibase?: string } | undefined)?.vrcDigestMultibase
-    if (digest !== this.ownDigest) {
+    if (!digest || !digestBytesEqual(digest, this.ownDigest)) {
       this.log('receipt digest matches no delivery of ours, not acknowledged')
       return
     }
