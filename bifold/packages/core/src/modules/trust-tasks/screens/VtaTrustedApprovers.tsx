@@ -67,6 +67,7 @@ import { StateOfficeEntry } from '../../sedi/identity/StateOfficeCodes'
 
 import { Mark, StatusPill, Zone } from './approver/ApproverZones'
 import { EnforcementCheckCard } from './approver/EnforcementCheckCard'
+import { guardianReasonKeys } from './approver/guardianReasonWords'
 
 export const TrustedApproversIds = {
   screen: 'TrustedApprovers',
@@ -422,6 +423,13 @@ const VtaTrustedApprovers: React.FC = () => {
    * holder signed it, and it came over this relationship. Refused for its own reason: said so, beside the open ring.
    * Refused because of the card under it, or none sent: the open ring alone, as before (the card's own line says why).
    */
+  /** Why a card or authorization didn't check out, in plain words, and what to do: never the reason code itself. */
+  const reasonWords = (outcome: string, name: string) => {
+    const keys = guardianReasonKeys(outcome)
+    const named = { name, interpolation: { escapeValue: false } }
+    return `${t(keys.what, named)} ${t(keys.todo, named)}`
+  }
+
   const socialLine = (did: string, name: string) => {
     const social = socials[did]
     const named = { name, interpolation: { escapeValue: false } }
@@ -446,9 +454,7 @@ const VtaTrustedApprovers: React.FC = () => {
             <ThemedText testID={testIdWithKey(TrustedApproversIds.socialRefused(did))}>
               {t('Approver.SocialNotAuthorized', named)}
             </ThemedText>
-            <ThemedText style={styles.muted}>
-              {t('Approver.GuardianOutcome', { outcome: social.outcome, interpolation: { escapeValue: false } })}
-            </ThemedText>
+            <ThemedText style={styles.muted}>{reasonWords(social.outcome, name)}</ThemedText>
           </Mark>
         ) : null}
       </>
@@ -462,7 +468,7 @@ const VtaTrustedApprovers: React.FC = () => {
    * - a root whose did:webs could not be reached on this open: "Couldn't reach the state", never "Couldn't verify"
    *   (the card was not checked) and never verified (nothing falls back to the card's own copy), with "Check again";
    * - revoked, in its own words (the card's own revocation, or the issuer's or state's published record);
-   * - otherwise "Couldn't verify", with the outcome.
+   * - otherwise "Couldn't verify", with why in plain words and what to do (guardianReasonWords), never the code.
    * For a demo root, where it was checked from goes in the state's box (box 2); otherwise here.
    */
   const checkedBox = (did: string | undefined, name: string) => {
@@ -539,7 +545,7 @@ const VtaTrustedApprovers: React.FC = () => {
               {t('Approver.GuardianCouldNotVerify')}
             </ThemedText>
             <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianOutcome(did))}>
-              {t('Approver.GuardianOutcome', { outcome: standing.outcome, interpolation: { escapeValue: false } })}
+              {reasonWords(standing.outcome, name)}
             </ThemedText>
           </Mark>
         )}

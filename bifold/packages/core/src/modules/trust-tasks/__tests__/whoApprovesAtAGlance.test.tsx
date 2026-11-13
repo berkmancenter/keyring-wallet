@@ -406,3 +406,60 @@ describe('Who approves: the K0 preload reads "Test", never "Demo" or "State of U
     }
   )
 })
+
+describe("Who approves: why a card didn't check out, in plain words (Alberto's hand run, 2026-11-13)", () => {
+  const outcomeLine = (tree: Tree) => tree.getByTestId(id(Ids.guardianOutcome(JORDAN))).props.children
+
+  test('noWard: what went wrong and what to do, never "Details: noWard" (control: wardMismatch has its own words)', async () => {
+    const tree = await show({ kind: 'unverified', outcome: 'noWard' })
+    expect(tree.getByTestId(id(Ids.guardianUnverified(JORDAN)))).toBeTruthy()
+    expect(outcomeLine(tree)).toBe('Approver.Reason.noWard Approver.ReasonDo.noWard')
+    expect(tree.queryByText(/GuardianOutcome/)).toBeNull()
+    tree.unmount()
+    const other = await show({ kind: 'unverified', outcome: 'wardMismatch' })
+    expect(outcomeLine(other)).toBe('Approver.Reason.wardMismatch Approver.ReasonDo.wardMismatch')
+  })
+
+  test('a chain refusal reads in its group: kelNotReplaying is "damaged" (control: expired is its own)', async () => {
+    const tree = await show({ kind: 'unverified', outcome: 'kelNotReplaying' })
+    expect(outcomeLine(tree)).toBe('Approver.Reason.damaged Approver.ReasonDo.damaged')
+    tree.unmount()
+    const expired = await show({ kind: 'unverified', outcome: 'expired' })
+    expect(outcomeLine(expired)).toBe('Approver.Reason.expired Approver.ReasonDo.expired')
+  })
+
+  test('a code this phone does not know gets the general words, never the code (control: a known code, above)', async () => {
+    const tree = await show({ kind: 'unverified', outcome: 'someNewReason' })
+    expect(outcomeLine(tree)).toBe('Approver.Reason.other Approver.ReasonDo.other')
+    expect(tree.queryByText(/someNewReason/)).toBeNull()
+  })
+
+  test("an authorization that didn't check out says why the same way (control: authorized has no such line)", async () => {
+    standings.mockResolvedValue({
+      cards: { [JORDAN]: VERIFIED_DEMO },
+      social: { [JORDAN]: { kind: 'refused', outcome: 'notThisCard' } },
+    })
+    demos.mockResolvedValue({})
+    const tree = render(
+      <BasicAppContext>
+        <VtaTrustedApprovers />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    expect(tree.getByTestId(id(Ids.socialRefused(JORDAN)))).toBeTruthy()
+    expect(tree.getByText('Approver.Reason.damaged Approver.ReasonDo.damaged')).toBeTruthy()
+    tree.unmount()
+    standings.mockResolvedValue({
+      cards: { [JORDAN]: VERIFIED_DEMO },
+      social: { [JORDAN]: { kind: 'authorized', state: UTAH } },
+    })
+    const ok = render(
+      <BasicAppContext>
+        <VtaTrustedApprovers />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    expect(ok.queryByTestId(id(Ids.socialRefused(JORDAN)))).toBeNull()
+    expect(ok.queryByText(/Approver\.Reason\./)).toBeNull()
+  })
+})
