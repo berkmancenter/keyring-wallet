@@ -26,6 +26,12 @@ import {
   setPeerLegCarriage,
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
+  setTrustedApproversEnabled,
+  setStateVerifiedApproversEnabled,
+  setTrustTestStateEnabled,
+  setStateCardEnabled,
+  setDemoStateHost,
+  setConfirmItsYouEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -388,6 +394,12 @@ export class AppContainer implements Container {
         enableLivePickup,
         enableSharedConnect,
         enableSharedConnectInvite,
+        enableTrustedApprovers,
+        enableStateVerifiedApprovers,
+        enableTrustTestState,
+        enableStateCard,
+        demoStateHost,
+        enableConfirmItsYou,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -416,6 +428,23 @@ export class AppContainer implements Container {
         // A saved "on" outlives any default, so bifold's isSharedConnectInviteEnabled() (with its remote off) is this
         // flag's only kill path: keep the read going through it, never inline the saved value.
         loadSwitch(BCLocalStorageKeys.EnableSharedConnectInvite, (val) => (enableSharedConnectInvite = val)),
+        // As above: bifold's isTrustedApproversEnabled() (with its remote off) is this flag's only kill path, so every
+        // reader goes through it, never the saved value.
+        loadSwitch(BCLocalStorageKeys.EnableTrustedApprovers, (val) => (enableTrustedApprovers = val)),
+        // As above: isStateVerifiedApproversEnabled() and isTrustTestStateEnabled() (with the remote offs) are the
+        // only kill paths, so every reader goes through them, never the saved value.
+        loadSwitch(BCLocalStorageKeys.EnableStateVerifiedApprovers, (val) => (enableStateVerifiedApprovers = val)),
+        loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
+        // As above: isStateCardEnabled() (with STATE_CARD_REMOTE_OFF and SEDI_KERI_REMOTE_OFF) is the only kill path.
+        loadSwitch(BCLocalStorageKeys.EnableStateCard, (val) => (enableStateCard = val)),
+        // As above: bifold's isConfirmItsYouEnabled() (with its remote off and the umbrella) is the only kill path.
+        loadSwitch(BCLocalStorageKeys.EnableConfirmItsYou, (val) => (enableConfirmItsYou = val)),
+        // The saved Demo state host goes to bifold, which refuses a value that is not a bare public hostname and applies
+        // it only to demo roots and only while both switches hold: the saved text never redirects on its own.
+        (async () => {
+          const data = await this.storage.getValueForKey(BCLocalStorageKeys.DemoStateHost)
+          if (typeof data === 'string') demoStateHost = data
+        })(),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -443,6 +472,12 @@ export class AppContainer implements Container {
           enableLivePickup,
           enableSharedConnect,
           enableSharedConnectInvite,
+          enableTrustedApprovers,
+          enableStateVerifiedApprovers,
+          enableTrustTestState,
+          enableStateCard,
+          demoStateHost,
+          enableConfirmItsYou,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -452,6 +487,16 @@ export class AppContainer implements Container {
       setSharedConnectEnabled(state.developer.enableSharedConnect)
       // Before the QR sheet first opens: it offers "Show a code" only while this is on.
       setSharedConnectInviteEnabled(state.developer.enableSharedConnectInvite)
+      // Before the agent's first message is read: an offer or an approver's request that arrives is dropped while off.
+      setTrustedApproversEnabled(state.developer.enableTrustedApprovers)
+      // Before a Guardian card arrives or Who approves opens: both read these at each check.
+      setStateVerifiedApproversEnabled(state.developer.enableStateVerifiedApprovers)
+      setTrustTestStateEnabled(state.developer.enableTrustTestState)
+      // Before Credentials first draws: the state card reads it at each render.
+      setStateCardEnabled(state.developer.enableStateCard)
+      setDemoStateHost(state.developer.demoStateHost || null)
+      // Before an arriving "Confirm it's you" request is read: it is dropped while off.
+      setConfirmItsYouEnabled(state.developer.enableConfirmItsYou)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {
