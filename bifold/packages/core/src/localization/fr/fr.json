@@ -3671,6 +3671,14 @@
     "ExpiredPromptTitle": "Cette demande a expiré",
     "ExpiredPromptBody": "Rien n'a été envoyé. Si besoin, {{asker}} peut redemander.",
     "Close": "Fermer",
+    "SheetHint": "{{name}} répond sur son téléphone, avec Face ID ou son code.",
+    "SheetPlaceholder": "Que doit confirmer {{name}} ?",
+    "LastConfirmed": "La dernière fois : {{name}} a confirmé, {{time}}",
+    "LastExpired": "{{name}} n’a pas répondu à temps. N’agissez toujours pas.",
+    "WhatItProves": "Ce que prouve une confirmation",
+    "ProofNote": "Le téléphone de {{name}} a affiché votre note exactement comme vous l’avez écrite.",
+    "ProofSigned": "La réponse est signée sur le téléphone de {{name}}, par la connexion que vous partagez déjà.",
+    "EarlierOnContact": "Les demandes précédentes sont sur la fiche de contact de {{name}}.",
     "Done": "Terminé"
   },
   "Approver": {

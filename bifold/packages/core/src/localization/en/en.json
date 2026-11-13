@@ -3713,6 +3713,14 @@
     "ExpiredPromptTitle": "This request has expired",
     "ExpiredPromptBody": "Nothing was sent. If it's still needed, {{asker}} can ask again.",
     "Close": "Close",
+    "SheetHint": "{{name}} answers on their phone, with Face ID or their PIN.",
+    "SheetPlaceholder": "What should {{name}} confirm?",
+    "LastConfirmed": "Last time: {{name}} confirmed, {{time}}",
+    "LastExpired": "{{name}} didn't answer in time. Still don't act on it.",
+    "WhatItProves": "What a confirmation proves",
+    "ProofNote": "{{name}}'s phone showed your note exactly as you typed it.",
+    "ProofSigned": "The answer is signed on {{name}}'s phone, over the connection you already share.",
+    "EarlierOnContact": "Earlier requests are on {{name}}'s contact page.",
     "Done": "Done"
   },
   "Approver": {

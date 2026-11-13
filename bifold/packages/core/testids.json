@@ -438,20 +438,25 @@
     "ConfirmItsYouExpiresIn": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouFailed": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouItsMe": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouLast": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouLock": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouNotMe": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouNotNow": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouNote": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouOpen": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouProof": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
+    "ConfirmItsYouProofToggle": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouSaid": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouSend": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouSent": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouSheet": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouSheetNote": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
+    "ConfirmItsYouShort": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouStatus": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouSteps": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmRemoveButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmWithSheet": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
+    "ConfirmWithSheetBackdrop": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConfirmWithSheetClose": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConnectCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectMyAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -2406,6 +2411,9 @@
       "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.sheet"
     },
     {
+      "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.backdrop"
+    },
+    {
       "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.close"
     },
     {
@@ -2538,10 +2546,19 @@
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.expiresIn"
     },
     {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.last"
+    },
+    {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.note"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.open"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.proof"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.proofToggle"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.row"
@@ -2551,6 +2568,9 @@
     },
     {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.send"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.sheet"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.status"

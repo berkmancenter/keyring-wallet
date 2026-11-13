@@ -3587,6 +3587,14 @@
     "ExpiredPromptTitle": "Este pedido expirou",
     "ExpiredPromptBody": "Nada foi enviado. Se ainda for preciso, {{asker}} pode pedir de novo.",
     "Close": "Fechar",
+    "SheetHint": "{{name}} responde no telefone, com Face ID ou o PIN.",
+    "SheetPlaceholder": "O que {{name}} deve confirmar?",
+    "LastConfirmed": "Da última vez: {{name}} confirmou, {{time}}",
+    "LastExpired": "{{name}} não respondeu a tempo. Continue sem agir.",
+    "WhatItProves": "O que uma confirmação prova",
+    "ProofNote": "O telefone de {{name}} mostrou sua nota exatamente como você escreveu.",
+    "ProofSigned": "A resposta é assinada no telefone de {{name}}, pela conexão que vocês já têm.",
+    "EarlierOnContact": "Os pedidos anteriores estão na página de contato de {{name}}.",
     "Done": "Pronto"
   },
   "Approver": {
