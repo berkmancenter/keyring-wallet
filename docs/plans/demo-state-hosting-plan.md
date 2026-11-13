@@ -310,6 +310,16 @@ None of this touches the resolver or the Guardian check.
 
   It is always fetched from that did:webs, and the free-text field never redirects it. It is trusted on the same terms
   as K0: in a Developer build, or with "Trust the test state" on.
+
+  The build names the host in one constant, `K1_WEBS_HOST` (the SEDI lane's code), which has three values:
+  - **`null`, the default.** K1 fetches nothing, and a K1 card is refused on receipt: "This build doesn't name the
+    state's host". A build that names no host is safe.
+  - **A hostname.** The fixed host. The field is ignored for K1.
+  - **`'developerField'`.** A deliberate one-line opt-in, only on the owner's explicit word. The field then reaches K1,
+    and the line reads "Fetched from \<host\>, typed on this phone", never as the state's record.
+
+  Rows and aimed mutants pin that a typed host never reaches K1 under `null`. A temporary tunnel's hostname changes
+  every run, so on a tunnel K1 needs a stable tunnel hostname (an account step, the owner's word) or the opt-in.
 - **A3. The setups choose a kit.** The guardian's and the person's one-tap setups take a choice of K0 or K1. K0 stays
   the default until K1 has checked live on both phones.
 - **A4. "Get the Guardian card from \<host\>"**, the Developer step in §4.
