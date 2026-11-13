@@ -161,7 +161,8 @@ The infra lane recommends our own hostname; the coordinator recommends the bucke
 - **The bucket's own URL serves K1 only.** The Developer "Demo state host" field takes a bare hostname, so it can't
   point K0 at a path below a bucket. K1's host is fixed in its list entry anyway (A2), with the full path. The screen
   then reads "Fetched live from storage.googleapis.com", which names Google's address, not ours.
-- **Our own hostname serves both.** K1 is fixed to it (A2), and K0 can be pointed at it with the field. The project's
+- **Our own hostname serves both.** K1 is fixed to it (A2), and K0 can be pointed at it with the field. Its load
+  balancer also sends `X-Robots-Tag: noindex` on every answer. The project's
   organization policy may refuse the load balancer's global resources. In that case, the bucket's URL is the fallback
   (the infra README, "Before any apply").
 
@@ -427,7 +428,7 @@ The quick-tunnel runbook stays as it is for ad hoc tests. Nothing in it is remov
 
 - **How the bucket is served** (§2): its own URL, or a hostname we own, and which hostname.
 - **The DNS record** for that hostname, and who creates it.
-- **Applying #23**, and who may publish (its `publishers`).
+- **Applying #23**, and who may publish (its `publishers`). The owner's own Editor role covers the whole apply.
 - **Where K1's keys live.** Who holds them, on what machine, and how they are backed up. They are never committed,
   never on the host and never sent over a tunnel.
 - **K1's name** on the phone's list.
