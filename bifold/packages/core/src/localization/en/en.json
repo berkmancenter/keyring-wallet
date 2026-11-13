@@ -3725,6 +3725,7 @@
     "ChangeCaption": "Sends {{name}} a new request. What {{name}} approves now stays until {{name}} says yes again and you add it.",
     "SaidYes": "{{name}} said yes. Add them on My agent, under Who approves.",
     "IsApprover": "{{name}} approves for you.",
+    "AlreadyApproves": "{{name}} already approves for you, for everything you chose. Nothing was sent.",
     "NoRelationship": "Exchange a relationship credential with {{name}} first.",
     "NotSent": "The ask didn't go to {{name}}. Try again.",
     "OfferTitle": "{{asker}} asks you to be an approver",

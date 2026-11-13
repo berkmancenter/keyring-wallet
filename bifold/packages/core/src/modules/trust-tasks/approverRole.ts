@@ -331,6 +331,46 @@ export function approversWithAccepted(
   return { approvers: [...new Set([...held.approvers, ask.acceptedAs])], keys }
 }
 
+/**
+ * The DIDs this phone knows the contact on `ask` approves as: the one written on the agent, and the one their last yes
+ * named. Only these can be matched against the agent's rules: the agent lists approvers by the DID each said yes as,
+ * which is not a DID of the relationship, so with no record this phone cannot tell which listed approver is this
+ * contact.
+ */
+export const approverDidsOf = (ask: RoleOfferAsk | undefined): string[] =>
+  ask ? [...new Set([writtenAsOf(ask), ask.acceptedAs].filter((did): did is string => !!did))] : []
+
+/**
+ * Whether the agent's own rules, as just read, list the contact on `ask` as an approver. No read (it failed, is still
+ * running, or was not made: `view` null) WITHHOLDS: never a yes.
+ */
+export function agentListsApprover(
+  view: { approvers: readonly string[] } | null,
+  ask: RoleOfferAsk | undefined
+): boolean {
+  if (!view) return false
+  return approverDidsOf(ask).some((did) => view.approvers.includes(did))
+}
+
+/**
+ * Whether asking the contact on `ask` for `actions` would ask for nothing new: the agent's rules, as just read, list
+ * them, and already hold every one of `actions` (the one set approves every action it holds). Then no offer is sent.
+ * No read (`view` null) is never "nothing new", so the offer goes as it always did.
+ *
+ * This depends on the agent's model being ONE approver set that approves every action it holds (see
+ * {@link approversWithAccepted}): a listed approver then covers every held action. If the agent ever gains
+ * per-approver scopes, this becomes wrong in the dangerous direction (it would call an action covered that this
+ * approver does not hold, and suppress the ask); it must then read that approver's own actions.
+ */
+export function agentAlreadyCovers(
+  view: { approvers: readonly string[]; keys: readonly RoleAction[] } | null,
+  ask: RoleOfferAsk | undefined,
+  actions: readonly RoleAction[]
+): boolean {
+  if (!view || !agentListsApprover(view, ask)) return false
+  return actions.every((action) => view.keys.includes(action))
+}
+
 /** The offer this phone sent on `connectionId`, if any, in whatever state it is now (the contact's row reads it). */
 export async function roleOfferAskOn(
   agent: Pick<Agent, 'genericRecords'>,

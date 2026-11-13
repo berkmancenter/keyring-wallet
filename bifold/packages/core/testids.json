@@ -182,6 +182,7 @@
       "src/modules/trust-tasks/screens/MyAgent.ids.ts",
       "src/modules/trust-tasks/screens/RequestCard.tsx"
     ],
+    "ApproverAlreadyApproves": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
     "ApproverApproved": ["src/modules/trust-tasks/screens/ApproverWaitNote.tsx"],
     "ApproverAsk": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
     "ApproverAskAgain": ["src/modules/trust-tasks/screens/ApproverAskRow.tsx"],
@@ -2325,6 +2326,9 @@
     },
     {
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.again"
+    },
+    {
+      "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.already"
     },
     {
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.ask"

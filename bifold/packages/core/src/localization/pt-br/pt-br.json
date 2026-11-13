@@ -3599,6 +3599,7 @@
     "ChangeCaption": "Envia um novo pedido para {{name}}. O que {{name}} aprova agora continua até {{name}} aceitar de novo e você adicionar.",
     "SaidYes": "{{name}} disse sim. Adicione em Meu agente, em Quem aprova.",
     "IsApprover": "{{name}} aprova por você.",
+    "AlreadyApproves": "{{name}} já aprova por você, para tudo o que você escolheu. Nada foi enviado.",
     "NoRelationship": "Troque primeiro uma credencial de relacionamento com {{name}}.",
     "NotSent": "O pedido não chegou a {{name}}. Tente de novo.",
     "OfferTitle": "{{asker}} pede que você seja aprovador",
