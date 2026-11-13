@@ -23,13 +23,18 @@ const chainReasons = (): string[] => {
   return [...block.matchAll(/'([A-Za-z0-9]+)'/g)].map((m) => m[1])
 }
 
-/** The reason codes a file raises itself: refuse('x', ...) and reason: 'x'. */
+/**
+ * The reason codes a file raises itself: refuse('x', ...), and every quoted code in what a `reason:` is set to, in any
+ * shape (a literal, or a ternary such as guardianEvidence's `fromRoot ? 'revokedInStateRecord' : ...`), so a code
+ * assigned a new way is still seen (ac, #1063).
+ */
 const raisedIn = (rel: string): string[] => {
   const text = read(rel)
   return [
     ...[...text.matchAll(/refuse\('([A-Za-z0-9]+)'/g)].map((m) => m[1]),
-    ...[...text.matchAll(/reason: '([A-Za-z0-9]+)'/g)].map((m) => m[1]),
-    ...[...text.matchAll(/'(revokedIn[A-Za-z]+Record)'/g)].map((m) => m[1]),
+    ...[...text.matchAll(/reason: ([^,\n]+)/g)].flatMap((m) =>
+      [...m[1].matchAll(/'([A-Za-z0-9]+)'/g)].map((q) => q[1])
+    ),
   ]
 }
 
@@ -52,12 +57,21 @@ describe('guardianReasonWords: every refusal has words', () => {
     expect(raisedIn('trust-tasks/socialAuthorization.ts')).toEqual(
       expect.arrayContaining(['notThisAuthorization', 'notTheHolder', 'notThisCard'])
     )
+    // a code set through a ternary, found with no special case
+    expect(raisedIn('trust-tasks/guardianEvidence.ts')).toEqual(
+      expect.arrayContaining(['revokedInStateRecord', 'revokedInIssuerRecord'])
+    )
+    // the chain check's own decide() raises these itself (sedi/guardian/index.ts)
+    expect(raisedIn('sedi/guardian/index.ts')).toEqual(
+      expect.arrayContaining(['unsupportedCesr', 'malformedCesr', 'kelNotReplaying', 'switchedOff'])
+    )
   })
 
   test.each([
     ['sedi/guardian/chain.ts', chainReasons],
     ['trust-tasks/guardianEvidence.ts', () => raisedIn('trust-tasks/guardianEvidence.ts')],
     ['trust-tasks/socialAuthorization.ts', () => raisedIn('trust-tasks/socialAuthorization.ts')],
+    ['sedi/guardian/index.ts', () => raisedIn('sedi/guardian/index.ts')],
   ])('each code %s raises is listed, so none falls to the general words', (_file, codes) => {
     const unlisted = (codes as () => string[])().filter((code) => !(code in GUARDIAN_REASON_GROUPS))
     expect(unlisted).toEqual([])
