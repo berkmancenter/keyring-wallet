@@ -40,15 +40,16 @@ import {
   type RoleOfferPrompt,
 } from '../approverRole'
 import {
+  approverCardStandings,
   cardConsents,
   cardToShare,
   guardianCardEvents,
   guardianDemoStates,
   guardianSourceKey,
-  guardianStandings,
   shareGuardianCard,
   type CardConsent,
   type GuardianStanding,
+  type SocialStanding,
 } from '../guardianEvidence'
 import { releaseWarn } from '../module/releaseLog'
 import { isStateVerifiedApproversEnabled } from '../module/stateVerifiedApproversFlag'
@@ -106,6 +107,11 @@ export const TrustedApproversIds = {
   guardianHostWithheld: (did: string) => `TrustedApproverGuardianHostWithheld_${did}`,
   checkHostAgain: (did: string) => `TrustedApproverCheckHostAgain_${did}`,
   triedAgain: (did: string) => `TrustedApproverTriedAgain_${did}`,
+  // The Social Authorization (S2) the approver sent with the card: its mark, and its lines.
+  socialMark: (did: string) => `TrustedApproverSocialMark_${did}`,
+  socialAuthorized: (did: string) => `TrustedApproverSocialAuthorized_${did}`,
+  socialFromPhone: (did: string) => `TrustedApproverSocialFromPhone_${did}`,
+  socialRefused: (did: string) => `TrustedApproverSocialRefused_${did}`,
 } as const
 
 /** A card the check found revoked, in any of its three ways (its own revocation, the issuer's or the state's record). */
@@ -127,6 +133,7 @@ const VtaTrustedApprovers: React.FC = () => {
   const [names, setNames] = useState<Record<string, string>>({})
   /** Each approver's state Guardian card, checked again on this open (guardianEvidence.ts); none, no line. */
   const [standings, setStandings] = useState<Record<string, GuardianStanding>>({})
+  const [socials, setSocials] = useState<Record<string, SocialStanding>>({})
   /** For an approver whose card names a demo root on this phone's list: that root's name (the state's box). */
   const [demoStates, setDemoStates] = useState<Record<string, string>>({})
   const [mine, setMine] = useState<RoleOfferPrompt[]>([])
@@ -155,7 +162,14 @@ const VtaTrustedApprovers: React.FC = () => {
     const stepped = await steppedDownApprovers(agent).catch(() => [] as string[])
     // Also on its own. A card whose check fails is "couldn't verify" inside guardianStandings; this catch is for the
     // records not being readable at all, which shows no line, so it never claims a card is valid.
-    const cards = await guardianStandings(agent).catch(() => ({}) as Record<string, GuardianStanding>)
+    // The card and its authorization from ONE check, so the two can never disagree about whether the card stands.
+    const both = await approverCardStandings(agent).catch(
+      () =>
+        ({ cards: {}, social: {} }) as {
+          cards: Record<string, GuardianStanding>
+          social: Record<string, SocialStanding>
+        }
+    )
     // Unreadable reads as none: no state box, so a card is never drawn as a demo state's without the list saying so.
     const demos = await guardianDemoStates(agent).catch(() => ({}) as Record<string, string>)
     // Unreadable answers read as none given, which sends nothing.
@@ -165,7 +179,8 @@ const VtaTrustedApprovers: React.FC = () => {
     setShareable(share)
     setConsents(answers)
     setSteppedDown(stepped)
-    setStandings(cards)
+    setStandings(both.cards)
+    setSocials(both.social)
     setDemoStates(demos)
     setNames(known)
     setMine(approving)
@@ -243,7 +258,15 @@ const VtaTrustedApprovers: React.FC = () => {
     if (!agent) return
     setBusy('checkAgain')
     try {
-      setStandings(await guardianStandings(agent).catch(() => ({}) as Record<string, GuardianStanding>))
+      const both = await approverCardStandings(agent).catch(
+        () =>
+          ({ cards: {}, social: {} }) as {
+            cards: Record<string, GuardianStanding>
+            social: Record<string, SocialStanding>
+          }
+      )
+      setStandings(both.cards)
+      setSocials(both.social)
       setDemoStates(await guardianDemoStates(agent).catch(() => ({}) as Record<string, string>))
       setTriedAgainAt(new Date().toISOString())
     } finally {
@@ -387,6 +410,45 @@ const VtaTrustedApprovers: React.FC = () => {
     ) : null
 
   /**
+   * Under a verified card: the approver's Social Authorization, or what is not checked yet. `authorized` (it checks
+   * out under this card, on this same check) is the only case that says the card is tied to their phone: the card's
+   * holder signed it, and it came over this relationship. Refused for its own reason: said so, beside the open ring.
+   * Refused because of the card under it, or none sent: the open ring alone, as before (the card's own line says why).
+   */
+  const socialLine = (did: string, name: string) => {
+    const social = socials[did]
+    const named = { name, interpolation: { escapeValue: false } }
+    if (social?.kind === 'authorized')
+      return (
+        <Mark kind="pass" testID={TrustedApproversIds.socialMark(did)}>
+          <ThemedText testID={testIdWithKey(TrustedApproversIds.socialAuthorized(did))}>
+            {t('Approver.SocialAuthorized', { name, state: social.state, interpolation: { escapeValue: false } })}
+          </ThemedText>
+          <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.socialFromPhone(did))}>
+            {t('Approver.SocialSignedFromPhone', named)}
+          </ThemedText>
+        </Mark>
+      )
+    return (
+      <>
+        <Mark kind="gap">
+          <ThemedText style={styles.muted}>{t('Approver.GuardianAsShown', named)}</ThemedText>
+        </Mark>
+        {social?.kind === 'refused' && !social.underCard ? (
+          <Mark kind="fail" testID={TrustedApproversIds.socialMark(did)}>
+            <ThemedText testID={testIdWithKey(TrustedApproversIds.socialRefused(did))}>
+              {t('Approver.SocialNotAuthorized', named)}
+            </ThemedText>
+            <ThemedText style={styles.muted}>
+              {t('Approver.GuardianOutcome', { outcome: social.outcome, interpolation: { escapeValue: false } })}
+            </ThemedText>
+          </Mark>
+        ) : null}
+      </>
+    )
+  }
+
+  /**
    * Box 1, "What Keyring checked", for an approver with a card (none with the state-verified switch off; an approver
    * with no card gets one plain line instead). Each line keeps the testID it always had:
    * - verified: a tick for the card, and an open ring for what isn't checked yet (that it is their phone's);
@@ -419,9 +481,7 @@ const VtaTrustedApprovers: React.FC = () => {
               </View>
               {standing.demo ? null : sourceLine(did, standing)}
             </Mark>
-            <Mark kind="gap">
-              <ThemedText style={styles.muted}>{t('Approver.GuardianAsShown', named)}</ThemedText>
-            </Mark>
+            {socialLine(did, name)}
           </>
         ) : standing.kind === 'unreachable' ? (
           <Mark kind="warn" testID={mark}>

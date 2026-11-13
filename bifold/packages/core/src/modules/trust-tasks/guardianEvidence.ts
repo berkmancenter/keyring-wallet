@@ -65,6 +65,14 @@ import {
   type GuardianEvidencePayload,
 } from './approverRoleSpec'
 import { signDocumentProof } from './documentProof'
+import {
+  checkSocialAuthorization,
+  socialMaterialFor,
+  splitSocial,
+  withSocial,
+  type SocialMaterial,
+  type SocialVerdict,
+} from './socialAuthorization'
 import { isStateVerifiedApproversEnabled } from './module/stateVerifiedApproversFlag'
 import { isTrustedApproversEnabled } from './module/trustedApproversFlag'
 import { isTrustTestStateEnabled } from './module/trustTestStateFlag'
@@ -144,6 +152,11 @@ export interface GuardianOnAsk {
   stateHost?: string
   receivedAt: string
   verdict: GuardianVerdict
+  /**
+   * The Social Authorization the contact sent with the card (0.2's `social`), if any: only with a card issued to their
+   * own phone. `material` is absent when the document named one but did not carry all of it (refused as incomplete).
+   */
+  social?: { material?: SocialMaterial; verdict: SocialVerdict }
 }
 
 /**
@@ -623,22 +636,40 @@ export async function sendGuardianEvidence(
   const connection = await agent.modules.didcomm.connections.getById(connectionId)
   if (!connection.did || !connection.theirDid) return 'noRelationship'
 
+  // The authorization this phone's holder issues the card's ward (S2): only for a card issued to this phone's own
+  // holder AID, so a K0 card's payload is exactly what older builds accept. A failure to issue one never stops the
+  // card: it goes without it, and the person's phone shows the card as before.
+  const issued = await socialMaterialFor(agent, held).catch((e: unknown) => {
+    warn(agent, `no authorization sent with the card on ${connectionId}: ${(e as Error)?.message ?? e}`)
+    return undefined
+  })
+  const withIt = issued ? withSocial(held, issued) : undefined
+  const carried = withIt && evidenceBytes(withIt) <= GUARDIAN_EVIDENCE_MAX_BYTES ? withIt : undefined
+  if (issued && !carried) warn(agent, `the card and its authorization are over ${GUARDIAN_EVIDENCE_MAX_BYTES} bytes`)
+
   const id = utils.uuid()
   // The host goes ONLY with a K1 card, and only as 0.2: a K0 card stays 0.1, exactly what earlier builds send and
   // accept. A phone that knows only 0.1 refuses a 0.2 document by its type (and, today, silently: it answers nothing).
   const k1Card = isK1Card(held)
   const stateHost = k1Card ? await heldGuardianStateHost(agent) : undefined
+  // 0.2 for a K1 card or a card carrying its authorization; 0.1 (unchanged) otherwise, so a K0 card is what it was.
+  // `carried` cannot widen this to a K0 card: socialMaterialFor returns undefined unless the card's holder is this
+  // phone's own holder AID (holder === evidence.holder) AND the Guardian credential is issued to it (a.i === holder),
+  // which a K0 card, issued to the kit's own holder, never is. So a K0 card never carries an authorization.
+  const v2 = k1Card || !!carried
   const payload: GuardianEvidencePayload = {
     agent: agentDid,
     approver: approverDid,
-    ...held,
+    ...(carried ?? held),
     // The host the card came with (K1 'fromCard'), so the person's phone fetches the state from the same one.
     ...(stateHost ? { stateHost } : {}),
     sentAt: new Date().toISOString(),
+    // 0.2's `social` names the authorization; its proof, registry and the guardian's KEL are in the lists above.
+    ...(carried && issued ? { social: { said: issued.said } } : {}),
   }
   const document: Record<string, unknown> = {
     id,
-    type: k1Card ? GUARDIAN_EVIDENCE_V2_TYPE_URI : GUARDIAN_EVIDENCE_TYPE_URI,
+    type: v2 ? GUARDIAN_EVIDENCE_V2_TYPE_URI : GUARDIAN_EVIDENCE_TYPE_URI,
     threadId: id,
     issuer: connection.did,
     recipient: connection.theirDid,
@@ -963,27 +994,50 @@ export async function handleGuardianEvidence(
   if (!record || !ask || ask.agentDid !== payload.agent)
     return dropped(agent, context.connectionId, 'it names no offer this phone sent on this connection')
 
-  const evidence = evidenceOf(payload)
+  // 0.2's authorization (named by `social`) is taken out of the card's lists first, so the card's own check never
+  // reads, or fetches, the guardian's KEL; 0.1 never carries one.
+  const said = v2 && typeof payload.social?.said === 'string' ? payload.social.said : undefined
+  const split = said ? splitSocial(evidenceOf(payload), said) : undefined
+  const evidence = split ? split.card : evidenceOf(payload)
   // The host the card came with, and only that: never this phone's Developer field, never a host from elsewhere.
   const stateHost = v2 && typeof payload.stateHost === 'string' ? payload.stateHost : undefined
+  const ward = await stateWardOf(agent)
   const verdict = await checkGuardianEvidenceResolving(
     evidence,
-    await stateWardOf(agent),
+    ward,
     new Date(),
     (m) => warn(agent, m),
     stateHost ? { stateHost } : {}
   )
+  // The authorization stands on the card's verdict just computed (the same live fetches), never on its own.
+  const social = said
+    ? split?.material
+      ? {
+          material: split.material,
+          verdict: checkSocialAuthorization(evidence, split.material, ward, verdict, new Date(), (m) => warn(agent, m)),
+        }
+      : {
+          verdict: {
+            ok: false as const,
+            reason: 'socialIncomplete',
+            detail: 'the authorization named was not all there (its proof, registry or the guardian KEL)',
+            checkedAt: new Date().toISOString(),
+          },
+        }
+    : undefined
   const guardian: GuardianOnAsk = {
     approver: payload.approver,
     evidence,
     ...(stateHost ? { stateHost } : {}),
     receivedAt: new Date().toISOString(),
     verdict,
+    ...(social ? { social } : {}),
   }
   record.content = { ...ask, guardian }
   await agent.genericRecords.update(record)
   agent.config?.logger?.info(
-    `${LOG_PREFIX} guardian card kept on connection ${context.connectionId}: ${verdict.ok ? 'valid' : verdict.reason}`
+    `${LOG_PREFIX} guardian card kept on connection ${context.connectionId}: ${verdict.ok ? 'valid' : verdict.reason}` +
+      (social ? `; authorization ${social.verdict.ok ? 'valid' : social.verdict.reason}` : '')
   )
   approverRoleEvents.emit('answered', { connectionId: context.connectionId, decision: 'guardianCard' })
 }
@@ -1148,11 +1202,45 @@ export async function guardianStandings(
   agent: Agent,
   deps: { fetch?: WebsFetch; resolveRootKel?: RootKelResolver } = {}
 ): Promise<Record<string, GuardianStanding>> {
-  if (!isOn()) return {}
+  return (await approverCardStandings(agent, deps)).cards
+}
+
+/**
+ * What Who approves shows for an approver's Social Authorization (S2), beside their card: `authorized` only when the
+ * authorization checks out under a card that checks out on this same open; `refused` otherwise, with `underCard` when
+ * it was the card under it that failed (revoked, unreachable, couldn't verify), so the screen never says the
+ * authorization itself is at fault. An approver who sent none has no entry.
+ */
+export type SocialStanding =
+  | { kind: 'authorized'; state: string }
+  | { kind: 'refused'; outcome: string; underCard?: true }
+
+const socialStandingOf = (verdict: SocialVerdict): SocialStanding =>
+  verdict.ok === true
+    ? { kind: 'authorized', state: verdict.state }
+    : { kind: 'refused', outcome: verdict.reason, ...(verdict.underCard ? { underCard: true as const } : {}) }
+
+const sameSocial = (a: SocialVerdict | undefined, b: SocialVerdict) =>
+  !!a &&
+  a.ok === b.ok &&
+  (a.ok === true && b.ok === true
+    ? a.root === b.root && a.state === b.state && a.demo === b.demo && a.expires === b.expires
+    : a.ok === false && b.ok === false && a.reason === b.reason && a.detail === b.detail && a.underCard === b.underCard)
+
+/**
+ * {@link guardianStandings}, and beside it each approver's Social Authorization checked on the SAME open, against the
+ * card's verdict just computed (never a stored one): the two can never disagree about whether the card stands.
+ */
+export async function approverCardStandings(
+  agent: Agent,
+  deps: { fetch?: WebsFetch; resolveRootKel?: RootKelResolver } = {}
+): Promise<{ cards: Record<string, GuardianStanding>; social: Record<string, SocialStanding> }> {
+  if (!isOn()) return { cards: {}, social: {} }
   const resolves: WebsResolves = new Map()
   const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK })) ?? []
   const ward = await stateWardOf(agent)
   const standings: Record<string, GuardianStanding> = {}
+  const social: Record<string, SocialStanding> = {}
   for (const record of records) {
     const ask = record.content as unknown as RoleOfferAsk
     const guardian = ask?.guardian
@@ -1160,15 +1248,30 @@ export async function guardianStandings(
     const beside = shownBeside(ask, guardian)
     if (!beside) continue
     const verdict = await verdictNow(agent, record.id, guardian, ward, { ...deps, resolves })
-    if (!sameVerdict(guardian.verdict, verdict)) {
-      record.content = { ...ask, guardian: { ...guardian, verdict } }
+    // Checked again against this open's card verdict; one kept incomplete stays the refusal it was.
+    const socialVerdict = guardian.social
+      ? guardian.social.material
+        ? checkSocialAuthorization(guardian.evidence, guardian.social.material, ward, verdict, new Date(), (m) =>
+            warn(agent, m)
+          )
+        : guardian.social.verdict
+      : undefined
+    const socialMoved = !!guardian.social && !!socialVerdict && !sameSocial(guardian.social.verdict, socialVerdict)
+    if (!sameVerdict(guardian.verdict, verdict) || socialMoved) {
+      const kept: GuardianOnAsk = {
+        ...guardian,
+        verdict,
+        ...(guardian.social && socialVerdict ? { social: { ...guardian.social, verdict: socialVerdict } } : {}),
+      }
+      record.content = { ...ask, guardian: kept }
       await agent.genericRecords
         .update(record)
         .catch((e: unknown) => warn(agent, `could not keep a new verdict: ${(e as Error)?.message ?? e}`))
     }
     standings[beside] = standingOf(verdict, guardian.evidence, guardian.stateHost)
+    if (socialVerdict) social[beside] = socialStandingOf(socialVerdict)
   }
-  return standings
+  return { cards: standings, social }
 }
 
 /**

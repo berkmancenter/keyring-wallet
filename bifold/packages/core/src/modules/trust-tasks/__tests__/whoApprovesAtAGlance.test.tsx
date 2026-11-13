@@ -33,6 +33,8 @@ const JORDAN = 'did:peer:2.jordans-phone'
 const UTAH = 'State of Utah'
 
 let standings: jest.SpyInstance
+/** The screen reads the card and its authorization from one call (approverCardStandings); these rows set the cards. */
+const cardsAre = (cards: Record<string, GuardianStanding>) => standings.mockResolvedValue({ cards, social: {} })
 let demos: jest.SpyInstance
 
 const state = (): TrustedApproversState =>
@@ -42,7 +44,7 @@ const state = (): TrustedApproversState =>
   }) as unknown as TrustedApproversState
 
 const show = async (standing?: GuardianStanding, demoState?: string) => {
-  standings.mockResolvedValue(standing ? { [JORDAN]: standing } : {})
+  cardsAre(standing ? { [JORDAN]: standing } : {})
   demos.mockResolvedValue(demoState ? { [JORDAN]: demoState } : {})
   const tree = render(
     <BasicAppContext>
@@ -76,7 +78,7 @@ beforeEach(() => {
   jest.spyOn(guardianEvidence, 'cardToShare').mockResolvedValue(undefined)
   jest.spyOn(guardianEvidence, 'cardConsents').mockResolvedValue({})
   jest.spyOn(demoHost, 'demoStateHost').mockReturnValue(null)
-  standings = jest.spyOn(guardianEvidence, 'guardianStandings')
+  standings = jest.spyOn(guardianEvidence, 'approverCardStandings')
   demos = jest.spyOn(guardianEvidence, 'guardianDemoStates')
 })
 afterAll(() => {
@@ -234,7 +236,7 @@ describe('Who approves: Check again for a state that could not be reached (B5)',
 
   test('reached this time: the verified card and its timed live line, never the copy line', async () => {
     const tree = await show(UNREACHABLE, UTAH)
-    standings.mockResolvedValue({
+    cardsAre({
       [JORDAN]: {
         ...VERIFIED_DEMO,
         fetchedFrom: 'abc-def.trycloudflare.com',

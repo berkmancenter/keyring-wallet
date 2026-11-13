@@ -3236,6 +3236,15 @@
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.screen"
     },
     {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.socialAuthorized(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.socialFromPhone(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.socialRefused(did)"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.stepDown(prompt.connectionId)"
     },
     {

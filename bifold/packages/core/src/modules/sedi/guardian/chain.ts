@@ -407,7 +407,11 @@ export function socialIn(ctx: ChainContext, socialSaid: string, expect: { ward: 
   return { ok: true, guardian: s.sad.i, ward: expect.ward, root: gv.root, expires: exp.expires }
 }
 
-/** Re-SAID a modified ACDC. Tests only: builds a well-formed credential that differs in one field. */
+/**
+ * SAID an ACDC v2 from a template: each block's SAID over its most compact form, then the top-level SAID, exactly as
+ * verifyAcdcV2 recomputes them. Tests use it to build a well-formed credential that differs in one field; the
+ * guardian's phone uses it to issue the Social Authorization (./issue.ts).
+ */
 export function saidifyAcdcV2(dig: Digest, sad: Sad): Sad {
   const out = JSON.parse(json(sad)) as Sad
   const fill = (block: Record<string, unknown> & { d: string }) => {
