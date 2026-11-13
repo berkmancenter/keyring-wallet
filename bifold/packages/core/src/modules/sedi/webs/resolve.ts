@@ -17,7 +17,7 @@ import { readKelStream } from '../cesr/reader'
 import { digest, replayKel, type HistoryEntry, type KeyState } from '../guardian/kel'
 
 import { checkDocument } from './document'
-import { artifactUrl, originOf, parseWebsDid, type WebsDid } from './identifier'
+import { artifactUrl, originOf, parseWebsDid, type WebsArtifact, type WebsDid } from './identifier'
 
 /** The parts of a fetch Response this module reads (React Native's and Node's fetch both fit). */
 export interface WebsResponse {
@@ -76,13 +76,17 @@ export interface WebsResolution {
 
 const refuse = (reason: WebsRefusalReason, detail: string): WebsRefusal => ({ ok: false, reason, detail })
 
-type Got = { ok: true; bytes: Uint8Array } | WebsRefusal
+/** An artifact's bytes, or why not; `status` is the HTTP status when the host answered, but not with 2xx. */
+export type Got = { ok: true; bytes: Uint8Array } | (WebsRefusal & { status?: number })
 
-/** One artifact: HTTPS only, no redirect off the identifier's origin, a timeout and a size cap, 2xx only. */
-async function getArtifact(
+/**
+ * One artifact: HTTPS only, no redirect off the identifier's origin, a timeout and a size cap, 2xx only. Exported for
+ * the one other file read the same way, beside them (./designatedAliases).
+ */
+export async function getArtifact(
   fetchFn: WebsFetch,
   id: WebsDid,
-  name: 'did.json' | 'keri.cesr',
+  name: WebsArtifact,
   cap: number,
   timeoutMs: number
 ): Promise<Got> {
@@ -101,7 +105,7 @@ async function getArtifact(
       try {
         res = await fetchFn(url, {
           redirect: 'manual',
-          headers: { accept: name === 'did.json' ? 'application/json' : 'application/cesr' },
+          headers: { accept: name === 'keri.cesr' ? 'application/cesr' : 'application/json' },
           ...(controller ? { signal: controller.signal } : {}),
         })
       } catch (e) {
@@ -113,7 +117,7 @@ async function getArtifact(
         return refuse('redirectRefused', `${name} was redirected to ${finalUrl}`)
       if (res.status >= 300 && res.status < 400)
         return refuse('redirectRefused', `${name} answered a redirect (${res.status})`)
-      if (!res.ok) return refuse('unreachable', `${name} answered ${res.status}`)
+      if (!res.ok) return { ...refuse('unreachable', `${name} answered ${res.status}`), status: res.status }
       const declared = Number(res.headers?.get('content-length') ?? NaN)
       if (Number.isFinite(declared) && declared > cap)
         return refuse('tooLarge', `${name} is ${declared} bytes (cap ${cap})`)

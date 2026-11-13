@@ -103,7 +103,11 @@ What is proven, by what the card does:
   trust anchor is the AID on the phone's own root list, and an AID is self-certifying wherever it is hosted. It does
   mean this is not a conformant did:webs resolver. Other aliases in `alsoKnownAs` are returned as `unverifiedAliases`,
   and nothing relies on them. The K0 root's KEL carries no such attestation, so a conformant resolver would refuse it
-  today (see "Cross-check" below).
+  today (see "Cross-check" below). `resolveWebs` still does not read one. Separately, `./designatedAliases`
+  (`hostDesignatedByRoot`) reads the K1 demo state's OWN variant: a designated-aliases ACDC the root issues in its own
+  registry, anchored in its KEL, published as `designated-aliases.json` beside it. It answers only whether the root
+  designates a host, so that a host a phone is handed is used only when the root says so. It is not the specification's
+  attestation, and makes no conformance claim.
 - **Witness receipts** (refused, above), and so no duplicity detection beyond the events served. "Valid" means "matches
   the history this host publishes", not "no one holds a newer one".
 - `versionId` queries, delegated KELs (`dip`/`drt`), weighted thresholds, services, key agreement, designated key roles.

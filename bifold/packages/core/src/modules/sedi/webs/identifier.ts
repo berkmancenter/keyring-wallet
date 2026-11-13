@@ -38,8 +38,12 @@ export function parseWebsDid(did: string): ParsedWebsDid {
   return { ok: true, value: { did: `did:webs:${rest}`, host, path, aid } }
 }
 
-/** The HTTPS URL of one of the two artifacts. There is no http form: did:webs is always fetched over TLS. */
-export function artifactUrl(id: WebsDid, artifact: 'did.json' | 'keri.cesr'): string {
+/** A file published beside the two did:webs artifacts: the K1 demo state root's designated aliases (./designatedAliases). */
+export type WebsArtifact = 'did.json' | 'keri.cesr' | 'designated-aliases.json'
+
+/** The HTTPS URL of one of the two artifacts (or a file beside them). There is no http form: did:webs is always fetched
+ * over TLS. */
+export function artifactUrl(id: WebsDid, artifact: WebsArtifact): string {
   return ['https://' + id.host, ...id.path, id.aid, artifact].join('/')
 }
 

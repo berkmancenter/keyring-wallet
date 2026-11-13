@@ -18,3 +18,12 @@ export {
 export { verifyGuardianWithWebs, type StateNotResolved, type WebsRoot } from './guardian'
 export { ourRootKelResolver, resolveRootKel, setRootKelResolver, type RootKel, type RootKelResolver } from './rootKel'
 export { demoStateHost, demoStateHostProblem, setDemoStateHost, websDidToFetch } from './demoStateHost'
+export {
+  DESIGNATED_ALIASES_FILE,
+  DESIGNATED_ALIASES_SCHEMA,
+  checkDesignation,
+  hostDesignatedByRoot,
+  rootWebsAt,
+  type DesignationCheck,
+  type HostDesignation,
+} from './designatedAliases'
