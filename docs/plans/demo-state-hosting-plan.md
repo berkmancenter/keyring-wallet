@@ -318,9 +318,12 @@ None of this touches the resolver or the Guardian check.
   - **`'developerField'`.** A deliberate one-line opt-in, only on the owner's explicit word. The field then reaches K1,
     and the line reads "Fetched from \<host\>, typed on this phone", never as the state's record.
 
-  **For local testing, the app carries `'developerField'`.** The owner's words, relayed by the coordinator: "i mean
-  running it locally for testing only, we would move to prod later". The SEDI lane reads them as choosing the opt-in
-  until the infra host replaces it. Before prod, the constant becomes that host.
+  **The opt-in is declined.** The owner, relayed by the coordinator: "no we should not type it on developer settings,
+  it should issued if needed somehow … I thought this was as simple as scanning". So `K1_WEBS_HOST` stays `null`, and
+  no build carries `'developerField'`. K1's host comes with what is issued instead: the did:webs DID inside the card,
+  or in its QR code. To make that safe, the phone checks the designated-alias attestation. That is the AID's own
+  KEL-anchored statement that the did:webs host is its own. Without that check, a card could name any host, and a host
+  serving a log cut short could hide a revocation (F7). This direction is proposed, not designed yet.
 
   Rows and aimed mutants pin that a typed host never reaches K1 under `null`. A temporary tunnel's hostname changes
   every run, so on a tunnel K1 needs a stable tunnel hostname (an account step, the owner's word) or the opt-in.
