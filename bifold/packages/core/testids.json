@@ -409,6 +409,17 @@
     "ConfirmActionWithPIN": ["src/screens/PINVerify.tsx"],
     "ConfirmBiometric": ["src/components/modals/BiometricConfirmationModal.tsx"],
     "ConfirmButton": ["src/components/modals/CommonRemoveModal.tsx"],
+    "ConfirmChatAskAgain": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatCancel": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatEarlier": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatItsMe": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatMine": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatNotMe": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatNote": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatSaid": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatStatus": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatSteps": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatTheirs": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmDeclineButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmDeleteProfileButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmItsYou": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
@@ -2395,6 +2406,39 @@
     },
     {
       "src/modules/trust-tasks/screens/CommunityMark.tsx": "VtiCommunityIds.markIcon"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.askAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.cancel"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.earlier"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.itsMe"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.mine"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.notMe"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.note"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.said"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.status"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.steps"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.theirs"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.alarm"

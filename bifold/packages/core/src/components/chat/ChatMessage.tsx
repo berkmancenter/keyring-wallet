@@ -78,6 +78,11 @@ export interface ExtendedChatMessage extends IMessage {
   basicMessageId?: string
   /** A photo on its way, not yet stored (media/pending.ts): drawn as its pending bubble. */
   photoSending?: PhotoSending
+  /**
+   * A card that mirrors something outside the chat (a Confirm it's you request): drawn full width by its own
+   * renderEvent, with no bubble, no actions and no reactions. Never stored as a chat message.
+   */
+  confirmCard?: boolean
 }
 
 /**
@@ -358,6 +363,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
         sending={message.photoSending}
       />
     )
+
+  // A card that draws itself (ConfirmChatCard): full width, its own colours, no bubble.
+  if (message.confirmCard) return <View>{message.renderEvent()}</View>
 
   // A line about the chat itself (a timer change): centered words, no bubble.
   if (message.kind === 'system') {

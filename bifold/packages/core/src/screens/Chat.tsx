@@ -71,6 +71,7 @@ import { testIdWithKey } from '../utils/testable'
 import { sendCapabilityNoticeIfNeeded } from '../modules/chat/notice'
 import { counterpartySpeaksChat } from '../modules/chat/capability'
 import { useChatEvents } from '../modules/chat/chatEventsStore'
+import { useConfirmChatItems } from '../modules/trust-tasks/screens/useConfirmChatItems'
 import { useChatDraft } from '../modules/chat/useChatDraft'
 import { timerOf } from '../modules/chat/timer'
 import { registerOtaApplyBlocker } from '../utils/otaApply'
@@ -621,8 +622,17 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   )
 
   const pendingPhotos = usePendingPhotos(connectionId)
+  // Confirm it's you requests, as cards among the messages (none while its switch, or a remote off, says no).
+  const confirmCards = useConfirmChatItems(connectionId, theirLabel)
+  const timeline = useMemo(
+    () =>
+      confirmCards.length
+        ? [...chatMessages, ...confirmCards].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        : chatMessages,
+    [chatMessages, confirmCards]
+  )
   const messages = useMemo(() => {
-    if (!pendingPhotos.length) return chatMessages
+    if (!pendingPhotos.length) return timeline
     const retry = async (p: PendingPhoto) => {
       if (!p.retry) return
       updatePendingPhoto(connectionId, p.id, { stage: 'sending' })
@@ -645,8 +655,8 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         onDelete: p.stage === 'failed' ? () => removePendingPhoto(connectionId, p.id) : undefined,
       },
     }))
-    return [...pending, ...chatMessages]
-  }, [pendingPhotos, chatMessages, connectionId])
+    return [...pending, ...timeline]
+  }, [pendingPhotos, timeline, connectionId])
 
   const actions = useMemo(() => {
     const photo = _isWitnessConnection

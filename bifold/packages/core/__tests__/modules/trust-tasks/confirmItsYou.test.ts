@@ -194,6 +194,8 @@ describe('the round trip', () => {
     expect(jordan.store.records.map((r) => [r.tags.recordType, r.content.open, r.content.answered])).toEqual([
       [CONFIRM_PROMPT, false, 'itsMe'],
     ])
+    // Jordan's kept prompt carries the time inside the signed answer, so the chat card shows what Sam's phone shows.
+    expect(jordan.store.records[0].content.answeredAt).toBe(signedAt)
     expect(sam.store.deleteById).not.toHaveBeenCalled()
     expect(jordan.store.deleteById).not.toHaveBeenCalled()
   })

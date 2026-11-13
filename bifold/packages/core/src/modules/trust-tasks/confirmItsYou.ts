@@ -114,7 +114,7 @@ const proofUnder = (agent: Agent, controller: string) => ({
  * Past its time, or a time that cannot be read: either way, not answerable. The isFinite check is what makes an
  * unreadable or missing expiresAt (NaN) read as past due: `at <= now` alone is false for NaN.
  */
-const pastDue = (expiresAt: string, now: number) => {
+export const pastDue = (expiresAt: string, now = Date.now()) => {
   const at = Date.parse(expiresAt)
   return !Number.isFinite(at) || at <= now
 }
@@ -347,6 +347,8 @@ export interface ConfirmPrompt {
   request: Record<string, unknown>
   receivedAt: string
   answered?: ConfirmDecision
+  /** When this phone's person answered: the time inside the signed answer, so both phones show the same time. */
+  answeredAt?: string
 }
 
 class ConfirmPromptStore {
@@ -501,8 +503,9 @@ export async function answerConfirmRequest(
 
   confirmPromptStore.take(connectionId)
   confirmEvents.emit('promptCleared', { connectionId })
-  await keepPrompt(agent, { ...prompt, open: false, answered: decision }).catch((error: unknown) =>
-    agent.config?.logger?.warn(`${LOG_PREFIX} could not close a request: ${(error as Error)?.message ?? error}`)
+  await keepPrompt(agent, { ...prompt, open: false, answered: decision, answeredAt: answer.respondedAt }).catch(
+    (error: unknown) =>
+      agent.config?.logger?.warn(`${LOG_PREFIX} could not close a request: ${(error as Error)?.message ?? error}`)
   )
   agent.config?.logger?.info(`${LOG_PREFIX} answered on connection ${connectionId}: ${decision}`)
   return 'sent'
