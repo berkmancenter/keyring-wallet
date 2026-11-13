@@ -74,6 +74,16 @@ Labels never leave the keystore, and no file in `publish/` names a person.
 
 Every did.json and card page is rewritten for the host in use.
 
+## Designated aliases
+
+`publish --host H` makes the root designate H. It issues a designated-aliases ACDC (Keyring's own variant of did:webs
+designated aliases; no conformance claim), whose `a.ids` lists the did:webs DIDs of the root, org unit and issuing agent
+at H. It sits in its own registry, anchored in roy's KEL. Designating a new host revokes the previous ACDC first.
+
+The live one is published as `keyring-demo-state/<root AID>/designated-aliases.json`:
+`{said, proof, tel: {ripText, updateTexts}}`. `proof` is the ACDC with its blinded-state disclosure. The phone reads
+roy's KEL from `keri.cesr` beside it.
+
 ## The officer API (127.0.0.1 only)
 
 Every request carries `Authorization: Bearer <token>`. A Host or Origin other than `127.0.0.1:<port>` or
