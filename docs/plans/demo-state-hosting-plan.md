@@ -18,8 +18,9 @@ It does not change the resolver, the Guardian check or any trust decision.
 
 - [`delegated-batch-issuance-plan.md`](./delegated-batch-issuance-plan.md) Phase 2 and
   [`keri-holder-plan.md`](./keri-holder-plan.md) own the did:webs verifier this host feeds.
-- [`push-notifications-plan.md`](./push-notifications-plan.md) and `deploy/keyring-ota` own the server whose Caddy this
-  host would share.
+- The infra repository's `demo-state` environment (Mickens-Lab/keyring-push-gateway-infra#23, the infra lane's) owns
+  the bucket and the publish script (§2, §3.2).
+- The SEDI lane's K1 issuance plan owns the issuer that writes K1's tree and its cards (§4).
 - The local-only ngrok tunnelling plan (`ngrok-tunneling-plan.md`, not on `main`) is the developer-tunnel layer, which
   this plan is not (§2.3).
 
@@ -27,6 +28,8 @@ It does not change the resolver, the Guardian check or any trust decision.
 
 - [`2026-11-12-al.md`](./demo-state-hosting-plan/2026-11-12-al.md): the evidence behind the host choice (the tunnel's
   rate limits, GitHub Pages' fixed cache, the wallet host today), and the SEDI lane's answers that set §4 and §5.
+  Later the same day: the move to the bucket (F8), the card files (F9), and the dry-run that caught the publish
+  script's DID check (F10).
 
 ## 1. What the host serves
 
@@ -51,6 +54,17 @@ For today's test state (K0, the keripy kit `sedi/__tests__/fixtures/k0-utah-v2`)
 | the org unit | `IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ` | `kel-deb.cesr` |
 | the issuing agent | `IDTFZ-B3B25INJli8AtIDcYRyZpwcfE7sNYaS4ISbZjx` | `kel-sue.cesr` |
 
+K1 (§4) adds its own three AIDs under the same path. It also adds the Guardian cards it issues. They sit beside the
+state path, not inside it, since `keyring-demo-state/` is DID space:
+
+```
+https://<HOST>/cards/<pickupId>.json          the card, fetched by the guardian's phone (A4)
+https://<HOST>/cards/<pickupId>.status.json   {"status":"issued"|"revoked","revokedAt"?}
+https://<HOST>/cards/<pickupId>.html          the same card as a static page, for a browser
+```
+
+On the bucket's own URL, every path above starts with `/<bucket>` (§2).
+
 ### 1.1 What the phone requires of the host (the contract)
 
 These rules come from the phone's resolver (`sedi/webs/resolve.ts` and its `README.md`, bifold `main` at `72db4ffe7`).
@@ -71,51 +85,68 @@ A host that breaks any of them gets "Couldn't reach the state" on the phone, by 
   - `alsoKnownAs` lists did:keri only for this AID.
 
   So `did.json` names the host, and **is regenerated for every host** (§3).
+
 - **The pair is consistent at every moment.** The phone fetches `keri.cesr` and then `did.json`. If a rotation is
-  half-published, the two don't match and the phone refuses (`didDocMismatch`). Publishing is therefore an atomic swap
-  (§3.2).
+  half-published, the two don't match and the phone refuses (`didDocMismatch`). The publish order keeps a revocation
+  safe, and rotations are published outside demos (§3.2).
 
-Our own additions, for the live-revocation demo (§4):
+Our own additions, for the live-revocation demo (§4). They apply to every file, the cards' included:
 
-- **`Cache-Control: no-store`** on both files, so that no layer between the host and the phone serves an old log after
-  a revocation is published. The phone fetches on every open of Who approves or the state card, and reuses its own last
-  success only when a fetch fails, for under five minutes, labelled with the time (`sedi/webs/lastLive.ts`).
-- **`Content-Type`**: `application/json` for `did.json` and `application/cesr` for `keri.cesr`. The resolver doesn't
-  check it, but other did:webs resolvers may.
-- **No access log**, as the existing Caddy sites have none (`deploy/keyring-ota/Caddyfile`): "No `log` directive, so no
-  access log." Every request is a phone opening a screen, so a log would be a per-phone record.
+- **`Cache-Control: no-store`**, so that no layer between the host and the phone serves an old log after a revocation
+  is published. A public bucket object without it is served `public, max-age=3600`. The phone fetches on every open of
+  Who approves or the state card. It reuses its own last success only when a fetch fails, for under five minutes,
+  labelled with the time (`sedi/webs/lastLive.ts`).
+- **`Content-Type`**:
+  - `application/json` for `did.json`, a card's `.json` and its `.status.json`;
+  - `application/cesr` for `keri.cesr`, which the phone asks for in its `Accept` header;
+  - `text/html` for a card's page.
+- **No access log.** Every request is a phone opening a screen, so a log would be a per-phone record.
+
+### 1.2 The card files
+
+Set by the SEDI lane (the issuer) and the infra lane (the publish script), 2026-11-12 (companion F9):
+
+- **`pickupId`** is 22 base64url characters, from 16 random bytes. It is unrelated to the card's SAID. It isn't a
+  bearer secret: a phone keeps a card only if it is issued to that phone's own AID, so another phone that fetches it
+  keeps nothing. But the card shows pseudonymous AIDs, so the id is private by URL: the bucket can't be listed, and logs
+  show only its first six characters.
+- **`<pickupId>.json`** is the card as the phone holds it: `{"type":"keyring.sedi.guardian-card/0.1", "guardianSaid",
+"holder", "kels", "tels", "creds", "issuedAt", "expiresAt"}`. That is the guardian-evidence payload, with a type tag
+  and its dates. **At most 64 KiB**: the phone's own cap (`GUARDIAN_EVIDENCE_MAX_BYTES`) refuses anything larger, so
+  the publish refuses it first.
+- **`<pickupId>.status.json`** is `{"status":"issued"}` or `{"status":"revoked","revokedAt":…}`.
+- **`<pickupId>.html`** is a static page, at most 256 KiB, with no script. It carries `<meta name="robots"
+content="noindex">`. Its QR code is an inline SVG. Once the card is revoked, the page is re-rendered without the QR.
+- **Nothing else** is in `cards/`. Nothing is ever deleted by the publish step.
 
 ## 2. Where it lives
 
-### 2.1 Recommended: its own hostname, on the Caddy that already serves the wallet host
+A Cloud Storage bucket of its own, defined in the infra repository's `demo-state` environment (the infra lane's draft
+Mickens-Lab/keyring-push-gateway-infra#23). Nothing else is served from it.
 
-A third site block in `deploy/keyring-ota/Caddyfile`, beside the update server and the wallet host. It is a static
-`file_server` over its own directory (`/srv/demo-state`) with the headers in §1.1. The hostname is a proposal, and the
-owner picks it: **`demo-state.asml.berkmancenter.org`**. The demo DIDs then read
-`did:webs:demo-state.asml.berkmancenter.org:keyring-demo-state:<AID>`.
+- **Public read is one object by name.** `storage.objects.get` only, so nobody can list the bucket. A card is private
+  by its URL (§1.2).
+- **No access log.** The bucket has no usage log, and the project has no Data Access audit log.
+- **Earlier versions of each object are kept**, as the undo after a bad publish.
+- **No `website` setting.** So there is no index page, and no redirect for a "directory".
 
-Why this one:
+One variable sets how the bucket is served, and the owner picks (§8):
 
-- **It adds no server.** The Caddy host already obtains and renews certificates for our `asml.berkmancenter.org` names.
-  It already serves a static site (the wallet host's `/srv/wallet-site`) the same way.
-- **A separate hostname keeps the demo state apart from the wallet host.** The wallet host is the universal-link host
-  the app's entitlements and Android manifest claim (`applinks:wallet.asml.berkmancenter.org`). A did:webs identifier
-  carries its host, so a state published there would tie demo identifiers to the app-link host for good. Retiring the
-  demo, or moving it, would then mean touching the site the app links through.
-- **We set the cache headers.** Live revocation needs them (§1.1 and §2.3).
+| Form | Files at | DIDs | Needs |
+|---|---|---|---|
+| The bucket's own URL | `https://storage.googleapis.com/<bucket>/…` | `did:webs:storage.googleapis.com:<bucket>:keyring-demo-state:<AID>` | Nothing more. About $0. |
+| A hostname we own | `https://<host>/…` | `did:webs:<host>:keyring-demo-state:<AID>` | One A record, a load balancer and a Google-managed certificate. About $18 a month. |
 
-It needs **one DNS record** for the new hostname, before Caddy's first start with it, as every site on that host does
-(`deploy/keyring-messaging/README.md`, "Prerequisites": "A DNS A record … created before the first start, since Caddy
-asks for a certificate on boot").
+The infra lane recommends our own hostname; the coordinator recommends the bucket's URL. What each means for the demos:
 
-### 2.2 Fallback, with no DNS: a path on the wallet host
+- **The bucket's own URL serves K1 only.** The Developer "Demo state host" field takes a bare hostname, so it can't
+  point K0 at a path below a bucket. K1's host is fixed in its list entry anyway (A2), with the full path. The screen
+  then reads "Fetched live from storage.googleapis.com", which names Google's address, not ours.
+- **Our own hostname serves both.** K1 is fixed to it (A2), and K0 can be pointed at it with the field. The project's
+  organization policy may refuse the load balancer's global resources. In that case, the bucket's URL is the fallback
+  (the infra README, "Before any apply").
 
-`https://wallet.asml.berkmancenter.org/keyring-demo-state/<AID>/…`, served from the existing `/srv/wallet-site` root,
-with the same headers set for that path. Today that path answers 404 (companion F3), and the app claims only `/invite`
-and `/i/`, so it doesn't collide with app links. It costs the separation in §2.1, so it is the fallback if the DNS
-record is slow, not the default.
-
-### 2.3 Ruled out
+### 2.1 Ruled out
 
 - **GitHub Pages** (a repository under the organization). Pages sets `cache-control: max-age=600` on every answer, and
   a site can't change it (companion F2). A published revocation could then take ten minutes to reach a phone. That
@@ -128,46 +159,83 @@ record is slow, not the default.
 - **The quick tunnel as the demo's host.** It stays for ad hoc tests, through the Developer "Demo state host" field
   (the SEDI lane's runbook). But its hostname changes every run, so all six `did.json` files must be regenerated each
   time. Its free endpoint also refused new tunnels with Cloudflare's rate limit on the day before a demo (companion F1).
+- **A site on the Caddy that serves the wallet host** (this plan's first draft). It is superseded by the bucket:
+  our hosting lives in the infra repository, and the Caddy would have needed a deploy change and a publish path onto
+  the server (companion F8).
 
 ## 3. Making the files, and keeping them in step with the host
 
-### 3.1 One generator
+### 3.1 Who writes the tree
 
-`sedi/__tests__/fixtures/webs-k0-root.gen.mjs` already writes the six K0 files for any host:
+The publish step takes one local tree that mirrors the host exactly: `keyring-demo-state/` and `cards/` (§1).
 
-```sh
-node src/modules/sedi/__tests__/fixtures/webs-k0-root.gen.mjs <HOST> <outDir>
-```
+- **K0's six files** come from `sedi/__tests__/fixtures/webs-k0-root.gen.mjs`. It copies each `keri.cesr` byte for byte.
+  It derives `did.json` from the log's last establishment event, with a JWK conversion independent of the resolver's
+  (`@noble/curves`), so the committed fixtures are a second derivation. It writes the hostname form only:
+  ```sh
+  node src/modules/sedi/__tests__/fixtures/webs-k0-root.gen.mjs <HOST> <outDir>
+  ```
+- **K1's files and its cards** come from the SEDI lane's issuer. It writes `<keystore>/publish/` after each issue and
+  each revoke, for a given `--host` and `--path-prefix`. The keys sit in `<keystore>/keys/`, a sibling, which the publish
+  step never reads (§4).
 
-It copies each `keri.cesr` byte for byte. It derives `did.json` from the log's last establishment event, with a JWK
-conversion independent of the resolver's (`@noble/curves`), so the committed fixtures are a second derivation. Two
-changes, and nothing else:
+Both write `did.json` in the same form: `id` is the did:web twin, with the did:webs DID first in `alsoKnownAs`, then
+did:keri.
 
-- **A log source other than the K0 kit**, `--kels <dir>` holding `kel-<name>.cesr` files, for the kept-key state of §4.
-  It uses the same derivation and the same refusals. It handles P-256 only, which is already the rule (DBI plan §5.1:
-  "ECDSA P-256 and SHA-256 only").
-- **A manifest of what it wrote**: each AID with the sha-256 of both files. The publish step and the live check (§3.3)
-  compare against it.
+### 3.2 Publishing
 
-### 3.2 Publishing is a directory swap
+The infra repository's `scripts/demo-state-publish.sh` uploads the tree with the publisher's own login. Before anything
+leaves the machine, it checks the whole tree against §1.1 and §1.2 and refuses the publish on any failure:
 
-The generator writes a complete new tree, `keyring-demo-state.<stamp>/`, beside the live one. A symlink
-`keyring-demo-state` is then repointed at it in one `rename`. The previous tree stays until the next publish, as the
-undo. A phone never sees a new `keri.cesr` with an old `did.json` (§1.1). Only public bytes leave the machine that ran
-the generator: the logs and the documents, never a key (§4).
+- only `keyring-demo-state/` and `cards/` in it, and never the keystore or a `keys/` directory;
+- each AID directory holds exactly `did.json` and `keri.cesr`, within the size caps;
+- each `did.json` names this host and path, so a tree made for a tunnel is refused, not published;
+- each card id and card file follows §1.2.
+
+It then uploads:
+
+- only files whose bytes differ from the live object;
+- in an order that keeps a phone mid-publish safe: `keri.cesr`, then the card's `.json`, then `.status.json`, then
+  `.html`, then `did.json`;
+- each with `Cache-Control: no-store` and its content type;
+- never deleting. Removing files after a demo is a separate step, on the owner's word.
+
+A bucket has no atomic swap.
+
+- **A revocation is safe.** It appends one anchoring event to the issuing agent's `keri.cesr` and leaves its `did.json`
+  unchanged, since `did.json` comes from the last establishment event. The pair never disagrees. A phone that fetches
+  between two uploads sees the anchor first, and that alone shows the revocation.
+- **A key rotation is not.** It changes both files. A phone opening the screen between the two uploads gets "Couldn't
+  reach the state" (`didDocMismatch`) for that moment, and its five-minute reuse (`lastLive.ts`) covers most of it.
+  Rotations are published outside demos.
+
+The script logs only the first six characters of a card id.
 
 ### 3.3 A live check, run after every publish
 
-A Jest test in `bifold/packages/core`, skipped unless `DEMO_STATE_HOST` is set. It resolves every AID in the manifest at
-`did:webs:$DEMO_STATE_HOST:keyring-demo-state:<AID>`. It uses the app's own resolver (`resolveWebs`) over the network,
-and fails on any refusal. It also checks the headers: 200, no redirect, `no-store`. The app's own code is the judge, so
-a host that passes is one the phones accept. Run it after each publish. The nightly gate can run it as one cheap row,
-so a host that has drifted shows up before a demo, not during one.
+`sedi/__tests__/websLiveHost.test.ts` in `bifold/packages/core` is skipped unless `DEMO_STATE_HOST` is set:
+
+```sh
+DEMO_STATE_HOST=<host> [DEMO_STATE_PATH=<bucket>/keyring-demo-state] \
+  [DEMO_STATE_AIDS=<AID,…>] [DEMO_STATE_CARDS=<pickupId,…>] yarn jest websLiveHost
+```
+
+- **Every AID resolves through the app's own resolver** (`resolveWebs`) over the network, and any refusal fails with
+  the resolver's own reason. The app's code is the judge, so a host that passes is one the phones accept. The AIDs are
+  K0's three by default.
+- **Every file carries the headers:** 200, no redirect, `no-store` and its content type.
+- **Every card named passes §1.2's shape:**
+  - its `.json` is within the phone's cap and tagged with its type;
+  - its status is `issued` or `revoked`;
+  - its page is marked `noindex` and has no script.
+
+The publish script prints the exact command after each publish. The nightly gate can run it as one cheap row, so a host
+that has drifted shows up before a demo, not during one.
 
 ## 4. Real issuance and live revocation
 
-**The SEDI lane builds this after the Sunday 2026-11-15 demo.** Its shape is settled (companion, "SEDI lane answers");
-the work is not started. This section states what it needs from the host and from the app.
+**The SEDI lane builds this, in its K1 issuance plan.** Its shape is settled (companion, "SEDI lane answers", and F9).
+This section states what it needs from the host and from the app.
 
 - **A second demo state with kept keys (K1), beside K0.** K0's keys were thrown away when the kit was made, so nothing
   new can be issued or revoked under it. K1 is made the same way and has the same shape:
@@ -183,20 +251,23 @@ the work is not started. This section states what it needs from the host and fro
     - one key, `kt` 1.
 
     The verifier is tested against exactly that shape, so K1 does not "fix" any of it. It meets §1.1 as it stands.
-  - It writes `kel-<name>.cesr` files, which are what the generator's `--kels` reads (§3.1).
+
+  - Its issuer writes the publish tree itself, for the chosen host and path (§3.1).
 
   K1 is still ours, not a state's, so the phone's list marks it `demo` and Who approves shows the Demo pill. Its name is
   the owner's choice (§8). K0 is never replaced: it stays the fixed fixture the verifier is tested against, and the
   offline copy.
+
 - **The keys stay on the operator's machine.** That machine runs the issuance tool and the generator, and hands only
-  the public tree to §3.2. Issuing and revoking never run on the host, and never go over a tunnel. Which machine it is,
-  and how its keys are backed up, is the owner's decision (§8).
+  the public tree to §3.2, from a directory beside the keys, never the keys' own. Issuing and revoking never run on
+  the host, and never go over a tunnel. Which machine it is, and how its keys are backed up, is the owner's decision
+  (§8).
 - **Getting the card to the guardian's phone is a new step.** The existing carriage (guardian-evidence/0.1,
   keyring-bifold#1027) runs from the approver to the person, not from the issuer to the guardian, and K0's card is
   bundled in the build (`holdGuardianEvidence`). For the demos, a Developer step "Get the Guardian card from \<host\>"
-  fetches the published card (its ACDC and its TEL) from K1's host. It keeps the card through `holdGuardianEvidence`, so
-  the existing check applies unchanged. The host then also serves the card files, in a layout that step's design sets,
-  under the same tree and the same headers (§1.1).
+  fetches the published card (`cards/<pickupId>.json`, §1.2) from K1's host. It accepts only that base URL, the host
+  and path fixed in K1's entry followed by `/cards/`. It keeps the card through `holdGuardianEvidence`, so the existing
+  check applies unchanged.
 
   **Rejected:**
   - Bundling a K1 card in an OTA, as K0's is. It isn't issuance.
@@ -207,14 +278,14 @@ the work is not started. This section states what it needs from the host and fro
 - **Revoking a card live, from the issuer's log.** In the K0 kit, a card's revocation is a TEL `brv` in that card's
   own registry (one registry per card, a declared deviation), anchored by an event in the issuing agent's log. A live
   revocation is therefore one TEL event plus one anchoring event:
-  1. Only the issuing agent's `keri.cesr` is republished.
+  1. Among the logs, only the issuing agent's `keri.cesr` is republished. The card's three files are republished
+     with it: its `.json` with the revocation in its TEL, its status, and its page without the QR (§1.2).
   2. On the next open of Who approves, the phone fetches that log.
   3. It shows "The issuer's published record shows it was revoked" (`revokedInIssuerRecord`), from the anchor alone,
      even when the card's own copy stops before the revocation (keyring-bifold#1045).
 
-  **This plan promises that line, and only that line.** "The card shows it was revoked" would need the phone to hold
-  the `brv` itself: the TEL's revoked state published as well, and the card fetched again. That is a separate choice,
-  not part of this plan.
+  **This plan promises that line, and only that line.** The republished card carries the `brv`. But "The card shows it
+  was revoked" would need the phone to fetch the card again, which is a separate choice and not part of this plan.
 
   How quickly the revocation shows:
   - With `no-store` (§1.1), at the next open.
@@ -234,7 +305,8 @@ None of this touches the resolver or the Guardian check.
 - **A2. The K1 root on the phone's list.** It goes beside K0 in `sedi/guardian/stateRoots.ts`, with:
   - its own AID and name;
   - `demo: true`;
-  - its did:webs on the permanent host, **fixed in the entry**.
+  - its did:webs on the permanent host, with the full path, **fixed in the entry**. On the bucket's own URL that is
+    `did:webs:storage.googleapis.com:<bucket>:keyring-demo-state:<AID>`.
 
   It is always fetched from that did:webs, and the free-text field never redirects it. It is trusted on the same terms
   as K0: in a Developer build, or with "Trust the test state" on.
@@ -263,14 +335,13 @@ kit nothing is issued under.
 
 | Item | Cost |
 |---|---|
-| Server | None new: the existing Caddy host. |
-| Disk and traffic | About 2 KiB per AID. K0's root is 1,213 B of log plus 821 B of document. Each open of the screen fetches two files per AID. |
-| DNS | One record (§2.1), or none (§2.2). |
-| Caddy site block, headers, deploy directory | About ½ day, including a check on a local Caddy before the real host. |
-| Generator `--kels`, manifest, swap publish | About ½ day. |
-| Live check (§3.3) with its control | About ½ day. |
+| Hosting | About $0 on the bucket's own URL. About $18 a month on our own hostname, for the load balancer's forwarding rule (the infra README, "Cost"). |
+| Disk and traffic | About 2 KiB per AID. K0's root is 1,213 B of log plus 821 B of document. Each open of the screen fetches two files per AID. A card is at most 64 KiB. |
+| DNS | One A record on our own hostname, none on the bucket's URL. |
+| Bucket, publish script and its cards rules | The infra lane's (#23). |
+| Live check (§3.3), with its controls | Written (below, S3). |
 | A1 (the field applies to K0 only), rows and a mutant | About ½ day plus review. |
-| K1, the issuance tool, A2–A4 (§4, §5) | The SEDI lane's estimate: about 3 to 3½ days, plus 1 to 1½ days for live revocation. |
+| K1, the issuer, A2–A4 (§4, §5) | The SEDI lane's estimate: about 3 to 3½ days, plus 1 to 1½ days for live revocation. |
 
 The estimates are this lane's. They aren't measured.
 
@@ -278,35 +349,29 @@ The estimates are this lane's. They aren't measured.
 
 Each step starts on the owner's word where §8 says so.
 
-1. **S1. The site, locally.**
-   - Work: the site block, and the headers in §1.1, on a local Caddy serving the K0 tree for a placeholder host.
-   - Done when, for each of the six paths, `curl -sI`:
-     - shows 200 with no `Location`;
-     - shows `cache-control: no-store`;
-     - shows both content types.
-
-     A request for a missing AID also answers 404, not a redirect.
-2. **S2. Generator and publish.**
-   - Work: `--kels`, the manifest and the swap.
-   - Done when:
-     - the committed fixtures are unchanged (`git diff --exit-code` on `webs-k0-root/`);
-     - `--kels` over the K0 kit's own files writes the same bytes as the default run;
-     - a publish followed by an undo (repointing the symlink back) leaves the earlier tree serving.
-3. **S3. Live check.**
-   - Work: the test in §3.3.
-   - Done when:
-     - it passes against S1's local site, through a quick tunnel;
-     - it fails, as the control, against the same site with one `did.json` from another host.
-4. **S4. On the real host** (the owner's word, the DNS record first).
-   - Work: deploy the site block and publish K0's six files.
-   - Done when the live check passes against the real hostname from outside our network.
+1. **S1. The bucket** (the owner applies #23).
+   - Done when the infra README's "After apply" checks pass: a missing object answers 404, not a redirect; a listing is
+     refused; nothing is logged per request.
+2. **S2. The publish script, with the cards** (the infra lane, #23).
+   - Done when its own test covers each refusal in §3.2, and a dry run over a tree made by each writer in §3.1 passes:
+     K0's generator, and K1's issuer.
+3. **S3. Live check** (`websLiveHost.test.ts`).
+   - Done. On 2026-11-12, on a local HTTPS server with the six K0 files and a placeholder card:
+     - with the headers set, every row passed;
+     - on a plain static server, all nine header rows failed and the three resolver rows passed;
+     - with one `did.json` made for another host, that AID failed with `didDocMismatch`;
+     - with a card over 64 KiB, a status of `pending` and a page with a script, each failed on its own row;
+     - with an id that isn't a pickup id, the card rows failed.
+4. **S4. On the real host** (the owner's word; on our own hostname, the DNS record first).
+   - Work: publish K1's tree.
+   - Done when the live check passes against the real host from outside our network, for K1's AIDs and one card.
 5. **S5. A1 in the app.**
    - Done when rows prove each of these, and a mutant that applies the field to every demo root is killed:
      - with a host typed, K0 is fetched from it;
      - with a host typed, a root without the mark is fetched from its own did:webs, never from the typed host;
      - with the field empty, K0 is checked against the copy;
      - with the switches off, nothing is fetched.
-6. **S6. K1 and live revocation** (§4, A2–A4: the SEDI lane, after the Sunday demo).
+6. **S6. K1 and live revocation** (§4, A2–A4: the SEDI lane).
    - Done when, on two phones, with the kit set to K1 and no host typed:
      - "Get the Guardian card" holds K1's card;
      - Who approves reads "Fetched live from \<host\>";
@@ -317,20 +382,22 @@ The quick-tunnel runbook stays as it is for ad hoc tests. Nothing in it is remov
 
 ## 8. What needs the owner's word
 
-- **The hostname** (§2.1), or the fallback path on the wallet host (§2.2).
-- **The DNS record**, and who creates it.
-- **Deploying the site block to the real host**, and who may publish to it.
+- **How the bucket is served** (§2): its own URL, or a hostname we own, and which hostname.
+- **The DNS record** for that hostname, and who creates it.
+- **Applying #23**, and who may publish (its `publishers`).
 - **Where K1's keys live.** Who holds them, on what machine, and how they are backed up. They are never committed,
   never on the host and never sent over a tunnel.
 - **K1's name** on the phone's list.
 - **A1–A4** (§5), and shipping them (an OTA, graded by `tier.mjs`).
 - **Switching the setups' default to K1**, once it has checked live on both phones.
 - **Each live revocation run** in a demo, since it publishes.
+- **Removing anything published**, after a demo or otherwise. The publish step never deletes.
 
 **Blocked on:**
 
 - the owner, for everything above;
-- the SEDI lane, for building K1 and A2–A4 (§4, §5), after the Sunday demo.
+- the SEDI lane, for K1's issuer and A2–A4 (§4, §5);
+- the infra lane, for the cards in the publish script (#23).
 
 Nothing is blocked on an outside party, except the DNS record if the owner's DNS is managed elsewhere.
 
