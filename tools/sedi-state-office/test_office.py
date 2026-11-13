@@ -125,6 +125,42 @@ class K0InTheSameTree(unittest.TestCase):
             office.read_k0_kel(d, "roy")
 
 
+class Defaults(unittest.TestCase):
+    def test_alberto_s_defaults(self):
+        self.assertEqual((office.DEFAULT_STATE_NAME, office.DEFAULT_VALID_DAYS, office.DEFAULT_ROLE),
+                         ("State of Utah", 365, "legal guardian"))
+
+    def test_every_page_says_who_did_not_issue_it(self):
+        self.assertEqual(office.not_issued_by("State of Utah"), "Not issued by the State of Utah")
+        bare = office.with_not_issued_line("<html><body><p>x</p></body></html>", "State of Utah")
+        self.assertIn("Not issued by the State of Utah", bare)
+        self.assertLess(bare.index("Not issued"), bare.index("</body>"))
+        once = office.with_not_issued_line(bare, "State of Utah")
+        self.assertEqual(once.count("Not issued by the State of Utah"), 1)  # control: never twice
+
+    def test_the_keychain_comes_first_then_the_env_then_a_prompt(self):
+        saved = (office.keychain_passcode, os.environ.get("KEYRING_SEDI_K1_PASSCODE"), office.PASSCODE_FROM_KEYCHAIN)
+        try:
+            os.environ["KEYRING_SEDI_K1_PASSCODE"] = "from-the-environment-123456"
+            office.keychain_passcode = lambda: "from-the-keychain-1234567890"
+            office.PASSCODE_FROM_KEYCHAIN = None
+            self.assertEqual(office.passcode(), "from-the-keychain-1234567890")
+            office.PASSCODE_FROM_KEYCHAIN = False  # --no-keychain
+            self.assertEqual(office.passcode(), "from-the-environment-123456")
+            office.PASSCODE_FROM_KEYCHAIN = None
+            office.keychain_passcode = lambda: None  # no item: the env var
+            self.assertEqual(office.passcode(), "from-the-environment-123456")
+            office.PASSCODE_FROM_KEYCHAIN = True  # --passcode-from-keychain with no item refuses
+            with self.assertRaises(office.OfficeError):
+                office.passcode()
+        finally:
+            office.keychain_passcode, env, office.PASSCODE_FROM_KEYCHAIN = saved
+            if env is None:
+                os.environ.pop("KEYRING_SEDI_K1_PASSCODE", None)
+            else:
+                os.environ["KEYRING_SEDI_K1_PASSCODE"] = env
+
+
 KERIPY = Path(os.environ.get("KEYRING_SEDI_KERIPY", str(office.DEFAULT_KERIPY)))
 
 
@@ -136,6 +172,7 @@ class EndToEnd(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         os.environ["KEYRING_SEDI_K1_PASSCODE"] = "a-throwaway-test-passcode-123"
+        office.PASSCODE_FROM_KEYCHAIN = False  # tests never read the real Keychain item
         office.load_keripy(KERIPY)
         cls.ks = office.Keystore(Path(cls.tmp.name) / "ks")
         cls.ks.ensure()
@@ -198,6 +235,8 @@ class EndToEnd(unittest.TestCase):
         self.assertNotIn("<b>State</b>", live + gone)
         self.assertIn("Demo &lt;b&gt;State&lt;/b&gt;", live)
         self.assertIn("<svg", live)  # control
+        for page in (live, gone):
+            self.assertIn("Not issued by", page)
         self.assertNotIn("<svg", gone)
         self.assertEqual(json.loads((pub / f"{self.gone['pickupId']}.status.json").read_text())["status"], "revoked")
 

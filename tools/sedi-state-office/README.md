@@ -21,14 +21,27 @@ This is the K0 kit's keripy pin, with its requirements (libsodium from Homebrew)
 
 ## Use
 
-`PY=~/.cache/keyring-sedi-office/venv/bin/python`, run from this folder. Every command asks for the keystore passcode
-(at least 21 characters), or reads `KEYRING_SEDI_K1_PASSCODE`.
+`PY=~/.cache/keyring-sedi-office/venv/bin/python`, run from this folder.
+
+### The passcode
+
+The keystore passcode (at least 21 characters) comes from the macOS Keychain. Alberto adds the item himself, once; the
+command prompts for the passcode and never shows it:
 
 ```sh
-$PY -I office.py init                         # once: incept roy/deb/sue, issue the Unit and Agent cards
+security add-generic-password -s keyring-sedi-k1 -a "$USER" -w
+```
+
+The tool never creates that item and never chooses the passcode. It reads it with
+`security find-generic-password -s keyring-sedi-k1 -a "$USER" -w`, never echoes or logs it, and uses it by default
+whenever the item exists. Without the item it falls back to `KEYRING_SEDI_K1_PASSCODE`, then to a prompt.
+`--passcode-from-keychain` requires the item; `--no-keychain` skips it (for throwaway stores).
+
+```sh
+$PY -I office.py init                         # once: prints root / unit / agent AIDs
 $PY -I office.py --host <public host> publish # rewrite the public tree for that host (remembered from then on)
 $PY -I office.py serve                        # the officer API + page on http://127.0.0.1:8790 (prints the token)
-$PY -I office.py issue --holder <AID> --ward <AID> [--valid-days 30] [--role parent] [--label text]
+$PY -I office.py issue --holder <AID> --ward <AID> [--valid-days 365] [--role "legal guardian"] [--label text]
 $PY -I office.py revoke <card SAID>
 $PY -I office.py show
 ```
@@ -66,12 +79,12 @@ Every did.json and card page is rewritten for the host in use.
 Every request carries `Authorization: Bearer <token>`. A Host or Origin other than `127.0.0.1:<port>` or
 `localhost:<port>` is refused, and there is no CORS.
 
-| Call                            | Takes                                                   | Returns                                                                                |
-| ------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `POST /api/cards`               | `{holder, ward, label?, validDays?=30, role?="parent"}` | 201, the card view; 400 `badHolder`, `badWard`, `badValidity`, `badRole` or `badLabel` |
-| `GET /api/cards`                |                                                         | every card view                                                                        |
-| `POST /api/cards/{SAID}/revoke` |                                                         | 200, the card view; idempotent (the same `revokedAt`); 404 for an unknown card         |
-| `GET /api/health`               |                                                         | `{root, aids, host, pathPrefix, keystore}`                                             |
+| Call                            | Takes                                                            | Returns                                                                                |
+| ------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `POST /api/cards`               | `{holder, ward, label?, validDays?=365, role?="legal guardian"}` | 201, the card view; 400 `badHolder`, `badWard`, `badValidity`, `badRole` or `badLabel` |
+| `GET /api/cards`                |                                                                  | every card view                                                                        |
+| `POST /api/cards/{SAID}/revoke` |                                                                  | 200, the card view; idempotent (the same `revokedAt`); 404 for an unknown card         |
+| `GET /api/health`               |                                                                  | `{root, aids, host, pathPrefix, keystore}`                                             |
 
 A card view holds:
 

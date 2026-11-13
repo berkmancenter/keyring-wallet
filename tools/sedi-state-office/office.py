@@ -55,7 +55,10 @@ DEFAULT_K0_DIR = f"git:{Path.home() / 'Documents' / 'keyring-wallet' / 'bifold'}
 K0_ROOT = "IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6"
 ROLES = ("roy", "deb", "sue")
 B64URL = re.compile(r"^[A-Za-z0-9_-]+$")
-DEFAULT_STATE_NAME = "Demo State"  # display name for the pickup page; the template adds "(Demo)"
+DEFAULT_STATE_NAME = "State of Utah"  # Alberto's display name; pages always add "(Demo)" and NOT_ISSUED_BY
+DEFAULT_VALID_DAYS = 365
+DEFAULT_ROLE = "legal guardian"
+KEYCHAIN_SERVICE = "keyring-sedi-k1"
 
 
 class OfficeError(Exception):
@@ -182,8 +185,34 @@ class Keystore:
         return self.token_file.read_text().strip()
 
 
+def keychain_passcode() -> str | None:
+    """The passcode from the macOS Keychain item Alberto adds himself (service keyring-sedi-k1, account $USER).
+    Never created, chosen, echoed or logged here. None when there is no such item."""
+    if sys.platform != "darwin" or not shutil.which("security"):
+        return None
+    r = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", getpass.getuser(), "-w"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    return r.stdout.rstrip("\n") or None
+
+
+PASSCODE_FROM_KEYCHAIN = None  # set by --passcode-from-keychain: True requires the item, False skips it
+
+
 def passcode() -> str:
-    code = os.environ.get("KEYRING_SEDI_K1_PASSCODE") or getpass.getpass("K1 keystore passcode (21+ chars): ")
+    """The Keychain item when it exists (the default), else KEYRING_SEDI_K1_PASSCODE, else a prompt."""
+    code = None
+    if PASSCODE_FROM_KEYCHAIN is not False:
+        code = keychain_passcode()
+        if not code and PASSCODE_FROM_KEYCHAIN:
+            raise OfficeError("noKeychainItem", f"no Keychain item for service {KEYCHAIN_SERVICE}, account "
+                                                f"{getpass.getuser()} (add it with security add-generic-password; "
+                                                "see README)", 2)
+    if not code:
+        code = os.environ.get("KEYRING_SEDI_K1_PASSCODE")
+    if not code:
+        code = getpass.getpass("K1 keystore passcode (21+ chars): ")
     if len(code) < 21:
         raise OfficeError("badPasscode", "the passcode must be at least 21 characters (keripy's bran)", 2)
     return code
@@ -351,7 +380,8 @@ class Office:
         self.ks.save(self.data)
         return dict(aids=self.data["aids"])
 
-    def issue(self, holder: str, ward: str, valid_days: int = 30, role: str = "parent", label: str = "") -> dict:
+    def issue(self, holder: str, ward: str, valid_days: int = DEFAULT_VALID_DAYS, role: str = DEFAULT_ROLE,
+              label: str = "") -> dict:
         if not self.data.get("aids"):
             raise OfficeError("notInitialised", "run `office.py init` first", 409)
         if (p := holder_problem(holder)):
@@ -486,12 +516,13 @@ class Office:
     def pickup_html(self, card: dict) -> str:
         view = self.card_view(card)
         values = {**{k: view.get(k, "") for k in ("pickupJsonUrl", "offerUrl", "statusJsonUrl")},
+                  "notIssuedBy": not_issued_by(self.state_name),
                   **{k: human_date(view.get(k)) for k in ("issuedAt", "expiresAt", "revokedAt")},
                   "stateName": self.state_name, "host": self.site.host, "qrSvg": view["qrSvg"]}
         name = "pickup.html" if card["state"] == "issued" else "pickup-revoked.html"
         template = HERE / "templates" / name
         text = template.read_text() if template.exists() else PLACEHOLDER[card["state"]]
-        return render(text, values)
+        return with_not_issued_line(render(text, values), self.state_name)
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -501,16 +532,32 @@ class Office:
 PLACEHOLDER = {
     "issued": """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Your Guardian card</title></head>
-<body><p>Demo state: a test issuer, not a government service.</p><h1>Your Guardian card from {{stateName}} (Demo)
+<body><p>{{notIssuedBy}}. Demo state: a test issuer, not a government service.</p><h1>Your Guardian card from {{stateName}} (Demo)
 is ready</h1><p>Scan this with Keyring, or open it on the phone it was issued to.</p>{{qrSvg}}
 <p><a href="{{offerUrl}}">Open in Keyring</a></p><p>Issued {{issuedAt}}, valid until {{expiresAt}}.</p></body></html>
 """,
     "revoked": """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Guardian card revoked</title></head>
-<body><p>Demo state: a test issuer, not a government service.</p><h1>This Guardian card from {{stateName}} (Demo)
+<body><p>{{notIssuedBy}}. Demo state: a test issuer, not a government service.</p><h1>This Guardian card from {{stateName}} (Demo)
 was revoked</h1><p>Revoked {{revokedAt}}. It was issued {{issuedAt}}.</p></body></html>
 """,
 }
+
+
+def not_issued_by(state_name: str) -> str:
+    """The plain line every public page carries, as K0's DemoNote does ("not issued by the State of Utah")."""
+    return f"Not issued by the {state_name[0].upper()}{state_name[1:]}" if state_name.lower().startswith("state of ") \
+        else f"Not issued by {state_name}"
+
+
+def with_not_issued_line(page: str, state_name: str) -> str:
+    """A rendered page always says who did NOT issue it. A template that leaves the line out gets it before </body>."""
+    line = not_issued_by(state_name)
+    if html.escape(line) in page:
+        return page
+    tag = f'<p class="not-issued"><strong>{html.escape(line)}.</strong> A demo card from a test issuer.</p>'
+    at = page.lower().rfind("</body>")
+    return page[:at] + tag + page[at:] if at >= 0 else page + tag
 
 
 def render(template: str, values: dict) -> str:
@@ -708,7 +755,8 @@ class Api(BaseHTTPRequestHandler):
             try:
                 if path == "/api/cards":
                     card = self.office.issue(holder=body.get("holder"), ward=body.get("ward"),
-                                             valid_days=body.get("validDays", 30), role=body.get("role", "parent"),
+                                             valid_days=body.get("validDays", DEFAULT_VALID_DAYS),
+                                             role=body.get("role", DEFAULT_ROLE),
                                              label=body.get("label", "") or "")
                     self.office.write_publish_tree()
                     ok, err = run_publish(self.publish_cmd, self.office.ks.publish)
@@ -753,14 +801,18 @@ def main(argv=None):
     ap.add_argument("--k0-dir", default=os.environ.get("KEYRING_SEDI_K0_DIR", DEFAULT_K0_DIR),
                     help="bifold's K0 kit fixtures; its root, org unit and issuing agent are published beside K1's "
                          "so one host serves both ('' to leave K0 out)")
+    kc = ap.add_mutually_exclusive_group()
+    kc.add_argument("--passcode-from-keychain", dest="keychain", action="store_true", default=None,
+                    help=f"read the passcode from the Keychain item {KEYCHAIN_SERVICE} (the default when it exists)")
+    kc.add_argument("--no-keychain", dest="keychain", action="store_false", help="never read the Keychain")
     ap.add_argument("--state-name", default=os.environ.get("KEYRING_SEDI_K1_STATE_NAME", DEFAULT_STATE_NAME))
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init")
     p = sub.add_parser("issue")
     p.add_argument("--holder", required=True)
     p.add_argument("--ward", required=True)
-    p.add_argument("--valid-days", type=int, default=30)
-    p.add_argument("--role", default="parent")
+    p.add_argument("--valid-days", type=int, default=DEFAULT_VALID_DAYS)
+    p.add_argument("--role", default=DEFAULT_ROLE)
     p.add_argument("--label", default="")
     p = sub.add_parser("revoke")
     p.add_argument("said")
@@ -771,6 +823,8 @@ def main(argv=None):
     p.add_argument("--publish-cmd", default=os.environ.get("KEYRING_SEDI_PUBLISH_CMD"),
                    help="run after each change, in the publish dir (e.g. the upload script); none = local tree only")
     a = ap.parse_args(argv)
+    global PASSCODE_FROM_KEYCHAIN
+    PASSCODE_FROM_KEYCHAIN = a.keychain
 
     try:
         ks = Keystore(Path(a.keystore))
@@ -784,8 +838,9 @@ def main(argv=None):
         office.remember_site()
         try:
             if a.cmd == "init":
-                print(json.dumps(office.init(), indent=2))
+                aids = office.init()["aids"]
                 office.write_publish_tree()
+                print(f"root  {aids['roy']}\nunit  {aids['deb']}\nagent {aids['sue']}")
             elif a.cmd == "issue":
                 card = office.issue(a.holder, a.ward, a.valid_days, a.role, a.label)
                 office.write_publish_tree()
