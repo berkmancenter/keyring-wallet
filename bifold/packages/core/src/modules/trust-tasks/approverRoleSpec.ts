@@ -162,6 +162,13 @@ export interface GuardianEvidencePayload {
   tels: { ripText: string; updateTexts: string[] }[]
   /** Each credential's proof: ACDC text followed by its state disclosure. */
   creds: string[]
+  /**
+   * 0.2 only, optional: the host the card came with (a state office's QR; stateRoots K1_WEBS_HOST 'fromCard'), so the
+   * person's phone fetches the state from that host only, if the state names it.
+   */
+  stateHost?: string
+  /** 0.2 only, optional: the Social Authorization the guardian issued the person, chained to this card (the S2 build). */
+  social?: { said: string }
   sentAt: string
 }
 
@@ -203,6 +210,39 @@ export const GUARDIAN_EVIDENCE_SPEC = {
       },
       creds: { type: 'array', minItems: 1, maxItems: EVIDENCE_MAX_ITEMS, items: evidenceText },
       sentAt: { type: 'string', format: 'date-time' },
+    },
+  },
+} as const
+
+/**
+ * guardian-evidence/0.2: 0.1's payload plus two OPTIONAL members, `stateHost` (the host a K1 card came with) and
+ * `social` (the Social Authorization chained to the card). A new version rather than new members in 0.1 (ac,
+ * 2026-11-13): a phone that knows only 0.1 refuses a 0.2 document by its type before reading its payload, so the
+ * refusal says what it is, never a schema failure. A K1 card (one with a host or a Social Authorization) goes as 0.2;
+ * a K0 card stays 0.1, byte-identical to what 278.18 sends. A phone on this build takes both.
+ */
+export const GUARDIAN_EVIDENCE_V2_TYPE_URI =
+  'https://keyring.appliedtechnologylab.org/spec/approver/guardian-evidence/0.2'
+
+const V1_SCHEMA = GUARDIAN_EVIDENCE_SPEC.payloadSchema
+
+export const GUARDIAN_EVIDENCE_V2_SPEC = {
+  ...GUARDIAN_EVIDENCE_SPEC,
+  typeUri: GUARDIAN_EVIDENCE_V2_TYPE_URI,
+  payloadSchema: {
+    ...V1_SCHEMA,
+    $id: GUARDIAN_EVIDENCE_V2_TYPE_URI,
+    title: 'Approver Guardian Evidence 0.2 — payload',
+    properties: {
+      ...V1_SCHEMA.properties,
+      // A bare hostname, lower case, as the receiving phone requires; it is fetched only if the state names it.
+      stateHost: { type: 'string', minLength: 1, maxLength: 253, pattern: '^[a-z0-9.:-]+$' },
+      social: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['said'],
+        properties: { said: { type: 'string', pattern: AID_PATTERN } },
+      },
     },
   },
 } as const

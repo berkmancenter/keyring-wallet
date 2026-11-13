@@ -96,6 +96,8 @@ export enum Screens {
   SignIn = 'Sign in to a community',
   VtaClaim = 'Set up your agent',
   SharedConnect = 'Connect with someone',
+  GuardianCardReceive = 'Guardian card from a state office',
+  StateOfficeCodes = 'Your codes for a state office',
   SharedConnectInvite = 'Show a code',
   RoomsHome = 'Rooms',
   Room = 'Room',
@@ -199,6 +201,10 @@ export type MyAgentStackParams = {
   [Screens.VtaClaim]: { link: string; scanId: string } | undefined
   // A shared-connect link (developer flag), and the scan it came from.
   [Screens.SharedConnect]: { link: string; scanId: string } | undefined
+  // A Guardian card link from a state office (SEDI switches), and the scan it came from.
+  [Screens.GuardianCardReceive]: { link: string; scanId: string } | undefined
+  // This phone's holder and ward codes for a state office (SEDI switches).
+  [Screens.StateOfficeCodes]: undefined
   [Screens.EditRCard]: { profileId: string } | undefined
   // Every room and offer the member has (rooms flag on only).
   [Screens.RoomsHome]: undefined

@@ -1142,7 +1142,9 @@
     "Join": "Entrar em uma comunidade",
     "VtaClaim": "Configurar seu agente",
     "SharedConnect": "Conectar com alguém",
-    "VtaTrustedApprovers": "Quem aprova"
+    "VtaTrustedApprovers": "Quem aprova",
+    "GuardianCardReceive": "Cartão de responsável",
+    "StateOfficeCodes": "Códigos para um escritório estadual"
   },
   "Loading": {
     "TakingTooLong": "Isso esta demorando mais que o normal. Você pode voltar para a home ou continuar esperando.",
@@ -3708,7 +3710,13 @@
     "NotGivenNoNag": "O Keyring não vai perguntar a {{names}} de novo por conta própria.",
     "ApprovedGoAhead": "{{names}} disse sim, então seu agente pode seguir.",
     "AcceptReason": "Aceitar ser aprovador de {{asker}}",
-    "AcceptAsksLock": "Para aceitar, confirme {{method}}. Recusar é um toque."
+    "AcceptAsksLock": "Para aceitar, confirme {{method}}. Recusar é um toque.",
+    "GuardianFetchedFromCardHost": "Obtido ao vivo de {{host}}, um host que o estado indica.",
+    "GuardianFetchedFromCardHostAt": "Obtido ao vivo de {{host}}, um host que o estado indica, às {{time}}; {{host}} não pode ser alcançado agora.",
+    "GuardianHostNotNamed": "O estado não indica {{host}}, então este cartão foi verificado com a própria cópia.",
+    "GuardianHostUnchecked": "Não foi possível verificar se o estado indica {{host}}, então este cartão foi verificado com a própria cópia.",
+    "NeedsNewerKeyring": "O telefone de {{name}} precisa do Keyring mais novo para receber este cartão.",
+    "CardSentToK1": "Enviado para {{asker}}. Se o Keyring dessa pessoa for mais antigo que este, o cartão não vai aparecer."
   },
   "StateCard": {
     "Kind": "Responsável",
@@ -3749,6 +3757,45 @@
     "NotReached": "Não foi possível falar com o estado para verificar este cartão. Ele não é verificado pela cópia deste telefone no lugar. Tente de novo mais tarde.",
     "PillNotReached": "Sem resposta",
     "RevokedIssuer": "O registro publicado pelo emissor mostra que ele foi revogado",
-    "RevokedState": "O registro publicado pelo estado mostra que ele foi revogado"
+    "RevokedState": "O registro publicado pelo estado mostra que ele foi revogado",
+    "AsOfQrHost": "segundo o registro de um host que o estado indica",
+    "FetchedFromQrHost": "Obtido ao vivo de {{host}}, um host que o estado indica.",
+    "FetchedFromQrHostAt": "Obtido ao vivo de {{host}}, um host que o estado indica, às {{time}}; {{host}} não pode ser alcançado agora.",
+    "DemoNoteOffice": "Cartão de demonstração, emitido por um escritório estadual de demonstração; não emitido pelo Estado de Utah",
+    "HostNotNamed": "O estado não indica {{host}}, então este cartão foi verificado com a própria cópia.",
+    "HostUnchecked": "Não foi possível verificar se o estado indica {{host}}, então este cartão foi verificado com a própria cópia."
+  },
+  "GuardianCard": {
+    "Checking": "Verificando o cartão…",
+    "Checked": "Um cartão de responsável de {{state}}, emitido para este telefone. Ele é válido.",
+    "KeepNote": "Guarde-o para enviá-lo à pessoa de quem você cuida quando aprovar por ela.",
+    "Keep": "Guardar este cartão",
+    "Kept": "Guardado: seu cartão de responsável de {{state}}.",
+    "KeptNote": "Ele substitui qualquer cartão que este telefone tinha antes.",
+    "Off": "O Keyring não pode receber um cartão de responsável neste telefone.",
+    "NoHostInBuild": "Esta versão não indica o host do estado.",
+    "WrongPlace": "Este link não é do endereço de um escritório estadual, então nada foi obtido.",
+    "Unreachable": "Não foi possível alcançar o escritório estadual. Tente de novo em instantes.",
+    "Unreadable": "Este cartão não pôde ser lido.",
+    "NotForThisPhone": "Este cartão foi emitido para outro telefone, então não foi guardado.",
+    "Revoked": "O estado mostra que este cartão foi revogado, então não foi guardado.",
+    "DidNotCheckOut": "Este cartão não é válido, então não foi guardado.",
+    "HostNotNamed": "O estado não indica o host deste link, então o cartão não foi guardado."
+  },
+  "StateOffice": {
+    "Entry": "Seus códigos para um escritório estadual",
+    "Intro": "Um escritório estadual emite um cartão de responsável para um código criado neste telefone. Mostre ao escritório o código do seu papel.",
+    "HolderTitle": "Se você é o responsável",
+    "HolderNote": "O estado emite seu cartão de responsável para este código. A chave fica guardada neste telefone.",
+    "ShowHolder": "Mostrar meu código de responsável",
+    "WardTitle": "Se você é a pessoa cuidada",
+    "WardNote": "O cartão indica este código como a pessoa a quem se refere.",
+    "ShowWard": "Mostrar meu código",
+    "UseWard": "Usar este código neste telefone",
+    "WardSet": "Este telefone agora verifica cartões com este código.",
+    "Copy": "Copiar",
+    "Copied": "Copiado",
+    "Problem": "O Keyring não conseguiu criar o código. Tente de novo.",
+    "Off": "Ative aprovadores confiáveis e aprovadores verificados pelo estado nas configurações de Desenvolvedor para usar isto."
   }
 }

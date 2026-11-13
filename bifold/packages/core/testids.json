@@ -685,6 +685,13 @@
     "GetStarted": ["src/screens/Onboarding.tsx", "src/screens/OnboardingPages.tsx"],
     "GoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "GoToSettings": ["src/screens/PINChangeSuccess.tsx"],
+    "GuardianCardChecking": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
+    "GuardianCardDetail": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
+    "GuardianCardKeep": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
+    "GuardianCardKept": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
+    "GuardianCardOff": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
+    "GuardianCardReceive": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
+    "GuardianCardResult": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
     "HardwareAttestation": ["src/screens/Settings.tsx"],
     "HardwareAttestationChangedEnterPIN": ["src/screens/PINVerify.tsx"],
     "HeaderText": [
@@ -1545,6 +1552,20 @@
     "StateCardTechnical": ["src/modules/sedi/holder/StateCardDetails.tsx"],
     "StateCardTechnicalRows": ["src/modules/sedi/holder/StateCardDetails.tsx"],
     "StateCardWhatChecked": ["src/modules/sedi/holder/StateCardDetails.tsx"],
+    "StateOfficeCodes": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeCodesEntry": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeCodesOff": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeCopyHolder": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeCopyWard": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeHolderCode": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeHolderQr": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeProblem": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeShowHolder": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeShowWard": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeUseWard": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeWardCode": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeWardQr": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
+    "StateOfficeWardSet": ["src/modules/sedi/identity/StateOfficeCodes.ids.ts"],
     "StepUpAsk": ["src/modules/trust-tasks/screens/StepUpAskHost.tsx"],
     "StepUpConfirm": ["src/modules/trust-tasks/screens/StepUpAskHost.tsx"],
     "StepUpDecline": ["src/modules/trust-tasks/screens/StepUpAskHost.tsx"],
@@ -2268,6 +2289,54 @@
     },
     {
       "src/modules/rooms/screens/RoomInfo.tsx": "PART_TEST_ID[part]"
+    },
+    {
+      "src/modules/sedi/holder/GuardianCardReceive.tsx": "Ids.checking"
+    },
+    {
+      "src/modules/sedi/holder/GuardianCardReceive.tsx": "Ids.keep"
+    },
+    {
+      "src/modules/sedi/holder/GuardianCardReceive.tsx": "Ids.kept"
+    },
+    {
+      "src/modules/sedi/holder/GuardianCardReceive.tsx": "Ids.off"
+    },
+    {
+      "src/modules/sedi/holder/GuardianCardReceive.tsx": "Ids.result"
+    },
+    {
+      "src/modules/sedi/holder/GuardianCardReceive.tsx": "Ids.screen"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "Ids.entry"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "Ids.off"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "Ids.problem"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "Ids.screen"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "Ids.showHolder"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "Ids.showWard"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "Ids.useWard"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "Ids.wardSet"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "copy"
+    },
+    {
+      "src/modules/sedi/identity/StateOfficeCodes.tsx": "text"
     },
     {
       "src/modules/trust-tasks/components/ApproverOfferModal.tsx": "ApproverOfferIds.body"
@@ -3113,6 +3182,9 @@
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.checkAgain(did)"
     },
     {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.checkHostAgain(did)"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.error"
     },
     {
@@ -3120,6 +3192,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.guardianFetchedLive(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.guardianHostWithheld(did)"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.guardianOutcome(did)"

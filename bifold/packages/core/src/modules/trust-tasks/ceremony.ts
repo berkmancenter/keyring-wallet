@@ -2087,14 +2087,19 @@ function registerBuiltinTrustTasks(): void {
   // Keyring's own type (private authority): an approver's phone sends its state Guardian card after a yes. One way,
   // nothing answers it; its handler does nothing unless both trusted approvers and state-verified approvers are on.
   // Loaded on arrival, so the Guardian check (sedi/guardian) is not loaded with this module.
-  trustTaskRegistry.register({
-    typeUri: approverRoleSpec.GUARDIAN_EVIDENCE_TYPE_URI,
-    spec: approverRoleSpec.GUARDIAN_EVIDENCE_SPEC as never,
-    orchestration: { requiresDiscovery: false },
-    handleRequest: (...args: Parameters<typeof import('./guardianEvidence').handleGuardianEvidence>) =>
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-      (require('./guardianEvidence') as typeof import('./guardianEvidence')).handleGuardianEvidence(...args),
-  })
+  // Both versions: 0.1 (a K0 card, as 278.18 sends it) and 0.2 (a K1 card, with its host or Social Authorization).
+  for (const [typeUri, spec] of [
+    [approverRoleSpec.GUARDIAN_EVIDENCE_TYPE_URI, approverRoleSpec.GUARDIAN_EVIDENCE_SPEC],
+    [approverRoleSpec.GUARDIAN_EVIDENCE_V2_TYPE_URI, approverRoleSpec.GUARDIAN_EVIDENCE_V2_SPEC],
+  ] as const)
+    trustTaskRegistry.register({
+      typeUri,
+      spec: spec as never,
+      orchestration: { requiresDiscovery: false },
+      handleRequest: (...args: Parameters<typeof import('./guardianEvidence').handleGuardianEvidence>) =>
+        // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+        (require('./guardianEvidence') as typeof import('./guardianEvidence')).handleGuardianEvidence(...args),
+    })
 }
 
 registerBuiltinTrustTasks()

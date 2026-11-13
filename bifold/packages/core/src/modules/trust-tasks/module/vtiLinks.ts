@@ -22,6 +22,9 @@ import {
 } from '@bifold/trust-tasks'
 
 import { Screens } from '../../../types/navigators'
+import { k1Root } from '../../sedi/guardian/stateRoots'
+import { isGuardianCardLink } from '../../sedi/holder/guardianCardLink'
+import { phoneCodesOn } from '../../sedi/identity/phoneCodesOn'
 import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
@@ -98,6 +101,7 @@ export type KeyringAgentLinkKind =
   | 'community'
   | 'did'
   | 'otherDid'
+  | 'guardianCard'
 
 /** Which of our links this is, if any — cheap, no parsing beyond the prefix. */
 export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undefined {
@@ -105,6 +109,9 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // An agent host's automatic connection: JSON with a callback. Claimed even
   // when it fails its checks, so the scanner says why rather than "invalid".
   if (looksLikeAgentHostQr(trimmed)) return 'agentHost'
+  // A state office's Guardian card link (keyring://guardian-card?u=…): claimed by its prefix even with the SEDI
+  // switches off, so it is answered in words rather than handed to the connection flow.
+  if (isGuardianCardLink(trimmed)) return 'guardianCard'
   // A one-scan trigger link (a community sign-in, an agent claim). Keyring
   // reads none of its flows yet, so it is claimed here to be answered in
   // words instead of reaching the connection handler, which reported it as
@@ -383,7 +390,14 @@ export type MyAgentScreenName =
  * route's id): a second code scanned while one is on screen opens a new one,
  * and never shows the first one's code or result.
  */
-export type ScannedCodeDestination = { screen: 'SignIn' | 'VtaClaim' | 'SharedConnect'; link: string; scanId: string }
+export type ScannedCodeDestination = {
+  screen: 'SignIn' | 'VtaClaim' | 'SharedConnect' | 'GuardianCardReceive'
+  link: string
+  scanId: string
+}
+
+/** What a Guardian card link says on a phone where it cannot be used (switches off, kill set, no office configured). */
+export const GUARDIAN_CARD_LINK_OFF = "Keyring can't take a Guardian card on this phone."
 
 /** Where a link lands, inside the My Agent stack. */
 export type MyAgentDestination = MyAgentScreenName | ScannedCodeDestination
@@ -403,6 +417,8 @@ export const MY_AGENT_SCREEN: Record<MyAgentScreenName | ScannedCodeDestination[
   VtaClaim: Screens.VtaClaim,
   // A shared-connect link (relationship over TSP), read and accepted behind the developer flag.
   SharedConnect: Screens.SharedConnect,
+  // A state office's Guardian card link, behind the SEDI switches (the screen checks them again itself).
+  GuardianCardReceive: Screens.GuardianCardReceive,
 }
 
 /**
@@ -607,6 +623,11 @@ export async function routeKeyringAgentLink(
       return routeBareDid(bareDid(trimmed) as string, agent, navigate)
     case 'otherDid':
       throw new KeyringLinkError(otherDidMessage(bareDid(trimmed) as string))
+    case 'guardianCard':
+      // Nothing opens with the switches off, the SEDI/KERI kill set, or no state office configured on this build.
+      if (!phoneCodesOn() || !k1Root()) throw new KeyringLinkError(GUARDIAN_CARD_LINK_OFF)
+      navigate({ screen: 'GuardianCardReceive', link: trimmed, scanId: newScanId() })
+      return
     case 'triggerLink':
       if (signInToOpen(trimmed)) {
         navigate({ screen: 'SignIn', link: trimmed, scanId: newScanId() })

@@ -1209,7 +1209,9 @@
     "Join": "Rejoindre une communauté",
     "VtaClaim": "Configurer votre agent",
     "SharedConnect": "Se connecter avec quelqu'un",
-    "VtaTrustedApprovers": "Qui approuve"
+    "VtaTrustedApprovers": "Qui approuve",
+    "GuardianCardReceive": "Carte de tuteur",
+    "StateOfficeCodes": "Codes pour un bureau d'État"
   },
   "Loading": {
     "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
@@ -3792,7 +3794,13 @@
     "NotGivenNoNag": "Keyring ne redemandera pas à {{names}} de lui-même.",
     "ApprovedGoAhead": "{{names}} a dit oui : votre agent peut continuer.",
     "AcceptReason": "Accepter d’être l’approbateur de {{asker}}",
-    "AcceptAsksLock": "Pour accepter, confirmez {{method}}. Refuser se fait en un geste."
+    "AcceptAsksLock": "Pour accepter, confirmez {{method}}. Refuser se fait en un geste.",
+    "GuardianFetchedFromCardHost": "Récupéré en direct depuis {{host}}, un hôte que l'État désigne.",
+    "GuardianFetchedFromCardHostAt": "Récupéré en direct depuis {{host}}, un hôte que l'État désigne, à {{time}} ; {{host}} est injoignable pour le moment.",
+    "GuardianHostNotNamed": "L'État ne désigne pas {{host}} ; cette carte a donc été vérifiée avec sa propre copie.",
+    "GuardianHostUnchecked": "Impossible de vérifier que l'État désigne {{host}} ; cette carte a donc été vérifiée avec sa propre copie.",
+    "NeedsNewerKeyring": "Le téléphone de {{name}} a besoin de la nouvelle version de Keyring pour recevoir cette carte.",
+    "CardSentToK1": "Envoyée à {{asker}}. Si son Keyring est plus ancien que celui-ci, la carte ne s'affichera pas."
   },
   "StateCard": {
     "Kind": "Tuteur",
@@ -3833,6 +3841,45 @@
     "NotReached": "Impossible de joindre l'État pour vérifier cette carte. Elle n'est pas vérifiée à la place d'après la copie de ce téléphone. Réessayez plus tard.",
     "PillNotReached": "Injoignable",
     "RevokedIssuer": "Le registre publié par l’émetteur indique qu’elle a été révoquée",
-    "RevokedState": "Le registre publié par l’État indique qu’elle a été révoquée"
+    "RevokedState": "Le registre publié par l’État indique qu’elle a été révoquée",
+    "AsOfQrHost": "d'après le registre d'un hôte que l'État désigne",
+    "FetchedFromQrHost": "Récupéré en direct depuis {{host}}, un hôte que l'État désigne.",
+    "FetchedFromQrHostAt": "Récupéré en direct depuis {{host}}, un hôte que l'État désigne, à {{time}} ; {{host}} est injoignable pour le moment.",
+    "DemoNoteOffice": "Carte de démonstration, délivrée par un bureau d'État de démonstration ; non délivrée par l’État de l’Utah",
+    "HostNotNamed": "L'État ne désigne pas {{host}} ; cette carte a donc été vérifiée avec sa propre copie.",
+    "HostUnchecked": "Impossible de vérifier que l'État désigne {{host}} ; cette carte a donc été vérifiée avec sa propre copie."
+  },
+  "GuardianCard": {
+    "Checking": "Vérification de la carte…",
+    "Checked": "Une carte de tuteur de {{state}}, délivrée à ce téléphone. Elle est valide.",
+    "KeepNote": "Gardez-la pour l'envoyer à la personne dont vous avez la charge quand vous approuvez pour elle.",
+    "Keep": "Garder cette carte",
+    "Kept": "Gardée : votre carte de tuteur de {{state}}.",
+    "KeptNote": "Elle remplace toute carte que ce téléphone détenait avant.",
+    "Off": "Keyring ne peut pas prendre de carte de tuteur sur ce téléphone.",
+    "NoHostInBuild": "Cette version ne nomme pas l'hôte de l'État.",
+    "WrongPlace": "Ce lien ne vient pas de l'adresse d'un bureau d'État ; rien n'a été récupéré.",
+    "Unreachable": "Impossible de joindre le bureau d'État. Réessayez dans un instant.",
+    "Unreadable": "Cette carte n'a pas pu être lue.",
+    "NotForThisPhone": "Cette carte a été délivrée à un autre téléphone ; elle n'a pas été gardée.",
+    "Revoked": "L'État indique que cette carte a été révoquée ; elle n'a pas été gardée.",
+    "DidNotCheckOut": "Cette carte n'est pas valide ; elle n'a pas été gardée.",
+    "HostNotNamed": "L'État ne désigne pas l'hôte de ce lien ; la carte n'a pas été gardée."
+  },
+  "StateOffice": {
+    "Entry": "Vos codes pour un bureau d'État",
+    "Intro": "Un bureau d'État délivre une carte de tuteur à un code créé sur ce téléphone. Montrez au bureau le code de votre rôle.",
+    "HolderTitle": "Si vous êtes le tuteur",
+    "HolderNote": "L'État délivre votre carte de tuteur à ce code. Sa clé est gardée sur ce téléphone.",
+    "ShowHolder": "Afficher mon code de tuteur",
+    "WardTitle": "Si vous êtes la personne prise en charge",
+    "WardNote": "La carte nomme ce code comme la personne concernée.",
+    "ShowWard": "Afficher mon code",
+    "UseWard": "Utiliser ce code sur ce téléphone",
+    "WardSet": "Ce téléphone vérifie désormais les cartes avec ce code.",
+    "Copy": "Copier",
+    "Copied": "Copié",
+    "Problem": "Keyring n'a pas pu créer le code. Réessayez.",
+    "Off": "Activez les approbateurs de confiance et les approbateurs vérifiés par l'État dans les réglages Développeur pour l'utiliser."
   }
 }

@@ -360,7 +360,36 @@ export {
 } from './modules/trust-tasks'
 export { setStateCardEnabled, isStateCardEnabled, STATE_CARD_REMOTE_OFF } from './modules/sedi/holder/stateCardFlag'
 // The SEDI State roots' demo mark, for screens that show the "Demo" pill (Who approves, the holder's state card).
-export { isDemoStateRoot, K0_TEST_ROOT, type StateRoot } from './modules/sedi/guardian/stateRoots'
+export {
+  isDemoStateRoot,
+  K0_TEST_ROOT,
+  K1_NAME,
+  K1_ROOT_AID,
+  K1_WEBS_HOST,
+  k1HostMode,
+  k1Root,
+  type K1WebsHost,
+  type StateRoot,
+} from './modules/sedi/guardian/stateRoots'
+// The phone's own KERI identifiers for a state office (K1), and receiving a Guardian card from one.
+export {
+  HOLDER_IDENTITY,
+  HolderSwitchedOff,
+  appendInteraction,
+  holderCodeOf,
+  holderKel,
+  holderSign,
+  type ControllerAgent,
+} from './modules/sedi/holder/controller'
+export { WARD_IDENTITY, becomeOwnWard, wardCodeOf } from './modules/sedi/identity/phoneIdentity'
+export { GUARDIAN_CARD_LINK, guardianCardUrlOf, isGuardianCardLink } from './modules/sedi/holder/guardianCardLink'
+export {
+  GUARDIAN_CARD_TYPE,
+  checkGuardianCard,
+  receiveGuardianCard,
+  type CardCheckFailure,
+  type ReceiveResult,
+} from './modules/sedi/holder/receiveGuardianCard'
 export type {
   TrustTaskRegistration,
   TrustTaskOrchestration,

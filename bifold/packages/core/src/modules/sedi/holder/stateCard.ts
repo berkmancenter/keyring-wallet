@@ -28,13 +28,15 @@ import {
 } from '../../trust-tasks/guardianEvidence'
 import { isStateVerifiedApproversEnabled } from '../../trust-tasks/module/stateVerifiedApproversFlag'
 import { K0_TEST_GUARDIAN_CARD } from '../guardian/k0TestCard'
-import { isDemoStateRoot, trustedStateRoots } from '../guardian/stateRoots'
+import { isDemoStateRoot, k1Root, trustedStateRoots } from '../guardian/stateRoots'
 import { websDidToFetch } from '../webs/demoStateHost'
 
 /** How far a "Checks out" reaches when the check read the copy this phone holds. */
 export const STATE_CARD_AS_OF = 'StateCard.AsOfHeldCopy'
 /** How far it reaches when the root was fetched live: the state's published record. */
 export const STATE_CARD_AS_OF_LIVE = 'StateCard.AsOfPublished'
+/** The as-of line when the record was fetched from the host the state office's QR named (K1 'fromCard'). */
+export const STATE_CARD_AS_OF_QR_HOST = 'StateCard.AsOfQrHost'
 
 /**
  * The outcome of checking the held card: not checked (and why), still checking (the live fetch has not answered), or
@@ -199,7 +201,10 @@ export function stateCardView(
   const ok = verdict?.ok === true ? verdict : undefined
   // One answer to "is this a demo root", the one Who approves and the card question use (stateRoots).
   const demo = ok ? isDemoStateRoot(ok.root) : false
-  const asOf = words(ok?.fetchedFrom ? STATE_CARD_AS_OF_LIVE : STATE_CARD_AS_OF)
+  // The host the state office's QR named is said to be that, never "the state's published record" (K1 'fromCard').
+  const asOf = words(
+    ok?.fetchedFrom ? (ok.hostFromCard ? STATE_CARD_AS_OF_QR_HOST : STATE_CARD_AS_OF_LIVE) : STATE_CARD_AS_OF
+  )
   // Which "fetched live" line, decided where Who approves decides it (guardianSourceKey): the full line only when the
   // root and every issuer in its chain were fetched live, else "the issuers' records came from the card"; each with
   // its "at <time>" variant for a fetch reused because the host just failed (the result is no fresher than that). The
@@ -213,11 +218,26 @@ export function stateCardView(
         ...(ok.fetchedIssuers ? { fetchedIssuers: true as const } : {}),
       })
     : null
-  const source = sourceKey
-    ? words(sourceKey, { host: ok?.fetchedFrom, ...(ok?.fetchedAt ? { time: localClock(ok.fetchedAt) } : {}) })
-    : demo
-      ? words('Approver.GuardianDemoCopy')
-      : undefined
+  // The holder's own words for the host the QR named (Who approves has the person's: "the host <name>'s card names").
+  const qrKey =
+    ok?.fetchedFrom && ok.hostFromCard
+      ? ok.fetchedAt
+        ? 'StateCard.FetchedFromQrHostAt'
+        : 'StateCard.FetchedFromQrHost'
+      : null
+  // A host the card came with that the state does not name was not fetched: the copy was checked, and it says so.
+  const withheld = verdict?.hostWithheld
+  const source = withheld
+    ? words(withheld.result === 'unreachable' ? 'StateCard.HostUnchecked' : 'StateCard.HostNotNamed', {
+        host: withheld.host,
+      })
+    : qrKey
+      ? words(qrKey, { host: ok?.fetchedFrom, ...(ok?.fetchedAt ? { time: localClock(ok.fetchedAt) } : {}) })
+      : sourceKey
+        ? words(sourceKey, { host: ok?.fetchedFrom, ...(ok?.fetchedAt ? { time: localClock(ok.fetchedAt) } : {}) })
+        : demo
+          ? words('Approver.GuardianDemoCopy')
+          : undefined
 
   let tone: StateCardTone
   let status: string
@@ -246,9 +266,16 @@ export function stateCardView(
   const title = ok?.state ?? words('StateCard.UnknownState')
   const guardianOf = words('StateCard.GuardianOf', { ward: words('StateCard.YourContact') })
   const kind = words('StateCard.Kind')
-  // A demo card says so wherever it is shown: one from a demo root, and the K0 test card whatever its check said.
-  const demoNote =
-    demo || evidence.guardianSaid === K0_TEST_GUARDIAN_CARD.guardianSaid ? words('StateCard.DemoNote') : undefined
+  // A demo card says so wherever it is shown: one from a demo root, and the K0 test card whatever its check said. A
+  // card from K1, the local state office, says it came from that office, not loaded from the kit (and it, too, that
+  // the State of Utah did not issue it), whatever its check said.
+  const k1 = k1Root()
+  const fromOffice = !!k1 && (ok?.root === k1.aid || evidence.creds.some((cred) => cred.includes(k1.aid)))
+  const demoNote = fromOffice
+    ? words('StateCard.DemoNoteOffice')
+    : demo || evidence.guardianSaid === K0_TEST_GUARDIAN_CARD.guardianSaid
+      ? words('StateCard.DemoNote')
+      : undefined
 
   return {
     title,

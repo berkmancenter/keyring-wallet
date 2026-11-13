@@ -248,3 +248,58 @@ describe('an unregistered type falls back to the documented default', () => {
     expect(fake.agent.config.logger.info).toHaveBeenCalledWith(expect.stringContaining('unhandled trust-task type'))
   })
 })
+
+describe('guardian-evidence versions on arrival (0.1 for a K0 card, 0.2 for a K1 card)', () => {
+  const V1 = 'https://keyring.appliedtechnologylab.org/spec/approver/guardian-evidence/0.1'
+  const V2 = 'https://keyring.appliedtechnologylab.org/spec/approver/guardian-evidence/0.2'
+  const V3 = 'https://keyring.appliedtechnologylab.org/spec/approver/guardian-evidence/0.3'
+  /** The fake agent's logger, typed: makeFakeAgent hands its agent back as `never`. */
+  const infoOf = (fake: ReturnType<typeof makeFakeAgent>) =>
+    (fake.agent as unknown as { config: { logger: { info: jest.Mock } } }).config.logger.info
+  const doc = (type: string) => ({
+    id: 'doc-ge',
+    type,
+    threadId: 'thread-ge',
+    issuer: 'did:peer:4zzz',
+    recipient: 'did:peer:4aaa',
+    issuedAt: new Date().toISOString(),
+    payload: {},
+  })
+
+  test('this build registers both 0.1 and 0.2 (control for the two rows below)', () => {
+    expect(trustTaskRegistry.get(V1)).toBeDefined()
+    expect(trustTaskRegistry.get(V2)).toBeDefined()
+    expect(trustTaskRegistry.get(V3)).toBeUndefined()
+  })
+
+  test('UNKNOWN-VERSION LOG: a guardian-evidence version this build does not know (0.3) is logged with its exact type URI, and nothing is sent back', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    setupTrustTasksInbound(fake.agent)
+    await deliver(fake.capturedHandlerRef, doc(V3), {
+      id: fake.connectionId,
+      did: 'did:peer:4aaa',
+      theirDid: 'did:peer:4zzz',
+    })
+    expect(fake.sentMessages).toHaveLength(0)
+    expect(infoOf(fake)).toHaveBeenCalledWith(expect.stringContaining(V3))
+  })
+
+  test('OLD-PHONE PIN (278.18): a 0.1-only reader given a guardian-evidence/0.2 document refuses it by its TYPE (unhandled, retained), never as a schema failure, and answers nothing', async () => {
+    // A 278.18 phone: its registry knows 0.1 only. Modelled by hiding 0.2 from the lookup, nothing else changed.
+    const real = trustTaskRegistry.resolveForDocumentType.bind(trustTaskRegistry)
+    jest
+      .spyOn(trustTaskRegistry, 'resolveForDocumentType')
+      .mockImplementation((type: string) => (type.startsWith(V2) ? undefined : real(type)))
+    const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    setupTrustTasksInbound(fake.agent)
+    await deliver(fake.capturedHandlerRef, doc(V2), {
+      id: fake.connectionId,
+      did: 'did:peer:4aaa',
+      theirDid: 'did:peer:4zzz',
+    })
+    // Refused by type: the unhandled-type line names the URI; no payload was validated, so no schema refusal, and the
+    // sender is told nothing (the reason a sender can only ever say "may need updating", never "needs").
+    expect(infoOf(fake)).toHaveBeenCalledWith(expect.stringContaining(`unhandled trust-task type ${V2}`))
+    expect(fake.sentMessages).toHaveLength(0)
+  })
+})

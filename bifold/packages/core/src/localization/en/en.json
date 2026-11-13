@@ -1268,7 +1268,9 @@
     "SignIn": "Sign in",
     "VtaClaim": "Set up your agent",
     "SharedConnect": "Connect with someone",
-    "VtaTrustedApprovers": "Who approves"
+    "VtaTrustedApprovers": "Who approves",
+    "GuardianCardReceive": "Guardian card",
+    "StateOfficeCodes": "State office codes"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -3834,7 +3836,13 @@
     "NotGivenNoNag": "Keyring won't ask {{names}} again on its own.",
     "ApprovedGoAhead": "{{names}} said yes, so your agent can go ahead.",
     "AcceptReason": "Accept being {{asker}}'s approver",
-    "AcceptAsksLock": "Accept asks for {{method}}. Decline is one tap."
+    "AcceptAsksLock": "Accept asks for {{method}}. Decline is one tap.",
+    "GuardianFetchedFromCardHost": "Fetched live from {{host}}, a host the state names.",
+    "GuardianFetchedFromCardHostAt": "Fetched live from {{host}}, a host the state names, at {{time}}; {{host}} can't be reached right now.",
+    "GuardianHostNotNamed": "The state doesn't name {{host}}, so this card was checked against its own copy.",
+    "GuardianHostUnchecked": "Couldn't check that the state names {{host}}, so this card was checked against its own copy.",
+    "NeedsNewerKeyring": "{{name}}'s phone needs the newer Keyring to receive this card.",
+    "CardSentToK1": "Sent to {{asker}}. If their Keyring is older than this one, it won't show the card."
   },
   "StateCard": {
     "Kind": "Guardian",
@@ -3875,6 +3883,45 @@
     "NotReached": "Couldn't reach the state to check this card. It isn't checked against the copy on this phone instead. Try again later.",
     "PillNotReached": "Couldn't reach",
     "RevokedIssuer": "The issuer's published record shows it was revoked",
-    "RevokedState": "The state's published record shows it was revoked"
+    "RevokedState": "The state's published record shows it was revoked",
+    "AsOfQrHost": "as of the record at a host the state names",
+    "FetchedFromQrHost": "Fetched live from {{host}}, a host the state names.",
+    "FetchedFromQrHostAt": "Fetched live from {{host}}, a host the state names, at {{time}}; {{host}} can't be reached right now.",
+    "DemoNoteOffice": "Demo card, issued by a demo state office; not issued by the State of Utah",
+    "HostNotNamed": "The state doesn't name {{host}}, so this card was checked against its own copy.",
+    "HostUnchecked": "Couldn't check that the state names {{host}}, so this card was checked against its own copy."
+  },
+  "GuardianCard": {
+    "Checking": "Checking the card…",
+    "Checked": "A Guardian card from {{state}}, issued to this phone. It checks out.",
+    "KeepNote": "Keep it to send it to the person you care for when you approve for them.",
+    "Keep": "Keep this card",
+    "Kept": "Kept: your Guardian card from {{state}}.",
+    "KeptNote": "It replaces any card this phone held before.",
+    "Off": "Keyring can't take a Guardian card on this phone.",
+    "NoHostInBuild": "This build doesn't name the state's host.",
+    "WrongPlace": "This link isn't from a state office's address, so nothing was fetched.",
+    "Unreachable": "Couldn't reach the state office. Try again in a moment.",
+    "Unreadable": "This card couldn't be read.",
+    "NotForThisPhone": "This card was issued to another phone, so it wasn't kept.",
+    "Revoked": "The state shows this card was revoked, so it wasn't kept.",
+    "DidNotCheckOut": "This card didn't check out, so it wasn't kept.",
+    "HostNotNamed": "The state doesn't name this link's host, so the card wasn't kept."
+  },
+  "StateOffice": {
+    "Entry": "Your codes for a state office",
+    "Intro": "A state office issues a Guardian card to a code made on this phone. Show the office the code for your role.",
+    "HolderTitle": "If you're the guardian",
+    "HolderNote": "The state issues your Guardian card to this code. Its key is kept on this phone.",
+    "ShowHolder": "Show my guardian code",
+    "WardTitle": "If you're the person cared for",
+    "WardNote": "The card names this code as the person it's for.",
+    "ShowWard": "Show my code",
+    "UseWard": "Use this code on this phone",
+    "WardSet": "This phone now checks cards against this code.",
+    "Copy": "Copy",
+    "Copied": "Copied",
+    "Problem": "Keyring couldn't make the code. Try again.",
+    "Off": "Turn on trusted approvers and state-verified approvers in Developer settings to use this."
   }
 }

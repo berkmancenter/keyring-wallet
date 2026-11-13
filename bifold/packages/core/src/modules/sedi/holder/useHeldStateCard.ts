@@ -23,7 +23,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { heldGuardianEvidence, type GuardianEvidence } from '../../trust-tasks/guardianEvidence'
+import { heldGuardianCard, type GuardianEvidence } from '../../trust-tasks/guardianEvidence'
 import { localClock, localDate } from '../../trust-tasks/screens/localTime'
 
 import {
@@ -44,6 +44,8 @@ export function useHeldStateCard(focused: boolean): StateCardView | undefined {
   const { agent } = useAgent()
   const { t } = useTranslation()
   const [held, setHeld] = useState<GuardianEvidence | undefined>(undefined)
+  // The host the card came with (a state office's QR, K1 'fromCard'): its checks fetch the state from there only.
+  const [stateHost, setStateHost] = useState<string | undefined>(undefined)
   const [answer, setAnswer] = useState<{ key: string; check: HeldCheck } | undefined>(undefined)
   const on = isStateCardEnabled()
   const key = on && held ? checkKeyOf(held) : undefined
@@ -57,9 +59,11 @@ export function useHeldStateCard(focused: boolean): StateCardView | undefined {
   useEffect(() => {
     if (!focused || !agent || !on) return
     let live = true
-    heldGuardianEvidence(agent)
-      .then((evidence) => {
-        if (live) setHeld(evidence)
+    heldGuardianCard(agent)
+      .then((card) => {
+        if (!live) return
+        setHeld(card?.evidence)
+        setStateHost(card?.stateHost)
       })
       .catch((e: unknown) =>
         agent.config?.logger?.warn(`${LOG_PREFIX} could not read the held card: ${(e as Error)?.message ?? e}`)
@@ -76,7 +80,7 @@ export function useHeldStateCard(focused: boolean): StateCardView | undefined {
     if (!on || !card || !key || !canCheck) return
     let live = true
     const warn = (message: string) => agent?.config?.logger?.warn(`${LOG_PREFIX} ${message}`)
-    checkHeldCard(card, new Date(), warn)
+    checkHeldCard(card, new Date(), warn, stateHost ? { stateHost } : undefined)
       .then((check) => {
         // Dropped when the card unmounted or what the check read moved (this effect was cleaned up), or when the
         // switch went off before the answer, even with no render since. Kept when Credentials is only out of focus.
@@ -88,7 +92,7 @@ export function useHeldStateCard(focused: boolean): StateCardView | undefined {
     return () => {
       live = false
     }
-  }, [on, key, canCheck, agent])
+  }, [on, key, canCheck, agent, stateHost])
 
   if (!on || !held || !key) return undefined
   const check = uncheckable ?? (answer?.key === key ? answer.check : PENDING)

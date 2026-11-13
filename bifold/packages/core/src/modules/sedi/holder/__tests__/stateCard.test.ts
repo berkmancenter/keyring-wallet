@@ -19,7 +19,7 @@ import { resetGuardianCheckMemo, type GuardianEvidence } from '../../../trust-ta
 import { K0_REVOKED_OMITTED_CARD } from '../../guardian/k0RevokedOmittedCard'
 import { K0_REVOKED_TEST_GUARDIAN_CARD } from '../../guardian/k0RevokedTestCard'
 import { K0_TEST_GUARDIAN_CARD } from '../../guardian/k0TestCard'
-import { K0_TEST_ROOT } from '../../guardian/stateRoots'
+import { K0_TEST_ROOT, k1SettingsForTests } from '../../guardian/stateRoots'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -67,6 +67,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   global.fetch = realFetch
+  k1SettingsForTests.reset()
   setDemoStateHost(null)
   switches(false, false)
   STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = false
@@ -140,6 +141,8 @@ describe('the state card: what it says', () => {
       () => {
         ;(global as { __DEV__?: boolean }).__DEV__ = false
         setTrustTestStateEnabled(false)
+        // And no state office on this build: K1 is trusted with both switches on, so "no root" needs it gone too.
+        k1SettingsForTests.set({ aid: '' })
       },
       'noRoots',
     ],

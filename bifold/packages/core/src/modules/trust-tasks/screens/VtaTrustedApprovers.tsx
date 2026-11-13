@@ -61,6 +61,8 @@ import ApproverWaitNote from './ApproverWaitNote'
 import { DemoPill } from '../components/DemoPill'
 import { demoStateHost } from '../../sedi/webs/demoStateHost'
 
+import { StateOfficeEntry } from '../../sedi/identity/StateOfficeCodes'
+
 import { Mark, StatusPill, Zone } from './approver/ApproverZones'
 import { EnforcementCheckCard } from './approver/EnforcementCheckCard'
 
@@ -101,6 +103,8 @@ export const TrustedApproversIds = {
   mark: (did: string) => `TrustedApproverMark_${did}`,
   noCard: (did: string) => `TrustedApproverNoCard_${did}`,
   checkAgain: (did: string) => `TrustedApproverCheckAgain_${did}`,
+  guardianHostWithheld: (did: string) => `TrustedApproverGuardianHostWithheld_${did}`,
+  checkHostAgain: (did: string) => `TrustedApproverCheckHostAgain_${did}`,
   triedAgain: (did: string) => `TrustedApproverTriedAgain_${did}`,
 } as const
 
@@ -127,7 +131,7 @@ const VtaTrustedApprovers: React.FC = () => {
   const [demoStates, setDemoStates] = useState<Record<string, string>>({})
   const [mine, setMine] = useState<RoleOfferPrompt[]>([])
   /** On an approver's phone: the card it could share (none, no card lines) and its answer for each person. */
-  const [shareable, setShareable] = useState<{ state?: string } | undefined>()
+  const [shareable, setShareable] = useState<{ state?: string; k1?: true } | undefined>()
   const [consents, setConsents] = useState<Record<string, CardConsent>>({})
   const [error, setError] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
@@ -344,10 +348,38 @@ const VtaTrustedApprovers: React.FC = () => {
             variant for our own earlier live result reused because the host just failed, never "just now". */}
         {t(guardianSourceKey(standing) ?? 'Approver.GuardianFetchedLive', {
           host: standing.fetchedFrom,
+          // For "the host <name>'s card names" (K1 'fromCard'); the other lines do not use it.
+          name: nameOf(did),
           ...(standing.fetchedAt ? { time: localClock(standing.fetchedAt) } : {}),
           interpolation: { escapeValue: false },
         })}
       </ThemedText>
+    ) : standing.hostWithheld ? (
+      // The host the card came with was not fetched, because the state does not name it (or that could not be read):
+      // checked against the card's own copy, said so. "Check again" only for a failure to read that can pass; never
+      // when the state said no, and never when the check was switched off (ac, #1059).
+      <View style={{ gap: 4 }}>
+        <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianHostWithheld(did))}>
+          {t(
+            standing.hostWithheld.result === 'unreachable'
+              ? 'Approver.GuardianHostUnchecked'
+              : 'Approver.GuardianHostNotNamed',
+            {
+              host: standing.hostWithheld.host,
+              interpolation: { escapeValue: false },
+            }
+          )}
+        </ThemedText>
+        {standing.hostWithheld.retryable ? (
+          <Button
+            title={t('Approver.CheckAgain')}
+            buttonType={ButtonType.Tertiary}
+            onPress={() => void onCheckAgain()}
+            disabled={busy !== undefined}
+            testID={testIdWithKey(TrustedApproversIds.checkHostAgain(did))}
+          />
+        ) : null}
+      </View>
     ) : standing.demo ? (
       <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.guardianDemoCopy(did))}>
         {t('Approver.GuardianDemoCopy')}
@@ -523,7 +555,9 @@ const VtaTrustedApprovers: React.FC = () => {
     return (
       <View>
         <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.cardStatus(prompt.connectionId))}>
-          {t(goes ? 'Approver.CardSentTo' : 'Approver.CardNotSentTo', asker)}
+          {/* A K1 card goes as guardian-evidence/0.2: a phone on an older build will not show it, and nothing tells
+              this phone either way, so the line says what is known and claims no receipt. */}
+          {t(goes ? (shareable.k1 ? 'Approver.CardSentToK1' : 'Approver.CardSentTo') : 'Approver.CardNotSentTo', asker)}
         </ThemedText>
         {goes ? <ThemedText style={styles.muted}>{t('Approver.CardStopNote', asker)}</ThemedText> : null}
         <Button
@@ -721,6 +755,9 @@ const VtaTrustedApprovers: React.FC = () => {
             )
           })}
         </View>
+        {/* This phone's codes for a state office (K1): draws nothing unless the SEDI switches are on and an office is
+            on this build; the screen it opens checks the same again. */}
+        <StateOfficeEntry />
       </ScrollView>
     </SafeAreaView>
   )
