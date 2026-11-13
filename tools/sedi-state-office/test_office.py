@@ -125,6 +125,53 @@ class K0InTheSameTree(unittest.TestCase):
             office.read_k0_kel(d, "roy")
 
 
+class NotIssuedOnce(unittest.TestCase):
+    """With the templates in this folder (6e's, when present) or the built-in placeholders: the sentence, once."""
+
+    def test_each_page_carries_the_sentence_exactly_once(self):
+        values = {"stateName": "State of Utah", "notIssuedBy": office.not_issued_by("State of Utah"), "qrSvg": "<svg/>"}
+        for state, name in (("issued", "pickup.html"), ("revoked", "pickup-revoked.html")):
+            t = office.HERE / "templates" / name
+            text = t.read_text() if t.exists() else office.PLACEHOLDER[state]
+            self.assertEqual(office.render(text, values).count("Not issued by the State of Utah."), 1, name)
+
+
+class Defaults(unittest.TestCase):
+    def test_alberto_s_defaults(self):
+        self.assertEqual((office.DEFAULT_STATE_NAME, office.DEFAULT_VALID_DAYS, office.DEFAULT_ROLE),
+                         ("State of Utah", 365, "legal guardian"))
+
+    def test_the_not_issued_sentence(self):
+        self.assertEqual(office.not_issued_by("State of Utah"), "Not issued by the State of Utah.")
+
+    def test_the_qr_svg_carries_the_svg_namespace(self):
+        svg = office.qr_svg("keyring://guardian-card?u=x")
+        self.assertTrue(svg.startswith("<svg"))
+        self.assertIn('xmlns="http://www.w3.org/2000/svg"', svg)
+
+    def test_the_keychain_comes_first_then_the_env_then_a_prompt(self):
+        saved = (office.keychain_passcode, os.environ.get("KEYRING_SEDI_K1_PASSCODE"), office.PASSCODE_FROM_KEYCHAIN)
+        try:
+            os.environ["KEYRING_SEDI_K1_PASSCODE"] = "from-the-environment-123456"
+            office.keychain_passcode = lambda: "from-the-keychain-1234567890"
+            office.PASSCODE_FROM_KEYCHAIN = None
+            self.assertEqual(office.passcode(), "from-the-keychain-1234567890")
+            office.PASSCODE_FROM_KEYCHAIN = False  # --no-keychain
+            self.assertEqual(office.passcode(), "from-the-environment-123456")
+            office.PASSCODE_FROM_KEYCHAIN = None
+            office.keychain_passcode = lambda: None  # no item: the env var
+            self.assertEqual(office.passcode(), "from-the-environment-123456")
+            office.PASSCODE_FROM_KEYCHAIN = True  # --passcode-from-keychain with no item refuses
+            with self.assertRaises(office.OfficeError):
+                office.passcode()
+        finally:
+            office.keychain_passcode, env, office.PASSCODE_FROM_KEYCHAIN = saved
+            if env is None:
+                os.environ.pop("KEYRING_SEDI_K1_PASSCODE", None)
+            else:
+                os.environ["KEYRING_SEDI_K1_PASSCODE"] = env
+
+
 KERIPY = Path(os.environ.get("KEYRING_SEDI_KERIPY", str(office.DEFAULT_KERIPY)))
 
 
@@ -136,6 +183,7 @@ class EndToEnd(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         os.environ["KEYRING_SEDI_K1_PASSCODE"] = "a-throwaway-test-passcode-123"
+        office.PASSCODE_FROM_KEYCHAIN = False  # tests never read the real Keychain item
         office.load_keripy(KERIPY)
         cls.ks = office.Keystore(Path(cls.tmp.name) / "ks")
         cls.ks.ensure()
@@ -198,6 +246,8 @@ class EndToEnd(unittest.TestCase):
         self.assertNotIn("<b>State</b>", live + gone)
         self.assertIn("Demo &lt;b&gt;State&lt;/b&gt;", live)
         self.assertIn("<svg", live)  # control
+        for page in (live, gone):
+            self.assertEqual(page.count("Not issued by the Demo &lt;b&gt;State&lt;/b&gt;."), 1)
         self.assertNotIn("<svg", gone)
         self.assertEqual(json.loads((pub / f"{self.gone['pickupId']}.status.json").read_text())["status"], "revoked")
 

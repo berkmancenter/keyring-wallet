@@ -55,7 +55,10 @@ DEFAULT_K0_DIR = f"git:{Path.home() / 'Documents' / 'keyring-wallet' / 'bifold'}
 K0_ROOT = "IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6"
 ROLES = ("roy", "deb", "sue")
 B64URL = re.compile(r"^[A-Za-z0-9_-]+$")
-DEFAULT_STATE_NAME = "Demo State"  # display name for the pickup page; the template adds "(Demo)"
+DEFAULT_STATE_NAME = "State of Utah"  # Alberto's display name; pages always add "(Demo)" and NOT_ISSUED_BY
+DEFAULT_VALID_DAYS = 365
+DEFAULT_ROLE = "legal guardian"
+KEYCHAIN_SERVICE = "keyring-sedi-k1"
 
 
 class OfficeError(Exception):
@@ -182,8 +185,34 @@ class Keystore:
         return self.token_file.read_text().strip()
 
 
+def keychain_passcode() -> str | None:
+    """The passcode from the macOS Keychain item Alberto adds himself (service keyring-sedi-k1, account $USER).
+    Never created, chosen, echoed or logged here. None when there is no such item."""
+    if sys.platform != "darwin" or not shutil.which("security"):
+        return None
+    r = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", getpass.getuser(), "-w"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    return r.stdout.rstrip("\n") or None
+
+
+PASSCODE_FROM_KEYCHAIN = None  # set by --passcode-from-keychain: True requires the item, False skips it
+
+
 def passcode() -> str:
-    code = os.environ.get("KEYRING_SEDI_K1_PASSCODE") or getpass.getpass("K1 keystore passcode (21+ chars): ")
+    """The Keychain item when it exists (the default), else KEYRING_SEDI_K1_PASSCODE, else a prompt."""
+    code = None
+    if PASSCODE_FROM_KEYCHAIN is not False:
+        code = keychain_passcode()
+        if not code and PASSCODE_FROM_KEYCHAIN:
+            raise OfficeError("noKeychainItem", f"no Keychain item for service {KEYCHAIN_SERVICE}, account "
+                                                f"{getpass.getuser()} (add it with security add-generic-password; "
+                                                "see README)", 2)
+    if not code:
+        code = os.environ.get("KEYRING_SEDI_K1_PASSCODE")
+    if not code:
+        code = getpass.getpass("K1 keystore passcode (21+ chars): ")
     if len(code) < 21:
         raise OfficeError("badPasscode", "the passcode must be at least 21 characters (keripy's bran)", 2)
     return code
@@ -193,12 +222,43 @@ def passcode() -> str:
 # keripy
 
 
+# Our own variant of did:webs "designated aliases", as an ACDC the State root issues: the did:webs DIDs (root, org
+# unit, issuing agent) at the host the root designates. Keyring's demo format only; no conformance claim.
+ALIASES_SCHEMA_BODY = {
+    "$id": "",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Keyring demo designated aliases",
+    "description": "The did:webs DIDs a KERI State root designates for its demo chain. Keyring's own variant of "
+                   "did:webs designated aliases; no conformance claim.",
+    "credentialType": "KeyringDemoDesignatedAliases",
+    "version": "0.1.0",
+    "type": "object",
+    "required": ["v", "d", "i", "rd", "s", "a", "r"],
+    "properties": {
+        "v": {"type": "string"}, "t": {"type": "string"}, "d": {"type": "string"}, "u": {"type": "string"},
+        "i": {"type": "string"}, "rd": {"type": "string"},
+        "s": {"oneOf": [{"type": "string"}, {"type": "object"}]},
+        "a": {"oneOf": [{"type": "string"}, {
+            "type": "object", "required": ["d", "u", "dt", "ids"],
+            "properties": {"d": {"type": "string"}, "u": {"type": "string"}, "dt": {"type": "string"},
+                           "ids": {"type": "array", "minItems": 1, "items": {"type": "string",
+                                                                             "pattern": "^did:webs:"}}},
+            "additionalProperties": False}]},
+        "r": {"oneOf": [{"type": "string"}, {
+            "type": "object", "required": ["d", "l"],
+            "properties": {"d": {"type": "string"}, "l": {"type": "string"}}, "additionalProperties": False}]},
+    },
+    "additionalProperties": False,
+}
+ALIASES_FILE = "designated-aliases.json"
+
+
 def load_keripy(src: Path):
     """Import keripy and the SEDI schemas from the pinned clone (tests.sedi lives in its source tree only)."""
     sys.path.insert(0, str(src))
     global keri, Vrsn_2_0, Kinds, Habery, Configer, MtrDex, Mapper, Compactor, Noncer, Salter, Schemer, SerderKERI
     global Regery, Registrar, RegBaser, acdcmap, messagize, SealEvent, SCHEMAS, VALIDATE
-    global UnitSchemaSaid, AgentSchemaSaid, GuardianSchemaSaid
+    global UnitSchemaSaid, AgentSchemaSaid, GuardianSchemaSaid, AliasesSchemaSaid
     import keri  # noqa: F401
     from keri import Vrsn_2_0, Kinds  # noqa: F811
     from keri.app.habbing import Habery  # noqa: F811
@@ -210,7 +270,10 @@ def load_keripy(src: Path):
     from jsonschema import Draft202012Validator
     from tests.sedi.test_sedi import (GuardianSchema, GuardianSchemaSaid, AgentSchema, AgentSchemaSaid,  # noqa: F811
                                       UnitSchema, UnitSchemaSaid)
-    SCHEMAS = [(UnitSchemaSaid, UnitSchema), (AgentSchemaSaid, AgentSchema), (GuardianSchemaSaid, GuardianSchema)]
+    aliases = Schemer(sed=dict(ALIASES_SCHEMA_BODY))
+    AliasesSchemaSaid = aliases.said
+    SCHEMAS = [(UnitSchemaSaid, UnitSchema), (AgentSchemaSaid, AgentSchema), (GuardianSchemaSaid, GuardianSchema),
+               (AliasesSchemaSaid, aliases.sed)]
     VALIDATE = {s: Draft202012Validator(schema=sch) for s, sch in SCHEMAS}
     if keri.__version__ != "2.1.0-dev1":
         raise OfficeError("keripyVersion", f"keripy {keri.__version__}; the K1 profile needs 2.1.0-dev1 (7143832)", 2)
@@ -351,7 +414,8 @@ class Office:
         self.ks.save(self.data)
         return dict(aids=self.data["aids"])
 
-    def issue(self, holder: str, ward: str, valid_days: int = 30, role: str = "parent", label: str = "") -> dict:
+    def issue(self, holder: str, ward: str, valid_days: int = DEFAULT_VALID_DAYS, role: str = DEFAULT_ROLE,
+              label: str = "") -> dict:
         if not self.data.get("aids"):
             raise OfficeError("notInitialised", "run `office.py init` first", 409)
         if (p := holder_problem(holder)):
@@ -399,6 +463,40 @@ class Office:
             self.ks.save(self.data)
         return card
 
+    # ---- designated aliases ----
+
+    def designated_ids(self) -> list[str]:
+        return [self.site.webs_did(self.hab(r).pre) for r in ROLES]
+
+    def current_aliases(self) -> dict | None:
+        live = [a for a in self.data.get("aliases", []) if a["state"] == "issued"]
+        return live[-1] if live else None
+
+    def designate(self) -> dict | None:
+        """The root designates the host in use: a new aliases ACDC when the host differs from the live one's, after
+        revoking that one. A no-op when the live one already names this host."""
+        if not self.data.get("aids"):
+            return None
+        wanted = self.designated_ids()
+        current = self.current_aliases()
+        if current and current["ids"] == wanted:
+            return current
+        if current:
+            self._revoke(current)
+            current["revokedAt"] = iso(datetime.now(timezone.utc))
+        n = len(self.data.setdefault("aliases", []))
+        a = self._issue("roy", f"aliases-{n}", AliasesSchemaSaid,
+                        Mapper(mad=dict(d="", u=nonce(), dt=iso(datetime.now(timezone.utc)), ids=wanted),
+                               makify=True, saidive=True, kind=Kinds.json).mad)
+        a.update(ids=wanted, host=self.site.host, pathPrefix="/".join(self.site.segs))
+        self.data["aliases"].append(a)
+        self.ks.save(self.data)
+        return a
+
+    def aliases_file(self, a: dict) -> dict:
+        return {"said": a["said"], "proof": a["proof"],
+                "tel": {"ripText": a["ripText"], "updateTexts": list(a["updateTexts"])}}
+
     # ---- outputs ----
 
     def bundle(self, card: dict) -> dict:
@@ -440,6 +538,7 @@ class Office:
     def write_publish_tree(self) -> list[str]:
         """Rewrite every public file from the store. Returns the paths written, relative to publish/."""
         out, written = self.ks.publish, []
+        aliases = self.designate()  # the root designates this host before anything names it
 
         def put(rel: str, data: bytes):
             p = out / rel
@@ -454,6 +553,8 @@ class Office:
             base = "/".join([DID_PATH, aid])
             put(f"{base}/keri.cesr", self.kel(role))
             put(f"{base}/did.json", (json.dumps(self.did_doc(role), indent=2) + "\n").encode())
+            if role == "roy" and aliases:
+                put(f"{base}/{ALIASES_FILE}", (json.dumps(self.aliases_file(aliases), indent=2) + "\n").encode())
         self.write_k0(put)
         for card in self.data.get("cards", {}).values():
             pid = card["pickupId"]
@@ -486,6 +587,7 @@ class Office:
     def pickup_html(self, card: dict) -> str:
         view = self.card_view(card)
         values = {**{k: view.get(k, "") for k in ("pickupJsonUrl", "offerUrl", "statusJsonUrl")},
+                  "notIssuedBy": not_issued_by(self.state_name),
                   **{k: human_date(view.get(k)) for k in ("issuedAt", "expiresAt", "revokedAt")},
                   "stateName": self.state_name, "host": self.site.host, "qrSvg": view["qrSvg"]}
         name = "pickup.html" if card["state"] == "issued" else "pickup-revoked.html"
@@ -501,16 +603,21 @@ class Office:
 PLACEHOLDER = {
     "issued": """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Your Guardian card</title></head>
-<body><p>Demo state: a test issuer, not a government service.</p><h1>Your Guardian card from {{stateName}} (Demo)
+<body><p>{{notIssuedBy}} Demo state: a test issuer, not a government service.</p><h1>Your Guardian card from {{stateName}} (Demo)
 is ready</h1><p>Scan this with Keyring, or open it on the phone it was issued to.</p>{{qrSvg}}
 <p><a href="{{offerUrl}}">Open in Keyring</a></p><p>Issued {{issuedAt}}, valid until {{expiresAt}}.</p></body></html>
 """,
     "revoked": """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Guardian card revoked</title></head>
-<body><p>Demo state: a test issuer, not a government service.</p><h1>This Guardian card from {{stateName}} (Demo)
+<body><p>{{notIssuedBy}} Demo state: a test issuer, not a government service.</p><h1>This Guardian card from {{stateName}} (Demo)
 was revoked</h1><p>Revoked {{revokedAt}}. It was issued {{issuedAt}}.</p></body></html>
 """,
 }
+
+
+def not_issued_by(state_name: str) -> str:
+    """The plain sentence every public page carries ({{notIssuedBy}}), as K0's DemoNote does."""
+    return f"Not issued by the {state_name}."
 
 
 def render(template: str, values: dict) -> str:
@@ -531,8 +638,13 @@ def human_date(value: str | None) -> str:
 
 
 def qr_svg(text: str) -> str:
+    """An inline SVG QR code, WITH the SVG namespace (segno's svg_inline leaves it out)."""
+    import io
     import segno
-    return segno.make(text, error="m").svg_inline(scale=4, border=2, title="Guardian card QR code")
+    out = io.BytesIO()
+    segno.make(text, error="m").save(out, kind="svg", xmldecl=False, svgns=True, nl=False, scale=4, border=2,
+                                     title="Guardian card QR code")
+    return out.getvalue().decode()
 
 
 def read_k0_kel(source: str, who: str) -> bytes:
@@ -708,7 +820,8 @@ class Api(BaseHTTPRequestHandler):
             try:
                 if path == "/api/cards":
                     card = self.office.issue(holder=body.get("holder"), ward=body.get("ward"),
-                                             valid_days=body.get("validDays", 30), role=body.get("role", "parent"),
+                                             valid_days=body.get("validDays", DEFAULT_VALID_DAYS),
+                                             role=body.get("role", DEFAULT_ROLE),
                                              label=body.get("label", "") or "")
                     self.office.write_publish_tree()
                     ok, err = run_publish(self.publish_cmd, self.office.ks.publish)
@@ -753,14 +866,18 @@ def main(argv=None):
     ap.add_argument("--k0-dir", default=os.environ.get("KEYRING_SEDI_K0_DIR", DEFAULT_K0_DIR),
                     help="bifold's K0 kit fixtures; its root, org unit and issuing agent are published beside K1's "
                          "so one host serves both ('' to leave K0 out)")
+    kc = ap.add_mutually_exclusive_group()
+    kc.add_argument("--passcode-from-keychain", dest="keychain", action="store_true", default=None,
+                    help=f"read the passcode from the Keychain item {KEYCHAIN_SERVICE} (the default when it exists)")
+    kc.add_argument("--no-keychain", dest="keychain", action="store_false", help="never read the Keychain")
     ap.add_argument("--state-name", default=os.environ.get("KEYRING_SEDI_K1_STATE_NAME", DEFAULT_STATE_NAME))
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init")
     p = sub.add_parser("issue")
     p.add_argument("--holder", required=True)
     p.add_argument("--ward", required=True)
-    p.add_argument("--valid-days", type=int, default=30)
-    p.add_argument("--role", default="parent")
+    p.add_argument("--valid-days", type=int, default=DEFAULT_VALID_DAYS)
+    p.add_argument("--role", default=DEFAULT_ROLE)
     p.add_argument("--label", default="")
     p = sub.add_parser("revoke")
     p.add_argument("said")
@@ -771,6 +888,8 @@ def main(argv=None):
     p.add_argument("--publish-cmd", default=os.environ.get("KEYRING_SEDI_PUBLISH_CMD"),
                    help="run after each change, in the publish dir (e.g. the upload script); none = local tree only")
     a = ap.parse_args(argv)
+    global PASSCODE_FROM_KEYCHAIN
+    PASSCODE_FROM_KEYCHAIN = a.keychain
 
     try:
         ks = Keystore(Path(a.keystore))
@@ -784,8 +903,9 @@ def main(argv=None):
         office.remember_site()
         try:
             if a.cmd == "init":
-                print(json.dumps(office.init(), indent=2))
+                aids = office.init()["aids"]
                 office.write_publish_tree()
+                print(f"root  {aids['roy']}\nunit  {aids['deb']}\nagent {aids['sue']}")
             elif a.cmd == "issue":
                 card = office.issue(a.holder, a.ward, a.valid_days, a.role, a.label)
                 office.write_publish_tree()
