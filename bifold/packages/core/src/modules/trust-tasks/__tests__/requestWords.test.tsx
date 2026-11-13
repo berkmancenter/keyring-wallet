@@ -152,6 +152,30 @@ describe('what approving would do, when the agent did not say', () => {
     expect(own.getByTestId(testIdWithKey('ApprovalMatchCodeLabel'))).toHaveTextContent(/MyAgent\.ApprovalMatchCode/)
   })
 
+  it("for someone else's agent, in the real English words: every line names the asker, none shows a {{placeholder}} (control: the row above)", async () => {
+    // a6's K1 lab run, 11-13: Jordan's card for Sam's agent read "{{asker}}'s phone shows the same code:". The jest
+    // mock's t returns the bare key and drops its options, so the row above could not see a missing name.
+    await i18n.init({ lng: 'en', resources: { en: { translation: en } }, interpolation: { escapeValue: false } })
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const reactI18next = require('react-i18next')
+    const spy = jest.spyOn(reactI18next, 'useTranslation').mockReturnValue({ t: i18n.t.bind(i18n), i18n } as never)
+    try {
+      const forSam = { ...approval, forAgent: { agentDid: 'did:webvh:sams-agent.example', asker: 'Sam' } }
+      const tree = render(
+        <BasicAppContext>
+          <ApprovalDetails approval={forSam} />
+        </BasicAppContext>
+      )
+      expect(tree.getByTestId(testIdWithKey('ApprovalMatchCodeLabel'))).toHaveTextContent(
+        "Sam's phone shows the same code:"
+      )
+      for (const id of ['ApprovalTaskDoes', 'ApprovalOutcomeUnknown', 'ApprovalMatchCodeLabel'])
+        expect(tree.getByTestId(testIdWithKey(id))).not.toHaveTextContent(/\{\{|\}\}/)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('a task it does not know: as before', () => {
     const tree = render(
       <BasicAppContext>

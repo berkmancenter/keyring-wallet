@@ -88,7 +88,7 @@ export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) =>
       {approval.matchCode ? (
         <View>
           <ThemedText style={styles.muted} testID={testIdWithKey('ApprovalMatchCodeLabel')}>
-            {t(asker ? 'Requests.ForAgentMatchCode' : 'MyAgent.ApprovalMatchCode')}
+            {asker ? t('Requests.ForAgentMatchCode', forWords) : t('MyAgent.ApprovalMatchCode')}
           </ThemedText>
           <ThemedText style={styles.code} selectable testID={testIdWithKey('ApprovalMatchCode')}>
             {approval.matchCode}
