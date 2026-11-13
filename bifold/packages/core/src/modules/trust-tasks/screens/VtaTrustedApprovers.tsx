@@ -55,7 +55,6 @@ import { isStateVerifiedApproversEnabled } from '../module/stateVerifiedApprover
 import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
 
-import { checkEnforcement, lastEnforcementCheck, type EnforcementCheck } from './approverEnforcementCheck'
 import { localClock, localDate } from './localTime'
 import { deviceErrorWords } from './VtaDevices'
 import ApproverWaitNote from './ApproverWaitNote'
@@ -63,6 +62,7 @@ import { DemoPill } from '../components/DemoPill'
 import { demoStateHost } from '../../sedi/webs/demoStateHost'
 
 import { Mark, StatusPill, Zone } from './approver/ApproverZones'
+import { EnforcementCheckCard } from './approver/EnforcementCheckCard'
 
 export const TrustedApproversIds = {
   screen: 'TrustedApprovers',
@@ -80,9 +80,6 @@ export const TrustedApproversIds = {
   stepDownConfirm: (connectionId: string) => `TrustedApproverStepDownConfirm_${connectionId}`,
   stepDownCancel: (connectionId: string) => `TrustedApproverStepDownCancel_${connectionId}`,
   stepDownError: 'TrustedApproverStepDownError',
-  check: 'TrustedApproversCheck',
-  checkResult: 'TrustedApproversCheckResult',
-  checkPrompt: 'TrustedApproversCheckPrompt',
   guardianVerified: (did: string) => `TrustedApproverGuardianVerified_${did}`,
   guardianDemo: (did: string) => `TrustedApproverGuardianDemo_${did}`,
   guardianUnverified: (did: string) => `TrustedApproverGuardianUnverified_${did}`,
@@ -135,10 +132,6 @@ const VtaTrustedApprovers: React.FC = () => {
   const [error, setError] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
   const [on, setOn] = useState(isTrustedApproversEnabled)
-  /** The last enforcement check on this agent this session; the probe runs only when tapped. */
-  const [checked, setChecked] = useState<EnforcementCheck | undefined>(() =>
-    lastEnforcementCheck(vtaAgent.getState().vtaDid)
-  )
   /** Who was just added: the screen then offers the check (never runs it). */
   const [justAdded, setJustAdded] = useState<string | undefined>()
   /** When "Check again" last ran on this open, so a state still unreachable says it was tried again, and when. */
@@ -234,17 +227,6 @@ const VtaTrustedApprovers: React.FC = () => {
     await closeRoleOffer(agent, ask.connectionId, true).catch(() => undefined)
     setJustAdded(names[ask.acceptedAs] ?? t('Approver.UnnamedContact'))
     await loadKept()
-  }
-
-  // A live probe with side effects (approverEnforcementCheck.ts): only ever on a tap.
-  const onCheck = async () => {
-    if (!agent) return
-    setBusy('check')
-    try {
-      setChecked(await checkEnforcement(agent))
-    } finally {
-      setBusy(undefined)
-    }
   }
 
   /**
@@ -660,45 +642,14 @@ const VtaTrustedApprovers: React.FC = () => {
         {view && view.approvers.length > 0 ? (
           <ThemedText style={styles.muted}>{t('Approver.RemoveNeedsYes')}</ThemedText>
         ) : null}
-        {isTrustedApproversEnabled() && view && view.approvers.length > 0 ? (
-          <View style={styles.card} testID={testIdWithKey(TrustedApproversIds.check)}>
-            {justAdded ? (
-              <ThemedText variant="bold" testID={testIdWithKey(TrustedApproversIds.checkPrompt)}>
-                {t('Approver.CheckAfterAdd', { name: justAdded, interpolation: { escapeValue: false } })}
-              </ThemedText>
-            ) : null}
-            <ThemedText style={styles.muted}>{t('Approver.CheckHint')}</ThemedText>
-            <Button
-              title={t('Approver.Check')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => void onCheck()}
-              disabled={busy !== undefined}
-              testID={testIdWithKey(`${TrustedApproversIds.check}Button`)}
-            >
-              {busy === 'check' ? <ActivityIndicator color={ColorPalette.brand.primary} /> : undefined}
-            </Button>
-            {checked ? (
-              <View testID={testIdWithKey(TrustedApproversIds.checkResult)} style={{ gap: 4 }}>
-                <ThemedText>
-                  {checked.kind === 'held'
-                    ? t('Approver.CheckHeld')
-                    : checked.kind === 'letThrough'
-                      ? t('Approver.CheckNotOn')
-                      : checked.kind === 'wouldReachOthers'
-                        ? t('Approver.CheckWouldReachOthers')
-                        : checked.kind === 'needsTestRule'
-                          ? t('Approver.CheckNeedsTestRule', {
-                              task: t('AskMe.Task.contextsCreate'),
-                              interpolation: { escapeValue: false },
-                            })
-                          : t('Approver.CheckUnknown')}
-                </ThemedText>
-                {checked.kind === 'letThrough' && checked.kept ? (
-                  <ThemedText style={styles.muted}>{t('AskMe.TestLetThroughKept')}</ThemedText>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
+        {/* The practice request, one shared card (Developer › Demos shows it too). Here only once there is someone to
+            approve; it holds this screen's buttons while it runs, and waits while they write. */}
+        {view && view.approvers.length > 0 ? (
+          <EnforcementCheckCard
+            justAdded={justAdded}
+            hostBusy={busy !== undefined && busy !== 'check'}
+            onBusy={(running) => setBusy(running ? 'check' : undefined)}
+          />
         ) : null}
         {view?.heldElsewhere.length ? (
           <ThemedText style={styles.muted}>

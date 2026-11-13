@@ -277,6 +277,7 @@ export type {
   ChatEventKey,
   ChatMessageIds,
 } from './modules/chat'
+export { EnforcementCheckCard, EnforcementCheckIds } from './modules/trust-tasks'
 export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,

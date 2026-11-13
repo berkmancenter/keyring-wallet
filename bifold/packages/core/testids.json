@@ -1564,9 +1564,9 @@
     "TrustedApproverStepDownError": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApprovers": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversApprovingFor": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
-    "TrustedApproversCheck": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
-    "TrustedApproversCheckPrompt": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
-    "TrustedApproversCheckResult": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversCheck": ["src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx"],
+    "TrustedApproversCheckPrompt": ["src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx"],
+    "TrustedApproversCheckResult": ["src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx"],
     "TrustedApproversError": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversNone": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversOff": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
@@ -3057,16 +3057,7 @@
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.cardStop(prompt.connectionId)"
     },
     {
-      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.check"
-    },
-    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.checkAgain(did)"
-    },
-    {
-      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.checkPrompt"
-    },
-    {
-      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.checkResult"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.error"
@@ -3133,9 +3124,6 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.triedAgain(did)"
-    },
-    {
-      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "`${TrustedApproversIds.check}Button`"
     },
     {
       "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.applyToCommunityButton"
@@ -3733,6 +3721,18 @@
     },
     {
       "src/modules/trust-tasks/screens/approver/ApproverZones.tsx": "testID"
+    },
+    {
+      "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.check"
+    },
+    {
+      "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.checkPrompt"
+    },
+    {
+      "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.checkResult"
+    },
+    {
+      "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "`${EnforcementCheckIds.check}Button`"
     },
     {
       "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.notice"

@@ -27,6 +27,7 @@ import ApproverWaitNote, {
 } from '../screens/ApproverWaitNote'
 import * as ownerConfirm from '../module/ownerConfirm'
 import VtaTrustedApprovers, { TrustedApproversIds } from '../screens/VtaTrustedApprovers'
+import { EnforcementCheckIds } from '../screens/approver/EnforcementCheckCard'
 import { forgetEnforcementChecks, onlyThisPhone } from '../screens/approverEnforcementCheck'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -850,9 +851,9 @@ describe('Who approves: checking the agent waits for them (a live probe, only on
   }
   const tap = async (tree: Awaited<ReturnType<typeof show>>) =>
     act(async () => {
-      fireEvent.press(tree.getByTestId(id(`${TrustedApproversIds.check}Button`)))
+      fireEvent.press(tree.getByTestId(id(`${EnforcementCheckIds.check}Button`)))
     })
-  const said = (tree: Awaited<ReturnType<typeof show>>) => tree.getByTestId(id(TrustedApproversIds.checkResult))
+  const said = (tree: Awaited<ReturnType<typeof show>>) => tree.getByTestId(id(EnforcementCheckIds.checkResult))
 
   beforeEach(() => forgetEnforcementChecks())
 
@@ -932,12 +933,12 @@ describe('Who approves: checking the agent waits for them (a live probe, only on
   test('with the switch off, there is no check at all (control: on, it is there)', async () => {
     setup()
     setTrustedApproversEnabled(false)
-    expect((await show(<VtaTrustedApprovers />)).queryByTestId(id(TrustedApproversIds.check))).toBeNull()
+    expect((await show(<VtaTrustedApprovers />)).queryByTestId(id(EnforcementCheckIds.check))).toBeNull()
     setTrustedApproversEnabled(true)
     TRUSTED_APPROVERS_REMOTE_OFF.off = true
-    expect((await show(<VtaTrustedApprovers />)).queryByTestId(id(TrustedApproversIds.check))).toBeNull()
+    expect((await show(<VtaTrustedApprovers />)).queryByTestId(id(EnforcementCheckIds.check))).toBeNull()
     TRUSTED_APPROVERS_REMOTE_OFF.off = false
-    expect((await show(<VtaTrustedApprovers />)).getByTestId(id(TrustedApproversIds.check))).toBeTruthy()
+    expect((await show(<VtaTrustedApprovers />)).getByTestId(id(EnforcementCheckIds.check))).toBeTruthy()
   })
 
   test('right after an approver is added, the check is offered, and not run', async () => {
@@ -952,7 +953,7 @@ describe('Who approves: checking the agent waits for them (a live probe, only on
     await act(async () => {
       fireEvent.press(tree.getByTestId(id(TrustedApproversIds.add(CONN))))
     })
-    expect(tree.getByTestId(id(TrustedApproversIds.checkPrompt))).toBeTruthy()
+    expect(tree.getByTestId(id(EnforcementCheckIds.checkPrompt))).toBeTruthy()
     expect(probe).not.toHaveBeenCalled()
   })
 })

@@ -138,6 +138,7 @@ export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook, VtaAclEntry 
 // effect as much as its symbol.
 export { registerHiddenVettingModules } from './hiddenVettingModules'
 export { registerHiddenVetting, hiddenVettingSeam } from './screens/hiddenVettingSeam'
+export { EnforcementCheckCard, EnforcementCheckIds } from './screens/approver/EnforcementCheckCard'
 export type {
   HiddenVettingSeam,
   HiddenVettingCheck,
