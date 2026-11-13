@@ -35,6 +35,7 @@ import {
   setDemoStateHost,
   demoStateHost,
   sediDemoHiddenByKill,
+  EnforcementCheckCard,
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
@@ -1418,6 +1419,13 @@ const Developer: React.FC = () => {
                 >
                   <Text style={styles.copy}>{t('Developer.PasteDemoStateHost')}</Text>
                 </Pressable>
+              </View>
+            )}
+            {/* The practice request (B7, Alberto 11-12: moved here from Who approves). bifold's card gates itself on
+                the trusted-approvers switch and both remote offs; the same read here only keeps the padding away. */}
+            {isTrustedApproversEnabled() && (
+              <View style={{ paddingHorizontal: 25, paddingVertical: 12 }} testID={testIdWithKey('DevPracticeRequest')}>
+                <EnforcementCheckCard />
               </View>
             )}
           </>
