@@ -318,6 +318,10 @@ None of this touches the resolver or the Guardian check.
   - **`'developerField'`.** A deliberate one-line opt-in, only on the owner's explicit word. The field then reaches K1,
     and the line reads "Fetched from \<host\>, typed on this phone", never as the state's record.
 
+  **For local testing, the app carries `'developerField'`.** The owner's words, relayed by the coordinator: "i mean
+  running it locally for testing only, we would move to prod later". The SEDI lane reads them as choosing the opt-in
+  until the infra host replaces it. Before prod, the constant becomes that host.
+
   Rows and aimed mutants pin that a typed host never reaches K1 under `null`. A temporary tunnel's hostname changes
   every run, so on a tunnel K1 needs a stable tunnel hostname (an account step, the owner's word) or the opt-in.
 - **A3. The setups choose a kit.** The guardian's and the person's one-tap setups take a choice of K0 or K1. K0 stays
