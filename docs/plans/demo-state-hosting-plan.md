@@ -119,7 +119,26 @@ Set by the SEDI lane (the issuer) and the infra lane (the publish script), 2026-
 content="noindex">`. Its QR code is an inline SVG. Once the card is revoked, the page is re-rendered without the QR.
 - **Nothing else** is in `cards/`. Nothing is ever deleted by the publish step.
 
+### 1.3 The root's designated aliases
+
+K1's root also publishes `keyring-demo-state/<root AID>/designated-aliases.json`: the hosts it may be fetched from,
+as `{"said", "proof", "tel": {"ripText", "updateTexts"}}`.
+
+- `proof` is an ACDC issued by the root, followed by its disclosure. Its attributes list the did:webs DIDs of the root,
+  the org unit and the issuing agent at the designated host.
+- `tel` is that ACDC's own registry, anchored in the root's log.
+- Designating a new host revokes the old ACDC and issues a new one. Only the live one is published.
+
+This is how a host named by what is issued can be trusted (§5 A2). The SEDI lane's verifier checks it. The host only
+serves it, at most 64 KiB, with the same headers.
+
 ## 2. Where it lives
+
+**For now, the demo is served locally.** The owner: "website should be done locally first and then moved into using
+the infra later". So a local server on the operator's machine serves the tree through a temporary tunnel. It serves
+only the paths in §1, with the headers in §1.1, and it never lists a directory (companion F11). The bucket below
+follows later, off the demo's critical path.
+
 
 A Cloud Storage bucket of its own, defined in the infra repository's `demo-state` environment (the infra lane's draft
 Mickens-Lab/keyring-push-gateway-infra#23). Nothing else is served from it.
@@ -188,15 +207,16 @@ The infra repository's `scripts/demo-state-publish.sh` uploads the tree with the
 leaves the machine, it checks the whole tree against §1.1 and §1.2 and refuses the publish on any failure:
 
 - only `keyring-demo-state/` and `cards/` in it, and never the keystore or a `keys/` directory;
-- each AID directory holds exactly `did.json` and `keri.cesr`, within the size caps;
+- each AID directory holds `did.json` and `keri.cesr`, and optionally `designated-aliases.json`, within the size caps;
+- nothing is a symlink, and nothing looks like key material (a PEM key, or a private JWK);
 - each `did.json` names this host and path, so a tree made for a tunnel is refused, not published;
 - each card id and card file follows §1.2.
 
 It then uploads:
 
 - only files whose bytes differ from the live object;
-- in an order that keeps a phone mid-publish safe: `keri.cesr`, then the card's `.json`, then `.status.json`, then
-  `.html`, then `did.json`;
+- in an order that keeps a phone mid-publish safe: `keri.cesr`, then `designated-aliases.json`, then the card's
+  `.json`, then `.status.json`, then `.html`, then `did.json`;
 - each with `Cache-Control: no-store` and its content type;
 - never deleting. Removing files after a demo is a separate step, on the owner's word.
 
@@ -217,7 +237,7 @@ The script logs only the first six characters of a card id.
 
 ```sh
 DEMO_STATE_HOST=<host> [DEMO_STATE_PATH=<bucket>/keyring-demo-state] \
-  [DEMO_STATE_AIDS=<AID,…>] [DEMO_STATE_CARDS=<pickupId,…>] yarn jest websLiveHost
+  [DEMO_STATE_AIDS=<AID,…>] [DEMO_STATE_CARDS=<pickupId,…>] [DEMO_STATE_ALIASES=<root AID>] yarn jest websLiveHost
 ```
 
 - **Every AID resolves through the app's own resolver** (`resolveWebs`) over the network, and any refusal fails with
@@ -228,6 +248,7 @@ DEMO_STATE_HOST=<host> [DEMO_STATE_PATH=<bucket>/keyring-demo-state] \
   - its `.json` is within the phone's cap and tagged with its type;
   - its status is `issued` or `revoked`;
   - its page is marked `noindex` and has no script.
+- **The root's designated aliases**, when named, carry the same headers and the file's shape (§1.3).
 
 The publish script prints the exact command after each publish. The nightly gate can run it as one cheap row, so a host
 that has drifted shows up before a demo, not during one.
@@ -379,6 +400,11 @@ Each step starts on the owner's word where §8 says so.
      - with one `did.json` made for another host, that AID failed with `didDocMismatch`;
      - with a card over 64 KiB, a status of `pending` and a page with a script, each failed on its own row;
      - with an id that isn't a pickup id, the card rows failed.
+   - A throwaway K1 tree with four cards passed, 21 of 21. A designated-aliases file passed as issued, failed on the two
+     fields broken in a copy, and failed on 404 where absent.
+   - The real K1 tree (the owner's init) passed 10 of 10 on a copy with the host label set to the local host.
+   - Through K1's quick tunnel, the header and aliases rows passed and `cards/` answered 404. The resolver rows failed
+     with `didDocMismatch`, as they must while the tree is still made for a placeholder host.
 4. **S4. On the real host** (the owner's word; on our own hostname, the DNS record first).
    - Work: publish K1's tree.
    - Done when the live check passes against the real host from outside our network, for K1's AIDs and one card.
