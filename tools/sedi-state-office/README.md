@@ -66,12 +66,12 @@ Every did.json and card page is rewritten for the host in use.
 Every request carries `Authorization: Bearer <token>`. A Host or Origin other than `127.0.0.1:<port>` or
 `localhost:<port>` is refused, and there is no CORS.
 
-| Call | Takes | Returns |
-| --- | --- | --- |
-| `POST /api/cards` | `{holder, ward, label?, validDays?=30, role?="parent"}` | 201, the card view; 400 `badHolder`, `badWard`, `badValidity`, `badRole` or `badLabel` |
-| `GET /api/cards` | | every card view |
-| `POST /api/cards/{SAID}/revoke` | | 200, the card view; idempotent (the same `revokedAt`); 404 for an unknown card |
-| `GET /api/health` | | `{root, aids, host, pathPrefix, keystore}` |
+| Call                            | Takes                                                   | Returns                                                                                |
+| ------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `POST /api/cards`               | `{holder, ward, label?, validDays?=30, role?="parent"}` | 201, the card view; 400 `badHolder`, `badWard`, `badValidity`, `badRole` or `badLabel` |
+| `GET /api/cards`                |                                                         | every card view                                                                        |
+| `POST /api/cards/{SAID}/revoke` |                                                         | 200, the card view; idempotent (the same `revokedAt`); 404 for an unknown card         |
+| `GET /api/health`               |                                                         | `{root, aids, host, pathPrefix, keystore}`                                             |
 
 A card view holds:
 
