@@ -26,7 +26,8 @@ import {
   becomeK0TestWard,
   setStateCardEnabled,
   STATE_CARD_REMOTE_OFF,
-  setUpSediDemo,
+  setUpSediDemoAsGuardian,
+  setUpSediDemoAsPerson,
   turnOffSediDemo,
   SEDI_KERI_REMOTE_OFF,
   CONFIRM_ITS_YOU_REMOTE_OFF,
@@ -78,6 +79,29 @@ import { BCDispatchAction, BCState } from '@/store'
 import IASEnvironment from './IASEnvironment'
 import RemoteLogWarning from './RemoteLogWarning'
 
+/** Which side of the SEDI demo this phone takes: the guardian (the approver, holds the card) or the person. */
+type SediDemoSide = 'guardian' | 'person'
+type SediDemoSideResult = Awaited<ReturnType<typeof setUpSediDemoAsGuardian>>
+/** The last set-up's outcome, as the screen shows it; 'failed' is a set-up that threw. */
+interface SediDemoOutcome {
+  side: SediDemoSide
+  result: SediDemoSideResult | 'failed'
+  hidden: ReturnType<typeof sediDemoHiddenByKill>
+  error?: string
+}
+/** The result's own line. A 'done' names its side; every other result is the same on either side. */
+const sediDemoResultKey = (side: SediDemoSide, result: SediDemoOutcome['result']): string =>
+  ({
+    done: side === 'guardian' ? 'Developer.SediDemoGuardianDone' : 'Developer.SediDemoPersonDone',
+    doneSomeHidden: side === 'guardian' ? 'Developer.SediDemoGuardianDone' : 'Developer.SediDemoPersonDone',
+    remoteOff: 'Developer.SediDemoOff',
+    cardNotHeld: 'Developer.SediDemoCardNotHeld',
+    wardNotSet: 'Developer.SediDemoWardNotSet',
+    cardNotRemoved: 'Developer.SediDemoCardNotRemoved',
+    wardNotCleared: 'Developer.SediDemoWardNotCleared',
+    failed: 'Developer.SediDemoFailed',
+  }[result] ?? 'Developer.SediDemoOff')
+
 const Developer: React.FC = () => {
   const { t } = useTranslation()
   const [store, dispatch] = useStore<BCState>()
@@ -113,6 +137,9 @@ const Developer: React.FC = () => {
   const [enableStateCard, setEnableStateCard] = useState(!!store.developer.enableStateCard)
   const [enableConfirmItsYou, setEnableConfirmItsYou] = useState(!!store.developer.enableConfirmItsYou)
   const [demoStateHostText, setDemoStateHostText] = useState(store.developer.demoStateHost ?? '')
+  // The last demo set-up tapped on this screen, kept ON the screen (not an alert that goes away): which side, its
+  // result, and the features a release had turned off AT THAT TAP. Cleared by "Turn off the SEDI demo".
+  const [sediDemoOutcome, setSediDemoOutcome] = useState<SediDemoOutcome | null>(null)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
   // The probe's stages, on screen as well as in the log: a simulator has no
@@ -214,6 +241,8 @@ const Developer: React.FC = () => {
      * pressable row could toggle twice.
      */
     wholeRow?: boolean
+    /** A plain line under the title saying what the row does; inside the tap target of a wholeRow row. */
+    hint?: string
   }
   const SectionRow = ({
     title,
@@ -224,6 +253,7 @@ const Developer: React.FC = () => {
     showRowSeparator,
     subContent,
     wholeRow,
+    hint,
   }: SectionRowProps) => (
     <>
       <View style={styles.section}>
@@ -233,10 +263,18 @@ const Developer: React.FC = () => {
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
+            accessibilityHint={hint}
             testID={testID}
             style={{ flexDirection: 'row' }}
           >
-            <Text style={styles.rowTitle}>{title}</Text>
+            {hint ? (
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{title}</Text>
+                <Text style={[TextTheme.caption, { marginTop: 4 }]}>{hint}</Text>
+              </View>
+            ) : (
+              <Text style={styles.rowTitle}>{title}</Text>
+            )}
             <View style={styles.sectionRow}>{children}</View>
           </Pressable>
         ) : (
@@ -530,62 +568,52 @@ const Developer: React.FC = () => {
   /** Keep the three SEDI demo switches as saved settings, as their own rows do, and show them. */
   // The five switches the one-tap turns on in bifold (bifold #1041: the state card and Confirm it's you joined the
   // three), saved here so a restart matches what bifold holds.
-  const saveSediDemoSwitches = (on: boolean) => {
-    for (const type of [
-      BCDispatchAction.TOGGLE_TRUSTED_APPROVERS,
-      BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS,
-      BCDispatchAction.TOGGLE_TRUST_TEST_STATE,
-      BCDispatchAction.TOGGLE_STATE_CARD,
-      BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU,
-    ])
-      dispatch({ type, payload: [on] })
+  // The person's side turns the state card OFF in bifold (the person holds no card), so it is saved off here too: saving
+  // it on would bring it back at the next restart.
+  const saveSediDemoSwitches = (on: boolean, side?: SediDemoSide) => {
+    const stateCard = on && side !== 'person'
+    for (const [type, value] of [
+      [BCDispatchAction.TOGGLE_TRUSTED_APPROVERS, on],
+      [BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS, on],
+      [BCDispatchAction.TOGGLE_TRUST_TEST_STATE, on],
+      [BCDispatchAction.TOGGLE_STATE_CARD, stateCard],
+      [BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU, on],
+    ] as const)
+      dispatch({ type, payload: [value] })
     setEnableTrustedApprovers(on)
     setEnableStateVerifiedApprovers(on)
     setEnableTrustTestState(on)
-    setEnableStateCard(on)
+    setEnableStateCard(stateCard)
     setEnableConfirmItsYou(on)
   }
 
   /**
-   * "Set up the SEDI demo": bifold turns the five switches on and keeps the K0 card and ward, or does nothing at all
-   * when a remote off holds. Each result has its own message. The switches are saved on every result but 'remoteOff':
-   * after 'cardNotHeld' or 'wardNotSet' bifold HAS turned them on, so saving them keeps a restart from silently
-   * differing from what this screen shows. 'remoteOff' saves nothing: the feature is off for this build either way.
+   * "Set up as the guardian" / "Set up as the person" (Alberto's C1 pick, 11-12): bifold sets up one side of the demo,
+   * or does nothing at all when a remote off holds. The guardian's phone holds the K0 Guardian card and shows the state
+   * card; the person's phone is the K0 ward, holds no card, and has the state card off. The switches are saved on
+   * every result but 'remoteOff': after any other result bifold HAS turned them on, so saving them keeps a restart
+   * from differing from what this screen shows. 'remoteOff' saves nothing: the feature is off for this build.
+   *
+   * The result stays on the screen until the next set-up or "Turn off". Which features a release has turned off is
+   * read from bifold at this tap and kept with the result, so the lines say what THIS set-up found; the Demo state
+   * host line is read live at each render, so pasting a host after the set-up updates it.
    */
-  const runSediDemoSetup = async () => {
+  const runSediDemoSetup = async (side: SediDemoSide) => {
     if (!agent) {
       Alert.alert('Error', 'Agent not initialized')
       return
     }
     try {
-      const result = await setUpSediDemo(agent)
-      if (result !== 'remoteOff') saveSediDemoSwitches(true)
-      const message = {
-        done: 'Developer.SediDemoDone',
-        doneSomeHidden: 'Developer.SediDemoDone',
-        remoteOff: 'Developer.SediDemoOff',
-        cardNotHeld: 'Developer.SediDemoCardNotHeld',
-        wardNotSet: 'Developer.SediDemoWardNotSet',
-      }[result]
-      const lines = [t(message ?? 'Developer.SediDemoOff')]
-      if (result === 'done' || result === 'doneSomeHidden') {
-        // Where the demo state will be checked from: the Demo state host in effect (bifold's, read now), or a warning
-        // that without one the card is checked against the copy on this phone.
-        const host = demoStateHost()
-        lines.push(host ? t('Developer.SediDemoHost', { host }) : t('Developer.SediDemoNoHost'))
-      }
-      // Alert only, from this tap's result: the screen keeps no line about what is hidden. Which features are hidden
-      // is read live from bifold here, never remembered.
-      if (result === 'doneSomeHidden') {
-        const hidden = {
-          stateCard: 'Developer.SediDemoHiddenStateCard',
-          confirmItsYou: 'Developer.SediDemoHiddenConfirmItsYou',
-        }
-        for (const feature of sediDemoHiddenByKill()) lines.push(t(hidden[feature]))
-      }
-      Alert.alert(t('Developer.SetUpSediDemo'), lines.join('\n\n'))
+      const result = await (side === 'guardian' ? setUpSediDemoAsGuardian : setUpSediDemoAsPerson)(agent)
+      if (result !== 'remoteOff') saveSediDemoSwitches(true, side)
+      setSediDemoOutcome({ side, result, hidden: result === 'doneSomeHidden' ? sediDemoHiddenByKill(side) : [] })
     } catch (error) {
-      Alert.alert(t('Developer.SetUpSediDemo'), `Not done: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setSediDemoOutcome({
+        side,
+        result: 'failed',
+        hidden: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
     }
   }
 
@@ -604,9 +632,19 @@ const Developer: React.FC = () => {
     dispatch({ type: BCDispatchAction.SET_DEMO_STATE_HOST, payload: [result === 'cleared' ? '' : value.toLowerCase()] })
   }
 
+  /** "Paste": the clipboard's text into Demo state host, saved at once (bifold still refuses anything not a host). */
+  const pasteDemoStateHost = async () => {
+    const text = (await Clipboard.getString()).trim()
+    // An empty clipboard pastes nothing: it must never clear a host already set.
+    if (text === '') return
+    setDemoStateHostText(text)
+    saveDemoStateHost(text)
+  }
+
   const runSediDemoOff = () => {
     turnOffSediDemo()
     saveSediDemoSwitches(false)
+    setSediDemoOutcome(null)
   }
 
   const toggleEnableLivePickupSwitch = () => {
@@ -1272,15 +1310,68 @@ const Developer: React.FC = () => {
                 />
               </SectionRow>
             )}
-            <SectionRow
-              title={t('Developer.SetUpSediDemo')}
-              accessibilityLabel={t('Developer.SetUpSediDemo')}
-              testID={testIdWithKey('SetUpSediDemo')}
-              wholeRow
-              onPress={() => void runSediDemoSetup()}
-            >
-              <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
-            </SectionRow>
+            <View style={{ paddingHorizontal: 25, paddingVertical: 12 }}>
+              <Text style={TextTheme.normal}>{t('Developer.SediDemoIntro')}</Text>
+            </View>
+            {(['guardian', 'person'] as const).map((side) => {
+              const title = t(side === 'guardian' ? 'Developer.SetUpSediDemoGuardian' : 'Developer.SetUpSediDemoPerson')
+              return (
+                <SectionRow
+                  key={side}
+                  title={title}
+                  hint={t(
+                    side === 'guardian' ? 'Developer.SetUpSediDemoGuardianHint' : 'Developer.SetUpSediDemoPersonHint'
+                  )}
+                  accessibilityLabel={title}
+                  testID={testIdWithKey(side === 'guardian' ? 'SetUpSediDemoGuardian' : 'SetUpSediDemoPerson')}
+                  showRowSeparator={side === 'guardian'}
+                  wholeRow
+                  onPress={() => void runSediDemoSetup(side)}
+                >
+                  <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+                </SectionRow>
+              )
+            })}
+            {sediDemoOutcome && (
+              <View
+                testID={testIdWithKey('SediDemoResult')}
+                accessible={true}
+                accessibilityLiveRegion="polite"
+                style={{
+                  marginHorizontal: 25,
+                  marginVertical: 12,
+                  padding: 12,
+                  borderWidth: 1,
+                  borderRadius: 8,
+                  borderColor: TextTheme.normal.color,
+                }}
+              >
+                {[
+                  t(sediDemoResultKey(sediDemoOutcome.side, sediDemoOutcome.result), {
+                    error: sediDemoOutcome.error,
+                  }),
+                  // Where the demo state is checked from, read live: a host pasted after the set-up shows here at once.
+                  ...(sediDemoOutcome.result === 'done' || sediDemoOutcome.result === 'doneSomeHidden'
+                    ? [
+                        demoStateHost()
+                          ? t('Developer.SediDemoHost', { host: demoStateHost() })
+                          : t('Developer.SediDemoNoHost'),
+                      ]
+                    : []),
+                  ...sediDemoOutcome.hidden.map((feature) =>
+                    t(
+                      feature === 'stateCard'
+                        ? 'Developer.SediDemoHiddenStateCard'
+                        : 'Developer.SediDemoHiddenConfirmItsYou'
+                    )
+                  ),
+                ].map((line, i) => (
+                  <Text key={i} style={[TextTheme.normal, i > 0 && { marginTop: 8 }]}>
+                    {line}
+                  </Text>
+                ))}
+              </View>
+            )}
             {(enableTrustedApprovers ||
               enableStateVerifiedApprovers ||
               enableTrustTestState ||
@@ -1288,6 +1379,7 @@ const Developer: React.FC = () => {
               enableConfirmItsYou) && (
               <SectionRow
                 title={t('Developer.TurnOffSediDemo')}
+                hint={t('Developer.TurnOffSediDemoHint')}
                 accessibilityLabel={t('Developer.TurnOffSediDemo')}
                 testID={testIdWithKey('TurnOffSediDemo')}
                 wholeRow
@@ -1316,6 +1408,16 @@ const Developer: React.FC = () => {
                     { borderBottomWidth: 1, borderColor: TextTheme.normal.color, paddingVertical: 6 },
                   ]}
                 />
+                <Pressable
+                  onPress={() => void pasteDemoStateHost()}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Developer.PasteDemoStateHost')}
+                  testID={testIdWithKey('PasteDemoStateHost')}
+                  hitSlop={8}
+                  style={{ alignSelf: 'flex-start', marginTop: 10, minHeight: 44, justifyContent: 'center' }}
+                >
+                  <Text style={styles.copy}>{t('Developer.PasteDemoStateHost')}</Text>
+                </Pressable>
               </View>
             )}
           </>

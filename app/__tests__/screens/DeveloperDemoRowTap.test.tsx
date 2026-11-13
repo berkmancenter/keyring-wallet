@@ -25,7 +25,7 @@ jest.mock('@bifold/react-hooks', () => ({
   ...jest.requireActual('@bifold/react-hooks'),
   useAgent: () => ({ agent: mockAgent }),
 }))
-const mockSetUp = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockSetUp = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
 const mockTurnOff = jest.fn<void, []>()
 const mockSetConfirm = jest.fn<void, [boolean]>()
 /** The four K0 test-state actions, each its own mock, so a row reaching the wrong one fails. */
@@ -44,7 +44,8 @@ jest.mock('@bifold/core', () => ({
   holdK0RevokedTestCard: (agent: unknown) => mockK0.holdK0RevokedTestCard(agent),
   holdK0RevokedOmittedCard: (agent: unknown) => mockK0.holdK0RevokedOmittedCard(agent),
   becomeK0TestWard: (agent: unknown) => mockK0.becomeK0TestWard(agent),
-  setUpSediDemo: (agent: unknown) => mockSetUp(agent),
+  setUpSediDemoAsGuardian: (agent: unknown) => mockSetUp(agent, 'guardian'),
+  setUpSediDemoAsPerson: (agent: unknown) => mockSetUp(agent, 'person'),
   turnOffSediDemo: () => mockTurnOff(),
   setConfirmItsYouEnabled: (on: boolean) => mockSetConfirm(on),
 }))
@@ -75,24 +76,37 @@ afterEach(() => {
 })
 
 describe('Developer › Demos: the whole action row takes the tap', () => {
-  test('one tap on the words "Set up the SEDI demo" runs the set-up once', async () => {
+  // Both set-up rows, on their title AND on the plain line under it: a tap on either runs that side once, never the
+  // other side (C1, 11-12: "Set up as the guardian" / "Set up as the person").
+  test.each([
+    ['guardian', 'Developer.SetUpSediDemoGuardian'],
+    ['guardian', 'Developer.SetUpSediDemoGuardianHint'],
+    ['person', 'Developer.SetUpSediDemoPerson'],
+    ['person', 'Developer.SetUpSediDemoPersonHint'],
+  ])('one tap on the words %s… (%s) runs that side once, and not the other', async (side, words) => {
     const tree = shown()
-    await userEvent.setup().press(tree.getByText('Developer.SetUpSediDemo'))
+    await userEvent.setup().press(tree.getByText(words))
     expect(mockSetUp).toHaveBeenCalledTimes(1)
+    expect(mockSetUp.mock.calls[0][1]).toBe(side)
   })
 
-  test('the row is one button, under the same test ID, labelled with its words', () => {
+  test.each([
+    ['SetUpSediDemoGuardian', 'Developer.SetUpSediDemoGuardian', 'Developer.SetUpSediDemoGuardianHint'],
+    ['SetUpSediDemoPerson', 'Developer.SetUpSediDemoPerson', 'Developer.SetUpSediDemoPersonHint'],
+  ])('the %s row is one button, labelled with its title, its plain line as the hint', (id, title, hint) => {
     const tree = shown()
-    const row = tree.getByTestId(testIdWithKey('SetUpSediDemo'))
+    const row = tree.getByTestId(testIdWithKey(id))
     expect(row.props.accessibilityRole).toBe('button')
-    expect(row.props.accessibilityLabel).toBe('Developer.SetUpSediDemo')
-    // The words are inside it, so the tap above landed on the row itself.
-    expect(within(row).getByText('Developer.SetUpSediDemo')).toBeTruthy()
+    expect(row.props.accessibilityLabel).toBe(title)
+    expect(row.props.accessibilityHint).toBe(hint)
+    // The words are inside it, so the taps above landed on the row itself.
+    expect(within(row).getByText(title)).toBeTruthy()
+    expect(within(row).getByText(hint)).toBeTruthy()
   })
 
   test('a tap on the words "Turn off the SEDI demo" turns it off (after a set-up shows the row)', async () => {
     const tree = shown()
-    await userEvent.setup().press(tree.getByText('Developer.SetUpSediDemo'))
+    await userEvent.setup().press(tree.getByText('Developer.SetUpSediDemoGuardian'))
     await userEvent.setup().press(tree.getByText('Developer.TurnOffSediDemo'))
     expect(mockTurnOff).toHaveBeenCalledTimes(1)
   })

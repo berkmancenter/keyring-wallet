@@ -1261,13 +1261,35 @@ exports[`Developer Screen screen renders correctly 1`] = `
       <View
         style={
           {
+            "paddingHorizontal": 25,
+            "paddingVertical": 12,
+          }
+        }
+      >
+        <Text
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            }
+          }
+        >
+          Developer.SediDemoIntro
+        </Text>
+      </View>
+      <View
+        style={
+          {
             "backgroundColor": "#F5F5F5",
             "padding": 24,
           }
         }
       >
         <View
-          accessibilityLabel="Developer.SetUpSediDemo"
+          accessibilityHint="Developer.SetUpSediDemoGuardianHint"
+          accessibilityLabel="Developer.SetUpSediDemoGuardian"
           accessibilityRole="button"
           accessibilityState={
             {
@@ -1303,22 +1325,184 @@ exports[`Developer Screen screen renders correctly 1`] = `
               "flexDirection": "row",
             }
           }
-          testID="com.ariesbifold:id/SetUpSediDemo"
+          testID="com.ariesbifold:id/SetUpSediDemoGuardian"
         >
-          <Text
+          <View
             style={
               {
-                "color": "#4A4A4A",
                 "flex": 1,
-                "flexWrap": "wrap",
-                "fontFamily": "SourceSans3-Regular",
-                "fontSize": 21,
-                "fontWeight": "normal",
               }
             }
           >
-            Developer.SetUpSediDemo
-          </Text>
+            <Text
+              style={
+                {
+                  "color": "#4A4A4A",
+                  "flex": 1,
+                  "flexWrap": "wrap",
+                  "fontFamily": "SourceSans3-Regular",
+                  "fontSize": 21,
+                  "fontWeight": "normal",
+                }
+              }
+            >
+              Developer.SetUpSediDemoGuardian
+            </Text>
+            <Text
+              style={
+                [
+                  {
+                    "color": "#4A4A4A",
+                    "fontFamily": "SourceSans3-Regular",
+                    "fontSize": 14,
+                    "fontWeight": "normal",
+                  },
+                  {
+                    "marginTop": 4,
+                  },
+                ]
+              }
+            >
+              Developer.SetUpSediDemoGuardianHint
+            </Text>
+          </View>
+          <View
+            style={
+              {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "justifyContent": "space-between",
+              }
+            }
+          >
+            <Text
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                [
+                  {
+                    "color": "#4A4A4A",
+                    "fontSize": 24,
+                  },
+                  undefined,
+                  {
+                    "fontFamily": "Material Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  {},
+                ]
+              }
+            >
+              
+            </Text>
+          </View>
+        </View>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+          }
+        }
+      >
+        <View
+          style={
+            {
+              "borderBottomColor": "#F5F5F5",
+              "borderBottomWidth": 1,
+              "marginHorizontal": 24,
+            }
+          }
+        />
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <View
+          accessibilityHint="Developer.SetUpSediDemoPersonHint"
+          accessibilityLabel="Developer.SetUpSediDemoPerson"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            {
+              "flexDirection": "row",
+            }
+          }
+          testID="com.ariesbifold:id/SetUpSediDemoPerson"
+        >
+          <View
+            style={
+              {
+                "flex": 1,
+              }
+            }
+          >
+            <Text
+              style={
+                {
+                  "color": "#4A4A4A",
+                  "flex": 1,
+                  "flexWrap": "wrap",
+                  "fontFamily": "SourceSans3-Regular",
+                  "fontSize": 21,
+                  "fontWeight": "normal",
+                }
+              }
+            >
+              Developer.SetUpSediDemoPerson
+            </Text>
+            <Text
+              style={
+                [
+                  {
+                    "color": "#4A4A4A",
+                    "fontFamily": "SourceSans3-Regular",
+                    "fontSize": 14,
+                    "fontWeight": "normal",
+                  },
+                  {
+                    "marginTop": 4,
+                  },
+                ]
+              }
+            >
+              Developer.SetUpSediDemoPersonHint
+            </Text>
+          </View>
           <View
             style={
               {

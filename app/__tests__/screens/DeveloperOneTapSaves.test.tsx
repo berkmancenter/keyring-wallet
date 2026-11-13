@@ -1,7 +1,8 @@
 /**
- * The one-tap "Set up the SEDI demo" and its undo save every switch bifold turns (bifold #1041 added the state card
- * and Confirm it's you to the three): on any result but 'remoteOff' all five are saved on, so a restart matches what
- * bifold holds; 'remoteOff' saves nothing; the undo saves all five off.
+ * The two demo set-ups ("Set up as the guardian" / "Set up as the person", C1) and the undo save every switch bifold
+ * turns, so a restart matches what bifold holds: the guardian saves all five on; the person saves four on and the
+ * state card OFF (bifold turns it off there: the person holds no card); 'remoteOff' saves nothing; the undo saves all
+ * five off.
  */
 import { AuthProvider, PersistentStorage, SEDI_KERI_REMOTE_OFF, testIdWithKey } from '@bifold/core'
 import { act, fireEvent, render } from '@testing-library/react-native'
@@ -22,15 +23,20 @@ jest.mock('@bifold/react-hooks', () => ({
   ...jest.requireActual('@bifold/react-hooks'),
   useAgent: () => ({ agent: mockAgent }),
 }))
-const mockSetUp = jest.fn<Promise<string>, [unknown]>(async () => 'done')
+const mockSetUp = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
 const mockTurnOff = jest.fn<void, []>()
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
-  setUpSediDemo: (agent: unknown) => mockSetUp(agent),
+  setUpSediDemoAsGuardian: (agent: unknown) => mockSetUp(agent, 'guardian'),
+  setUpSediDemoAsPerson: (agent: unknown) => mockSetUp(agent, 'person'),
   turnOffSediDemo: () => mockTurnOff(),
 }))
 
-const DEMO = { setUp: testIdWithKey('SetUpSediDemo'), turnOff: testIdWithKey('TurnOffSediDemo') }
+const DEMO = {
+  guardian: testIdWithKey('SetUpSediDemoGuardian'),
+  person: testIdWithKey('SetUpSediDemoPerson'),
+  turnOff: testIdWithKey('TurnOffSediDemo'),
+}
 const FIVE = [
   BCLocalStorageKeys.EnableTrustedApprovers,
   BCLocalStorageKeys.EnableStateVerifiedApprovers,
@@ -69,29 +75,51 @@ afterEach(() => {
   SEDI_KERI_REMOTE_OFF.off = false
 })
 
-describe('Developer: the one-tap SEDI demo saves all five switches', () => {
-  test.each(['done', 'cardNotHeld', 'wardNotSet'])(
-    "a set-up that returns %s saves all five on, the state card and Confirm it's you included (control: before it, none)",
-    async (result) => {
-      mockSetUp.mockResolvedValueOnce(result)
+describe('Developer: each demo set-up saves the switches bifold turned', () => {
+  // [side, what the five keys are saved as]: the state card is the fourth key.
+  const SAVED = {
+    guardian: [true, true, true, true, true],
+    person: [true, true, true, false, true],
+  } as const
+
+  test.each([
+    ['guardian', 'done'],
+    ['guardian', 'cardNotHeld'],
+    ['guardian', 'wardNotCleared'],
+    ['person', 'done'],
+    ['person', 'wardNotSet'],
+    ['person', 'cardNotRemoved'],
+  ] as const)('the %s set-up returning %s saves its switches (control: before it, none)', async (side, result) => {
+    mockSetUp.mockResolvedValueOnce(result)
+    const tree = shown()
+    expect(savedFive()).toEqual([undefined, undefined, undefined, undefined, undefined])
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO[side])))
+    expect(mockSetUp).toHaveBeenCalledWith(mockAgent, side)
+    expect(savedFive()).toEqual(SAVED[side])
+  })
+
+  test("the person after the guardian on one phone saves the state card OFF (a restart can't bring it back)", async () => {
+    const tree = shown()
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.guardian)))
+    expect(savedFive()[3]).toBe(true)
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.person)))
+    expect(savedFive()).toEqual(SAVED.person)
+  })
+
+  test.each(['guardian', 'person'] as const)(
+    'a %s set-up bifold refuses (remoteOff) saves none of the five (control: the done rows above)',
+    async (side) => {
+      mockSetUp.mockResolvedValueOnce('remoteOff')
       const tree = shown()
+      await act(async () => fireEvent.press(tree.getByTestId(DEMO[side])))
       expect(savedFive()).toEqual([undefined, undefined, undefined, undefined, undefined])
-      await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
-      expect(savedFive()).toEqual([true, true, true, true, true])
     }
   )
 
-  test('a set-up bifold refuses (remoteOff) saves none of the five (control: the done row above)', async () => {
-    mockSetUp.mockResolvedValueOnce('remoteOff')
-    const tree = shown()
-    await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
-    expect(savedFive()).toEqual([undefined, undefined, undefined, undefined, undefined])
-  })
-
   test('the undo saves all five off (control: after the set-up, all five on)', async () => {
     const tree = shown()
-    await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
-    expect(savedFive()).toEqual([true, true, true, true, true])
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.guardian)))
+    expect(savedFive()).toEqual(SAVED.guardian)
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.turnOff)))
     expect(mockTurnOff).toHaveBeenCalledTimes(1)
     expect(savedFive()).toEqual([false, false, false, false, false])
