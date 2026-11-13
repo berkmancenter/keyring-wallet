@@ -92,6 +92,19 @@ async function relationshipOn(agent: Agent, connectionId: string): Promise<Relat
   return found?.myRelationshipDid && found.counterpartyRelationshipDid ? found : undefined
 }
 
+/**
+ * Whether this phone could ask `connectionId`'s contact to confirm: a relationship with both relationship DIDs exists
+ * on it. What decides whether an entry point is offered at all (the chat's "+"), beside the switch. Never throws: an
+ * unreadable store reads as no.
+ */
+export async function canConfirmWith(agent: Agent, connectionId: string): Promise<boolean> {
+  try {
+    return (await relationshipOn(agent, connectionId)) !== undefined
+  } catch {
+    return false
+  }
+}
+
 const proofUnder = (agent: Agent, controller: string) => ({
   kind: 'verify' as const,
   verify: { verify: (doc: unknown) => verifyDocumentProof(agent, doc as Record<string, unknown>, controller) },

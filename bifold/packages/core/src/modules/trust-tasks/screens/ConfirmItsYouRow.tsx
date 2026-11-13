@@ -83,14 +83,16 @@ interface Props {
   name: string
   /** 'row' (default): the Safety row with the status. 'button': the contact page's full-width start button. */
   variant?: 'row' | 'button'
+  /** Open with the note form showing (the chat's sheet, which the person opened to write one). */
+  startComposing?: boolean
 }
 
-const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name, variant = 'row' }) => {
+const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name, variant = 'row', startComposing = false }) => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const { ColorPalette, Inputs } = useTheme()
   const [asks, setAsks] = useState<ConfirmAsk[]>([])
-  const [composing, setComposing] = useState(false)
+  const [composing, setComposing] = useState(startComposing)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | undefined>()

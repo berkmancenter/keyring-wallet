@@ -55,6 +55,9 @@ import {
 } from '../hooks/chat-messages'
 import { useConnectionDisplayName } from '../hooks/connections'
 import ContinuityRequestCard from '../modules/vrc/components/ContinuityRequestCard'
+import ConfirmWithSheet from '../modules/trust-tasks/components/ConfirmWithSheet'
+import { canConfirmWith } from '../modules/trust-tasks/confirmItsYou'
+import { isConfirmItsYouEnabled } from '../modules/trust-tasks/module/confirmItsYouFlag'
 import { LateStepHeldCard, WaitingSinceCard } from '../modules/vrc/components/LateStepCards'
 import { useHeldStep, useTickingNow } from '../modules/vrc/hooks/useLateStep'
 import { askPeerReady, lateStepStore, stopExchange } from '../modules/vrc/lateStep'
@@ -221,6 +224,23 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
 
   // Check if this connection is a witness connection by matching connectionId
   const _isWitnessConnection = connectedWitness?.connectionId === connectionId
+
+  // "Confirm with <name>" in the "+" sheet (Confirm it's you): offered only with its switch on (and no remote off), in a
+  // chat that is not the witness's, once this phone is known to hold a relationship to ask over. Off, nothing is read.
+  const confirmOn = isConfirmItsYouEnabled()
+  const [canConfirm, setCanConfirm] = useState(false)
+  const [confirmSheet, setConfirmSheet] = useState(false)
+  useEffect(() => {
+    if (!agent || !confirmOn || _isWitnessConnection) {
+      setCanConfirm(false)
+      return
+    }
+    let live = true
+    void canConfirmWith(agent, connectionId).then((ok) => live && setCanConfirm(ok))
+    return () => {
+      live = false
+    }
+  }, [agent, confirmOn, connectionId, _isWitnessConnection])
 
   useEffect(() => {
     assertNetworkConnected()
@@ -657,9 +677,38 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
           },
         ]
       : []
-    const all = [...photo, ...proof]
+    const confirm =
+      confirmOn && canConfirm
+        ? [
+            {
+              text: t('ConfirmItsYou.Title', {
+                name: theirLabel || t('Approver.UnnamedContact'),
+                interpolation: { escapeValue: false },
+              }),
+              testID: ChatIds.confirmWith,
+              onPress: () => {
+                setShowActionSlider(false)
+                setConfirmSheet(true)
+              },
+              icon: () => <Icon name="shield-check-outline" size={30} color={ColorPalette.brand.primary} />,
+            },
+          ]
+        : []
+    // The existing entries keep their order; the new one goes last.
+    const all = [...photo, ...proof, ...confirm]
     return all.length > 0 ? all : undefined
-  }, [_isWitnessConnection, store.preferences.useVerifierCapability, t, onPhoto, onSendRequest, Assets, ColorPalette])
+  }, [
+    _isWitnessConnection,
+    store.preferences.useVerifierCapability,
+    t,
+    onPhoto,
+    onSendRequest,
+    Assets,
+    ColorPalette,
+    confirmOn,
+    canConfirm,
+    theirLabel,
+  ])
 
   const onDismiss = useCallback(() => {
     setShowActionSlider(false)
@@ -752,6 +801,12 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
           }}
         />
         {showActionSlider && <ActionSlider onDismiss={onDismiss} actions={actions} />}
+        <ConfirmWithSheet
+          connectionId={connectionId}
+          name={theirLabel || t('Approver.UnnamedContact')}
+          visible={confirmSheet && confirmOn}
+          onClose={() => setConfirmSheet(false)}
+        />
         <MessageActions
           visible={actionTarget !== null}
           onClose={closeActions}

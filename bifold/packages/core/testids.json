@@ -309,6 +309,7 @@
     "ChatComposerCamera": ["src/components/chat/Chat.ids.ts"],
     "ChatComposerEmojiButton": ["src/components/chat/Chat.ids.ts"],
     "ChatComposerField": ["src/components/chat/Chat.ids.ts"],
+    "ChatConfirmWith": ["src/components/chat/Chat.ids.ts"],
     "ChatDayPill": ["src/components/chat/Chat.ids.ts"],
     "ChatDisappearingCancel": ["src/components/chat/Chat.ids.ts"],
     "ChatDisappearingCurrent": ["src/components/chat/Chat.ids.ts"],
@@ -438,6 +439,8 @@
     "ConfirmItsYouStatus": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouSteps": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmRemoveButton": ["src/components/modals/CommonRemoveModal.tsx"],
+    "ConfirmWithSheet": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
+    "ConfirmWithSheetClose": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConnectCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectMyAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectionInviterCapabilitySwitchElement": ["src/screens/Developer.tsx"],
@@ -2320,6 +2323,12 @@
     },
     {
       "src/modules/trust-tasks/components/ConfirmItsYouModal.tsx": "ConfirmItsYouModalIds.sheet"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.close"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.sheet"
     },
     {
       "src/modules/trust-tasks/components/DemoPill.tsx": "testID"

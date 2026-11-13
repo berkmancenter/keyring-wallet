@@ -15,6 +15,7 @@ import {
   CONFIRM_OPEN_FOR,
   CONFIRM_PROMPT,
   answerConfirmRequest,
+  canConfirmWith,
   cancelConfirmRequest,
   confirmAsksOn,
   confirmPromptStore,
@@ -262,6 +263,19 @@ describe('the round trip', () => {
     } finally {
       buzz.mockRestore()
     }
+  })
+
+  test('canConfirmWith: yes with a relationship on the connection; no without one, or on another, or if the store throws', async () => {
+    expect(await canConfirmWith(phone(SAM).agent, SAM.connectionId)).toBe(true)
+    expect(await canConfirmWith(phone(SAM).agent, 'some-other-connection')).toBe(false)
+    expect(await canConfirmWith(phone({ ...SAM, theirRel: null } as never).agent, SAM.connectionId)).toBe(false)
+    const broken = phone(SAM)
+    broken.agent.dependencyManager.resolve = () => ({
+      getAll: async () => {
+        throw new Error('store down')
+      },
+    })
+    expect(await canConfirmWith(broken.agent, SAM.connectionId)).toBe(false)
   })
 
   test('nothing in the flow reaches for an agent or a VTA', () => {

@@ -28,6 +28,8 @@ export const ChatIds = {
   // In the composer's "+" sheet: take a photo, or choose one, to send.
   attachCamera: 'ChatAttachCamera',
   attachLibrary: 'ChatAttachLibrary',
+  // In the same sheet, last: "Confirm with <name>" (Confirm it's you), only with its switch on and a relationship.
+  confirmWith: 'ChatConfirmWith',
   // The disappearing-messages sheet the chat's menu opens.
   disappearing: 'ChatDisappearingSheet',
   // One choice is `ChatDisappearingOption-<seconds>`, 0 for Off.
