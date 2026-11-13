@@ -222,12 +222,43 @@ def passcode() -> str:
 # keripy
 
 
+# Our own variant of did:webs "designated aliases", as an ACDC the State root issues: the did:webs DIDs (root, org
+# unit, issuing agent) at the host the root designates. Keyring's demo format only; no conformance claim.
+ALIASES_SCHEMA_BODY = {
+    "$id": "",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Keyring demo designated aliases",
+    "description": "The did:webs DIDs a KERI State root designates for its demo chain. Keyring's own variant of "
+                   "did:webs designated aliases; no conformance claim.",
+    "credentialType": "KeyringDemoDesignatedAliases",
+    "version": "0.1.0",
+    "type": "object",
+    "required": ["v", "d", "i", "rd", "s", "a", "r"],
+    "properties": {
+        "v": {"type": "string"}, "t": {"type": "string"}, "d": {"type": "string"}, "u": {"type": "string"},
+        "i": {"type": "string"}, "rd": {"type": "string"},
+        "s": {"oneOf": [{"type": "string"}, {"type": "object"}]},
+        "a": {"oneOf": [{"type": "string"}, {
+            "type": "object", "required": ["d", "u", "dt", "ids"],
+            "properties": {"d": {"type": "string"}, "u": {"type": "string"}, "dt": {"type": "string"},
+                           "ids": {"type": "array", "minItems": 1, "items": {"type": "string",
+                                                                             "pattern": "^did:webs:"}}},
+            "additionalProperties": False}]},
+        "r": {"oneOf": [{"type": "string"}, {
+            "type": "object", "required": ["d", "l"],
+            "properties": {"d": {"type": "string"}, "l": {"type": "string"}}, "additionalProperties": False}]},
+    },
+    "additionalProperties": False,
+}
+ALIASES_FILE = "designated-aliases.json"
+
+
 def load_keripy(src: Path):
     """Import keripy and the SEDI schemas from the pinned clone (tests.sedi lives in its source tree only)."""
     sys.path.insert(0, str(src))
     global keri, Vrsn_2_0, Kinds, Habery, Configer, MtrDex, Mapper, Compactor, Noncer, Salter, Schemer, SerderKERI
     global Regery, Registrar, RegBaser, acdcmap, messagize, SealEvent, SCHEMAS, VALIDATE
-    global UnitSchemaSaid, AgentSchemaSaid, GuardianSchemaSaid
+    global UnitSchemaSaid, AgentSchemaSaid, GuardianSchemaSaid, AliasesSchemaSaid
     import keri  # noqa: F401
     from keri import Vrsn_2_0, Kinds  # noqa: F811
     from keri.app.habbing import Habery  # noqa: F811
@@ -239,7 +270,10 @@ def load_keripy(src: Path):
     from jsonschema import Draft202012Validator
     from tests.sedi.test_sedi import (GuardianSchema, GuardianSchemaSaid, AgentSchema, AgentSchemaSaid,  # noqa: F811
                                       UnitSchema, UnitSchemaSaid)
-    SCHEMAS = [(UnitSchemaSaid, UnitSchema), (AgentSchemaSaid, AgentSchema), (GuardianSchemaSaid, GuardianSchema)]
+    aliases = Schemer(sed=dict(ALIASES_SCHEMA_BODY))
+    AliasesSchemaSaid = aliases.said
+    SCHEMAS = [(UnitSchemaSaid, UnitSchema), (AgentSchemaSaid, AgentSchema), (GuardianSchemaSaid, GuardianSchema),
+               (AliasesSchemaSaid, aliases.sed)]
     VALIDATE = {s: Draft202012Validator(schema=sch) for s, sch in SCHEMAS}
     if keri.__version__ != "2.1.0-dev1":
         raise OfficeError("keripyVersion", f"keripy {keri.__version__}; the K1 profile needs 2.1.0-dev1 (7143832)", 2)
@@ -429,6 +463,40 @@ class Office:
             self.ks.save(self.data)
         return card
 
+    # ---- designated aliases ----
+
+    def designated_ids(self) -> list[str]:
+        return [self.site.webs_did(self.hab(r).pre) for r in ROLES]
+
+    def current_aliases(self) -> dict | None:
+        live = [a for a in self.data.get("aliases", []) if a["state"] == "issued"]
+        return live[-1] if live else None
+
+    def designate(self) -> dict | None:
+        """The root designates the host in use: a new aliases ACDC when the host differs from the live one's, after
+        revoking that one. A no-op when the live one already names this host."""
+        if not self.data.get("aids"):
+            return None
+        wanted = self.designated_ids()
+        current = self.current_aliases()
+        if current and current["ids"] == wanted:
+            return current
+        if current:
+            self._revoke(current)
+            current["revokedAt"] = iso(datetime.now(timezone.utc))
+        n = len(self.data.setdefault("aliases", []))
+        a = self._issue("roy", f"aliases-{n}", AliasesSchemaSaid,
+                        Mapper(mad=dict(d="", u=nonce(), dt=iso(datetime.now(timezone.utc)), ids=wanted),
+                               makify=True, saidive=True, kind=Kinds.json).mad)
+        a.update(ids=wanted, host=self.site.host, pathPrefix="/".join(self.site.segs))
+        self.data["aliases"].append(a)
+        self.ks.save(self.data)
+        return a
+
+    def aliases_file(self, a: dict) -> dict:
+        return {"said": a["said"], "proof": a["proof"],
+                "tel": {"ripText": a["ripText"], "updateTexts": list(a["updateTexts"])}}
+
     # ---- outputs ----
 
     def bundle(self, card: dict) -> dict:
@@ -470,6 +538,7 @@ class Office:
     def write_publish_tree(self) -> list[str]:
         """Rewrite every public file from the store. Returns the paths written, relative to publish/."""
         out, written = self.ks.publish, []
+        aliases = self.designate()  # the root designates this host before anything names it
 
         def put(rel: str, data: bytes):
             p = out / rel
@@ -484,6 +553,8 @@ class Office:
             base = "/".join([DID_PATH, aid])
             put(f"{base}/keri.cesr", self.kel(role))
             put(f"{base}/did.json", (json.dumps(self.did_doc(role), indent=2) + "\n").encode())
+            if role == "roy" and aliases:
+                put(f"{base}/{ALIASES_FILE}", (json.dumps(self.aliases_file(aliases), indent=2) + "\n").encode())
         self.write_k0(put)
         for card in self.data.get("cards", {}).values():
             pid = card["pickupId"]
@@ -522,7 +593,7 @@ class Office:
         name = "pickup.html" if card["state"] == "issued" else "pickup-revoked.html"
         template = HERE / "templates" / name
         text = template.read_text() if template.exists() else PLACEHOLDER[card["state"]]
-        return with_not_issued_line(render(text, values), self.state_name)
+        return render(text, values)
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -532,32 +603,21 @@ class Office:
 PLACEHOLDER = {
     "issued": """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Your Guardian card</title></head>
-<body><p>{{notIssuedBy}}. Demo state: a test issuer, not a government service.</p><h1>Your Guardian card from {{stateName}} (Demo)
+<body><p>{{notIssuedBy}} Demo state: a test issuer, not a government service.</p><h1>Your Guardian card from {{stateName}} (Demo)
 is ready</h1><p>Scan this with Keyring, or open it on the phone it was issued to.</p>{{qrSvg}}
 <p><a href="{{offerUrl}}">Open in Keyring</a></p><p>Issued {{issuedAt}}, valid until {{expiresAt}}.</p></body></html>
 """,
     "revoked": """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Guardian card revoked</title></head>
-<body><p>{{notIssuedBy}}. Demo state: a test issuer, not a government service.</p><h1>This Guardian card from {{stateName}} (Demo)
+<body><p>{{notIssuedBy}} Demo state: a test issuer, not a government service.</p><h1>This Guardian card from {{stateName}} (Demo)
 was revoked</h1><p>Revoked {{revokedAt}}. It was issued {{issuedAt}}.</p></body></html>
 """,
 }
 
 
 def not_issued_by(state_name: str) -> str:
-    """The plain line every public page carries, as K0's DemoNote does ("not issued by the State of Utah")."""
-    return f"Not issued by the {state_name[0].upper()}{state_name[1:]}" if state_name.lower().startswith("state of ") \
-        else f"Not issued by {state_name}"
-
-
-def with_not_issued_line(page: str, state_name: str) -> str:
-    """A rendered page always says who did NOT issue it. A template that leaves the line out gets it before </body>."""
-    line = not_issued_by(state_name)
-    if html.escape(line) in page:
-        return page
-    tag = f'<p class="not-issued"><strong>{html.escape(line)}.</strong> A demo card from a test issuer.</p>'
-    at = page.lower().rfind("</body>")
-    return page[:at] + tag + page[at:] if at >= 0 else page + tag
+    """The plain sentence every public page carries ({{notIssuedBy}}), as K0's DemoNote does."""
+    return f"Not issued by the {state_name}."
 
 
 def render(template: str, values: dict) -> str:
@@ -578,8 +638,13 @@ def human_date(value: str | None) -> str:
 
 
 def qr_svg(text: str) -> str:
+    """An inline SVG QR code, WITH the SVG namespace (segno's svg_inline leaves it out)."""
+    import io
     import segno
-    return segno.make(text, error="m").svg_inline(scale=4, border=2, title="Guardian card QR code")
+    out = io.BytesIO()
+    segno.make(text, error="m").save(out, kind="svg", xmldecl=False, svgns=True, nl=False, scale=4, border=2,
+                                     title="Guardian card QR code")
+    return out.getvalue().decode()
 
 
 def read_k0_kel(source: str, who: str) -> bytes:
