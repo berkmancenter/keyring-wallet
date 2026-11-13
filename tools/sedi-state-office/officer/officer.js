@@ -149,19 +149,26 @@
 
   // ---- issue ----------------------------------------------------------------------------------
   // The QR comes from the issuer as SVG text; shown through <img> as a data: URL, so nothing in it can run.
+  const withNamespace = (svg) =>
+    /^<svg\b(?![^>]*\bxmlns=)/.test(svg || "")
+      ? svg.replace(/^<svg\b/, '<svg xmlns="http://www.w3.org/2000/svg"')
+      : svg || "";
   const svgAsImage = (svg) =>
-    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg || "")}`;
+    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(withNamespace(svg))}`;
 
   function showResult(card) {
     $("result").hidden = false;
     $("result-qr").src = svgAsImage(card.qrSvg);
     $("result-qr").hidden = !card.qrSvg;
-    $("result-state").textContent = card.published
-      ? "Published. The guardian's phone checks it when they scan."
-      : "Issued, but not published yet.";
-    $("result-publish").textContent = card.published
-      ? ""
-      : `The pick-up page could not be published${card.publishError ? ` (${card.publishError})` : ""}. The QR here still works.`;
+    // published:false with no publishError means there is no upload step (served from this computer), not a failure.
+    $("result-state").textContent = card.publishError
+      ? "Issued, but the pick-up page was not uploaded."
+      : card.published
+        ? "Published. The guardian's phone checks it when they scan."
+        : "Issued. The pick-up page is ready on this computer; the guardian's phone checks it when they scan.";
+    $("result-publish").textContent = card.publishError
+      ? `The upload failed (${card.publishError}). The QR here still works.`
+      : "";
     $("result-pickup").textContent = card.pickupUrl || "—";
     $("result-offer").textContent = card.offerUrl || "—";
     $("result-issued").textContent = when(card.issuedAt);
@@ -214,12 +221,9 @@
       ? `Issued ${when(card.issuedAt)} · Revoked ${when(card.revokedAt)}`
       : `Issued ${when(card.issuedAt)} · Valid until ${when(card.expiresAt)}`;
     const pill = li.querySelector(".pill");
-    pill.textContent = revoked
-      ? "Revoked"
-      : card.published
-        ? "Issued"
-        : "Not published";
-    pill.className = `pill ${revoked ? "revoked" : card.published ? "issued" : "unpublished"}`;
+    // The list carries no publishError: an issued card is "Issued" whether it was uploaded or is served from here.
+    pill.textContent = revoked ? "Revoked" : "Issued";
+    pill.className = `pill ${revoked ? "revoked" : "issued"}`;
 
     const revoke = li.querySelector(".revoke");
     const confirm = li.querySelector(".confirm");
@@ -242,10 +246,10 @@
         );
         say(
           $("list-said"),
-          done && done.published
-            ? "Revoked and published. The pick-up page now says so."
-            : `Revoked here, but the pick-up page was not updated${done && done.publishError ? ` (${done.publishError})` : ""}.`,
-          done && done.published ? "ok" : "bad",
+          done && done.publishError
+            ? `Revoked here, but the pick-up page upload failed (${done.publishError}).`
+            : "Revoked. The pick-up page now says so.",
+          done && done.publishError ? "bad" : "ok",
         );
       } catch (error) {
         say($("list-said"), failed(error), "bad");
