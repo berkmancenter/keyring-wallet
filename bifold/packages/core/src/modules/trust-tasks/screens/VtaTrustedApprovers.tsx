@@ -18,7 +18,8 @@ import { useAgent } from '@bifold/react-hooks'
 import { useFocusEffect } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import Icon from 'react-native-vector-icons/MaterialIcons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -33,6 +34,8 @@ import {
   approverRoleEvents,
   approvingFor,
   closeRoleOffer,
+  setAsideRoleOffer,
+  setAsideRoleOffers,
   nextTrustedRules,
   stepDownAsApprover,
   withoutApprover,
@@ -79,6 +82,16 @@ export const TrustedApproversIds = {
   accepted: (connectionId: string) => `TrustedApproverAccepted_${connectionId}`,
   add: (connectionId: string) => `TrustedApproverAdd_${connectionId}`,
   notNow: (connectionId: string) => `TrustedApproverNotNow_${connectionId}`,
+  // "Set aside (n)" (Alberto, 278.19; cf's D2): the yeses "Not now" kept, each still addable or forgotten.
+  setAside: 'TrustedApproversSetAside',
+  setAsideOpen: 'TrustedApproversSetAsideOpen',
+  setAsideRow: (connectionId: string) => `TrustedApproverSetAside_${connectionId}`,
+  setAsideAdd: (connectionId: string) => `TrustedApproverSetAsideAdd_${connectionId}`,
+  setAsideForget: (connectionId: string) => `TrustedApproverSetAsideForget_${connectionId}`,
+  // Two tabs (Alberto's design B-lite, 11-14): my approvers, and the people I approve for. And "More".
+  tabMine: 'TrustedApproversTabMine',
+  tabTheirs: 'TrustedApproversTabTheirs',
+  more: 'TrustedApproversMore',
   approvingFor: 'TrustedApproversApprovingFor',
   steppedDown: (did: string) => `TrustedApproverSteppedDown_${did}`,
   stepDown: (connectionId: string) => `TrustedApproverStepDown_${connectionId}`,
@@ -127,6 +140,11 @@ const VtaTrustedApprovers: React.FC = () => {
   const { ColorPalette } = useTheme()
   const [state, setState] = useState<TrustedApproversState | undefined>()
   const [accepted, setAccepted] = useState<RoleOfferAsk[]>([])
+  /** The yeses set aside with "Not now", and whether their section is open. */
+  const [aside, setAside] = useState<RoleOfferAsk[]>([])
+  const [asideOpen, setAsideOpen] = useState(false)
+  /** Which tab shows: my approvers (first), or the people I approve for. */
+  const [tab, setTab] = useState<'mine' | 'theirs'>('mine')
   /** Approvers who said they stepped down, by the DID they had said yes as. */
   const [steppedDown, setSteppedDown] = useState<string[]>([])
   /** The "People I approve for" card whose Step down is being confirmed. */
@@ -181,7 +199,10 @@ const VtaTrustedApprovers: React.FC = () => {
     // Unreadable answers read as none given, which sends nothing.
     const share = await cardToShare(agent).catch(() => undefined)
     const answers = await cardConsents(agent).catch(() => ({}) as Record<string, CardConsent>)
+    // Unreadable reads as none set aside: the section is not drawn, and nothing is lost (the records stay).
+    const setAsideYeses = await setAsideRoleOffers(agent).catch(() => [] as RoleOfferAsk[])
     setAccepted(yeses)
+    setAside(setAsideYeses)
     setShareable(share)
     setConsents(answers)
     setSteppedDown(stepped)
@@ -248,7 +269,18 @@ const VtaTrustedApprovers: React.FC = () => {
 
   const onAdd = async (ask: RoleOfferAsk) => {
     if (!agent || !state) return
-    const written = await write(ask.connectionId, nextTrustedRules(state.view, ask))
+    // The set as the agent holds it NOW, not as this screen loaded it: the write replaces the whole set, and a set-aside
+    // yes is added later by design, so a snapshot could put back an approver removed meanwhile. What remains is the
+    // window of the Face ID prompt inside setTrustedApprovers (its version check comes after it), a known gap.
+    let fresh: TrustedApproversState
+    try {
+      fresh = await vtaAgent.trustedApprovers(agent)
+    } catch (e) {
+      setError(wordsFor(e))
+      return
+    }
+    setState(fresh)
+    const written = await write(ask.connectionId, nextTrustedRules(fresh.view, ask))
     if (!written || !ask.acceptedAs || !written.view.approvers.includes(ask.acceptedAs)) return
     await closeRoleOffer(agent, ask.connectionId, true).catch(() => undefined)
     setJustAdded(names[ask.acceptedAs] ?? t('Approver.UnnamedContact'))
@@ -282,7 +314,15 @@ const VtaTrustedApprovers: React.FC = () => {
     }
   }
 
+  // "Not now" sets the yes aside (kept, still addable, or forgotten later), never closes it (Alberto, 278.19).
   const onNotNow = async (ask: RoleOfferAsk) => {
+    if (!agent) return
+    await setAsideRoleOffer(agent, ask.connectionId).catch(() => undefined)
+    await loadKept()
+  }
+
+  /** "Forget" on a set-aside yes: closed, not written. To add them later, they are asked again. */
+  const onForget = async (ask: RoleOfferAsk) => {
     if (!agent) return
     await closeRoleOffer(agent, ask.connectionId, false).catch(() => undefined)
     await loadKept()
@@ -342,6 +382,33 @@ const VtaTrustedApprovers: React.FC = () => {
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     error: { color: ColorPalette.semantic.error },
     muted: { color: ColorPalette.grayscale.mediumGrey },
+    aside: {
+      borderRadius: 8,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: ColorPalette.grayscale.lightGrey,
+      padding: 12,
+      gap: 10,
+    },
+    asideHead: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
+    tabs: {
+      flexDirection: 'row',
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderRadius: 10,
+      padding: 4,
+      gap: 4,
+    },
+    tab: {
+      flex: 1,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+      paddingHorizontal: 6,
+    },
+    tabOn: { backgroundColor: ColorPalette.brand.primary },
+    tabOnText: { color: ColorPalette.grayscale.white },
+    more: { gap: 10, marginTop: 8 },
   })
 
   const view = state?.view
@@ -672,176 +739,273 @@ const VtaTrustedApprovers: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey(TrustedApproversIds.screen)}>
-        {/* A held task waits here as anywhere: who it waits on (off with the trusted-approvers switch). */}
-        <ApproverWaitNote />
-        <ThemedText>{t('Approver.Intro')}</ThemedText>
+        {/* Two tabs (design B-lite, Alberto 11-14: "too much flat text, no separation"): each list on its own. */}
+        <View style={styles.tabs} accessibilityRole="tablist">
+          {(
+            [
+              ['mine', TrustedApproversIds.tabMine, t('Approver.TabMine', { count: view?.approvers.length ?? 0 })],
+              ['theirs', TrustedApproversIds.tabTheirs, t('Approver.TabTheirs', { count: mine.length })],
+            ] as const
+          ).map(([key, testID, label]) => (
+            <Pressable
+              key={key}
+              onPress={() => setTab(key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === key }}
+              accessibilityLabel={label}
+              testID={testIdWithKey(testID)}
+              style={[styles.tab, tab === key && styles.tabOn]}
+            >
+              <ThemedText variant={tab === key ? 'bold' : undefined} style={tab === key ? styles.tabOnText : undefined}>
+                {label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
         {error ? (
           <ThemedText style={styles.error} testID={testIdWithKey(TrustedApproversIds.error)}>
             {error}
           </ThemedText>
         ) : null}
+        {tab === 'mine' ? (
+          <>
+            <ThemedText style={styles.muted}>{t('Approver.Intro')}</ThemedText>
 
-        {waiting.map((ask) => {
-          const name = names[ask.acceptedAs as string] ?? t('Approver.UnnamedContact')
-          return (
-            <View
-              key={ask.connectionId}
-              style={styles.card}
-              testID={testIdWithKey(TrustedApproversIds.accepted(ask.connectionId))}
-            >
-              <View style={styles.header}>
-                <ThemedText variant="bold" style={styles.name}>
-                  {name}
-                </ThemedText>
-                {pillFor(ask.acceptedAs)}
+            {waiting.map((ask) => {
+              const name = names[ask.acceptedAs as string] ?? t('Approver.UnnamedContact')
+              return (
+                <View
+                  key={ask.connectionId}
+                  style={styles.card}
+                  testID={testIdWithKey(TrustedApproversIds.accepted(ask.connectionId))}
+                >
+                  <View style={styles.header}>
+                    <ThemedText variant="bold" style={styles.name}>
+                      {name}
+                    </ThemedText>
+                    {pillFor(ask.acceptedAs)}
+                  </View>
+                  <ThemedText style={styles.muted}>{t('Approver.Accepted')}</ThemedText>
+                  {checkedBox(ask.acceptedAs, name)}
+                  {stateBox(ask.acceptedAs)}
+                  {needsBox(ask.acceptedAs ?? ask.connectionId, name, ask.actions, { added: false })}
+                  <Button
+                    title={t('Approver.Add', { name, interpolation: { escapeValue: false } })}
+                    buttonType={ButtonType.Primary}
+                    onPress={() => void onAdd(ask)}
+                    disabled={!view || busy !== undefined}
+                    testID={testIdWithKey(TrustedApproversIds.add(ask.connectionId))}
+                  >
+                    {busy === ask.connectionId ? <ActivityIndicator color={ColorPalette.brand.primary} /> : undefined}
+                  </Button>
+                  <Button
+                    title={t('Approver.NotNow')}
+                    buttonType={ButtonType.Tertiary}
+                    onPress={() => void onNotNow(ask)}
+                    disabled={busy !== undefined}
+                    testID={testIdWithKey(TrustedApproversIds.notNow(ask.connectionId))}
+                  />
+                </View>
+              )
+            })}
+
+            {!view && !error ? (
+              <View style={styles.row}>
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+                <ThemedText style={styles.muted}>{t('Approver.Loading')}</ThemedText>
               </View>
-              <ThemedText style={styles.muted}>{t('Approver.Accepted')}</ThemedText>
-              {checkedBox(ask.acceptedAs, name)}
-              {stateBox(ask.acceptedAs)}
-              {needsBox(ask.acceptedAs ?? ask.connectionId, name, ask.actions, { added: false })}
-              <Button
-                title={t('Approver.Add', { name, interpolation: { escapeValue: false } })}
-                buttonType={ButtonType.Primary}
-                onPress={() => void onAdd(ask)}
-                disabled={!view || busy !== undefined}
-                testID={testIdWithKey(TrustedApproversIds.add(ask.connectionId))}
-              >
-                {busy === ask.connectionId ? <ActivityIndicator color={ColorPalette.brand.primary} /> : undefined}
-              </Button>
-              <Button
-                title={t('Approver.NotNow')}
-                buttonType={ButtonType.Tertiary}
-                onPress={() => void onNotNow(ask)}
-                disabled={busy !== undefined}
-                testID={testIdWithKey(TrustedApproversIds.notNow(ask.connectionId))}
-              />
-            </View>
-          )
-        })}
-
-        <ThemedText variant="bold" accessibilityRole="header">
-          {t('Approver.Approvers')}
-        </ThemedText>
-        {!view && !error ? (
-          <View style={styles.row}>
-            <ActivityIndicator color={ColorPalette.brand.primary} />
-            <ThemedText style={styles.muted}>{t('Approver.Loading')}</ThemedText>
-          </View>
-        ) : null}
-        {view && view.approvers.length === 0 ? (
-          <ThemedText testID={testIdWithKey(TrustedApproversIds.none)}>{t('Approver.None')}</ThemedText>
-        ) : null}
-        {view?.approvers.map((did) => (
-          <View key={did} style={styles.card} testID={testIdWithKey(TrustedApproversIds.approver(did))}>
-            <View style={styles.header}>
-              <ThemedText variant="bold" style={styles.name}>
-                {nameOf(did)}
-              </ThemedText>
-              {pillFor(did)}
-            </View>
-            {checkedBox(did, nameOf(did))}
-            {stateBox(did)}
-            {steppedDown.includes(did) ? (
-              <ThemedText testID={testIdWithKey(TrustedApproversIds.steppedDown(did))}>
-                {t('Approver.SteppedDownRemove', { name: nameOf(did), interpolation: { escapeValue: false } })}
+            ) : null}
+            {view && view.approvers.length === 0 ? (
+              <ThemedText testID={testIdWithKey(TrustedApproversIds.none)}>{t('Approver.None')}</ThemedText>
+            ) : null}
+            {view?.approvers.map((did) => (
+              <View key={did} style={styles.card} testID={testIdWithKey(TrustedApproversIds.approver(did))}>
+                <View style={styles.header}>
+                  <ThemedText variant="bold" style={styles.name}>
+                    {nameOf(did)}
+                  </ThemedText>
+                  {pillFor(did)}
+                </View>
+                {checkedBox(did, nameOf(did))}
+                {stateBox(did)}
+                {steppedDown.includes(did) ? (
+                  <ThemedText testID={testIdWithKey(TrustedApproversIds.steppedDown(did))}>
+                    {t('Approver.SteppedDownRemove', { name: nameOf(did), interpolation: { escapeValue: false } })}
+                  </ThemedText>
+                ) : null}
+                {needsBox(did, nameOf(did), view.keys, { added: true })}
+                <Button
+                  title={t('Approver.Remove', { name: nameOf(did), interpolation: { escapeValue: false } })}
+                  // A revoked card leaves the agent waiting for them until removed (B6): Remove turns solid red.
+                  buttonType={isRevoked(standingFor(did)) ? ButtonType.Critical : ButtonType.Secondary}
+                  onPress={() => void onRemove(did)}
+                  disabled={busy !== undefined}
+                  testID={testIdWithKey(TrustedApproversIds.remove(did))}
+                >
+                  {busy === did ? <ActivityIndicator color={ColorPalette.brand.primary} /> : undefined}
+                </Button>
+              </View>
+            ))}
+            {view && view.approvers.length > 0 ? (
+              <ThemedText style={styles.muted}>{t('Approver.RemoveNeedsYes')}</ThemedText>
+            ) : null}
+            {/* "Set aside (n)", at the end of My approvers (cf's D2): the yeses "Not now" kept. Closed, one row; open,
+            each person with what was checked, what they would approve, Add and Forget. Nothing is sent to them. */}
+            {aside.length > 0 ? (
+              <View style={styles.aside} testID={testIdWithKey(TrustedApproversIds.setAside)}>
+                <Pressable
+                  onPress={() => setAsideOpen((open) => !open)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: asideOpen }}
+                  accessibilityLabel={t('Approver.SetAsideTitle', { count: aside.length })}
+                  testID={testIdWithKey(TrustedApproversIds.setAsideOpen)}
+                  style={styles.asideHead}
+                >
+                  <View style={{ flex: 1 }}>
+                    <ThemedText variant="bold">{t('Approver.SetAsideTitle', { count: aside.length })}</ThemedText>
+                    <ThemedText style={styles.muted}>
+                      {asideOpen ? t('Approver.SetAsideNote') : t('Approver.SetAsideSub')}
+                    </ThemedText>
+                  </View>
+                  <Icon
+                    name={asideOpen ? 'expand-less' : 'expand-more'}
+                    size={24}
+                    color={ColorPalette.grayscale.mediumGrey}
+                  />
+                </Pressable>
+                {asideOpen
+                  ? aside.map((ask) => {
+                      const name = names[ask.acceptedAs as string] ?? t('Approver.UnnamedContact')
+                      const words = { name, interpolation: { escapeValue: false } }
+                      return (
+                        <View
+                          key={ask.connectionId}
+                          style={styles.card}
+                          testID={testIdWithKey(TrustedApproversIds.setAsideRow(ask.connectionId))}
+                        >
+                          <View style={styles.header}>
+                            <ThemedText variant="bold" style={styles.name}>
+                              {name}
+                            </ThemedText>
+                            {pillFor(ask.acceptedAs)}
+                          </View>
+                          {checkedBox(ask.acceptedAs, name)}
+                          {needsBox(ask.acceptedAs ?? ask.connectionId, name, ask.actions, { added: false })}
+                          <Button
+                            title={t('Approver.Add', words)}
+                            buttonType={ButtonType.Primary}
+                            onPress={() => void onAdd(ask)}
+                            disabled={!view || busy !== undefined}
+                            testID={testIdWithKey(TrustedApproversIds.setAsideAdd(ask.connectionId))}
+                          >
+                            {busy === ask.connectionId ? (
+                              <ActivityIndicator color={ColorPalette.brand.primary} />
+                            ) : undefined}
+                          </Button>
+                          <Button
+                            title={t('Approver.Forget')}
+                            buttonType={ButtonType.Secondary}
+                            onPress={() => void onForget(ask)}
+                            disabled={busy !== undefined}
+                            testID={testIdWithKey(TrustedApproversIds.setAsideForget(ask.connectionId))}
+                          />
+                          <ThemedText style={styles.muted}>{t('Approver.ForgetNote', words)}</ThemedText>
+                        </View>
+                      )
+                    })
+                  : null}
+              </View>
+            ) : null}
+            {/* The practice request lives on Developer › Demos (B7 step 3); right after an add, this says where it is. It
+            runs nothing from here. */}
+            {justAdded ? (
+              <ThemedText variant="bold" testID={testIdWithKey(EnforcementCheckIds.checkPrompt)}>
+                {t('Approver.CheckAfterAdd', { name: justAdded, interpolation: { escapeValue: false } })}
               </ThemedText>
             ) : null}
-            {needsBox(did, nameOf(did), view.keys, { added: true })}
-            <Button
-              title={t('Approver.Remove', { name: nameOf(did), interpolation: { escapeValue: false } })}
-              // A revoked card leaves the agent waiting for them until removed (B6): Remove turns solid red.
-              buttonType={isRevoked(standingFor(did)) ? ButtonType.Critical : ButtonType.Secondary}
-              onPress={() => void onRemove(did)}
-              disabled={busy !== undefined}
-              testID={testIdWithKey(TrustedApproversIds.remove(did))}
-            >
-              {busy === did ? <ActivityIndicator color={ColorPalette.brand.primary} /> : undefined}
-            </Button>
-          </View>
-        ))}
-        {view && view.approvers.length > 0 ? (
-          <ThemedText style={styles.muted}>{t('Approver.RemoveNeedsYes')}</ThemedText>
-        ) : null}
-        {/* The practice request lives on Developer › Demos (B7 step 3); right after an add, this says where it is. It
-            runs nothing from here. */}
-        {justAdded ? (
-          <ThemedText variant="bold" testID={testIdWithKey(EnforcementCheckIds.checkPrompt)}>
-            {t('Approver.CheckAfterAdd', { name: justAdded, interpolation: { escapeValue: false } })}
-          </ThemedText>
-        ) : null}
-        {view?.heldElsewhere.length ? (
-          <ThemedText style={styles.muted}>
-            {t('Approver.HeldElsewhere', { actions: actionList(view.heldElsewhere) })}
-          </ThemedText>
-        ) : null}
-
-        <ThemedText variant="bold" accessibilityRole="header">
-          {t('Approver.IApproveFor')}
-        </ThemedText>
-        <View testID={testIdWithKey(TrustedApproversIds.approvingFor)} style={{ gap: 8 }}>
-          {mine.length === 0 ? (
-            <ThemedText style={styles.muted}>{t('Approver.IApproveForNone')}</ThemedText>
-          ) : (
-            <ThemedText style={styles.muted}>{t('Approver.IApproveForIntro')}</ThemedText>
-          )}
-          {stepDownError ? (
-            <ThemedText style={styles.error} testID={testIdWithKey(TrustedApproversIds.stepDownError)}>
-              {stepDownError}
-            </ThemedText>
-          ) : null}
-          {mine.map((prompt) => {
-            const asker = { asker: prompt.asker || t('Approver.UnnamedContact'), interpolation: { escapeValue: false } }
-            return (
-              <View key={prompt.connectionId} style={styles.card}>
-                <ThemedText variant="bold">{asker.asker}</ThemedText>
-                <ThemedText style={styles.muted}>
-                  {t('Approver.IApproveForSince', { date: localDate(prompt.receivedAt) })}
-                </ThemedText>
-                <ThemedText style={styles.muted}>{t('Approver.YouApprove')}</ThemedText>
-                <ThemedText>{actionList(prompt.actions)}</ThemedText>
-                {cardLine(prompt, asker)}
-                {confirming === prompt.connectionId ? (
-                  <>
-                    <ThemedText variant="bold">{t('Approver.StepDownConfirmTitle', asker)}</ThemedText>
-                    <ThemedText>{t('Approver.StepDownConfirmBody', asker)}</ThemedText>
+            {view?.heldElsewhere.length ? (
+              <ThemedText style={styles.muted}>
+                {t('Approver.HeldElsewhere', { actions: actionList(view.heldElsewhere) })}
+              </ThemedText>
+            ) : null}
+            {/* More: the held-request note and this phone's codes for a state office, off the main list. */}
+            <View style={styles.more} testID={testIdWithKey(TrustedApproversIds.more)}>
+              <ThemedText variant="bold" accessibilityRole="header">
+                {t('Approver.More')}
+              </ThemedText>
+              {/* A held task waits here as anywhere: who it waits on (off with the trusted-approvers switch). */}
+              <ApproverWaitNote />
+              {/* This phone's codes for a state office (K1): draws nothing unless the SEDI switches are on and an office is
+              on this build; the screen it opens checks the same again. */}
+              <StateOfficeEntry />
+            </View>
+          </>
+        ) : (
+          <View testID={testIdWithKey(TrustedApproversIds.approvingFor)} style={{ gap: 8 }}>
+            {mine.length === 0 ? (
+              <ThemedText style={styles.muted}>{t('Approver.IApproveForNone')}</ThemedText>
+            ) : (
+              <ThemedText style={styles.muted}>{t('Approver.IApproveForIntro')}</ThemedText>
+            )}
+            {stepDownError ? (
+              <ThemedText style={styles.error} testID={testIdWithKey(TrustedApproversIds.stepDownError)}>
+                {stepDownError}
+              </ThemedText>
+            ) : null}
+            {mine.map((prompt) => {
+              const asker = {
+                asker: prompt.asker || t('Approver.UnnamedContact'),
+                interpolation: { escapeValue: false },
+              }
+              return (
+                <View key={prompt.connectionId} style={styles.card}>
+                  <ThemedText variant="bold">{asker.asker}</ThemedText>
+                  <ThemedText style={styles.muted}>
+                    {t('Approver.IApproveForSince', { date: localDate(prompt.receivedAt) })}
+                  </ThemedText>
+                  <ThemedText style={styles.muted}>{t('Approver.YouApprove')}</ThemedText>
+                  <ThemedText>{actionList(prompt.actions)}</ThemedText>
+                  {cardLine(prompt, asker)}
+                  {confirming === prompt.connectionId ? (
+                    <>
+                      <ThemedText variant="bold">{t('Approver.StepDownConfirmTitle', asker)}</ThemedText>
+                      <ThemedText>{t('Approver.StepDownConfirmBody', asker)}</ThemedText>
+                      <Button
+                        title={t('Approver.StepDown')}
+                        buttonType={ButtonType.Secondary}
+                        onPress={() => void onStepDown(prompt)}
+                        disabled={busy !== undefined}
+                        testID={testIdWithKey(TrustedApproversIds.stepDownConfirm(prompt.connectionId))}
+                      >
+                        {busy === prompt.connectionId ? (
+                          <ActivityIndicator color={ColorPalette.brand.primary} />
+                        ) : undefined}
+                      </Button>
+                      <Button
+                        title={t('Global.Cancel')}
+                        buttonType={ButtonType.Tertiary}
+                        onPress={() => setConfirming(undefined)}
+                        disabled={busy !== undefined}
+                        testID={testIdWithKey(TrustedApproversIds.stepDownCancel(prompt.connectionId))}
+                      />
+                    </>
+                  ) : (
                     <Button
                       title={t('Approver.StepDown')}
-                      buttonType={ButtonType.Secondary}
-                      onPress={() => void onStepDown(prompt)}
-                      disabled={busy !== undefined}
-                      testID={testIdWithKey(TrustedApproversIds.stepDownConfirm(prompt.connectionId))}
-                    >
-                      {busy === prompt.connectionId ? (
-                        <ActivityIndicator color={ColorPalette.brand.primary} />
-                      ) : undefined}
-                    </Button>
-                    <Button
-                      title={t('Global.Cancel')}
                       buttonType={ButtonType.Tertiary}
-                      onPress={() => setConfirming(undefined)}
+                      onPress={() => {
+                        setStepDownError(undefined)
+                        setConfirming(prompt.connectionId)
+                      }}
                       disabled={busy !== undefined}
-                      testID={testIdWithKey(TrustedApproversIds.stepDownCancel(prompt.connectionId))}
+                      testID={testIdWithKey(TrustedApproversIds.stepDown(prompt.connectionId))}
                     />
-                  </>
-                ) : (
-                  <Button
-                    title={t('Approver.StepDown')}
-                    buttonType={ButtonType.Tertiary}
-                    onPress={() => {
-                      setStepDownError(undefined)
-                      setConfirming(prompt.connectionId)
-                    }}
-                    disabled={busy !== undefined}
-                    testID={testIdWithKey(TrustedApproversIds.stepDown(prompt.connectionId))}
-                  />
-                )}
-              </View>
-            )
-          })}
-        </View>
-        {/* This phone's codes for a state office (K1): draws nothing unless the SEDI switches are on and an office is
-            on this build; the screen it opens checks the same again. */}
-        <StateOfficeEntry />
+                  )}
+                </View>
+              )
+            })}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   )

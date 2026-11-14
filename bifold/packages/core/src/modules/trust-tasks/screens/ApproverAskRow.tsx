@@ -45,6 +45,7 @@ import {
   agentListsApprover,
   approverDidsOf,
   approverRoleEvents,
+  isYesNotAdded,
   offerApproverRole,
   roleOfferAskOn,
   type RoleAction,
@@ -286,7 +287,7 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
         />
       </View>
     )
-  } else if (state === 'accepted' || approves) {
+  } else if (isYesNotAdded(ask) || approves) {
     // After a yes, what they approve can be changed: a fresh offer with the picker set to today's actions. Nothing is
     // deleted, and the rules already written on the agent stay until the new yes is added on Who approves.
     const change = (
@@ -308,7 +309,7 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
     )
     // A yes not yet written reads "said yes, add them" unless the agent already lists them: then it is in force.
     body =
-      state === 'accepted' && !listed ? (
+      isYesNotAdded(ask) && !listed ? (
         <>
           <ThemedText testID={testIdWithKey(ApproverAskRowIds.status)}>{t('Approver.SaidYes', words)}</ThemedText>
           {change}

@@ -14,7 +14,10 @@ import {
   approversWithAccepted,
   approvingFor,
   closeRoleOffer,
+  isYesNotAdded,
   nextTrustedRules,
+  setAsideRoleOffer,
+  setAsideRoleOffers,
   roleOfferAskOn,
   withoutApprover,
   handleRoleOfferRequest,
@@ -548,6 +551,97 @@ describe('what the screens read', () => {
     expect(cleared).toHaveBeenCalledWith({ connectionId: JORDAN.connectionId })
     approverRoleEvents.off('offer', offer)
     approverRoleEvents.off('promptCleared', cleared)
+  })
+})
+
+describe('"Not now" sets a yes aside (Alberto, 278.19: the request must be viewable again)', () => {
+  /** Sam asks, Jordan says yes, Sam's phone holds the yes, not yet added. */
+  async function saidYes() {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity', 'changeApprovers'])
+    await deliver(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    await deliver(sam)
+    mockSent.length = 0
+    return { sam, jordan }
+  }
+
+  test('set aside: kept with its yes, no longer waiting, listed as set aside; nothing is sent or deleted', async () => {
+    const { sam } = await saidYes()
+    const asked = jest.fn()
+    approverRoleEvents.on('asked', asked)
+    expect(await setAsideRoleOffer(sam.agent, SAM.connectionId)).toBe('setAside')
+    approverRoleEvents.off('asked', asked)
+    expect(await acceptedRoleOffers(sam.agent)).toEqual([])
+    const [aside] = await setAsideRoleOffers(sam.agent)
+    expect(aside).toMatchObject({
+      state: 'setAside',
+      acceptedAs: JORDAN_APPROVES_AS,
+      actions: ['joinCommunity', 'changeApprovers'],
+    })
+    expect(isYesNotAdded(aside)).toBe(true)
+    expect(asked).toHaveBeenCalledWith({ connectionId: SAM.connectionId })
+    expect(mockSent).toHaveLength(0)
+    expect(sam.store.deleteById).not.toHaveBeenCalled()
+  })
+
+  test('only a yes waiting to be added can be set aside: an open offer, a closed one, or none is left as it was', async () => {
+    const sam = phone(SAM)
+    expect(await setAsideRoleOffer(sam.agent, SAM.connectionId)).toBe('notAccepted')
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
+    expect(await setAsideRoleOffer(sam.agent, SAM.connectionId)).toBe('notAccepted')
+    expect((await roleOfferAskOn(sam.agent, SAM.connectionId))?.state).toBe('open')
+    const { sam: other } = await saidYes()
+    await closeRoleOffer(other.agent, SAM.connectionId)
+    expect(await setAsideRoleOffer(other.agent, SAM.connectionId)).toBe('notAccepted')
+    expect((await roleOfferAskOn(other.agent, SAM.connectionId))?.state).toBe('closed')
+  })
+
+  test('Add from set aside writes it as an add from waiting does (control: the same yes, not set aside)', async () => {
+    const { sam } = await saidYes()
+    await setAsideRoleOffer(sam.agent, SAM.connectionId)
+    const [aside] = await setAsideRoleOffers(sam.agent)
+    expect(approversWithAccepted({ approvers: [], keys: [] }, aside)).toEqual({
+      approvers: [JORDAN_APPROVES_AS],
+      keys: ['joinCommunity', 'changeApprovers'],
+    })
+    await closeRoleOffer(sam.agent, SAM.connectionId, true)
+    expect(await roleOfferAskOn(sam.agent, SAM.connectionId)).toMatchObject({
+      state: 'closed',
+      written: true,
+      writtenAs: JORDAN_APPROVES_AS,
+    })
+    expect(await setAsideRoleOffers(sam.agent)).toEqual([])
+  })
+
+  test('Forget closes it, not written: in neither list, and an earlier written arrangement stays', async () => {
+    const { sam } = await saidYes()
+    await setAsideRoleOffer(sam.agent, SAM.connectionId)
+    await closeRoleOffer(sam.agent, SAM.connectionId, false)
+    expect(await setAsideRoleOffers(sam.agent)).toEqual([])
+    expect(await acceptedRoleOffers(sam.agent)).toEqual([])
+    expect(await roleOfferAskOn(sam.agent, SAM.connectionId)).toMatchObject({ state: 'closed', written: false })
+  })
+
+  test('the contact steps down while it is set aside: it is taken back (closed), no longer addable', async () => {
+    const { sam, jordan } = await saidYes()
+    await setAsideRoleOffer(sam.agent, SAM.connectionId)
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    await handleRoleStepDown(sam.agent, pipeline, mockSent[mockSent.length - 1].document, context(sam))
+    expect(await roleOfferAskOn(sam.agent, SAM.connectionId)).toMatchObject({
+      state: 'closed',
+      steppedDown: expect.any(String),
+    })
+    expect(await setAsideRoleOffers(sam.agent)).toEqual([])
+  })
+
+  test('an offer an earlier build closed with "Not now" stays closed: it is not revived as set aside', async () => {
+    const { sam } = await saidYes()
+    // What "Not now" did before this change.
+    await closeRoleOffer(sam.agent, SAM.connectionId, false)
+    expect(await setAsideRoleOffers(sam.agent)).toEqual([])
+    expect(isYesNotAdded(await roleOfferAskOn(sam.agent, SAM.connectionId))).toBe(false)
   })
 })
 

@@ -4,7 +4,7 @@
  * in approverRole.test.ts; here, what each screen calls, with what, and what it says.
  */
 import { useFocusEffect } from '@react-navigation/native'
-import { act, fireEvent, render, userEvent } from '@testing-library/react-native'
+import { act, fireEvent, render, within, userEvent } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -232,6 +232,17 @@ describe("the contact's row", () => {
     tree = await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)
     expect(tree.getByTestId(id(ApproverAskRowIds.status)).props.children).toBe('Approver.IsApprover')
     // Control: closed without writing, the person can ask again.
+    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(ask({ state: 'closed', acceptedAs: JORDAN }))
+    tree = await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)
+    expect(tree.getByTestId(id(ApproverAskRowIds.ask))).toBeTruthy()
+  })
+
+  test('a yes set aside with "Not now" still reads as said yes, with Change (control: closed by Forget, Ask again)', async () => {
+    linked(SAM_AGENT)
+    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(ask({ state: 'setAside', acceptedAs: JORDAN }))
+    let tree = await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)
+    expect(tree.getByTestId(id(ApproverAskRowIds.status)).props.children).toBe('Approver.SaidYes')
+    expect(tree.getByTestId(id(ApproverAskRowIds.change))).toBeTruthy()
     jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(ask({ state: 'closed', acceptedAs: JORDAN }))
     tree = await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)
     expect(tree.getByTestId(id(ApproverAskRowIds.ask))).toBeTruthy()
@@ -695,8 +706,13 @@ describe('Who approves', () => {
   const held = (approvers: string[], keys: TrustedApproversState['view']['keys'], heldElsewhere: typeof keys = []) =>
     ({ view: { approvers, keys, heldElsewhere }, version: 3 }) as TrustedApproversState
 
-  const kept = (yeses: approverRole.RoleOfferAsk[], names: Record<string, string> = {}) => {
+  const kept = (
+    yeses: approverRole.RoleOfferAsk[],
+    names: Record<string, string> = {},
+    setAside: approverRole.RoleOfferAsk[] = []
+  ) => {
     jest.spyOn(approverRole, 'acceptedRoleOffers').mockResolvedValue(yeses)
+    jest.spyOn(approverRole, 'setAsideRoleOffers').mockResolvedValue(setAside)
     jest.spyOn(approverRole, 'approverNames').mockResolvedValue(names)
     jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([])
   }
@@ -760,6 +776,186 @@ describe('Who approves', () => {
     })
     expect(write).toHaveBeenCalledWith(AGENT, [JORDAN], [])
     expect(close).not.toHaveBeenCalled()
+  })
+
+  describe('two tabs: my approvers, and the people I approve for (design B-lite, Alberto 11-14)', () => {
+    const SAM_PROMPT = {
+      connectionId: 'c-sam',
+      agentDid: 'did:webvh:sams-agent.example',
+      actions: ['joinCommunity'],
+      asker: 'Sam',
+      receivedAt: new Date().toISOString(),
+    } as unknown as approverRole.RoleOfferPrompt
+    const both = async () => {
+      kept([], { [JORDAN]: 'Jordan' })
+      jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([SAM_PROMPT])
+      jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([JORDAN], ['shareCredential']))
+      return show(<VtaTrustedApprovers />)
+    }
+    const selected = (tree: Awaited<ReturnType<typeof both>>, key: string) =>
+      tree.getByTestId(id(key)).props.accessibilityState?.selected
+
+    test('My approvers first: my approvers and More, none of the people I approve for', async () => {
+      const tree = await both()
+      expect(selected(tree, TrustedApproversIds.tabMine)).toBe(true)
+      expect(selected(tree, TrustedApproversIds.tabTheirs)).toBe(false)
+      expect(tree.getByTestId(id(TrustedApproversIds.approver(JORDAN)))).toBeTruthy()
+      expect(tree.getByTestId(id(TrustedApproversIds.more))).toBeTruthy()
+      expect(tree.queryByTestId(id(TrustedApproversIds.approvingFor))).toBeNull()
+    })
+
+    test('the other tab: only the people I approve for (control: the first tab, above)', async () => {
+      const tree = await both()
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.tabTheirs)))
+      })
+      expect(selected(tree, TrustedApproversIds.tabTheirs)).toBe(true)
+      expect(tree.getByTestId(id(TrustedApproversIds.approvingFor))).toBeTruthy()
+      expect(tree.getByTestId(id(TrustedApproversIds.stepDown('c-sam')))).toBeTruthy()
+      expect(tree.queryByTestId(id(TrustedApproversIds.approver(JORDAN)))).toBeNull()
+      expect(tree.queryByTestId(id(TrustedApproversIds.more))).toBeNull()
+      // And back.
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.tabMine)))
+      })
+      expect(tree.getByTestId(id(TrustedApproversIds.approver(JORDAN)))).toBeTruthy()
+    })
+
+    test('each tab is labelled with its count: approvers on the agent, and people I approve for', async () => {
+      const calls: [string, unknown][] = []
+      const t = (key: string, args?: unknown) => {
+        calls.push([key, args])
+        return key
+      }
+      // The module the screen gets (jest maps react-i18next to __mocks__; a namespace import would be a copy).
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      jest.spyOn(require('react-i18next'), 'useTranslation').mockReturnValue({ t, i18n: { language: 'en', t } })
+      const tree = await both()
+      const last = (key: string) => [...calls].reverse().find(([k]) => k === key)?.[1]
+      expect(last('Approver.TabMine')).toEqual({ count: 1 })
+      expect(last('Approver.TabTheirs')).toEqual({ count: 1 })
+      expect(tree.getByTestId(id(TrustedApproversIds.tabMine)).props.accessibilityRole).toBe('tab')
+    })
+  })
+
+  describe('"Set aside (n)": the yeses "Not now" kept (Alberto, 278.19; cf\'s D2)', () => {
+    const ASIDE = ask({ state: 'setAside', acceptedAs: JORDAN, actions: ['shareCredential', 'addDevice'] })
+
+    test('"Not now" sets the yes aside, never closes it (control: nothing set aside, no section)', async () => {
+      kept([ask({ state: 'accepted', acceptedAs: JORDAN })], { [JORDAN]: 'Jordan' })
+      jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([], []))
+      const setAside = jest.spyOn(approverRole, 'setAsideRoleOffer').mockResolvedValue('setAside')
+      const close = jest.spyOn(approverRole, 'closeRoleOffer').mockResolvedValue(undefined)
+      const tree = await show(<VtaTrustedApprovers />)
+      expect(tree.queryByTestId(id(TrustedApproversIds.setAside))).toBeNull()
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.notNow(CONN))))
+      })
+      expect(setAside).toHaveBeenCalledWith(AGENT, CONN)
+      expect(close).not.toHaveBeenCalled()
+    })
+
+    test('one row with the count, closed; opened, the person with their check, what they would approve, Add and Forget', async () => {
+      kept([], { [JORDAN]: 'Jordan' }, [ASIDE])
+      jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([], []))
+      const tree = await show(<VtaTrustedApprovers />)
+      expect(tree.getByText('Approver.SetAsideTitle')).toBeTruthy()
+      expect(tree.getByText('Approver.SetAsideSub')).toBeTruthy()
+      expect(tree.queryByTestId(id(TrustedApproversIds.setAsideRow(CONN)))).toBeNull()
+      // Not on the waiting list above: it is not asked again, and not added by a stray tap.
+      expect(tree.queryByTestId(id(TrustedApproversIds.accepted(CONN)))).toBeNull()
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideOpen)))
+      })
+      const row = within(tree.getByTestId(id(TrustedApproversIds.setAsideRow(CONN))))
+      expect(row.getByText('Jordan')).toBeTruthy()
+      expect(row.getByTestId(id(TrustedApproversIds.needsBox(JORDAN)))).toBeTruthy()
+      expect(row.getByTestId(id(TrustedApproversIds.setAsideAdd(CONN)))).toBeTruthy()
+      expect(row.getByTestId(id(TrustedApproversIds.setAsideForget(CONN)))).toBeTruthy()
+      expect(tree.getByText('Approver.SetAsideNote')).toBeTruthy()
+    })
+
+    test('Add, right there, writes it as an add from waiting does and closes it as written', async () => {
+      kept([], { [JORDAN]: 'Jordan' }, [ASIDE])
+      jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([], [], ['addDevice']))
+      const write = jest
+        .spyOn(vtaAgent, 'setTrustedApprovers')
+        .mockResolvedValue(held([JORDAN], ['shareCredential'], ['addDevice']))
+      const close = jest.spyOn(approverRole, 'closeRoleOffer').mockResolvedValue(undefined)
+      const tree = await show(<VtaTrustedApprovers />)
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideOpen)))
+      })
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideAdd(CONN))))
+      })
+      expect(write).toHaveBeenCalledWith(AGENT, [JORDAN], ['shareCredential'])
+      expect(close).toHaveBeenCalledWith(AGENT, CONN, true)
+    })
+
+    test('Add reads the set the agent holds NOW: an approver removed since the screen loaded is not put back', async () => {
+      kept([], { [JORDAN]: 'Jordan' }, [ASIDE])
+      // Loaded with Amy; Amy removed (elsewhere) before Add: the second read says so.
+      jest
+        .spyOn(vtaAgent, 'trustedApprovers')
+        .mockResolvedValueOnce(held([AMY], ['shareCredential']))
+        .mockResolvedValue(held([], []))
+      const write = jest
+        .spyOn(vtaAgent, 'setTrustedApprovers')
+        .mockResolvedValue(held([JORDAN], ['shareCredential', 'addDevice']))
+      jest.spyOn(approverRole, 'closeRoleOffer').mockResolvedValue(undefined)
+      const tree = await show(<VtaTrustedApprovers />)
+      expect(tree.getByTestId(id(TrustedApproversIds.approver(AMY)))).toBeTruthy()
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideOpen)))
+      })
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideAdd(CONN))))
+      })
+      expect(write).toHaveBeenCalledWith(AGENT, [JORDAN], ['shareCredential', 'addDevice'])
+    })
+
+    test('a fresh read that fails writes nothing and says why (control: the row above writes)', async () => {
+      kept([], { [JORDAN]: 'Jordan' }, [ASIDE])
+      jest
+        .spyOn(vtaAgent, 'trustedApprovers')
+        .mockResolvedValueOnce(held([], []))
+        .mockRejectedValue(new DeviceActionRefused('failed', 'no'))
+      const write = jest.spyOn(vtaAgent, 'setTrustedApprovers')
+      const tree = await show(<VtaTrustedApprovers />)
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideOpen)))
+      })
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideAdd(CONN))))
+      })
+      expect(write).not.toHaveBeenCalled()
+      expect(tree.getByTestId(id(TrustedApproversIds.error))).toBeTruthy()
+    })
+
+    test('Forget, right there, closes it unwritten and writes nothing on the agent', async () => {
+      kept([], { [JORDAN]: 'Jordan' }, [ASIDE])
+      jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([], []))
+      const write = jest.spyOn(vtaAgent, 'setTrustedApprovers')
+      const close = jest.spyOn(approverRole, 'closeRoleOffer').mockResolvedValue(undefined)
+      const tree = await show(<VtaTrustedApprovers />)
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideOpen)))
+      })
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id(TrustedApproversIds.setAsideForget(CONN))))
+      })
+      expect(close).toHaveBeenCalledWith(AGENT, CONN, false)
+      expect(write).not.toHaveBeenCalled()
+    })
+
+    test('with the trusted-approvers switch off, nothing of it is shown (control: on, above)', async () => {
+      kept([], { [JORDAN]: 'Jordan' }, [ASIDE])
+      setTrustedApproversEnabled(false)
+      const tree = await show(<VtaTrustedApprovers />)
+      expect(tree.queryByTestId(id(TrustedApproversIds.setAside))).toBeNull()
+      setTrustedApproversEnabled(true)
+    })
   })
 
   test('removing one writes the others with every action, then marks their yes no longer written', async () => {
@@ -986,11 +1182,17 @@ describe('People I approve for: stepping down', () => {
     act(async () => {
       fireEvent.press(tree.getByTestId(id(key)))
     })
+  /** Who approves, on the people-I-approve-for tab (B-lite, 11-14: their own tab). */
+  const theirs = async () => {
+    const tree = await show(<VtaTrustedApprovers />)
+    await press(tree, TrustedApproversIds.tabTheirs)
+    return tree
+  }
 
   test('Step down asks first and sends nothing; confirming sends it for that contact', async () => {
     kept()
     const step = jest.spyOn(approverRole, 'stepDownAsApprover').mockResolvedValue('sent')
-    const tree = await show(<VtaTrustedApprovers />)
+    const tree = await theirs()
     await press(tree, TrustedApproversIds.stepDown(SAM_CONN))
     expect(step).not.toHaveBeenCalled()
     expect(tree.getByText('Approver.StepDownConfirmTitle')).toBeTruthy()
@@ -1002,7 +1204,7 @@ describe('People I approve for: stepping down', () => {
   test('Cancel sends nothing (control for the one above)', async () => {
     kept()
     const step = jest.spyOn(approverRole, 'stepDownAsApprover').mockResolvedValue('sent')
-    const tree = await show(<VtaTrustedApprovers />)
+    const tree = await theirs()
     await press(tree, TrustedApproversIds.stepDown(SAM_CONN))
     await press(tree, TrustedApproversIds.stepDownCancel(SAM_CONN))
     expect(step).not.toHaveBeenCalled()
@@ -1012,7 +1214,7 @@ describe('People I approve for: stepping down', () => {
   test('a step-down that did not go says so and keeps the confirmation open to try again', async () => {
     kept()
     jest.spyOn(approverRole, 'stepDownAsApprover').mockRejectedValue(new Error('mediator down'))
-    const tree = await show(<VtaTrustedApprovers />)
+    const tree = await theirs()
     await press(tree, TrustedApproversIds.stepDown(SAM_CONN))
     await press(tree, TrustedApproversIds.stepDownConfirm(SAM_CONN))
     expect(tree.getByTestId(id(TrustedApproversIds.stepDownError)).props.children).toBe('Approver.StepDownFailed')
@@ -1045,6 +1247,7 @@ describe('People I approve for: stepping down', () => {
     } as TrustedApproversState)
     const tree = await show(<VtaTrustedApprovers />)
     expect(tree.getByTestId(id(TrustedApproversIds.add(CONN)))).toBeTruthy()
+    await press(tree, TrustedApproversIds.tabTheirs)
     expect(tree.getByTestId(id(TrustedApproversIds.stepDown(SAM_CONN)))).toBeTruthy()
   })
 })

@@ -1616,8 +1616,13 @@
     "TrustedApproversCheckPrompt": ["src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx"],
     "TrustedApproversCheckResult": ["src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx"],
     "TrustedApproversError": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversMore": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversNone": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversOff": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversSetAside": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversSetAsideOpen": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversTabMine": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversTabTheirs": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "UndoToast": ["src/components/toast/UndoToast.tsx"],
     "UndoToastUndo": ["src/components/toast/UndoToast.tsx"],
     "UnverifiedProofView": ["src/screens/ProofDetails.tsx"],
@@ -3264,6 +3269,9 @@
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.guardianVerified(did)"
     },
     {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.more"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.noCard(did)"
     },
     {
@@ -3280,6 +3288,21 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.screen"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.setAside"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.setAsideAdd(ask.connectionId)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.setAsideForget(ask.connectionId)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.setAsideOpen"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.setAsideRow(ask.connectionId)"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.socialAuthorized(did)"
@@ -3307,6 +3330,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.triedAgain(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "testID"
     },
     {
       "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.applyToCommunityButton"

@@ -124,7 +124,12 @@ async function keepOn(
 
 /** The offer this phone sent to a contact. `accepted`: a yes not yet written on the agent. */
 export interface RoleOfferAsk {
-  state: 'open' | 'accepted' | 'closed'
+  /**
+   * open: sent, no answer yet. accepted: the contact said yes, not yet added. setAside: the contact said yes and the
+   * person chose "Not now" (Who approves, design B: "Set aside"): kept, not added, and still addable, or forgotten
+   * (closed). closed: answered no, lapsed, forgotten, or added (then `written`).
+   */
+  state: 'open' | 'accepted' | 'setAside' | 'closed'
   connectionId: string
   threadId: string
   agentDid: string
@@ -288,8 +293,38 @@ export async function acceptedRoleOffers(agent: Pick<Agent, 'genericRecords'>): 
 }
 
 /**
+ * "Not now" on a yes not yet added: set it aside. The yes is kept (acceptedAs, actions, any Guardian card), and the
+ * person can still add it, or forget it ({@link closeRoleOffer}), from Who approves. Only a yes waiting to be added can
+ * be set aside: anything else is left as it was.
+ */
+export async function setAsideRoleOffer(
+  agent: Pick<Agent, 'genericRecords'>,
+  connectionId: string
+): Promise<'setAside' | 'notAccepted'> {
+  const [record] = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK, connectionId })) ?? []
+  const ask = record?.content as unknown as RoleOfferAsk | undefined
+  if (!record || !ask || ask.state !== 'accepted' || !ask.acceptedAs) return 'notAccepted'
+  record.content = { ...ask, state: 'setAside' }
+  await agent.genericRecords.update(record)
+  approverRoleEvents.emit('asked', { connectionId })
+  return 'setAside'
+}
+
+/** The yeses set aside with "Not now": kept, not added, still addable. */
+export async function setAsideRoleOffers(agent: Pick<Agent, 'genericRecords'>): Promise<RoleOfferAsk[]> {
+  const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK })) ?? []
+  return records
+    .map((record) => record.content as unknown as RoleOfferAsk)
+    .filter((ask) => ask.state === 'setAside' && !!ask.acceptedAs)
+}
+
+/** A yes this phone holds and has not added: waiting (accepted) or set aside. Either can be added. */
+export const isYesNotAdded = (ask: Pick<RoleOfferAsk, 'state' | 'acceptedAs'> | undefined): boolean =>
+  !!ask?.acceptedAs && (ask.state === 'accepted' || ask.state === 'setAside')
+
+/**
  * Close the offer on `connectionId`: `written` once its yes is written on the agent, else the person chose not to
- * write it.
+ * write it (from a set-aside yes, "Forget").
  */
 export async function closeRoleOffer(
   agent: Pick<Agent, 'genericRecords'>,
@@ -694,7 +729,9 @@ export async function handleRoleStepDown(
     // A yes not yet written is simply taken back.
     record.content = {
       ...ask,
-      ...(ask.state === 'accepted' ? { state: 'closed' } : {}),
+      // A set-aside yes too: it is no longer theirs to give. Spelled out on purpose, not isYesNotAdded: that also asks
+      // for acceptedAs, and a step-down must close the yes even where none was recorded.
+      ...(ask.state === 'accepted' || ask.state === 'setAside' ? { state: 'closed' } : {}),
       steppedDown: payload.steppedDownAt,
     }
   }
