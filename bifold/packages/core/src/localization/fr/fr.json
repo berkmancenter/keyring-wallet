@@ -3921,7 +3921,8 @@
     "NotForThisPhone": "Cette carte a été délivrée à un autre téléphone ; elle n'a pas été gardée.",
     "Revoked": "L'État indique que cette carte a été révoquée ; elle n'a pas été gardée.",
     "DidNotCheckOut": "Cette carte n'est pas valide ; elle n'a pas été gardée.",
-    "HostNotNamed": "L'État ne désigne pas l'hôte de ce lien ; la carte n'a pas été gardée."
+    "HostNotNamed": "L'État ne désigne pas l'hôte de ce lien ; la carte n'a pas été gardée.",
+    "SentTo": "Envoyée à {{names}} : vous aviez accepté d'envoyer votre carte."
   },
   "StateOffice": {
     "Entry": "Vos codes pour un bureau d'État",

@@ -3837,7 +3837,8 @@
     "NotForThisPhone": "Este cartão foi emitido para outro telefone, então não foi guardado.",
     "Revoked": "O estado mostra que este cartão foi revogado, então não foi guardado.",
     "DidNotCheckOut": "Este cartão não é válido, então não foi guardado.",
-    "HostNotNamed": "O estado não indica o host deste link, então o cartão não foi guardado."
+    "HostNotNamed": "O estado não indica o host deste link, então o cartão não foi guardado.",
+    "SentTo": "Enviado para {{names}}: você aceitou enviar seu cartão."
   },
   "StateOffice": {
     "Entry": "Seus códigos para um escritório estadual",

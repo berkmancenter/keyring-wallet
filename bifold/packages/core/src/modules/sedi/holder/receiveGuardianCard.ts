@@ -274,6 +274,20 @@ export async function checkGuardianCard(
   }
 }
 
+/**
+ * After a card is kept: offer it to the people this phone already approves for (trust-tasks/guardianEvidence
+ * guardianCardAfterKeep: an earlier yes sends it, never asked puts the question). The names it was SENT to, for the
+ * screen; never throws, so a failed offer never undoes the keep.
+ */
+export async function offerKeptCard(agent: unknown): Promise<string[]> {
+  try {
+    const results = await guardianEvidenceModule().guardianCardAfterKeep(agent as Agent)
+    return results.filter((r) => r.result === 'sent').map((r) => r.asker)
+  } catch {
+    return []
+  }
+}
+
 /** Steps 1 to 8: fetch, check and keep the card a link names, as the card this phone sends after a yes. */
 export async function receiveGuardianCard(
   agent: IdentityAgent & Pick<Agent, 'genericRecords'>,

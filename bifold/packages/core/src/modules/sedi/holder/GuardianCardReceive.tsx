@@ -31,6 +31,7 @@ import { GuardianCardReceiveIds as Ids } from './GuardianCardReceive.ids'
 import { guardianCardUrlOf } from './guardianCardLink'
 import {
   checkGuardianCard,
+  offerKeptCard,
   receiveGuardianCard,
   type CardCheckFailure,
   type ReceiveResult,
@@ -85,6 +86,8 @@ const GuardianCardReceive: React.FC = () => {
   const route = useRoute<RouteProp<MyAgentStackParams, Screens.GuardianCardReceive>>()
   const link = route.params?.link ?? ''
   const [shown, setShown] = useState<Shown>({ kind: 'checking' })
+  // The people the kept card went to (their earlier yes to sending it); anyone never asked gets the question sheet.
+  const [sentTo, setSentTo] = useState<string[]>([])
   const on = phoneCodesOn() && !!k1Root()
 
   useEffect(() => {
@@ -123,9 +126,12 @@ const GuardianCardReceive: React.FC = () => {
     const url = guardianCardUrlOf(link)
     if (!agent || !url || shown.kind !== 'checked') return
     setShown({ kind: 'keeping', state: shown.state })
-    setShown(
-      await receiveGuardianCard(agent as unknown as IdentityAgent & Parameters<typeof receiveGuardianCard>[0], url)
+    const kept = await receiveGuardianCard(
+      agent as unknown as IdentityAgent & Parameters<typeof receiveGuardianCard>[0],
+      url
     )
+    setShown(kept)
+    if (kept.kind === 'kept') setSentTo(await offerKeptCard(agent))
   }
 
   const busy = shown.kind === 'checking' || shown.kind === 'keeping'
@@ -148,6 +154,11 @@ const GuardianCardReceive: React.FC = () => {
         {shown.kind === 'kept' ? (
           <ThemedText style={styles.muted} testID={testIdWithKey(Ids.kept)}>
             {t('GuardianCard.KeptNote')}
+          </ThemedText>
+        ) : null}
+        {shown.kind === 'kept' && sentTo.length > 0 ? (
+          <ThemedText>
+            {t('GuardianCard.SentTo', { names: sentTo.join(', '), interpolation: { escapeValue: false } })}
           </ThemedText>
         ) : null}
       </ScrollView>

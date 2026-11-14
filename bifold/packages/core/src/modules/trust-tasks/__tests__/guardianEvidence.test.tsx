@@ -41,6 +41,8 @@ import {
   cardConsentOn,
   cardQuestions,
   guardianCardAfterYes,
+  guardianCardAfterKeep,
+  cardConsentRootOn,
   setCardConsent,
   shareGuardianCard,
   checkGuardianEvidence,
@@ -112,6 +114,8 @@ const prov = JSON.parse(text('PROVENANCE.json')) as {
 const SAM_WARD = prov.aids.sam
 const OTHER_WARD = prov.aids['other-ward']
 const JORDAN_AID = prov.aids.jordan
+/** The K0 root, the state a yes to sending the K0 card is kept for (literal; asserted against the list below). */
+const K0_ROOT_AID = 'IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6'
 
 const tel = (stem: string, states: string[]) => ({
   ripText: text(`tel-${stem}-rip.json`),
@@ -1259,7 +1263,7 @@ describe("on the approver's phone: sending the card after a yes", () => {
   test('with a card held and its sending said yes to, the yes goes and then the card, for that agent and as that DID', async () => {
     const jordan = phone()
     expect(await holdGuardianEvidence(jordan.agent, card('G-ok'))).toBe('held')
-    await setCardConsent(jordan.agent, CONN, 'yes')
+    await setCardConsent(jordan.agent, CONN, 'yes', K0_ROOT_AID)
     await sayYes(jordan)
     expect(sent.map((d) => d.type)).toEqual([expect.stringContaining('role-offer'), GUARDIAN_EVIDENCE_TYPE_URI])
     const payload = sent[1].payload as GuardianEvidencePayload
@@ -1310,7 +1314,7 @@ describe("on the approver's phone: sending the card after a yes", () => {
   test('a card that fails to send leaves the yes standing', async () => {
     const jordan = phone()
     await holdGuardianEvidence(jordan.agent, card('G-ok'))
-    await setCardConsent(jordan.agent, CONN, 'yes')
+    await setCardConsent(jordan.agent, CONN, 'yes', K0_ROOT_AID)
     const ceremony = jest.requireMock('../ceremony') as { sendTrustTaskDocument: jest.Mock }
     ceremony.sendTrustTaskDocument
       .mockImplementationOnce(async (_a: unknown, _c: string, doc: Record<string, unknown>) => {
@@ -1491,9 +1495,27 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
     expect(answers(jordan)).toHaveLength(0)
     // Control: the same phone with a kept yes for Sam sends it.
     const control = await jordanWithCard()
-    await setCardConsent(control.agent, CONN, 'yes')
+    await setCardConsent(control.agent, CONN, 'yes', K0_ROOT_AID)
     sent.length = 0
     await yesTo(control)
+    expect(cards()).toHaveLength(1)
+  })
+
+  test("a yes kept for ANOTHER state, or before states were kept: a re-offer puts the question again, naming this card's state, and sends nothing (control: the same state, sent)", async () => {
+    expect(stateRoots.K0_TEST_ROOT.aid).toBe(K0_ROOT_AID)
+    for (const root of ['EOtherStateRootAidxxxxxxxxxxxxxxxxxxxxxxxxxx', undefined]) {
+      const jordan = await jordanWithCard()
+      await setCardConsent(jordan.agent, CONN, 'yes', root)
+      cardQuestions.reset()
+      sent.length = 0
+      await yesTo(jordan)
+      expect(cards()).toHaveLength(0)
+      expect(cardQuestions.first()).toMatchObject({ connectionId: CONN, asker: 'Sam', state: 'Example State' })
+    }
+    const same = await jordanWithCard()
+    await setCardConsent(same.agent, CONN, 'yes', K0_ROOT_AID)
+    sent.length = 0
+    await yesTo(same)
     expect(cards()).toHaveLength(1)
   })
 
@@ -1539,7 +1561,7 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
 
   test("an answer is per person: a yes for Sam sends nothing to Amy, who is asked (control: Sam's card goes)", async () => {
     const jordan = await jordanWithCard()
-    await setCardConsent(jordan.agent, CONN, 'yes')
+    await setCardConsent(jordan.agent, CONN, 'yes', K0_ROOT_AID)
     await yesTo(jordan, CONN2, 'Amy')
     expect(cards()).toHaveLength(0)
     expect(cardQuestions.first()).toMatchObject({ connectionId: CONN2 })
@@ -1555,7 +1577,7 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
     await yesTo(jordan)
     expect(cards()).toHaveLength(0)
     expect(cardQuestions.first()).toBeUndefined()
-    await setCardConsent(jordan.agent, CONN, 'yes')
+    await setCardConsent(jordan.agent, CONN, 'yes', K0_ROOT_AID)
     await yesTo(jordan)
     expect(cards()).toHaveLength(1)
   })
@@ -1740,7 +1762,7 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
 
     test('a kept yes reads as sent, and "Stop sending" keeps a no, so a re-offer sends nothing', async () => {
       const jordan = await jordanWithCard()
-      await setCardConsent(jordan.agent, CONN, 'yes')
+      await setCardConsent(jordan.agent, CONN, 'yes', K0_ROOT_AID)
       await yesTo(jordan)
       sent.length = 0
       const tree = await show(jordan)
@@ -1771,6 +1793,115 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
       setStateVerifiedApproversEnabled(true)
       const on = await show(jordan)
       expect(on.getByTestId(testIdWithKey(TrustedApproversIds.cardStatus(CONN)))).toBeTruthy()
+    })
+  })
+
+  describe('a card kept AFTER the yes (a state office pick-up, K1 test 11-14): offered by the same rule', () => {
+    // The root a yes was given for, kept with it: the K0 card's (literal, so the rows can't compare a value with itself).
+    const K0_ROOT = 'IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6'
+    const ceremonyMock = () => jest.requireMock('../ceremony') as { sendTrustTaskDocument: jest.Mock }
+    /** Jordan said yes to `who` with no card held (so nothing went and nothing was asked), then keeps a card. */
+    const yesThenKeep = async (who: Array<[string, string]> = [[CONN, 'Sam']]) => {
+      const jordan = phone()
+      jest.spyOn(stateRoots, 'trustedStateRoots').mockReturnValue([stateRoots.K0_TEST_ROOT])
+      for (const [connectionId, asker] of who) await yesTo(jordan, connectionId, asker)
+      expect(cards()).toHaveLength(0)
+      expect(cardQuestions.first()).toBeUndefined()
+      await holdGuardianEvidence(jordan.agent, card('G-ok'))
+      return jordan
+    }
+
+    test("never asked: nothing goes, and the question is put now, naming the kept card's state", async () => {
+      const jordan = await yesThenKeep()
+      expect(await guardianCardAfterKeep(jordan.agent)).toEqual([{ connectionId: CONN, asker: 'Sam', result: 'asked' }])
+      expect(cards()).toHaveLength(0)
+      expect(cardQuestions.first()).toMatchObject({ connectionId: CONN, asker: 'Sam', state: 'Example State' })
+    })
+
+    test('an earlier yes to sending the card: this card goes now, for the agent and as the yes (control: before the keep, none went)', async () => {
+      const jordan = await yesThenKeep()
+      await setCardConsent(jordan.agent, CONN, 'yes', K0_ROOT)
+      expect(await guardianCardAfterKeep(jordan.agent)).toEqual([{ connectionId: CONN, asker: 'Sam', result: 'sent' }])
+      expect(cards()).toHaveLength(1)
+      expect(cards()[0].payload).toMatchObject({
+        agent: SAM_AGENT,
+        approver: JORDAN,
+        guardianSaid: card('G-ok').guardianSaid,
+      })
+      expect(cardQuestions.first()).toBeUndefined()
+    })
+
+    test('an earlier no: nothing goes and nothing is asked', async () => {
+      const jordan = await yesThenKeep()
+      await setCardConsent(jordan.agent, CONN, 'no')
+      expect(await guardianCardAfterKeep(jordan.agent)).toEqual([
+        { connectionId: CONN, asker: 'Sam', result: 'declined' },
+      ])
+      expect(cards()).toHaveLength(0)
+      expect(cardQuestions.first()).toBeUndefined()
+    })
+
+    test("one person's send failing never stops the next, and is logged (control: both yes, both sent)", async () => {
+      const jordan = await yesThenKeep([
+        [CONN, 'Sam'],
+        [CONN2, 'Amy'],
+      ])
+      await setCardConsent(jordan.agent, CONN, 'yes', K0_ROOT)
+      await setCardConsent(jordan.agent, CONN2, 'yes', K0_ROOT)
+      ceremonyMock().sendTrustTaskDocument.mockImplementationOnce(async () => {
+        throw new Error('mediator down')
+      })
+      const results = await guardianCardAfterKeep(jordan.agent)
+      expect(results.map((r) => r.result).sort()).toEqual(['failed', 'sent'])
+      expect(cards()).toHaveLength(1)
+      expect(jordan.warn).toHaveBeenCalledWith(expect.stringContaining('the kept card was not sent on'))
+      sent.length = 0
+      expect((await guardianCardAfterKeep(jordan.agent)).map((r) => r.result)).toEqual(['sent', 'sent'])
+    })
+
+    test('no one approved for, or either switch off: nothing at all (control: one yes, an answer)', async () => {
+      const nobody = phone()
+      await holdGuardianEvidence(nobody.agent, card('G-ok'))
+      expect(await guardianCardAfterKeep(nobody.agent)).toEqual([])
+      const jordan = await yesThenKeep()
+      setStateVerifiedApproversEnabled(false)
+      expect(await guardianCardAfterKeep(jordan.agent)).toEqual([])
+      setStateVerifiedApproversEnabled(true)
+      expect(await guardianCardAfterKeep(jordan.agent)).toHaveLength(1)
+      expect(cards()).toHaveLength(0)
+    })
+
+    test('the fixture: K0 card G-ok chains to the K0 root these rows name', () => {
+      expect(stateRoots.K0_TEST_ROOT.aid).toBe(K0_ROOT)
+    })
+
+    test("a yes given for ANOTHER state never sends this one: the question again, naming this card's state (control: same state, sent)", async () => {
+      const jordan = await yesThenKeep()
+      await setCardConsent(jordan.agent, CONN, 'yes', 'EOtherStateRootAidxxxxxxxxxxxxxxxxxxxxxxxxxx')
+      expect(await guardianCardAfterKeep(jordan.agent)).toEqual([{ connectionId: CONN, asker: 'Sam', result: 'asked' }])
+      expect(cards()).toHaveLength(0)
+      expect(cardQuestions.first()).toMatchObject({ connectionId: CONN, asker: 'Sam', state: 'Example State' })
+      // Answering it records this state; the next keep of a card from it sends.
+      expect(await shareGuardianCard(jordan.agent, CONN, true)).toBe('sent')
+      expect(await cardConsentRootOn(jordan.agent, CONN)).toBe(K0_ROOT)
+      sent.length = 0
+      expect((await guardianCardAfterKeep(jordan.agent)).map((r) => r.result)).toEqual(['sent'])
+    })
+
+    test('a yes kept before states were recorded is asked again, never sent on its own', async () => {
+      const jordan = await yesThenKeep()
+      await setCardConsent(jordan.agent, CONN, 'yes')
+      expect(await guardianCardAfterKeep(jordan.agent)).toEqual([{ connectionId: CONN, asker: 'Sam', result: 'asked' }])
+      expect(cards()).toHaveLength(0)
+    })
+
+    test('"Send my card" keeps the state of the card held when answering (control: no card held, none kept)', async () => {
+      const none = phone()
+      await setCardConsent(none.agent, CONN, 'yes')
+      expect(await cardConsentRootOn(none.agent, CONN)).toBeUndefined()
+      const jordan = await yesThenKeep()
+      await shareGuardianCard(jordan.agent, CONN, true)
+      expect(await cardConsentRootOn(jordan.agent, CONN)).toBe(K0_ROOT)
     })
   })
 })

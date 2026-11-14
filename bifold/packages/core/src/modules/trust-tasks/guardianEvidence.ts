@@ -723,13 +723,31 @@ export async function cardConsentOn(
   return answer === 'yes' || answer === 'no' ? answer : undefined
 }
 
-/** Keep this phone's answer for the contact on `connectionId` (changed in place; saved the first time). */
+/**
+ * The state root the answer for `connectionId` was given for (the root of the card held when it was answered), if
+ * one was recorded. An answer from before roots were recorded has none.
+ */
+export async function cardConsentRootOn(
+  agent: Pick<Agent, 'genericRecords'>,
+  connectionId: string
+): Promise<string | undefined> {
+  const [record] =
+    (await agent.genericRecords.findAllByQuery({ recordType: GUARDIAN_CARD_CONSENT, connectionId })) ?? []
+  const root = (record?.content as { root?: unknown } | undefined)?.root
+  return typeof root === 'string' && root.length > 0 ? root : undefined
+}
+
+/**
+ * Keep this phone's answer for the contact on `connectionId` (changed in place; saved the first time), with the state
+ * root of the card it was given for, when known: the question names the state, so the answer is kept for that state.
+ */
 export async function setCardConsent(
   agent: Pick<Agent, 'genericRecords'>,
   connectionId: string,
-  answer: CardConsent
+  answer: CardConsent,
+  root?: string
 ): Promise<void> {
-  const content = { connectionId, answer, answeredAt: new Date().toISOString() }
+  const content = { connectionId, answer, answeredAt: new Date().toISOString(), ...(root ? { root } : {}) }
   const [existing] =
     (await agent.genericRecords.findAllByQuery({ recordType: GUARDIAN_CARD_CONSENT, connectionId })) ?? []
   if (existing) {
@@ -792,8 +810,15 @@ export const guardianCardEvents = new EventEmitter()
  * The state this phone's own list names for the card's root, and that entry's demo mark, if the root is on the list;
  * never the card's word.
  */
+/** The root on this phone's list the card chains to (its AID found among the card's KELs), if it is on the list. */
+function rootAidOf(evidence: GuardianEvidence): string | undefined {
+  return trustedStateRoots().find((known) => evidence.kels.some((kel) => kel.includes(`"i":"${known.aid}"`)))?.aid
+}
+
 function stateOf(evidence: GuardianEvidence): { state?: string; demo?: true; test?: true } {
-  const root = trustedStateRoots().find((known) => evidence.kels.some((kel) => kel.includes(`"i":"${known.aid}"`)))
+  // The same match as rootAidOf: one rule decides whether a card counts as a known state's.
+  const aid = rootAidOf(evidence)
+  const root = aid ? trustedStateRoots().find((known) => known.aid === aid) : undefined
   if (!root) return {}
   return {
     state: root.name,
@@ -830,7 +855,9 @@ export type CardAfterYesResult = EvidenceSendResult | 'declined' | 'asked' | 'no
 
 /**
  * After a yes to approve for the contact on `prompt.connectionId`: send the card this phone holds only if its person
- * already said yes to sending it to this contact. Said no: nothing goes, and nothing is asked again. Never asked:
+ * already said yes to sending it to this contact, for a card from the same state (the question names the state; a
+ * yes for another state's card, or one kept before states were, puts the question again for this card's state).
+ * Said no: nothing goes, and nothing is asked again. Never asked:
  * nothing goes, and the question is put to the person ({@link cardQuestions}). Either switch off: nothing is asked
  * and nothing goes. The approval itself is never touched here.
  */
@@ -843,6 +870,9 @@ export async function guardianCardAfterYes(
   const held = await heldGuardianEvidence(agent)
   if (!held) return 'none'
   const consent = await cardConsentOn(agent, prompt.connectionId)
+  // A yes counts only for the state it was given for (the question names it): for another state's card, or a yes
+  // kept before states were, the question is put again, naming the held card's state.
+  if (consent === 'yes' && (await yesForAnotherState(agent, prompt.connectionId))) return askAgain(agent, prompt)
   if (consent === 'yes') return sendGuardianEvidence(agent, prompt.connectionId, prompt.agentDid, approverDid)
   if (consent === 'no') return 'declined'
   cardQuestions.set({ connectionId: prompt.connectionId, asker: prompt.asker, ...stateOf(held) })
@@ -861,13 +891,64 @@ export async function shareGuardianCard(
   send: boolean
 ): Promise<CardAfterYesResult> {
   if (!isOn()) return 'off'
-  await setCardConsent(agent, connectionId, send ? 'yes' : 'no')
+  const held = await heldGuardianEvidence(agent)
+  await setCardConsent(agent, connectionId, send ? 'yes' : 'no', held ? rootAidOf(held) : undefined)
   cardQuestions.take(connectionId)
   guardianCardEvents.emit('question', { connectionId })
   if (!send) return 'declined'
   const yes = (await approvingFor(agent)).find((prompt) => prompt.connectionId === connectionId)
   if (!yes?.answeredAs) return 'notApproving'
   return sendGuardianEvidence(agent, connectionId, yes.agentDid, yes.answeredAs)
+}
+
+/** A yes kept for this contact, given for a card from a state other than the held card's (or with no state kept). */
+async function yesForAnotherState(agent: Agent, connectionId: string): Promise<boolean> {
+  if ((await cardConsentOn(agent, connectionId)) !== 'yes') return false
+  const held = await heldGuardianEvidence(agent)
+  if (!held) return false
+  const root = rootAidOf(held)
+  return !root || (await cardConsentRootOn(agent, connectionId)) !== root
+}
+
+/** Put "Also send your Guardian card from <state> to <name>?" for the held card's state; nothing goes yet. */
+async function askAgain(agent: Agent, prompt: Pick<RoleOfferPrompt, 'connectionId' | 'asker'>): Promise<'asked'> {
+  const held = await heldGuardianEvidence(agent)
+  cardQuestions.set({ connectionId: prompt.connectionId, asker: prompt.asker, ...(held ? stateOf(held) : {}) })
+  guardianCardEvents.emit('question', { connectionId: prompt.connectionId })
+  return 'asked'
+}
+
+/** What {@link guardianCardAfterKeep} did for one person: the after-a-yes result, or 'failed' when it threw. */
+export type CardAfterKeepResult = CardAfterYesResult | 'failed'
+
+/**
+ * A card was just kept on this phone (a state office's pick-up, sedi/holder/receiveGuardianCard): offer it to each
+ * person this phone already approves for, by exactly the rule after a yes ({@link guardianCardAfterYes}): their
+ * earlier yes sends this card only if it was given for a card from the SAME state (its root, kept with the answer),
+ * else the question is put again naming this card's state; a no sends nothing and is not asked again; never asked
+ * puts the question. So a card picked up AFTER the yes reaches the person with no step
+ * on People I approve for (K1 test, 11-14), and never without an answer for its state.
+ *
+ * One person's send failing never stops the next: it reads 'failed' and is logged. Either switch off: nothing at
+ * all. One entry per person, with their name, for the screen to say who it went to.
+ */
+export async function guardianCardAfterKeep(
+  agent: Agent
+): Promise<Array<{ connectionId: string; asker: string; result: CardAfterKeepResult }>> {
+  const results: Array<{ connectionId: string; asker: string; result: CardAfterKeepResult }> = []
+  if (!isOn()) return results
+  for (const yes of await approvingFor(agent)) {
+    if (!yes.answeredAs) continue
+    let result: CardAfterKeepResult
+    try {
+      result = await guardianCardAfterYes(agent, yes, yes.answeredAs)
+    } catch (e) {
+      warn(agent, `the kept card was not sent on ${yes.connectionId}: ${(e as Error)?.message ?? e}`)
+      result = 'failed'
+    }
+    results.push({ connectionId: yes.connectionId, asker: yes.asker, result })
+  }
+  return results
 }
 
 // ---------------------------------------------------------------------------------------------------------------
