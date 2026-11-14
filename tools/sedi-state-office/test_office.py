@@ -172,6 +172,171 @@ class Defaults(unittest.TestCase):
                 os.environ["KEYRING_SEDI_K1_PASSCODE"] = env
 
 
+SECRETS = ("SECRET-KEY-BYTES", "SECRET-INDEX", "SECRET-TOKEN", "SECRET-LOCK")
+REAL_FILES = {
+    f"keyring-demo-state/{AID_I}/did.json": b'{"id": "did:web:x"}\n',
+    f"keyring-demo-state/{AID_I}/keri.cesr": b'{"v":"KERI10JSON0000fd_","t":"icp"}-AABAA',
+    f"keyring-demo-state/{AID_I}/designated-aliases.json": b'{"said": "E1"}\n',
+    "cards/p1.json": b'{"type":"card"}',
+    "cards/p1.status.json": b'{"status": "issued"}',
+    "cards/p1.html": b"<!doctype html><title>card</title><script>no</script>",
+}
+
+
+def published_fixture(base: Path) -> Path:
+    """A keystore as `serve` lays it out: the secrets BESIDE publish/, the public files in it, and decoys that each
+    guard alone must refuse."""
+    ks = base / "ks"
+    (ks / "keys").mkdir(parents=True)
+    (ks / "keys" / "secret.json").write_text(SECRETS[0])
+    (ks / "office.json").write_text(SECRETS[1])
+    (ks / "officer.token").write_text(SECRETS[2])
+    (ks / "office.lock").write_text(SECRETS[3])
+    pub = ks / "publish"
+    for rel, data in REAL_FILES.items():
+        (pub / rel).parent.mkdir(parents=True, exist_ok=True)
+        (pub / rel).write_bytes(data)
+    (pub / ".hidden.json").write_text("{}")  # the path rule only
+    (pub / "cards" / "p1.json.tmp").write_text("{}")  # the suffix rule
+    (pub / "notes.txt").write_text("x")  # the suffix rule
+    (pub / "big.json").write_bytes(b" " * (office.PUBLISHED_MAX_BYTES + 1))  # the size cap only
+    (pub / "dir.json").mkdir()  # a folder with an allowed name (is_file, and its link count)
+    os.mkfifo(pub / "fifo.json")  # not a regular file, one link: is_file only (reading it would hang the office)
+    (pub / ".git").mkdir()
+    (pub / ".git" / "x.json").write_text("{}")
+    os.symlink(ks / "keys" / "secret.json", pub / "link-key.json")  # out of the tree
+    os.symlink(pub / "cards" / "p1.json", pub / "link-inside.json")  # stays inside: the symlink rule only
+    os.symlink(ks / "keys", pub / "linkdir")  # a folder link out
+    os.symlink(ks, pub / "linkks")  # the whole keystore
+    os.link(ks / "officer.token", pub / "hard.json")  # a hard link to the token: the link-count rule only
+    return pub
+
+
+REFUSED = [
+    "../office.json", "../officer.token", "../office.lock", "../keys/secret.json", "keys/secret.json",
+    "cards/../../office.json", "/etc/hosts", "cards\\p1.json", "cards//p1.json", "cards/p1.json/", "",
+    ".hidden.json", ".git/x.json", "cards/p1.json.tmp", "notes.txt", "big.json", "dir.json", "fifo.json",
+    "link-key.json", "link-inside.json", "linkdir/secret.json", "linkks/office.json", "linkks/officer.token",
+    "linkks/publish/cards/p1.json", "hard.json", "missing.json", None, 7,
+]
+
+
+class PublishedFiles(unittest.TestCase):
+    """Read only, the publish tree only: never keys/, office.json, office.lock, officer.token or the passcode."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.pub = published_fixture(Path(self.tmp.name))
+        self.site = office.Site("storage.googleapis.com", "bkt")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_list_is_exactly_the_public_files(self):
+        listed = office.published_files(self.pub, self.site)
+        self.assertEqual({f["path"] for f in listed}, set(REAL_FILES))  # control: every real file is there
+        self.assertFalse(any(s in json.dumps(listed) for s in ("secret", "office", "token", "lock", "keys/")))
+
+    def test_each_public_link_follows_the_host(self):
+        listed = {f["path"]: f for f in office.published_files(self.pub, self.site)}
+        self.assertEqual(listed["cards/p1.json"]["publicUrl"], "https://storage.googleapis.com/bkt/cards/p1.json")
+        other = office.published_files(self.pub, office.Site("demo-state.example.org"))
+        self.assertIn("https://demo-state.example.org/cards/p1.html", {f["publicUrl"] for f in other})
+        self.assertEqual(listed["cards/p1.json"]["size"], len(REAL_FILES["cards/p1.json"]))
+
+    def test_every_real_file_opens(self):  # control for the refusals below
+        for rel, data in REAL_FILES.items():
+            with self.subTest(rel=rel):
+                self.assertEqual(office.published_file(self.pub, rel).read_bytes(), data)
+
+    def test_anything_else_is_refused(self):
+        for rel in REFUSED:
+            with self.subTest(rel=rel):
+                self.assertIsNone(office.published_file(self.pub, rel))
+
+
+class PublishedFilesApi(unittest.TestCase):
+    """The two routes over a real local server, with a stand-in office (no keys, no keripy)."""
+
+    TOKEN = "t" * 32
+
+    @classmethod
+    def setUpClass(cls):
+        import http.client
+        import threading as th
+        from types import SimpleNamespace
+        cls.http = http.client
+        cls.tmp = tempfile.TemporaryDirectory()
+        pub = published_fixture(Path(cls.tmp.name))
+        cls.saved = {k: getattr(office.Api, k, None) for k in ("office", "token", "port", "publish_cmd")}
+        cls.srv = office.HTTPServer(("127.0.0.1", 0), office.Api)
+        port = cls.srv.server_address[1]
+        stub = SimpleNamespace(site=office.Site("storage.googleapis.com", "bkt"), ks=SimpleNamespace(publish=pub),
+                               data={})
+        office.Api.office, office.Api.token, office.Api.port, office.Api.publish_cmd = stub, cls.TOKEN, port, None
+        office.Api.log_message = lambda *a: None
+        cls.port = port
+        cls.thread = th.Thread(target=cls.srv.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        for k, v in cls.saved.items():
+            setattr(office.Api, k, v)
+        del office.Api.log_message
+        cls.tmp.cleanup()
+
+    def get(self, target, token=TOKEN, host=None):
+        c = self.http.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Host": host or f"127.0.0.1:{self.port}"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        c.request("GET", target, headers=headers)
+        r = c.getresponse()
+        out = (r.status, r.getheader("Content-Type"), r.getheader("X-Content-Type-Options"), r.read())
+        c.close()
+        return out
+
+    def view(self, rel):
+        from urllib.parse import quote as q
+        return self.get(f"/api/files/view?path={q(rel, safe='')}")
+
+    def test_the_list(self):
+        status, ctype, _, body = self.get("/api/files")
+        self.assertEqual((status, ctype), (200, "application/json"))
+        got = json.loads(body)
+        self.assertEqual({f["path"] for f in got["files"]}, set(REAL_FILES))
+        self.assertEqual(got["siteUrl"], "https://storage.googleapis.com/bkt/")
+        self.assertFalse(any(s.encode() in body for s in SECRETS))
+
+    def test_a_file_is_plain_text_so_a_page_shows_as_source(self):
+        status, ctype, nosniff, body = self.view("cards/p1.html")
+        self.assertEqual((status, ctype, nosniff), (200, "text/plain; charset=utf-8", "nosniff"))
+        self.assertEqual(body, REAL_FILES["cards/p1.html"])
+
+    def test_every_refusal_is_the_same_404_and_carries_nothing(self):
+        for rel in [r for r in REFUSED if isinstance(r, str)] + ["%2e%2e/office.json", "..%2Fofficer.token"]:
+            with self.subTest(rel=rel):
+                status, _, _, body = self.view(rel)
+                self.assertEqual((status, json.loads(body)), (404, {"error": "notFound"}))
+                self.assertFalse(any(s.encode() in body for s in SECRETS))
+        for target in ("/api/files/view", "/api/files/view?path=", "/api/files/view?path=cards/p1.json&path=cards/p1.json",
+                       "/api/files/view/../../office.json"):
+            with self.subTest(target=target):
+                self.assertEqual(self.get(target)[0], 404)
+        self.assertEqual(self.get("/api/files/view?path=cards/p1.json")[0], 200)  # control
+
+    def test_the_token_and_the_loopback_host_are_required(self):
+        for target in ("/api/files", "/api/files/view?path=cards/p1.json"):
+            with self.subTest(target=target):
+                self.assertEqual(self.get(target, token=None)[0], 401)
+                self.assertEqual(self.get(target, token="wrong")[0], 401)
+                self.assertEqual(self.get(target, host="demo-state.example.org")[0], 403)
+                self.assertEqual(self.get(target)[0], 200)  # control
+
+
 KERIPY = Path(os.environ.get("KEYRING_SEDI_KERIPY", str(office.DEFAULT_KERIPY)))
 
 

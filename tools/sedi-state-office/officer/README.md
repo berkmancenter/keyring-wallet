@@ -10,6 +10,10 @@ API it calls (see `../README.md`). Plain HTML, CSS and JS: no framework, no buil
   only, never published.
 - **The QR** is the issuer's `qrSvg`, shown through an `<img>` with a `data:` URL, so nothing in it can run.
 - **Revoke** asks first, in the page. After a revoke the list shows "Revoked" with its time.
+- **Published files** (testing only, read only): the publish tree the public server hands to phones, grouped
+  by DID and by card. View opens a file as text (JSON pretty-printed, a KEL one event at a time, a pick-up page as
+  source); "Copy public link" copies its URL at the current `--host`. It never lists or opens the keys or the
+  office's own records; the API refuses them (see `../README.md`).
 - Every screen carries the Demo banner.
 
 Owned by the UI/UX lane.

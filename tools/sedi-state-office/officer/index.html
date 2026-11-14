@@ -174,6 +174,45 @@
         <ul class="cards" id="cards"></ul>
         <p class="empty" id="empty" hidden>No cards issued yet.</p>
       </section>
+      <section
+        class="panel"
+        id="files-panel"
+        hidden
+        aria-labelledby="files-title"
+      >
+        <div class="row between">
+          <div>
+            <p class="testing">Testing only</p>
+            <h2 id="files-title">Published files</h2>
+          </div>
+          <button type="button" class="btn quiet" id="files-refresh">
+            Refresh
+          </button>
+        </div>
+        <p class="hint">
+          What the public server hands to phones, read from this computer's
+          publish folder. Read only: nothing here changes a file. The signing
+          keys and the office's own records are not published, and this view
+          never opens them.
+        </p>
+        <p class="hint">
+          Public links start with <code id="files-site">—</code>
+        </p>
+        <p class="said" id="files-said" role="status"></p>
+        <div id="files-groups"></div>
+        <p class="empty" id="files-empty" hidden>Nothing published yet.</p>
+
+        <div class="viewer" id="viewer" hidden>
+          <div class="row between">
+            <h3 class="viewer-title"><code id="viewer-path"></code></h3>
+            <button type="button" class="btn quiet" id="viewer-close">
+              Close
+            </button>
+          </div>
+          <p class="hint" id="viewer-note"></p>
+          <pre id="viewer-text" tabindex="0"></pre>
+        </div>
+      </section>
     </main>
 
     <footer class="wrap foot">
@@ -201,6 +240,20 @@
               <button type="button" class="btn quiet no">Keep it</button>
             </div>
           </div>
+        </div>
+      </li>
+    </template>
+
+    <template id="file-row">
+      <li class="file">
+        <div class="file-main">
+          <p class="file-name"><code></code></p>
+          <p class="file-meta"></p>
+          <p class="file-url"><code></code></p>
+        </div>
+        <div class="file-side">
+          <button type="button" class="btn quiet view">View</button>
+          <button type="button" class="link copy-url">Copy public link</button>
         </div>
       </li>
     </template>

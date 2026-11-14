@@ -38,7 +38,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_KEYSTORE = Path.home() / ".keyring-sedi-k1"
@@ -726,6 +726,59 @@ def run_publish(cmd: str | None, publish_dir: Path) -> tuple[bool, str | None]:
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# Published files, read only: the officer page's "Published files" view, for showing people what the public server
+# hands to phones (testing only). Only the publish tree: keys/, office.json, office.lock, officer.token and the
+# passcode live BESIDE publish/, so every step below refuses rather than resolves its way out.
+
+PUBLISHED_SUFFIXES = (".json", ".cesr", ".html")
+PUBLISHED_MAX_BYTES = 2 * 1024 * 1024
+# Plain segments only: no "..", no dotfile, no empty segment, no backslash, no leading "/".
+PUBLISHED_PATH = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$")
+
+
+def published_file(publish_dir: Path, rel) -> Path | None:
+    """The regular file at rel inside the publish tree, or None for anything else (one answer for every refusal,
+    so a refusal never says whether something exists outside the tree)."""
+    if not isinstance(rel, str) or len(rel) > 512 or not PUBLISHED_PATH.match(rel) or not rel.endswith(
+            PUBLISHED_SUFFIXES):
+        return None
+    root = publish_dir.resolve()
+    here = root
+    for part in rel.split("/"):
+        here = here / part
+        if here.is_symlink():  # no symlink anywhere on the way, even one that points back inside
+            return None
+    try:
+        target = here.resolve(strict=True)
+        st = target.stat()
+    except (OSError, RuntimeError):
+        return None
+    if root not in target.parents or not target.is_file() or st.st_size > PUBLISHED_MAX_BYTES:
+        return None
+    if st.st_nlink > 1:  # a hard link could be the same file as one in keys/; the office never writes one
+        return None
+    return target
+
+
+def published_files(publish_dir: Path, site: Site) -> list[dict]:
+    """Every file published_file would serve, with its public link at the current --host."""
+    root = publish_dir.resolve()
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        for name in sorted(filenames):
+            rel = (Path(dirpath) / name).relative_to(root).as_posix()
+            f = published_file(root, rel)
+            if f is None:
+                continue
+            st = f.stat()
+            out.append({"path": rel, "size": st.st_size,
+                        "modified": iso(datetime.fromtimestamp(st.st_mtime, timezone.utc)),
+                        "publicUrl": site.url(*rel.split("/"))})
+    return out
+
+
+# ---------------------------------------------------------------------------------------------------------------
 # The officer API
 
 
@@ -791,6 +844,16 @@ class Api(BaseHTTPRequestHandler):
                 if path == "/api/cards":
                     cards = sorted(self.office.data.get("cards", {}).values(), key=lambda c: c["issuedAt"])
                     return self._json(200, [self.office.card_view(c) for c in cards])
+                if path == "/api/files":  # read only; testing only
+                    o = self.office
+                    return self._json(200, {"host": o.site.host, "siteUrl": o.site.url(""),
+                                            "files": published_files(o.ks.publish, o.site)})
+                if path == "/api/files/view":  # the bytes as plain text, so a pick-up .html shows as source
+                    asked = parse_qs(urlsplit(self.path).query).get("path", [])
+                    target = published_file(self.office.ks.publish, asked[0]) if len(asked) == 1 else None
+                    if target is None:
+                        return self._json(404, {"error": "notFound"})
+                    return self._send(200, target.read_bytes(), "text/plain; charset=utf-8")
             return self._json(404, {"error": "notFound"})
         if not self._guard(api=False):
             return
