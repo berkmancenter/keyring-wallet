@@ -1016,13 +1016,17 @@ class Api(BaseHTTPRequestHandler):
                                              role=body.get("role", DEFAULT_ROLE),
                                              label=body.get("label", "") or "", host=body.get("host", "prod"))
                     self.office.write_publish_tree()
+                    # The upload runs for PROD's tree only. TEST is served from publish-test/ directly; if TEST ever
+                    # becomes an uploaded host it needs its own publish step here (and at revoke below), or a
+                    # revocation there will never reach phones: a revoked TEST card would go on being served as
+                    # issued, with nothing failing.
                     ok, err = run_publish(self.publish_cmd, self.office.ks.publish)
                     return self._json(201, self.office.card_view(card, ok, err))
                 m = re.match(r"^/api/cards/([A-Za-z0-9_-]{44})/revoke$", path)
                 if m:
                     card = self.office.revoke(m.group(1))
                     self.office.write_publish_tree()
-                    ok, err = run_publish(self.publish_cmd, self.office.ks.publish)
+                    ok, err = run_publish(self.publish_cmd, self.office.ks.publish)  # PROD only: see issue above
                     return self._json(200, self.office.card_view(card, ok, err))
             except OfficeError as e:
                 return self._json(e.status if e.status >= 400 else 400, {"error": e.code, "message": str(e)})
