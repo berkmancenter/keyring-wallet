@@ -637,6 +637,29 @@ class HostsChange(unittest.TestCase):
             finally:
                 o.close()
 
+    def test_a_card_from_before_two_hosts_keeps_the_host_it_was_issued_under(self):
+        with tempfile.TemporaryDirectory() as d:
+            o = throwaway_office(Path(d), TEST_HOST, None)  # today: the tunnel is the one host
+            o.remember_site()
+            o.init()
+            old = o.issue(AID_I, WARD_B)
+            del o.data["cards"][old["said"]]["site"]  # as issued before #931
+            o.ks.save(o.data)
+            o.close()
+            o = throwaway_office(Path(d), PROD_HOST, TEST_HOST)  # the switch-over: PROD + TEST = that tunnel
+            try:
+                o.remember_site()
+                card = o.data["cards"][old["said"]]
+                view = o.card_view(card)
+                self.assertEqual((view["host"], view["hostKind"]), (TEST_HOST, "test"))
+                self.assertEqual(view["pickupJsonUrl"], f"https://{TEST_HOST}/cards/{card['pickupId']}.json")
+                on_disk = office.Keystore(Path(d) / "ks").load()["cards"][old["said"]]
+                self.assertEqual(on_disk["site"], {"host": TEST_HOST, "pathPrefix": ""})  # kept on disk
+                new = o.issue(AID_I, WARD_B)
+                self.assertEqual(o.card_view(new)["host"], PROD_HOST)  # control: a card after the switch is PROD
+            finally:
+                o.close()
+
     def test_no_test_host_writes_one_tree_as_before(self):
         with tempfile.TemporaryDirectory() as d:
             o = throwaway_office(Path(d), PROD_HOST, None)

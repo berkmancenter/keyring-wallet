@@ -91,6 +91,10 @@ tunnel, served from this computer). As designed in the infra repo's demo-state R
   host, and it is written, byte-identical, into BOTH trees, so it is the same object whichever host serves it. The
   phone keeps the host of the link it fetched (bifold `receiveGuardianCard.ts`, `stateHost`); a card's QR always
   links to its own host, and a PROD card fetched through TEST by hand still checks, since TEST is designated too.
+- **Cards from before two hosts** carry no host of their own. The first time the saved host changes, each is
+  stamped with the host it was issued under (the one saved until then), so it keeps that host for life instead of
+  following the new PROD. This also holds with one host: after `publish --host NEW`, earlier cards keep their old
+  host (still published, and marked as no longer designated).
 - **Issue and revoke write both trees, then upload.** The upload command runs in `publish/` only; TEST needs none.
 - **A card whose host is no longer designated** (a dead tunnel name, a changed PROD host) stays published and current
   in both trees, never deleted and never re-issued by itself. `serve` and `publish` name it; the officer page marks it

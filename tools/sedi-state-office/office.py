@@ -356,6 +356,15 @@ class Office:
     def remember_site(self):
         site = self.site_record()
         if self.data.get("site") != site:
+            # A card from before cards kept their own site was issued under the site saved until now: stamp it with
+            # that one BEFORE it is replaced, so it keeps its real host for life (else it would follow the new PROD,
+            # and its page and JSON would name a host it was never issued under). Only on a change, so one host
+            # unchanged stays byte-identical.
+            old = self.data.get("site") or {}
+            if old.get("host"):
+                stamp = {"host": old["host"], "pathPrefix": old.get("pathPrefix", "")}
+                for card in self.data.get("cards", {}).values():
+                    card.setdefault("site", dict(stamp))
             self.data["site"] = site
             if self.data.get("aids"):
                 self.ks.save(self.data)
@@ -542,8 +551,9 @@ class Office:
     # ---- outputs ----
 
     def card_site(self, card: dict) -> Site:
-        """The site a card names for life: the one it was issued under. A card from before two hosts has none and
-        follows PROD, as it always did."""
+        """The site a card names for life: the one it was issued under. A card from before two hosts gets the site it
+        was issued under stamped by remember_site() when the saved site first changes; until then it has none and
+        follows PROD, which is that same site."""
         s = card.get("site")
         return Site(s["host"], s.get("pathPrefix", "")) if s else self.site
 
