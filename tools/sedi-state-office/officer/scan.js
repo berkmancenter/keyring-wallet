@@ -1,7 +1,8 @@
 // Demo State Office: "Scan from phone". The Mac's camera reads the QR a phone shows on its codes screen (the raw
 // code), and each new code goes into the paste box, whose own parser (codes.js) fills the guardian's or the ward's
 // field. Scan the guardian's phone, then the ward's. Nothing leaves this computer: the camera is read here, on
-// 127.0.0.1 (a secure context), and the stream is stopped when both fields are filled, on Stop, or on any error.
+// 127.0.0.1 (a secure context), and the stream is stopped when both fields are filled, on Stop, after an issue, on
+// leaving the page or when it is hidden.
 // Decoding is the browser's own BarcodeDetector (Chrome and Edge on macOS); a browser without it says so and the
 // paste box still works. No decoder is loaded from anywhere.
 "use strict";
@@ -68,24 +69,31 @@
     await video.play().catch(() => undefined);
     $("scan").textContent = "Stop";
     say("Hold a phone's code up to the camera.", "");
+    // One tick at a time: a slow detect must not let a later tick write back text read before another code was added.
+    let busy = false;
     timer = setInterval(async () => {
-      if (!stream || video.readyState < 2) return;
-      let found = [];
+      if (busy || !stream || video.readyState < 2) return;
+      busy = true;
       try {
-        found = await detector.detect(video);
-      } catch {
-        return;
-      }
-      for (const f of found) {
-        const next = appendScanned($("paste").value, f.rawValue);
-        if (next === null) continue;
-        $("paste").value = next;
-        $("paste").dispatchEvent(new Event("input"));
-        say("Read one. Now the other phone.", "ok");
-      }
-      if (both()) {
-        stop();
-        say("Both codes read. Check them, then issue.", "ok");
+        let found = [];
+        try {
+          found = await detector.detect(video);
+        } catch {
+          return; // one bad frame never ends the scan
+        }
+        for (const f of found) {
+          const next = appendScanned($("paste").value, f.rawValue);
+          if (next === null) continue;
+          $("paste").value = next;
+          $("paste").dispatchEvent(new Event("input"));
+          say("Read one. Now the other phone.", "ok");
+        }
+        if (both()) {
+          stop();
+          say("Both codes read. Check them, then issue.", "ok");
+        }
+      } finally {
+        busy = false;
       }
     }, 300);
   };
@@ -93,6 +101,13 @@
   document.addEventListener("DOMContentLoaded", () => {
     $("scan").addEventListener("click", () => (stream ? (stop(), say("")) : void start()));
     window.addEventListener("pagehide", stop);
+    // No camera on while nobody is looking at this page (another tab, a minimised window).
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && stream) {
+        stop();
+        say("Stopped while this page was hidden. Scan again when ready.", "");
+      }
+    });
     $("issue-form").addEventListener("reset", () => {
       stop();
       say("");
