@@ -74,6 +74,12 @@
             </small>
             <small class="said" id="paste-said" aria-live="polite"></small>
           </label>
+          <div class="field">
+            <span>Or scan from each phone <em>(Chrome, this Mac's camera)</em></span>
+            <button type="button" class="btn quiet" id="scan">Scan from phone</button>
+            <video id="scan-video" class="scan-video" playsinline muted hidden></video>
+            <small class="said" id="scan-said" aria-live="polite"></small>
+          </div>
           <label class="field">
             <span>Guardian's code</span>
             <input
@@ -274,6 +280,7 @@
     </template>
 
     <script src="codes.js"></script>
+    <script src="scan.js"></script>
     <script src="officer.js"></script>
   </body>
 </html>
