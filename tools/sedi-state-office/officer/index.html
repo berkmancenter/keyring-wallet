@@ -127,6 +127,21 @@
             />
             <small class="err" id="validDays-err"></small>
           </label>
+          <fieldset class="field host-field" id="host-field" hidden>
+            <legend>Published at</legend>
+            <label class="choice">
+              <input type="radio" name="host" value="prod" checked />
+              <span>PROD · <code id="host-prod"></code></span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="host" value="test" />
+              <span>TEST · <code id="host-test"></code></span>
+            </label>
+            <small class="hint-small"
+              >A card keeps this host for life. Both hosts carry every
+              card.</small
+            >
+          </fieldset>
           <div class="actions">
             <button type="submit" class="btn" id="issue-btn">Issue card</button>
           </div>
@@ -209,6 +224,25 @@
             Refresh
           </button>
         </div>
+        <div class="tree-switch" id="tree-switch" role="group" hidden>
+          <span>Tree:</span>
+          <button
+            type="button"
+            class="btn quiet"
+            data-tree="prod"
+            aria-pressed="true"
+          >
+            PROD
+          </button>
+          <button
+            type="button"
+            class="btn quiet"
+            data-tree="test"
+            aria-pressed="false"
+          >
+            TEST
+          </button>
+        </div>
         <p class="hint">
           What the public server hands to phones, read from this computer's
           publish folder. Read only: nothing here changes a file. The signing
@@ -249,6 +283,7 @@
         </div>
         <div class="card-side">
           <span class="pill"></span>
+          <span class="pill host"></span>
           <button type="button" class="btn danger revoke">Revoke…</button>
           <div class="confirm" hidden>
             <p>
