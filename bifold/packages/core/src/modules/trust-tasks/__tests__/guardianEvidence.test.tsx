@@ -20,6 +20,8 @@ import { testIdWithKey } from '../../../utils/testable'
 import * as guardianModule from '../../sedi/guardian'
 import * as stateRoots from '../../sedi/guardian/stateRoots'
 import { K0_REVOKED_OMITTED_CARD } from '../../sedi/guardian/k0RevokedOmittedCard'
+import { wardNamedIn } from '../../sedi/guardian/chain'
+import { WARD_IDENTITY, wardCodeOf } from '../../sedi/identity/phoneIdentity'
 import { STATE_CARD_REMOTE_OFF, isStateCardEnabled, setStateCardEnabled } from '../../sedi/holder/stateCardFlag'
 import * as websModule from '../../sedi/webs'
 import * as lastLive from '../../sedi/webs/lastLive'
@@ -58,6 +60,9 @@ import {
   type GuardianOnAsk,
   type GuardianStanding,
   type GuardianVerdict,
+  phoneWardsOf,
+  unsetStateWard,
+  wardToCheck,
 } from '../guardianEvidence'
 import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import {
@@ -366,6 +371,134 @@ describe("on the person's phone: a card arrives", () => {
     await handleGuardianEvidence(sam.agent, sam.service, documentOf(card('G-ok')), context)
     expect(sam.consume).not.toHaveBeenCalled()
     expect(sam.askRecord().guardian).toBeUndefined()
+  })
+})
+
+describe("on the person's phone: the card names this phone's OWN ward code (K1 test, 11-14)", () => {
+  // Literals, so a guard that reads the wrong field can't pass by comparing a value with itself.
+  const SAM = 'IFDf7z58Wp19EQ-EjCviVU2sgmFnjecWqCEaNsAz8lq6'
+  const OTHER = 'IJpj8_jwPauLZMmIjiglQEvnOC0Lfw9nV-LCEKovbEIk'
+  const G_OK = 'EE77k2PeUVmo7nPAEjvZ-R-8G3UsxLbmaOM__tG3I6PC'
+  /** This phone's own ward code, as phoneIdentity keeps it once the codes screen made it. */
+  const ownCode = (sam: ReturnType<typeof phone>, aid: string) =>
+    sam.rows.push({
+      id: `own-${aid}`,
+      tags: { recordType: WARD_IDENTITY },
+      content: { aid, keyId: 'k-own', createdAt: '2026-11-13T21:00:00.000Z' },
+    })
+  /** Sam's phone with the ward `set` (null: none) and its own code `own` (null: never made), then the card arrives. */
+  async function arrivesWith(set: string | null, own: string | null) {
+    const sam = phone()
+    if (set !== null) await setStateWard(sam.agent, set)
+    if (own !== null) ownCode(sam, own)
+    sam.ask()
+    await handleGuardianEvidence(sam.agent, sam.service, documentOf(card('G-ok')), context)
+    return sam
+  }
+
+  test("the fixture is what these rows assume: K0's G-ok names Sam as its ward", () => {
+    expect([SAM_WARD, OTHER_WARD, prov.creds['G-ok'].said]).toEqual([SAM, OTHER, G_OK])
+    expect(wardNamedIn(card('G-ok').creds, G_OK)).toBe(SAM)
+  })
+
+  test('another ward set ("Set up as the person" after "Use this code"): valid on arrival and on open (control: no own code, wardMismatch)', async () => {
+    const sam = await arrivesWith(OTHER, SAM)
+    expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: true, state: 'Example State' })
+    expect(await guardianStandings(sam.agent)).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'Example State', demo: true, test: true },
+    })
+    const control = await arrivesWith(OTHER, null)
+    expect(control.askRecord().guardian?.verdict).toMatchObject({ ok: false, reason: 'wardMismatch' })
+  })
+
+  test('no ward set at all: valid with no Developer step (control: no own code, noWard)', async () => {
+    const sam = await arrivesWith(null, SAM)
+    expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: true })
+    const control = await arrivesWith(null, null)
+    expect(control.askRecord().guardian?.verdict).toMatchObject({ ok: false, reason: 'noWard' })
+  })
+
+  test('an own code the card does not name changes nothing: the ward set still checks it, and the refusals read as before', async () => {
+    expect((await arrivesWith(SAM, OTHER)).askRecord().guardian?.verdict).toMatchObject({ ok: true })
+    expect((await arrivesWith(null, OTHER)).askRecord().guardian?.verdict).toMatchObject({
+      ok: false,
+      reason: 'noWard',
+    })
+    expect((await arrivesWith(G_OK, OTHER)).askRecord().guardian?.verdict).toMatchObject({
+      ok: false,
+      reason: 'wardMismatch',
+    })
+  })
+
+  test('a check never makes a code: with none made, no key is asked of the key store and none is saved (control: making one does)', async () => {
+    const sam = phone()
+    const createKey = jest.fn(async () => ({
+      keyId: 'k-new',
+      publicJwk: { kty: 'OKP', crv: 'Ed25519', x: 'A'.repeat(43) },
+    }))
+    Object.assign(sam.raw.kms, { createKey })
+    await setStateWard(sam.agent, SAM)
+    sam.ask()
+    await handleGuardianEvidence(sam.agent, sam.service, documentOf(card('G-ok')), context)
+    await guardianStandings(sam.agent)
+    expect(createKey).not.toHaveBeenCalled()
+    expect(sam.rows.filter((r) => r.tags.recordType === WARD_IDENTITY)).toEqual([])
+    // Control: the codes screen's own call does make one, through the same fake.
+    expect(await wardCodeOf(sam.agent)).toEqual(expect.any(String))
+    expect(createKey).toHaveBeenCalledTimes(1)
+  })
+
+  test('the code first made after the card came: the next open checks again and reads valid, written in place', async () => {
+    const sam = await arrivesWith(OTHER, null)
+    expect(await guardianStandings(sam.agent)).toEqual({ [JORDAN]: { kind: 'unverified', outcome: 'wardMismatch' } })
+    ownCode(sam, SAM)
+    expect(await guardianStandings(sam.agent)).toEqual({
+      [JORDAN]: { kind: 'verified', state: 'Example State', demo: true, test: true },
+    })
+    expect(sam.askRecord().guardian?.verdict).toMatchObject({ ok: true })
+  })
+
+  test.each([
+    ['trusted approvers', setTrustedApproversEnabled],
+    ['state-verified approvers', setStateVerifiedApproversEnabled],
+  ])('with %s off, the own code is not read (control: both on, it is)', async (_name, setOn) => {
+    const sam = phone()
+    ownCode(sam, SAM)
+    expect(await phoneWardsOf(sam.agent)).toEqual({ set: null, own: SAM })
+    setOn(false)
+    expect(await phoneWardsOf(sam.agent)).toEqual({ set: null, own: null })
+  })
+
+  test("the guardian's setup (unsetStateWard writes an EMPTY ward): a card naming this phone's own code verifies, any other reads noWard", async () => {
+    const own = phone()
+    await setStateWard(own.agent, OTHER)
+    await unsetStateWard(own.agent)
+    // The real write: an empty ward kept, not no record.
+    expect(own.rows.filter((r) => r.tags.recordType === 'keyring.sedi-state-ward').map((r) => r.content.ward)).toEqual([
+      '',
+    ])
+    ownCode(own, SAM)
+    own.ask()
+    await handleGuardianEvidence(own.agent, own.service, documentOf(card('G-ok')), context)
+    expect(own.askRecord().guardian?.verdict).toMatchObject({ ok: true })
+    // Control: the same setup, its own code another one: refused as no ward set.
+    const other = phone()
+    await setStateWard(other.agent, OTHER)
+    await unsetStateWard(other.agent)
+    ownCode(other, OTHER)
+    other.ask()
+    await handleGuardianEvidence(other.agent, other.service, documentOf(card('G-ok')), context)
+    expect(other.askRecord().guardian?.verdict).toMatchObject({ ok: false, reason: 'noWard' })
+  })
+
+  test('wardToCheck chooses only between the two wards of this phone, by the card it is given', () => {
+    const ok = card('G-ok')
+    expect(wardToCheck({ set: OTHER, own: SAM }, ok)).toBe(SAM)
+    expect(wardToCheck({ set: OTHER, own: OTHER }, ok)).toBe(OTHER)
+    expect(wardToCheck({ set: null, own: OTHER }, ok)).toBeNull()
+    expect(wardToCheck({ set: OTHER, own: null }, ok)).toBe(OTHER)
+    // The card's SAID must be the one named: another credential's ward is never read as this card's.
+    expect(wardToCheck({ set: OTHER, own: SAM }, { ...ok, guardianSaid: prov.creds['G-revoked'].said })).toBe(OTHER)
   })
 })
 

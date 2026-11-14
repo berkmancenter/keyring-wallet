@@ -60,6 +60,15 @@ export async function wardCodeOf(agent: IdentityAgent): Promise<string | null> {
 }
 
 /**
+ * This phone's ward code if one was already made, never making one: what a Guardian check reads, so checking a card
+ * never makes a key. Null with the switches off, or before the code was first shown.
+ */
+export async function keptWardCodeOf(agent: Pick<Agent, 'genericRecords'>): Promise<string | null> {
+  if (!phoneCodesOn()) return null
+  return (await keptWard(agent))?.aid ?? null
+}
+
+/**
  * Make this phone's own ward code its ward for Guardian checks, in place of any other (the K0 demo's included): a
  * card from a state office naming this phone then checks as naming its ward. 'off' with the switches off.
  */

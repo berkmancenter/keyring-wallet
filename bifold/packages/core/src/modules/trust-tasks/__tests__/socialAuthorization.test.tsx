@@ -18,6 +18,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { K0_TEST_GUARDIAN_CARD } from '../../sedi/guardian/k0TestCard'
 import { K1_ROOT_AID } from '../../sedi/guardian/stateRoots'
 import { HOLDER_IDENTITY } from '../../sedi/holder/controller'
+import { WARD_IDENTITY } from '../../sedi/identity/phoneIdentity'
 import { TestController, revoke, testState } from '../../sedi/__tests__/fixtures/keriTestKit'
 import * as approverRole from '../approverRole'
 import {
@@ -171,8 +172,12 @@ const schemaTakes = (payload: unknown) =>
   trustTaskPayloadValidator.validate(GUARDIAN_EVIDENCE_V2_SPEC.payloadSchema, payload) === true
 
 /** Sam's phone, its ward set, Jordan's yes written on the agent, and the payload Jordan's phone sent arriving. */
-async function samReceives(payload: GuardianEvidencePayload, ward: string, type = lastType()) {
-  const sam = phone()
+async function samReceives(
+  payload: GuardianEvidencePayload,
+  ward: string,
+  type = lastType(),
+  sam: ReturnType<typeof phone> = phone()
+) {
   await setStateWard(sam.agent, ward)
   ;(sam.agent as { genericRecords: { save: (r: unknown) => Promise<void> } }).genericRecords.save({
     tags: { recordType: approverRole.ROLE_OFFER_ASK, connectionId: CONN },
@@ -362,6 +367,24 @@ describe("Sam's phone: the authorization checked under the card's own verdict", 
     const { cards, social } = await approverCardStandings(phoneOfSam.agent)
     expect(cards[JORDAN]).toMatchObject({ kind: 'unverified', outcome: 'wardMismatch' })
     expect(social[JORDAN]).toEqual({ kind: 'refused', outcome: 'wardMismatch', underCard: true })
+  })
+
+  test("the card names this phone's OWN ward code while another ward is set: card and authorization both check out, on arrival and on open (control: the row above)", async () => {
+    const { payload, sam } = await sent1()
+    const other = new TestController().aid
+    const phoneOfSam = phone()
+    ;(phoneOfSam.agent as { genericRecords: { save: (r: unknown) => Promise<void> } }).genericRecords.save({
+      tags: { recordType: WARD_IDENTITY },
+      content: { aid: sam.aid, keyId: 'k-own', createdAt: '2026-11-13T21:00:00.000Z' },
+    })
+    const arrived = await samReceives(payload, other, lastType(), phoneOfSam)
+    const kept = arrived.rows.find((r) => r.tags.recordType === approverRole.ROLE_OFFER_ASK)
+      ?.content as unknown as approverRole.RoleOfferAsk
+    expect(kept.guardian?.verdict).toMatchObject({ ok: true })
+    expect(kept.guardian?.social?.verdict).toMatchObject({ ok: true })
+    const { cards, social } = await approverCardStandings(arrived.agent)
+    expect(cards[JORDAN]).toMatchObject({ kind: 'verified', state: 'Test State' })
+    expect(social[JORDAN]).toEqual({ kind: 'authorized', state: 'Test State' })
   })
 
   test('CASCADE: the state revoked the card (it carries the revocation): the authorization falls with it', async () => {

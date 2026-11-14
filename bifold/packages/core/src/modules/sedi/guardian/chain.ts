@@ -199,6 +199,26 @@ export function parseProof(text: string): { ok: true; acdcText: string; blinder:
 }
 
 /** keripy Blinder: blid = Blake3 of the dummied concatenation '#'*44 + uuid + td + ts. */
+/**
+ * The ward the Guardian credential `guardianSaid` names, read WITHOUT checking anything (no SAID, signature, TEL or
+ * root). Only for choosing which of this phone's own wards a card is checked against (trust-tasks/guardianEvidence
+ * wardToCheck); guardianIn then refuses any ward but the one chosen, so a wrong read can only end in a refusal.
+ */
+export function wardNamedIn(creds: readonly string[], guardianSaid: string): string | undefined {
+  for (const text of creds) {
+    const p = parseProof(text)
+    if (!p.ok) continue
+    let sad: Partial<Sad>
+    try {
+      sad = JSON.parse(p.acdcText) as Partial<Sad>
+    } catch {
+      continue
+    }
+    if (sad?.d === guardianSaid) return typeof sad.a?.ward === 'string' ? sad.a.ward : undefined
+  }
+  return undefined
+}
+
 export function blidOf(dig: Digest, { uuid, td, ts }: Pick<Blinder, 'uuid' | 'td' | 'ts'>): string {
   return dig('E', te.encode(DUMMY + uuid + (td || '1AAP') + labelQb64(ts)))
 }

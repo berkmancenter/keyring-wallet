@@ -3,7 +3,7 @@
  * (trusted-approver plan, stage 2, S1). Jordan says yes to approving for Sam; if Jordan's phone holds a Guardian card,
  * it sends the chain after the yes (approver/guardian-evidence/0.1, signed under its relationship DID). Sam's phone
  * checks it with sedi/guardian's verifyGuardian against the State roots this build trusts (sedi/guardian/stateRoots)
- * and the ward set on this phone, keeps the card and the verdict on the offer's record, and checks it again each
+ * and this phone's ward (its own ward code when the card names it, else the ward set: {@link wardToCheck}), keeps the card and the verdict on the offer's record, and checks it again each
  * time Who approves opens (a card can expire or a root can leave the list).
  *
  * Jordan is asked first (Alberto, 2026-11-11): the card shows Sam Jordan's KERI identifier and the state's record of it,
@@ -30,6 +30,7 @@ import { utils, type Agent } from '@credo-ts/core'
 import { EventEmitter } from 'events'
 
 import { verifyGuardian, type ChainMaterial } from '../sedi/guardian'
+import { wardNamedIn } from '../sedi/guardian/chain'
 import { K0_REVOKED_TEST_GUARDIAN_CARD } from '../sedi/guardian/k0RevokedTestCard'
 import { K0_TEST_GUARDIAN_CARD } from '../sedi/guardian/k0TestCard'
 import { K0_REVOKED_OMITTED_CARD } from '../sedi/guardian/k0RevokedOmittedCard'
@@ -45,6 +46,7 @@ import {
 import { checkDesignation, type DesignationCheck } from '../sedi/webs/designatedAliases'
 import { demoStateHostProblem, websDidToFetch } from '../sedi/webs/demoStateHost'
 import { resetLiveResolutions, resolveRootKelReusing, type LiveRootKel } from '../sedi/webs/lastLive'
+import { keptWardCodeOf } from '../sedi/identity/phoneIdentity'
 
 import {
   ROLE_OFFER_ASK,
@@ -949,9 +951,38 @@ export async function stateWardOf(agent: Pick<Agent, 'genericRecords'>): Promise
 }
 
 /**
+ * This phone's two wards: the one set ({@link stateWardOf}: K0's by "Set up as the person", or its own code by "Use
+ * this code on this phone") and its own ward code, if it was made (sedi/identity/phoneIdentity).
+ */
+export interface PhoneWards {
+  set: string | null
+  own: string | null
+}
+
+export async function phoneWardsOf(agent: Pick<Agent, 'genericRecords'>): Promise<PhoneWards> {
+  return { set: await stateWardOf(agent), own: await keptWardCodeOf(agent) }
+}
+
+/**
+ * The ward a card is checked against: this phone's own ward code when the card names it, so a state office's card
+ * for this phone checks with no Developer step, whichever ward is set (K1 test, 11-14: "Set up as the person" had set
+ * K0's ward over it). Otherwise the ward set, exactly as before, so a card naming neither is refused as it was
+ * ('noWard' or 'wardMismatch'). Only chooses: the check itself still refuses a card naming any other ward.
+ */
+export function wardToCheck(
+  wards: PhoneWards,
+  evidence: Pick<GuardianEvidence, 'creds' | 'guardianSaid'>
+): string | null {
+  if (wards.own !== null && wardNamedIn(evidence.creds, evidence.guardianSaid) === wards.own) return wards.own
+  return wards.set
+}
+
+/**
  * Set no ward on this phone (Developer setup "as the guardian": the guardian's phone is not the person the card
  * names). The ward record is overwritten with an empty ward, never deleted; stateWardOf then reads null, so no card
- * received here verifies.
+ * received here verifies against a SET ward. A card naming this phone's OWN ward code still does (wardToCheck): such
+ * a card names this very phone, so it is not shown as naming someone else (decided 11-14 with #1072). A phone has an
+ * own ward code only once its codes screen has shown it.
  */
 export async function unsetStateWard(agent: Pick<Agent, 'genericRecords'>): Promise<void> {
   const [existing] = (await agent.genericRecords.findAllByQuery({ recordType: STATE_WARD })) ?? []
@@ -1011,7 +1042,7 @@ export async function handleGuardianEvidence(
   const evidence = split ? split.card : evidenceOf(payload)
   // The host the card came with, and only that: never this phone's Developer field, never a host from elsewhere.
   const stateHost = v2 && typeof payload.stateHost === 'string' ? payload.stateHost : undefined
-  const ward = await stateWardOf(agent)
+  const ward = wardToCheck(await phoneWardsOf(agent), evidence)
   const verdict = await checkGuardianEvidenceResolving(
     evidence,
     ward,
@@ -1202,7 +1233,7 @@ const sameVerdict = (a: GuardianVerdict | undefined, b: GuardianVerdict) =>
     : a.ok === false && b.ok === false && a.reason === b.reason && a.detail === b.detail)
 
 /**
- * Who approves, on open: each kept card checked again now (expiry, the roots this build trusts, the ward set now),
+ * Who approves, on open: each kept card checked again now (expiry, the roots this build trusts, this phone's ward now),
  * by the approver DID it is shown beside. The check runs on the JS thread, so it is memoised for this run of the app
  * (see {@link verdictNow}): it runs again only when the ward, the trusted roots or the card's text moved, or a valid
  * verdict's expiry has come, and always on the first open after a restart. Except for a card whose root publishes
@@ -1250,7 +1281,7 @@ export async function approverCardStandings(
   if (!isOn()) return { cards: {}, social: {} }
   const resolves: WebsResolves = new Map()
   const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK })) ?? []
-  const ward = await stateWardOf(agent)
+  const wards = await phoneWardsOf(agent)
   const standings: Record<string, GuardianStanding> = {}
   const social: Record<string, SocialStanding> = {}
   for (const record of records) {
@@ -1259,6 +1290,7 @@ export async function approverCardStandings(
     if (!guardian) continue
     const beside = shownBeside(ask, guardian)
     if (!beside) continue
+    const ward = wardToCheck(wards, guardian.evidence)
     const verdict = await verdictNow(agent, record.id, guardian, ward, { ...deps, resolves })
     // Checked again against this open's card verdict; one kept incomplete stays the refusal it was.
     const socialVerdict = guardian.social
