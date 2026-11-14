@@ -449,7 +449,8 @@ export class AppContainer implements Container {
         })(),
         // Which SEDI demo side this phone took: anything but the two names reads as neither.
         (async () => {
-          const data = await this.storage.getValueForKey(BCLocalStorageKeys.SediDemoSide)
+          // Read as unknown: the store is typed for its whole state, and only the two names are taken.
+          const data: unknown = await this.storage.getValueForKey(BCLocalStorageKeys.SediDemoSide)
           if (data === 'guardian' || data === 'ward') sediDemoSide = data
         })(),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
