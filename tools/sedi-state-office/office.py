@@ -38,7 +38,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_KEYSTORE = Path.home() / ".keyring-sedi-k1"
@@ -726,6 +726,96 @@ def run_publish(cmd: str | None, publish_dir: Path) -> tuple[bool, str | None]:
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# Published files, read only: the officer page's "Published files" view, for showing people what the public server
+# hands to phones (testing only). Only the publish tree: keys/, office.json, office.lock, officer.token and the
+# passcode live BESIDE publish/, so every step below refuses rather than resolves its way out.
+
+PUBLISHED_SUFFIXES = (".json", ".cesr", ".html")
+PUBLISHED_MAX_BYTES = 2 * 1024 * 1024
+# Plain segments only: no "..", no dotfile, no empty segment, no backslash, no leading "/".
+PUBLISHED_PATH = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$")
+
+
+PUBLISHED_LIST_MAX = 5000  # entries; the office writes a few per card
+
+
+def published_check(publish_dir: Path, rel) -> tuple[Path | None, str | None]:
+    """(the file, None) when the viewer may open rel, else (None, why not). The API answers every refusal with the
+    same 404, so a refusal never says whether something exists outside the tree; the reason only labels a row of
+    the listing, which is the publish tree's own entries.
+
+    Loopback tool behind a token: the symlink walk and resolve() are two passes over the path, so a file swapped
+    for a link between them would get past (TOCTOU). Don't lift this into anything exposed without opening the
+    file with O_NOFOLLOW per component instead."""
+    if not isinstance(rel, str) or len(rel) > 512 or not PUBLISHED_PATH.match(rel):
+        return None, "notPlainPath"
+    root = publish_dir.resolve()
+    here = root
+    for part in rel.split("/"):
+        here = here / part
+        if here.is_symlink():  # no symlink anywhere on the way, even one that points back inside
+            return None, "symlinked"
+    try:
+        target = here.resolve(strict=True)
+        st = target.stat()
+    except (OSError, RuntimeError):
+        return None, "missing"
+    if root not in target.parents:
+        return None, "outside"
+    if not target.is_file():  # read from stat, so a FIFO is never opened
+        return None, "notRegularFile"
+    if st.st_nlink > 1:  # a hard link could be the same file as one in keys/; the office never writes one
+        return None, "hardLinked"
+    # The suffix and size rules run AFTER the path is pinned inside the tree, so a row gets its most specific
+    # reason; don't move them back in front of the filesystem checks to save a stat without re-reading this.
+    if not rel.endswith(PUBLISHED_SUFFIXES):
+        return None, "notViewableType"
+    if st.st_size > PUBLISHED_MAX_BYTES:
+        return None, "tooLarge"
+    return target, None
+
+
+def published_file(publish_dir: Path, rel) -> Path | None:
+    """The regular file at rel inside the publish tree that the viewer may open, or None for anything else."""
+    return published_check(publish_dir, rel)[0]
+
+
+def published_files(publish_dir: Path, site: Site) -> dict:
+    """Every file-like entry under publish/ (files, FIFOs and the like, and links, a symlinked folder as the link
+    itself), as the public server would hand it out, not only the ones the viewer opens: one it won't open is
+    listed with why (an invisible file would read as unpublished). A real folder is not a row; what is in it is,
+    dot-folders included. Names and lstat only; nothing outside the tree is followed, stat'ed or read.
+
+    A refused row's size is its lstat size, so a hard link to officer.token would show the token's length: only to
+    someone who already sent the token. Keep the sizes; they are the view's point."""
+    root = publish_dir.resolve()
+    out, truncated = [], False
+
+    def add(path: Path):
+        rel = path.relative_to(root).as_posix()
+        lst = os.lstat(path)
+        reason = published_check(root, rel)[1]
+        out.append({"path": rel, "size": lst.st_size,
+                    "modified": iso(datetime.fromtimestamp(lst.st_mtime, timezone.utc)),
+                    "publicUrl": site.url(*(quote(seg, safe="") for seg in rel.split("/"))),
+                    "viewable": reason is None, **({"reason": reason} if reason else {})})
+
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames.sort()
+        here = Path(dirpath)
+        # os.walk lists a symlinked folder among the folders and doesn't enter it: list the link itself.
+        entries = sorted([here / d for d in dirnames if (here / d).is_symlink()] + [here / f for f in filenames])
+        for path in entries:
+            if len(out) >= PUBLISHED_LIST_MAX:
+                truncated = True
+                break
+            add(path)
+        if truncated:
+            break
+    return {"files": out, "truncated": truncated}
+
+
+# ---------------------------------------------------------------------------------------------------------------
 # The officer API
 
 
@@ -791,6 +881,16 @@ class Api(BaseHTTPRequestHandler):
                 if path == "/api/cards":
                     cards = sorted(self.office.data.get("cards", {}).values(), key=lambda c: c["issuedAt"])
                     return self._json(200, [self.office.card_view(c) for c in cards])
+                if path == "/api/files":  # read only; testing only
+                    o = self.office
+                    return self._json(200, {"host": o.site.host, "siteUrl": o.site.url(""),
+                                            **published_files(o.ks.publish, o.site)})
+                if path == "/api/files/view":  # the bytes as plain text, so a pick-up .html shows as source
+                    asked = parse_qs(urlsplit(self.path).query).get("path", [])
+                    target = published_file(self.office.ks.publish, asked[0]) if len(asked) == 1 else None
+                    if target is None:
+                        return self._json(404, {"error": "notFound"})
+                    return self._send(200, target.read_bytes(), "text/plain; charset=utf-8")
             return self._json(404, {"error": "notFound"})
         if not self._guard(api=False):
             return

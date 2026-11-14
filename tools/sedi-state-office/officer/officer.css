@@ -380,3 +380,91 @@ code {
   font-size: 13px;
   padding-block: 8px 28px;
 }
+
+/* ---- Published files (read only, testing only) ---- */
+.testing {
+  display: inline-block;
+  margin: 0 0 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.file-group h3,
+.viewer-title {
+  margin: 16px 0 6px;
+  font-size: 1rem;
+}
+.file-group .who {
+  color: var(--muted);
+  font-weight: 400;
+}
+.files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.file {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.file-main {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.file-main p {
+  margin: 0;
+}
+.file-meta,
+.file-url {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.file-why {
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+.file-url code {
+  overflow-wrap: anywhere;
+}
+.file-side {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.viewer {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.viewer pre {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  font:
+    13px/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre;
+}

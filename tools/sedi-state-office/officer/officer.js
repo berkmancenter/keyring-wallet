@@ -126,14 +126,17 @@
         : `Connected · publishing to ${h && h.host ? h.host : "the demo host"}`;
       health.className = `health ${locked ? "bad" : "ok"}`;
       $("issue-btn").disabled = locked;
-      for (const id of ["issue-panel", "list-panel"]) $(id).hidden = false;
+      for (const id of ["issue-panel", "list-panel", "files-panel"])
+        $(id).hidden = false;
       say($("token-said"), "Connected.", "ok");
+      roles = (h && h.aids) || {};
       await loadList();
+      await loadFiles();
       return true;
     } catch (error) {
       health.textContent = "Not connected";
       health.className = "health bad";
-      for (const id of ["issue-panel", "list-panel", "result"])
+      for (const id of ["issue-panel", "list-panel", "result", "files-panel"])
         $(id).hidden = true;
       say($("token-said"), failed(error), "bad");
       return false;
@@ -203,6 +206,7 @@
       $("issue-form").reset();
       showResult(card);
       await loadList();
+      await loadFiles();
     } catch (error) {
       say($("issue-said"), failed(error), "bad");
     } finally {
@@ -255,6 +259,7 @@
         say($("list-said"), failed(error), "bad");
       }
       await loadList();
+      await loadFiles();
     });
     return li;
   }
@@ -276,10 +281,235 @@
     void loadList();
   });
 
+  // ---- published files: read only, testing only ----------------------------------------------
+  // What the public server hands to phones, read from the publish folder through the officer API (which serves
+  // that folder only). Everything is shown as text: textContent, never markup.
+  let roles = {};
+  const ROLE_WORDS = {
+    roy: "State root",
+    deb: "Org unit",
+    sue: "Issuing agent",
+  };
+  const DID_PATH = "keyring-demo-state/";
+  const groupOf = (path) => {
+    if (path.startsWith(DID_PATH)) {
+      const aid = path.slice(DID_PATH.length).split("/")[0];
+      const role = Object.keys(roles).find((r) => roles[r] === aid);
+      return {
+        key: `did:${aid}`,
+        title: role ? ROLE_WORDS[role] || role : "K0 kit (fixture)",
+        who: short(aid),
+        order: role ? Object.keys(ROLE_WORDS).indexOf(role) : 10,
+      };
+    }
+    const card = /^cards\/([^/.]+)\./.exec(path);
+    if (card)
+      return {
+        key: `card:${card[1]}`,
+        title: "Card pick-up",
+        who: short(card[1]),
+        order: 20,
+      };
+    return { key: "other", title: "Other", who: "", order: 30 };
+  };
+  const size = (n) =>
+    n < 1024 ? `${n} bytes` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
+
+  async function apiText(path) {
+    const response = await fetch(path, {
+      headers: { Authorization: `Bearer ${readToken()}` },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      let code = null;
+      try {
+        code = (await response.json()).error;
+      } catch {
+        /* no body */
+      }
+      throw new ApiError(response.status, code);
+    }
+    return response.text();
+  }
+
+  // The end of the JSON object that starts at `start`, or -1: braces counted outside strings only.
+  const objectEnd = (text, start) => {
+    let depth = 0;
+    let inString = false;
+    for (let i = start; i < text.length; i += 1) {
+      const c = text[i];
+      if (inString) {
+        if (c === "\\") i += 1;
+        else if (c === '"') inString = false;
+      } else if (c === '"') inString = true;
+      else if (c === "{") depth += 1;
+      else if (c === "}" && --depth === 0) return i + 1;
+    }
+    return -1;
+  };
+  // Key events carry their sequence number in "s" (an ACDC uses "s" for its schema).
+  const KEL_TYPES = new Set(["icp", "rot", "ixn", "dip", "drt"]);
+  // A KEL as CESR text: each event's JSON pretty-printed, its signatures (the attachment) on the lines after it.
+  const readableKel = (text) => {
+    const out = [];
+    let at = text.indexOf("{");
+    if (at !== 0) return null;
+    let n = 0;
+    while (at !== -1 && at < text.length) {
+      const end = objectEnd(text, at);
+      if (end === -1) return null;
+      let event;
+      try {
+        event = JSON.parse(text.slice(at, end));
+      } catch {
+        return null;
+      }
+      const next = text.indexOf('{"v":', end);
+      const attachment = text.slice(end, next === -1 ? text.length : next);
+      n += 1;
+      out.push(
+        `# event ${n}${event.t ? ` · ${event.t}` : ""}${
+          KEL_TYPES.has(event.t) ? ` · sn ${event.s}` : ""
+        }`,
+        JSON.stringify(event, null, 2),
+        ...(attachment.trim() ? ["# attachment", attachment.trim()] : []),
+        "",
+      );
+      at = next;
+    }
+    return out.join("\n");
+  };
+  const readable = (path, text) => {
+    if (path.endsWith(".json")) {
+      try {
+        return { text: JSON.stringify(JSON.parse(text), null, 2), note: "" };
+      } catch {
+        return { text, note: "Not valid JSON; shown as it is." };
+      }
+    }
+    if (path.endsWith(".cesr")) {
+      const kel = readableKel(text);
+      return kel
+        ? { text: kel, note: "The key event log, one event at a time." }
+        : { text, note: "Shown as it is." };
+    }
+    if (path.endsWith(".html"))
+      return {
+        text,
+        note: "Shown as source. This is the page a phone's browser opens.",
+      };
+    return { text, note: "" };
+  };
+
+  async function view(file) {
+    const viewer = $("viewer");
+    $("viewer-path").textContent = file.path;
+    $("viewer-note").textContent = "Opening…";
+    $("viewer-text").textContent = "";
+    viewer.hidden = false;
+    try {
+      const shown = readable(
+        file.path,
+        await apiText(`/api/files/view?path=${encodeURIComponent(file.path)}`),
+      );
+      $("viewer-note").textContent = shown.note;
+      $("viewer-text").textContent = shown.text;
+    } catch (error) {
+      $("viewer-note").textContent =
+        error instanceof ApiError && error.status === 404
+          ? "That file is no longer published."
+          : failed(error);
+    }
+    viewer.scrollIntoView({ behavior: "smooth", block: "start" });
+    $("viewer-text").focus({ preventScroll: true });
+  }
+  $("viewer-close").addEventListener("click", () => {
+    $("viewer").hidden = true;
+  });
+
+  // Every entry in the folder is listed, since the public server hands them all out; one the viewer won't open
+  // says why instead of going missing (a missing file would read as not published).
+  const WHY_NOT = {
+    notPlainPath: "its name isn't a plain path",
+    symlinked: "it is a link",
+    notRegularFile: "it isn't a regular file",
+    hardLinked: "it is hard-linked to another file",
+    notViewableType: "only .json, .cesr and .html files open here",
+    tooLarge: "it is larger than 2 MB",
+  };
+  function fileRow(file, index, fullPath) {
+    const li = $("file-row").content.firstElementChild.cloneNode(true);
+    li.querySelector(".file-name code").textContent = fullPath
+      ? file.path
+      : file.path.split("/").pop();
+    li.querySelector(".file-meta").textContent = `${size(
+      file.size,
+    )} · written ${when(file.modified)}`;
+    const why = li.querySelector(".file-why");
+    why.hidden = file.viewable;
+    why.textContent = file.viewable
+      ? ""
+      : `Published, but not opened here: ${WHY_NOT[file.reason] || "it can't be read safely"}.`;
+    const url = li.querySelector(".file-url code");
+    url.textContent = file.publicUrl;
+    url.id = `file-url-${index}`;
+    li.querySelector(".copy-url").dataset.copy = url.id;
+    const open = li.querySelector(".view");
+    open.hidden = !file.viewable;
+    open.addEventListener("click", () => void view(file));
+    return li;
+  }
+
+  async function loadFiles() {
+    try {
+      const got = (await api("GET", "/api/files")) || {};
+      const files = got.files || [];
+      $("files-site").textContent = got.siteUrl || "—";
+      const groups = new Map();
+      files.forEach((file, index) => {
+        const g = groupOf(file.path);
+        if (!groups.has(g.key)) groups.set(g.key, { ...g, rows: [] });
+        groups.get(g.key).rows.push(fileRow(file, index, g.key === "other"));
+      });
+      const sections = [...groups.values()]
+        .sort((a, b) => a.order - b.order)
+        .map((g) => {
+          const box = document.createElement("div");
+          box.className = "file-group";
+          const h = document.createElement("h3");
+          h.textContent = g.title;
+          if (g.who) {
+            const who = document.createElement("span");
+            who.className = "who";
+            who.textContent = ` · ${g.who}`;
+            h.append(who);
+          }
+          const ul = document.createElement("ul");
+          ul.className = "files";
+          ul.append(...g.rows);
+          box.append(h, ul);
+          return box;
+        });
+      $("files-groups").replaceChildren(...sections);
+      $("files-empty").hidden = files.length > 0;
+      say(
+        $("files-said"),
+        got.truncated
+          ? `Showing the first ${files.length} entries; the folder holds more.`
+          : "",
+        got.truncated ? "bad" : "",
+      );
+    } catch (error) {
+      say($("files-said"), failed(error), "bad");
+    }
+  }
+  $("files-refresh").addEventListener("click", () => void loadFiles());
+
   // ---- copy -----------------------------------------------------------------------------------
   document.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-copy]");
     if (!button) return;
+    const label = (button.dataset.label ||= button.textContent.trim());
     const text = $(button.dataset.copy).textContent;
     try {
       await navigator.clipboard.writeText(text);
@@ -292,7 +522,7 @@
       selection.addRange(range);
       button.textContent = "Selected";
     }
-    setTimeout(() => (button.textContent = "Copy"), 1500);
+    setTimeout(() => (button.textContent = label), 1500);
   });
 
   if (readToken()) void connect();
