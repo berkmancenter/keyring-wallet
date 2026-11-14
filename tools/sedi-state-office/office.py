@@ -766,6 +766,8 @@ def published_check(publish_dir: Path, rel) -> tuple[Path | None, str | None]:
         return None, "notRegularFile"
     if st.st_nlink > 1:  # a hard link could be the same file as one in keys/; the office never writes one
         return None, "hardLinked"
+    # The suffix and size rules run AFTER the path is pinned inside the tree, so a row gets its most specific
+    # reason; don't move them back in front of the filesystem checks to save a stat without re-reading this.
     if not rel.endswith(PUBLISHED_SUFFIXES):
         return None, "notViewableType"
     if st.st_size > PUBLISHED_MAX_BYTES:
@@ -779,9 +781,13 @@ def published_file(publish_dir: Path, rel) -> Path | None:
 
 
 def published_files(publish_dir: Path, site: Site) -> dict:
-    """EVERY entry under publish/, as the public server would hand it out, not only the ones the viewer opens: a
-    file it won't open is listed with why (an invisible file would read as unpublished). Names and lstat only;
-    nothing outside the tree is followed, stat'ed or read."""
+    """Every file-like entry under publish/ (files, FIFOs and the like, and links, a symlinked folder as the link
+    itself), as the public server would hand it out, not only the ones the viewer opens: one it won't open is
+    listed with why (an invisible file would read as unpublished). A real folder is not a row; what is in it is,
+    dot-folders included. Names and lstat only; nothing outside the tree is followed, stat'ed or read.
+
+    A refused row's size is its lstat size, so a hard link to officer.token would show the token's length: only to
+    someone who already sent the token. Keep the sizes; they are the view's point."""
     root = publish_dir.resolve()
     out, truncated = [], False
 

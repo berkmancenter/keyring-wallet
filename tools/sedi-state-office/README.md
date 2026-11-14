@@ -108,7 +108,7 @@ what the public server hands to phones. They serve the publish tree and nothing 
 - it is a regular file with one link (no hard link to anything else), at most 2 MB.
 
 Every refusal is the same 404, so it never says whether something exists outside the tree. The list, though, shows
-EVERY entry of `publish/` (names and `lstat` only, nothing followed), since the public server hands them all out: one
+every file-like entry of `publish/` (a folder isn't a row, what's in it is; names and `lstat` only, nothing followed), since the public server hands them all out: one
 the viewer won't open is listed with `viewable: false` and a `reason` (`notPlainPath`, `symlinked`, `notRegularFile`,
 `hardLinked`, `notViewableType`, `tooLarge`) instead of going missing.
 
