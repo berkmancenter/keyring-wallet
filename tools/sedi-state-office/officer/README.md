@@ -15,6 +15,9 @@ API it calls (see `../README.md`). Plain HTML, CSS and JS: no framework, no buil
   file as text (JSON pretty-printed, a KEL one event at a time, a pick-up page as
   source); "Copy public link" copies its URL at the current `--host`. It never lists or opens the keys or the
   office's own records; the API refuses them (see `../README.md`).
+- **Two hosts** (only with `office.py --test-host`): Issue offers PROD or TEST, below the codes; each card row
+  says which host it names for life, and marks one whose host is no longer designated (re-issue to move it);
+  Published files switches between the two trees. With one host none of this shows.
 - Every screen carries the Demo banner.
 
 Owned by the UI/UX lane.

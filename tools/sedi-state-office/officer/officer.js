@@ -123,13 +123,25 @@
       const locked = h && h.keystore === "locked";
       health.textContent = locked
         ? "Connected · keystore locked: unlock it in the issuer first"
-        : `Connected · publishing to ${h && h.host ? h.host : "the demo host"}`;
+        : `Connected · publishing to ${h && h.host ? h.host : "the demo host"}${
+            h && h.hosts && h.hosts.test
+              ? ` and ${h.hosts.test.host} (TEST)`
+              : ""
+          }`;
       health.className = `health ${locked ? "bad" : "ok"}`;
       $("issue-btn").disabled = locked;
       for (const id of ["issue-panel", "list-panel", "files-panel"])
         $(id).hidden = false;
       say($("token-said"), "Connected.", "ok");
       roles = (h && h.aids) || {};
+      hosts = (h && h.hosts) || {};
+      // Two hosts only when the office runs with --test-host; otherwise nothing here changes.
+      const two = Boolean(hosts.test);
+      $("host-field").hidden = !two;
+      $("tree-switch").hidden = !two;
+      $("host-prod").textContent = (hosts.prod && hosts.prod.host) || "";
+      $("host-test").textContent = two ? hosts.test.host : "";
+      if (!two) setTree("prod");
       await loadList();
       await loadFiles();
       return true;
@@ -201,6 +213,7 @@
         ward,
         ...(label ? { label } : {}),
         validDays: Number(validDays),
+        ...(hosts.test ? { host: chosenHost() } : {}),
       });
       say($("issue-said"), "");
       $("issue-form").reset();
@@ -228,6 +241,15 @@
     // The list carries no publishError: an issued card is "Issued" whether it was uploaded or is served from here.
     pill.textContent = revoked ? "Revoked" : "Issued";
     pill.className = `pill ${revoked ? "revoked" : "issued"}`;
+    // Which host the card names, for life. An orphan's host is no longer designated: re-issue to move it.
+    const host = li.querySelector(".pill.host");
+    const kind = card.hostDesignated === false ? "orphan" : card.hostKind;
+    host.hidden = !card.host || (!hosts.test && kind !== "orphan");
+    host.textContent =
+      kind === "orphan"
+        ? `${card.host}: host not designated; re-issue to move`
+        : `${kind === "test" ? "TEST" : "PROD"} · ${card.host || ""}`;
+    host.className = `pill host ${kind === "orphan" ? "orphan" : ""}`.trim();
 
     const revoke = li.querySelector(".revoke");
     const confirm = li.querySelector(".confirm");
@@ -285,6 +307,16 @@
   // What the public server hands to phones, read from the publish folder through the officer API (which serves
   // that folder only). Everything is shown as text: textContent, never markup.
   let roles = {};
+  let hosts = {};
+  let tree = "prod";
+  const chosenHost = () =>
+    (document.querySelector('input[name="host"]:checked') || {}).value ||
+    "prod";
+  const setTree = (which) => {
+    tree = which;
+    for (const b of document.querySelectorAll("#tree-switch [data-tree]"))
+      b.setAttribute("aria-pressed", String(b.dataset.tree === which));
+  };
   const ROLE_WORDS = {
     roy: "State root",
     deb: "Org unit",
@@ -410,7 +442,9 @@
     try {
       const shown = readable(
         file.path,
-        await apiText(`/api/files/view?path=${encodeURIComponent(file.path)}`),
+        await apiText(
+          `/api/files/view?tree=${tree}&path=${encodeURIComponent(file.path)}`,
+        ),
       );
       $("viewer-note").textContent = shown.note;
       $("viewer-text").textContent = shown.text;
@@ -462,7 +496,7 @@
 
   async function loadFiles() {
     try {
-      const got = (await api("GET", "/api/files")) || {};
+      const got = (await api("GET", `/api/files?tree=${tree}`)) || {};
       const files = got.files || [];
       $("files-site").textContent = got.siteUrl || "—";
       const groups = new Map();
@@ -504,6 +538,12 @@
     }
   }
   $("files-refresh").addEventListener("click", () => void loadFiles());
+  for (const b of document.querySelectorAll("#tree-switch [data-tree]"))
+    b.addEventListener("click", () => {
+      setTree(b.dataset.tree);
+      $("viewer").hidden = true;
+      void loadFiles();
+    });
 
   // ---- copy -----------------------------------------------------------------------------------
   document.addEventListener("click", async (event) => {

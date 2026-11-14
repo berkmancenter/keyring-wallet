@@ -125,6 +125,31 @@ class Site:
     def offer_url(self, pickup_id: str) -> str:
         return "keyring://guardian-card?u=" + quote(self.card_url(pickup_id, "json"), safe="")
 
+    def stored(self) -> dict:
+        return {"host": self.host, "pathPrefix": "/".join(self.segs)}
+
+    def same(self, other: "Site | None") -> bool:
+        return other is not None and self.host.lower() == other.host.lower() and self.segs == other.segs
+
+
+def test_site_for(prod: Site, test_host: str | None) -> Site | None:
+    """The TEST site (the tunnel's bare hostname, no path prefix), or None when there is no TEST host. It must not be
+    PROD: one host, one tree."""
+    if not test_host:
+        return None
+    test = Site(test_host)
+    if test.same(prod) or test.host.lower() == prod.host.lower():
+        raise OfficeError("badHost", f"--test-host {test_host!r} is the PROD host; give TEST its own hostname", 2)
+    return test
+
+
+def site_warnings(prod: Site) -> list[str]:
+    """Said, never refused: today's app checks a designation only at a bare hostname (bifold rootWebsAt)."""
+    if prod.segs:
+        return [f"PROD has a path prefix ({'/'.join(prod.segs)}): today's app can't check a card at "
+                f"{prod.host}/{'/'.join(prod.segs)} live (it builds did:webs from a bare hostname)"]
+    return []
+
 
 # ---------------------------------------------------------------------------------------------------------------
 # Keystore
@@ -140,6 +165,7 @@ class Keystore:
                                                         "keys must never be in a repo", 2)
         self.keys = self.path / "keys"
         self.publish = self.path / "publish"
+        self.publish_test = self.path / "publish-test"  # TEST's tree, beside publish/ (never inside it)
         self.index = self.path / "office.json"
         self.salts = self.keys / "blind-salts.json"
         self.token_file = self.path / "officer.token"
@@ -299,8 +325,10 @@ def rule():
 class Office:
     """The open keripy store: three habs (roy, deb, sue) in one Habery, and their registries."""
 
-    def __init__(self, ks: Keystore, site: Site, state_name: str, k0_dir: str | None = None):
-        self.ks, self.site, self.state_name, self.k0_dir = ks, site, state_name, k0_dir
+    def __init__(self, ks: Keystore, site: Site, state_name: str, k0_dir: str | None = None,
+                 test_site: Site | None = None):
+        # site is PROD (--host); test_site is TEST (--test-host), or None for one host as before.
+        self.ks, self.site, self.state_name, self.k0_dir, self.test_site = ks, site, state_name, k0_dir, test_site
         bran = passcode()
         fresh = not any(ks.keys.glob("**/data.mdb"))
         self.cf = Configer(name=HAB_NAME, base="", temp=False, reopen=True, headDirPath=str(ks.keys))
@@ -319,8 +347,14 @@ class Office:
         self.data = ks.load()
         self.salts = ks.load_salts()
 
+    def site_record(self) -> dict:
+        site = self.site.stored()
+        if self.test_site:
+            site["testHost"] = self.test_site.host
+        return site
+
     def remember_site(self):
-        site = {"host": self.site.host, "pathPrefix": "/".join(self.site.segs)}
+        site = self.site_record()
         if self.data.get("site") != site:
             self.data["site"] = site
             if self.data.get("aids"):
@@ -409,15 +443,17 @@ class Office:
                                          orgUnit=dict(d="", u=nonce(), n=unit["said"], s=UnitSchemaSaid, o="I2I")),
                                     (".orgUnit",)))
         self.data = dict(kit="keyring K1 (kept keys)", createdAt=now, aids={r: self.hab(r).pre for r in ROLES},
-                         unit=unit, agent=agent, cards={},
-                         site={"host": self.site.host, "pathPrefix": "/".join(self.site.segs)})
+                         unit=unit, agent=agent, cards={}, site=self.site_record())
         self.ks.save(self.data)
         return dict(aids=self.data["aids"])
 
     def issue(self, holder: str, ward: str, valid_days: int = DEFAULT_VALID_DAYS, role: str = DEFAULT_ROLE,
-              label: str = "") -> dict:
+              label: str = "", host: str = "prod") -> dict:
         if not self.data.get("aids"):
             raise OfficeError("notInitialised", "run `office.py init` first", 409)
+        if host not in ("prod", "test") or (host == "test" and self.test_site is None):
+            raise OfficeError("badHost", "host is \"prod\", or \"test\" when the office has a --test-host")
+        site = self.test_site if host == "test" else self.site
         if (p := holder_problem(holder)):
             raise OfficeError("badHolder", p)
         if (p := ward_problem(ward)):
@@ -442,7 +478,7 @@ class Office:
                                  "utahAgent": {"d": "", "u": nonce(), "n": self.data["agent"]["said"],
                                                "s": AgentSchemaSaid, "o": "I2I"}}, (".utahAgent",)))
         g.update(pickupId=pickup_id, holder=holder, ward=ward, role=role, label=label,
-                 issuedAt=iso(issued), expiresAt=iso(expires))
+                 issuedAt=iso(issued), expiresAt=iso(expires), site=site.stored())
         self.data["cards"][g["said"]] = g
         self.ks.save(self.data)
         bundle = self.bundle(g)
@@ -465,8 +501,13 @@ class Office:
 
     # ---- designated aliases ----
 
+    def sites(self) -> list[Site]:
+        return [self.site, *([self.test_site] if self.test_site else [])]
+
     def designated_ids(self) -> list[str]:
-        return [self.site.webs_did(self.hab(r).pre) for r in ROLES]
+        """The root, org unit and issuing agent at PROD, then at TEST. A host that is no longer one of these is
+        dropped (designate() revokes the ACDC that named it), never kept."""
+        return [site.webs_did(self.hab(r).pre) for site in self.sites() for r in ROLES]
 
     def current_aliases(self) -> dict | None:
         live = [a for a in self.data.get("aliases", []) if a["state"] == "issued"]
@@ -488,7 +529,8 @@ class Office:
         a = self._issue("roy", f"aliases-{n}", AliasesSchemaSaid,
                         Mapper(mad=dict(d="", u=nonce(), dt=iso(datetime.now(timezone.utc)), ids=wanted),
                                makify=True, saidive=True, kind=Kinds.json).mad)
-        a.update(ids=wanted, host=self.site.host, pathPrefix="/".join(self.site.segs))
+        a.update(ids=wanted, host=self.site.host, pathPrefix="/".join(self.site.segs),
+                 **({"testHost": self.test_site.host} if self.test_site else {}))
         self.data["aliases"].append(a)
         self.ks.save(self.data)
         return a
@@ -498,6 +540,16 @@ class Office:
                 "tel": {"ripText": a["ripText"], "updateTexts": list(a["updateTexts"])}}
 
     # ---- outputs ----
+
+    def card_site(self, card: dict) -> Site:
+        """The site a card names for life: the one it was issued under. A card from before two hosts has none and
+        follows PROD, as it always did."""
+        s = card.get("site")
+        return Site(s["host"], s.get("pathPrefix", "")) if s else self.site
+
+    def card_designated(self, card: dict) -> bool:
+        """Whether the card's host is still one the root designates (else: re-issue to move it)."""
+        return any(self.card_site(card).same(site) for site in self.sites())
 
     def bundle(self, card: dict) -> dict:
         """The card as the phone keeps it: bifold's GuardianEvidence plus a type tag and dates."""
@@ -511,15 +563,15 @@ class Office:
             "creds": [self.data["unit"]["proof"], self.data["agent"]["proof"], card["proof"]],
             "issuedAt": card["issuedAt"],
             "expiresAt": card["expiresAt"],
-            "pickupJsonUrl": self.site.card_url(card["pickupId"], "json"),
-            "offerUrl": self.site.offer_url(card["pickupId"]),
+            "pickupJsonUrl": self.card_site(card).card_url(card["pickupId"], "json"),
+            "offerUrl": self.card_site(card).offer_url(card["pickupId"]),
         }
 
-    def did_doc(self, role: str) -> dict:
+    def did_doc(self, role: str, site: Site | None = None) -> dict:
         hab = self.hab(role)
-        return did_document(self.site, hab.pre, [v.qb64 for v in hab.kever.verfers])
+        return did_document(site or self.site, hab.pre, [v.qb64 for v in hab.kever.verfers])
 
-    def write_k0(self, put) -> list[str]:
+    def write_k0(self, put, site: Site | None = None) -> list[str]:
         """K0's root, org unit and issuing agent, from bifold's kit, as webs-k0-root.gen.mjs lays them out."""
         if not self.k0_dir:
             return []
@@ -531,14 +583,24 @@ class Office:
                 raise OfficeError("badK0", f"{self.k0_dir} is not the K0 kit (root {aid})", 2)
             base = "/".join([DID_PATH, aid])
             put(f"{base}/keri.cesr", kel)
-            put(f"{base}/did.json", (json.dumps(did_document(self.site, aid, keys), indent=2) + "\n").encode())
+            put(f"{base}/did.json", (json.dumps(did_document(site or self.site, aid, keys), indent=2) + "\n").encode())
             aids.append(aid)
         return aids
 
     def write_publish_tree(self) -> list[str]:
-        """Rewrite every public file from the store. Returns the paths written, relative to publish/."""
-        out, written = self.ks.publish, []
-        aliases = self.designate()  # the root designates this host before anything names it
+        """Rewrite every public file from the store: PROD's tree (publish/), then TEST's (publish-test/) when there is
+        a TEST host, both before anything uploads. Returns the paths written, PROD's relative to publish/, TEST's
+        as publish-test/<path>. Each tree's did.json names its own host; the KELs and the designation are the same
+        bytes in both; every card is the same bytes in both, naming the card's own host."""
+        aliases = self.designate()  # the root designates these hosts before anything names them
+        written = self._write_tree(self.ks.publish, self.site, aliases)
+        if self.test_site:
+            written += [f"publish-test/{p}" for p in self._write_tree(self.ks.publish_test, self.test_site, aliases)]
+        return written
+
+    def _write_tree(self, out: Path, site: Site, aliases: dict | None) -> list[str]:
+        out.mkdir(mode=0o755, exist_ok=True)
+        written = []
 
         def put(rel: str, data: bytes):
             p = out / rel
@@ -552,10 +614,10 @@ class Office:
             aid = self.hab(role).pre
             base = "/".join([DID_PATH, aid])
             put(f"{base}/keri.cesr", self.kel(role))
-            put(f"{base}/did.json", (json.dumps(self.did_doc(role), indent=2) + "\n").encode())
+            put(f"{base}/did.json", (json.dumps(self.did_doc(role, site), indent=2) + "\n").encode())
             if role == "roy" and aliases:
                 put(f"{base}/{ALIASES_FILE}", (json.dumps(self.aliases_file(aliases), indent=2) + "\n").encode())
-        self.write_k0(put)
+        self.write_k0(put, site)
         for card in self.data.get("cards", {}).values():
             pid = card["pickupId"]
             put(f"cards/{pid}.json", json.dumps(self.bundle(card), separators=(",", ":")).encode())
@@ -566,15 +628,21 @@ class Office:
             put(f"cards/{pid}.html", self.pickup_html(card).encode())
         return written
 
+    def orphans(self) -> list[dict]:
+        """Cards whose host the root no longer designates. Still published and kept current, never deleted."""
+        return [c for c in self.data.get("cards", {}).values() if not self.card_designated(c)]
+
     def card_view(self, card: dict, published: bool | None = None, publish_error: str | None = None) -> dict:
-        pid = card["pickupId"]
+        pid, site = card["pickupId"], self.card_site(card)
         view = {
             "id": card["said"], "pickupId": pid, "label": card.get("label", ""), "holder": card["holder"],
             "ward": card["ward"], "role": card["role"], "issuedAt": card["issuedAt"], "expiresAt": card["expiresAt"],
             "status": card["state"],
-            "pickupUrl": self.site.card_url(pid, "html"), "pickupJsonUrl": self.site.card_url(pid, "json"),
-            "statusJsonUrl": self.site.card_url(pid, "status.json"), "offerUrl": self.site.offer_url(pid),
-            "qrSvg": qr_svg(self.site.offer_url(pid)) if card["state"] == "issued" else "",
+            "pickupUrl": site.card_url(pid, "html"), "pickupJsonUrl": site.card_url(pid, "json"),
+            "statusJsonUrl": site.card_url(pid, "status.json"), "offerUrl": site.offer_url(pid),
+            "qrSvg": qr_svg(site.offer_url(pid)) if card["state"] == "issued" else "",
+            "host": site.host, "hostKind": "test" if site.same(self.test_site) else "prod" if site.same(self.site)
+            else "orphan", "hostDesignated": self.card_designated(card),
         }
         if card.get("revokedAt"):
             view["revokedAt"] = card["revokedAt"]
@@ -589,7 +657,7 @@ class Office:
         values = {**{k: view.get(k, "") for k in ("pickupJsonUrl", "offerUrl", "statusJsonUrl")},
                   "notIssuedBy": not_issued_by(self.state_name),
                   **{k: human_date(view.get(k)) for k in ("issuedAt", "expiresAt", "revokedAt")},
-                  "stateName": self.state_name, "host": self.site.host, "qrSvg": view["qrSvg"]}
+                  "stateName": self.state_name, "host": view["host"], "qrSvg": view["qrSvg"]}
         name = "pickup.html" if card["state"] == "issued" else "pickup-revoked.html"
         template = HERE / "templates" / name
         text = template.read_text() if template.exists() else PLACEHOLDER[card["state"]]
@@ -864,6 +932,17 @@ class Api(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _tree(self) -> tuple[Path, Site] | None:
+        """?tree= for the files view: absent or "prod" is publish/, "test" is publish-test/ (only with a TEST host and
+        once written). Anything else is no tree. Both go through published_check, the files view's only gate."""
+        asked = parse_qs(urlsplit(self.path).query).get("tree", ["prod"])
+        o = self.office
+        if asked == ["prod"]:
+            return o.ks.publish, o.site
+        if asked == ["test"] and o.test_site and o.ks.publish_test.is_dir():
+            return o.ks.publish_test, o.test_site
+        return None
+
     def do_OPTIONS(self):  # no CORS, ever
         self._json(405, {"error": "noCors"})
 
@@ -877,17 +956,20 @@ class Api(BaseHTTPRequestHandler):
                     o = self.office
                     return self._json(200, {"root": o.data.get("aids", {}).get("roy"), "aids": o.data.get("aids"),
                                             "host": o.site.host, "pathPrefix": "/".join(o.site.segs),
-                                            "keystore": "unlocked"})
+                                            "hosts": {"prod": o.site.stored(),
+                                                      "test": o.test_site.stored() if o.test_site else None},
+                                            "warnings": site_warnings(o.site), "keystore": "unlocked"})
                 if path == "/api/cards":
                     cards = sorted(self.office.data.get("cards", {}).values(), key=lambda c: c["issuedAt"])
                     return self._json(200, [self.office.card_view(c) for c in cards])
-                if path == "/api/files":  # read only; testing only
-                    o = self.office
-                    return self._json(200, {"host": o.site.host, "siteUrl": o.site.url(""),
-                                            **published_files(o.ks.publish, o.site)})
-                if path == "/api/files/view":  # the bytes as plain text, so a pick-up .html shows as source
+                tree = self._tree()
+                if path == "/api/files" and tree:  # read only; testing only
+                    tree_dir, site = tree
+                    return self._json(200, {"host": site.host, "siteUrl": site.url(""),
+                                            **published_files(tree_dir, site)})
+                if path == "/api/files/view" and tree:  # the bytes as plain text, so a page shows as source
                     asked = parse_qs(urlsplit(self.path).query).get("path", [])
-                    target = published_file(self.office.ks.publish, asked[0]) if len(asked) == 1 else None
+                    target = published_file(tree[0], asked[0]) if len(asked) == 1 else None
                     if target is None:
                         return self._json(404, {"error": "notFound"})
                     return self._send(200, target.read_bytes(), "text/plain; charset=utf-8")
@@ -922,7 +1004,7 @@ class Api(BaseHTTPRequestHandler):
                     card = self.office.issue(holder=body.get("holder"), ward=body.get("ward"),
                                              valid_days=body.get("validDays", DEFAULT_VALID_DAYS),
                                              role=body.get("role", DEFAULT_ROLE),
-                                             label=body.get("label", "") or "")
+                                             label=body.get("label", "") or "", host=body.get("host", "prod"))
                     self.office.write_publish_tree()
                     ok, err = run_publish(self.publish_cmd, self.office.ks.publish)
                     return self._json(201, self.office.card_view(card, ok, err))
@@ -935,6 +1017,12 @@ class Api(BaseHTTPRequestHandler):
             except OfficeError as e:
                 return self._json(e.status if e.status >= 400 else 400, {"error": e.code, "message": str(e)})
         return self._json(404, {"error": "notFound"})
+
+
+def report_orphans(office: "Office"):
+    for c in office.orphans():
+        print(f"note: card {c['pickupId'][:6]}… names {office.card_site(c).host}, which the root no longer "
+              "designates; it stays published and current. Re-issue it to move it.", file=sys.stderr)
 
 
 def free_port(preferred: int) -> int:
@@ -960,6 +1048,10 @@ def main(argv=None):
                     help="bare hostname the publish tree is served from (a tunnel's, for now). Remembered in the "
                          "keystore; every did.json and card page is rewritten for it. Default: the last one used, "
                          "else the placeholder example.org")
+    ap.add_argument("--test-host", default=os.environ.get("KEYRING_SEDI_K1_TEST_HOST"),
+                    help="TEST's bare hostname (the tunnel's), beside PROD's --host: the root designates both, and "
+                         "TEST gets its own tree, publish-test/. Remembered; '' drops it. Default: the last one used, "
+                         "else none (one host, as before)")
     ap.add_argument("--path-prefix", default=os.environ.get("KEYRING_SEDI_K1_PATH_PREFIX"),
                     help="path of the site root under the host, e.g. the bucket name for a bucket URL (default: the "
                          "last one used, else none)")
@@ -998,8 +1090,11 @@ def main(argv=None):
         saved = ks.load().get("site", {})
         site = Site(a.host or saved.get("host") or "example.org",
                     a.path_prefix if a.path_prefix is not None else saved.get("pathPrefix", ""))
+        test_site = test_site_for(site, a.test_host if a.test_host is not None else saved.get("testHost"))
+        for w in site_warnings(site):
+            print(f"warning: {w}", file=sys.stderr)
         load_keripy(Path(a.keripy))
-        office = Office(ks, site, a.state_name, a.k0_dir or None)
+        office = Office(ks, site, a.state_name, a.k0_dir or None, test_site)
         office.remember_site()
         try:
             if a.cmd == "init":
@@ -1019,6 +1114,7 @@ def main(argv=None):
                 print(json.dumps(v, indent=2))
             elif a.cmd == "publish":
                 print("\n".join(office.write_publish_tree()))
+                report_orphans(office)
             elif a.cmd == "show":
                 d = office.data
                 print(json.dumps({"aids": d.get("aids"), "cards": {s: {k: c[k] for k in (
@@ -1034,6 +1130,10 @@ def main(argv=None):
                 srv = HTTPServer(("127.0.0.1", port), Api)
                 print(f"State office on http://127.0.0.1:{port}/  (officer token: {Api.token})", flush=True)
                 print(f"Token also in {ks.token_file} (mode 600). Publish tree: {ks.publish}", flush=True)
+                if test_site:
+                    print(f"TEST ({test_site.host}) tree: {ks.publish_test}; the upload command runs for PROD only",
+                          flush=True)
+                report_orphans(office)
                 try:
                     srv.serve_forever()
                 except KeyboardInterrupt:
