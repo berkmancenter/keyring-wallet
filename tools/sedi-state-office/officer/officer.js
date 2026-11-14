@@ -180,6 +180,22 @@
     $("result").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // ---- one paste for both codes (codes.js): fills a field only when exactly one code of its kind is found -------
+  $("paste").addEventListener("input", () => {
+    const found = globalThis.SediOfficeCodes.pickCodes($("paste").value);
+    if (found.holder) $("holder").value = found.holder;
+    if (found.ward) $("ward").value = found.ward;
+    const parts = [];
+    if (found.holder) parts.push("guardian's code filled");
+    else if (found.holderCount > 1) parts.push("more than one guardian's code: paste just one");
+    if (found.ward) parts.push("ward's code filled");
+    else if (found.wardCount > 1) parts.push("more than one ward's code: paste just one");
+    const text = $("paste").value.trim() ? parts.join("; ") || "no code found in that text" : "";
+    const ambiguous = found.holderCount > 1 || found.wardCount > 1;
+    const sentence = text ? text.charAt(0).toUpperCase() + text.slice(1) + "." : "";
+    say($("paste-said"), sentence, ambiguous || !(found.holder || found.ward) ? "bad" : "ok");
+  });
+
   $("issue-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const holder = $("holder").value.trim();
@@ -204,6 +220,7 @@
       });
       say($("issue-said"), "");
       $("issue-form").reset();
+      say($("paste-said"), "");
       showResult(card);
       await loadList();
       await loadFiles();
