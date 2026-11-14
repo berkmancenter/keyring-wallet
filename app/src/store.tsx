@@ -60,7 +60,7 @@ export interface Developer {
   /** Developer "Demo state host": where a demo state root's did:webs is fetched while testing; '' for none. */
   demoStateHost: string
   /**
-   * "Confirm it's you": ask a contact to confirm, with their phone's lock, that a call or message is really them.
+   * "Confirm it's you": ask a contact to confirm, with their phone's lock, that it's really them.
    * bifold's setConfirmItsYouEnabled; CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
    */
   enableConfirmItsYou: boolean

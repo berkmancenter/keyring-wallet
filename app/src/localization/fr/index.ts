@@ -207,7 +207,7 @@ const translation = {
     "HoldK0RevokedOmittedCard": "Garder la carte révoquée sans sa révocation (K0)",
     "BecomeK0TestWard": "Je suis la personne protégée de test (K0)",
     "EnableStateCard": "Carte d’État (démo) : afficher dans Justificatifs la carte de tuteur que ce téléphone détient",
-    "EnableConfirmItsYou": "C'est bien vous : demander à un contact de confirmer qu'un appel ou un message vient bien de lui (démo). À activer sur les deux téléphones.",
+    "EnableConfirmItsYou": "C'est bien vous : demander à un contact de confirmer que c'est bien lui (démo). À activer sur les deux téléphones.",
     "Demos": "Démos",
     "SediDemoGuardian": "Démo tuteur",
     "SediDemoGuardianHint": "Sur le téléphone de l'approbateur. Détient la carte de test Example State et affiche la carte d'État.",
