@@ -432,6 +432,14 @@ code {
   color: var(--muted);
   font-size: 0.85rem;
 }
+.file-why {
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
 .file-url code {
   overflow-wrap: anywhere;
 }

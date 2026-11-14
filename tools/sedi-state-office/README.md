@@ -89,14 +89,14 @@ roy's KEL from `keri.cesr` beside it.
 Every request carries `Authorization: Bearer <token>`. A Host or Origin other than `127.0.0.1:<port>` or
 `localhost:<port>` is refused, and there is no CORS.
 
-| Call                            | Takes                                                            | Returns                                                                                |
-| ------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `POST /api/cards`               | `{holder, ward, label?, validDays?=365, role?="legal guardian"}` | 201, the card view; 400 `badHolder`, `badWard`, `badValidity`, `badRole` or `badLabel` |
-| `GET /api/cards`                |                                                                  | every card view                                                                        |
-| `POST /api/cards/{SAID}/revoke` |                                                                  | 200, the card view; idempotent (the same `revokedAt`); 404 for an unknown card         |
-| `GET /api/health`               |                                                                  | `{root, aids, host, pathPrefix, keystore}`                                             |
-| `GET /api/files`                |                                                                  | `{host, siteUrl, files: [{path, size, modified, publicUrl}]}`: the publish tree only   |
-| `GET /api/files/view?path=P`    |                                                                  | that file's bytes as `text/plain`; 404 `notFound` for anything else                    |
+| Call                            | Takes                                                            | Returns                                                                                     |
+| ------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `POST /api/cards`               | `{holder, ward, label?, validDays?=365, role?="legal guardian"}` | 201, the card view; 400 `badHolder`, `badWard`, `badValidity`, `badRole` or `badLabel`      |
+| `GET /api/cards`                |                                                                  | every card view                                                                             |
+| `POST /api/cards/{SAID}/revoke` |                                                                  | 200, the card view; idempotent (the same `revokedAt`); 404 for an unknown card              |
+| `GET /api/health`               |                                                                  | `{root, aids, host, pathPrefix, keystore}`                                                  |
+| `GET /api/files`                |                                                                  | `{host, siteUrl, truncated, files: [{path, size, modified, publicUrl, viewable, reason?}]}` |
+| `GET /api/files/view?path=P`    |                                                                  | that file's bytes as `text/plain`; 404 `notFound` for anything else                         |
 
 The two files calls are read only and for testing: the officer page's "Published files" view, for showing people
 what the public server hands to phones. They serve the publish tree and nothing else. `keys/`, `office.json`,
@@ -107,7 +107,10 @@ what the public server hands to phones. They serve the publish tree and nothing 
 - no part of it is a symlink, and it resolves inside `publish/`;
 - it is a regular file with one link (no hard link to anything else), at most 2 MB.
 
-Every refusal is the same 404, so it never says whether something exists outside the tree.
+Every refusal is the same 404, so it never says whether something exists outside the tree. The list, though, shows
+EVERY entry of `publish/` (names and `lstat` only, nothing followed), since the public server hands them all out: one
+the viewer won't open is listed with `viewable: false` and a `reason` (`notPlainPath`, `symlinked`, `notRegularFile`,
+`hardLinked`, `notViewableType`, `tooLarge`) instead of going missing.
 
 A card view holds:
 

@@ -200,6 +200,7 @@ def published_fixture(base: Path) -> Path:
     (pub / "cards" / "p1.json.tmp").write_text("{}")  # the suffix rule
     (pub / "notes.txt").write_text("x")  # the suffix rule
     (pub / "big.json").write_bytes(b" " * (office.PUBLISHED_MAX_BYTES + 1))  # the size cap only
+    (pub / "big.cesr").write_bytes(b"-" * (office.PUBLISHED_MAX_BYTES + 1))  # published, listed, not opened
     (pub / "dir.json").mkdir()  # a folder with an allowed name (is_file, and its link count)
     os.mkfifo(pub / "fifo.json")  # not a regular file, one link: is_file only (reading it would hang the office)
     (pub / ".git").mkdir()
@@ -212,10 +213,18 @@ def published_fixture(base: Path) -> Path:
     return pub
 
 
+# Every entry the viewer won't open, and why: listed all the same (the public server hands them out).
+LISTED_REFUSED = {
+    ".hidden.json": "notPlainPath", ".git/x.json": "notPlainPath",
+    "cards/p1.json.tmp": "notViewableType", "notes.txt": "notViewableType",
+    "big.json": "tooLarge", "big.cesr": "tooLarge", "fifo.json": "notRegularFile", "hard.json": "hardLinked",
+    "link-key.json": "symlinked", "link-inside.json": "symlinked", "linkdir": "symlinked", "linkks": "symlinked",
+}
+
 REFUSED = [
     "../office.json", "../officer.token", "../office.lock", "../keys/secret.json", "keys/secret.json",
     "cards/../../office.json", "/etc/hosts", "cards\\p1.json", "cards//p1.json", "cards/p1.json/", "",
-    ".hidden.json", ".git/x.json", "cards/p1.json.tmp", "notes.txt", "big.json", "dir.json", "fifo.json",
+    ".hidden.json", ".git/x.json", "cards/p1.json.tmp", "notes.txt", "big.json", "big.cesr", "dir.json", "fifo.json",
     "link-key.json", "link-inside.json", "linkdir/secret.json", "linkks/office.json", "linkks/officer.token",
     "linkks/publish/cards/p1.json", "hard.json", "missing.json", None, 7,
 ]
@@ -232,15 +241,30 @@ class PublishedFiles(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_the_list_is_exactly_the_public_files(self):
-        listed = office.published_files(self.pub, self.site)
-        self.assertEqual({f["path"] for f in listed}, set(REAL_FILES))  # control: every real file is there
-        self.assertFalse(any(s in json.dumps(listed) for s in ("secret", "office", "token", "lock", "keys/")))
+    def test_the_list_shows_every_entry_and_marks_what_the_viewer_wont_open(self):
+        # The public server hands out the whole folder, so nothing in it may be missing from the list: a file the
+        # viewer won't open is listed with why, never dropped.
+        got = office.published_files(self.pub, self.site)
+        listed = {f["path"]: f for f in got["files"]}
+        self.assertFalse(got["truncated"])
+        self.assertEqual({p for p, f in listed.items() if f["viewable"]}, set(REAL_FILES))  # control
+        self.assertEqual({p: f.get("reason") for p, f in listed.items() if not f["viewable"]}, LISTED_REFUSED)
+        self.assertNotIn("dir.json", listed)  # a folder is not an entry; what is in it is
+        # Nothing outside the tree: no path through a link, and none of the secrets' contents or sizes.
+        self.assertFalse(any(p.startswith(("linkdir/", "linkks/")) for p in listed))
+        self.assertFalse(any(s in json.dumps(got) for s in SECRETS))
+        self.assertNotEqual(listed["link-key.json"]["size"], len(SECRETS[0]))  # lstat: the link, not the key
+
+    def test_an_oversize_kel_is_listed_flagged_and_not_opened(self):
+        listed = {f["path"]: f for f in office.published_files(self.pub, self.site)["files"]}
+        self.assertEqual((listed["big.cesr"]["viewable"], listed["big.cesr"]["reason"]), (False, "tooLarge"))
+        self.assertEqual(listed["big.cesr"]["publicUrl"], "https://storage.googleapis.com/bkt/big.cesr")
+        self.assertIsNone(office.published_file(self.pub, "big.cesr"))
 
     def test_each_public_link_follows_the_host(self):
-        listed = {f["path"]: f for f in office.published_files(self.pub, self.site)}
+        listed = {f["path"]: f for f in office.published_files(self.pub, self.site)["files"]}
         self.assertEqual(listed["cards/p1.json"]["publicUrl"], "https://storage.googleapis.com/bkt/cards/p1.json")
-        other = office.published_files(self.pub, office.Site("demo-state.example.org"))
+        other = office.published_files(self.pub, office.Site("demo-state.example.org"))["files"]
         self.assertIn("https://demo-state.example.org/cards/p1.html", {f["publicUrl"] for f in other})
         self.assertEqual(listed["cards/p1.json"]["size"], len(REAL_FILES["cards/p1.json"]))
 
@@ -307,7 +331,8 @@ class PublishedFilesApi(unittest.TestCase):
         status, ctype, _, body = self.get("/api/files")
         self.assertEqual((status, ctype), (200, "application/json"))
         got = json.loads(body)
-        self.assertEqual({f["path"] for f in got["files"]}, set(REAL_FILES))
+        self.assertEqual({f["path"] for f in got["files"] if f["viewable"]}, set(REAL_FILES))
+        self.assertEqual({f["path"]: f.get("reason") for f in got["files"] if not f["viewable"]}, LISTED_REFUSED)
         self.assertEqual(got["siteUrl"], "https://storage.googleapis.com/bkt/")
         self.assertFalse(any(s.encode() in body for s in SECRETS))
 

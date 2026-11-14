@@ -427,19 +427,36 @@
     $("viewer").hidden = true;
   });
 
-  function fileRow(file, index) {
+  // Every entry in the folder is listed, since the public server hands them all out; one the viewer won't open
+  // says why instead of going missing (a missing file would read as not published).
+  const WHY_NOT = {
+    notPlainPath: "its name isn't a plain path",
+    symlinked: "it is a link",
+    notRegularFile: "it isn't a regular file",
+    hardLinked: "it is hard-linked to another file",
+    notViewableType: "only .json, .cesr and .html files open here",
+    tooLarge: "it is larger than 2 MB",
+  };
+  function fileRow(file, index, fullPath) {
     const li = $("file-row").content.firstElementChild.cloneNode(true);
-    li.querySelector(".file-name code").textContent = file.path
-      .split("/")
-      .pop();
+    li.querySelector(".file-name code").textContent = fullPath
+      ? file.path
+      : file.path.split("/").pop();
     li.querySelector(".file-meta").textContent = `${size(
       file.size,
     )} · written ${when(file.modified)}`;
+    const why = li.querySelector(".file-why");
+    why.hidden = file.viewable;
+    why.textContent = file.viewable
+      ? ""
+      : `Published, but not opened here: ${WHY_NOT[file.reason] || "it can't be read safely"}.`;
     const url = li.querySelector(".file-url code");
     url.textContent = file.publicUrl;
     url.id = `file-url-${index}`;
     li.querySelector(".copy-url").dataset.copy = url.id;
-    li.querySelector(".view").addEventListener("click", () => void view(file));
+    const open = li.querySelector(".view");
+    open.hidden = !file.viewable;
+    open.addEventListener("click", () => void view(file));
     return li;
   }
 
@@ -452,7 +469,7 @@
       files.forEach((file, index) => {
         const g = groupOf(file.path);
         if (!groups.has(g.key)) groups.set(g.key, { ...g, rows: [] });
-        groups.get(g.key).rows.push(fileRow(file, index));
+        groups.get(g.key).rows.push(fileRow(file, index, g.key === "other"));
       });
       const sections = [...groups.values()]
         .sort((a, b) => a.order - b.order)
@@ -475,7 +492,13 @@
         });
       $("files-groups").replaceChildren(...sections);
       $("files-empty").hidden = files.length > 0;
-      say($("files-said"), "");
+      say(
+        $("files-said"),
+        got.truncated
+          ? `Showing the first ${files.length} entries; the folder holds more.`
+          : "",
+        got.truncated ? "bad" : "",
+      );
     } catch (error) {
       say($("files-said"), failed(error), "bad");
     }
