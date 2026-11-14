@@ -7,12 +7,17 @@
  * chat does not touch a request, and each card follows the request's own expiry, not the chat's timer.
  *
  * Read again on every Confirm it's you event for this connection, and on a clock at the soonest expiry, since no
- * event says a request ran out of time. With the switch off (or either remote off) there are no items at all.
+ * event says a request ran out of time. Also read again when the chat comes back into view and when the app comes back
+ * to the front: a safety net only, so a missed event can never leave a card stale until the chat is left (278.19, where
+ * the event fired before the answer was kept; confirmItsYou now fires it after). With the switch off (or either remote
+ * off) there are no items at all.
  *
  * @module trust-tasks/screens/useConfirmChatItems
  */
 import { useAgent } from '@bifold/react-hooks'
+import { useIsFocused } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { AppState } from 'react-native'
 
 import type { ExtendedChatMessage } from '../../../components/chat/ChatMessage'
 import { Role } from '../../../types/chat'
@@ -78,6 +83,19 @@ export function useConfirmChatItems(connectionId: string | undefined, name: stri
       for (const event of names) confirmEvents.off(event, refresh)
     }
   }, [on, load, connectionId])
+
+  // The safety net: back in view (a screen opened over the chat was closed), or the app back to the front.
+  const focused = useIsFocused()
+  useEffect(() => {
+    if (on && focused) void load()
+  }, [on, focused, load])
+  useEffect(() => {
+    if (!on) return
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load()
+    })
+    return () => subscription.remove()
+  }, [on, load])
 
   // A clock, not only events: no answer may ever come, and the card must still change when the time is up.
   useEffect(() => {

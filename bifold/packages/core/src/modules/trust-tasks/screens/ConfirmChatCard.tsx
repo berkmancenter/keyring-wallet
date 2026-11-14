@@ -11,7 +11,15 @@
  *
  * Theirs (the contact asked this phone): Confirm or "No, that wasn't me", each behind the phone's own lock, exactly
  * as the global sheet (ConfirmItsYouModal) answers it; both read the same prompt, so answering either clears both.
- * Once answered, what was sent; once past its time, "This request has expired" and nothing to press.
+ * It says when it was received, and while open how long is left. Once answered, what was sent; once past its time,
+ * "This request has expired" and nothing to press.
+ *
+ * Settled cards fold to one line (Alberto, 278.19): a request confirmed, not them, unanswered or cancelled, and the
+ * contact's request answered or expired, show as one line once the chat is opened again, and a tap on the line opens
+ * the whole card as the record (with Hide to fold it back). A card that settles while it is on screen stays open, so an
+ * answer arriving, or the one just given, is seen in full: while its row stays mounted. The chat's list virtualises,
+ * so a card scrolled far out of view and back is drawn again, and comes back folded. "Not them" folds too, to a red
+ * line.
  *
  * Shown only while the "Confirm it's you" switch is on and neither its own nor the SEDI/KERI remote off is set
  * (isConfirmItsYouEnabled), read at every render: the card itself is gated, not only the list that holds it.
@@ -21,7 +29,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -56,6 +64,14 @@ export const ConfirmChatCardIds = {
   notMe: 'ConfirmChatNotMe',
   said: 'ConfirmChatSaid',
   steps: 'ConfirmChatSteps',
+  /** The newest request of mine, settled and folded (an older one is `earlier`). */
+  mineLine: 'ConfirmChatMineLine',
+  theirLine: 'ConfirmChatTheirLine',
+  hide: 'ConfirmChatHide',
+  received: 'ConfirmChatReceived',
+  /** One per side: both cards can be in one chat at once (I asked them, they asked me). */
+  expiresMine: 'ConfirmChatExpiresMine',
+  expiresTheirs: 'ConfirmChatExpiresTheirs',
 } as const
 
 /** What one card shows: a request this phone sent, or the contact's request to this phone. */
@@ -96,6 +112,15 @@ const timeOf = (iso: string | undefined) =>
 const minutesLeft = (expiresAt: string, now = Date.now()) =>
   Math.max(1, Math.ceil((Date.parse(expiresAt) - now) / 60000))
 
+/**
+ * Settled: nothing left to do on it, so it folds to one line. Mine: answered, unanswered or cancelled, and any older
+ * request (a newer one replaced it). Theirs: answered or expired.
+ */
+export function settledEntry(entry: ConfirmChatEntry, now = Date.now()): boolean {
+  if (entry.side === 'mine') return !entry.newest || confirmStatusOf(entry.ask, now) !== 'waiting'
+  return theirStatusOf(entry.prompt, now) !== 'open'
+}
+
 interface Props {
   entry: ConfirmChatEntry
   connectionId: string
@@ -112,6 +137,8 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | undefined>()
   const [sentNow, setSentNow] = useState<{ decision: ConfirmDecision; at: string; lock?: string } | undefined>()
+  // Read once, when the card is first drawn: one settled then starts folded; one that settles on screen stays open.
+  const [open, setOpen] = useState(() => !settledEntry(entry))
 
   const askAgain = useCallback(
     async (note: string) => {
@@ -218,7 +245,9 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
     kind: { color: ColorPalette.brand.primary, fontWeight: 'bold' },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     error: { color: ColorPalette.semantic.error },
-    line: { marginHorizontal: 12, marginVertical: 4, alignItems: 'center' },
+    line: { marginHorizontal: 12, marginVertical: 4, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
+    hide: { alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+    hideText: { color: ColorPalette.brand.primary, fontWeight: 'bold' },
   })
 
   const n = { name, interpolation: { escapeValue: false } }
@@ -236,6 +265,30 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
       </ThemedText>
     </View>
   )
+  // One line for a settled card; a tap opens the whole card as the record.
+  const folded = (testID: string, text: React.ReactNode, style?: object) => (
+    <Pressable
+      style={styles.line}
+      onPress={() => setOpen(true)}
+      accessibilityRole="button"
+      accessibilityHint={t('ConfirmItsYou.ShowRecord')}
+      testID={testIdWithKey(testID)}
+    >
+      <ThemedText style={[styles.muted, style]}>{text}</ThemedText>
+    </Pressable>
+  )
+  // On an opened settled card: fold it back to its line.
+  const hide = (style?: object) => (
+    <Pressable
+      style={styles.hide}
+      onPress={() => setOpen(false)}
+      accessibilityRole="button"
+      hitSlop={8}
+      testID={testIdWithKey(ConfirmChatCardIds.hide)}
+    >
+      <ThemedText style={[styles.hideText, style]}>{t('ConfirmItsYou.HideRecord')}</ThemedText>
+    </Pressable>
+  )
   const kindLine = (who: string, style?: object) => (
     <ThemedText style={[styles.kind, style]}>
       {t('ConfirmItsYou.Title', { name: who, interpolation: { escapeValue: false } })}
@@ -252,17 +305,19 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
       sent: timeOf(ask.askedAt),
       ...(lock ? { lock: t(`ConfirmItsYou.Lock.${lock}`) } : {}),
     }
-    if (!newest)
-      return (
-        <View style={styles.line} testID={testIdWithKey(ConfirmChatCardIds.earlier)}>
-          <ThemedText style={styles.muted}>
-            {kindLine(name, styles.muted)} · {t(EARLIER_KEY[status], at)}
-          </ThemedText>
-        </View>
+    if (!open)
+      return folded(
+        newest ? ConfirmChatCardIds.mineLine : ConfirmChatCardIds.earlier,
+        <>
+          {kindLine(name, status === 'notMe' ? styles.error : styles.muted)} · {t(EARLIER_KEY[status], at)}
+        </>,
+        status === 'notMe' ? styles.error : undefined
       )
+    const foldable = status !== 'waiting' || !newest
     const mine = (style: object | undefined, body: React.ReactNode) => (
       <View style={[styles.card, style]} testID={testIdWithKey(ConfirmChatCardIds.mine)}>
         {body}
+        {foldable ? hide() : null}
       </View>
     )
     switch (status) {
@@ -279,7 +334,7 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
             </View>
             <ThemedText variant="bold">{t('ConfirmItsYou.WaitingBody', n)}</ThemedText>
             {quote(t('ConfirmItsYou.YouAsked'), ask.note)}
-            <ThemedText style={styles.muted}>
+            <ThemedText style={styles.muted} testID={testIdWithKey(ConfirmChatCardIds.expiresMine)}>
               {t('ConfirmItsYou.ExpiresIn', { count: minutesLeft(ask.expiresAt) })}
             </ThemedText>
             <Button
@@ -333,6 +388,7 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
               <ThemedText style={styles.onRed}>• {t('ConfirmItsYou.StepCallBack', n)}</ThemedText>
               <ThemedText style={styles.onRed}>• {t('ConfirmItsYou.StepNoCodes')}</ThemedText>
             </View>
+            {hide(styles.onRed)}
           </View>
         )
       case 'expired':
@@ -379,10 +435,34 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
   const asker = prompt.asker || name
   const words = { asker, interpolation: { escapeValue: false } }
   const status: TheirStatus = sentNow ? 'answered' : theirStatusOf(prompt)
+  const received = { ...words, received: timeOf(prompt.receivedAt) }
+  if (!open) {
+    // The answer just given here first: until the reload lands, the record still reads open (no decision, no time),
+    // and folding then must never fall through to "you confirmed" after a "not me".
+    const decision = sentNow?.decision ?? prompt.answered
+    const time = timeOf(sentNow?.at ?? entry.answeredAt)
+    const key =
+      status === 'expired'
+        ? 'ConfirmItsYou.TheirLineExpired'
+        : decision === 'notMe'
+          ? time
+            ? 'ConfirmItsYou.TheirLineNotMe'
+            : 'ConfirmItsYou.YouToldNotMe'
+          : time
+            ? 'ConfirmItsYou.TheirLineItsMe'
+            : 'ConfirmItsYou.YouToldItsMe'
+    return folded(ConfirmChatCardIds.theirLine, t(key, { ...received, time }))
+  }
   const theirs = (style: object | undefined, body: React.ReactNode) => (
     <View style={[styles.card, style]} testID={testIdWithKey(ConfirmChatCardIds.theirs)}>
       {kindLine(asker, status === 'expired' ? styles.muted : undefined)}
+      {prompt.receivedAt ? (
+        <ThemedText style={styles.muted} testID={testIdWithKey(ConfirmChatCardIds.received)}>
+          {t('ConfirmItsYou.ReceivedAt', received)}
+        </ThemedText>
+      ) : null}
       {body}
+      {status !== 'open' ? hide() : null}
     </View>
   )
 
@@ -395,6 +475,9 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
         </ThemedText>
         {quote(t('ConfirmItsYou.TheirNote', words), prompt.note)}
         <ThemedText>{t('ConfirmItsYou.AnswerOnlyForYou', words)}</ThemedText>
+        <ThemedText style={styles.muted} testID={testIdWithKey(ConfirmChatCardIds.expiresTheirs)}>
+          {t('ConfirmItsYou.ExpiresIn', { count: minutesLeft(prompt.expiresAt) })}
+        </ThemedText>
         {said_}
         <Button
           title={t('ConfirmItsYou.ItsMe')}

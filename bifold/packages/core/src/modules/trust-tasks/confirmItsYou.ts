@@ -502,11 +502,14 @@ export async function answerConfirmRequest(
   await sendTrustTaskDocument(agent, connectionId, signed)
 
   confirmPromptStore.take(connectionId)
-  confirmEvents.emit('promptCleared', { connectionId })
   await keepPrompt(agent, { ...prompt, open: false, answered: decision, answeredAt: answer.respondedAt }).catch(
     (error: unknown) =>
       agent.config?.logger?.warn(`${LOG_PREFIX} could not close a request: ${(error as Error)?.message ?? error}`)
   )
+  // Only once the answer is kept: an open chat reads the record again on this event, and nothing else redraws it. Fired
+  // before the write, the chat read the request as still open and kept showing it so until it was left and opened again
+  // (278.19). The store is emptied first, as before, so a second tap finds nothing to answer.
+  confirmEvents.emit('promptCleared', { connectionId })
   agent.config?.logger?.info(`${LOG_PREFIX} answered on connection ${connectionId}: ${decision}`)
   return 'sent'
 }

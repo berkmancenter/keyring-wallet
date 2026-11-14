@@ -18,6 +18,7 @@ import {
   canConfirmWith,
   cancelConfirmRequest,
   confirmAsksOn,
+  confirmEvents,
   confirmPromptStore,
   confirmStatusOf,
   handleConfirmRequest,
@@ -283,6 +284,74 @@ describe('the round trip', () => {
   test('nothing in the flow reaches for an agent or a VTA', () => {
     const source = fs.readFileSync(path.join(__dirname, '../../../src/modules/trust-tasks/confirmItsYou.ts'), 'utf8')
     expect(source).not.toMatch(/vtaAgent|VtaClient|vtiAgent|trustedApprovers/)
+  })
+})
+
+describe('each event fires once what it announces is kept (the open chat redraws on the event)', () => {
+  // The chat's cards (useConfirmChatItems) read the records again on each event, and on nothing else while the chat is
+  // open. An event fired before its write is read as the old state, and the card stays there until the chat is left
+  // and opened again (Alberto, 278.19: "Confirmed" showed only after leaving the chat). Each row reads the record the
+  // way the chat does, at the moment the event fires.
+  const readAt = (name: 'answered' | 'promptCleared' | 'prompt', read: () => Promise<unknown>) => {
+    const reads: Promise<unknown>[] = []
+    const listener = () => reads.push(read())
+    confirmEvents.on(name, listener)
+    return {
+      reads,
+      off: () => confirmEvents.off(name, listener),
+    }
+  }
+  const keptPrompt = (p: Phone) => async () => {
+    const [record] = await p.agent.genericRecords.findAllByQuery({
+      recordType: CONFIRM_PROMPT,
+      connectionId: p.side.connectionId,
+    })
+    return record ? { open: record.content.open, answered: record.content.answered } : undefined
+  }
+
+  test("Jordan answers: at 'promptCleared' the kept request already reads answered, not open", async () => {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await sendConfirmRequest(sam.agent, SAM.connectionId, NOTE)
+    await deliver(jordan)
+    const at = readAt('promptCleared', keptPrompt(jordan))
+    try {
+      expect(await answerConfirmRequest(jordan.agent, JORDAN.connectionId, 'itsMe', ok, 'r')).toBe('sent')
+    } finally {
+      at.off()
+    }
+    expect(at.reads).toHaveLength(1)
+    expect(await at.reads[0]).toEqual({ open: false, answered: 'itsMe' })
+  })
+
+  test("the request arrives: at 'prompt' it is already kept, open (control for the read: it sees a record at all)", async () => {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await sendConfirmRequest(sam.agent, SAM.connectionId, NOTE)
+    const at = readAt('prompt', keptPrompt(jordan))
+    try {
+      await deliver(jordan)
+    } finally {
+      at.off()
+    }
+    expect(await at.reads[0]).toEqual({ open: true, answered: undefined })
+  })
+
+  test("Sam's phone takes the answer: at 'answered' the request already reads confirmed", async () => {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await sendConfirmRequest(sam.agent, SAM.connectionId, NOTE)
+    await deliver(jordan)
+    await answerConfirmRequest(jordan.agent, JORDAN.connectionId, 'itsMe', ok, 'r')
+    const at = readAt('answered', async () =>
+      (await confirmAsksOn(sam.agent, SAM.connectionId)).map((ask) => confirmStatusOf(ask))
+    )
+    try {
+      await deliver(sam)
+    } finally {
+      at.off()
+    }
+    expect(await at.reads[0]).toEqual(['itsMe'])
   })
 })
 
