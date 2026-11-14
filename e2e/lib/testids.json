@@ -413,13 +413,19 @@
     "ConfirmChatAskAgain": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatCancel": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatEarlier": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatExpiresMine": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatExpiresTheirs": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatHide": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatItsMe": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatMine": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatMineLine": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatNotMe": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatNote": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatReceived": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatSaid": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatStatus": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatSteps": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatTheirLine": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatTheirs": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmDeclineButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmDeleteProfileButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -458,6 +464,7 @@
     "ConfirmWithSheet": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConfirmWithSheetBackdrop": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConfirmWithSheetClose": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
+    "ConfirmWithSheetLift": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConnectCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectMyAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectionInviterCapabilitySwitchElement": ["src/screens/Developer.tsx"],
@@ -2417,6 +2424,9 @@
       "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.close"
     },
     {
+      "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.lift"
+    },
+    {
       "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.sheet"
     },
     {
@@ -2492,7 +2502,13 @@
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.cancel"
     },
     {
-      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.earlier"
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.expiresMine"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.expiresTheirs"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.hide"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.itsMe"
@@ -2507,6 +2523,9 @@
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.note"
     },
     {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.received"
+    },
+    {
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.said"
     },
     {
@@ -2517,6 +2536,9 @@
     },
     {
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.theirs"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "testID"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.alarm"
@@ -3177,6 +3199,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.waitingForPhone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "EnforcementCheckIds.checkPrompt"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.accepted(ask.connectionId)"
@@ -3882,9 +3907,6 @@
     },
     {
       "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.check"
-    },
-    {
-      "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.checkPrompt"
     },
     {
       "src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx": "EnforcementCheckIds.checkResult"
