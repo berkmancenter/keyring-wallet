@@ -7,8 +7,8 @@
  */
 import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
-import { Modal } from 'react-native'
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
+import { Modal, Platform, StyleSheet } from 'react-native'
+import { KeyboardAvoidingView, KeyboardEvents } from 'react-native-keyboard-controller'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -205,6 +205,63 @@ describe('the sheet around it', () => {
     const inside = within(tree.getByTestId(id(ConfirmWithSheetIds.lift)))
     expect(inside.queryByTestId(id(Ids.note))).not.toBeNull()
     expect(inside.queryByTestId(id(Ids.send))).not.toBeNull()
+  })
+
+  describe('Android: the lift follows the app-wide keyboard events (278.20, K2 on a Pixel 6: the sheet never moved)', () => {
+    // Inside a Modal opened from the chat, keyboard-controller's view reads the app's provider, but gifted-chat's own
+    // provider is the one told about the dialog's keyboard, so the view never moved. KeyboardEvents are app-wide.
+    type Handler = (e: { height: number }) => void
+    let handlers: Record<string, Handler>
+    let removed: string[]
+    const realAdd = KeyboardEvents.addListener
+    const realOS = Platform.OS
+    const setOS = (os: typeof Platform.OS) => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+    beforeEach(() => {
+      handlers = {}
+      removed = []
+      ;(KeyboardEvents as { addListener: unknown }).addListener = jest.fn((name: string, handler: Handler) => {
+        handlers[name] = handler
+        return { remove: () => removed.push(name) }
+      })
+    })
+    afterEach(() => {
+      ;(KeyboardEvents as { addListener: unknown }).addListener = realAdd
+      setOS(realOS)
+    })
+    const liftPadding = (tree: Tree) =>
+      StyleSheet.flatten(tree.getByTestId(id(ConfirmWithSheetIds.lift)).props.style).paddingBottom
+
+    test('the keyboard starts to show: the sheet goes up by its whole height; it starts to hide: back down', async () => {
+      setOS('android')
+      const tree = await show(<ConfirmWithSheet connectionId={CONN} name="Jordan" visible onClose={jest.fn()} />)
+      // Not keyboard-controller's view (on Android that one is never told). Both are a View in jest, so it is told
+      // apart by its props: that view always gets behavior="padding".
+      expect(tree.getByTestId(id(ConfirmWithSheetIds.lift)).props.behavior).toBeUndefined()
+      expect(liftPadding(tree)).toBe(0)
+      await act(async () => handlers.keyboardWillShow({ height: 336 }))
+      expect(liftPadding(tree)).toBe(336)
+      await act(async () => handlers.keyboardWillHide({ height: 0 }))
+      expect(liftPadding(tree)).toBe(0)
+      // What it lifts: the note and Send are inside it.
+      const inside = within(tree.getByTestId(id(ConfirmWithSheetIds.lift)))
+      expect(inside.queryByTestId(id(Ids.note))).not.toBeNull()
+      expect(inside.queryByTestId(id(Ids.send))).not.toBeNull()
+    })
+
+    test('closing the sheet stops listening, both events', async () => {
+      setOS('android')
+      const tree = await show(<ConfirmWithSheet connectionId={CONN} name="Jordan" visible onClose={jest.fn()} />)
+      expect(Object.keys(handlers).sort()).toEqual(['keyboardWillHide', 'keyboardWillShow'])
+      tree.unmount()
+      expect(removed.sort()).toEqual(['keyboardWillHide', 'keyboardWillShow'])
+    })
+
+    test("control: on iOS it is still keyboard-controller's view, and nothing listens to the events", async () => {
+      setOS('ios')
+      const tree = await show(<ConfirmWithSheet connectionId={CONN} name="Jordan" visible onClose={jest.fn()} />)
+      expect(tree.getByTestId(id(ConfirmWithSheetIds.lift)).props.behavior).toBe('padding')
+      expect(KeyboardEvents.addListener).not.toHaveBeenCalled()
+    })
   })
 })
 

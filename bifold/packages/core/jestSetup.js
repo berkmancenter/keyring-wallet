@@ -96,6 +96,8 @@ jest.mock('react-native-keyboard-controller', () => {
     KeyboardProvider: ({ children }) => children,
     KeyboardAwareScrollView: ScrollView,
     KeyboardAvoidingView: View,
+    // App-wide keyboard events (the Confirm sheet's lift on Android reads them).
+    KeyboardEvents: { addListener: () => ({ remove: () => undefined }) },
     // gifted-chat's MessageImage opens a photo full screen in one.
     OverKeyboardView: ({ visible, children }) => (visible ? children : null),
   }

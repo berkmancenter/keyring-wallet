@@ -4,10 +4,9 @@
  * in one line (waiting, confirmed), or the red "not them" card whole. It closes with its ✕, a tap above it, or Back.
  *
  * The keyboard never covers the note or Send (278.19, Alberto's iPhone: it hid both). The sheet is in a Modal, its own
- * window, so the chat's keyboard handling never reaches it: keyboard-controller's view lifts it here, on both
- * platforms. It fills the whole window, so the lift is the keyboard's full height (offset 0). On Android the window is
- * drawn under the status and navigation bars (translucent) so that holds there too; the safe-area views keep the
- * sheet clear of both bars.
+ * window, so the chat's keyboard handling never reaches it: SheetKeyboardLift lifts it here. It fills the whole
+ * window, so the lift is the keyboard's full height. On Android the window is drawn under the status and navigation
+ * bars (translucent) so that holds there too; the safe-area views keep the sheet clear of both bars.
  *
  * Its own gate, read at every render: with the "Confirm it's you" switch off or a remote off (isConfirmItsYouEnabled,
  * the switch AND no kill), or with no connection, it shows nothing, even if a parent opened it. The row inside carries
@@ -18,7 +17,6 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -29,6 +27,8 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { isConfirmItsYouEnabled } from '../module/confirmItsYouFlag'
 import ConfirmItsYouRow from '../screens/ConfirmItsYouRow'
+
+import SheetKeyboardLift from './SheetKeyboardLift'
 
 export const ConfirmWithSheetIds = {
   sheet: 'ConfirmWithSheet',
@@ -74,12 +74,7 @@ const ConfirmWithSheet: React.FC<Props> = ({ connectionId, name, visible, onClos
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <KeyboardAvoidingView
-        behavior="padding"
-        keyboardVerticalOffset={0}
-        style={styles.lift}
-        testID={testIdWithKey(ConfirmWithSheetIds.lift)}
-      >
+      <SheetKeyboardLift style={styles.lift} testID={testIdWithKey(ConfirmWithSheetIds.lift)}>
         <SafeAreaView style={styles.overlay} edges={['top']}>
           {/* A tap above the sheet closes it, for sighted use only: a screen reader skips it and starts at the title, and
             closes with the ✕ (or the reader's own escape gesture, onRequestClose). */}
@@ -116,7 +111,7 @@ const ConfirmWithSheet: React.FC<Props> = ({ connectionId, name, visible, onClos
             </ScrollView>
           </SafeAreaView>
         </SafeAreaView>
-      </KeyboardAvoidingView>
+      </SheetKeyboardLift>
     </SafeAreaModal>
   )
 }
