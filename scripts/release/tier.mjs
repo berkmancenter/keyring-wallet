@@ -73,7 +73,9 @@ export const RULES = [
   // At the wallet root and at bifold's (the submodule's own .prettierignore keeps vendored bundles byte-identical).
   ['none', 'repository dotfile', /^(bifold\/)?\.(gitignore|gitattributes|editorconfig|nvmrc|prettierrc[^/]*|prettierignore|eslintrc[^/]*|eslintignore|commitlintrc[^/]*|lintstagedrc[^/]*)$/],
   ['none', 'the .env template (builds read their own .env)', /^app\/\.env\.sample$/],
-  ['none', "a package's test or type-check config", /^bifold\/packages\/[^/]+\/(jest\.config\.[jt]s|tsconfig[^/]*\.json|\.eslintrc[^/]*|\.prettierrc[^/]*)$/],
+  // jestSetup*.js: jest's setupFiles / setupFilesAfterEnv (named by jest.config); only tests and that config reference
+  // them, nothing in src imports them, so they never reach the bundle.
+  ['none', "a package's test or type-check config", /^bifold\/packages\/[^/]+\/(jest\.config\.[jt]s|jestSetup[^/]*\.[jt]s|tsconfig[^/]*\.json|\.eslintrc[^/]*|\.prettierrc[^/]*)$/],
   // A package's dev-time generators (core: gen-testids, the emoji data). Their OUTPUT lands in src and grades there;
   // nothing the app ships imports scripts/. The two native packages match the native rule above first.
   ['none', "a package's dev-time scripts (generators and their tests; nothing shipped imports them)", /^bifold\/packages\/[^/]+\/scripts\//],
