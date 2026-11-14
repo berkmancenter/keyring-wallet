@@ -8,7 +8,7 @@ import en from '../../src/localization/en'
 import fr from '../../src/localization/fr'
 import ptBr from '../../src/localization/pt-br'
 
-const LINES = ['SetUpSediDemoGuardianHint', 'SetUpSediDemoPersonHint', 'SediDemoGuardianDone'] as const
+const LINES = ['SediDemoGuardianHint', 'SediDemoWardHint', 'SediDemoGuardianDone', 'SediDemoWardDone'] as const
 const LOCALES = { en, fr, 'pt-BR': ptBr } as unknown as Record<string, { Developer: Record<string, string> }>
 
 describe.each(Object.keys(LOCALES))('the SEDI demo set-up lines, in %s', (lng) => {

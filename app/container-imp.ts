@@ -31,6 +31,7 @@ import {
   setTrustTestStateEnabled,
   setStateCardEnabled,
   setDemoStateHost,
+  setSediDemoSide,
   setConfirmItsYouEnabled,
   ownerChecks,
   vtaAgent,
@@ -400,6 +401,7 @@ export class AppContainer implements Container {
         enableStateCard,
         demoStateHost,
         enableConfirmItsYou,
+        sediDemoSide,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -445,6 +447,11 @@ export class AppContainer implements Container {
           const data = await this.storage.getValueForKey(BCLocalStorageKeys.DemoStateHost)
           if (typeof data === 'string') demoStateHost = data
         })(),
+        // Which SEDI demo side this phone took: anything but the two names reads as neither.
+        (async () => {
+          const data = await this.storage.getValueForKey(BCLocalStorageKeys.SediDemoSide)
+          if (data === 'guardian' || data === 'ward') sediDemoSide = data
+        })(),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -478,6 +485,7 @@ export class AppContainer implements Container {
           enableStateCard,
           demoStateHost,
           enableConfirmItsYou,
+          sediDemoSide,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -495,6 +503,8 @@ export class AppContainer implements Container {
       // Before Credentials first draws: the state card reads it at each render.
       setStateCardEnabled(state.developer.enableStateCard)
       setDemoStateHost(state.developer.demoStateHost || null)
+      // Before the codes screen first opens: it shows only this side's code (both with no side).
+      setSediDemoSide(state.developer.sediDemoSide || null)
       // Before an arriving "Confirm it's you" request is read: it is dropped while off.
       setConfirmItsYouEnabled(state.developer.enableConfirmItsYou)
 

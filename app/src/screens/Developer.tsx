@@ -27,13 +27,12 @@ import {
   setStateCardEnabled,
   STATE_CARD_REMOTE_OFF,
   setUpSediDemoAsGuardian,
-  setUpSediDemoAsPerson,
+  setUpSediDemoAsWard,
   turnOffSediDemo,
   SEDI_KERI_REMOTE_OFF,
   CONFIRM_ITS_YOU_REMOTE_OFF,
   setConfirmItsYouEnabled,
   setDemoStateHost,
-  demoStateHost,
   sediDemoHiddenByKill,
   EnforcementCheckCard,
   vtaAgent,
@@ -80,8 +79,8 @@ import { BCDispatchAction, BCState } from '@/store'
 import IASEnvironment from './IASEnvironment'
 import RemoteLogWarning from './RemoteLogWarning'
 
-/** Which side of the SEDI demo this phone takes: the guardian (the approver, holds the card) or the person. */
-type SediDemoSide = 'guardian' | 'person'
+/** Which side of the SEDI demo this phone takes: the guardian (the approver, holds the card) or the ward. */
+type SediDemoSide = 'guardian' | 'ward'
 type SediDemoSideResult = Awaited<ReturnType<typeof setUpSediDemoAsGuardian>>
 /** The last set-up's outcome, as the screen shows it; 'failed' is a set-up that threw. */
 interface SediDemoOutcome {
@@ -93,8 +92,8 @@ interface SediDemoOutcome {
 /** The result's own line. A 'done' names its side; every other result is the same on either side. */
 const sediDemoResultKey = (side: SediDemoSide, result: SediDemoOutcome['result']): string =>
   ({
-    done: side === 'guardian' ? 'Developer.SediDemoGuardianDone' : 'Developer.SediDemoPersonDone',
-    doneSomeHidden: side === 'guardian' ? 'Developer.SediDemoGuardianDone' : 'Developer.SediDemoPersonDone',
+    done: side === 'guardian' ? 'Developer.SediDemoGuardianDone' : 'Developer.SediDemoWardDone',
+    doneSomeHidden: side === 'guardian' ? 'Developer.SediDemoGuardianDone' : 'Developer.SediDemoWardDone',
     remoteOff: 'Developer.SediDemoOff',
     cardNotHeld: 'Developer.SediDemoCardNotHeld',
     wardNotSet: 'Developer.SediDemoWardNotSet',
@@ -138,8 +137,10 @@ const Developer: React.FC = () => {
   const [enableStateCard, setEnableStateCard] = useState(!!store.developer.enableStateCard)
   const [enableConfirmItsYou, setEnableConfirmItsYou] = useState(!!store.developer.enableConfirmItsYou)
   const [demoStateHostText, setDemoStateHostText] = useState(store.developer.demoStateHost ?? '')
-  // The last demo set-up tapped on this screen, kept ON the screen (not an alert that goes away): which side, its
-  // result, and the features a release had turned off AT THAT TAP. Cleared by "Turn off the SEDI demo".
+  // Which demo switch is on: one side per phone, or neither. Saved, and handed to bifold at start-up (container-imp).
+  const [sediDemoSide, setSediDemoSideShown] = useState<SediDemoSide | ''>(store.developer.sediDemoSide ?? '')
+  // The last demo switch turned on, kept ON the screen (not an alert that goes away): which side, its result, and
+  // the features a release had turned off AT THAT TAP. Cleared when the switch goes off.
   const [sediDemoOutcome, setSediDemoOutcome] = useState<SediDemoOutcome | null>(null)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
@@ -242,7 +243,10 @@ const Developer: React.FC = () => {
      * pressable row could toggle twice.
      */
     wholeRow?: boolean
-    /** A plain line under the title saying what the row does; inside the tap target of a wholeRow row. */
+    /**
+     * A plain line under the title saying what the row does: inside the tap target of a wholeRow row; beside a switch
+     * row's switch, outside it like the title (so the switch can never toggle twice), and its hint for a screen reader.
+     */
     hint?: string
   }
   const SectionRow = ({
@@ -280,11 +284,19 @@ const Developer: React.FC = () => {
           </Pressable>
         ) : (
           <View style={{ flexDirection: 'row' }}>
-            <Text style={styles.rowTitle}>{title}</Text>
+            {hint ? (
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{title}</Text>
+                <Text style={[TextTheme.caption, { marginTop: 4 }]}>{hint}</Text>
+              </View>
+            ) : (
+              <Text style={styles.rowTitle}>{title}</Text>
+            )}
             <Pressable
               onPress={onPress}
               accessible={true}
               accessibilityLabel={accessibilityLabel}
+              accessibilityHint={hint}
               testID={testID}
               style={styles.sectionRow}
             >
@@ -566,38 +578,42 @@ const Developer: React.FC = () => {
     }
   }
 
-  /** Keep the three SEDI demo switches as saved settings, as their own rows do, and show them. */
-  // The five switches the one-tap turns on in bifold (bifold #1041: the state card and Confirm it's you joined the
-  // three), saved here so a restart matches what bifold holds.
-  // The person's side turns the state card OFF in bifold (the person holds no card), so it is saved off here too: saving
+  /** Keep the SEDI demo's switches as saved settings, as their own rows do, and show them. */
+  // The four switches a demo side turns on in bifold, saved here so a restart matches what bifold holds. Confirm it's
+  // you is not one of them: it is its own switch, set on its own row (Alberto, 278.19), and the demo leaves it alone.
+  // The ward's side turns the state card OFF in bifold (the ward holds no card), so it is saved off here too: saving
   // it on would bring it back at the next restart.
   const saveSediDemoSwitches = (on: boolean, side?: SediDemoSide) => {
-    const stateCard = on && side !== 'person'
+    const stateCard = on && side !== 'ward'
     for (const [type, value] of [
       [BCDispatchAction.TOGGLE_TRUSTED_APPROVERS, on],
       [BCDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS, on],
       [BCDispatchAction.TOGGLE_TRUST_TEST_STATE, on],
       [BCDispatchAction.TOGGLE_STATE_CARD, stateCard],
-      [BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU, on],
     ] as const)
       dispatch({ type, payload: [value] })
     setEnableTrustedApprovers(on)
     setEnableStateVerifiedApprovers(on)
     setEnableTrustTestState(on)
     setEnableStateCard(stateCard)
-    setEnableConfirmItsYou(on)
+  }
+
+  /** The side this phone takes (or none), saved and shown; bifold's own copy is set by the set-up and the turn-off. */
+  const saveSediDemoSide = (side: SediDemoSide | '') => {
+    dispatch({ type: BCDispatchAction.SET_SEDI_DEMO_SIDE, payload: [side] })
+    setSediDemoSideShown(side)
   }
 
   /**
-   * "Set up as the guardian" / "Set up as the person" (Alberto's C1 pick, 11-12): bifold sets up one side of the demo,
-   * or does nothing at all when a remote off holds. The guardian's phone holds the K0 Guardian card and shows the state
-   * card; the person's phone is the K0 ward, holds no card, and has the state card off. The switches are saved on
-   * every result but 'remoteOff': after any other result bifold HAS turned them on, so saving them keeps a restart
-   * from differing from what this screen shows. 'remoteOff' saves nothing: the feature is off for this build.
+   * "Guardian demo" / "Ward demo" turned on (switches since 278.19; C1, 11-12, was two arrow rows): bifold sets up one
+   * side of the demo, or does nothing at all when a remote off holds. The guardian's phone holds the K0 Guardian card
+   * and shows the state card; the ward's phone is the K0 ward, holds no card, and has the state card off. The switches
+   * and the side are saved on every result but 'remoteOff': after any other result bifold HAS turned them on, so saving
+   * them keeps a restart from differing from what this screen shows. 'remoteOff' saves nothing: the feature is off for
+   * this build, and the switch stays off.
    *
-   * The result stays on the screen until the next set-up or "Turn off". Which features a release has turned off is
-   * read from bifold at this tap and kept with the result, so the lines say what THIS set-up found; the Demo state
-   * host line is read live at each render, so pasting a host after the set-up updates it.
+   * The result stays on the screen, as one line, until the next side or the switch goes off. Which features a release
+   * has turned off is read from bifold at this tap and kept with the result.
    */
   const runSediDemoSetup = async (side: SediDemoSide) => {
     if (!agent) {
@@ -605,8 +621,11 @@ const Developer: React.FC = () => {
       return
     }
     try {
-      const result = await (side === 'guardian' ? setUpSediDemoAsGuardian : setUpSediDemoAsPerson)(agent)
-      if (result !== 'remoteOff') saveSediDemoSwitches(true, side)
+      const result = await (side === 'guardian' ? setUpSediDemoAsGuardian : setUpSediDemoAsWard)(agent)
+      if (result !== 'remoteOff') {
+        saveSediDemoSwitches(true, side)
+        saveSediDemoSide(side)
+      }
       setSediDemoOutcome({ side, result, hidden: result === 'doneSomeHidden' ? sediDemoHiddenByKill(side) : [] })
     } catch (error) {
       setSediDemoOutcome({
@@ -645,7 +664,17 @@ const Developer: React.FC = () => {
   const runSediDemoOff = () => {
     turnOffSediDemo()
     saveSediDemoSwitches(false)
+    saveSediDemoSide('')
     setSediDemoOutcome(null)
+  }
+
+  /**
+   * A demo switch (Alberto, 278.19: switches, not arrow rows). On sets this phone up as that side, in place of the
+   * other one if it was on: one side per phone. Off turns the demo off.
+   */
+  const toggleSediDemoSide = (side: SediDemoSide) => {
+    if (sediDemoSide === side) runSediDemoOff()
+    else void runSediDemoSetup(side)
   }
 
   const toggleEnableLivePickupSwitch = () => {
@@ -1314,80 +1343,50 @@ const Developer: React.FC = () => {
             <View style={{ paddingHorizontal: 25, paddingVertical: 12 }}>
               <Text style={TextTheme.normal}>{t('Developer.SediDemoIntro')}</Text>
             </View>
-            {(['guardian', 'person'] as const).map((side) => {
-              const title = t(side === 'guardian' ? 'Developer.SetUpSediDemoGuardian' : 'Developer.SetUpSediDemoPerson')
+            {(['guardian', 'ward'] as const).map((side) => {
+              const title = t(side === 'guardian' ? 'Developer.SediDemoGuardian' : 'Developer.SediDemoWard')
+              const on = sediDemoSide === side
               return (
                 <SectionRow
                   key={side}
                   title={title}
-                  hint={t(
-                    side === 'guardian' ? 'Developer.SetUpSediDemoGuardianHint' : 'Developer.SetUpSediDemoPersonHint'
-                  )}
+                  hint={t(side === 'guardian' ? 'Developer.SediDemoGuardianHint' : 'Developer.SediDemoWardHint')}
                   accessibilityLabel={title}
-                  testID={testIdWithKey(side === 'guardian' ? 'SetUpSediDemoGuardian' : 'SetUpSediDemoPerson')}
+                  testID={testIdWithKey(side === 'guardian' ? 'SediDemoGuardian' : 'SediDemoWard')}
                   showRowSeparator={side === 'guardian'}
-                  wholeRow
-                  onPress={() => void runSediDemoSetup(side)}
+                  onPress={() => toggleSediDemoSide(side)}
                 >
-                  <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
+                  <Switch
+                    trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+                    thumbColor={on ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+                    ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+                    onValueChange={() => toggleSediDemoSide(side)}
+                    value={on}
+                    testID={testIdWithKey(side === 'guardian' ? 'SediDemoGuardianSwitch' : 'SediDemoWardSwitch')}
+                  />
                 </SectionRow>
               )
             })}
+            {/* One line: what this phone now does (Alberto, 278.19: the box said too much). A release that turned a
+                feature off adds its own line; where the state is checked from is said under Demo state host. */}
             {sediDemoOutcome && (
               <View
                 testID={testIdWithKey('SediDemoResult')}
                 accessible={true}
                 accessibilityLiveRegion="polite"
-                style={{
-                  marginHorizontal: 25,
-                  marginVertical: 12,
-                  padding: 12,
-                  borderWidth: 1,
-                  borderRadius: 8,
-                  borderColor: TextTheme.normal.color,
-                }}
+                style={{ marginHorizontal: 25, marginVertical: 8 }}
               >
                 {[
                   t(sediDemoResultKey(sediDemoOutcome.side, sediDemoOutcome.result), {
                     error: sediDemoOutcome.error,
                   }),
-                  // Where the demo state is checked from, read live: a host pasted after the set-up shows here at once.
-                  ...(sediDemoOutcome.result === 'done' || sediDemoOutcome.result === 'doneSomeHidden'
-                    ? [
-                        demoStateHost()
-                          ? t('Developer.SediDemoHost', { host: demoStateHost() })
-                          : t('Developer.SediDemoNoHost'),
-                      ]
-                    : []),
-                  ...sediDemoOutcome.hidden.map((feature) =>
-                    t(
-                      feature === 'stateCard'
-                        ? 'Developer.SediDemoHiddenStateCard'
-                        : 'Developer.SediDemoHiddenConfirmItsYou'
-                    )
-                  ),
+                  ...sediDemoOutcome.hidden.map(() => t('Developer.SediDemoHiddenStateCard')),
                 ].map((line, i) => (
-                  <Text key={i} style={[TextTheme.normal, i > 0 && { marginTop: 8 }]}>
+                  <Text key={i} style={[TextTheme.normal, i > 0 && { marginTop: 4 }]}>
                     {line}
                   </Text>
                 ))}
               </View>
-            )}
-            {(enableTrustedApprovers ||
-              enableStateVerifiedApprovers ||
-              enableTrustTestState ||
-              enableStateCard ||
-              enableConfirmItsYou) && (
-              <SectionRow
-                title={t('Developer.TurnOffSediDemo')}
-                hint={t('Developer.TurnOffSediDemoHint')}
-                accessibilityLabel={t('Developer.TurnOffSediDemo')}
-                testID={testIdWithKey('TurnOffSediDemo')}
-                wholeRow
-                onPress={runSediDemoOff}
-              >
-                <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
-              </SectionRow>
             )}
             {isTrustedApproversEnabled() && isStateVerifiedApproversEnabled() && (
               <View style={{ paddingHorizontal: 25, paddingVertical: 12 }}>
@@ -1404,9 +1403,22 @@ const Developer: React.FC = () => {
                   autoCorrect={false}
                   keyboardType="url"
                   placeholder="abc-def.trycloudflare.com"
+                  // Every colour set here, none left to the system: on an Android phone in dark mode the native
+                  // defaults drew the hint (and the typed text) near-white on this screen's light background (278.19).
+                  placeholderTextColor={ColorPalette.grayscale.mediumGrey}
+                  selectionColor={ColorPalette.brand.primary}
+                  cursorColor={ColorPalette.brand.primary}
+                  keyboardAppearance="light"
                   style={[
                     TextTheme.normal,
-                    { borderBottomWidth: 1, borderColor: TextTheme.normal.color, paddingVertical: 6 },
+                    {
+                      color: TextTheme.normal.color,
+                      backgroundColor: ColorPalette.grayscale.white,
+                      borderBottomWidth: 1,
+                      borderColor: TextTheme.normal.color,
+                      paddingVertical: 6,
+                      paddingHorizontal: 8,
+                    },
                   ]}
                 />
                 <Pressable

@@ -1,7 +1,8 @@
 /**
- * Developer › Demos: "Set up the SEDI demo" takes the tap on its words, not only on its arrow. On 278.16 Alberto
- * needed two taps: the title sat outside the row's Pressable, so a tap on the words did nothing. A switch row keeps
- * its old shape (its title still takes no tap), so a Switch inside a pressable row can never toggle twice.
+ * Developer › Demos: an action row takes the tap on its words, not only on its arrow. On 278.16 Alberto needed two taps
+ * on "Set up the SEDI demo": the title sat outside the row's Pressable. A switch row keeps its old shape (its words take
+ * no tap), so a Switch inside a pressable row can never toggle twice. The demo's two sides are switch rows since 278.19
+ * ("Guardian demo" / "Ward demo"): each takes its tap on the switch, once, and shows its plain line beside it.
  *
  * Taps on words use userEvent.press, which presses the HOST element the way a finger does. fireEvent.press would also
  * reach a composite parent's onPress (SectionRow's own prop), so it reads a tap on the words as handled even when the
@@ -45,7 +46,7 @@ jest.mock('@bifold/core', () => ({
   holdK0RevokedOmittedCard: (agent: unknown) => mockK0.holdK0RevokedOmittedCard(agent),
   becomeK0TestWard: (agent: unknown) => mockK0.becomeK0TestWard(agent),
   setUpSediDemoAsGuardian: (agent: unknown) => mockSetUp(agent, 'guardian'),
-  setUpSediDemoAsPerson: (agent: unknown) => mockSetUp(agent, 'person'),
+  setUpSediDemoAsWard: (agent: unknown) => mockSetUp(agent, 'ward'),
   turnOffSediDemo: () => mockTurnOff(),
   setConfirmItsYouEnabled: (on: boolean) => mockSetConfirm(on),
 }))
@@ -76,38 +77,41 @@ afterEach(() => {
 })
 
 describe('Developer › Demos: the whole action row takes the tap', () => {
-  // Both set-up rows, on their title AND on the plain line under it: a tap on either runs that side once, never the
-  // other side (C1, 11-12: "Set up as the guardian" / "Set up as the person").
+  // The two demo sides are switch rows (278.19): the switch takes the tap and runs that side once, never the other.
   test.each([
-    ['guardian', 'Developer.SetUpSediDemoGuardian'],
-    ['guardian', 'Developer.SetUpSediDemoGuardianHint'],
-    ['person', 'Developer.SetUpSediDemoPerson'],
-    ['person', 'Developer.SetUpSediDemoPersonHint'],
-  ])('one tap on the words %s… (%s) runs that side once, and not the other', async (side, words) => {
+    ['guardian', 'SediDemoGuardian'],
+    ['ward', 'SediDemoWard'],
+  ])('one tap on the %s switch runs that side once, and not the other', async (side, id) => {
     const tree = shown()
-    await userEvent.setup().press(tree.getByText(words))
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey(id))))
     expect(mockSetUp).toHaveBeenCalledTimes(1)
     expect(mockSetUp.mock.calls[0][1]).toBe(side)
   })
 
   test.each([
-    ['SetUpSediDemoGuardian', 'Developer.SetUpSediDemoGuardian', 'Developer.SetUpSediDemoGuardianHint'],
-    ['SetUpSediDemoPerson', 'Developer.SetUpSediDemoPerson', 'Developer.SetUpSediDemoPersonHint'],
-  ])('the %s row is one button, labelled with its title, its plain line as the hint', (id, title, hint) => {
+    ['SediDemoGuardian', 'Developer.SediDemoGuardian', 'Developer.SediDemoGuardianHint'],
+    ['SediDemoWard', 'Developer.SediDemoWard', 'Developer.SediDemoWardHint'],
+  ])('the %s switch is labelled with its title, its plain line on screen and as the hint', (id, title, hint) => {
     const tree = shown()
     const row = tree.getByTestId(testIdWithKey(id))
-    expect(row.props.accessibilityRole).toBe('button')
     expect(row.props.accessibilityLabel).toBe(title)
     expect(row.props.accessibilityHint).toBe(hint)
-    // The words are inside it, so the taps above landed on the row itself.
-    expect(within(row).getByText(title)).toBeTruthy()
-    expect(within(row).getByText(hint)).toBeTruthy()
+    expect(tree.getByText(title)).toBeTruthy()
+    expect(tree.getByText(hint)).toBeTruthy()
   })
 
-  test('a tap on the words "Turn off the SEDI demo" turns it off (after a set-up shows the row)', async () => {
+  test("a demo switch's words take no tap, so it can never run twice (control: its switch, above)", async () => {
     const tree = shown()
-    await userEvent.setup().press(tree.getByText('Developer.SetUpSediDemoGuardian'))
-    await userEvent.setup().press(tree.getByText('Developer.TurnOffSediDemo'))
+    await userEvent.setup().press(tree.getByText('Developer.SediDemoGuardian'))
+    await userEvent.setup().press(tree.getByText('Developer.SediDemoWardHint'))
+    expect(mockSetUp).not.toHaveBeenCalled()
+  })
+
+  test('no "Turn off the SEDI demo" row any more: the switch that is on turns it off', async () => {
+    const tree = shown()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('SediDemoGuardian'))))
+    expect(tree.queryByTestId(testIdWithKey('TurnOffSediDemo'))).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('SediDemoGuardian'))))
     expect(mockTurnOff).toHaveBeenCalledTimes(1)
   })
 
