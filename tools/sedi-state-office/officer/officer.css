@@ -509,3 +509,10 @@ code {
 .tree-switch [aria-pressed="true"] {
   outline: 2px solid var(--accent);
 }
+.scan-video {
+  width: 100%;
+  max-width: 320px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #000;
+}

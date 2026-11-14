@@ -173,4 +173,4 @@ Differences from K0:
 ## Tests
 
 `$PY -I test_office.py`. The end-to-end group needs the keripy clone, and the K0 group needs the bifold clone.
-The officer page's code picker: `node --test codes.test.js`.
+The officer page's code picker and scanner: `node --test codes.test.js scan.test.js`.

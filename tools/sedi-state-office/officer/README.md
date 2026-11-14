@@ -12,6 +12,11 @@ API it calls (see `../README.md`). Plain HTML, CSS and JS: no framework, no buil
   either code or both, and `codes.js` fills each field it finds exactly one code for, by the same shapes. Two
   different codes of one kind fill nothing and say so. Tested by `node --test ../codes.test.js` (kept outside this
   folder, which the page serves).
+- **Scan from phone** (`scan.js`): the Mac's camera reads the QR a phone shows on its codes screen and puts each
+  new code into the paste box, so scanning the guardian's phone then the ward's fills both fields. Decoded by the
+  browser's own `BarcodeDetector` (Chrome and Edge on macOS; elsewhere it says to use Chrome or paste). The camera
+  is read on this computer only, and stopped once both fields are filled, on Stop, after an issue, or on leaving.
+  Tested by `node --test ../scan.test.js`.
 - **The QR** is the issuer's `qrSvg`, shown through an `<img>` with a `data:` URL, so nothing in it can run.
 - **Revoke** asks first, in the page. After a revoke the list shows "Revoked" with its time.
 - **Published files** (testing only, read only): every entry of the publish tree the public server hands to
