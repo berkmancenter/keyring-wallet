@@ -65,6 +65,9 @@ test('what the app never ships is none, even a manifest there', () => {
   // another type, still reads store.
   assert.equal(tierOf('bifold/packages/core/setup.js'), 'store');
   assert.equal(tierOf('bifold/packages/core/jestSetup.json'), 'store');
+  // On purpose: the tail is [jt]s, not [jt]sx?. A .jsx setup file nobody has written fails safe to store, and widening
+  // the tail would reach into .jsx, which does ship.
+  assert.equal(tierOf('bifold/packages/core/jestSetup.jsx'), 'store');
   // The same tooling dotfiles at bifold's root; any other dotfile there, or its babel config, still reads store.
   assert.equal(tierOf('bifold/.prettierignore', 'bifold/.gitignore', 'bifold/.eslintrc.js'), 'none');
   assert.equal(tierOf('bifold/.babelrc'), 'store');
