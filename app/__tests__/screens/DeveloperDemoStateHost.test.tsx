@@ -15,7 +15,7 @@ import {
 } from '@bifold/core'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { Alert } from 'react-native'
+import { Alert, StyleSheet } from 'react-native'
 
 import Developer from '../../src/screens/Developer'
 import { BCLocalStorageKeys } from '../../src/store'
@@ -98,4 +98,18 @@ test('a public hostname is handed to bifold and saved (control: a refused one is
   })
   expect(mockSetHost).toHaveBeenLastCalledWith('Abc-Def.TryCloudflare.com')
   expect(store).toHaveBeenCalledWith(BCLocalStorageKeys.DemoStateHost, 'abc-def.trycloudflare.com')
+})
+
+test('every colour of the field is set, none left to the system (278.19: near-white on an Android phone in dark mode)', () => {
+  const field = shown().getByTestId(FIELD)
+  const style = StyleSheet.flatten(field.props.style)
+  const dark = (colour: unknown) => typeof colour === 'string' && colour.toLowerCase() !== '#ffffff'
+  // The typed text, the hint, the cursor and the selection: each named, and none of them white.
+  expect(dark(style.color)).toBe(true)
+  expect(dark(field.props.placeholderTextColor)).toBe(true)
+  expect(dark(field.props.cursorColor)).toBe(true)
+  expect(dark(field.props.selectionColor)).toBe(true)
+  // Drawn on its own background, so the text never depends on what is behind it.
+  expect(style.backgroundColor).toBeTruthy()
+  expect(style.backgroundColor).not.toBe(style.color)
 })

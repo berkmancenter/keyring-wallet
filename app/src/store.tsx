@@ -64,6 +64,11 @@ export interface Developer {
    * bifold's setConfirmItsYouEnabled; CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
    */
   enableConfirmItsYou: boolean
+  /**
+   * Developer › Demos: which side of the SEDI demo this phone takes ('' for neither). bifold's setSediDemoSide at
+   * start-up, so the codes screen shows this side's code after a restart.
+   */
+  sediDemoSide: '' | 'guardian' | 'ward'
 }
 
 export interface DismissPersonCredentialOffer {
@@ -90,6 +95,7 @@ enum DeveloperDispatchAction {
   TOGGLE_STATE_CARD = 'developer/toggleStateCard',
   TOGGLE_CONFIRM_ITS_YOU = 'developer/toggleConfirmItsYou',
   SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
+  SET_SEDI_DEMO_SIDE = 'developer/setSediDemoSide',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -172,6 +178,7 @@ const developerState: Developer = {
   demoStateHost: '',
   // Off by default, as above: CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
   enableConfirmItsYou: false,
+  sediDemoSide: '',
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -196,6 +203,7 @@ export enum BCLocalStorageKeys {
   EnableStateCard = 'EnableStateCard',
   EnableConfirmItsYou = 'EnableConfirmItsYou',
   DemoStateHost = 'DemoStateHost',
+  SediDemoSide = 'SediDemoSide',
 }
 
 export const initialState: BCState = {
@@ -354,6 +362,15 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, demoStateHost }
 
       PersistentStorage.storeValueForKey<string>(BCLocalStorageKeys.DemoStateHost, developer.demoStateHost)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.SET_SEDI_DEMO_SIDE: {
+      const value = (action?.payload || []).pop()
+      const sediDemoSide: Developer['sediDemoSide'] = value === 'guardian' || value === 'ward' ? value : ''
+      const developer = { ...state.developer, sediDemoSide }
+
+      PersistentStorage.storeValueForKey<string>(BCLocalStorageKeys.SediDemoSide, developer.sediDemoSide)
 
       return { ...state, developer }
     }

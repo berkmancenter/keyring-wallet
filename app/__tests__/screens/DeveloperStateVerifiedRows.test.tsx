@@ -43,7 +43,7 @@ jest.mock('@bifold/core', () => ({
   holdK0RevokedTestCard: (agent: unknown) => mockRevoked(agent),
   holdK0RevokedOmittedCard: (agent: unknown) => mockOmitted(agent),
   setUpSediDemoAsGuardian: (agent: unknown) => mockSetUp(agent, 'guardian'),
-  setUpSediDemoAsPerson: (agent: unknown) => mockSetUp(agent, 'person'),
+  setUpSediDemoAsWard: (agent: unknown) => mockSetUp(agent, 'ward'),
   turnOffSediDemo: () => mockTurnOff(),
 }))
 
@@ -187,13 +187,14 @@ describe('Developer: the state-verified approvers rows', () => {
   })
 })
 
-describe('Developer: "Set up the SEDI demo" in one tap', () => {
+describe('Developer: the SEDI demo switches', () => {
   const DEMO = {
-    setUp: testIdWithKey('SetUpSediDemoGuardian'),
-    person: testIdWithKey('SetUpSediDemoPerson'),
-    turnOff: testIdWithKey('TurnOffSediDemo'),
+    setUp: testIdWithKey('SediDemoGuardian'),
+    ward: testIdWithKey('SediDemoWard'),
+    guardianSwitch: testIdWithKey('SediDemoGuardianSwitch'),
   }
   const has = (tree: ReturnType<typeof shown>['tree'], id: string) => tree.queryByTestId(id) !== null
+  const isOn = (tree: ReturnType<typeof shown>['tree']) => tree.getByTestId(DEMO.guardianSwitch).props.value
   /** The result kept on the screen, line by line (C1: no alert). */
   const resultLines = (tree: ReturnType<typeof shown>['tree']) =>
     within(tree.getByTestId(testIdWithKey('SediDemoResult')))
@@ -201,67 +202,61 @@ describe('Developer: "Set up the SEDI demo" in one tap', () => {
       .map((n) => n.props.children)
       .join('\n\n')
 
-  test('the row shows with everything off, and no undo yet (control: the SEDI/KERI remote off hides both)', () => {
+  test('both switches show, off, with everything off (control: the SEDI/KERI remote off hides both)', () => {
     set(false, false, false)
     const { tree } = shown()
     expect(has(tree, DEMO.setUp)).toBe(true)
-    expect(has(tree, DEMO.person)).toBe(true)
-    expect(has(tree, DEMO.turnOff)).toBe(false)
+    expect(has(tree, DEMO.ward)).toBe(true)
+    expect(isOn(tree)).toBe(false)
+    expect(has(tree, testIdWithKey('TurnOffSediDemo'))).toBe(false)
     tree.unmount()
     SEDI_KERI_REMOTE_OFF.off = true
     const off = shown().tree
     expect(has(off, DEMO.setUp)).toBe(false)
-    expect(has(off, DEMO.person)).toBe(false)
-    expect(has(off, DEMO.turnOff)).toBe(false)
+    expect(has(off, DEMO.ward)).toBe(false)
   })
 
-  test('a done set-up calls bifold with this agent, says so, and keeps the switches on: the undo appears', async () => {
+  test('a done set-up calls bifold with this agent, says so in one line, and the switch shows on', async () => {
     set(false, false, false)
     const { tree } = shown()
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
     expect(mockSetUp).toHaveBeenCalledWith(mockAgent, 'guardian')
-    // The done line, then where the state is checked from (no Demo state host here; see DeveloperOneTapMessage).
-    expect(resultLines(tree)).toBe('Developer.SediDemoGuardianDone\n\nDeveloper.SediDemoNoHost')
+    expect(resultLines(tree)).toBe('Developer.SediDemoGuardianDone')
     expect(Alert.alert).not.toHaveBeenCalled()
-    expect(has(tree, DEMO.turnOff)).toBe(true)
+    expect(isOn(tree)).toBe(true)
   })
 
-  test('a set-up bifold refuses (remote off) saves nothing and says so (control: the row above)', async () => {
+  test('a set-up bifold refuses (remote off) says so and the switch stays off (control: the row above)', async () => {
     set(false, false, false)
     mockSetUp.mockResolvedValueOnce('remoteOff')
     const { tree } = shown()
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
     expect(resultLines(tree)).toBe('Developer.SediDemoOff')
-    expect(has(tree, DEMO.turnOff)).toBe(false)
+    expect(isOn(tree)).toBe(false)
   })
 
   // bifold says which step stopped the set-up (#1033); each has its own message, and since bifold has already turned
-  // the switches on, they are saved, so a restart matches this screen (control: the remote-off row above saves nothing).
+  // the switches on, they are saved and the side shows on, so a restart matches this screen (control: remote off).
   test.each([
     ['cardNotHeld', 'Developer.SediDemoCardNotHeld'],
     ['wardNotSet', 'Developer.SediDemoWardNotSet'],
-  ])(
-    'a set-up that stopped at a step (%s) says which, and keeps the switches on: the undo appears',
-    async (result, message) => {
-      set(false, false, false)
-      mockSetUp.mockResolvedValueOnce(result)
-      const { tree } = shown()
-      await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
-      expect(resultLines(tree)).toBe(message)
-      expect(has(tree, DEMO.turnOff)).toBe(true)
-    }
-  )
+  ])('a set-up that stopped at a step (%s) says which, and the switch shows on', async (result, message) => {
+    set(false, false, false)
+    mockSetUp.mockResolvedValueOnce(result)
+    const { tree } = shown()
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
+    expect(resultLines(tree)).toBe(message)
+    expect(isOn(tree)).toBe(true)
+  })
 
-  test('the undo calls bifold and turns the saved switches off: the undo goes (control: set up, it shows)', async () => {
+  test('the switch off calls bifold and turns the saved switches off; the line goes (control: on, it shows)', async () => {
     set(false, false, false)
     const { tree } = shown()
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
-    expect(has(tree, DEMO.turnOff)).toBe(true)
     expect(has(tree, testIdWithKey('SediDemoResult'))).toBe(true)
-    await act(async () => fireEvent.press(tree.getByTestId(DEMO.turnOff)))
+    await act(async () => fireEvent.press(tree.getByTestId(DEMO.setUp)))
     expect(mockTurnOff).toHaveBeenCalledTimes(1)
-    expect(has(tree, DEMO.turnOff)).toBe(false)
-    // The kept result goes with it (control: it showed after the set-up).
+    expect(isOn(tree)).toBe(false)
     expect(has(tree, testIdWithKey('SediDemoResult'))).toBe(false)
   })
 })

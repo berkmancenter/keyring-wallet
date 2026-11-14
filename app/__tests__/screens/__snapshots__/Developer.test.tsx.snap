@@ -1288,44 +1288,11 @@ exports[`Developer Screen screen renders correctly 1`] = `
         }
       >
         <View
-          accessibilityHint="Developer.SetUpSediDemoGuardianHint"
-          accessibilityLabel="Developer.SetUpSediDemoGuardian"
-          accessibilityRole="button"
-          accessibilityState={
-            {
-              "busy": undefined,
-              "checked": undefined,
-              "disabled": undefined,
-              "expanded": undefined,
-              "selected": undefined,
-            }
-          }
-          accessibilityValue={
-            {
-              "max": undefined,
-              "min": undefined,
-              "now": undefined,
-              "text": undefined,
-            }
-          }
-          accessible={true}
-          collapsable={false}
-          focusable={true}
-          onBlur={[Function]}
-          onClick={[Function]}
-          onFocus={[Function]}
-          onResponderGrant={[Function]}
-          onResponderMove={[Function]}
-          onResponderRelease={[Function]}
-          onResponderTerminate={[Function]}
-          onResponderTerminationRequest={[Function]}
-          onStartShouldSetResponder={[Function]}
           style={
             {
               "flexDirection": "row",
             }
           }
-          testID="com.ariesbifold:id/SetUpSediDemoGuardian"
         >
           <View
             style={
@@ -1346,7 +1313,7 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 }
               }
             >
-              Developer.SetUpSediDemoGuardian
+              Developer.SediDemoGuardian
             </Text>
             <Text
               style={
@@ -1363,10 +1330,41 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 ]
               }
             >
-              Developer.SetUpSediDemoGuardianHint
+              Developer.SediDemoGuardianHint
             </Text>
           </View>
           <View
+            accessibilityHint="Developer.SediDemoGuardianHint"
+            accessibilityLabel="Developer.SediDemoGuardian"
+            accessibilityState={
+              {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
             style={
               {
                 "alignItems": "center",
@@ -1374,28 +1372,30 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 "justifyContent": "space-between",
               }
             }
+            testID="com.ariesbifold:id/SediDemoGuardian"
           >
-            <Text
-              allowFontScaling={false}
-              selectable={false}
+            <RCTSwitch
+              accessibilityRole="switch"
+              onChange={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              onTintColor="rgba(98, 44, 98, 0.7)"
               style={
                 [
                   {
-                    "color": "#4A4A4A",
-                    "fontSize": 24,
+                    "alignSelf": "flex-start",
                   },
-                  undefined,
                   {
-                    "fontFamily": "Material Icons",
-                    "fontStyle": "normal",
-                    "fontWeight": "normal",
+                    "backgroundColor": "#D3D3D3",
+                    "borderRadius": 16,
                   },
-                  {},
                 ]
               }
-            >
-              
-            </Text>
+              testID="com.ariesbifold:id/SediDemoGuardianSwitch"
+              thumbTintColor="#666666"
+              tintColor="#D3D3D3"
+              value={false}
+            />
           </View>
         </View>
       </View>
@@ -1425,44 +1425,11 @@ exports[`Developer Screen screen renders correctly 1`] = `
         }
       >
         <View
-          accessibilityHint="Developer.SetUpSediDemoPersonHint"
-          accessibilityLabel="Developer.SetUpSediDemoPerson"
-          accessibilityRole="button"
-          accessibilityState={
-            {
-              "busy": undefined,
-              "checked": undefined,
-              "disabled": undefined,
-              "expanded": undefined,
-              "selected": undefined,
-            }
-          }
-          accessibilityValue={
-            {
-              "max": undefined,
-              "min": undefined,
-              "now": undefined,
-              "text": undefined,
-            }
-          }
-          accessible={true}
-          collapsable={false}
-          focusable={true}
-          onBlur={[Function]}
-          onClick={[Function]}
-          onFocus={[Function]}
-          onResponderGrant={[Function]}
-          onResponderMove={[Function]}
-          onResponderRelease={[Function]}
-          onResponderTerminate={[Function]}
-          onResponderTerminationRequest={[Function]}
-          onStartShouldSetResponder={[Function]}
           style={
             {
               "flexDirection": "row",
             }
           }
-          testID="com.ariesbifold:id/SetUpSediDemoPerson"
         >
           <View
             style={
@@ -1483,7 +1450,7 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 }
               }
             >
-              Developer.SetUpSediDemoPerson
+              Developer.SediDemoWard
             </Text>
             <Text
               style={
@@ -1500,10 +1467,41 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 ]
               }
             >
-              Developer.SetUpSediDemoPersonHint
+              Developer.SediDemoWardHint
             </Text>
           </View>
           <View
+            accessibilityHint="Developer.SediDemoWardHint"
+            accessibilityLabel="Developer.SediDemoWard"
+            accessibilityState={
+              {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
             style={
               {
                 "alignItems": "center",
@@ -1511,28 +1509,30 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 "justifyContent": "space-between",
               }
             }
+            testID="com.ariesbifold:id/SediDemoWard"
           >
-            <Text
-              allowFontScaling={false}
-              selectable={false}
+            <RCTSwitch
+              accessibilityRole="switch"
+              onChange={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              onTintColor="rgba(98, 44, 98, 0.7)"
               style={
                 [
                   {
-                    "color": "#4A4A4A",
-                    "fontSize": 24,
+                    "alignSelf": "flex-start",
                   },
-                  undefined,
                   {
-                    "fontFamily": "Material Icons",
-                    "fontStyle": "normal",
-                    "fontWeight": "normal",
+                    "backgroundColor": "#D3D3D3",
+                    "borderRadius": 16,
                   },
-                  {},
                 ]
               }
-            >
-              
-            </Text>
+              testID="com.ariesbifold:id/SediDemoWardSwitch"
+              thumbTintColor="#666666"
+              tintColor="#D3D3D3"
+              value={false}
+            />
           </View>
         </View>
       </View>
