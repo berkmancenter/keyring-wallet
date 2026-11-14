@@ -43,7 +43,7 @@ E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL
 # runs in any run.
 if [ "${GATE_KIND:-}" = nightly ] || [[ ",${E2E_ONLY_ROWS:-}," == *",lost-ask-offline-error,"* ]]; then
   # Block only the community's messaging host (needs root: google_apis image).
-  if [ -n "${C_MEDIATOR_HOST:-}" ]; then adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device; echo "adb root: $(adb -s $E shell id -u)"; fi
+  if [ -n "${C_MEDIATOR_HOST:-}" ]; then adb -s $E root >/dev/null 2>&1; sleep 3; adb_wait $E || broken "$E did not come back after adb root"; echo "adb root: $(adb -s $E shell id -u)"; fi
   E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 BLOCK_HOST=${C_MEDIATOR_HOST:-} C_DID=$C_DID C_NAME=$C_NAME C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
     galarm 900 node run-join-lost.mjs > "$LEG_DIR/lost.out" 2>&1; drc=$?
   grep -E '^\[e2e\] [0-9]' "$LEG_DIR/lost.out" | cut -c1-220
@@ -60,7 +60,7 @@ fi
 for r in $(grep -oE '^ARRIVED_REQ [^ ]+' "$LEG_DIR/lost.out" 2>/dev/null | awk '{print $2}' | sort -u); do
   echo "  decline $r (before card-status): $(JOIN_DECIDE_REASON='gate: an offline-ask test that reached C anyway, declined before the next ask' c_admin join-decide "$r" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
 done
-adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device
+adb -s $E root >/dev/null 2>&1; sleep 3; adb_wait $E || broken "$E did not come back after adb root (before card-status)"
 # The hosts file is writable only after a remount (this AVD's verity is off; avd_writable).
 adb -s $E remount 2>&1 | tail -1
 # A build with bifold #386's notice (CardStatusNotice) must show it: no notice is a FAIL there, tracked only before.

@@ -24,8 +24,10 @@
  *
  * Writes the result to $GITHUB_OUTPUT (verdict, sha, ref, bundles, screens,
  * test_builds, gate_smoke), $GITHUB_STEP_SUMMARY and post-release-handoff.json. verdict: none (not a
- * publish), green, smoke-red, builds-red. Exit 0 for none and green, 2 for a
- * red build or smoke, 1 for an error. It never publishes, widens or withdraws
+ * publish), green, smoke-red, smoke-incomplete (a judged platform's smoke job
+ * still absent from the run's jobs after every re-read: not a red, so no brake),
+ * builds-red. Exit 0 for none and green, 2 for a red build or smoke or an
+ * incomplete smoke, 1 for an error. It never publishes, widens or withdraws
  * anything.
  */
 import { execFileSync } from 'node:child_process'
@@ -134,6 +136,33 @@ export const smokeVerdict = (jobs, platforms = SMOKE_JOBS.map(([p]) => p)) => {
     return { platform, conclusion: job?.conclusion ?? 'missing' }
   })
   return { green: rows.every((r) => r.conclusion === 'success'), rows }
+}
+
+// Re-reading a smoke run's jobs when a judged platform's job is absent: up to six reads, 30 s apart.
+export const JOBS_ATTEMPTS = 6
+export const JOBS_RETRY_MS = 30000
+
+/**
+ * A finished gate-smoke run's verdict, read until every judged platform's job is in the list. An absent job is not a
+ * red one: on 11-09 (278.9, during a GitHub Actions incident) a read 8 s after the run completed came back without its
+ * green iOS job, and that one read made the verdict smoke-red. So redness is decided first, from the jobs that are
+ * listed: any listed job that is not green makes the smoke red at once, whatever else is absent. Only with no listed red
+ * is an absent job read again. Still absent after every read: incomplete, which is neither green nor red, and the caller
+ * must not act on it as a red. readJobs() returns the run's jobs array.
+ */
+export async function readSmokeVerdict({ readJobs, platforms, sleep, log = () => {}, attempts = JOBS_ATTEMPTS, retryMs = JOBS_RETRY_MS }) {
+  for (let attempt = 1; ; attempt++) {
+    const verdict = smokeVerdict(readJobs(), platforms)
+    // Red first, from the jobs that ARE listed: a listed red is red whatever else is absent. Without this, ios missing
+    // beside android failure (an incident read with a real red) became incomplete, and the brake did not act on a red.
+    const red = verdict.rows.some((r) => r.conclusion !== 'missing' && r.conclusion !== 'success')
+    if (red) return { ...verdict, incomplete: false }
+    const absent = verdict.rows.filter((r) => r.conclusion === 'missing').map((r) => r.platform)
+    if (!absent.length) return { ...verdict, incomplete: false }
+    if (attempt >= attempts) return { ...verdict, green: false, incomplete: true }
+    log(`smoke jobs read ${attempt} of ${attempts}: no ${absent.join(', ')} job listed yet; reading again in ${retryMs / 1000} s`)
+    await sleep(retryMs)
+  }
 }
 
 const realGh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
@@ -324,9 +353,12 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     return { ...base, bundles, sources, screens, since, verdict: 'builds-red', testBuilds: builds.id, reusedBuilds: Boolean(reused) }
   }
   const smoke = await dispatchAndWait('gate-smoke.yml', [`run-id=${builds.id}`, 'platform=both'], { title: `Test builds ${builds.id}` })
-  const verdict = smokeVerdict(api(`repos/${repo}/actions/runs/${smoke.id}/jobs?per_page=100`).jobs, base.platforms)
+  const verdict = await readSmokeVerdict({ readJobs: () => api(`repos/${repo}/actions/runs/${smoke.id}/jobs?per_page=100`).jobs, platforms: base.platforms, sleep, log })
   log(`gate-smoke ${smoke.id}: ${verdict.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}`)
-  return { ...base, bundles, sources, screens, since, verdict: verdict.green ? 'green' : 'smoke-red', testBuilds: builds.id, reusedBuilds: Boolean(reused), gateSmoke: smoke.id, rows: verdict.rows }
+  // smoke-incomplete is deliberately not smoke-red: the brake acts only on smoke-red, and a job never seen says nothing
+  // about the bundle. The job still fails (exit 2), so a person reads the smoke run and decides.
+  const name = verdict.green ? 'green' : verdict.incomplete ? 'smoke-incomplete' : 'smoke-red'
+  return { ...base, bundles, sources, screens, since, verdict: name, testBuilds: builds.id, reusedBuilds: Boolean(reused), gateSmoke: smoke.id, rows: verdict.rows }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -349,7 +381,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         ...r.bundles.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel}, from its ${r.sources?.[b.platform] ?? 'unknown source'})`),
         ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (no record, no notice, and its log was unreadable)`),
         r.testBuilds ? `- Test builds run ${r.testBuilds}${r.reusedBuilds ? ' (reused: the release chain\'s green build of this commit)' : ''}` : '', r.gateSmoke ? `- gate-smoke run ${r.gateSmoke}` : '',
-        ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`), '',
+        ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`),
+        // On 11-09 (278.9) GitHub created no Brake job for a smoke-red run, and nothing said so: name what should follow.
+        r.verdict === 'smoke-red' ? '- **the Brake job should now run in this run: if this run shows no Brake job, the brake did not run and the release is still live**' : '',
+        r.verdict === 'smoke-incomplete' ? '- **a smoke job was never listed, so this is not a red and the brake does not run: read the gate-smoke run and decide**' : '', '',
         `#### Changed screens since ${r.since ?? 'unknown'} (for the screen check)`, '',
         ...((r.screens ?? []).length ? r.screens.map((f) => `- ${f}`) : ['- none found']), '',
       ].filter((l) => l !== '').join('\n') + '\n')

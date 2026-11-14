@@ -20,6 +20,7 @@ import {
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
+import { answerConfirmSheet } from "./confirmSheet.js";
 import { REAL_CLOCKS, parseClocks, textInSource } from "./clocks.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -1276,19 +1277,48 @@ async function dumpConnectStrategyError(driver) {
 }
 
 /**
- * Real devices only: the issuer side shows the in-app biometric confirmation
- * modal (hardware attestation) while the VRC is being issued in the background.
- * Tap Confirm, then hand off to the human operator for the OS biometric prompt
- * (fingerprint / Face ID / device PIN) — Appium cannot satisfy those.
- * No-op on emulators/simulators: hardware signing is unavailable there, so the
- * modal never appears.
+ * The confirm sheet a signing act asks before it goes ahead (join, invitation, vetting step, room offer). See
+ * lib/confirmSheet.js for what it can ask.
+ * - It asks for the Keyring PIN (every emulator and simulator from bifold #937 on, since they have no biometrics,
+ *   and a phone with Biometric Unlock off): the run's PIN is typed.
+ * - It asks for the phone's biometrics (a real device): Confirm is tapped and the OS prompt is handed to the operator.
+ * - With no sheet, nothing happens.
+ * `appearWithin` is how long to look for the sheet. Right after a tap that asks for a confirm, the callers pass
+ * CONFIRM_APPEARS_WITHIN_MS. In a waiting loop that only might meet one, the short default keeps each pass short.
  */
-export async function handleBiometricConfirmIfPresent(driver) {
-  if (!(await existsTestId(driver, "ConfirmBiometric", 1500))) return false;
+/**
+ * How long to look for the confirm sheet right after a tap that asks for one. Not measured on an emulator yet: the
+ * sheet's own work before it shows is a settings read and a short slide, and the helper logs how long it took
+ * ("confirm sheet up after N ms"), so a run can show it. Generous because the cost of missing it is a stalled leg.
+ */
+export const CONFIRM_APPEARS_WITHIN_MS = 6000;
+
+export async function handleBiometricConfirmIfPresent(driver, { appearWithin = 1500 } = {}) {
+  const io = {
+    exists: (key, ms) => existsTestId(driver, key, ms),
+    tap: (key) => tapTestId(driver, key),
+    // As unlockIfLocked types it: one setValue of the whole PIN can drop a keystroke on an iOS simulator.
+    typePin: async (key, pin) => {
+      const field = byTestId(driver, key);
+      await field.click();
+      if (driver.e2ePlatform === "ios") {
+        for (const digit of pin) {
+          await field.addValue(digit);
+          await sleep(200);
+        }
+      } else {
+        await field.setValue(pin);
+      }
+    },
+    sleep,
+    log: (line) => console.log(`[e2e] ${driver.e2ePlatform}: ${line}`),
+  };
+  const how = await answerConfirmSheet(io, { pin: PIN, appearWithin });
+  if (how === "none") return false;
+  if (how === "pin") return true;
   console.log(
-    `[e2e] ${driver.e2ePlatform}: biometric confirmation modal — tapping Confirm`
+    `[e2e] ${driver.e2ePlatform}: biometric confirmation modal — tapped Confirm`
   );
-  await tapTestId(driver, "ConfirmBiometric");
   const deviceLabel =
     driver.e2ePlatform === "android" ? "ANDROID PHONE" : "IPHONE";
   console.log(

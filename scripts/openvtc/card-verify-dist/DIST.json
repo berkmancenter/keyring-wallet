@@ -1,0 +1,10 @@
+{
+  "note": "Prebuilt checkers for bifold's VTI conformance job. Written by build.sh; do not edit by hand. Rebuild after a VTI pin bump or a change to either checker's sources.",
+  "release": "card-verify-dist-f7b78e29d-439a03335-4e290661",
+  "builtAt": "2026-11-12T14:13:23Z",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "checkers": {
+    "card-verify": {"vtiPin": "f7b78e29d", "sourceDigest": "55871a216f9d928ac2ce2c00d5e1eea23d0a910516f33a72593d18c3c7cc6b63", "sha256": "f1183f2f55b6e6a94d1393b579edd7791bc85b8ff08a61391837bb265a5a26d5", "url": "https://github.com/berkmancenter/keyring-wallet/releases/download/card-verify-dist-f7b78e29d-439a03335-4e290661/card-verify", "target": "aarch64-apple-darwin", "minMacOS": "14.0"},
+    "card-verify-v047": {"vtiPin": "439a03335", "sourceDigest": "d0047d37c52d9d9b02d4e6c5aad555dc3419026e211618a82e8a98cce652c9ea", "sha256": "b667455d299cf42d8f866cf4f6712847592d9f4ccebcb92117649df1ac80c3cd", "url": "https://github.com/berkmancenter/keyring-wallet/releases/download/card-verify-dist-f7b78e29d-439a03335-4e290661/card-verify-v047", "target": "aarch64-apple-darwin", "minMacOS": "14.0"}
+  }
+}
