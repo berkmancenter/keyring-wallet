@@ -54,6 +54,17 @@ test('what the app never ships is none, even a manifest there', () => {
     'ota'
   );
   assert.equal(tierOf('bifold/packages/core/src/__tests__/x.test.ts'), 'none');
+  // A package's jest setup files (jest.config names them; nothing in src imports them): none, like jest.config.
+  // 278.21's pin read store on core's jestSetup.js alone (#1079 stubbed a mock there).
+  assert.equal(tierOf('bifold/packages/core/jestSetup.js'), 'none');
+  assert.equal(tierOf('bifold/packages/core/jestSetupAfterEnv.js'), 'none');
+  // Controls: only at a package's root. A source file named like one ships, and so does one nested in src.
+  assert.equal(tierOf('bifold/packages/core/src/jestSetupLike.ts'), 'ota');
+  assert.equal(tierOf('bifold/packages/core/src/x/jestSetup.js'), 'ota');
+  // And the fail-safe default is untouched: an unknown file at a package's root, or one only starting like it in
+  // another type, still reads store.
+  assert.equal(tierOf('bifold/packages/core/setup.js'), 'store');
+  assert.equal(tierOf('bifold/packages/core/jestSetup.json'), 'store');
   // The same tooling dotfiles at bifold's root; any other dotfile there, or its babel config, still reads store.
   assert.equal(tierOf('bifold/.prettierignore', 'bifold/.gitignore', 'bifold/.eslintrc.js'), 'none');
   assert.equal(tierOf('bifold/.babelrc'), 'store');
