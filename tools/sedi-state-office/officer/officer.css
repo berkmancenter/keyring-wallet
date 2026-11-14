@@ -468,3 +468,44 @@ code {
     monospace;
   white-space: pre;
 }
+
+/* ---- two hosts (PROD and TEST) ---- */
+.host-field {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.host-field legend {
+  padding: 0;
+  margin-bottom: 4px;
+}
+.choice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.hint-small {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.pill.host {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.pill.host.orphan {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: transparent;
+}
+.tree-switch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 8px;
+}
+.tree-switch [aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+}

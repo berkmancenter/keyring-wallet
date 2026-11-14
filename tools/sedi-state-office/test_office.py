@@ -3,6 +3,7 @@
 The first group needs no keripy. The end-to-end group (init, issue, revoke on a throwaway keystore) needs the pinned
 keripy clone (KEYRING_SEDI_KERIPY or the default path) and is skipped without it.
 """
+import http.client
 import json
 import os
 import sys
@@ -295,7 +296,8 @@ class PublishedFilesApi(unittest.TestCase):
         cls.saved = {k: getattr(office.Api, k, None) for k in ("office", "token", "port", "publish_cmd")}
         cls.srv = office.HTTPServer(("127.0.0.1", 0), office.Api)
         port = cls.srv.server_address[1]
-        stub = SimpleNamespace(site=office.Site("storage.googleapis.com", "bkt"), ks=SimpleNamespace(publish=pub),
+        stub = SimpleNamespace(site=office.Site("storage.googleapis.com", "bkt"), test_site=None,
+                               ks=SimpleNamespace(publish=pub, publish_test=pub),  # a TEST tree on disk, no TEST host
                                data={})
         office.Api.office, office.Api.token, office.Api.port, office.Api.publish_cmd = stub, cls.TOKEN, port, None
         office.Api.log_message = lambda *a: None
@@ -352,6 +354,10 @@ class PublishedFilesApi(unittest.TestCase):
             with self.subTest(target=target):
                 self.assertEqual(self.get(target)[0], 404)
         self.assertEqual(self.get("/api/files/view?path=cards/p1.json")[0], 200)  # control
+
+    def test_no_test_tree_without_a_test_host_even_on_disk(self):
+        self.assertEqual(self.get("/api/files?tree=test")[0], 404)
+        self.assertEqual(self.get("/api/files?tree=prod")[0], 200)  # control
 
     def test_the_token_and_the_loopback_host_are_required(self):
         for target in ("/api/files", "/api/files/view?path=cards/p1.json"):
@@ -440,6 +446,298 @@ class EndToEnd(unittest.TestCase):
             self.assertEqual(page.count("Not issued by the Demo &lt;b&gt;State&lt;/b&gt;."), 1)
         self.assertNotIn("<svg", gone)
         self.assertEqual(json.loads((pub / f"{self.gone['pickupId']}.status.json").read_text())["status"], "revoked")
+
+
+class TwoHostSites(unittest.TestCase):
+    """The TEST site and the PROD warning: no keripy needed."""
+
+    def test_no_test_host_is_one_host_as_before(self):
+        self.assertIsNone(office.test_site_for(office.Site("prod.example.org"), None))
+        self.assertIsNone(office.test_site_for(office.Site("prod.example.org"), ""))
+
+    def test_test_is_never_prod(self):
+        prod = office.Site("prod.example.org")
+        for same in ("prod.example.org", "PROD.example.org"):
+            with self.subTest(same=same):
+                with self.assertRaises(office.OfficeError) as e:
+                    office.test_site_for(prod, same)
+                self.assertEqual(e.exception.code, "badHost")
+        self.assertEqual(office.test_site_for(prod, "tunnel.example.com").host, "tunnel.example.com")  # control
+        with self.assertRaises(office.OfficeError):
+            office.test_site_for(prod, "tunnel.example.com/x")  # a bare hostname only
+
+    def test_a_prod_path_prefix_is_said_not_refused(self):
+        self.assertEqual(len(office.site_warnings(office.Site("storage.googleapis.com", "bkt"))), 1)
+        self.assertEqual(office.site_warnings(office.Site("prod.example.org")), [])  # control
+
+
+PROD_HOST, TEST_HOST = "prod.example.org", "tunnel.example.com"
+
+
+def throwaway_office(base: Path, prod: str, test: str | None, k0_dir=None):
+    os.environ["KEYRING_SEDI_K1_PASSCODE"] = "a-throwaway-test-passcode-123"
+    office.PASSCODE_FROM_KEYCHAIN = False  # tests never read the real Keychain item
+    office.load_keripy(KERIPY)
+    ks = office.Keystore(base / "ks")
+    ks.ensure()
+    prod_site = office.Site(prod)
+    return office.Office(ks, prod_site, "Demo State", k0_dir, office.test_site_for(prod_site, test))
+
+
+def tree_bytes(root: Path) -> dict:
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+@unittest.skipUnless((KERIPY / "tests" / "sedi" / "test_sedi.py").exists(), "pinned keripy clone not found")
+class TwoHosts(unittest.TestCase):
+    """PROD and TEST on one throwaway keystore: one designation naming both, one tree each, cards the same in both."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.office = throwaway_office(Path(cls.tmp.name), PROD_HOST, TEST_HOST)
+        cls.aids = cls.office.init()["aids"]
+        cls.prod_card = cls.office.issue(AID_I, WARD_B)
+        cls.test_card = cls.office.issue(AID_I, WARD_1AAI, host="test")
+        cls.written = cls.office.write_publish_tree()
+        cls.prod, cls.test = cls.office.ks.publish, cls.office.ks.publish_test
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.office.close()
+        cls.tmp.cleanup()
+
+    def test_the_root_designates_the_three_dids_at_each_host(self):
+        ids = self.office.current_aliases()["ids"]
+        self.assertEqual(ids, [f"did:webs:{h}:keyring-demo-state:{self.aids[r]}"
+                               for h in (PROD_HOST, TEST_HOST) for r in office.ROLES])
+        self.assertEqual(len(self.office.data["aliases"]), 1)  # one ACDC for both hosts
+        self.assertEqual(self.office.data["site"]["testHost"], TEST_HOST)  # remembered, like --host
+        self.assertIs(self.office.designate(), self.office.current_aliases())  # the same hosts: a no-op
+
+    def test_each_tree_names_its_own_host_and_shares_the_kels_and_the_designation(self):
+        for aid in self.aids.values():
+            d = f"keyring-demo-state/{aid}"
+            for tree, host in ((self.prod, PROD_HOST), (self.test, TEST_HOST)):
+                with self.subTest(aid=aid, host=host):
+                    doc = json.loads((tree / d / "did.json").read_text())
+                    self.assertEqual(doc["id"], f"did:web:{host}:keyring-demo-state:{aid}")
+            self.assertEqual((self.prod / d / "keri.cesr").read_bytes(), (self.test / d / "keri.cesr").read_bytes())
+        roy = f"keyring-demo-state/{self.aids['roy']}/{office.ALIASES_FILE}"
+        self.assertEqual((self.prod / roy).read_bytes(), (self.test / roy).read_bytes())
+        self.assertTrue(any(p.startswith("publish-test/") for p in self.written))
+
+    def test_every_card_is_the_same_bytes_in_both_trees_naming_its_own_host(self):
+        for card, host in ((self.prod_card, PROD_HOST), (self.test_card, TEST_HOST)):
+            pid = card["pickupId"]
+            for ext in ("json", "status.json", "html"):
+                with self.subTest(host=host, ext=ext):
+                    a = (self.prod / "cards" / f"{pid}.{ext}").read_bytes()
+                    self.assertEqual(a, (self.test / "cards" / f"{pid}.{ext}").read_bytes())
+            bundle = json.loads((self.prod / "cards" / f"{pid}.json").read_text())
+            self.assertEqual(bundle["pickupJsonUrl"], f"https://{host}/cards/{pid}.json")
+            view = self.office.card_view(card)
+            self.assertEqual((view["host"], view["hostDesignated"]), (host, True))
+        self.assertEqual(self.office.card_view(self.prod_card)["hostKind"], "prod")  # PROD by default
+        self.assertEqual(self.office.card_view(self.test_card)["hostKind"], "test")
+
+    def test_the_host_is_prod_or_test_and_test_needs_a_test_host(self):
+        for bad in ("bogus", "", None, PROD_HOST):
+            with self.subTest(host=bad):
+                with self.assertRaises(office.OfficeError) as e:
+                    self.office.issue(AID_I, WARD_B, host=bad)
+                self.assertEqual(e.exception.code, "badHost")
+        saved, self.office.test_site = self.office.test_site, None
+        try:
+            with self.assertRaises(office.OfficeError) as e:
+                self.office.issue(AID_I, WARD_B, host="test")
+            self.assertEqual(e.exception.code, "badHost")
+        finally:
+            self.office.test_site = saved
+
+    def test_a_revoke_writes_both_trees_before_the_upload_runs(self):
+        card = self.office.issue(AID_I, WARD_B)
+        self.office.write_publish_tree()
+        seen = Path(self.tmp.name) / "seen"
+        pid = card["pickupId"]
+        cmd = (f"cat ../publish-test/cards/{pid}.status.json > {seen} && "
+               f"cat ../publish-test/keyring-demo-state/{self.aids['sue']}/keri.cesr > {seen}.kel")
+        srv, saved = serve_office(self.office, cmd)
+        try:
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=30)
+            c.request("POST", f"/api/cards/{card['said']}/revoke",
+                      headers={"Host": f"127.0.0.1:{srv.server_address[1]}", "Authorization": f"Bearer {TOKEN}",
+                               "Content-Length": "0"})
+            r = c.getresponse()
+            body = json.loads(r.read())
+            c.close()
+        finally:
+            stop_office(srv, saved)
+        self.assertEqual((r.status, body["status"], body["published"]), (200, "revoked", True))
+        self.assertEqual(json.loads(seen.read_text())["status"], "revoked")  # TEST was current before the upload
+        self.assertEqual(Path(f"{seen}.kel").read_bytes(), self.office.kel("sue"))
+
+    def test_the_officer_api_says_both_hosts_and_takes_the_test_tree(self):
+        srv, saved = serve_office(self.office, None)
+        try:
+            port = srv.server_address[1]
+            health = api_get(port, "/api/health")
+            self.assertEqual(health["hosts"], {"prod": {"host": PROD_HOST, "pathPrefix": ""},
+                                               "test": {"host": TEST_HOST, "pathPrefix": ""}})
+            files = api_get(port, "/api/files?tree=test")
+            self.assertEqual(files["host"], TEST_HOST)
+            self.assertTrue(files["files"] and all(f["publicUrl"].startswith(f"https://{TEST_HOST}/")
+                                                   for f in files["files"]))
+            self.assertEqual(api_get(port, "/api/files")["host"], PROD_HOST)  # control: PROD by default
+            for bogus in ("/api/files?tree=keys", "/api/files?tree=..", "/api/files?tree=test&tree=prod",
+                          f"/api/files/view?tree=x&path=cards/{self.prod_card['pickupId']}.json"):
+                with self.subTest(target=bogus):
+                    self.assertEqual(api_get(port, bogus, status=404), {"error": "notFound"})
+            view = api_get(port, f"/api/files/view?tree=test&path=cards/{self.test_card['pickupId']}.json", raw=True)
+            self.assertEqual(view, (self.test / "cards" / f"{self.test_card['pickupId']}.json").read_bytes())
+            created = api_post(port, "/api/cards", {"holder": AID_I, "ward": WARD_B, "host": "test"})
+            self.assertEqual(created["host"], TEST_HOST)
+            self.assertEqual(api_post(port, "/api/cards", {"holder": AID_I, "ward": WARD_B, "host": "x"},
+                                      status=400)["error"], "badHost")
+        finally:
+            stop_office(srv, saved)
+
+
+@unittest.skipUnless((KERIPY / "tests" / "sedi" / "test_sedi.py").exists(), "pinned keripy clone not found")
+class HostsChange(unittest.TestCase):
+    """A card names one host for life; the designation drops a host that goes; an orphan stays current."""
+
+    def test_a_card_keeps_its_host_and_an_orphan_stays_published_and_current(self):
+        with tempfile.TemporaryDirectory() as d:
+            o = throwaway_office(Path(d), PROD_HOST, TEST_HOST)
+            o.init()
+            card = o.issue(AID_I, WARD_B)
+            o.write_publish_tree()
+            first = o.current_aliases()
+            o.close()
+            o = throwaway_office(Path(d), "prod2.example.org", TEST_HOST)  # PROD moves
+            try:
+                o.write_publish_tree()
+                ids = o.current_aliases()["ids"]
+                self.assertFalse(any(PROD_HOST in i for i in ids))  # the old host is dropped, not kept
+                self.assertTrue(any("prod2.example.org" in i for i in ids))  # control
+                old = [x for x in o.data["aliases"] if x["said"] == first["said"]]
+                self.assertEqual([x["state"] for x in old], ["revoked"])  # the old designation is withdrawn
+                self.assertEqual(len(o.data["aliases"]), 2)
+                card = o.data["cards"][card["said"]]
+                view = o.card_view(card)
+                self.assertEqual(view["pickupJsonUrl"], f"https://{PROD_HOST}/cards/{card['pickupId']}.json")
+                self.assertEqual((view["hostKind"], view["hostDesignated"]), ("orphan", False))
+                self.assertEqual([c["said"] for c in o.orphans()], [card["said"]])
+                o.revoke(card["said"])
+                o.write_publish_tree()
+                for tree in (o.ks.publish, o.ks.publish_test):  # still published, and current, never deleted
+                    status = json.loads((tree / "cards" / f"{card['pickupId']}.status.json").read_text())
+                    self.assertEqual(status["status"], "revoked")
+            finally:
+                o.close()
+
+    def test_a_card_from_before_two_hosts_keeps_the_host_it_was_issued_under(self):
+        with tempfile.TemporaryDirectory() as d:
+            o = throwaway_office(Path(d), TEST_HOST, None)  # today: the tunnel is the one host
+            o.remember_site()
+            o.init()
+            old = o.issue(AID_I, WARD_B)
+            del o.data["cards"][old["said"]]["site"]  # as issued before #931
+            o.ks.save(o.data)
+            o.close()
+            o = throwaway_office(Path(d), PROD_HOST, TEST_HOST)  # the switch-over: PROD + TEST = that tunnel
+            try:
+                o.remember_site()
+                card = o.data["cards"][old["said"]]
+                view = o.card_view(card)
+                self.assertEqual((view["host"], view["hostKind"]), (TEST_HOST, "test"))
+                self.assertEqual(view["pickupJsonUrl"], f"https://{TEST_HOST}/cards/{card['pickupId']}.json")
+                on_disk = office.Keystore(Path(d) / "ks").load()["cards"][old["said"]]
+                self.assertEqual(on_disk["site"], {"host": TEST_HOST, "pathPrefix": ""})  # kept on disk
+                new = o.issue(AID_I, WARD_B)
+                self.assertEqual(o.card_view(new)["host"], PROD_HOST)  # control: a card after the switch is PROD
+            finally:
+                o.close()
+
+    def test_no_test_host_writes_one_tree_as_before(self):
+        with tempfile.TemporaryDirectory() as d:
+            o = throwaway_office(Path(d), PROD_HOST, None)
+            try:
+                o.init()
+                card = o.issue(AID_I, WARD_B)
+                written = o.write_publish_tree()
+                self.assertFalse(o.ks.publish_test.exists())
+                self.assertFalse(any(p.startswith("publish-test/") for p in written))
+                self.assertEqual(len(o.current_aliases()["ids"]), 3)
+                self.assertNotIn("testHost", o.data["site"])
+                self.assertEqual(card["site"], {"host": PROD_HOST, "pathPrefix": ""})
+                with self.assertRaises(office.OfficeError):
+                    o.issue(AID_I, WARD_B, host="test")
+            finally:
+                o.close()
+
+    @unittest.skipUnless((BIFOLD / ".git").exists(), "no bifold clone for the K0 kit")
+    def test_k0_is_in_both_trees_each_naming_its_host(self):
+        with tempfile.TemporaryDirectory() as d:
+            o = throwaway_office(Path(d), PROD_HOST, TEST_HOST, office.DEFAULT_K0_DIR)
+            try:
+                o.init()
+                o.write_publish_tree()
+                for tree, host in ((o.ks.publish, PROD_HOST), (o.ks.publish_test, TEST_HOST)):
+                    doc = json.loads((tree / "keyring-demo-state" / office.K0_ROOT / "did.json").read_text())
+                    self.assertEqual(doc["id"], f"did:web:{host}:keyring-demo-state:{office.K0_ROOT}")
+                k0 = {p.name for p in (o.ks.publish / "keyring-demo-state").iterdir()} - set(o.data["aids"].values())
+                self.assertEqual(len(k0), 3)
+                self.assertEqual(k0, {p.name for p in (o.ks.publish_test / "keyring-demo-state").iterdir()}
+                                 - set(o.data["aids"].values()))
+            finally:
+                o.close()
+
+
+TOKEN = "t" * 32
+
+
+def serve_office(o, publish_cmd):
+    import threading as th
+    saved = {k: getattr(office.Api, k, None) for k in ("office", "token", "port", "publish_cmd")}
+    srv = office.HTTPServer(("127.0.0.1", 0), office.Api)
+    office.Api.office, office.Api.token, office.Api.port, office.Api.publish_cmd = (o, TOKEN, srv.server_address[1],
+                                                                                    publish_cmd)
+    office.Api.log_message = lambda *a: None
+    th.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, saved
+
+
+def stop_office(srv, saved):
+    srv.shutdown()
+    srv.server_close()
+    for k, v in saved.items():
+        setattr(office.Api, k, v)
+    del office.Api.log_message
+
+
+def api_get(port, target, status=200, raw=False):
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+    c.request("GET", target, headers={"Host": f"127.0.0.1:{port}", "Authorization": f"Bearer {TOKEN}"})
+    r = c.getresponse()
+    body = r.read()
+    c.close()
+    assert r.status == status, (target, r.status, body[:200])
+    return body if raw else json.loads(body)
+
+
+def api_post(port, target, payload, status=201):
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
+    data = json.dumps(payload).encode()
+    c.request("POST", target, body=data, headers={"Host": f"127.0.0.1:{port}", "Authorization": f"Bearer {TOKEN}",
+                                                   "Content-Type": "application/json",
+                                                   "Content-Length": str(len(data))})
+    r = c.getresponse()
+    body = json.loads(r.read())
+    c.close()
+    assert r.status == status, (target, r.status, body)
+    return body
 
 
 if __name__ == "__main__":
