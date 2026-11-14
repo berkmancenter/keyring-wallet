@@ -315,6 +315,48 @@ describe('resolving a tap', () => {
     })
   })
 
+  describe('with a "Confirm it\'s you" request waiting (it has no chat message: the unread rule never finds it)', () => {
+    it("opens the asker's chat, ahead of newer plain unread chat", async () => {
+      const { d, calls } = deps({ confirmPending: () => 'sam' })
+      await expect(openMessageWake(d)).resolves.toBe('confirm')
+      expect(calls).toEqual(['list', 'pickup', 'chat:sam'])
+      expect(d.newestUnread).not.toHaveBeenCalled()
+    })
+
+    it('the request arriving during the pickup ends the wait at once and opens its chat', async () => {
+      let ask: () => void = () => undefined
+      let waiting: string | undefined
+      const cancel = jest.fn()
+      const handle = deps({
+        nextConfirmPrompt: jest.fn(() => ({ arrived: new Promise<void>((resolve) => (ask = resolve)), cancel })),
+        confirmPending: () => waiting,
+      })
+      handle.d.pickUpNow = jest.fn(() => {
+        waiting = 'sam'
+        ask()
+        return new Promise<void>(() => undefined)
+      })
+      await expect(openMessageWake(handle.d)).resolves.toBe('confirm')
+      expect(handle.d.openChat).toHaveBeenCalledWith('sam')
+      // It stops listening once the tap is resolved.
+      expect(cancel).toHaveBeenCalled()
+    })
+
+    it('a proposal waiting for consent, and a continuity question, still come first', async () => {
+      const consent = deps({ consentPending: () => true, confirmPending: () => 'sam' })
+      await expect(openMessageWake(consent.d)).resolves.toBe('consent')
+      const continuity = deps({ continuityPending: () => 'alice', confirmPending: () => 'sam' })
+      await expect(openMessageWake(continuity.d)).resolves.toBe('continuity')
+      expect(continuity.calls).toEqual(['list', 'pickup', 'chat:alice'])
+    })
+
+    it('none waiting: the newest unread chat, as before (control for the rows above)', async () => {
+      const { d, calls } = deps({ confirmPending: () => undefined })
+      await expect(openMessageWake(d)).resolves.toBe('chat')
+      expect(calls).toEqual(['list', 'pickup', 'chat:bob'])
+    })
+  })
+
   it('stays on the list when nothing is unread', async () => {
     const { d, calls } = deps({ newestUnread: jest.fn(async () => undefined) })
     await expect(openMessageWake(d)).resolves.toBe('list')

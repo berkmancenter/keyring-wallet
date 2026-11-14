@@ -20,6 +20,9 @@ import React, { useEffect, useState } from 'react'
 import { Text } from 'react-native'
 
 import { ChatEventRepository } from '../../modules/chat/records/ChatEventRepository'
+import * as confirmItsYou from '../../modules/trust-tasks/confirmItsYou'
+import { CONFIRM_ITS_YOU_REMOTE_OFF, setConfirmItsYouEnabled } from '../../modules/trust-tasks/module/confirmItsYouFlag'
+import { SEDI_KERI_REMOTE_OFF } from '../../modules/trust-tasks/module/sediKeriRemoteOff'
 import { vrcFlowStore } from '../../modules/vrc/witnessStatusStore'
 import { Screens, Stacks, TabStacks } from '../../types/navigators'
 import { setActiveChatConnectionId } from '../activeChatTracker'
@@ -296,6 +299,93 @@ describe('a tapped message notification, driven as the app drives it', () => {
     const tree = render(<App />)
     expect(await settle(tap(agentWith([], [])))).toBe('list')
     expect(tree.getByTestId('MessagesScreen')).toBeTruthy()
+  })
+})
+
+/**
+ * Confirm it's you (Alberto, 278.18: the request was seen only once the app was opened). A tap for the wake that
+ * carried the request opens the asker's chat, where its card is and the sheet pops: the request has no chat message,
+ * so the unread rule alone opened another chat, or none.
+ */
+describe("a tap for a Confirm it's you request", () => {
+  const MIN = 60 * 1000
+  /** The request landing during the pickup, as handleConfirmRequest lands one: into the store, then the event. */
+  const requestFrom = (connectionId: string) => async () => {
+    confirmItsYou.confirmPromptStore.set({
+      open: true,
+      connectionId,
+      asker: 'Sam',
+      note: 'Is this you?',
+      expiresAt: new Date(Date.now() + 15 * MIN).toISOString(),
+      request: { payload: { challenge: 'c'.repeat(43) } },
+      receivedAt: new Date().toISOString(),
+    } as confirmItsYou.ConfirmPrompt)
+    confirmItsYou.confirmEvents.emit('prompt', { connectionId })
+  }
+  beforeEach(() => {
+    CONFIRM_ITS_YOU_REMOTE_OFF.off = false
+    SEDI_KERI_REMOTE_OFF.off = false
+    setConfirmItsYouEnabled(true)
+  })
+  afterEach(() => {
+    confirmItsYou.confirmPromptStore.clear()
+    setConfirmItsYouEnabled(false)
+  })
+
+  it("the request arrives with the tap: the asker's chat opens, not the newer unread one", async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], requestFrom('sam'))
+    expect(await settle(tap(agent))).toBe('confirm')
+    expect(await tree.findByTestId('Chat_sam')).toBeTruthy()
+    expect(tree.queryByTestId('Chat_bob')).toBeNull()
+  })
+
+  it("two open requests restored out of order (a cold start): the NEWER asker's chat opens", async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [], async () => {
+      const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * MIN).toISOString()
+      const base = {
+        open: true,
+        asker: 'x',
+        note: 'Is this you?',
+        expiresAt: new Date(Date.now() + 10 * MIN).toISOString(),
+        request: { payload: { challenge: 'c'.repeat(43) } },
+      }
+      // The newer first and the older second, as a restore can insert them: the store's own order is the wrong one.
+      confirmItsYou.confirmPromptStore.set({
+        ...base,
+        connectionId: 'sam',
+        receivedAt: at(1),
+      } as confirmItsYou.ConfirmPrompt)
+      confirmItsYou.confirmPromptStore.set({
+        ...base,
+        connectionId: 'tia',
+        receivedAt: at(4),
+      } as confirmItsYou.ConfirmPrompt)
+      confirmItsYou.confirmEvents.emit('prompt', { connectionId: 'tia' })
+    })
+    expect(await settle(tap(agent))).toBe('confirm')
+    expect(await tree.findByTestId('Chat_sam')).toBeTruthy()
+    expect(tree.queryByTestId('Chat_tia')).toBeNull()
+  })
+
+  it('with the switch off nothing of it is read: the newest unread chat opens (control: on, above)', async () => {
+    setConfirmItsYouEnabled(false)
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], requestFrom('sam'))
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_bob')).toBeTruthy()
+  })
+
+  it('a request already past its time opens nothing of its own (control: in time, above)', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], async () => {
+      await requestFrom('sam')()
+      const kept = confirmItsYou.confirmPromptStore.get('sam')!
+      confirmItsYou.confirmPromptStore.set({ ...kept, expiresAt: new Date(Date.now() - MIN).toISOString() })
+    })
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_bob')).toBeTruthy()
   })
 })
 

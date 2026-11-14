@@ -18,6 +18,10 @@
  *    - someone has just answered one of this phone's invitations (a shared
  *      link opened later): open that new contact's chat, where the exchange
  *      shows its progress;
+ *    - a continuity question ("Is this you?") waits: open its chat;
+ *    - a "Confirm it's you" request waits (the tap was most likely for it: it
+ *      has no chat message of its own, so the unread rule never finds it):
+ *      open the asker's chat, where its card is, and the sheet pops over it;
  *    - otherwise the chat with the newest unread message, a BasicMessage or a
  *      keyring/chat message alike — the rule the Messages badge counts by — or
  *      the list when nothing is unread.
@@ -46,6 +50,8 @@ import { isConnectionExcludedFromNotifications } from '../hooks/notifications'
 import { isUnreadChatMessage, isUnreadKeyringChatEvent } from '../hooks/useUnreadMessages'
 import { getChatEventRepository } from '../modules/chat/ChatModule'
 import { ChatEventRecord } from '../modules/chat/records/ChatEventRecord'
+import { confirmEvents, confirmPromptStore } from '../modules/trust-tasks/confirmItsYou'
+import { isConfirmItsYouEnabled } from '../modules/trust-tasks/module/confirmItsYouFlag'
 import { continuityPromptStore } from '../modules/vrc/contacts/continuity'
 import { vrcFlowStore } from '../modules/vrc/witnessStatusStore'
 
@@ -203,6 +209,10 @@ export interface MessageWakeDeps {
   nextContinuityPrompt?(): { arrived: Promise<void>; cancel(): void }
   /** The connection whose chat holds the newest continuity question still waiting, if any. */
   continuityPending?(): string | undefined
+  /** The next "Confirm it's you" request to arrive, if the tap was for one. */
+  nextConfirmPrompt?(): { arrived: Promise<void>; cancel(): void }
+  /** The connection of the newest "Confirm it's you" request still open, if any: the asker's chat. */
+  confirmPending?(): string | undefined
   /** The connection to open, read once the messages are in. */
   newestUnread(): Promise<string | undefined>
   /** Open that connection's chat. */
@@ -220,6 +230,7 @@ export type MessageWakeOutcome =
   | 'chat'
   | 'newContact'
   | 'continuity'
+  | 'confirm'
   | 'consent'
   | 'exchange'
   | 'list'
@@ -287,11 +298,13 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
   const next = deps.nextMessage()
   const connection = deps.nextConnection?.()
   const continuity = deps.nextContinuityPrompt?.()
+  const confirm = deps.nextConfirmPrompt?.()
   try {
     await Promise.race([
       next.arrived,
       ...(connection ? [connection.arrived] : []),
       ...(continuity ? [continuity.arrived] : []),
+      ...(confirm ? [confirm.arrived] : []),
       deps
         .pickUpNow()
         .catch((error: unknown) => {
@@ -304,6 +317,7 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
     next.cancel()
     connection?.cancel()
     continuity?.cancel()
+    confirm?.cancel()
     setFetching(false)
   }
   if (deps.listFocus.blurs() !== blursAtLanding || !deps.listFocus.focused()) {
@@ -330,6 +344,13 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
     opening(asking)
     deps.openChat(asking)
     return 'continuity'
+  }
+  // So does a Confirm it's you request: no chat message of its own either, and it runs out (15 minutes by default).
+  const confirming = deps.confirmPending?.()
+  if (confirming) {
+    opening(confirming)
+    deps.openChat(confirming)
+    return 'confirm'
   }
   const connectionId = await deps.newestUnread().catch(() => undefined)
   if (!connectionId) return 'list'
@@ -461,6 +482,31 @@ export function appMessageWakeDeps(options: {
     continuityPending: () =>
       continuityPromptStore.all().find((prompt) => !isConnectionExcludedFromNotifications(prompt.connectionId))
         ?.connectionId,
+    // Safe without the switch's gate (confirmPending has it): every 'prompt' emit is behind isConfirmItsYouEnabled()
+    // (handleConfirmRequest and restoreConfirmPrompts both return first while it is off). A new emit site must keep
+    // that, or this listener would end the wait for a feature that is meant to be inert.
+    nextConfirmPrompt: () => {
+      let cancel = () => undefined as void
+      const arrived = new Promise<void>((resolve) => {
+        const seen = () => resolve()
+        confirmEvents.on('prompt', seen)
+        cancel = () => {
+          confirmEvents.off('prompt', seen)
+        }
+      })
+      return { arrived, cancel: () => cancel() }
+    },
+    // The NEWEST open request, by when it was received (continuity's above deliberately takes the oldest question). Not
+    // by the store's order: a Map keeps insertion order, and a restore at launch inserts in the record store's order,
+    // so a cold start from a tap could open the older asker. None while the switch or a remote off says no.
+    confirmPending: () =>
+      isConfirmItsYouEnabled()
+        ? confirmPromptStore
+            .list()
+            .filter((prompt) => !isConnectionExcludedFromNotifications(prompt.connectionId))
+            .sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt))
+            .pop()?.connectionId
+        : undefined,
     newestUnread: async () => {
       const basicMessages = (agent.modules as { didcomm?: any }).didcomm?.basicMessages
       const records: DidCommBasicMessageRecord[] = (await basicMessages?.findAllByQuery?.({})) ?? []
