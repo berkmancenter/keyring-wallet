@@ -3,6 +3,12 @@
  * (ConfirmItsYouRow variant="sheet", mock D1): one line, the note and Send. Once sent, it shows where the request stands
  * in one line (waiting, confirmed), or the red "not them" card whole. It closes with its ✕, a tap above it, or Back.
  *
+ * The keyboard never covers the note or Send (278.19, Alberto's iPhone: it hid both). The sheet is in a Modal, its own
+ * window, so the chat's keyboard handling never reaches it: keyboard-controller's view lifts it here, on both
+ * platforms. It fills the whole window, so the lift is the keyboard's full height (offset 0). On Android the window is
+ * drawn under the status and navigation bars (translucent) so that holds there too; the safe-area views keep the
+ * sheet clear of both bars.
+ *
  * Its own gate, read at every render: with the "Confirm it's you" switch off or a remote off (isConfirmItsYouEnabled,
  * the switch AND no kill), or with no connection, it shows nothing, even if a parent opened it. The row inside carries
  * the same check again.
@@ -12,6 +18,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -25,6 +32,7 @@ import ConfirmItsYouRow from '../screens/ConfirmItsYouRow'
 
 export const ConfirmWithSheetIds = {
   sheet: 'ConfirmWithSheet',
+  lift: 'ConfirmWithSheetLift',
   close: 'ConfirmWithSheetClose',
   backdrop: 'ConfirmWithSheetBackdrop',
 } as const
@@ -43,6 +51,7 @@ const ConfirmWithSheet: React.FC<Props> = ({ connectionId, name, visible, onClos
   if (!visible || !connectionId || !isConfirmItsYouEnabled()) return null
 
   const styles = StyleSheet.create({
+    lift: { flex: 1 },
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     safeAreaView: {
       flexShrink: 1,
@@ -57,43 +66,57 @@ const ConfirmWithSheet: React.FC<Props> = ({ connectionId, name, visible, onClos
   })
 
   return (
-    <SafeAreaModal visible transparent animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.overlay} edges={['top']}>
-        {/* A tap above the sheet closes it, for sighted use only: a screen reader skips it and starts at the title, and
+    <SafeAreaModal
+      visible
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={0}
+        style={styles.lift}
+        testID={testIdWithKey(ConfirmWithSheetIds.lift)}
+      >
+        <SafeAreaView style={styles.overlay} edges={['top']}>
+          {/* A tap above the sheet closes it, for sighted use only: a screen reader skips it and starts at the title, and
             closes with the ✕ (or the reader's own escape gesture, onRequestClose). */}
-        <Pressable
-          style={styles.backdrop}
-          onPress={onClose}
-          accessible={false}
-          importantForAccessibility="no"
-          accessibilityElementsHidden
-          testID={testIdWithKey(ConfirmWithSheetIds.backdrop)}
-        />
-        <SafeAreaView style={styles.safeAreaView} edges={['bottom']} accessibilityViewIsModal>
-          <ScrollView
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.container}
-            testID={testIdWithKey(ConfirmWithSheetIds.sheet)}
-          >
-            <View style={styles.head}>
-              <ThemedText variant="headingFour" style={styles.title}>
-                {t('ConfirmItsYou.Title', { name, interpolation: { escapeValue: false } })}
-              </ThemedText>
-              <Pressable
-                onPress={onClose}
-                hitSlop={12}
-                accessibilityRole="button"
-                accessibilityLabel={t('ConfirmItsYou.Close')}
-                testID={testIdWithKey(ConfirmWithSheetIds.close)}
-              >
-                <Icon name="close" size={26} color={ColorPalette.brand.text} />
-              </Pressable>
-            </View>
-            <ConfirmItsYouRow connectionId={connectionId} name={name} variant="sheet" />
-          </ScrollView>
+          <Pressable
+            style={styles.backdrop}
+            onPress={onClose}
+            accessible={false}
+            importantForAccessibility="no"
+            accessibilityElementsHidden
+            testID={testIdWithKey(ConfirmWithSheetIds.backdrop)}
+          />
+          <SafeAreaView style={styles.safeAreaView} edges={['bottom']} accessibilityViewIsModal>
+            <ScrollView
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.container}
+              testID={testIdWithKey(ConfirmWithSheetIds.sheet)}
+            >
+              <View style={styles.head}>
+                <ThemedText variant="headingFour" style={styles.title}>
+                  {t('ConfirmItsYou.Title', { name, interpolation: { escapeValue: false } })}
+                </ThemedText>
+                <Pressable
+                  onPress={onClose}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ConfirmItsYou.Close')}
+                  testID={testIdWithKey(ConfirmWithSheetIds.close)}
+                >
+                  <Icon name="close" size={26} color={ColorPalette.brand.text} />
+                </Pressable>
+              </View>
+              <ConfirmItsYouRow connectionId={connectionId} name={name} variant="sheet" />
+            </ScrollView>
+          </SafeAreaView>
         </SafeAreaView>
-      </SafeAreaView>
+      </KeyboardAvoidingView>
     </SafeAreaModal>
   )
 }

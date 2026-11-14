@@ -5,12 +5,17 @@
  * whole, and "don't act on it" while waiting or after no answer. Each row has a control, mostly the contact page's
  * row, which is unchanged.
  */
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
+import { Modal } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import en from '../../../localization/en/en.json'
+import fr from '../../../localization/fr/fr.json'
+import ptBr from '../../../localization/pt-br/pt-br.json'
 import { testIdWithKey } from '../../../utils/testable'
 import * as confirmItsYou from '../confirmItsYou'
 import { NOTE_MAX } from '../confirmItsYouSpec'
@@ -181,4 +186,43 @@ describe('the sheet around it', () => {
     expect(has(tree, ConfirmWithSheetIds.sheet)).toBe(false)
     expect(has(tree, Ids.sheet)).toBe(false)
   })
+
+  test('the keyboard never covers the note or Send: the sheet sits in a view that lifts it by the whole keyboard', async () => {
+    // 278.19 on an iPhone: the keyboard hid the note and Send. The sheet is a Modal, its own window, so the chat's
+    // keyboard handling never reaches it; the lift has to be inside. (keyboard-controller's view is a View in jest.)
+    const tree = await show(<ConfirmWithSheet connectionId={CONN} name="Jordan" visible onClose={jest.fn()} />)
+    const lift = tree
+      .UNSAFE_getAllByType(KeyboardAvoidingView)
+      .find((v) => v.props.testID === id(ConfirmWithSheetIds.lift))
+    expect(lift).toBeTruthy()
+    expect(lift!.props.behavior).toBe('padding')
+    // It fills the window, which is drawn under both bars on Android, so the lift is the keyboard's full height.
+    expect(lift!.props.keyboardVerticalOffset).toBe(0)
+    const modal = tree.UNSAFE_getByType(Modal)
+    expect(modal.props.statusBarTranslucent).toBe(true)
+    expect(modal.props.navigationBarTranslucent).toBe(true)
+    // What it lifts: the note and Send are inside it.
+    const inside = within(tree.getByTestId(id(ConfirmWithSheetIds.lift)))
+    expect(inside.queryByTestId(id(Ids.note))).not.toBeNull()
+    expect(inside.queryByTestId(id(Ids.send))).not.toBeNull()
+  })
+})
+
+describe('after answering: "contact", never "call" (Alberto, 278.19)', () => {
+  const LOCALES = { en, fr, 'pt-BR': ptBr } as unknown as Record<string, { ConfirmItsYou: Record<string, string> }>
+  const CALL = { en: /\bcall/i, fr: /\bappel/i, 'pt-BR': /\bligue|\bligar/i } as Record<string, RegExp>
+  test.each(Object.keys(LOCALES).flatMap((lng) => ['SentItsMeAfter', 'SentNotMeAfter'].map((key) => [lng, key])))(
+    '%s %s says contact {{asker}}, not call',
+    (lng, key) => {
+      const line = LOCALES[lng].ConfirmItsYou[key]
+      expect(line).toContain('{{asker}}')
+      expect(line).not.toMatch(CALL[lng])
+      // And what it must say, by literal: contact.
+      expect(line).toContain(
+        { en: 'contact {{asker}}', fr: 'contactez {{asker}}', 'pt-BR': 'entre em contato com {{asker}}' }[lng]
+      )
+      // The control: the same pattern does catch the word it guards against in that language.
+      expect({ en: 'call them', fr: 'appelez-les', 'pt-BR': 'ligue para' }[lng]).toMatch(CALL[lng])
+    }
+  )
 })

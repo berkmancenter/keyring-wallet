@@ -458,6 +458,7 @@
     "ConfirmWithSheet": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConfirmWithSheetBackdrop": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConfirmWithSheetClose": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
+    "ConfirmWithSheetLift": ["src/modules/trust-tasks/components/ConfirmWithSheet.tsx"],
     "ConnectCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectMyAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectionInviterCapabilitySwitchElement": ["src/screens/Developer.tsx"],
@@ -2415,6 +2416,9 @@
     },
     {
       "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.close"
+    },
+    {
+      "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.lift"
     },
     {
       "src/modules/trust-tasks/components/ConfirmWithSheet.tsx": "ConfirmWithSheetIds.sheet"
