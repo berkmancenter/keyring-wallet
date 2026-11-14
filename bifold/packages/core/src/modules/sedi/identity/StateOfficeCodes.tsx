@@ -2,6 +2,8 @@
  * This phone's codes for a state office: the guardian's holder code (sedi/holder/controller) and the cared-for
  * person's ward code (./phoneIdentity), each shown as a QR and text to copy, made only when the person asks to see it.
  * The ward code can be made this phone's ward ("Use this code on this phone"), so a card naming it checks here.
+ * With a demo side set (trust-tasks/module/sediDemoSide: "Set up as the guardian" or "as the ward"), only that side's
+ * code is offered; with none, both.
  *
  * Gated at render, not only where it is opened: with trusted approvers or state-verified approvers off (the SEDI/KERI
  * kill included), or no state office on this build (K1's root a placeholder), it draws only that it is off, and its
@@ -24,6 +26,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { sediDemoSide } from '../../trust-tasks/module/sediDemoSide'
 import { k1Root } from '../guardian/stateRoots'
 import { holderCodeOf } from '../holder/controller'
 
@@ -78,6 +81,8 @@ const StateOfficeCodes: React.FC = () => {
     )
 
   const a = agent as unknown as IdentityAgent | undefined
+  // Read at each render, like the gate above: this phone's demo side, if one is set.
+  const side = sediDemoSide()
   const showHolder = async () => {
     if (!a) return
     try {
@@ -128,46 +133,50 @@ const StateOfficeCodes: React.FC = () => {
       <ScrollView contentContainerStyle={styles.page} testID={testIdWithKey(Ids.screen)}>
         <ThemedText>{t('StateOffice.Intro')}</ThemedText>
 
-        <View style={styles.group}>
-          <ThemedText variant="bold" accessibilityRole="header">
-            {t('StateOffice.HolderTitle')}
-          </ThemedText>
-          <ThemedText style={styles.muted}>{t('StateOffice.HolderNote')}</ThemedText>
-          {holder.aid ? null : (
-            <Button
-              title={t('StateOffice.ShowHolder')}
-              buttonType={ButtonType.Primary}
-              onPress={() => void showHolder()}
-              testID={testIdWithKey(Ids.showHolder)}
-            />
-          )}
-          {shown(holder, Ids.holderQr, Ids.holderCode, Ids.copyHolder, setHolder)}
-        </View>
+        {side === 'ward' ? null : (
+          <View style={styles.group}>
+            <ThemedText variant="bold" accessibilityRole="header">
+              {t('StateOffice.HolderTitle')}
+            </ThemedText>
+            <ThemedText style={styles.muted}>{t('StateOffice.HolderNote')}</ThemedText>
+            {holder.aid ? null : (
+              <Button
+                title={t('StateOffice.ShowHolder')}
+                buttonType={ButtonType.Primary}
+                onPress={() => void showHolder()}
+                testID={testIdWithKey(Ids.showHolder)}
+              />
+            )}
+            {shown(holder, Ids.holderQr, Ids.holderCode, Ids.copyHolder, setHolder)}
+          </View>
+        )}
 
-        <View style={styles.group}>
-          <ThemedText variant="bold" accessibilityRole="header">
-            {t('StateOffice.WardTitle')}
-          </ThemedText>
-          <ThemedText style={styles.muted}>{t('StateOffice.WardNote')}</ThemedText>
-          {ward.aid ? null : (
-            <Button
-              title={t('StateOffice.ShowWard')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => void showWard()}
-              testID={testIdWithKey(Ids.showWard)}
-            />
-          )}
-          {shown(ward, Ids.wardQr, Ids.wardCode, Ids.copyWard, setWard)}
-          {ward.aid && !wardSet ? (
-            <Button
-              title={t('StateOffice.UseWard')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => void applyWard()}
-              testID={testIdWithKey(Ids.useWard)}
-            />
-          ) : null}
-          {wardSet ? <ThemedText testID={testIdWithKey(Ids.wardSet)}>{t('StateOffice.WardSet')}</ThemedText> : null}
-        </View>
+        {side === 'guardian' ? null : (
+          <View style={styles.group}>
+            <ThemedText variant="bold" accessibilityRole="header">
+              {t('StateOffice.WardTitle')}
+            </ThemedText>
+            <ThemedText style={styles.muted}>{t('StateOffice.WardNote')}</ThemedText>
+            {ward.aid ? null : (
+              <Button
+                title={t('StateOffice.ShowWard')}
+                buttonType={ButtonType.Secondary}
+                onPress={() => void showWard()}
+                testID={testIdWithKey(Ids.showWard)}
+              />
+            )}
+            {shown(ward, Ids.wardQr, Ids.wardCode, Ids.copyWard, setWard)}
+            {ward.aid && !wardSet ? (
+              <Button
+                title={t('StateOffice.UseWard')}
+                buttonType={ButtonType.Secondary}
+                onPress={() => void applyWard()}
+                testID={testIdWithKey(Ids.useWard)}
+              />
+            ) : null}
+            {wardSet ? <ThemedText testID={testIdWithKey(Ids.wardSet)}>{t('StateOffice.WardSet')}</ThemedText> : null}
+          </View>
+        )}
 
         {holder.failed || ward.failed ? (
           <ThemedText style={styles.problem} testID={testIdWithKey(Ids.problem)}>

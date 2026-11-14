@@ -68,6 +68,7 @@ export {
   becomeK0TestWard,
   setUpSediDemo,
   setUpSediDemoAsGuardian,
+  setUpSediDemoAsWard,
   setUpSediDemoAsPerson,
   turnOffSediDemo,
   sediDemoHiddenByKill,
@@ -77,6 +78,7 @@ export {
   type SediDemoHiddenFeature,
 } from './developerTestState'
 export { SEDI_KERI_REMOTE_OFF } from './module/sediKeriRemoteOff'
+export { setSediDemoSide, sediDemoSide, type SediDemoSide } from './module/sediDemoSide'
 export { setConfirmItsYouEnabled, isConfirmItsYouEnabled, CONFIRM_ITS_YOU_REMOTE_OFF } from './module/confirmItsYouFlag'
 export { setDemoStateHost, demoStateHost, demoStateHostProblem } from '../sedi/webs/demoStateHost'
 

@@ -1,7 +1,8 @@
 /**
  * 278.16 hand run, item 5: "Set up the SEDI demo" put the Guardian card AND the ward on whichever phone ran it, so the
  * state card showed on both phones. Now each phone says which side it is: "Set up as the guardian" (Jordan: the card
- * and the state card, no ward) and "Set up as the person" (Sam: the ward, no card, the state card off).
+ * and the state card, no ward) and "Set up as the ward" (Sam: the ward, no card, the state card off). Since 11-14 neither
+ * touches "Confirm it's you" (its own switch), and each records the phone's demo side for the codes screen.
  */
 import { K0_TEST_GUARDIAN_CARD } from '../../sedi/guardian/k0TestCard'
 import { K0_TEST_WARD } from '../../sedi/guardian/stateRoots'
@@ -11,6 +12,7 @@ import {
   setUpSediDemo,
   setUpSediDemoAsGuardian,
   setUpSediDemoAsPerson,
+  setUpSediDemoAsWard,
   turnOffSediDemo,
 } from '../developerTestState'
 import * as evidenceModule from '../guardianEvidence'
@@ -20,6 +22,7 @@ import {
   isConfirmItsYouEnabled,
   setConfirmItsYouEnabled,
 } from '../module/confirmItsYouFlag'
+import { sediDemoSide } from '../module/sediDemoSide'
 import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import {
   STATE_VERIFIED_APPROVERS_REMOTE_OFF,
@@ -79,8 +82,9 @@ const states = () => [
   isConfirmItsYouEnabled(),
 ]
 const ALL_OFF = [false, false, false, false, false]
-const GUARDIAN = [true, true, true, true, true]
-const PERSON = [true, true, true, false, true]
+// Confirm it's you (last) is never turned on by either side.
+const GUARDIAN = [true, true, true, true, false]
+const WARD = [true, true, true, false, false]
 
 const allSwitchesOff = () => turnOffSediDemo()
 const clearKills = () => {
@@ -102,7 +106,7 @@ afterEach(() => {
 })
 
 describe('Set up as the guardian (Jordan)', () => {
-  test('from everything off: all five switches on, the K0 card held, no ward (control: before it, all off)', async () => {
+  test("from everything off: four switches on (never Confirm it's you), the K0 card held, no ward (control: before it, all off)", async () => {
     expect(states()).toEqual(ALL_OFF)
     const jordan = phone()
     expect(await setUpSediDemoAsGuardian(jordan.agent)).toBe('done')
@@ -124,10 +128,10 @@ describe('Set up as the guardian (Jordan)', () => {
     expect((jordan.agent as { genericRecords: { delete: jest.Mock } }).genericRecords.delete).not.toHaveBeenCalled()
   })
 
-  test('after "Set up as the person" on this phone, it becomes the guardian: state card on, card held, ward gone', async () => {
+  test('after "Set up as the ward" on this phone, it becomes the guardian: state card on, card held, ward gone', async () => {
     const p = phone()
-    await setUpSediDemoAsPerson(p.agent)
-    expect(states()).toEqual(PERSON)
+    await setUpSediDemoAsWard(p.agent)
+    expect(states()).toEqual(WARD)
     expect(await setUpSediDemoAsGuardian(p.agent)).toBe('done')
     expect(states()).toEqual(GUARDIAN)
     expect(await heldGuardianEvidence(p.agent)).toBeDefined()
@@ -178,20 +182,20 @@ describe('Set up as the guardian (Jordan)', () => {
     expect(await stateWardOf(jordan.agent)).toBe(K0_TEST_WARD)
   })
 
-  test("the state card's own remote off: doneSomeHidden naming the card (control: the person side ignores it)", async () => {
+  test("the state card's own remote off: doneSomeHidden naming the card (control: the ward side ignores it)", async () => {
     STATE_CARD_REMOTE_OFF.off = true
     expect(await setUpSediDemoAsGuardian(phone().agent)).toBe('doneSomeHidden')
     expect(sediDemoHiddenByKill('guardian')).toEqual(['stateCard'])
   })
 })
 
-describe('Set up as the person (Sam)', () => {
-  test('from everything off: four switches on, the state card OFF, the K0 ward set, no card (control: before it, all off)', async () => {
+describe('Set up as the ward (Sam)', () => {
+  test("from everything off: three switches on, the state card OFF (never Confirm it's you), the K0 ward set, no card (control: before it, all off)", async () => {
     expect(states()).toEqual(ALL_OFF)
     const sam = phone()
-    expect(await setUpSediDemoAsPerson(sam.agent)).toBe('done')
-    expect(states()).toEqual(PERSON)
-    expect(isConfirmItsYouEnabled()).toBe(true)
+    expect(await setUpSediDemoAsWard(sam.agent)).toBe('done')
+    expect(states()).toEqual(WARD)
+    expect(isConfirmItsYouEnabled()).toBe(false)
     expect(await stateWardOf(sam.agent)).toBe(K0_TEST_WARD)
     expect(await heldGuardianEvidence(sam.agent)).toBeUndefined()
   })
@@ -201,7 +205,7 @@ describe('Set up as the person (Sam)', () => {
     expect(await setUpSediDemo(sam.agent)).toBe('done')
     expect(isStateCardEnabled()).toBe(true)
     expect(await heldGuardianEvidence(sam.agent)).toBeDefined()
-    expect(await setUpSediDemoAsPerson(sam.agent)).toBe('done')
+    expect(await setUpSediDemoAsWard(sam.agent)).toBe('done')
     expect(isStateCardEnabled()).toBe(false)
     expect(await heldGuardianEvidence(sam.agent)).toBeUndefined()
     // Overwritten with no card in it, never deleted: not one of the card's fields is left.
@@ -215,7 +219,7 @@ describe('Set up as the person (Sam)', () => {
   test('the state card switch turned on by hand beforehand is turned off', async () => {
     setStateCardEnabled(true)
     expect(isStateCardEnabled()).toBe(true)
-    await setUpSediDemoAsPerson(phone().agent)
+    await setUpSediDemoAsWard(phone().agent)
     expect(isStateCardEnabled()).toBe(false)
   })
 
@@ -225,22 +229,22 @@ describe('Set up as the person (Sam)', () => {
     // Only the card is left here (the ward the old one-tap set is removed), so a ward found afterwards was set now.
     sam.rows.splice(0, sam.rows.length, ...sam.rows.filter((r) => r.tags.recordType === GUARDIAN_EVIDENCE_HELD))
     sam.fail.save.add(STATE_WARD)
-    expect(await setUpSediDemoAsPerson(sam.agent)).toBe('wardNotSet')
-    expect(states()).toEqual(PERSON)
+    expect(await setUpSediDemoAsWard(sam.agent)).toBe('wardNotSet')
+    expect(states()).toEqual(WARD)
     expect(await heldGuardianEvidence(sam.agent)).toBeUndefined()
     expect(await stateWardOf(sam.agent)).toBeNull()
     sam.fail.save.clear()
-    expect(await setUpSediDemoAsPerson(sam.agent)).toBe('done')
+    expect(await setUpSediDemoAsWard(sam.agent)).toBe('done')
   })
 
   test('the card cannot be put away: cardNotRemoved, the ward still set (control: writes working, done)', async () => {
     const sam = phone()
     await setUpSediDemo(sam.agent)
     sam.fail.save.add(GUARDIAN_EVIDENCE_HELD)
-    expect(await setUpSediDemoAsPerson(sam.agent)).toBe('cardNotRemoved')
+    expect(await setUpSediDemoAsWard(sam.agent)).toBe('cardNotRemoved')
     expect(await stateWardOf(sam.agent)).toBe(K0_TEST_WARD)
     sam.fail.save.clear()
-    expect(await setUpSediDemoAsPerson(sam.agent)).toBe('done')
+    expect(await setUpSediDemoAsWard(sam.agent)).toBe('done')
   })
 
   test('both steps fail: the ward is named first, and the put-away was still attempted', async () => {
@@ -250,7 +254,7 @@ describe('Set up as the person (Sam)', () => {
     sam.fail.save.add(STATE_WARD)
     sam.fail.save.add(GUARDIAN_EVIDENCE_HELD)
     const forget = jest.spyOn(evidenceModule, 'holdNoGuardianEvidence')
-    expect(await setUpSediDemoAsPerson(sam.agent)).toBe('wardNotSet')
+    expect(await setUpSediDemoAsWard(sam.agent)).toBe('wardNotSet')
     expect(forget).toHaveBeenCalledTimes(1)
     // The put-away really failed too (control for the order: the row above, where only it fails, says cardNotRemoved).
     expect(await heldGuardianEvidence(sam.agent)).toBeDefined()
@@ -258,15 +262,64 @@ describe('Set up as the person (Sam)', () => {
 
   test("the state card's own remote off hides nothing here: done, not doneSomeHidden (control: the guardian side names it)", async () => {
     STATE_CARD_REMOTE_OFF.off = true
-    expect(await setUpSediDemoAsPerson(phone().agent)).toBe('done')
+    expect(await setUpSediDemoAsWard(phone().agent)).toBe('done')
+    expect(sediDemoHiddenByKill('ward')).toEqual([])
+    // 'person', the side's older name, the wallet still passes until its pin moves.
     expect(sediDemoHiddenByKill('person')).toEqual([])
     expect(sediDemoHiddenByKill()).toEqual(['stateCard'])
   })
 
-  test("Confirm it's you's own remote off: doneSomeHidden naming it", async () => {
+  test("Confirm it's you's own remote off is not this side's to report: done, nothing hidden", async () => {
     CONFIRM_ITS_YOU_REMOTE_OFF.off = true
-    expect(await setUpSediDemoAsPerson(phone().agent)).toBe('doneSomeHidden')
-    expect(sediDemoHiddenByKill('person')).toEqual(['confirmItsYou'])
+    expect(await setUpSediDemoAsWard(phone().agent)).toBe('done')
+    expect(sediDemoHiddenByKill('ward')).toEqual([])
+  })
+
+  test('setUpSediDemoAsPerson is the same function, kept for the wallet until its pin moves', () => {
+    expect(setUpSediDemoAsPerson).toBe(setUpSediDemoAsWard)
+  })
+})
+
+describe("Confirm it's you is its own switch (Alberto, 11-14)", () => {
+  test.each([
+    ['guardian', setUpSediDemoAsGuardian],
+    ['ward', setUpSediDemoAsWard],
+  ] as const)('as the %s: on stays on through set-up and turn-off, off stays off', async (_side, setUp) => {
+    setConfirmItsYouEnabled(true)
+    expect(await setUp(phone().agent)).toBe('done')
+    expect(isConfirmItsYouEnabled()).toBe(true)
+    turnOffSediDemo()
+    expect(isConfirmItsYouEnabled()).toBe(true)
+    setConfirmItsYouEnabled(false)
+    expect(await setUp(phone().agent)).toBe('done')
+    expect(isConfirmItsYouEnabled()).toBe(false)
+  })
+})
+
+describe("the phone's demo side, for the codes screen", () => {
+  test("each set-up records its side, the other side's set-up replaces it, and turn-off clears it (control: before any, none)", async () => {
+    expect(sediDemoSide()).toBeNull()
+    const p = phone()
+    await setUpSediDemoAsGuardian(p.agent)
+    expect(sediDemoSide()).toBe('guardian')
+    await setUpSediDemoAsWard(p.agent)
+    expect(sediDemoSide()).toBe('ward')
+    turnOffSediDemo()
+    expect(sediDemoSide()).toBeNull()
+  })
+
+  test('a remote off up front records no side (control: cleared, it does)', async () => {
+    SEDI_KERI_REMOTE_OFF.off = true
+    expect(await setUpSediDemoAsGuardian(phone().agent)).toBe('remoteOff')
+    expect(sediDemoSide()).toBeNull()
+    clearKills()
+    await setUpSediDemoAsGuardian(phone().agent)
+    expect(sediDemoSide()).toBe('guardian')
+  })
+
+  test('the old one-tap records no side: it sets both up on one phone', async () => {
+    await setUpSediDemo(phone().agent)
+    expect(sediDemoSide()).toBeNull()
   })
 })
 
@@ -278,7 +331,7 @@ describe('both sides under a remote off', () => {
   ]
   const sides = [
     ['guardian', setUpSediDemoAsGuardian],
-    ['person', setUpSediDemoAsPerson],
+    ['ward', setUpSediDemoAsWard],
   ] as const
 
   describe.each(sides)('as the %s', (_side, setUp) => {

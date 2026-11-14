@@ -14,6 +14,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
 import { testIdWithKey } from '../../../utils/testable'
 import { guardianSourceKey } from '../../trust-tasks/guardianEvidence'
+import { setSediDemoSide } from '../../trust-tasks/module/sediDemoSide'
 import { SEDI_KERI_REMOTE_OFF } from '../../trust-tasks/module/sediKeriRemoteOff'
 import { setStateVerifiedApproversEnabled } from '../../trust-tasks/module/stateVerifiedApproversFlag'
 import { setTrustedApproversEnabled } from '../../trust-tasks/module/trustedApproversFlag'
@@ -56,6 +57,7 @@ afterEach(() => {
   setStateVerifiedApproversEnabled(false)
   SEDI_KERI_REMOTE_OFF.off = false
   stateRoots.k1SettingsForTests.reset()
+  setSediDemoSide(null)
 })
 
 describe('the keyring://guardian-card link', () => {
@@ -154,6 +156,27 @@ describe('the codes screen and its entry', () => {
     expect(tree.queryByTestId(id(StateOfficeCodesIds.showHolder))).toBeNull()
     expect(make).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['guardian', true, false],
+    ['ward', false, true],
+    [null, true, true],
+  ] as const)(
+    'C04: demo side %s: the guardian code offered %s, the ward code offered %s (none set: both, as before)',
+    (side, holder, ward) => {
+      setSediDemoSide(side)
+      const tree = render(
+        <BasicAppContext>
+          <StateOfficeCodes />
+        </BasicAppContext>
+      )
+      expect(!!tree.queryByTestId(id(StateOfficeCodesIds.showHolder))).toBe(holder)
+      expect(!!tree.queryByTestId(id(StateOfficeCodesIds.showWard))).toBe(ward)
+      // The whole group goes, its heading too (the test's t gives the key or the English).
+      expect(!!tree.queryByText(new RegExp(`StateOffice.HolderTitle|${en.StateOffice.HolderTitle}`))).toBe(holder)
+      expect(!!tree.queryByText(new RegExp(`StateOffice.WardTitle|${en.StateOffice.WardTitle}`))).toBe(ward)
+    }
+  )
 
   it('C03: no state office on this build (no K1 root): the entry and the screen are off too', () => {
     stateRoots.k1SettingsForTests.set({ aid: '' })

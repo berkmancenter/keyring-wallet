@@ -98,7 +98,16 @@ describe('guardianReasonWords: every refusal has words', () => {
       expect(codes.filter((code) => words.includes(code))).toEqual([])
   })
 
-  test('the noWard words say where to fix it (en), as Alberto asked', () => {
-    expect(locale('en').Approver.ReasonDo.noWard).toBe('Go to Settings › Developer › Demos › Set up as the person.')
+  test("the noWard words say where to fix it (en), as Alberto asked: the Ward demo switch, or the office and this phone's ward code", () => {
+    expect(locale('en').Approver.ReasonDo.noWard).toBe(
+      "For the test card, turn on Settings › Developer › Demos › Ward demo. For a card from a state office, check the office used this phone's ward code."
+    )
+  })
+
+  test('no refusal words name the old "Set up as the person" step, in any language (11-14: the switch is "Ward demo")', () => {
+    for (const lng of ['en', 'fr', 'pt-br'] as const) {
+      const words = JSON.stringify([locale(lng).Approver.Reason, locale(lng).Approver.ReasonDo])
+      expect(words).not.toMatch(/Set up as the person|Préparer comme la personne|Preparar como a pessoa/)
+    }
   })
 })
