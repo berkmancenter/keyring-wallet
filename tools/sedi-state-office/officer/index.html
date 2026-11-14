@@ -61,13 +61,24 @@
         </p>
         <form id="issue-form" class="grid" novalidate>
           <label class="field">
+            <span>Paste what the phones sent <em>(optional)</em></span>
+            <textarea
+              id="paste"
+              rows="3"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Paste a message with either code, or both: they fill the two fields below."
+            ></textarea>
+            <small class="said" id="paste-said" aria-live="polite"></small>
+          </label>
+          <label class="field">
             <span>Guardian's code</span>
             <input
               id="holder"
               name="holder"
               autocomplete="off"
               spellcheck="false"
-              placeholder="B…"
+              placeholder="I…"
               required
             />
             <small class="err" id="holder-err"></small>
@@ -259,6 +270,7 @@
       </li>
     </template>
 
+    <script src="codes.js"></script>
     <script src="officer.js"></script>
   </body>
 </html>

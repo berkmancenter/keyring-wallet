@@ -8,6 +8,10 @@ API it calls (see `../README.md`). Plain HTML, CSS and JS: no framework, no buil
 - **Issue:** the guardian's code (44 characters, starting E or I) and the ward's code (44 starting B, or 48
   starting 1AAI), checked here only to say what is wrong early; the issuer's own check decides. The note is local
   only, never published.
+- **One paste for both codes** (optional, above the two fields): paste whatever the phones sent, a message with
+  either code or both, and `codes.js` fills each field it finds exactly one code for, by the same shapes. Two
+  different codes of one kind fill nothing and say so. Tested by `node --test ../codes.test.js` (kept outside this
+  folder, which the page serves).
 - **The QR** is the issuer's `qrSvg`, shown through an `<img>` with a `data:` URL, so nothing in it can run.
 - **Revoke** asks first, in the page. After a revoke the list shows "Revoked" with its time.
 - **Published files** (testing only, read only): every entry of the publish tree the public server hands to
