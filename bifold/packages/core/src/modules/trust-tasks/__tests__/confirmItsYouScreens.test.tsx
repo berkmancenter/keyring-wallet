@@ -4,12 +4,14 @@
  * __tests__/modules/trust-tasks/confirmItsYou.test.ts; here, what each screen calls, with what, and what it says.
  */
 import { act, fireEvent, render, userEvent, within } from '@testing-library/react-native'
+import i18next from 'i18next'
 import React from 'react'
 import { StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import en from '../../../localization/en'
 import { ColorPalette } from '../../../theme'
 import { testIdWithKey } from '../../../utils/testable'
 import * as confirmItsYou from '../confirmItsYou'
@@ -660,5 +662,58 @@ describe('"This request has expired" on the asked phone (local only)', () => {
       await new Promise((resolve) => setTimeout(resolve, 150))
     })
     expect(tree.queryByTestId(id(ConfirmItsYouModalIds.sheet))).toBeNull()
+  })
+})
+
+/**
+ * The words as written (278.21 run): i18next HTML-escapes an interpolated value unless told not to, so the
+ * lock word "the phone's PIN" read "the phone&#39;s PIN" on the asked phone, and a name like O'Brien would too.
+ * These rows render the real English through a real i18next, which escapes by default (see the control).
+ */
+describe('the words as written, never HTML-escaped', () => {
+  const realEnglish = () => {
+    const i18n = i18next.createInstance()
+    void i18n.init({ lng: 'en', resources: { en: { translation: en } }, initAsync: false })
+    // The module the screens get (jest maps react-i18next to __mocks__; a namespace import would be a copy).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    jest.spyOn(require('react-i18next'), 'useTranslation').mockReturnValue({ t: i18n.t.bind(i18n), i18n } as never)
+    return i18n
+  }
+
+  test('control: a real i18next escapes the apostrophe when the flag is left out', () => {
+    const i18n = realEnglish()
+    expect(i18n.t('ConfirmItsYou.EitherAsksLock', { method: "the phone's PIN" })).toBe(
+      'Either answer asks for the phone&#39;s PIN.'
+    )
+  })
+
+  test('the request sheet\'s lock line reads "the phone\'s PIN", not "&#39;"', async () => {
+    realEnglish()
+    jest.spyOn(ownerConfirm, 'ownerLockKind').mockResolvedValue('screenLock')
+    confirmItsYou.confirmPromptStore.set(prompt())
+    const tree = await show(<ConfirmItsYouModal />)
+    const line = tree.getByTestId(id(ConfirmItsYouModalIds.lock)).props.children
+    expect(line).toBe("Either answer asks for the phone's PIN.")
+    expect(line).not.toContain('&#39;')
+  })
+
+  test("the row names O'Brien as written when there is no relationship, or the request did not go", async () => {
+    realEnglish()
+    jest.spyOn(confirmItsYou, 'confirmAsksOn').mockResolvedValue([])
+    const send = jest.spyOn(confirmItsYou, 'sendConfirmRequest').mockResolvedValue('noRelationship')
+    const tree = await show(<ConfirmItsYouRow connectionId={CONN} name="O'Brien" />)
+    await press(tree, ConfirmItsYouRowIds.open)
+    await act(async () => {
+      fireEvent.changeText(tree.getByTestId(id(ConfirmItsYouRowIds.note)), NOTE)
+    })
+    await press(tree, ConfirmItsYouRowIds.send)
+    expect(tree.getByTestId(id(ConfirmItsYouRowIds.said)).props.children).toBe(
+      "There's no relationship with O'Brien on this phone to ask over."
+    )
+    send.mockRejectedValue(new Error('mediator down'))
+    await press(tree, ConfirmItsYouRowIds.send)
+    expect(tree.getByTestId(id(ConfirmItsYouRowIds.said)).props.children).toBe(
+      "The request didn't go to O'Brien. Try again."
+    )
   })
 })

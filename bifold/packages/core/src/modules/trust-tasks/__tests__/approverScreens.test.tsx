@@ -5,11 +5,13 @@
  */
 import { useFocusEffect } from '@react-navigation/native'
 import { act, fireEvent, render, within, userEvent } from '@testing-library/react-native'
+import i18next from 'i18next'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import en from '../../../localization/en'
 import { testIdWithKey } from '../../../utils/testable'
 import * as approverRole from '../approverRole'
 import { ROLE_ACTIONS } from '../approverRoleSpec'
@@ -45,6 +47,16 @@ const linked = (vtaDid?: string) => {
     ...real,
     link: vtaDid ? ({ kind: 'linked', vtaDid } as never) : ({ kind: 'unlinked' } as never),
   })
+}
+
+/** The real English through a real i18next, which HTML-escapes a value unless told not to (278.21 run: "&#39;"). */
+const realEnglish = () => {
+  const i18n = i18next.createInstance()
+  void i18n.init({ lng: 'en', resources: { en: { translation: en } }, initAsync: false })
+  // The module the screens get (jest maps react-i18next to __mocks__; a namespace import would be a copy).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  jest.spyOn(require('react-i18next'), 'useTranslation').mockReturnValue({ t: i18n.t.bind(i18n), i18n } as never)
+  return i18n
 }
 
 const show = async (element: React.ReactElement) => {
@@ -341,6 +353,30 @@ describe("the contact's row", () => {
     })
     expect(tree.getByTestId(id(ApproverAskRowIds.error)).props.children).toBe('Approver.NotSent')
   })
+
+  test("names O'Brien as written, not HTML-escaped, in both of those lines", async () => {
+    realEnglish()
+    linked(SAM_AGENT)
+    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(undefined)
+    const offer = jest.spyOn(approverRole, 'offerApproverRole').mockResolvedValue('noRelationship')
+    const tree = await show(<ApproverAskRow connectionId={CONN} name="O'Brien" />)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id(ApproverAskRowIds.ask)))
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id(ApproverAskRowIds.send)))
+    })
+    expect(tree.getByTestId(id(ApproverAskRowIds.error)).props.children).toBe(
+      "Exchange a relationship credential with O'Brien first."
+    )
+    offer.mockRejectedValue(new Error('mediator down'))
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id(ApproverAskRowIds.send)))
+    })
+    expect(tree.getByTestId(id(ApproverAskRowIds.error)).props.children).toBe(
+      "The ask didn't go to O'Brien. Try again."
+    )
+  })
 })
 
 describe("the contact's row: already approves, from the agent's own rules (278.16 run, item 3)", () => {
@@ -567,6 +603,18 @@ describe('the offer sheet', () => {
     const other = await show(<ApproverOfferModal />)
     expect(other.getByTestId(id(ApproverOfferIds.faceId)).props.children).toBe(
       'Approver.AcceptAsksLock|CreateAgent.Lock.unknown'
+    )
+  })
+
+  test('the lock line reads "your phone\'s screen lock", not "&#39;" (the real English words)', async () => {
+    const i18n = realEnglish()
+    // Control: left without the flag, the same words do come out escaped.
+    expect(i18n.t('Approver.AcceptAsksLock', { method: "your phone's screen lock" })).toContain('&#39;')
+    approverRole.roleOfferPromptStore.set(offerFrom())
+    jest.spyOn(ownerConfirm, 'ownerLockKind').mockResolvedValue('screenLock')
+    const tree = await show(<ApproverOfferModal />)
+    expect(tree.getByTestId(id(ApproverOfferIds.faceId)).props.children).toBe(
+      "Accept asks for your phone's screen lock. Decline is one tap."
     )
   })
 

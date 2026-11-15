@@ -282,7 +282,10 @@ const ApproverOfferModal: React.FC = () => {
                   testID={testIdWithKey(ApproverOfferIds.notNow)}
                 />
                 <ThemedText style={[styles.muted, styles.centred]} testID={testIdWithKey(ApproverOfferIds.faceId)}>
-                  {t('Approver.AcceptAsksLock', { method: t(`CreateAgent.Lock.${lockKind}`) })}
+                  {t('Approver.AcceptAsksLock', {
+                    method: t(`CreateAgent.Lock.${lockKind}`),
+                    interpolation: { escapeValue: false },
+                  })}
                 </ThemedText>
               </>
             ) : null}

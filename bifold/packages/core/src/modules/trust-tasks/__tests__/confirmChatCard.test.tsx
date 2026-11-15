@@ -5,12 +5,14 @@
  * confirmItsYouScreens.test.tsx.
  */
 import { act, fireEvent, render, renderHook } from '@testing-library/react-native'
+import i18next from 'i18next'
 import React from 'react'
 import { AppState, StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import en from '../../../localization/en'
 import { ColorPalette } from '../../../theme'
 import { Role } from '../../../types/chat'
 import { testIdWithKey } from '../../../utils/testable'
@@ -258,6 +260,37 @@ describe('mine (this phone asked)', () => {
     expect(statusOf(tree)).toBe('ConfirmItsYou.ExpiredTitle')
     await press(tree, ConfirmChatCardIds.askAgain)
     expect(send).toHaveBeenCalledWith(AGENT, CONN, NOTE)
+  })
+
+  test("Ask again names O'Brien as written, not HTML-escaped, when there is no relationship or it did not go", async () => {
+    // The real English through a real i18next, which escapes a value unless told not to (278.21 run: "&#39;").
+    const i18n = i18next.createInstance()
+    void i18n.init({ lng: 'en', resources: { en: { translation: en } }, initAsync: false })
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    jest.spyOn(require('react-i18next'), 'useTranslation').mockReturnValue({ t: i18n.t.bind(i18n), i18n } as never)
+    const send = jest.spyOn(confirmItsYou, 'sendConfirmRequest').mockResolvedValue('noRelationship')
+    const entry: ConfirmChatEntry = {
+      side: 'mine',
+      ask: ask({ expiresAt: new Date(Date.now() - MIN).toISOString() }),
+      newest: true,
+    }
+    const tree = render(
+      <BasicAppContext>
+        <ConfirmChatCard entry={entry} connectionId={CONN} name="O'Brien" />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    // A settled card starts as one line: tap it open, as `opened` does.
+    await press(tree, ConfirmChatCardIds.mineLine)
+    await press(tree, ConfirmChatCardIds.askAgain)
+    expect(tree.getByTestId(id(ConfirmChatCardIds.said)).props.children).toBe(
+      "There's no relationship with O'Brien on this phone to ask over."
+    )
+    send.mockRejectedValue(new Error('mediator down'))
+    await press(tree, ConfirmChatCardIds.askAgain)
+    expect(tree.getByTestId(id(ConfirmChatCardIds.said)).props.children).toBe(
+      "The request didn't go to O'Brien. Try again."
+    )
   })
 
   test('an older request is one quiet line, with nothing to press', async () => {

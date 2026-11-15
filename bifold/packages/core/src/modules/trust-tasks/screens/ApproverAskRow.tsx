@@ -160,12 +160,13 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
           }
         }
         const result = await offerApproverRole(agent, connectionId, vtaDid, actions)
-        if (result === 'noRelationship') setSaid(t('Approver.NoRelationship', { name }))
+        if (result === 'noRelationship')
+          setSaid(t('Approver.NoRelationship', { name, interpolation: { escapeValue: false } }))
         else setPicking(false)
         await load()
       } catch (error) {
         releaseWarn(`[VTI] approver ask not sent (${(error as Error)?.name ?? 'error'}: ${(error as Error)?.message})`)
-        setSaid(t('Approver.NotSent', { name }))
+        setSaid(t('Approver.NotSent', { name, interpolation: { escapeValue: false } }))
       } finally {
         setBusy(false)
       }

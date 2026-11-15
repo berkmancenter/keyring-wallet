@@ -159,7 +159,8 @@ const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name, variant = 'row'
       setSaid(undefined)
       try {
         const result = await sendConfirmRequest(agent, connectionId, text)
-        if (result === 'noRelationship') setSaid(t('ConfirmItsYou.NoRelationship', { name }))
+        if (result === 'noRelationship')
+          setSaid(t('ConfirmItsYou.NoRelationship', { name, interpolation: { escapeValue: false } }))
         else if (result === 'badNote') setSaid(t('ConfirmItsYou.NoteNeeded'))
         else {
           setComposing(false)
@@ -170,7 +171,7 @@ const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name, variant = 'row'
         releaseWarn(
           `[VTI] confirm request not sent (${(error as Error)?.name ?? 'error'}: ${(error as Error)?.message})`
         )
-        setSaid(t('ConfirmItsYou.NotSent', { name }))
+        setSaid(t('ConfirmItsYou.NotSent', { name, interpolation: { escapeValue: false } }))
       } finally {
         setBusy(false)
       }

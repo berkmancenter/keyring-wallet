@@ -147,12 +147,13 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
       setSaid(undefined)
       try {
         const result = await sendConfirmRequest(agent, connectionId, note)
-        if (result === 'noRelationship') setSaid(t('ConfirmItsYou.NoRelationship', { name }))
+        if (result === 'noRelationship')
+          setSaid(t('ConfirmItsYou.NoRelationship', { name, interpolation: { escapeValue: false } }))
         else if (result === 'badNote') setSaid(t('ConfirmItsYou.NoteNeeded'))
         onChanged?.()
       } catch (error) {
         releaseWarn(`[VTI] confirm request not sent (${(error as Error)?.name ?? 'error'})`)
-        setSaid(t('ConfirmItsYou.NotSent', { name }))
+        setSaid(t('ConfirmItsYou.NotSent', { name, interpolation: { escapeValue: false } }))
       } finally {
         setBusy(false)
       }

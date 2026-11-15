@@ -230,7 +230,8 @@ const ConfirmItsYouModal: React.FC = () => {
     error: { color: ColorPalette.semantic.error, textAlign: 'center' },
   })
 
-  const lockWords = { method: t(`ConfirmItsYou.Lock.${lockKind}`) }
+  // As written: i18next HTML-escapes a value by default, and "the phone's PIN" then shows as "the phone&#39;s PIN".
+  const lockWords = { method: t(`ConfirmItsYou.Lock.${lockKind}`), interpolation: { escapeValue: false } }
 
   const body = sent ? (
     <>
