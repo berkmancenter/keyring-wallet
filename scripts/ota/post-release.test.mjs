@@ -4,7 +4,7 @@ import { writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
 
-import { baseOf, bundleNotice, bundlesFromAnnotations, bundlesFromLog, bundlesFromRecord, ghError, NOTICE_TITLE, pickDispatched, postRelease, publishedJobs, screensOf, smokeVerdict } from './post-release.mjs'
+import { baseOf, bundleNotice, bundlesFromAnnotations, bundlesFromLog, bundlesFromRecord, ghError, NOTICE_TITLE, pickDispatched, postRelease, publishedJobs, readSmokeVerdict, screensOf, smokeVerdict } from './post-release.mjs'
 
 const SHA = 'cb36b83a1e0b6a67fb0e8fd32b6b95dd88d9ac3f'
 const PREV = 'a'.repeat(40)
@@ -517,4 +517,70 @@ test('a log read refused for egress is named as a github-egress-503 warning', as
   const r = await postRelease({ ...opts(once), log: (l) => lines.push(l) })
   assert.deepEqual(r.sources, { ios: 'log', android: 'log' })
   assert.ok(lines.includes('::warning title=github-egress-503::2001-09-09T01:46:40.000Z post-release log: log of job 12'))
+})
+
+// 278.9 (11-09): one read of a finished gate-smoke's jobs, 8 s after it completed, listed no iOS job, and smoke-red
+// followed from that one read although iOS was green. An absent job is read again; never a red on its own.
+const IOS_GREEN = { name: 'iOS smoke (macos-26) · cb36b83a', conclusion: 'success' }
+const ANDROID_GREEN = { name: 'Android smoke (ubuntu-latest, KVM) · cb36b83a', conclusion: 'success' }
+const reads = (...lists) => {
+  let n = 0
+  return { readJobs: () => lists[Math.min(n++, lists.length - 1)], count: () => n }
+}
+
+test('an absent smoke job is read again; listed and green on a later read, the smoke is green', async () => {
+  const r = reads([ANDROID_GREEN], [IOS_GREEN, ANDROID_GREEN])
+  const slept = []
+  const v = await readSmokeVerdict({ readJobs: r.readJobs, platforms: ['ios', 'android'], sleep: async (ms) => slept.push(ms) })
+  assert.deepEqual([v.green, v.incomplete, r.count(), slept], [true, false, 2, [30000]])
+})
+
+test('a smoke job absent on every read: incomplete, not green and not a red, after exactly six reads', async () => {
+  const r = reads([ANDROID_GREEN])
+  const v = await readSmokeVerdict({ readJobs: r.readJobs, platforms: ['ios', 'android'], sleep: async () => {} })
+  assert.deepEqual([v.green, v.incomplete, r.count()], [false, true, 6])
+  assert.deepEqual(v.rows, [{ platform: 'ios', conclusion: 'missing' }, { platform: 'android', conclusion: 'success' }])
+})
+
+test('a listed red job is red at once: no re-read', async () => {
+  const r = reads([IOS_GREEN, { ...ANDROID_GREEN, conclusion: 'failure' }])
+  const v = await readSmokeVerdict({ readJobs: r.readJobs, platforms: ['ios', 'android'], sleep: async () => assert.fail('no sleep') })
+  assert.deepEqual([v.green, v.incomplete, r.count()], [false, false, 1])
+})
+
+test('an unpublished platform\'s absent job is not waited for', async () => {
+  const r = reads([IOS_GREEN])
+  const v = await readSmokeVerdict({ readJobs: r.readJobs, platforms: ['ios'], sleep: async () => assert.fail('no sleep') })
+  assert.deepEqual([v.green, v.incomplete, r.count()], [true, false, 1])
+})
+
+test('postRelease: a smoke whose iOS job is missing on the first read and green on the next is green (278.9)', async () => {
+  const { gh } = fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN })
+  let smokeReads = 0
+  const flaky = (...args) => {
+    if (String(args[1]).startsWith(`repos/${R}/actions/runs/601/jobs`) && smokeReads++ === 0) return JSON.stringify({ jobs: [GREEN[1]] })
+    return gh(...args)
+  }
+  const r = await postRelease(opts(flaky))
+  assert.deepEqual([r.verdict, smokeReads], ['green', 2])
+})
+
+test('postRelease: a smoke job never listed is smoke-incomplete, never smoke-red, so the brake cannot act on it', async () => {
+  const r = await postRelease(opts(fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: [GREEN[1]] }).gh))
+  assert.equal(r.verdict, 'smoke-incomplete')
+  assert.deepEqual(r.rows, [{ platform: 'ios', conclusion: 'missing' }, { platform: 'android', conclusion: 'success' }])
+})
+
+// ac on #888: red is decided first, from the listed jobs. iOS absent beside a real Android red (an incident read with a
+// real red) is red on one read, never incomplete, or the brake would not act on a real red.
+test('a listed red beside an absent job is red on ONE read, with no sleep, never incomplete', async () => {
+  const r = reads([{ ...ANDROID_GREEN, conclusion: 'failure' }])
+  const v = await readSmokeVerdict({ readJobs: r.readJobs, platforms: ['ios', 'android'], sleep: async () => assert.fail('no sleep') })
+  assert.deepEqual([v.green, v.incomplete, r.count()], [false, false, 1])
+  assert.deepEqual(v.rows, [{ platform: 'ios', conclusion: 'missing' }, { platform: 'android', conclusion: 'failure' }])
+})
+
+test('postRelease: iOS absent beside a red Android is smoke-red, so the brake acts', async () => {
+  const r = await postRelease(opts(fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: [{ ...GREEN[1], conclusion: 'failure' }] }).gh))
+  assert.equal(r.verdict, 'smoke-red')
 })

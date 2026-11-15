@@ -185,6 +185,26 @@ export function grantAfter(before, after, did, label = "keyring-admin") {
  * Remove this run's entries. Never throws: a cleanup that fails is logged, and
  * must not turn a passing run red or hide the real failure of a failing one.
  */
+/**
+ * What a link run does with its keys at the end, from what it knows then:
+ *  - "remove": list the ACL and remove this run's chain now (removeRunKeys);
+ *  - "leg" (a successful `always` run only): leave them to the gate leg's own cleanup, which lists and removes every phone key it made once at its end
+ *    (keys_since; `legCleans` = the slug is in E2E_ACL_LEG_SLUGS). No pnm call here (IN-560, W3 of
+ *    docs/plans/farm-test-footprint-plan.md);
+ *  - "keep": hand them on in last-link.json for the next step of the chain (keepForNextStep).
+ * A refused link's grant (another agent's, which the leg may not clean), a JOURNEY (the whole test) and `never` (keep
+ * them, say how to remove them) keep their own handling.
+ */
+export function aclEndAction({ legCleans = false, journey = false, expectRefusal = "", mode = "", failed = false } = {}) {
+  const removesNow = failed || journey || Boolean(expectRefusal) || mode === "always" || mode === "never";
+  if (!removesNow) return "keep";
+  // Only a successful `always` run: a failed run removes its keys here at once, as before. The leg's pass is weakest
+  // exactly then (keys_since refuses a start time that is not ISO; side by side it runs outside the leg's trap), and a
+  // key it misses is never picked up later, since keys_since takes only keys newer than its start (ac on #872).
+  if (legCleans && mode === "always" && !failed && !journey && !expectRefusal) return "leg";
+  return "remove";
+}
+
 export function removeRunKeys({ slug, pnmHome, before, tempDid, heirs = [], failed = false, log = console.log }) {
   try {
     if (!tempDid) {

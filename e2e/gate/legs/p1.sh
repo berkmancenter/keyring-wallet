@@ -13,6 +13,7 @@ fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; adb -s $E uninstall $BID >/dev/null 2>&1
   [ -n "$AP" ] && kill "$AP" 2>/dev/null; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; emu_stop
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; gate_sweep_runner "$RUNNER_MAIN_SLUG"
+  c_members_remove "gate: p1 applicant, removed after the leg" "$LEG_DIR/p1.out"
 }
 LEG_CLEANUP=fin
 export RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN ENROL_PORT=8196 E2E_RELEASE=1

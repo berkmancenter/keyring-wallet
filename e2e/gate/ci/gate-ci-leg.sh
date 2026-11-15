@@ -46,7 +46,9 @@ avd=$(adb -s "$serial" shell getprop ro.boot.qemu.avd_name 2>/dev/null | tr -d '
 [ -n "$avd" ] || { echo "ENV cannot read the emulator's AVD name" | tee "$LEG_DIR/leg.log"; exit 2; }
 export AVD=$avd
 # The mediator-block legs need root (iptables): a google_apis image gives it; a playstore image would not, silently.
-adb -s "$serial" root >/dev/null 2>&1; sleep 3; adb -s "$serial" wait-for-device
+# A deadline on the wait (lib.sh's adb_wait is not loaded here; the CI runner is Linux, with coreutils timeout).
+adb -s "$serial" root >/dev/null 2>&1; sleep 3
+timeout 120 adb -s "$serial" wait-for-device || { echo "ENV $serial did not come back within 120 s after adb root" | tee "$LEG_DIR/leg.log"; exit 2; }
 uid=$(adb -s "$serial" shell id -u 2>/dev/null | tr -d '\r')
 [ "$uid" = 0 ] || { echo "ENV adb root gave uid ${uid:-?}, not 0 (the emulator image must be google_apis)" | tee "$LEG_DIR/leg.log"; exit 2; }
 rc=0
