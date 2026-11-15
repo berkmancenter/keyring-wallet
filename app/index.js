@@ -141,8 +141,14 @@ require('fast-text-encoding') // TextEncoder/TextDecoder
 require('react-native-gesture-handler')
 require('@formatjs/intl-getcanonicallocales/polyfill')
 require('@formatjs/intl-locale/polyfill')
+// On Android these polyfills REPLACE the engine's Intl (probe on an emulator, 2026-11-06: Intl.PluralRules.polyfilled
+// and Intl.DateTimeFormat.polyfilled both true), so the app speaks only the languages whose data is loaded here. With
+// English alone, French and Portuguese took English plural rules (0 is "one" in both, "other" in English) and English
+// month names and AM/PM. en stays FIRST in each family: the first data loaded becomes the default locale.
 require('@formatjs/intl-pluralrules/polyfill')
 require('@formatjs/intl-pluralrules/locale-data/en')
+require('@formatjs/intl-pluralrules/locale-data/fr')
+require('@formatjs/intl-pluralrules/locale-data/pt')
 require('@formatjs/intl-displaynames/polyfill')
 require('@formatjs/intl-displaynames/locale-data/en')
 require('@formatjs/intl-listformat/polyfill')
@@ -151,8 +157,12 @@ require('@formatjs/intl-numberformat/polyfill')
 require('@formatjs/intl-numberformat/locale-data/en')
 require('@formatjs/intl-relativetimeformat/polyfill')
 require('@formatjs/intl-relativetimeformat/locale-data/en')
+require('@formatjs/intl-relativetimeformat/locale-data/fr')
+require('@formatjs/intl-relativetimeformat/locale-data/pt')
 require('@formatjs/intl-datetimeformat/polyfill')
 require('@formatjs/intl-datetimeformat/locale-data/en')
+require('@formatjs/intl-datetimeformat/locale-data/fr')
+require('@formatjs/intl-datetimeformat/locale-data/pt')
 require('@formatjs/intl-datetimeformat/add-all-tz')
 // The polyfill formats in UTC until told the phone's zone (IN-58): tell it now
 // and whenever the app comes back to the foreground.

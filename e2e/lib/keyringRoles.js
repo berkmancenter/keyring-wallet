@@ -39,7 +39,7 @@ import {
   waitForTestId,
 } from "./driver.js";
 import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./config.js";
-import { handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
+import { CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
 import { cardPrimaryIds, VETTING_DOOR_WORDS } from "./testIdKeys.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -617,7 +617,7 @@ export const applicant = {
           await dumpSource(d, `join-identity-step-${process.env.JOIN_SCREEN_RECORD}`);
         }
         await tapTestIdByCoordinates(d, "JoinAsContinue");
-        await handleBiometricConfirmIfPresent(d);
+        await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
         // "Your agent didn't answer. Tap Continue to try again": do what the
         // screen tells a person, up to twice (a lost reply, VTI-43; 225 final).
         for (let retry = 1; retry <= 2; retry++) {
@@ -630,7 +630,7 @@ export const applicant = {
           const said = await textOf(d, "JoinError").catch(() => "");
           console.log(`[e2e] ${d.e2ePlatform}: Join says "${said.slice(0, 80)}" — Continue again (${retry}/2)`);
           await tapTestIdByCoordinates(d, "JoinAsContinue");
-          await handleBiometricConfirmIfPresent(d);
+          await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
         }
         observedAsks = asks.replace(/\s+/g, " ").slice(0, 200);
       } else {
@@ -804,7 +804,7 @@ export const applicant = {
       await tapTestIdByCoordinates(d, "VettingSendCardButton");
       const cardSentMs = Date.now();
       await sleep(1500);
-      await handleBiometricConfirmIfPresent(d);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
       await awaitStep(d, "applicant", ["checking", "apply"], 60000, () => applicantEvidence(d));
       const cardSentAt = await textOf(d, "VettingCardSentAt").catch(() => "");
       // The value is when the card went, for awaitStatement's cardSentMs.
@@ -867,7 +867,7 @@ export const applicant = {
       await scrollToTestId(d, "VettingApplyButton", 4, LOW);
       await tapTestIdByCoordinates(d, "VettingApplyButton");
       await sleep(1500);
-      await handleBiometricConfirmIfPresent(d);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
       const until = Date.now() + timeoutMs;
       while (Date.now() < until) {
         if ((await stepIdOf(d, "applicant")) === "member") {
@@ -1098,7 +1098,7 @@ export const vetter = {
       const button = await scrollToTestId(d, "VettingAttestButton", 6);
       await tapElement(d, button);
       await sleep(1500);
-      await handleBiometricConfirmIfPresent(d);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
       await awaitStep(d, "vetter", "done", 60000, async () => ({ error: await textOf(d, "VettingError").catch(() => "") }));
       const issued = await textOf(d, "VettingStatementIssued").catch(() => "");
       return { observed: { statementIssued: issued } };

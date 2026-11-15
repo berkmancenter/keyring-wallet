@@ -44,13 +44,17 @@ let installed = false
 // it (maintainer reports, 2026-09-25). Each minute's polling is collapsed into
 // one counted line; every other line is kept, and so is any polling line that
 // carries a message waiting or an error.
+//
+// The counts are LOG LINES, and said so: one request is written to several
+// (277.6: 168 status-request lines in a minute that sent the mediator 56
+// requests, read as a runaway poll). The request count is the mediator's.
 const POLLING: Array<[RegExp, string]> = [
-  [/messagepickup\/[\d.]+\/status-request/, 'status requests'],
-  [/messagepickup\/[\d.]+\/delivery-request/, 'delivery requests'],
-  [/messagepickup\/[\d.]+\/live-delivery-change/, 'live-delivery changes'],
-  [/messagepickup\/[\d.]+\/messages-received/, 'receipts'],
-  [/messagepickup\/[\d.]+\/status\b/, 'statuses'],
-  [/Retriev(?:ing|ed) (?:\d+ )?services for (?:message to )?connection/, 'service lookups'],
+  [/messagepickup\/[\d.]+\/status-request/, 'status-request'],
+  [/messagepickup\/[\d.]+\/delivery-request/, 'delivery-request'],
+  [/messagepickup\/[\d.]+\/live-delivery-change/, 'live-delivery-change'],
+  [/messagepickup\/[\d.]+\/messages-received/, 'receipt'],
+  [/messagepickup\/[\d.]+\/status\b/, 'status'],
+  [/Retriev(?:ing|ed) (?:\d+ )?services for (?:message to )?connection/, 'service-lookup'],
 ]
 /** A polling line that still carries something: a message waiting, or trouble. */
 const CARRIES = /"?message_count"?\s*[:=]\s*[1-9]|error|fail|refus|denied|timeout/i
@@ -68,8 +72,8 @@ const pollingKind = (level: string, text: string): string | undefined => {
 
 const pollSummary = (): string | undefined => {
   if (!pollMinute || pollLines === 0) return undefined
-  const parts = Object.entries(pollCounts).map(([kind, n]) => `${n} ${kind}`)
-  return `${pollMinute}:00.000Z INFO [log buffer] mediator polling in this minute: ${parts.join(
+  const parts = Object.entries(pollCounts).map(([kind, n]) => `${n} ${kind} line${n === 1 ? '' : 's'}`)
+  return `${pollMinute}:00.000Z INFO [log buffer] mediator polling in this minute, in log lines (a request is written to several): ${parts.join(
     ', '
   )}, no messages (${pollLines} lines collapsed)`
 }

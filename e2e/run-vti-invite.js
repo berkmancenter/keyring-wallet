@@ -46,7 +46,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { MAY_FLIP_CRITERIA, criteriaNote } from "./lib/criteria.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";
-import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, pasteLinkOnScanScreen, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, pasteLinkOnScanScreen, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { assertDirectoryConsentOff, assertNoDidShown } from "./lib/gateChecks.js";
@@ -253,7 +253,7 @@ async function inviteByDoor(d) {
   const heldBefore = EXPECT_INVITED_ERROR ? vtaInventory(runner) : undefined;
   if (await existsTestId(d, "InvitedContinue", 10000)) {
     await tapTestId(d, "InvitedContinue", 15000);
-    await handleBiometricConfirmIfPresent(d);
+    await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
     console.log(`[e2e] ${d.e2ePlatform}: I was invited → Continue (making the identity)`);
   }
   // EXPECT_INVITED_ERROR=NoDidHost: an agent with nowhere to publish an
@@ -309,7 +309,7 @@ async function inviteByDoor(d) {
     if (retry >= 2) throw new Error(`"I was invited" still says "${await textOf(d, "InvitedError").catch(() => "")}" after two retries`);
     console.log(`[e2e] ${d.e2ePlatform}: I was invited says "${(await textOf(d, "InvitedError").catch(() => "")).slice(0, 70)}" — Continue again (${retry + 1}/2)`);
     await tapTestId(d, "InvitedContinue", 15000);
-    await handleBiometricConfirmIfPresent(d);
+    await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   }
   await waitForTestId(d, "InvitedShare", 30000);
   await screenshot(d, "vti-invite-door-share");
