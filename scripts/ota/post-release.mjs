@@ -125,6 +125,12 @@ export const pickDispatched = (runs, { sha, title, since }) => {
   return matches[0]
 }
 
+/**
+ * The verdicts that pass: this run exits 0 on these alone (the line at the end), and every other verdict fails it.
+ * brake-watchdog.mjs reads this same list, so a verdict added here is not passing there until it is added to this list.
+ */
+export const PASSING_VERDICTS = Object.freeze(['none', 'green'])
+
 /** A gate-smoke run's verdict from its jobs: green only with every judged platform's job green (skipped is not). */
 export const smokeVerdict = (jobs, platforms = SMOKE_JOBS.map(([p]) => p)) => {
   // Only the platforms the release published are judged: a platform that never got a bundle (its job failed before
@@ -372,7 +378,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       test_builds: r.testBuilds ?? '', gate_smoke: r.gateSmoke ?? '', screens: JSON.stringify(r.screens ?? []),
     }
     // The screen check's handoff (the owner's pipeline: a quick simulator check of each changed screen after release).
-    writeFileSync('post-release-handoff.json', JSON.stringify({ sha: r.sha, ref: r.ref, bundles: r.bundles, sources: r.sources ?? {}, since: r.since, screens: r.screens ?? [], verdict: r.verdict, testBuilds: r.testBuilds, gateSmoke: r.gateSmoke }, null, 2))
+    // brake-watchdog.mjs reads its verdict, bundles, platforms and gateSmoke too: the brake's second path.
+    writeFileSync('post-release-handoff.json', JSON.stringify({ sha: r.sha, ref: r.ref, bundles: r.bundles, platforms: r.platforms ?? [], sources: r.sources ?? {}, since: r.since, screens: r.screens ?? [], verdict: r.verdict, testBuilds: r.testBuilds, gateSmoke: r.gateSmoke }, null, 2))
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(out).map(([k, v]) => `${k}=${v}\n`).join(''))
     if (process.env.GITHUB_STEP_SUMMARY) {
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
@@ -389,7 +396,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         ...((r.screens ?? []).length ? r.screens.map((f) => `- ${f}`) : ['- none found']), '',
       ].filter((l) => l !== '').join('\n') + '\n')
     }
-    process.exitCode = r.verdict === 'none' || r.verdict === 'green' ? 0 : 2
+    process.exitCode = PASSING_VERDICTS.includes(r.verdict) ? 0 : 2
   } catch (error) {
     console.error(`post-release: ${error.message}`)
     process.exitCode = 1
