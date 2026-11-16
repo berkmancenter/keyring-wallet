@@ -71,7 +71,6 @@ export const ConfirmItsYouRowIds = {
   earlier: 'ConfirmItsYouEarlier',
   // the chat's sheet (variant="sheet")
   sheet: 'ConfirmItsYouShort',
-  last: 'ConfirmItsYouLast',
   proofToggle: 'ConfirmItsYouProofToggle',
   proof: 'ConfirmItsYouProof',
 } as const
@@ -216,15 +215,6 @@ const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name, variant = 'row'
     muted: { color: ColorPalette.grayscale.mediumGrey },
     error: { color: ColorPalette.semantic.error },
     sheetLine: { gap: 8 },
-    lastGood: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      minHeight: 44,
-      paddingHorizontal: 12,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: ColorPalette.semantic.success,
-    },
     hintRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     grow: { flex: 1 },
   })
@@ -417,59 +407,31 @@ const ConfirmItsYouRow: React.FC<Props> = ({ connectionId, name, variant = 'row'
         <Icon name="information-outline" size={22} color={ColorPalette.brand.primary} />
       </Pressable>
     )
-    // One line for where the last request stands; the red card is never cut down.
-    const lastLine = () => {
-      if (!newest || !newestStatus) return null
-      switch (newestStatus) {
-        case 'notMe':
-          return statusCard(newest, 'notMe')
-        case 'waiting':
-          return (
-            <View style={styles.sheetLine}>
-              <View style={styles.headRow}>
-                <ThemedText variant="bold" testID={testIdWithKey(ConfirmItsYouRowIds.status)}>
-                  {t('ConfirmItsYou.WaitingTitle', n)}
-                </ThemedText>
-                <ThemedText style={styles.muted}>{t('ConfirmItsYou.SentAt', at(newest))}</ThemedText>
-              </View>
-              <ThemedText>{t('ConfirmItsYou.WaitingBody', n)}</ThemedText>
-              <Button
-                title={t('ConfirmItsYou.CancelRequest')}
-                buttonType={ButtonType.Secondary}
-                onPress={() => void cancelRequest()}
-                disabled={busy}
-                testID={testIdWithKey(ConfirmItsYouRowIds.cancelRequest)}
-              />
-            </View>
-          )
-        case 'expired':
-          return (
-            <ThemedText variant="bold" style={styles.sheetLine} testID={testIdWithKey(ConfirmItsYouRowIds.status)}>
-              {t('ConfirmItsYou.LastExpired', n)}
+    // The sheet opens clean (Alberto, 278.22: "we dont need this please remove it"): no record of the last answer,
+    // which lives on the chat cards and the contact page. Only a request still waiting shows, since it is not history
+    // but what stands now: it says not to act on it yet, and Cancel is there; the box steps aside meanwhile.
+    const waitingLine = () =>
+      newest && newestStatus === 'waiting' ? (
+        <View style={styles.sheetLine}>
+          <View style={styles.headRow}>
+            <ThemedText variant="bold" testID={testIdWithKey(ConfirmItsYouRowIds.status)}>
+              {t('ConfirmItsYou.WaitingTitle', n)}
             </ThemedText>
-          )
-        case 'itsMe':
-          return (
-            <Pressable
-              style={[styles.sheetLine, styles.lastGood]}
-              onPress={() => setProofShown((shown) => !shown)}
-              accessibilityRole="button"
-              accessibilityHint={t('ConfirmItsYou.WhatItProves')}
-              testID={testIdWithKey(ConfirmItsYouRowIds.last)}
-            >
-              <Icon name="check" size={20} color={ColorPalette.semantic.success} />
-              <ThemedText style={styles.grow} testID={testIdWithKey(ConfirmItsYouRowIds.status)}>
-                {t('ConfirmItsYou.LastConfirmed', at(newest))}
-              </ThemedText>
-            </Pressable>
-          )
-        case 'cancelled':
-          return null
-      }
-    }
+            <ThemedText style={styles.muted}>{t('ConfirmItsYou.SentAt', at(newest))}</ThemedText>
+          </View>
+          <ThemedText>{t('ConfirmItsYou.WaitingBody', n)}</ThemedText>
+          <Button
+            title={t('ConfirmItsYou.CancelRequest')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => void cancelRequest()}
+            disabled={busy}
+            testID={testIdWithKey(ConfirmItsYouRowIds.cancelRequest)}
+          />
+        </View>
+      ) : null
     return (
       <View style={styles.row} testID={testIdWithKey(ConfirmItsYouRowIds.sheet)}>
-        {lastLine()}
+        {waitingLine()}
         {newestStatus === 'waiting' ? null : (
           <>
             <View style={styles.hintRow}>

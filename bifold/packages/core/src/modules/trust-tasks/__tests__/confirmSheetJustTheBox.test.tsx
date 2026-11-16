@@ -108,20 +108,17 @@ describe('the chat sheet, just the box (D1)', () => {
     expect(send).toHaveBeenCalledWith({}, CONN, 'Is this you?')
   })
 
-  test('confirmed: one line; what it proves only behind the (i), and again hidden (control: the contact row shows it all)', async () => {
+  test('after a yes, the sheet opens clean: no record of it, just the hint, the note and Send; what it proves still behind the (i) (control: the contact row shows the yes)', async () => {
     const tree = await sheet([CONFIRMED])
-    expect(statusOf(tree)).toBe('ConfirmItsYou.LastConfirmed')
-    expect(has(tree, Ids.last)).toBe(true)
+    expect(has(tree, Ids.status)).toBe(false)
     expect(tree.queryByText('ConfirmItsYou.ConfirmedBody')).toBeNull()
     expect(tree.queryByText('ConfirmItsYou.ConfirmedCaveat')).toBeNull()
+    expect(has(tree, Ids.note)).toBe(true)
+    expect(has(tree, Ids.send)).toBe(true)
     expect(has(tree, Ids.proof)).toBe(false)
     fireEvent.press(tree.getByTestId(id(Ids.proofToggle)))
     expect(has(tree, Ids.proof)).toBe(true)
-    expect(tree.getByText('ConfirmItsYou.ConfirmedCaveat')).toBeTruthy()
     expect(tree.getByText('ConfirmItsYou.EarlierOnContact')).toBeTruthy()
-    fireEvent.press(tree.getByTestId(id(Ids.last)))
-    expect(has(tree, Ids.proof)).toBe(false)
-    expect(has(tree, Ids.note)).toBe(true)
     tree.unmount()
     const row = await contactRow([CONFIRMED])
     expect(row.getByText('ConfirmItsYou.ConfirmedBody')).toBeTruthy()
@@ -137,15 +134,18 @@ describe('the chat sheet, just the box (D1)', () => {
     expect(has(row, Ids.earlier)).toBe(true)
   })
 
-  test('not them: the whole red card with what to do, never cut to a line (control: confirmed is one line)', async () => {
+  test('after "not them", the sheet opens clean too: no red card, the box to ask again (control: the contact row keeps the whole red card)', async () => {
     const tree = await sheet([NOT_ME])
-    expect(has(tree, Ids.alarm)).toBe(true)
-    expect(has(tree, Ids.steps)).toBe(true)
-    expect(tree.getByText('ConfirmItsYou.NotThemBody')).toBeTruthy()
-    expect(has(tree, Ids.last)).toBe(false)
-    // The box stays under it, as on 278.18's sheet: asking again is the person's choice.
+    expect(has(tree, Ids.alarm)).toBe(false)
+    expect(has(tree, Ids.steps)).toBe(false)
+    expect(tree.queryByText('ConfirmItsYou.NotThemBody')).toBeNull()
+    expect(has(tree, Ids.status)).toBe(false)
     expect(has(tree, Ids.note)).toBe(true)
     expect(has(tree, Ids.send)).toBe(true)
+    tree.unmount()
+    const row = await contactRow([NOT_ME])
+    expect(has(row, Ids.alarm)).toBe(true)
+    expect(row.getByText('ConfirmItsYou.NotThemBody')).toBeTruthy()
   })
 
   test('waiting: "don\'t act on it" and Cancel, and no note box, so no second request (control: confirmed has the box)', async () => {
@@ -157,10 +157,11 @@ describe('the chat sheet, just the box (D1)', () => {
     expect(has(tree, Ids.send)).toBe(false)
   })
 
-  test("no answer: one line that still says don't act, and the box to ask again", async () => {
+  test('after no answer, the sheet opens clean, with the box to ask again (control: a request still waiting shows its line, above)', async () => {
     const tree = await sheet([EXPIRED])
-    expect(statusOf(tree)).toBe('ConfirmItsYou.LastExpired')
+    expect(has(tree, Ids.status)).toBe(false)
     expect(has(tree, Ids.note)).toBe(true)
+    expect(has(tree, Ids.send)).toBe(true)
   })
 })
 

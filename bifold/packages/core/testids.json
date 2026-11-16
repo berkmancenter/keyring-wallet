@@ -444,7 +444,6 @@
     "ConfirmItsYouExpiresIn": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouFailed": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouItsMe": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
-    "ConfirmItsYouLast": ["src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx"],
     "ConfirmItsYouLock": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouNotMe": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
     "ConfirmItsYouNotNow": ["src/modules/trust-tasks/components/ConfirmItsYouModal.tsx"],
@@ -2573,9 +2572,6 @@
     },
     {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.expiresIn"
-    },
-    {
-      "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.last"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmItsYouRow.tsx": "ConfirmItsYouRowIds.note"
