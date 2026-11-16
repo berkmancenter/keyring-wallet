@@ -1609,6 +1609,8 @@
     "TrustTaskApprovalTitle": ["src/screens/TrustTaskApprovalCard.tsx", "src/screens/TrustTaskApprovalModal.tsx"],
     "TrustTaskApprove": ["src/screens/TrustTaskApprovalCard.tsx", "src/screens/TrustTaskApprovalModal.tsx"],
     "TrustTaskDeny": ["src/screens/TrustTaskApprovalCard.tsx", "src/screens/TrustTaskApprovalModal.tsx"],
+    "TrustedApproverPerson": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproverPersonGone": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproverStepDownError": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApprovers": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversApprovingFor": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
@@ -3221,6 +3223,9 @@
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.approvingFor"
     },
     {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.approvingPerson(prompt.connectionId)"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.cardSend(prompt.connectionId)"
     },
     {
@@ -3234,6 +3239,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.checkHostAgain(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.details(did)"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.error"
@@ -3269,7 +3277,13 @@
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.guardianVerified(did)"
     },
     {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.guardianWhat(did)"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.more"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.needsBox(did)"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.noCard(did)"
@@ -3284,7 +3298,19 @@
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.off"
     },
     {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.person"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.personGone"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.remove(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.row(kind, rowId)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.rowWaiting(did)"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.screen"
@@ -3330,6 +3356,12 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.triedAgain(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.waitCode(did)"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.waiting(did)"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "testID"
