@@ -24,8 +24,10 @@
  *
  * Writes the result to $GITHUB_OUTPUT (verdict, sha, ref, bundles, screens,
  * test_builds, gate_smoke), $GITHUB_STEP_SUMMARY and post-release-handoff.json. verdict: none (not a
- * publish), green, smoke-red, builds-red. Exit 0 for none and green, 2 for a
- * red build or smoke, 1 for an error. It never publishes, widens or withdraws
+ * publish), green, smoke-red, smoke-incomplete (a judged platform's smoke job
+ * still absent from the run's jobs after every re-read: not a red, so no brake),
+ * builds-red. Exit 0 for none and green, 2 for a red build or smoke or an
+ * incomplete smoke, 1 for an error. It never publishes, widens or withdraws
  * anything.
  */
 import { execFileSync } from 'node:child_process'
@@ -123,6 +125,12 @@ export const pickDispatched = (runs, { sha, title, since }) => {
   return matches[0]
 }
 
+/**
+ * The verdicts that pass: this run exits 0 on these alone (the line at the end), and every other verdict fails it.
+ * brake-watchdog.mjs reads this same list, so a verdict added here is not passing there until it is added to this list.
+ */
+export const PASSING_VERDICTS = Object.freeze(['none', 'green'])
+
 /** A gate-smoke run's verdict from its jobs: green only with every judged platform's job green (skipped is not). */
 export const smokeVerdict = (jobs, platforms = SMOKE_JOBS.map(([p]) => p)) => {
   // Only the platforms the release published are judged: a platform that never got a bundle (its job failed before
@@ -134,6 +142,65 @@ export const smokeVerdict = (jobs, platforms = SMOKE_JOBS.map(([p]) => p)) => {
     return { platform, conclusion: job?.conclusion ?? 'missing' }
   })
   return { green: rows.every((r) => r.conclusion === 'success'), rows }
+}
+
+/**
+ * Every job of a run, page by page (100 a page, at most 10 pages), and whether that is all of them. One page was the
+ * whole read until 11-10, so a run with more jobs than a page (re-runs, matrices) could leave a judged job off it,
+ * read as absent. Returns { jobs, complete, why }: complete once total_count is reached, or on a short page when the
+ * response gave no total_count. Incomplete, never silently short, when a page comes back without a jobs list (an
+ * error object parses too), when a short page leaves the count under total_count, or when the page cap is reached
+ * first: a partial list must not read as a whole one. api(route) returns the parsed response.
+ */
+export const JOB_PAGES = 10
+export const readAllJobs = (api, repo, runId, { perPage = 100, pages = JOB_PAGES } = {}) => {
+  const jobs = []
+  let total
+  for (let page = 1; page <= pages; page++) {
+    const r = api(`repos/${repo}/actions/runs/${runId}/jobs?per_page=${perPage}&page=${page}`)
+    if (!Array.isArray(r?.jobs)) return { jobs, complete: false, why: `page ${page} of the job list came back without jobs` }
+    if (Number.isFinite(r.total_count)) total = r.total_count
+    jobs.push(...r.jobs)
+    if (total !== undefined && jobs.length >= total) return { jobs, complete: true }
+    if (r.jobs.length < perPage)
+      return total === undefined ? { jobs, complete: true } : { jobs, complete: false, why: `read ${jobs.length} of ${total} jobs` }
+  }
+  return { jobs, complete: false, why: `read ${jobs.length}${total === undefined ? '' : ` of ${total}`} jobs in ${pages} pages, the most it reads` }
+}
+
+// Re-reading a smoke run's jobs when a judged platform's job is absent: up to six reads, 30 s apart.
+export const JOBS_ATTEMPTS = 6
+export const JOBS_RETRY_MS = 30000
+
+/**
+ * A finished gate-smoke run's verdict, read until every judged platform's job is in the list. An absent job is not a
+ * red one: on 11-09 (278.9, during a GitHub Actions incident) a read 8 s after the run completed came back without its
+ * green iOS job, and that one read made the verdict smoke-red. So redness is decided first, from the jobs that are
+ * listed: any listed job that is not green makes the smoke red at once, whatever else is absent. Only with no listed red
+ * is an absent job read again. Still absent after every read: incomplete, which is neither green nor red, and the caller
+ * must not act on it as a red. A job list that could not be read whole is treated the same way: never green, read again,
+ * and incomplete if it stays partial. readJobs() returns the run's jobs array, or readAllJobs's { jobs, complete, why }.
+ */
+export async function readSmokeVerdict({ readJobs, platforms, sleep, log = () => {}, attempts = JOBS_ATTEMPTS, retryMs = JOBS_RETRY_MS }) {
+  for (let attempt = 1; ; attempt++) {
+    // readJobs() returns the jobs, or readAllJobs's { jobs, complete, why }: an incomplete list is never judged green.
+    const read = readJobs()
+    const { jobs, complete = true, why } = Array.isArray(read) ? { jobs: read } : read
+    const verdict = smokeVerdict(jobs, platforms)
+    // Red first, from the jobs that ARE listed: a listed red is red whatever else is absent or unread. Without this, ios
+    // missing beside android failure (an incident read with a real red) became incomplete, and the brake did not act.
+    const red = verdict.rows.some((r) => r.conclusion !== 'missing' && r.conclusion !== 'success')
+    if (red) return { ...verdict, incomplete: false }
+    const absent = verdict.rows.filter((r) => r.conclusion === 'missing').map((r) => r.platform)
+    if (complete && !absent.length) return { ...verdict, incomplete: false }
+    if (attempt >= attempts) return { ...verdict, green: false, incomplete: true, ...(complete ? {} : { unread: why }) }
+    log(
+      complete
+        ? `smoke jobs read ${attempt} of ${attempts}: no ${absent.join(', ')} job listed yet; reading again in ${retryMs / 1000} s`
+        : `smoke jobs read ${attempt} of ${attempts}: the job list is incomplete (${why}); reading again in ${retryMs / 1000} s`
+    )
+    await sleep(retryMs)
+  }
 }
 
 const realGh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
@@ -324,9 +391,12 @@ export async function postRelease({ publishRun, repo, gh = realGh, isAncestor = 
     return { ...base, bundles, sources, screens, since, verdict: 'builds-red', testBuilds: builds.id, reusedBuilds: Boolean(reused) }
   }
   const smoke = await dispatchAndWait('gate-smoke.yml', [`run-id=${builds.id}`, 'platform=both'], { title: `Test builds ${builds.id}` })
-  const verdict = smokeVerdict(api(`repos/${repo}/actions/runs/${smoke.id}/jobs?per_page=100`).jobs, base.platforms)
+  const verdict = await readSmokeVerdict({ readJobs: () => readAllJobs(api, repo, smoke.id), platforms: base.platforms, sleep, log })
   log(`gate-smoke ${smoke.id}: ${verdict.rows.map((r) => `${r.platform} ${r.conclusion}`).join(', ')}`)
-  return { ...base, bundles, sources, screens, since, verdict: verdict.green ? 'green' : 'smoke-red', testBuilds: builds.id, reusedBuilds: Boolean(reused), gateSmoke: smoke.id, rows: verdict.rows }
+  // smoke-incomplete is deliberately not smoke-red: the brake acts only on smoke-red, and a job never seen says nothing
+  // about the bundle. The job still fails (exit 2), so a person reads the smoke run and decides.
+  const name = verdict.green ? 'green' : verdict.incomplete ? 'smoke-incomplete' : 'smoke-red'
+  return { ...base, bundles, sources, screens, since, verdict: name, testBuilds: builds.id, reusedBuilds: Boolean(reused), gateSmoke: smoke.id, rows: verdict.rows }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -340,7 +410,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       test_builds: r.testBuilds ?? '', gate_smoke: r.gateSmoke ?? '', screens: JSON.stringify(r.screens ?? []),
     }
     // The screen check's handoff (the owner's pipeline: a quick simulator check of each changed screen after release).
-    writeFileSync('post-release-handoff.json', JSON.stringify({ sha: r.sha, ref: r.ref, bundles: r.bundles, sources: r.sources ?? {}, since: r.since, screens: r.screens ?? [], verdict: r.verdict, testBuilds: r.testBuilds, gateSmoke: r.gateSmoke }, null, 2))
+    // brake-watchdog.mjs reads its verdict, bundles, platforms and gateSmoke too: the brake's second path.
+    writeFileSync('post-release-handoff.json', JSON.stringify({ sha: r.sha, ref: r.ref, bundles: r.bundles, platforms: r.platforms ?? [], sources: r.sources ?? {}, since: r.since, screens: r.screens ?? [], verdict: r.verdict, testBuilds: r.testBuilds, gateSmoke: r.gateSmoke }, null, 2))
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(out).map(([k, v]) => `${k}=${v}\n`).join(''))
     if (process.env.GITHUB_STEP_SUMMARY) {
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
@@ -349,12 +420,15 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         ...r.bundles.map((b) => `- ${b.platform} bundle ${b.id} (channel ${b.channel}, from its ${r.sources?.[b.platform] ?? 'unknown source'})`),
         ...(r.platforms ?? []).filter((p) => !r.bundles.some((b) => b.platform === p)).map((p) => `- ${p}: published, bundle id UNKNOWN (no record, no notice, and its log was unreadable)`),
         r.testBuilds ? `- Test builds run ${r.testBuilds}${r.reusedBuilds ? ' (reused: the release chain\'s green build of this commit)' : ''}` : '', r.gateSmoke ? `- gate-smoke run ${r.gateSmoke}` : '',
-        ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`), '',
+        ...(r.rows ?? []).map((row) => `- ${row.platform} smoke: ${row.conclusion}`),
+        // On 11-09 (278.9) GitHub created no Brake job for a smoke-red run, and nothing said so: name what should follow.
+        r.verdict === 'smoke-red' ? '- **the Brake job should now run in this run: if this run shows no Brake job, the brake did not run and the release is still live**' : '',
+        r.verdict === 'smoke-incomplete' ? '- **a smoke job was never listed, or the job list could not be read whole, so this is not a red and the brake does not run: read the gate-smoke run and decide**' : '', '',
         `#### Changed screens since ${r.since ?? 'unknown'} (for the screen check)`, '',
         ...((r.screens ?? []).length ? r.screens.map((f) => `- ${f}`) : ['- none found']), '',
       ].filter((l) => l !== '').join('\n') + '\n')
     }
-    process.exitCode = r.verdict === 'none' || r.verdict === 'green' ? 0 : 2
+    process.exitCode = PASSING_VERDICTS.includes(r.verdict) ? 0 : 2
   } catch (error) {
     console.error(`post-release: ${error.message}`)
     process.exitCode = 1
