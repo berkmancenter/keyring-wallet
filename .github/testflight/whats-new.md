@@ -6,10 +6,7 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Build 260: private vetting uses your community identity throughout, so vouching tokens draw and private vouches count. If your agent's vetter enrolment was set up for another identity, Keyring says so and how to reset it.
-• Private vetting. Communities that use private vetting now work in Keyring, both when you apply and when you vouch for someone. It uses the same vetting steps as before, with a "Private vetting" mark where it applies: your vetters stay private, and the community learns that enough members vouched for you, not who. It needs your agent on version 0.60 or later.
-• Vouching privately: when you open the vetting desk in such a community, Keyring enrols you and draws your vouching tokens by itself, and shows how many people you can vouch for now. Open Keyring at least every few days to keep vouching. When you vouch, Keyring asks how you know the person.
-• Relationship and witness records now use the new DTG credential formats. Your existing contacts keep working.
-• After an update, a community identity whose key was held only in the app gets it back from your agent, or Keyring asks you to reconnect your agent, instead of failing to sign in.
-• A vetter opening the vetting screen no longer briefly sees the applicant's steps.
-
+• Who approves, redesigned (behind the trusted-approvers Developer switch). The list shows one row per person, with their initials and a status. Tap a person to open their page, laid out in sections: their state card in one line (Details shows everything Keyring checked), what they approve as short tags, and, while a request is waiting on them, the code to read out.
+• People you approve for: sending your Guardian card is now an on/off switch in its own section. Stepping down is a separate red button under "Your role", so the two can't be confused.
+• Stepping down now asks the other person to remove you. Until they do, you are still their approver and their requests still show. Your page says "You asked to stop", and your card stops going to them.
+• After someone steps down, their contact page shows "Ask [name] again" in place of Change, so you can invite them back. If they accept, they're a full approver again.
