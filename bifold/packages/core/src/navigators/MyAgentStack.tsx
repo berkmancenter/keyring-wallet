@@ -194,6 +194,15 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
           ...ScreenOptionsDictionary[Screens.VtaTrustedApprovers],
         }}
       />
+      {/* One person from Who approves (design B): the same screen, opened on them. */}
+      <Stack.Screen
+        name={Screens.VtaApproverPerson}
+        component={VtaTrustedApprovers}
+        options={{
+          title: t('Screens.VtaApproverPerson'),
+          ...ScreenOptionsDictionary[Screens.VtaApproverPerson],
+        }}
+      />
       {/* Opened from the gear in "Your agent"'s header. */}
       <Stack.Screen
         name={Screens.VtaAgentSettings}

@@ -5,7 +5,7 @@
  * a revoked card. What each box says is decided by guardianEvidence (tested in guardianEvidence.test.tsx); here, which
  * box shows for which standing, and that none of it shows with the switches off.
  */
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 
@@ -24,7 +24,8 @@ import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import { setStateVerifiedApproversEnabled } from '../module/stateVerifiedApproversFlag'
 import { TRUSTED_APPROVERS_REMOTE_OFF, setTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
-import VtaTrustedApprovers, { TrustedApproversIds as Ids } from '../screens/VtaTrustedApprovers'
+import { ApproverWaitNoteIds } from '../screens/ApproverWaitNote'
+import VtaTrustedApprovers, { TrustedApproversIds as Ids, initialsOf } from '../screens/VtaTrustedApprovers'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -44,15 +45,56 @@ const state = (): TrustedApproversState =>
     version: 1,
   }) as unknown as TrustedApproversState
 
-const show = async (standing?: GuardianStanding, demoState?: string) => {
-  cardsAre(standing ? { [JORDAN]: standing } : {})
-  demos.mockResolvedValue(demoState ? { [JORDAN]: demoState } : {})
-  const tree = render(
+/**
+ * Who approves opened on one person's page (design B, 11-14): the same screen under the person route, where a person's
+ * boxes and buttons now are.
+ */
+const personPage = (kind: 'approver' | 'yes' | 'setAside' | 'approving', personId: string) => {
+  ;(useRoute as jest.Mock).mockReturnValue({ params: { kind, id: personId } })
+  return (
     <BasicAppContext>
       <VtaTrustedApprovers />
     </BasicAppContext>
   )
+}
+
+/** Each kind's page shows its person under this id; the page of someone it cannot find shows none of them. */
+const pageIdOf = (kind: 'approver' | 'yes' | 'setAside' | 'approving', personId: string) =>
+  ({
+    approver: Ids.approver,
+    yes: Ids.accepted,
+    setAside: Ids.setAsideRow,
+    approving: Ids.approvingPerson,
+  })[kind](personId)
+/**
+ * The page really is that person's (7d, #1078): many rows check that something is ABSENT from it, and a page that
+ * found nobody (a wrong kind or id) would pass every one of them for nothing.
+ */
+const expectPage = (
+  tree: { getByTestId: (testId: string) => unknown },
+  kind: 'approver' | 'yes' | 'setAside' | 'approving',
+  personId: string
+) => expect(tree.getByTestId(testIdWithKey(pageIdOf(kind, personId)))).toBeTruthy()
+
+/**
+ * Row E (Alberto, 11-16): an approver's state card shows one line until Details opens what Keyring checked. Rows that
+ * read the checks open it first; with no card, or the state-verified switch off, there is nothing to open.
+ */
+const openDetails = async (tree: { queryByTestId: (testId: string) => unknown }, did: string = JORDAN) => {
+  const toggle = tree.queryByTestId(testIdWithKey(Ids.details(did)))
+  if (toggle) await act(async () => fireEvent.press(toggle as Parameters<typeof fireEvent.press>[0]))
+}
+
+const show = async (standing?: GuardianStanding, demoState?: string) => {
+  cardsAre(standing ? { [JORDAN]: standing } : {})
+  demos.mockResolvedValue(demoState ? { [JORDAN]: demoState } : {})
+  const tree = render(personPage('approver', JORDAN))
   await act(async () => undefined)
+  // Switched off, the screen is only the switched-off line, which those rows assert themselves.
+  if (!tree.queryByTestId(testIdWithKey(Ids.off))) {
+    expectPage(tree, 'approver', JORDAN)
+    await openDetails(tree)
+  }
   return tree
 }
 type Tree = Awaited<ReturnType<typeof show>>
@@ -74,7 +116,7 @@ beforeEach(() => {
   jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(state())
   jest.spyOn(approverRole, 'acceptedRoleOffers').mockResolvedValue([])
   jest.spyOn(approverRole, 'approverNames').mockResolvedValue({ [JORDAN]: 'Jordan' })
-  jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([])
+  jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([])
   jest.spyOn(approverRole, 'steppedDownApprovers').mockResolvedValue([])
   jest.spyOn(guardianEvidence, 'cardToShare').mockResolvedValue(undefined)
   jest.spyOn(guardianEvidence, 'cardConsents').mockResolvedValue({})
@@ -123,8 +165,9 @@ describe('Who approves: the three boxes (B1, B2)', () => {
     const tree = await show(VERIFIED_DEMO)
     const box = tree.getByTestId(id(Ids.needsBox(JORDAN)))
     expect(within(box).getByText('Approver.NeedsTitle')).toBeTruthy()
-    expect(within(box).getByText('· Approver.Action.joinCommunity')).toBeTruthy()
-    expect(within(box).getByText('· Approver.Action.setTrustedApprovers')).toBeTruthy()
+    // Row E: each action is a tag of its own, no bullet.
+    expect(within(box).getByText('Approver.Action.joinCommunity')).toBeTruthy()
+    expect(within(box).getByText('Approver.Action.setTrustedApprovers')).toBeTruthy()
   })
 
   test.each([
@@ -440,12 +483,10 @@ describe("Who approves: why a card didn't check out, in plain words (Alberto's h
       social: { [JORDAN]: { kind: 'refused', outcome: 'notThisCard' } },
     })
     demos.mockResolvedValue({})
-    const tree = render(
-      <BasicAppContext>
-        <VtaTrustedApprovers />
-      </BasicAppContext>
-    )
+    const tree = render(personPage('approver', JORDAN))
     await act(async () => undefined)
+    expectPage(tree, 'approver', JORDAN)
+    await openDetails(tree)
     expect(tree.getByTestId(id(Ids.socialRefused(JORDAN)))).toBeTruthy()
     expect(tree.getByText('Approver.Reason.damaged Approver.ReasonDo.damaged')).toBeTruthy()
     tree.unmount()
@@ -453,13 +494,225 @@ describe("Who approves: why a card didn't check out, in plain words (Alberto's h
       cards: { [JORDAN]: VERIFIED_DEMO },
       social: { [JORDAN]: { kind: 'authorized', state: UTAH } },
     })
-    const ok = render(
+    const ok = render(personPage('approver', JORDAN))
+    await act(async () => undefined)
+    expectPage(ok, 'approver', JORDAN)
+    await openDetails(ok)
+    expect(ok.queryByTestId(id(Ids.socialRefused(JORDAN)))).toBeNull()
+    expect(ok.queryByText(/Approver\.Reason\./)).toBeNull()
+  })
+})
+
+describe('row E (Alberto, 11-16): each person is one card, in sections, with far less text', () => {
+  // Literal task types: joinCommunity's persona mint is on the set (state() writes joinCommunity); presenting a
+  // credential is shareCredential, which this set does not cover.
+  const COVERED = 'https://trusttasks.org/spec/vta/webvh/dids/create/1.2'
+  const NOT_COVERED = 'https://trusttasks.org/spec/vault/credentials/present/0.1'
+  const holding = (task: string, code: string) => {
+    const real = vtaAgent.getState()
+    jest.spyOn(vtaAgent, 'getState').mockReturnValue({ ...real, awaitingConsentFor: task, awaitingConsentCode: code })
+  }
+  /** The approver's page as it first shows: Details closed. */
+  const page = async (standing?: GuardianStanding) => {
+    cardsAre(standing ? { [JORDAN]: standing } : {})
+    demos.mockResolvedValue({})
+    const tree = render(personPage('approver', JORDAN))
+    await act(async () => undefined)
+    expectPage(tree, 'approver', JORDAN)
+    return tree
+  }
+  const list = async () => {
+    ;(useRoute as jest.Mock).mockReturnValue({ params: undefined })
+    const tree = render(
       <BasicAppContext>
         <VtaTrustedApprovers />
       </BasicAppContext>
     )
     await act(async () => undefined)
-    expect(ok.queryByTestId(id(Ids.socialRefused(JORDAN)))).toBeNull()
-    expect(ok.queryByText(/Approver\.Reason\./)).toBeNull()
+    expect(tree.getByTestId(id(Ids.row('approver', JORDAN)))).toBeTruthy()
+    return tree
+  }
+
+  test("couldn't verify, closed: the one line and what went wrong, no box; Details opens the box with what to do", async () => {
+    const tree = await page(REVOKED('wardMismatch'))
+    expect(has(tree, `${Ids.mark(JORDAN)}_fail`)).toBe(true)
+    expect(has(tree, Ids.guardianUnverified(JORDAN))).toBe(true)
+    expect(tree.getByTestId(id(Ids.guardianWhat(JORDAN))).props.children).toBe('Approver.Reason.wardMismatch')
+    expect(has(tree, Ids.checkedBox(JORDAN))).toBe(false)
+    expect(has(tree, Ids.guardianOutcome(JORDAN))).toBe(false)
+    // Control: open, the checks as before, and the short line gives way to the full one.
+    await openDetails(tree)
+    expect(has(tree, Ids.checkedBox(JORDAN))).toBe(true)
+    expect(tree.getByTestId(id(Ids.guardianOutcome(JORDAN))).props.children).toBe(
+      'Approver.Reason.wardMismatch Approver.ReasonDo.wardMismatch'
+    )
+    expect(has(tree, Ids.guardianWhat(JORDAN))).toBe(false)
+  })
+
+  test('verified from a demo root, closed: the card line and the Demo pill by the heading, never the box', async () => {
+    const tree = await page(VERIFIED_DEMO)
+    expect(has(tree, Ids.guardianVerified(JORDAN))).toBe(true)
+    expect(has(tree, Ids.guardianDemo(JORDAN))).toBe(true)
+    expect(has(tree, Ids.stateBox(JORDAN))).toBe(false)
+    expect(tree.queryByText('Approver.GuardianAsShown')).toBeNull()
+    // Control: open, the pill is inside the state's box, once.
+    await openDetails(tree)
+    const box = tree.getByTestId(id(Ids.stateBox(JORDAN)))
+    expect(within(box).getByTestId(id(Ids.guardianDemo(JORDAN)))).toBeTruthy()
+    expect(tree.getAllByTestId(id(Ids.guardianDemo(JORDAN)))).toHaveLength(1)
+    expect(tree.getByText('Approver.GuardianAsShown')).toBeTruthy()
+  })
+
+  test("a real root, closed: no Demo pill (control: the demo root's row above has one)", async () => {
+    const tree = await page(VERIFIED_REAL)
+    expect(has(tree, Ids.guardianVerified(JORDAN))).toBe(true)
+    expect(has(tree, Ids.guardianDemo(JORDAN))).toBe(false)
+  })
+
+  test('unreachable, closed: Check again is there without opening anything', async () => {
+    const tree = await page(UNREACHABLE)
+    expect(has(tree, `${Ids.mark(JORDAN)}_warn`)).toBe(true)
+    expect(has(tree, Ids.checkAgain(JORDAN))).toBe(true)
+    expect(has(tree, Ids.checkedBox(JORDAN))).toBe(false)
+  })
+
+  test('no card: the one plain line and nothing to open (control: a card has Details)', async () => {
+    const none = await page()
+    expect(has(none, Ids.noCard(JORDAN))).toBe(true)
+    expect(has(none, Ids.details(JORDAN))).toBe(false)
+    none.unmount()
+    const card = await page(VERIFIED_REAL)
+    expect(has(card, Ids.details(JORDAN))).toBe(true)
+  })
+
+  test('a held task the set covers: the page and the row say so with the code, and More drops its own note', async () => {
+    holding(COVERED, '1c6d66')
+    jest.spyOn(approverRole, 'approversWaitedOn').mockResolvedValue(['Jordan'])
+    const tree = await page(VERIFIED_REAL)
+    expect(has(tree, Ids.waiting(JORDAN))).toBe(true)
+    expect(tree.getByTestId(id(Ids.waitCode(JORDAN))).props.children).toBe('1c6d66')
+    tree.unmount()
+    const rows = await list()
+    expect(has(rows, Ids.rowWaiting(JORDAN))).toBe(true)
+    expect(within(rows.getByTestId(id(Ids.rowWaiting(JORDAN)))).getByText('1c6d66')).toBeTruthy()
+    expect(has(rows, ApproverWaitNoteIds.waiting)).toBe(false)
+  })
+
+  test('control: a held task the set does not cover waits on nobody here, and More keeps its note', async () => {
+    holding(NOT_COVERED, '1c6d66')
+    jest.spyOn(approverRole, 'approversWaitedOn').mockResolvedValue(['Jordan'])
+    const tree = await page(VERIFIED_REAL)
+    expect(has(tree, Ids.waiting(JORDAN))).toBe(false)
+    tree.unmount()
+    const rows = await list()
+    expect(has(rows, Ids.rowWaiting(JORDAN))).toBe(false)
+    await act(async () => undefined)
+    expect(has(rows, ApproverWaitNoteIds.waiting)).toBe(true)
+  })
+
+  test('stepped down: the row shows "Stepped down" in place of the card pill; the page both, and Remove solid red', async () => {
+    jest.spyOn(approverRole, 'steppedDownApprovers').mockResolvedValue([JORDAN])
+    cardsAre({ [JORDAN]: VERIFIED_REAL })
+    demos.mockResolvedValue({})
+    const rows = await list()
+    expect(has(rows, Ids.steppedDownPill(JORDAN))).toBe(true)
+    expect(has(rows, Ids.pill(JORDAN))).toBe(false)
+    rows.unmount()
+    const tree = await page(VERIFIED_REAL)
+    expect(has(tree, Ids.steppedDownPill(JORDAN))).toBe(true)
+    expect(has(tree, Ids.pill(JORDAN))).toBe(true)
+    expect(tree.UNSAFE_getAllByProps({ testID: id(Ids.remove(JORDAN)) })[0].props.buttonType).toBe(ButtonType.Critical)
+  })
+
+  test('control: not stepped down, the card pill on the row, no Stepped down pill, Remove plain', async () => {
+    cardsAre({ [JORDAN]: VERIFIED_REAL })
+    demos.mockResolvedValue({})
+    const rows = await list()
+    expect(has(rows, Ids.pill(JORDAN))).toBe(true)
+    expect(has(rows, Ids.steppedDownPill(JORDAN))).toBe(false)
+    rows.unmount()
+    const tree = await page(VERIFIED_REAL)
+    expect(has(tree, Ids.steppedDownPill(JORDAN))).toBe(false)
+    expect(tree.UNSAFE_getAllByProps({ testID: id(Ids.remove(JORDAN)) })[0].props.buttonType).toBe(ButtonType.Secondary)
+  })
+
+  test('someone I approve for: Step down is a red button named for them, and its confirm is red too', async () => {
+    const SAM = 'conn-sam'
+    jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([
+      {
+        open: false,
+        connectionId: SAM,
+        asker: 'Sam',
+        agentDid: 'did:web:sam-agent',
+        actions: ['joinCommunity'],
+        request: {},
+        receivedAt: '2026-11-13T10:00:00.000Z',
+        answered: 'accepted',
+      },
+    ])
+    cardsAre({})
+    demos.mockResolvedValue({})
+    const tree = render(personPage('approving', SAM))
+    await act(async () => undefined)
+    expectPage(tree, 'approving', SAM)
+    const stepDown = tree.UNSAFE_getAllByProps({ testID: id(Ids.stepDown(SAM)) })[0]
+    expect(stepDown.props.buttonType).toBe(ButtonType.Critical)
+    expect(stepDown.props.title).toBe('Approver.StepDownAs')
+    await act(async () => fireEvent.press(tree.getByTestId(id(Ids.stepDown(SAM)))))
+    expect(tree.UNSAFE_getAllByProps({ testID: id(Ids.stepDownConfirm(SAM)) })[0].props.buttonType).toBe(
+      ButtonType.Critical
+    )
+    // Control: Cancel stays plain.
+    expect(tree.UNSAFE_getAllByProps({ testID: id(Ids.stepDownCancel(SAM)) })[0].props.buttonType).toBe(
+      ButtonType.Tertiary
+    )
+  })
+
+  test('asked to stop (#1081): the card switch reads off and is locked, and Your role says so with no Step down', async () => {
+    const SAM = 'conn-sam'
+    const sam = {
+      open: false,
+      connectionId: SAM,
+      asker: 'Sam',
+      agentDid: 'did:web:sam-agent',
+      actions: ['joinCommunity'],
+      request: {},
+      receivedAt: '2026-11-13T10:00:00.000Z',
+      answered: 'accepted',
+      answeredAs: JORDAN,
+    } as approverRole.RoleOfferPrompt
+    jest.spyOn(guardianEvidence, 'cardToShare').mockResolvedValue({ state: UTAH })
+    jest.spyOn(guardianEvidence, 'cardConsents').mockResolvedValue({ [SAM]: 'yes' })
+    cardsAre({})
+    demos.mockResolvedValue({})
+    const open = async (prompt: approverRole.RoleOfferPrompt) => {
+      jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([prompt])
+      const tree = render(personPage('approving', SAM))
+      await act(async () => undefined)
+      expectPage(tree, 'approving', SAM)
+      return tree
+    }
+    const asked = await open({ ...sam, answered: 'steppedDown', stopAskedAt: '2026-11-16T18:40:00Z' } as never)
+    const locked = asked.getByTestId(id(Ids.cardSend(SAM)))
+    expect(locked.props.accessibilityState).toMatchObject({ checked: false, disabled: true })
+    expect(asked.getByTestId(id(Ids.cardStatus(SAM))).props.children).toBe('Approver.CardStoppedNote')
+    expect(has(asked, Ids.stopAsked(SAM))).toBe(true)
+    expect(has(asked, Ids.stepDown(SAM))).toBe(false)
+    asked.unmount()
+    // Control: active, the kept yes reads on and can be pressed, and Step down is there.
+    const active = await open(sam)
+    expect(active.getByTestId(id(Ids.cardStop(SAM))).props.accessibilityState).toMatchObject({
+      checked: true,
+      disabled: false,
+    })
+    expect(has(active, Ids.stopAsked(SAM))).toBe(false)
+    expect(has(active, Ids.stepDown(SAM))).toBe(true)
+  })
+
+  test('initials: the first letter of the first two words, upper case', () => {
+    expect(initialsOf('Alberto Leon')).toBe('AL')
+    expect(initialsOf('brendan')).toBe('B')
+    expect(initialsOf('  Jordan  Q  Sample ')).toBe('JQ')
+    expect(initialsOf('')).toBe('')
   })
 })

@@ -6,7 +6,7 @@
  *
  * The K0 Guardian credential expires 2030-11-10; these rows read the real clock.
  */
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -241,6 +241,46 @@ const allOn = () => {
   TRUSTED_APPROVERS_REMOTE_OFF.off = false
   STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = false
   SEDI_KERI_REMOTE_OFF.off = false
+}
+
+/**
+ * Who approves opened on one person's page (design B, 11-14): the same screen under the person route, where a person's
+ * boxes and buttons now are.
+ */
+const personPage = (kind: 'approver' | 'yes' | 'setAside' | 'approving', personId: string) => {
+  ;(useRoute as jest.Mock).mockReturnValue({ params: { kind, id: personId } })
+  return (
+    <BasicAppContext>
+      <VtaTrustedApprovers />
+    </BasicAppContext>
+  )
+}
+
+/** Each kind's page shows its person under this id; the page of someone it cannot find shows none of them. */
+const pageIdOf = (kind: 'approver' | 'yes' | 'setAside' | 'approving', personId: string) =>
+  ({
+    approver: TrustedApproversIds.approver,
+    yes: TrustedApproversIds.accepted,
+    setAside: TrustedApproversIds.setAsideRow,
+    approving: TrustedApproversIds.approvingPerson,
+  })[kind](personId)
+/**
+ * The page really is that person's (7d, #1078): many rows check that something is ABSENT from it, and a page that
+ * found nobody (a wrong kind or id) would pass every one of them for nothing.
+ */
+const expectPage = (
+  tree: { getByTestId: (testId: string) => unknown },
+  kind: 'approver' | 'yes' | 'setAside' | 'approving',
+  personId: string
+) => expect(tree.getByTestId(testIdWithKey(pageIdOf(kind, personId)))).toBeTruthy()
+
+/**
+ * Row E (Alberto, 11-16): an approver's state card shows one line until Details opens what Keyring checked. Rows that
+ * read the checks open it first; with no card, or the state-verified switch off, there is nothing to open.
+ */
+const openDetails = async (tree: { queryByTestId: (testId: string) => unknown }, did: string = JORDAN) => {
+  const toggle = tree.queryByTestId(testIdWithKey(TrustedApproversIds.details(did)))
+  if (toggle) await act(async () => fireEvent.press(toggle as Parameters<typeof fireEvent.press>[0]))
 }
 
 beforeEach(() => {
@@ -1349,12 +1389,10 @@ describe('Who approves: the state card line', () => {
       view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
       version: 2,
     } as TrustedApproversState)
-    const tree = render(
-      <BasicAppContext>
-        <VtaTrustedApprovers />
-      </BasicAppContext>
-    )
+    const tree = render(personPage('approver', JORDAN))
     await act(async () => undefined)
+    expectPage(tree, 'approver', JORDAN)
+    await openDetails(tree)
     return tree
   }
   const writtenWith = async (evidence: GuardianEvidence | null) => {
@@ -1433,11 +1471,7 @@ describe('Who approves: the state card line', () => {
     const tree = await showFor(await writtenWith(card('G-ok')))
     expect(tree.getByTestId(id(TrustedApproversIds.guardianVerified(JORDAN)))).toBeTruthy()
     STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = true
-    tree.rerender(
-      <BasicAppContext>
-        <VtaTrustedApprovers />
-      </BasicAppContext>
-    )
+    tree.rerender(personPage('approver', JORDAN))
     expect(tree.queryByTestId(id(TrustedApproversIds.guardianVerified(JORDAN)))).toBeNull()
     expect(tree.getByTestId(id(TrustedApproversIds.approver(JORDAN)))).toBeTruthy()
   })
@@ -1641,12 +1675,10 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
         view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
         version: 2,
       } as TrustedApproversState)
-      const tree = render(
-        <BasicAppContext>
-          <VtaTrustedApprovers />
-        </BasicAppContext>
-      )
+      const tree = render(personPage('approver', JORDAN))
       await act(async () => undefined)
+      expectPage(tree, 'approver', JORDAN)
+      await openDetails(tree)
       return tree
     }
     const declined = await run(false)
@@ -1747,16 +1779,10 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
         view: { approvers: [], keys: [], heldElsewhere: [] },
         version: 1,
       } as TrustedApproversState)
-      const tree = render(
-        <BasicAppContext>
-          <VtaTrustedApprovers />
-        </BasicAppContext>
-      )
+      // Their own page (design B, 11-14), opened from the people-I-approve-for tab.
+      const tree = render(personPage('approving', CONN))
       await act(async () => undefined)
-      // The people I approve for are on their own tab (B-lite, 11-14).
-      await act(async () => {
-        fireEvent.press(tree.getByTestId(testIdWithKey(TrustedApproversIds.tabTheirs)))
-      })
+      expectPage(tree, 'approving', CONN)
       return tree
     }
 
@@ -1764,15 +1790,22 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
       const jordan = await jordanWithCard()
       await yesTo(jordan)
       const tree = await show(jordan)
-      expect(tree.getByTestId(testIdWithKey(TrustedApproversIds.cardStatus(CONN))).props.children).toBe(
-        'Approver.CardNotSentTo'
-      )
+      // Row E: a switch, read off; its press sends (cardSend), so it is named for what it does.
+      expect(
+        tree.getByTestId(testIdWithKey(TrustedApproversIds.cardSend(CONN))).props.accessibilityState
+      ).toMatchObject({
+        checked: false,
+      })
       await act(async () => {
         fireEvent.press(tree.getByTestId(testIdWithKey(TrustedApproversIds.cardSend(CONN))))
       })
       expect(await cardConsentOn(jordan.agent, CONN)).toBe('yes')
       expect(cards()).toHaveLength(1)
-      expect(tree.getByTestId(testIdWithKey(TrustedApproversIds.cardStop(CONN)))).toBeTruthy()
+      expect(
+        tree.getByTestId(testIdWithKey(TrustedApproversIds.cardStop(CONN))).props.accessibilityState
+      ).toMatchObject({
+        checked: true,
+      })
     })
 
     test('a kept yes reads as sent, and "Stop sending" keeps a no, so a re-offer sends nothing', async () => {
@@ -1781,9 +1814,12 @@ describe('asking Jordan first: the card goes only once Jordan said yes to sendin
       await yesTo(jordan)
       sent.length = 0
       const tree = await show(jordan)
-      expect(tree.getByTestId(testIdWithKey(TrustedApproversIds.cardStatus(CONN))).props.children).toBe(
-        'Approver.CardSentTo'
-      )
+      // Row E: a switch, read on; its press stops (cardStop).
+      expect(
+        tree.getByTestId(testIdWithKey(TrustedApproversIds.cardStop(CONN))).props.accessibilityState
+      ).toMatchObject({
+        checked: true,
+      })
       await act(async () => {
         fireEvent.press(tree.getByTestId(testIdWithKey(TrustedApproversIds.cardStop(CONN))))
       })
@@ -2204,12 +2240,10 @@ describe('a root read from its did:webs', () => {
       version: 2,
     } as TrustedApproversState)
     const screen = async () => {
-      const tree = render(
-        <BasicAppContext>
-          <VtaTrustedApprovers />
-        </BasicAppContext>
-      )
+      const tree = render(personPage('approver', JORDAN))
       await act(async () => undefined)
+      expectPage(tree, 'approver', JORDAN)
+      await openDetails(tree)
       return tree
     }
     const copy = await screen()
@@ -2282,12 +2316,10 @@ describe('a root read from its did:webs', () => {
       view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
       version: 2,
     } as TrustedApproversState)
-    const tree = render(
-      <BasicAppContext>
-        <VtaTrustedApprovers />
-      </BasicAppContext>
-    )
+    const tree = render(personPage('approver', JORDAN))
     await act(async () => undefined)
+    expectPage(tree, 'approver', JORDAN)
+    await openDetails(tree)
     expect(tree.getByTestId(id(TrustedApproversIds.guardianDemoCopy(JORDAN))).props.children).toBe(
       'Approver.GuardianTestCopy'
     )
@@ -2455,12 +2487,10 @@ describe('a root read from its did:webs', () => {
     } as TrustedApproversState)
     resetGuardianCheckMemo()
     global.fetch = host() as never
-    const tree = render(
-      <BasicAppContext>
-        <VtaTrustedApprovers />
-      </BasicAppContext>
-    )
+    const tree = render(personPage('approver', JORDAN))
     await act(async () => undefined)
+    expectPage(tree, 'approver', JORDAN)
+    await openDetails(tree)
     expect(tree.getByTestId(id(TrustedApproversIds.guardianRevokedState(JORDAN))).props.children).toBe(
       'Approver.GuardianRevokedState'
     )
@@ -2539,12 +2569,10 @@ describe('a root read from its did:webs', () => {
     rootAtWebs()
     global.fetch = host() as never
     const screen = async () => {
-      const tree = render(
-        <BasicAppContext>
-          <VtaTrustedApprovers />
-        </BasicAppContext>
-      )
+      const tree = render(personPage('approver', JORDAN))
       await act(async () => undefined)
+      expectPage(tree, 'approver', JORDAN)
+      await openDetails(tree)
       return tree
     }
     const live = await screen()
@@ -2592,12 +2620,10 @@ describe('a root read from its did:webs', () => {
         view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
         version: 2,
       } as TrustedApproversState)
-      const tree = render(
-        <BasicAppContext>
-          <VtaTrustedApprovers />
-        </BasicAppContext>
-      )
+      const tree = render(personPage('approver', JORDAN))
       await act(async () => undefined)
+      expectPage(tree, 'approver', JORDAN)
+      await openDetails(tree)
       expect(tree.getByTestId(id(TrustedApproversIds.guardianUnreachable(JORDAN))).props.children).toBe(
         'Approver.GuardianStateUnreachable'
       )
@@ -2733,12 +2759,10 @@ describe('a root read from its did:webs', () => {
         version: 2,
       } as TrustedApproversState)
       const screen = async () => {
-        const tree = render(
-          <BasicAppContext>
-            <VtaTrustedApprovers />
-          </BasicAppContext>
-        )
+        const tree = render(personPage('approver', JORDAN))
         await act(async () => undefined)
+        expectPage(tree, 'approver', JORDAN)
+        await openDetails(tree)
         return tree
       }
       const realFetch = global.fetch

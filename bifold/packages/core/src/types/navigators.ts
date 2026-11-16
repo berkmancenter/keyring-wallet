@@ -90,6 +90,8 @@ export enum Screens {
   VtaRequests = 'Requests',
   VtaAskMe = 'Ask me before',
   VtaTrustedApprovers = 'Who approves',
+  // One person on Who approves: their detail and what can be done (design B, 11-14).
+  VtaApproverPerson = 'Approver',
   VtaAgentSettings = 'Agent settings',
   VtiInvited = 'Invited',
   VtiJoin = 'Join',
@@ -189,6 +191,8 @@ export type MyAgentStackParams = {
   [Screens.VtaRequests]: undefined
   [Screens.VtaAskMe]: undefined
   [Screens.VtaTrustedApprovers]: undefined
+  // One person on Who approves: `id` is the approver's DID for 'approver', else the relationship's connectionId.
+  [Screens.VtaApproverPerson]: { kind: 'approver' | 'yes' | 'setAside' | 'approving'; id: string }
   [Screens.VtaAgentSettings]: { unlink?: boolean } | undefined
   [Screens.VtiInvited]: undefined
   [Screens.VtaCreateAgent]: { addDevice?: boolean; byAddress?: boolean } | undefined

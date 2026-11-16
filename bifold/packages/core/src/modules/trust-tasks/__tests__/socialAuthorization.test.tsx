@@ -6,8 +6,8 @@
  * The holder's key is a test key (sedi/__tests__/fixtures/keriTestKit) standing in for the phone's KMS through the
  * controller's own interface. Every store here throws on delete: nothing in this flow deletes a record.
  */
-import { useFocusEffect } from '@react-navigation/native'
-import { act, render } from '@testing-library/react-native'
+import { useFocusEffect, useRoute } from '@react-navigation/native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -223,6 +223,46 @@ const allOn = () => {
   TRUSTED_APPROVERS_REMOTE_OFF.off = false
   STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = false
   SEDI_KERI_REMOTE_OFF.off = false
+}
+
+/**
+ * Who approves opened on one person's page (design B, 11-14): the same screen under the person route, where a person's
+ * boxes and buttons now are.
+ */
+const personPage = (kind: 'approver' | 'yes' | 'setAside' | 'approving', personId: string) => {
+  ;(useRoute as jest.Mock).mockReturnValue({ params: { kind, id: personId } })
+  return (
+    <BasicAppContext>
+      <VtaTrustedApprovers />
+    </BasicAppContext>
+  )
+}
+
+/** Each kind's page shows its person under this id; the page of someone it cannot find shows none of them. */
+const pageIdOf = (kind: 'approver' | 'yes' | 'setAside' | 'approving', personId: string) =>
+  ({
+    approver: TrustedApproversIds.approver,
+    yes: TrustedApproversIds.accepted,
+    setAside: TrustedApproversIds.setAsideRow,
+    approving: TrustedApproversIds.approvingPerson,
+  })[kind](personId)
+/**
+ * The page really is that person's (7d, #1078): many rows check that something is ABSENT from it, and a page that
+ * found nobody (a wrong kind or id) would pass every one of them for nothing.
+ */
+const expectPage = (
+  tree: { getByTestId: (testId: string) => unknown },
+  kind: 'approver' | 'yes' | 'setAside' | 'approving',
+  personId: string
+) => expect(tree.getByTestId(testIdWithKey(pageIdOf(kind, personId)))).toBeTruthy()
+
+/**
+ * Row E (Alberto, 11-16): an approver's state card shows one line until Details opens what Keyring checked. Rows that
+ * read the checks open it first; with no card, or the state-verified switch off, there is nothing to open.
+ */
+const openDetails = async (tree: { queryByTestId: (testId: string) => unknown }, did: string = JORDAN) => {
+  const toggle = tree.queryByTestId(testIdWithKey(TrustedApproversIds.details(did)))
+  if (toggle) await act(async () => fireEvent.press(toggle as Parameters<typeof fireEvent.press>[0]))
 }
 
 beforeEach(() => {
@@ -547,12 +587,10 @@ describe('Who approves: one honest line for the authorization', () => {
       view: { approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
       version: 2,
     } as TrustedApproversState)
-    const tree = render(
-      <BasicAppContext>
-        <VtaTrustedApprovers />
-      </BasicAppContext>
-    )
+    const tree = render(personPage('approver', JORDAN))
     await act(async () => undefined)
+    expectPage(tree, 'approver', JORDAN)
+    await openDetails(tree)
     return tree
   }
   const received = async (opts: { strip?: boolean; otherWard?: boolean; edited?: boolean } = {}) => {
