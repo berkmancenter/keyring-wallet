@@ -24,6 +24,8 @@ import { resolveContactDisplayInfo } from '../vrc/utils/rcardDisplayUtils'
 import { sameChallenge } from '../vrc/contacts/continuityCrypto'
 
 import {
+  REMOVED_SPEC,
+  REMOVED_TYPE_URI,
   RESPONSE_SPEC,
   ROLE_ACTIONS,
   SPEC,
@@ -32,6 +34,7 @@ import {
   TYPE_URI,
   type RoleOfferPayload,
   type RoleOfferResponsePayload,
+  type RoleRemovedPayload,
   type RoleStepDownPayload,
 } from './approverRoleSpec'
 import { signDocumentProof, verifyDocumentProof } from './documentProof'
@@ -276,7 +279,8 @@ export async function handleRoleOfferResponse(
 
   if (answer.decision === 'accepted') {
     if (!answer.approver || !DID.test(answer.approver)) return
-    record.content = { ...ask, state: 'accepted', acceptedAs: answer.approver }
+    // A yes after a step-down ("Ask … again") is a fresh yes: the step-down no longer stands.
+    record.content = { ...ask, state: 'accepted', acceptedAs: answer.approver, steppedDown: undefined }
   } else {
     record.content = { ...ask, state: 'closed' }
   }
@@ -351,6 +355,51 @@ export async function approverRemoved(agent: Pick<Agent, 'genericRecords'>, did:
     await agent.genericRecords.update(record)
     approverRoleEvents.emit('asked', { connectionId: ask.connectionId })
   }
+}
+
+/**
+ * {@link approverRemoved}, then tell each contact who was written as `did` that the removal went through
+ * (`approver/role-removed/0.1`), so their phone stops listening to this agent. Call it only after the agent's rules no
+ * longer name `did`. The local record changes first: a notice that does not go is logged and never undoes it, and the
+ * approver's phone then keeps listening, which is harmless (the agent no longer asks them).
+ */
+export async function approverRemovedAndTold(agent: Agent, did: string): Promise<void> {
+  const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_ASK })) ?? []
+  const told = records
+    .map((record) => record.content as unknown as RoleOfferAsk)
+    .filter((ask) => writtenAsOf(ask) === did)
+  await approverRemoved(agent, did)
+  for (const ask of told) {
+    await tellRemoved(agent, ask.connectionId, ask.agentDid, did).catch((error: unknown) =>
+      agent.config?.logger?.warn(
+        `${LOG_PREFIX} the removal notice on connection ${ask.connectionId} was not sent: ${(error as Error)?.message ?? error}`
+      )
+    )
+  }
+}
+
+async function tellRemoved(agent: Agent, connectionId: string, agentDid: string, approver: string): Promise<void> {
+  if (!isTrustedApproversEnabled()) return
+  const relationship = await relationshipOn(agent, connectionId)
+  if (!relationship) throw new Error('no relationship to sign the removal notice under')
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.did || !connection.theirDid) throw new Error('the connection has no DIDs')
+  const id = utils.uuid()
+  const payload: RoleRemovedPayload = { agent: agentDid, approver, removedAt: new Date().toISOString() }
+  const document: Record<string, unknown> = {
+    id,
+    type: REMOVED_TYPE_URI,
+    threadId: id,
+    issuer: connection.did,
+    recipient: connection.theirDid,
+    issuedAt: new Date().toISOString(),
+    payload,
+  }
+  const signed = await signDocumentProof(agent, document, relationship.myRelationshipDid as string)
+  const { getTrustTasksService, sendTrustTaskDocument } = ceremony()
+  await getTrustTasksService(agent).retain(agent.context, signed, 'request', connectionId)
+  await sendTrustTaskDocument(agent, connectionId, signed)
+  agent.config?.logger?.info(`${LOG_PREFIX} removal notice sent on connection ${connectionId}`)
 }
 
 /**
@@ -478,9 +527,52 @@ export interface RoleOfferPrompt {
   actions: RoleAction[]
   request: Record<string, unknown>
   receivedAt: string
-  /** Set once this phone's person answered; with `accepted`, the DID the yes named. `steppedDown`: a yes taken back. */
+  /**
+   * Set once this phone's person answered; with `accepted`, the DID the yes named. `steppedDown`: this phone's person
+   * asked to be removed (see `stopAskedAt`); the yes stays in force until the asker removes them.
+   */
   answered?: 'accepted' | 'declined' | 'steppedDown'
   answeredAs?: string
+  /**
+   * The yes in force on the asker's agent: the agent it was given for, the DID it named, the actions it covered. Kept
+   * apart from the offer, so a newer offer on the same connection (open, declined or lapsed) never ends it: the agent
+   * still names this phone until the asker removes it. Records from before this field: read from `answered` and
+   * `answeredAs` ({@link inForceOf}).
+   */
+  inForce?: { agentDid: string; as: string; actions: RoleAction[] }
+  /**
+   * When this phone's person stepped down: they asked to be removed. Until the asker's phone says the removal went
+   * through (`removedAt`), this phone keeps showing that agent's requests, the removal among them, since the agent
+   * still waits for this phone's answer. A step-down before this field reads as one ({@link isStopAsked}).
+   */
+  stopAskedAt?: string
+  /** When the asker's phone said its agent no longer names this phone (`approver/role-removed/0.1`). Ends the yes. */
+  removedAt?: string
+}
+
+/**
+ * The yes this phone's person gave that is in force on the asker's agent, if any: given, and not since removed by the
+ * asker. A step-down does not end it (the agent keeps waiting for this phone until the asker removes it).
+ */
+export function inForceOf(
+  prompt: RoleOfferPrompt | undefined
+): { agentDid: string; as: string; actions: RoleAction[] } | undefined {
+  if (!prompt || prompt.removedAt) return undefined
+  if (prompt.inForce) return prompt.inForce
+  // A record from before `inForce`: an accepted yes, or one stepped down from, named its DID in `answeredAs`.
+  if ((prompt.answered === 'accepted' || prompt.answered === 'steppedDown') && prompt.answeredAs)
+    return { agentDid: prompt.agentDid, as: prompt.answeredAs, actions: [...(prompt.actions ?? [])] }
+  return undefined
+}
+
+/** This phone's person asked to stop approving for this asker, and the asker has not removed them yet. */
+export const isStopAsked = (prompt: RoleOfferPrompt | undefined): boolean =>
+  !!inForceOf(prompt) && (!!prompt?.stopAskedAt || prompt?.answered === 'steppedDown')
+
+/** The prompt as the yes in force reads it: its agent, the DID it named and its actions, whatever offer came since. */
+const asInForce = (prompt: RoleOfferPrompt): RoleOfferPrompt => {
+  const inForce = inForceOf(prompt) as { agentDid: string; as: string; actions: RoleAction[] }
+  return { ...prompt, agentDid: inForce.agentDid, answeredAs: inForce.as, actions: [...inForce.actions] }
 }
 
 class RoleOfferPromptStore {
@@ -532,6 +624,15 @@ export async function handleRoleOfferRequest(
 
   const payload = document.payload as RoleOfferPayload
   const credentials = await agent.w3cCredentials.getAll()
+  // A newer offer replaces the offer, never a yes in force (nor a step-down from it): the asker's agent still names
+  // this phone, so its requests must still show while the new offer is open, declined or lapsed.
+  const [earlierRecord] =
+    (await agent.genericRecords.findAllByQuery({
+      recordType: ROLE_OFFER_PROMPT,
+      connectionId: context.connectionId,
+    })) ?? []
+  const earlier = earlierRecord?.content as unknown as RoleOfferPrompt | undefined
+  const inForce = inForceOf(earlier)
   const prompt: RoleOfferPrompt = {
     open: true,
     connectionId: context.connectionId,
@@ -540,6 +641,10 @@ export async function handleRoleOfferRequest(
     actions: [...payload.actions],
     request: document,
     receivedAt: new Date().toISOString(),
+    ...(inForce ? { inForce } : {}),
+    ...(inForce && isStopAsked(earlier)
+      ? { stopAskedAt: earlier?.stopAskedAt ?? earlier?.receivedAt ?? new Date().toISOString() }
+      : {}),
   }
   roleOfferPromptStore.set(prompt)
   await keepPrompt(agent, prompt).catch((error: unknown) =>
@@ -596,12 +701,19 @@ export async function respondToRoleOffer(
 
   roleOfferPromptStore.take(connectionId)
   approverRoleEvents.emit('promptCleared', { connectionId })
-  const kept: RoleOfferPrompt = {
-    ...prompt,
-    open: false,
-    answered: accept ? 'accepted' : 'declined',
-    ...(accept ? { answeredAs: approverDid } : {}),
-  }
+  // A yes is the yes in force from now on, and ends any step-down; a no leaves a yes already in force as it was (the
+  // asker's agent still names this phone until the asker removes it).
+  const kept: RoleOfferPrompt = accept
+    ? {
+        ...prompt,
+        open: false,
+        answered: 'accepted',
+        answeredAs: approverDid,
+        inForce: { agentDid: prompt.agentDid, as: approverDid as string, actions: [...prompt.actions] },
+        stopAskedAt: undefined,
+        removedAt: undefined,
+      }
+    : { ...prompt, open: false, answered: 'declined' }
   await keepPrompt(agent, kept).catch((error: unknown) =>
     agent.config?.logger?.warn(`${LOG_PREFIX} could not close an offer: ${(error as Error)?.message ?? error}`)
   )
@@ -625,14 +737,31 @@ function guardianEvidence(): typeof import('./guardianEvidence') {
 }
 
 /**
- * The people this phone's person said yes to ("People I approve for"), newest first. Only what this phone answered:
- * whether the asker then wrote the rule on their agent is theirs to say.
+ * Every yes of this phone's person still in force, a step-down asked included, newest first, each read as that yes
+ * ({@link inForceOf}): the agent it was for, the DID it named, its actions. What this phone LISTENS to: a request from
+ * one of these agents is shown (foreignApproval.ts), because the agent still waits for this phone's answer, a removal
+ * of this phone among them. Only what this phone answered and was told: whether the asker wrote it is theirs to say.
+ */
+export async function listeningFor(agent: Pick<Agent, 'genericRecords'>): Promise<RoleOfferPrompt[]> {
+  const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_PROMPT })) ?? []
+  return records
+    .map((record) => record.content as unknown as RoleOfferPrompt)
+    .filter((prompt) => !!inForceOf(prompt))
+    .map(asInForce)
+    .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+}
+
+/**
+ * The people this phone's person said yes to and has not stepped down from, newest first. Only what this phone
+ * answered: whether the asker then wrote the rule on their agent is theirs to say. A Guardian card goes only to these
+ * (guardianEvidence.ts). Deliberately NOT {@link listeningFor}: a step-down stops the card at once, while the phone
+ * keeps listening; and a removal the asker told this phone about ends it here too.
  */
 export async function approvingFor(agent: Pick<Agent, 'genericRecords'>): Promise<RoleOfferPrompt[]> {
   const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_PROMPT })) ?? []
   return records
     .map((record) => record.content as unknown as RoleOfferPrompt)
-    .filter((prompt) => prompt?.answered === 'accepted')
+    .filter((prompt) => prompt?.answered === 'accepted' && !prompt.removedAt)
     .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
 }
 
@@ -640,16 +769,20 @@ export async function approvingFor(agent: Pick<Agent, 'genericRecords'>): Promis
 // Stepping down (Jordan's phone tells Sam's)
 
 /**
- * This phone's person no longer approves for the contact on `connectionId`: a step-down, signed under this phone's
- * relationship DID, goes to the contact's phone, and the yes kept here reads as taken back, so requests from that
- * agent are no longer shown (foreignApproval.ts reads {@link approvingFor}). Sent first: if sending fails, nothing
- * changes and the person can try again. The record's state is changed in place, never deleted.
+ * This phone's person asks to stop approving for the contact on `connectionId`: a step-down, signed under this phone's
+ * relationship DID, goes to the contact's phone, which asks its person to remove them. The yes kept here reads as
+ * stop-asked ({@link isStopAsked}), NOT ended: the contact's agent still names this phone and waits for its answer,
+ * the removal itself included, so its requests still show here ({@link listeningFor}) until the contact's phone says
+ * the removal went through ({@link handleRoleRemoved}). Ending the listening here instead left a removal nobody could
+ * answer (278.22, 11-16). No Guardian card goes to them meanwhile. Sent first: if sending fails, nothing changes and
+ * the person can try again. The record's state is changed in place, never deleted.
  */
 export async function stepDownAsApprover(agent: Agent, connectionId: string): Promise<'sent' | 'off' | 'notApproving'> {
   if (!isTrustedApproversEnabled()) return 'off'
   const [record] = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_PROMPT, connectionId })) ?? []
-  const prompt = record?.content as unknown as RoleOfferPrompt | undefined
-  if (!prompt || prompt.answered !== 'accepted' || !prompt.answeredAs) return 'notApproving'
+  const kept = record?.content as unknown as RoleOfferPrompt | undefined
+  const inForce = inForceOf(kept)
+  if (!kept || !inForce || isStopAsked(kept)) return 'notApproving'
   const relationship = await relationshipOn(agent, connectionId)
   if (!relationship) throw new Error(`${LOG_PREFIX} no relationship to sign the step-down under`)
   const connection = await agent.modules.didcomm.connections.getById(connectionId)
@@ -657,8 +790,8 @@ export async function stepDownAsApprover(agent: Agent, connectionId: string): Pr
 
   const id = utils.uuid()
   const payload: RoleStepDownPayload = {
-    agent: prompt.agentDid,
-    approver: prompt.answeredAs,
+    agent: inForce.agentDid,
+    approver: inForce.as,
     steppedDownAt: new Date().toISOString(),
   }
   const document: Record<string, unknown> = {
@@ -675,7 +808,16 @@ export async function stepDownAsApprover(agent: Agent, connectionId: string): Pr
   await getTrustTasksService(agent).retain(agent.context, signed, 'request', connectionId)
   await sendTrustTaskDocument(agent, connectionId, signed)
 
-  await keepPrompt(agent, { ...prompt, answered: 'steppedDown' })
+  // An offer still open on this connection closes too: the contact's phone closes it on the step-down.
+  roleOfferPromptStore.take(connectionId)
+  await keepPrompt(agent, {
+    ...kept,
+    open: false,
+    answered: 'steppedDown',
+    answeredAs: inForce.as,
+    inForce,
+    stopAskedAt: payload.steppedDownAt,
+  })
   agent.config?.logger?.info(`${LOG_PREFIX} stepped down on connection ${connectionId}`)
   approverRoleEvents.emit('promptCleared', { connectionId })
   return 'sent'
@@ -738,6 +880,50 @@ export async function handleRoleStepDown(
   await agent.genericRecords.update(record)
   agent.config?.logger?.info(`${LOG_PREFIX} a contact stepped down on connection ${context.connectionId}`)
   approverRoleEvents.emit('answered', { connectionId: context.connectionId, decision: 'steppedDown' })
+}
+
+/**
+ * The asker's phone says it took this phone off its agent's approvers (`approver/role-removed/0.1`): verified under
+ * their relationship DID, it ends the yes in force here, so that agent's requests are no longer shown and the person
+ * leaves People I approve for. It counts only for the agent and the DID of the yes in force on that connection;
+ * anything else is dropped. Told, not checked against the agent: a contact who says so without removing this phone
+ * only stops being answered.
+ */
+export async function handleRoleRemoved(
+  agent: Agent,
+  service: TrustTasksService,
+  document: Record<string, unknown>,
+  context: InboundContext
+): Promise<void> {
+  if (!isTrustedApproversEnabled()) return dropped(agent, 'a removal notice', context.connectionId, SWITCHED_OFF)
+  const relationship = await relationshipOn(agent, context.connectionId)
+  if (!relationship) return dropped(agent, 'a removal notice', context.connectionId, NO_RELATIONSHIP)
+  const outcome = await service.consume(agent.context, {
+    spec: REMOVED_SPEC as never,
+    document,
+    myDid: context.recipientDid,
+    senderDid: context.senderDid,
+    connectionId: context.connectionId,
+    proofPolicy: proofUnder(agent, relationship.counterpartyRelationshipDid as string),
+    handler: async () => undefined,
+  })
+  if (outcome.kind !== 'accepted' && outcome.kind !== 'handled')
+    return dropped(agent, 'a removal notice', context.connectionId, refusedAs(outcome.kind))
+
+  const payload = document.payload as RoleRemovedPayload
+  const [record] =
+    (await agent.genericRecords.findAllByQuery({
+      recordType: ROLE_OFFER_PROMPT,
+      connectionId: context.connectionId,
+    })) ?? []
+  const prompt = record?.content as unknown as RoleOfferPrompt | undefined
+  const inForce = inForceOf(prompt)
+  if (!record || !prompt || !inForce || inForce.agentDid !== payload.agent || inForce.as !== payload.approver)
+    return dropped(agent, 'a removal notice', context.connectionId, 'it names no yes in force here')
+  record.content = { ...prompt, removedAt: payload.removedAt }
+  await agent.genericRecords.update(record)
+  agent.config?.logger?.info(`${LOG_PREFIX} removed as approver on connection ${context.connectionId}`)
+  approverRoleEvents.emit('promptCleared', { connectionId: context.connectionId })
 }
 
 /**

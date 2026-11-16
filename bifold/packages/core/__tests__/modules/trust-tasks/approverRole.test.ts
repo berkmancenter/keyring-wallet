@@ -10,7 +10,12 @@ import {
   acceptedRoleOffers,
   approverNames,
   approverRemoved,
+  approverRemovedAndTold,
   approverRoleEvents,
+  handleRoleRemoved,
+  isStopAsked,
+  listeningFor,
+  ROLE_OFFER_PROMPT,
   approversWithAccepted,
   approvingFor,
   closeRoleOffer,
@@ -31,7 +36,12 @@ import {
   restoreRoleOfferPrompts,
   roleOfferPromptStore,
 } from '../../../src/modules/trust-tasks/approverRole'
-import { ROLE_ACTIONS, STEP_DOWN_TYPE_URI, TYPE_URI } from '../../../src/modules/trust-tasks/approverRoleSpec'
+import {
+  REMOVED_TYPE_URI,
+  ROLE_ACTIONS,
+  STEP_DOWN_TYPE_URI,
+  TYPE_URI,
+} from '../../../src/modules/trust-tasks/approverRoleSpec'
 import { TRUSTED_TASKS } from '../../../src/modules/trust-tasks/module/trustedApprovers'
 import {
   TRUSTED_APPROVERS_REMOTE_OFF,
@@ -829,6 +839,111 @@ describe('stepping down', () => {
     mockSent.length = 0
     expect(await stepDownAsApprover(both.jordan.agent, JORDAN.connectionId)).toBe('notApproving')
     expect(mockSent).toHaveLength(0)
+  })
+})
+
+describe('a step-down asks to be removed: the approver keeps answering until removed (278.22 deadlock, 11-16)', () => {
+  async function approving() {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity', 'changeApprovers'])
+    await deliver(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    await deliver(sam)
+    await closeRoleOffer(sam.agent, SAM.connectionId, true)
+    mockSent.length = 0
+    return { sam, jordan }
+  }
+  // Re-signed by Sam over an altered payload, so only the payload check can refuse it.
+  const resign = (signed: Record<string, unknown>, payload: Record<string, string>) => {
+    const altered: Record<string, unknown> = { ...signed, payload: { ...(signed.payload as object), ...payload } }
+    const { proof: _p, ...unsigned } = altered
+    return {
+      ...unsigned,
+      proof: {
+        type: 'DataIntegrityProof',
+        cryptosuite: 'eddsa-jcs-2022',
+        by: SAM.myRel,
+        over: JSON.stringify(unsigned),
+      },
+    }
+  }
+
+  test("after Jordan steps down, Jordan's phone still listens to Sam's agent (stop-asked, no card), until Sam's phone says the removal went through", async () => {
+    const { sam, jordan } = await approving()
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    await handleRoleStepDown(sam.agent, pipeline, mockSent[0].document, context(sam))
+    // Still listened to (Sam's agent waits for Jordan, the removal included); no longer approved for (no card goes).
+    const listening = await listeningFor(jordan.agent)
+    expect(listening).toHaveLength(1)
+    expect(listening[0]).toMatchObject({ agentDid: SAM_AGENT, answeredAs: JORDAN_APPROVES_AS })
+    expect(isStopAsked(listening[0])).toBe(true)
+    expect(await approvingFor(jordan.agent)).toEqual([])
+    // Sam removes Jordan: the notice, signed under Sam's relationship DID, ends Jordan's listening.
+    mockSent.length = 0
+    await approverRemovedAndTold(sam.agent, JORDAN_APPROVES_AS)
+    expect(mockSent).toHaveLength(1)
+    expect(mockSent[0].document).toMatchObject({
+      type: REMOVED_TYPE_URI,
+      payload: { agent: SAM_AGENT, approver: JORDAN_APPROVES_AS },
+      proof: { by: SAM.myRel },
+    })
+    // Control: one naming another approver DID changes nothing.
+    await handleRoleRemoved(
+      jordan.agent,
+      pipeline,
+      resign(mockSent[0].document, { approver: 'did:peer:2.someone-else' }),
+      context(jordan)
+    )
+    expect(await listeningFor(jordan.agent)).toHaveLength(1)
+    await handleRoleRemoved(jordan.agent, pipeline, mockSent[0].document, context(jordan))
+    expect(await listeningFor(jordan.agent)).toEqual([])
+    expect(jordan.store.deleteById).not.toHaveBeenCalled()
+  })
+
+  test('the rescue: a step-down kept by 278.22 (answered steppedDown, nothing else) reads as still listening (control: a no is not listened to)', async () => {
+    const jordan = phone(JORDAN)
+    const old = {
+      open: false,
+      connectionId: JORDAN.connectionId,
+      asker: 'Sam',
+      agentDid: SAM_AGENT,
+      actions: ['joinCommunity', 'changeApprovers'],
+      request: {},
+      receivedAt: '2026-11-15T10:00:00Z',
+      answered: 'steppedDown',
+      answeredAs: JORDAN_APPROVES_AS,
+    }
+    await jordan.store.save({
+      content: old,
+      tags: { recordType: ROLE_OFFER_PROMPT, connectionId: JORDAN.connectionId },
+    })
+    const listening = await listeningFor(jordan.agent)
+    expect(listening).toHaveLength(1)
+    expect(isStopAsked(listening[0])).toBe(true)
+    const declined = phone(JORDAN)
+    await declined.store.save({
+      content: { ...old, answered: 'declined' },
+      tags: { recordType: ROLE_OFFER_PROMPT, connectionId: JORDAN.connectionId },
+    })
+    expect(await listeningFor(declined.agent)).toEqual([])
+  })
+
+  test("Ask again after the step-down: Jordan's phone keeps listening while it is open, and a yes makes Jordan an approver again on both phones", async () => {
+    const { sam, jordan } = await approving()
+    await stepDownAsApprover(jordan.agent, JORDAN.connectionId)
+    await handleRoleStepDown(sam.agent, pipeline, mockSent[0].document, context(sam))
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity', 'changeApprovers'])
+    await deliver(jordan)
+    expect(await listeningFor(jordan.agent)).toHaveLength(1)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    await deliver(sam)
+    expect(await approvingFor(jordan.agent)).toHaveLength(1)
+    expect(await roleOfferAskOn(sam.agent, SAM.connectionId)).toMatchObject({
+      state: 'accepted',
+      acceptedAs: JORDAN_APPROVES_AS,
+    })
+    expect((await roleOfferAskOn(sam.agent, SAM.connectionId))?.steppedDown).toBeUndefined()
   })
 })
 

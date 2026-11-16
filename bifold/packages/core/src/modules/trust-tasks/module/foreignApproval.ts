@@ -18,7 +18,7 @@ import { TRUST_TASK_V2_ENVELOPE_TYPE, signDocumentProof } from '@bifold/trust-ta
 import { utils, type Agent } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
-import { approvingFor } from '../approverRole'
+import { isStopAsked, listeningFor } from '../approverRole'
 
 import { purposeForDocumentType } from './proofPurpose'
 import { versionsFor } from './taskVersions'
@@ -49,6 +49,8 @@ export interface ApprovedAgent {
   asker: string
   /** The DID this phone said yes as. */
   answeredAs?: string
+  /** This phone's person asked to stop approving for them; the agent still waits for this phone until removed. */
+  stopAsked?: true
 }
 
 /**
@@ -62,9 +64,18 @@ export async function approvedAgentOf(
   if (!isTrustedApproversEnabled()) return undefined
   const issuer = typeof doc.issuer === 'string' ? doc.issuer : undefined
   if (!issuer) return undefined
-  const prompts = await approvingFor(agent).catch(() => [])
+  // Every yes in force, a step-down asked included: that agent still waits for this phone's answer (its removal of
+  // this phone among them) until the asker's phone says it was removed. Dropping it at the step-down left a removal
+  // nobody could answer (278.22, 11-16).
+  const prompts = await listeningFor(agent).catch(() => [])
   const yes = prompts.find((prompt) => prompt.agentDid === issuer)
-  return yes ? { agentDid: issuer, asker: yes.asker, answeredAs: yes.answeredAs } : undefined
+  if (!yes) return undefined
+  return {
+    agentDid: issuer,
+    asker: yes.asker,
+    answeredAs: yes.answeredAs,
+    ...(isStopAsked(yes) ? { stopAsked: true as const } : {}),
+  }
 }
 
 /** What the decision needs of the request. */

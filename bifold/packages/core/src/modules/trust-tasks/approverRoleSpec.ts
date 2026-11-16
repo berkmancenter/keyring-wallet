@@ -131,6 +131,46 @@ export const STEP_DOWN_SPEC = {
 } as const
 
 /**
+ * `approver/role-removed/0.1`: the person's phone tells an approver it took them off its agent's approvers, over the
+ * same relationship, once that write went through. One way: nothing answers it. Signed under the person's
+ * relationship DID and verified under the one the relationship established, as the step-down is.
+ *
+ * It ends the approver's listening: after a step-down, the approver's phone keeps showing that agent's requests (the
+ * agent still waits for them, the removal itself included) until this arrives. It only tells: a person who sends it
+ * without removing them only stops being answered.
+ */
+export const REMOVED_TYPE_URI = 'https://keyring.appliedtechnologylab.org/spec/approver/role-removed/0.1'
+
+/** The removal: whose agent, and the DID the approver was written as. */
+export interface RoleRemovedPayload {
+  agent: string
+  approver: string
+  removedAt: string
+}
+
+export const REMOVED_SPEC = {
+  typeUri: REMOVED_TYPE_URI,
+  isBearer: false,
+  isProofRequired: true,
+  isRecipientRequired: true,
+  payloadSchema: {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: REMOVED_TYPE_URI,
+    title: 'Approver Role Removed — payload',
+    description:
+      'The person tells an approver, over an established VRC relationship, that their agent no longer names the approver.',
+    type: 'object',
+    additionalProperties: false,
+    required: ['agent', 'approver', 'removedAt'],
+    properties: {
+      agent: { type: 'string', pattern: DID_PATTERN },
+      approver: { type: 'string', pattern: DID_PATTERN },
+      removedAt: { type: 'string', format: 'date-time' },
+    },
+  },
+} as const
+
+/**
  * An approver's phone sends the person's phone its state Guardian card (trusted-approver plan, stage 2, S1), after it
  * said yes: the KERI/ACDC chain from a State root to the Guardian credential naming the person as ward, as inert text.
  * One way and only told, like the step-down: the person's phone checks it on its own (sedi/guardian, verifyGuardian)

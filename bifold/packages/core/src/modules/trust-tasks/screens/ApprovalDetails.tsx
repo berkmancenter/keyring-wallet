@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
+import { mayApprove } from '../module/afterStepDown'
 import type { VtiApproval } from '../module/vtaAgent'
 
 import { taskWords } from './requestWords'
@@ -59,6 +60,12 @@ export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) =>
   const forWords = { asker, interpolation: { escapeValue: false } }
   return (
     <View style={styles.block}>
+      {/* This phone's person stepped down from approving for them: the agent still waits for this phone until removed. */}
+      {approval.forAgent?.stopAsked ? (
+        <ThemedText>
+          {t(mayApprove(approval) ? 'Requests.ForAgentAfterStopRemoval' : 'Requests.ForAgentAfterStop', forWords)}
+        </ThemedText>
+      ) : null}
       {action ? (
         <ThemedText testID={testIdWithKey('ApprovalTaskDoes')}>
           {asker

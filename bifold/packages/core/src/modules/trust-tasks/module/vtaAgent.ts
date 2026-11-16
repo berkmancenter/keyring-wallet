@@ -30,6 +30,7 @@ import { classifyDid, type DidResolverAgent } from './classifyDid'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { setCurrentAgentDid } from './currentAgent'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
+import { mayApprove } from './afterStepDown'
 import { approvedAgentOf, sendForeignDecision, takeForeignReply } from './foreignApproval'
 import type { StepUpRequest } from './stepUp'
 import { releaseWarn } from './releaseLog'
@@ -146,7 +147,7 @@ export interface VtiApproval extends VtaConsentRequest {
    * Set when the request is from another person's agent, one this phone agreed to approve for (foreignApproval.ts):
    * that agent, and the person who asked. The decision goes to that agent, not to this phone's own.
    */
-  forAgent?: { agentDid: string; asker: string }
+  forAgent?: { agentDid: string; asker: string; stopAsked?: true }
 }
 
 export interface VtaAgentState {
@@ -3628,7 +3629,15 @@ export class VtaAgentController {
     const listed: VtiApproval = {
       ...approval,
       requestCheck: 'verified',
-      ...(other ? { forAgent: { agentDid: other.agentDid, asker: other.asker } } : {}),
+      ...(other
+        ? {
+            forAgent: {
+              agentDid: other.agentDid,
+              asker: other.asker,
+              ...(other.stopAsked ? { stopAsked: true as const } : {}),
+            },
+          }
+        : {}),
     }
     this.set({ approvals: [listed, ...this.state.approvals] })
     if (other) {
@@ -3685,6 +3694,13 @@ export class VtaAgentController {
     const client = this.current?.client
     const approval = this.state.approvals.find((a) => a.id === id)
     if (!client || !approval) return
+    // After a step-down only a change to who approves can be approved (afterStepDown.ts); the card shows no Approve.
+    if (decision === 'approve' && !mayApprove(approval)) {
+      releaseWarn(
+        '[VTI] approve refused: this phone asked to stop approving for that agent, and it is not a change to who approves'
+      )
+      return
+    }
     // Approving lets the agent do what was asked, so it is an owner act, as
     // removing or renaming a device is: Face ID, a fingerprint or the
     // passcode first (Alberto's iPhone, 10-06: Approve asked for nothing).

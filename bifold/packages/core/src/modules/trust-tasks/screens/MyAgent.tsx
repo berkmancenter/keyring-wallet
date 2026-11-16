@@ -43,6 +43,7 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 import { ApprovalDetails } from './ApprovalDetails'
 import { MyAgentIds } from './MyAgent.ids'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
+import { mayApprove } from '../module/afterStepDown'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { ownVetterGrantState } from '../module/vtiGrantState'
@@ -489,15 +490,17 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 <ApprovalDetails approval={approval} />
                 {approval.status === 'pending' ? (
                   <View style={styles.row}>
-                    <Pressable
-                      style={[styles.button, { flex: 1 }]}
-                      testID={testIdWithKey(MyAgentIds.approveConsentButton)}
-                      accessibilityRole="button"
-                      disabled={deciding !== undefined}
-                      onPress={() => onDecide(approval.id, 'approve')}
-                    >
-                      <Text style={styles.buttonText}>{t('MyAgent.Approve')}</Text>
-                    </Pressable>
+                    {mayApprove(approval) ? (
+                      <Pressable
+                        style={[styles.button, { flex: 1 }]}
+                        testID={testIdWithKey(MyAgentIds.approveConsentButton)}
+                        accessibilityRole="button"
+                        disabled={deciding !== undefined}
+                        onPress={() => onDecide(approval.id, 'approve')}
+                      >
+                        <Text style={styles.buttonText}>{t('MyAgent.Approve')}</Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable
                       style={[styles.button, { flex: 1, backgroundColor: ColorPalette.grayscale.mediumGrey }]}
                       testID={testIdWithKey(MyAgentIds.denyConsentButton)}

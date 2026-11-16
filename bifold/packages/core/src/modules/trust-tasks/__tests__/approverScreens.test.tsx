@@ -481,6 +481,37 @@ describe("the contact's row: already approves, from the agent's own rules (278.1
     expect([...offer.mock.calls[0][3]].sort()).toEqual(['addDevice', 'changeApprovers', 'joinCommunity'])
   })
 
+  test('after a step-down, "Ask … again" shows in place of Change and SENDS though the agent lists them, for what is written (278.22 deadlock, 11-16; control: not stepped down, Change and no Ask again)', async () => {
+    linked(SAM_AGENT)
+    const written = ask({
+      state: 'closed',
+      acceptedAs: JORDAN,
+      written: true,
+      writtenAs: JORDAN,
+      writtenActions: ['joinCommunity', 'changeApprovers'],
+      actions: ['joinCommunity', 'changeApprovers'],
+    })
+    const record = jest
+      .spyOn(approverRole, 'roleOfferAskOn')
+      .mockResolvedValue({ ...written, steppedDown: '2026-11-16T18:40:00Z' })
+    jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(rules([JORDAN], ['joinCommunity', 'changeApprovers']))
+    const offer = jest.spyOn(approverRole, 'offerApproverRole').mockResolvedValue('sent')
+    const user = userEvent.setup()
+    let tree = await row()
+    expect(tree.queryByTestId(id(ApproverAskRowIds.change))).toBeNull()
+    expect(tree.getByText('Approver.AskAgainAfterStepDown')).toBeTruthy()
+    await user.press(tree.getByTestId(id(ApproverAskRowIds.again)))
+    expect(offer).toHaveBeenCalledTimes(1)
+    expect(offer.mock.calls[0][2]).toBe(SAM_AGENT)
+    expect([...offer.mock.calls[0][3]].sort()).toEqual(['changeApprovers', 'joinCommunity'])
+    expect(tree.queryByTestId(id(ApproverAskRowIds.already))).toBeNull()
+    // Control: the same written record, never stepped down: Change, no Ask again.
+    record.mockResolvedValue(written)
+    tree = await row()
+    expect(tree.getByTestId(id(ApproverAskRowIds.change))).toBeTruthy()
+    expect(tree.queryByText('Approver.AskAgainAfterStepDown')).toBeNull()
+  })
+
   test('a read gone stale before Send (removed out of band, or fewer actions now) is read again, and the offer IS sent (control: still covered, not sent)', async () => {
     linked(SAM_AGENT)
     jest
@@ -762,7 +793,7 @@ describe('Who approves', () => {
     jest.spyOn(approverRole, 'acceptedRoleOffers').mockResolvedValue(yeses)
     jest.spyOn(approverRole, 'setAsideRoleOffers').mockResolvedValue(setAside)
     jest.spyOn(approverRole, 'approverNames').mockResolvedValue(names)
-    jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([])
+    jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([])
   }
 
   test('adding a yes writes the approver with the offered actions, less one held elsewhere, then closes it as written', async () => {
@@ -836,7 +867,7 @@ describe('Who approves', () => {
     } as unknown as approverRole.RoleOfferPrompt
     const both = async () => {
       kept([], { [JORDAN]: 'Jordan' })
-      jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([SAM_PROMPT])
+      jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([SAM_PROMPT])
       jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([JORDAN], ['shareCredential']))
       return show(<VtaTrustedApprovers />)
     }
@@ -1014,7 +1045,7 @@ describe('Who approves', () => {
     const write = jest
       .spyOn(vtaAgent, 'setTrustedApprovers')
       .mockResolvedValue(held([AMY], ['shareCredential', 'joinCommunity']))
-    const removed = jest.spyOn(approverRole, 'approverRemoved').mockResolvedValue(undefined)
+    const removed = jest.spyOn(approverRole, 'approverRemovedAndTold').mockResolvedValue(undefined)
     const tree = await show(<VtaTrustedApprovers />)
     expect(tree.getByText('Jordan')).toBeTruthy()
     expect(tree.getByText('Approver.Unnamed')).toBeTruthy()
@@ -1030,7 +1061,7 @@ describe('Who approves', () => {
     kept([], { [JORDAN]: 'Jordan' })
     jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([AMY, JORDAN], ['shareCredential']))
     jest.spyOn(vtaAgent, 'setTrustedApprovers').mockResolvedValue(held([AMY, JORDAN], ['shareCredential']))
-    const removed = jest.spyOn(approverRole, 'approverRemoved').mockResolvedValue(undefined)
+    const removed = jest.spyOn(approverRole, 'approverRemovedAndTold').mockResolvedValue(undefined)
     const tree = await show(<VtaTrustedApprovers />)
     await act(async () => {
       fireEvent.press(tree.getByTestId(id(TrustedApproversIds.remove(JORDAN))))
@@ -1081,7 +1112,7 @@ describe('the practice request: checking the agent waits for them (a live probe,
   const setup = (canTest = true, signedInAs: string | null = ME_PHONE) => {
     jest.spyOn(approverRole, 'acceptedRoleOffers').mockResolvedValue([])
     jest.spyOn(approverRole, 'approverNames').mockResolvedValue({ [JORDAN]: 'Jordan' })
-    jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([])
+    jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([])
     jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([JORDAN]))
     const rules = jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue({
       view: { canTest },
@@ -1220,7 +1251,7 @@ describe('People I approve for: stepping down', () => {
   const kept = () => {
     jest.spyOn(approverRole, 'acceptedRoleOffers').mockResolvedValue([])
     jest.spyOn(approverRole, 'approverNames').mockResolvedValue({})
-    jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([approving()])
+    jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([approving()])
     jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue({
       view: { approvers: [], keys: [], heldElsewhere: [] },
       version: 0,
@@ -1249,6 +1280,21 @@ describe('People I approve for: stepping down', () => {
     expect(tree.queryByTestId(id(TrustedApproversIds.stepDownConfirm(SAM_CONN)))).toBeNull()
   })
 
+  test('asked to stop: still listed, "You asked to stop" with its line, no Step down (278.22 deadlock; control: an active one has Step down)', async () => {
+    kept()
+    jest
+      .spyOn(approverRole, 'listeningFor')
+      .mockResolvedValue([{ ...approving(), answered: 'steppedDown', stopAskedAt: '2026-11-16T18:40:00Z' }])
+    let tree = await theirs()
+    expect(tree.getByText('Approver.AskedToStop')).toBeTruthy()
+    expect(tree.getByText('Approver.AskedToStopNote')).toBeTruthy()
+    expect(tree.queryByTestId(id(TrustedApproversIds.stepDown(SAM_CONN)))).toBeNull()
+    kept()
+    tree = await theirs()
+    expect(tree.queryByText('Approver.AskedToStop')).toBeNull()
+    expect(tree.getByTestId(id(TrustedApproversIds.stepDown(SAM_CONN)))).toBeTruthy()
+  })
+
   test('Cancel sends nothing (control for the one above)', async () => {
     kept()
     const step = jest.spyOn(approverRole, 'stepDownAsApprover').mockResolvedValue('sent')
@@ -1272,7 +1318,7 @@ describe('People I approve for: stepping down', () => {
   test("on the person's phone, an approver who stepped down says so on their card (control: another approver does not)", async () => {
     jest.spyOn(approverRole, 'acceptedRoleOffers').mockResolvedValue([])
     jest.spyOn(approverRole, 'approverNames').mockResolvedValue({ [JORDAN]: 'Jordan' })
-    jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([])
+    jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([])
     jest.spyOn(approverRole, 'steppedDownApprovers').mockResolvedValue([JORDAN])
     jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue({
       view: { approvers: [AMY, JORDAN], keys: ['joinCommunity'], heldElsewhere: [] },
@@ -1287,7 +1333,7 @@ describe('People I approve for: stepping down', () => {
   test('a stepped-down note that cannot be read leaves the rest of the screen as it was', async () => {
     jest.spyOn(approverRole, 'acceptedRoleOffers').mockResolvedValue([ask({ state: 'accepted', acceptedAs: AMY })])
     jest.spyOn(approverRole, 'approverNames').mockResolvedValue({})
-    jest.spyOn(approverRole, 'approvingFor').mockResolvedValue([approving()])
+    jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([approving()])
     jest.spyOn(approverRole, 'steppedDownApprovers').mockRejectedValue(new Error('store locked'))
     jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue({
       view: { approvers: [], keys: [], heldElsewhere: [] },

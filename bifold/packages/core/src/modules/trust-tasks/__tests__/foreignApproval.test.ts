@@ -51,7 +51,7 @@ const DIGEST = 'zQmDigestDigestDigestDigest'
 const flush = () => new Promise((resolve) => setImmediate(resolve))
 
 /** Jordan's phone, having answered Sam's offer (`answered`), or not at all. */
-function jordanPhone(answered?: 'accepted' | 'declined') {
+function jordanPhone(answered?: 'accepted' | 'declined' | 'steppedDown', extra: Record<string, unknown> = {}) {
   const store = memoryGenericRecords()
   if (answered)
     void store.save({
@@ -64,7 +64,8 @@ function jordanPhone(answered?: 'accepted' | 'declined') {
         request: {},
         receivedAt: new Date().toISOString(),
         answered,
-        ...(answered === 'accepted' ? { answeredAs: JORDAN } : {}),
+        ...(answered === 'accepted' || answered === 'steppedDown' ? { answeredAs: JORDAN } : {}),
+        ...extra,
       },
       tags: { recordType: ROLE_OFFER_PROMPT, connectionId: 'c-sam' },
     })
@@ -126,6 +127,33 @@ describe('which agents this phone approves for', () => {
     setTrustedApproversEnabled(true)
     TRUSTED_APPROVERS_REMOTE_OFF.off = true
     expect(await approvedAgentOf(jordanPhone('accepted'), doc)).toBeUndefined()
+  })
+})
+
+describe('after a step-down: still listened to, until removed (278.22 deadlock, 11-16)', () => {
+  test("a stepped-down yes's agent is still listed, marked stop-asked (control: an accepted yes is listed unmarked, a never-yes is not)", async () => {
+    const doc = { issuer: SAM_AGENT }
+    expect(await approvedAgentOf(jordanPhone('steppedDown'), doc)).toEqual({
+      agentDid: SAM_AGENT,
+      asker: 'Sam',
+      answeredAs: JORDAN,
+      stopAsked: true,
+    })
+    expect(await approvedAgentOf(jordanPhone('accepted'), doc)).toEqual({
+      agentDid: SAM_AGENT,
+      asker: 'Sam',
+      answeredAs: JORDAN,
+    })
+    expect(await approvedAgentOf(jordanPhone(), doc)).toBeUndefined()
+    expect(await approvedAgentOf(jordanPhone('declined'), doc)).toBeUndefined()
+  })
+
+  test('once the asker said the removal went through, it is no longer listed (control: the same step-down, not removed, is)', async () => {
+    const doc = { issuer: SAM_AGENT }
+    expect(
+      await approvedAgentOf(jordanPhone('steppedDown', { removedAt: '2026-11-16T19:00:00Z' }), doc)
+    ).toBeUndefined()
+    expect(await approvedAgentOf(jordanPhone('steppedDown'), doc)).toBeTruthy()
   })
 })
 

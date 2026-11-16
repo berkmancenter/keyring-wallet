@@ -30,10 +30,11 @@ import {
   acceptedRoleOffers,
   approverNames,
   steppedDownApprovers,
-  approverRemoved,
+  approverRemovedAndTold,
   approverRoleEvents,
-  approvingFor,
   closeRoleOffer,
+  isStopAsked,
+  listeningFor,
   setAsideRoleOffer,
   setAsideRoleOffers,
   nextTrustedRules,
@@ -178,7 +179,8 @@ const VtaTrustedApprovers: React.FC = () => {
     const [yeses, known, approving] = await Promise.all([
       acceptedRoleOffers(agent),
       approverNames(agent),
-      approvingFor(agent),
+      // Stop-asked people stay listed: their agent still waits for this phone until they remove it.
+      listeningFor(agent),
     ]).catch(() => [[], {}, []] as [RoleOfferAsk[], Record<string, string>, RoleOfferPrompt[]])
     // Read on its own: a note that cannot be read must not blank the lists above.
     const stepped = await steppedDownApprovers(agent).catch(() => [] as string[])
@@ -370,7 +372,7 @@ const VtaTrustedApprovers: React.FC = () => {
     if (!agent || !state) return
     const written = await write(did, withoutApprover(state.view, did))
     if (!written || written.view.approvers.includes(did)) return
-    await approverRemoved(agent, did).catch(() => undefined)
+    await approverRemovedAndTold(agent, did).catch(() => undefined)
   }
 
   const styles = StyleSheet.create({
@@ -965,8 +967,18 @@ const VtaTrustedApprovers: React.FC = () => {
                   </ThemedText>
                   <ThemedText style={styles.muted}>{t('Approver.YouApprove')}</ThemedText>
                   <ThemedText>{actionList(prompt.actions)}</ThemedText>
-                  {cardLine(prompt, asker)}
-                  {confirming === prompt.connectionId ? (
+                  {isStopAsked(prompt) ? (
+                    // Asked to stop: still their approver until they remove this phone; no card goes, nothing to tap.
+                    <>
+                      <ThemedText variant="bold" style={styles.muted}>
+                        {t('Approver.AskedToStop')}
+                      </ThemedText>
+                      <ThemedText style={styles.muted}>{t('Approver.AskedToStopNote', asker)}</ThemedText>
+                    </>
+                  ) : (
+                    cardLine(prompt, asker)
+                  )}
+                  {isStopAsked(prompt) ? null : confirming === prompt.connectionId ? (
                     <>
                       <ThemedText variant="bold">{t('Approver.StepDownConfirmTitle', asker)}</ThemedText>
                       <ThemedText>{t('Approver.StepDownConfirmBody', asker)}</ThemedText>

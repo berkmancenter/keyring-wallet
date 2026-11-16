@@ -20,6 +20,7 @@ import { Pressable, StyleSheet, View } from 'react-native'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
+import { mayApprove } from '../module/afterStepDown'
 import { vtaAgent, type VtiApproval } from '../module/vtaAgent'
 
 import { ApprovalDetails } from './ApprovalDetails'
@@ -138,20 +139,22 @@ export const RequestCard: React.FC<RequestCardProps> = ({ approval, shows, busy,
           // theme's primary and secondary buttons differ in padding and border,
           // so Approve and Decline read as two kinds of control (Alberto, 10-06).
           <View style={styles.decisions}>
-            <View style={styles.decision} testID={testIdWithKey(`ApproveConsentButton_${handle}`)}>
-              <Pressable
-                style={[styles.answer, styles.approve, busy ? styles.answerBusy : undefined]}
-                disabled={busy}
-                onPress={() => onDecide(approval.id, 'approve')}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-                testID={testIdWithKey('ApproveConsentButton')}
-              >
-                <ThemedText variant="bold" style={styles.approveText}>
-                  {t('MyAgent.Approve')}
-                </ThemedText>
-              </Pressable>
-            </View>
+            {mayApprove(approval) ? (
+              <View style={styles.decision} testID={testIdWithKey(`ApproveConsentButton_${handle}`)}>
+                <Pressable
+                  style={[styles.answer, styles.approve, busy ? styles.answerBusy : undefined]}
+                  disabled={busy}
+                  onPress={() => onDecide(approval.id, 'approve')}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: busy }}
+                  testID={testIdWithKey('ApproveConsentButton')}
+                >
+                  <ThemedText variant="bold" style={styles.approveText}>
+                    {t('MyAgent.Approve')}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={styles.decision} testID={testIdWithKey(`DenyConsentButton_${handle}`)}>
               <Pressable
                 style={[styles.answer, styles.decline, busy ? styles.answerBusy : undefined]}

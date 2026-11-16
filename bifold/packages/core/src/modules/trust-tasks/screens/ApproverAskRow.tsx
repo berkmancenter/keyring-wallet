@@ -147,7 +147,9 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
         // Nothing new to ask? The last read may be stale (the approver removed on another phone or on the agent
         // directly fires no event here), so it only prompts a FRESH read, and only a fresh read that still covers
         // every chosen action stops the send. A fresh read that fails withholds: the offer goes as it always did.
-        if (agentAlreadyCovers(held, ask, actions)) {
+        // After a step-down the agent still lists them, so "already covered" is exactly the case to ask again: their
+        // yes is what lets their phone answer for this agent again (the removal of them included).
+        if (!ask?.steppedDown && agentAlreadyCovers(held, ask, actions)) {
           const fresh = await vtaAgent
             .trustedApprovers(agent)
             .then((state) => state.view)
@@ -308,6 +310,24 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
         <ThemedText style={styles.muted}>{t('Approver.ChangeCaption', words)}</ThemedText>
       </>
     )
+    // After a step-down: one tap asks them again for what is written, so a yes puts their phone back to answering.
+    const askAgainAfterStepDown = (
+      <>
+        <Button
+          title={t('Approver.AskAgainAfterStepDown', words)}
+          buttonType={ButtonType.Tertiary}
+          onPress={() => {
+            setSaid(undefined)
+            setAlready(false)
+            const written = ask && writtenActionsOf(ask).length ? writtenActionsOf(ask) : (ask?.actions ?? [])
+            void send([...new Set([...written, LOCKED])])
+          }}
+          disabled={busy}
+          testID={testIdWithKey(ApproverAskRowIds.again)}
+        />
+        <ThemedText style={styles.muted}>{t('Approver.AskAgainAfterStepDownNote', words)}</ThemedText>
+      </>
+    )
     // A yes not yet written reads "said yes, add them" unless the agent already lists them: then it is in force.
     body =
       isYesNotAdded(ask) && !listed ? (
@@ -319,7 +339,7 @@ const ApproverAskRow: React.FC<Props> = ({ connectionId, name }) => {
         <>
           <ThemedText testID={testIdWithKey(ApproverAskRowIds.status)}>{t('Approver.IsApprover', words)}</ThemedText>
           {steppedDown}
-          {ask?.steppedDown ? null : change}
+          {ask?.steppedDown ? askAgainAfterStepDown : change}
         </>
       )
   } else {

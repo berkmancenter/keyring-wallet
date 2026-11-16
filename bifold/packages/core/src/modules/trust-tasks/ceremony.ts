@@ -68,7 +68,7 @@ import * as witnessShare from './witnessShareSpec'
 import * as continuitySpec from '../vrc/contacts/continuitySpec'
 import { handleContinuityRequest, handleContinuityResponse } from '../vrc/contacts/continuity'
 import * as approverRoleSpec from './approverRoleSpec'
-import { handleRoleOfferRequest, handleRoleOfferResponse, handleRoleStepDown } from './approverRole'
+import { handleRoleOfferRequest, handleRoleOfferResponse, handleRoleRemoved, handleRoleStepDown } from './approverRole'
 import * as confirmItsYouSpec from './confirmItsYouSpec'
 import { handleConfirmRequest, handleConfirmResponse } from './confirmItsYou'
 import type { VwcPresentationBundle } from './outcomeEvidence'
@@ -2071,6 +2071,15 @@ function registerBuiltinTrustTasks(): void {
     spec: approverRoleSpec.STEP_DOWN_SPEC as never,
     orchestration: { requiresDiscovery: false },
     handleRequest: handleRoleStepDown,
+  })
+
+  // Keyring's own type (private authority): the person tells an approver it took them off its agent's approvers, which
+  // ends the approver's listening after a step-down. One way; its handler does nothing while the switch is off.
+  trustTaskRegistry.register({
+    typeUri: approverRoleSpec.REMOVED_TYPE_URI,
+    spec: approverRoleSpec.REMOVED_SPEC as never,
+    orchestration: { requiresDiscovery: false },
+    handleRequest: handleRoleRemoved,
   })
 
   // Keyring's own type (private authority): one person asks a contact to confirm, with their phone's lock, that a call
