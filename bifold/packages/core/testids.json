@@ -411,7 +411,9 @@
     "ConfirmBiometric": ["src/components/modals/BiometricConfirmationModal.tsx"],
     "ConfirmButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmChatAskAgain": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatAskAgainLine": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatCancel": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
+    "ConfirmChatCompact": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatEarlier": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatExpiresMine": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
     "ConfirmChatExpiresTheirs": ["src/modules/trust-tasks/screens/ConfirmChatCard.tsx"],
@@ -2505,7 +2507,16 @@
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.askAgain"
     },
     {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.askAgainLine"
+    },
+    {
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.cancel"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.compact"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.earlier"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.expiresMine"
@@ -2521,6 +2532,9 @@
     },
     {
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.mine"
+    },
+    {
+      "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.mineLine"
     },
     {
       "src/modules/trust-tasks/screens/ConfirmChatCard.tsx": "ConfirmChatCardIds.notMe"

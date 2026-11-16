@@ -211,7 +211,9 @@ describe('the items', () => {
       await act(async () => {
         jest.advanceTimersByTime(MIN + 100)
       })
-      expect(statusOf(tree)).toBe('ConfirmItsYou.ExpiredTitle')
+      // Row F (11-16): settled on screen, it is the compact no-answer card.
+      expect(tree.getByTestId(id(ConfirmChatCardIds.mineLine))).toBeTruthy()
+      expect(tree.getByText('ConfirmItsYou.CompactNoAnswer')).toBeTruthy()
     } finally {
       jest.useRealTimers()
     }
@@ -230,7 +232,7 @@ describe('mine (this phone asked)', () => {
     expect(changed).toHaveBeenCalled()
   })
 
-  test('not confirmed is the red alert with what to do now (control: confirmed has no steps)', async () => {
+  test('not confirmed, tapped open: the red alert with what to do now (control: a yes tapped open has no steps)', async () => {
     const bad = await opened({ side: 'mine', ask: ask({ state: 'notMe' }), newest: true })
     expect(statusOf(bad)).toBe('ConfirmItsYou.NotThemTitle')
     expect(bad.getByTestId(id(ConfirmChatCardIds.steps))).toBeTruthy()
@@ -389,13 +391,14 @@ describe('settled cards fold to one line (Alberto, 278.19)', () => {
     expect(tree.queryByTestId(id(ConfirmChatCardIds.hide))).toBeNull()
   })
 
-  test('"not them" folds to a red line, never a quiet grey one (control: confirmed folds grey)', async () => {
-    const colourOf = (tree: Awaited<ReturnType<typeof show>>) =>
-      StyleSheet.flatten(tree.getByText(/ConfirmItsYou\.Earlier/).props.style).color
+  test('"not them" folds to a red card, never a quiet one (control: confirmed is outlined green on white)', async () => {
+    const styleOf = (tree: Awaited<ReturnType<typeof show>>) =>
+      StyleSheet.flatten(tree.getByTestId(id(ConfirmChatCardIds.mineLine)).props.style)
     const red = await show({ side: 'mine', ask: SETTLED_MINE[1][1], newest: true })
-    expect(colourOf(red)).toBe(ColorPalette.semantic.error)
-    const grey = await show({ side: 'mine', ask: SETTLED_MINE[0][1], newest: true })
-    expect(colourOf(grey)).toBe(ColorPalette.grayscale.mediumGrey)
+    expect(styleOf(red).backgroundColor).toBe(ColorPalette.semantic.error)
+    const green = await show({ side: 'mine', ask: SETTLED_MINE[0][1], newest: true })
+    expect(styleOf(green).backgroundColor).toBe(ColorPalette.grayscale.white)
+    expect(styleOf(green).borderColor).toBe(ColorPalette.semantic.success)
   })
 
   test('theirs, answered or expired: one line saying what happened, with the time; a tap opens the record', async () => {
@@ -426,7 +429,7 @@ describe('settled cards fold to one line (Alberto, 278.19)', () => {
     expect(open.queryByTestId(id(ConfirmChatCardIds.hide))).toBeNull()
   })
 
-  test('an answer that arrives while the chat is open is seen whole (control: drawn already settled, it is a line)', async () => {
+  test('an answer that arrives while the chat is open is the compact card too (row F, 11-16); a tap opens it', async () => {
     const waiting: ConfirmChatEntry = { side: 'mine', ask: ask(), newest: true }
     const confirmed: ConfirmChatEntry = {
       side: 'mine',
@@ -440,12 +443,14 @@ describe('settled cards fold to one line (Alberto, 278.19)', () => {
     )
     const tree = render(card(waiting))
     await act(async () => undefined)
+    // Control: while it waits, the whole card.
+    expect(tree.getByTestId(id(ConfirmChatCardIds.mine))).toBeTruthy()
     tree.rerender(card(confirmed))
     await act(async () => undefined)
+    expect(tree.getByTestId(id(ConfirmChatCardIds.mineLine))).toBeTruthy()
+    expect(tree.queryByTestId(id(ConfirmChatCardIds.mine))).toBeNull()
+    await press(tree, ConfirmChatCardIds.mineLine)
     expect(statusOf(tree)).toBe('ConfirmItsYou.ConfirmedTitle')
-    expect(tree.queryByTestId(id(ConfirmChatCardIds.mineLine))).toBeNull()
-    expect(tree.getByTestId(id(ConfirmChatCardIds.hide))).toBeTruthy()
-    expect((await show(confirmed)).getByTestId(id(ConfirmChatCardIds.mineLine))).toBeTruthy()
   })
 
   test.each([
@@ -540,5 +545,102 @@ describe('the safety net: read again when the app comes back to the front', () =
     expect(read.mock.calls).toHaveLength(before)
     await act(async () => listeners[0]('active'))
     expect(read.mock.calls).toHaveLength(before + 1)
+  })
+})
+
+describe('row F (Alberto, 11-16): settled cards of mine are one or two lines, the rest a tap away', () => {
+  const confirmed = (over: Partial<confirmItsYou.ConfirmAsk> = {}) =>
+    ask({ state: 'itsMe', respondedAt: new Date().toISOString(), confirmedWith: 'faceId', ...over })
+
+  test('a yes: who, then how and when, and none of the long text (control: tapped, the note and the one-line caveat)', async () => {
+    const tree = await show({ side: 'mine', ask: confirmed(), newest: true })
+    expect(tree.getByText('ConfirmItsYou.CompactConfirmed')).toBeTruthy()
+    expect(tree.getByText('ConfirmItsYou.CompactHow')).toBeTruthy()
+    expect(tree.queryByTestId(id(ConfirmChatCardIds.note))).toBeNull()
+    expect(tree.queryByText('ConfirmItsYou.CompactCaveat')).toBeNull()
+    await press(tree, ConfirmChatCardIds.mineLine)
+    expect(tree.getByTestId(id(ConfirmChatCardIds.note)).props.children).toBe(NOTE)
+    expect(tree.getByText('ConfirmItsYou.CompactCaveat')).toBeTruthy()
+    for (const gone of ['ConfirmItsYou.ConfirmedBody', 'ConfirmItsYou.TheyAnswered', 'ConfirmItsYou.ConfirmedCaveat'])
+      expect(tree.queryByText(gone)).toBeNull()
+  })
+
+  test('a yes with no lock named says "on their phone" on its line (control: Face ID named, above)', async () => {
+    const tree = await show({ side: 'mine', ask: confirmed({ confirmedWith: 'unknown' }), newest: true })
+    expect(tree.getByText('ConfirmItsYou.CompactOnPhone')).toBeTruthy()
+    expect(tree.queryByText('ConfirmItsYou.CompactHow')).toBeNull()
+  })
+
+  test('"not them": the warning and "may be a scam" stay on the card; What to do now is one tap away, not gone', async () => {
+    const tree = await show({
+      side: 'mine',
+      ask: ask({ state: 'notMe', respondedAt: new Date().toISOString() }),
+      newest: true,
+    })
+    expect(tree.getByText('ConfirmItsYou.NotThemTitle')).toBeTruthy()
+    expect(tree.getByText('ConfirmItsYou.CompactNotThemSub')).toBeTruthy()
+    expect(tree.queryByTestId(id(ConfirmChatCardIds.steps))).toBeNull()
+    await press(tree, ConfirmChatCardIds.mineLine)
+    expect(tree.getByTestId(id(ConfirmChatCardIds.steps))).toBeTruthy()
+    expect(tree.getByText('ConfirmItsYou.NotThemBody')).toBeTruthy()
+  })
+
+  test('"not them", compact: the alert and an assertive live region, and its label says the warning (control: a yes is neither)', async () => {
+    const bad = await show({
+      side: 'mine',
+      ask: ask({ state: 'notMe', respondedAt: new Date().toISOString() }),
+      newest: true,
+    })
+    const wrap = bad.getByTestId(id(ConfirmChatCardIds.compact))
+    expect(wrap.props.accessibilityRole).toBe('alert')
+    expect(wrap.props.accessibilityLiveRegion).toBe('assertive')
+    const label = bad.getByTestId(id(ConfirmChatCardIds.mineLine)).props.accessibilityLabel
+    expect(label).toContain('ConfirmItsYou.NotThemTitle')
+    expect(label).toContain('ConfirmItsYou.CompactNotThemSub')
+    const good = await show({ side: 'mine', ask: confirmed(), newest: true })
+    const calm = good.getByTestId(id(ConfirmChatCardIds.compact))
+    expect(calm.props.accessibilityRole).toBeUndefined()
+    expect(calm.props.accessibilityLiveRegion).toBe('none')
+  })
+
+  test('no answer: Ask again right on its line sends the same note (control: an older one has no Ask again)', async () => {
+    const send = jest.spyOn(confirmItsYou, 'sendConfirmRequest').mockResolvedValue('sent')
+    const late = ask({ expiresAt: new Date(Date.now() - MIN).toISOString() })
+    const tree = await show({ side: 'mine', ask: late, newest: true })
+    expect(tree.getByText('ConfirmItsYou.CompactNoAnswer')).toBeTruthy()
+    await press(tree, ConfirmChatCardIds.askAgainLine)
+    expect(send).toHaveBeenCalledWith(AGENT, CONN, NOTE)
+    const older = await show({ side: 'mine', ask: late, newest: false })
+    expect(older.queryByTestId(id(ConfirmChatCardIds.askAgainLine))).toBeNull()
+  })
+
+  test('What to do now says to contact them using details they already have, never to call (Alberto, 11-16), in real English, apostrophe as written', async () => {
+    const i18n = i18next.createInstance()
+    void i18n.init({ lng: 'en', resources: { en: { translation: en } }, initAsync: false })
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    jest.spyOn(require('react-i18next'), 'useTranslation').mockReturnValue({ t: i18n.t.bind(i18n), i18n } as never)
+    const entry: ConfirmChatEntry = {
+      side: 'mine',
+      ask: ask({ state: 'notMe', respondedAt: new Date().toISOString() }),
+      newest: true,
+    }
+    const tree = render(
+      <BasicAppContext>
+        <ConfirmChatCard entry={entry} connectionId={CONN} name="O'Brien" />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    await press(tree, ConfirmChatCardIds.mineLine)
+    // The safeguard stays (Alberto's pick A): details already had, never ones the request supplied.
+    expect(tree.getByText("• Contact O'Brien using details you already have")).toBeTruthy()
+    // Control: nothing on the card still assumes a phone call.
+    expect(tree.queryByText(/\bCall\b|number you already have/)).toBeNull()
+    expect(tree.queryByText(/&#39;/)).toBeNull()
+  })
+
+  test('cancelled: one grey card saying so, with when it was sent', async () => {
+    const tree = await show({ side: 'mine', ask: ask({ state: 'cancelled' }), newest: true })
+    expect(tree.getByText('ConfirmItsYou.CancelledTitle')).toBeTruthy()
+    expect(tree.getByText('ConfirmItsYou.CompactSent')).toBeTruthy()
   })
 })
