@@ -1,0 +1,179 @@
+/**
+ * Which session a polls ask goes out on (sessions phase B, as rooms: agentRoomsBackendOwnSession.test.ts): the
+ * identity's own, where the release switch is on and that session is open, else the shared session exactly as before.
+ * A session found closed before anything was sent falls back; any other failure is the ask's own, and a ticket request
+ * is never sent again the shared way. Y74V-MEPV (11-17): opening a SEDI poll signed the shared session in (+2.2 s).
+ */
+const mockHolding = jest.fn(async (..._a: unknown[]) => 'shared')
+const mockOwnOpen = jest.fn((_did: string) => true)
+const mockTaskAs = jest.fn(async (..._a: unknown[]): Promise<unknown> => 'own')
+const mockCompletedAs = jest.fn(async (..._a: unknown[]): Promise<unknown> => 'own')
+let mockPersona: Record<string, unknown> | undefined
+jest.mock('../../trust-tasks/module/VtiIdentityStore', () => ({
+  GenericRecordsIdentityStore: class {
+    async getPersona() {
+      return mockPersona
+    }
+    async listPersonas() {
+      return mockPersona ? [mockPersona] : []
+    }
+    async setPersona() {
+      return undefined
+    }
+  },
+}))
+jest.mock('../../trust-tasks/module/VtiCommunityStore', () => ({
+  ...jest.requireActual('../../trust-tasks/module/VtiCommunityStore'),
+  GenericRecordsCommunityStore: class {
+    async listMemberships() {
+      return []
+    }
+    async getMembership() {
+      return undefined
+    }
+  },
+}))
+jest.mock('../../trust-tasks/module/vtiAgent', () => {
+  class VtiNoOwnSession extends Error {
+    constructor() {
+      super('not open')
+      this.name = 'VtiNoOwnSession'
+    }
+  }
+  return {
+    VtiNoOwnSession,
+    vtiAgent: {
+      holding: (...a: unknown[]) => mockHolding(...a),
+      communityTask: jest.fn(),
+      sendCompleted: jest.fn(),
+      ownSessionOpen: (did: string) => mockOwnOpen(did),
+      communityTaskAs: (...a: unknown[]) => mockTaskAs(...a),
+      sendCompletedAs: (...a: unknown[]) => mockCompletedAs(...a),
+    },
+  }
+})
+jest.mock('../../trust-tasks/module/vtaAgent', () => ({ vtaAgent: {} }))
+jest.mock('../../trust-tasks/module/vtiTsp', () => ({ GenericRecordsTspPeerRevisionStore: class {} }))
+jest.mock('../ballotBoxDoor', () => ({ createBallotBoxDoor: () => ({}) }))
+
+import { SESSIONS_PER_IDENTITY } from '../../trust-tasks/module/sessionsPerIdentitySwitch'
+import { VtiNoOwnSession } from '../../trust-tasks/module/vtiAgent'
+import { createAgentPollsBackend } from '../agentPollsBackend'
+
+const agent = { config: { logger: { warn: jest.fn(), info: jest.fn() } } } as never
+const COMMUNITY = 'did:webs:webvh.storm.ws:sedi-vtc:EExample'
+const LIST = 'https://trusttasks.org/spec/vtc/elections/list/0.5'
+const SHOW = 'https://trusttasks.org/spec/vtc/elections/show/0.6'
+const TICKET = { type: 'https://trusttasks.org/spec/vtc/elections/tickets/issue/0.1', payload: { electionId: 'e1' } }
+
+const listing = () => createAgentPollsBackend(agent).communityTask(COMMUNITY, LIST, {})
+const show = () => createAgentPollsBackend(agent).communityTask(COMMUNITY, SHOW, { electionId: 'e1' })
+const ticket = () => createAgentPollsBackend(agent).sendCompleted(COMMUNITY, TICKET)
+const noOwnSession = () => {
+  throw new (VtiNoOwnSession as unknown as new () => Error)()
+}
+
+beforeEach(() => {
+  for (const m of [mockHolding, mockOwnOpen, mockTaskAs, mockCompletedAs]) m.mockClear()
+  mockOwnOpen.mockImplementation(() => true)
+  mockTaskAs.mockImplementation(async () => 'own')
+  mockCompletedAs.mockImplementation(async () => 'own')
+  mockPersona = {
+    did: 'did:webvh:p:pull-hockey',
+    communityDid: COMMUNITY,
+    vtaDid: 'did:webvh:a:agent',
+    vtaKeyIds: { signing: 's', keyAgreement: 'k' },
+    kmsKeyIds: { keyAgreement: 'vta-copy:k', signing: 'vta-copy:s' },
+  }
+  Object.assign(SESSIONS_PER_IDENTITY, { on: true, remoteOff: false })
+})
+// Put back what the release ships, whatever that is, not a value assumed here.
+const SHIPPED = { ...SESSIONS_PER_IDENTITY }
+afterAll(() => Object.assign(SESSIONS_PER_IDENTITY, SHIPPED))
+
+describe('the polls backend, with its identity’s own session open', () => {
+  it('lists over that session, as the identity, with no hold of the shared session', async () => {
+    await expect(listing()).resolves.toBe('own')
+    expect(mockTaskAs).toHaveBeenCalledWith(mockPersona, COMMUNITY, LIST, {})
+    expect(mockHolding).not.toHaveBeenCalled()
+  })
+
+  it('reads one poll over it too (Y74V-MEPV: opening a poll signed the shared session in first)', async () => {
+    await expect(show()).resolves.toBe('own')
+    expect(mockTaskAs).toHaveBeenCalledWith(mockPersona, COMMUNITY, SHOW, { electionId: 'e1' })
+    expect(mockHolding).not.toHaveBeenCalled()
+  })
+
+  it('sends the ticket request over it, to the community', async () => {
+    await expect(ticket()).resolves.toBe('own')
+    expect(mockCompletedAs).toHaveBeenCalledWith(mockPersona, COMMUNITY, TICKET)
+    expect(mockHolding).not.toHaveBeenCalled()
+  })
+
+  it('asks the shared way when the session turns out closed before anything was sent', async () => {
+    mockTaskAs.mockImplementation(async () => noOwnSession())
+    await expect(listing()).resolves.toBe('shared')
+    expect(mockHolding).toHaveBeenCalledTimes(1)
+  })
+
+  it('a ticket request found with no session before it was sent goes the shared way, once', async () => {
+    mockCompletedAs.mockImplementation(async () => noOwnSession())
+    await expect(ticket()).resolves.toBe('shared')
+    expect(mockCompletedAs).toHaveBeenCalledTimes(1)
+    expect(mockHolding).toHaveBeenCalledTimes(1)
+  })
+
+  it('never sends a ticket request again the shared way after it failed on the own session', async () => {
+    mockCompletedAs.mockImplementation(async () => {
+      throw Object.assign(new Error('no answer yet'), { name: 'VtiSentNoAnswer' })
+    })
+    await expect(ticket()).rejects.toMatchObject({ name: 'VtiSentNoAnswer' })
+    expect(mockHolding).not.toHaveBeenCalled()
+  })
+
+  it('a listing that failed on the own session for any other reason is not asked again the shared way', async () => {
+    mockTaskAs.mockImplementation(async () => {
+      throw Object.assign(new Error('refused'), { name: 'VtiRefusal' })
+    })
+    await expect(listing()).rejects.toMatchObject({ name: 'VtiRefusal' })
+    expect(mockHolding).not.toHaveBeenCalled()
+  })
+})
+
+describe('the polls backend asks the shared way, exactly as before (controls)', () => {
+  const holdingOptions = () => mockHolding.mock.calls[0][4] as Record<string, unknown>
+
+  it('one community (the shared session is this identity, so it has no session of its own): a listing as before', async () => {
+    mockOwnOpen.mockImplementation(() => false)
+    await expect(listing()).resolves.toBe('shared')
+    expect(mockTaskAs).not.toHaveBeenCalled()
+    expect(holdingOptions()).toMatchObject({ reason: 'polls', claims: false, listing: true })
+  })
+
+  it('one community: a ticket request as before, holding as an ordinary caller', async () => {
+    mockOwnOpen.mockImplementation(() => false)
+    await expect(ticket()).resolves.toBe('shared')
+    expect(mockCompletedAs).not.toHaveBeenCalled()
+    expect(holdingOptions()).toMatchObject({ reason: 'polls', claims: true })
+    expect(holdingOptions()).not.toHaveProperty('listing')
+  })
+
+  it('with the switch turned off remotely, whatever `on` says', async () => {
+    SESSIONS_PER_IDENTITY.remoteOff = true
+    await expect(listing()).resolves.toBe('shared')
+    await expect(ticket()).resolves.toBe('shared')
+    expect(mockTaskAs).not.toHaveBeenCalled()
+    expect(mockCompletedAs).not.toHaveBeenCalled()
+  })
+
+  it('with the switch off', async () => {
+    SESSIONS_PER_IDENTITY.on = false
+    await expect(show()).resolves.toBe('shared')
+    expect(mockTaskAs).not.toHaveBeenCalled()
+  })
+
+  it('a switch that is not plainly on reads as off', async () => {
+    Object.assign(SESSIONS_PER_IDENTITY, { on: 'yes' as unknown as boolean })
+    await expect(listing()).resolves.toBe('shared')
+  })
+})
