@@ -61,7 +61,10 @@ These four parts are built at the same time, by different lanes, against the int
      - a credential from a community the phone isn't in is refused (`credentialRefusal`);
      - a re-issue replaces the earlier copy and never adds a second card;
      - the document loader serves the OB context offline, with a row that fails if it fetches.
-4. **Room posts.**
+4. **Room posts. On hold: this needs a decision, and is not built until one is made.**
+   - A phone cannot map a post's author DID to the directory entry `wall/show` takes. Directory `query/0.1` answers only `{subject, fields}`. `entries/show` by DID is administrator-only, because "a lookup by DID is exactly the membership oracle the directory is designed not to be" (trust-tasks-tf `vtc/directory/entries/show` 0.1, consumer rules).
+   - The design below applies only if the post carries its author's entry (a rooms format change, with an anti-impersonation check), or if upstream adds a member-callable wall-by-DID.
+   - The original design:
    - A post's author line shows that author's pinned badge (one chip, at most two) in the community the room belongs to.
    - It sits on the same meta line as the agent mark (`RoomPostBubble`).
    - Lookups are made only for authors on screen, and are cached like directory names.
