@@ -66,7 +66,7 @@ const fakeSmoke = ({ firstGreen = false, rerunGreen }) => {
     calls.push(args)
     if (args[0] === 'run' && args[1] === 'rerun') { attempt = 2; return '' }
     const route = args[1]
-    if (route.endsWith('/jobs?per_page=100')) return JSON.stringify(jobs(attempt === 1 ? firstGreen : rerunGreen))
+    if (route.includes('/jobs?per_page=100&page=')) return JSON.stringify(jobs(attempt === 1 ? firstGreen : rerunGreen))
     reads++
     // The rerun attempt shows up, then completes on the next read.
     const status = attempt === 2 && reads % 2 === 0 ? 'completed' : attempt === 1 ? 'completed' : 'in_progress'
@@ -145,7 +145,7 @@ test('a re-run that never completes is given up on with an error that says nothi
   const gh = (...args) => {
     calls.push(args)
     if (args[0] === 'run') return ''
-    if (String(args[1]).endsWith('/jobs?per_page=100'))
+    if (String(args[1]).includes('/jobs?per_page=100&page='))
       return JSON.stringify({ jobs: [{ name: 'iOS smoke (macos-26) · cb36b83a', conclusion: 'success' }, { name: 'Android smoke (ubuntu-latest, KVM) · cb36b83a', conclusion: 'failure' }] })
     const reran = calls.some((c) => c[0] === 'run')
     return JSON.stringify({ id: 601, run_attempt: reran ? 2 : 1, status: reran ? 'in_progress' : 'completed' })
@@ -168,4 +168,91 @@ test("the re-run judges only the platforms the release published", async () => {
 
 test('the brake job hands the re-run the platforms the release published', () => {
   assert.match(brakeCode, /brake\.mjs rerun --gate-smoke "\$GATE_SMOKE" --platforms "\$PLATFORMS"/)
+})
+
+// 278.9 (11-09): a job never listed is not a red one. The brake re-reads, and refuses to re-run or withdraw on it.
+const absentThen = (lists) => {
+  const calls = []
+  let n = 0
+  const gh = (...args) => {
+    calls.push(args)
+    if (args[0] === 'run') return ''
+    if (String(args[1]).includes('/jobs?per_page=100&page=')) return JSON.stringify({ jobs: lists[Math.min(n++, lists.length - 1)] })
+    return JSON.stringify({ id: 601, run_attempt: 1, status: 'completed' })
+  }
+  return { gh, calls }
+}
+const IOS_OK = { name: 'iOS smoke (macos-26) · cb36b83a', conclusion: 'success' }
+const ANDROID_OK = { name: 'Android smoke (ubuntu-latest, KVM) · cb36b83a', conclusion: 'success' }
+
+test('a smoke job absent on the first read and green on the next: not re-run, nothing withdrawn', async () => {
+  const { gh, calls } = absentThen([[ANDROID_OK], [IOS_OK, ANDROID_OK]])
+  const r = await rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => {}, log: () => {} })
+  assert.deepEqual([r.stillRed, r.rerun], [false, false])
+  assert.equal(calls.some((c) => c[0] === 'run'), false)
+})
+
+test('a smoke job absent on every read: an error that says nothing was withdrawn, and no re-run', async () => {
+  const { gh, calls } = absentThen([[ANDROID_OK]])
+  await assert.rejects(
+    rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => {}, log: () => {} }),
+    /gate-smoke 601 before the re-run: no ios job listed after every re-read: NOTHING was withdrawn, and the release is still live/
+  )
+  assert.equal(calls.some((c) => c[0] === 'run'), false)
+})
+
+test('the brake still acts only on smoke-red: smoke-incomplete never reaches it', () => {
+  assert.match(brakeJob, /needs\.smoke\.outputs\.verdict == 'smoke-red'/)
+  assert.doesNotMatch(brakeJob, /smoke-incomplete/)
+})
+
+test('iOS absent beside a red Android on both reads: re-run once, then still red, so the brake withdraws', async () => {
+  const calls = []
+  let attempt = 1
+  let reads = 0
+  const gh = (...args) => {
+    calls.push(args)
+    if (args[0] === 'run' && args[1] === 'rerun') { attempt = 2; return '' }
+    if (String(args[1]).includes('/jobs?per_page=100&page=')) return JSON.stringify({ jobs: [{ ...ANDROID_OK, conclusion: 'failure' }] })
+    reads++
+    return JSON.stringify({ id: 601, run_attempt: attempt, status: attempt === 1 || reads % 2 === 0 ? 'completed' : 'in_progress' })
+  }
+  const r = await rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => {}, log: () => {} })
+  assert.deepEqual([r.stillRed, r.rerun], [true, true])
+  assert.equal(calls.filter((c) => c[0] === 'run' && c[1] === 'rerun').length, 1)
+})
+
+// POSTREL-MISSING-JOB (11-10): the brake reads the smoke's jobs page by page too, so a green iOS job on page 2 is
+// green, and the brake neither re-runs nor withdraws.
+test('a green smoke job on the second page of the jobs list: not re-run, nothing withdrawn', async () => {
+  const calls = []
+  const filler = Array.from({ length: 99 }, (_, i) => ({ name: `Which build #${i}`, conclusion: 'success' }))
+  const gh = (...args) => {
+    calls.push(args)
+    if (args[0] === 'run') return ''
+    const route = String(args[1])
+    if (route.includes('/jobs?per_page=100&page=1')) return JSON.stringify({ total_count: 101, jobs: [...filler, ANDROID_OK] })
+    if (route.includes('/jobs?per_page=100&page=2')) return JSON.stringify({ total_count: 101, jobs: [IOS_OK] })
+    return JSON.stringify({ id: 601, run_attempt: 1, status: 'completed' })
+  }
+  const r = await rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => assert.fail('no sleep'), log: () => {} })
+  assert.deepEqual([r.stillRed, r.rerun], [false, false])
+  assert.equal(calls.some((c) => c[0] === 'run'), false)
+})
+
+test('a job list that cannot be read whole (an error object on page 2): an error that says so, no re-run, nothing withdrawn', async () => {
+  const calls = []
+  const gh = (...args) => {
+    calls.push(args)
+    if (args[0] === 'run') return ''
+    const route = String(args[1])
+    if (route.includes('/jobs?per_page=100&page=1')) return JSON.stringify({ total_count: 101, jobs: [...Array.from({ length: 98 }, (_, i) => ({ name: `Which build #${i}`, conclusion: 'success' })), IOS_OK, ANDROID_OK] })
+    if (route.includes('/jobs?per_page=100&page=2')) return JSON.stringify({ message: 'Server Error' })
+    return JSON.stringify({ id: 601, run_attempt: 1, status: 'completed' })
+  }
+  await assert.rejects(
+    rerunAndJudge({ gateSmoke: '601', repo: 'o/r', platforms: ['ios', 'android'], gh, sleep: async () => {}, log: () => {} }),
+    /gate-smoke 601 before the re-run: its job list could not be read whole \(page 2 of the job list came back without jobs\) after every re-read: NOTHING was withdrawn/
+  )
+  assert.equal(calls.some((c) => c[0] === 'run'), false)
 })
