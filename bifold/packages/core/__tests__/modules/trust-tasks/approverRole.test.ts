@@ -564,6 +564,58 @@ describe('what the screens read', () => {
   })
 })
 
+describe('People I approve for redraws when a yes is answered (demo 11-16: the tab stayed on the old list)', () => {
+  /** What the screen does on the event: reads the list straight away. The reads are taken when the event fires. */
+  function readsOnCleared(jordan: Phone) {
+    const reads: Promise<string[][]>[] = []
+    const onCleared = () => reads.push(listeningFor(jordan.agent).then((list) => list.map((p) => [...p.actions])))
+    approverRoleEvents.on('promptCleared', onCleared)
+    return { reads, stop: () => approverRoleEvents.off('promptCleared', onCleared) }
+  }
+
+  test('a yes to a wider offer: the read on the event already has the new actions', async () => {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['changeApprovers'])
+    await deliver(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    await deliver(sam)
+    // Sam adds to what Jordan approves: a new offer, and Jordan says yes on the open tab.
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['changeApprovers', 'addDevice'])
+    await deliver(jordan)
+    const heard = readsOnCleared(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    heard.stop()
+    expect(await Promise.all(heard.reads)).toEqual([[['changeApprovers', 'addDevice']]])
+  })
+
+  test('a first yes: the read on the event already lists the person', async () => {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['joinCommunity'])
+    await deliver(jordan)
+    const heard = readsOnCleared(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    heard.stop()
+    expect(await Promise.all(heard.reads)).toEqual([[['joinCommunity']]])
+  })
+
+  test('control: a no to a wider offer leaves the yes in force as it was', async () => {
+    const sam = phone(SAM)
+    const jordan = phone(JORDAN)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['changeApprovers'])
+    await deliver(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, true, JORDAN_APPROVES_AS)
+    await deliver(sam)
+    await offerApproverRole(sam.agent, SAM.connectionId, SAM_AGENT, ['changeApprovers', 'addDevice'])
+    await deliver(jordan)
+    const heard = readsOnCleared(jordan)
+    await respondToRoleOffer(jordan.agent, JORDAN.connectionId, false)
+    heard.stop()
+    expect(await Promise.all(heard.reads)).toEqual([[['changeApprovers']]])
+  })
+})
+
 describe('"Not now" sets a yes aside (Alberto, 278.19: the request must be viewable again)', () => {
   /** Sam asks, Jordan says yes, Sam's phone holds the yes, not yet added. */
   async function saidYes() {

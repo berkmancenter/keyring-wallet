@@ -700,7 +700,6 @@ export async function respondToRoleOffer(
   await sendTrustTaskDocument(agent, connectionId, signed)
 
   roleOfferPromptStore.take(connectionId)
-  approverRoleEvents.emit('promptCleared', { connectionId })
   // A yes is the yes in force from now on, and ends any step-down; a no leaves a yes already in force as it was (the
   // asker's agent still names this phone until the asker removes it).
   const kept: RoleOfferPrompt = accept
@@ -717,6 +716,9 @@ export async function respondToRoleOffer(
   await keepPrompt(agent, kept).catch((error: unknown) =>
     agent.config?.logger?.warn(`${LOG_PREFIX} could not close an offer: ${(error as Error)?.message ?? error}`)
   )
+  // Told only once the answer is kept: People I approve for reads the kept records on this event, and told before,
+  // it read the yes from before (a first yes not listed, a wider one with the old actions) until left and opened again.
+  approverRoleEvents.emit('promptCleared', { connectionId })
   // After the yes, and only after it is sent and kept: this phone's state Guardian card, if it holds one and its person
   // said yes to sending it to this contact; never asked, they are asked and nothing goes (guardianEvidence.ts; nothing
   // with either switch off). The yes stands whatever happens to the card, a no to sending it included.
