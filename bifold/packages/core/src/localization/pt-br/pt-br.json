@@ -3934,6 +3934,18 @@
     "Problem": "O Keyring não conseguiu criar o código. Tente de novo.",
     "Off": "Ative aprovadores confiáveis e aprovadores verificados pelo estado nas configurações de Desenvolvedor para usar isto."
   },
+  "BadgeCard": {
+    "Kind": "Selo",
+    "From": "De {{community}}",
+    "Earned": "Recebido em {{date}}",
+    "EarnedTimes": "Recebido {{count}} vezes",
+    "AllCards": "Todos os cartões",
+    "GivenBy": "Dado por",
+    "EarnedOn": "Recebido",
+    "ValidUntil": "Válido até",
+    "Notes": "Recados de quem deu",
+    "NotesPrivate": "Só você vê estes recados."
+  },
   "Badges": {
     "Badges": "Distintivos",
     "Badge": "Distintivo",

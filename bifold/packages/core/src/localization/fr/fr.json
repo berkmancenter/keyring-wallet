@@ -4018,6 +4018,18 @@
     "Problem": "Keyring n'a pas pu créer le code. Réessayez.",
     "Off": "Activez les approbateurs de confiance et les approbateurs vérifiés par l'État dans les réglages Développeur pour l'utiliser."
   },
+  "BadgeCard": {
+    "Kind": "Badge",
+    "From": "De {{community}}",
+    "Earned": "Obtenu le {{date}}",
+    "EarnedTimes": "Obtenu {{count}} fois",
+    "AllCards": "Toutes les cartes",
+    "GivenBy": "Donné par",
+    "EarnedOn": "Obtenu",
+    "ValidUntil": "Valable jusqu’au",
+    "Notes": "Mots de la personne qui l’a donné",
+    "NotesPrivate": "Vous seul voyez ces mots."
+  },
   "Badges": {
     "Badges": "Badges",
     "Badge": "Badge",

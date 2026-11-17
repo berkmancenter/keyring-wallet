@@ -22,8 +22,11 @@ import { GenericCredentialExchangeRecord } from '../types/credentials'
 import { BaseTourID } from '../types/tour'
 import { OpenIDCredentialType } from '../modules/openid/types'
 import CredentialCardGen from '../components/misc/CredentialCardGen'
+import { isMemberBadgesOn } from '../modules/badges/badgesSwitch'
+import BadgeCardPass from '../modules/badges/wallet/BadgeCardPass'
 import PassStack from '../modules/trust-tasks/components/PassStack'
 import { liftFrom } from '../modules/trust-tasks/components/passGeometry'
+import { badgeCardView, isBadgeCredential } from '../modules/trust-tasks/module/badgeCredentials'
 import { isCommunityCard, walletCardKey } from '../modules/trust-tasks/module/vtiWalletCards'
 import { openCommunityFrom } from '../modules/trust-tasks/screens/CommunityCardDetails'
 import CommunityPassDetails from '../modules/trust-tasks/screens/CommunityPassDetails'
@@ -236,7 +239,17 @@ const ListCredentials: React.FC = () => {
     (r): r is W3cCredentialRecord =>
       r instanceof W3cCredentialRecord && isCommunityCard((toRawCredential(r) ?? {}) as Record<string, unknown>)
   )
-  const otherCards = sorted.filter((r) => !communityCards.includes(r as W3cCredentialRecord))
+  // A community's badges are badge cards, after its passes, while badges are on (badgesSwitch); with them off, each is
+  // listed as the ordinary credential it is.
+  const badgeCards = isMemberBadgesOn()
+    ? sorted.filter(
+        (r): r is W3cCredentialRecord =>
+          r instanceof W3cCredentialRecord && isBadgeCredential((toRawCredential(r) ?? {}) as Record<string, unknown>)
+      )
+    : []
+  const otherCards = sorted.filter(
+    (r) => !communityCards.includes(r as W3cCredentialRecord) && !badgeCards.includes(r as W3cCredentialRecord)
+  )
 
   // A community card opens in place: its pass lifts to the top of the Wallet and the card's Details come in under it.
   // Kept by the card's own id, not its record's: a card the community changes is stored again under a new record id
@@ -339,7 +352,7 @@ const ListCredentials: React.FC = () => {
               onClose={close}
               liftFrom={open.liftFrom}
             />
-          ) : communityCards.length > 0 || heldStateCard ? (
+          ) : communityCards.length > 0 || heldStateCard || badgeCards.length > 0 ? (
             <>
               {communityCards.length > 0 ? (
                 <PassStack
@@ -355,6 +368,12 @@ const ListCredentials: React.FC = () => {
                 />
               ) : null}
               {heldStateCard ? <StateCardPass view={heldStateCard} /> : null}
+              {badgeCards.map((record) => (
+                <BadgeCardPass
+                  key={record.id}
+                  view={badgeCardView((toRawCredential(record) ?? {}) as Record<string, unknown>)}
+                />
+              ))}
             </>
           ) : null
         }
@@ -377,7 +396,7 @@ const ListCredentials: React.FC = () => {
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }} testID="ListCredentialsLoading">
               <ActivityIndicator color={ColorPalette.brand.primary} />
             </View>
-          ) : communityCards.length > 0 || heldStateCard ? null : (
+          ) : communityCards.length > 0 || heldStateCard || badgeCards.length > 0 ? null : (
             <CredentialEmptyList message={t('Credentials.EmptyList')} />
           )
         }

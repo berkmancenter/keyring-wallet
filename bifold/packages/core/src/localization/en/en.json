@@ -4060,6 +4060,18 @@
     "Problem": "Keyring couldn't make the code. Try again.",
     "Off": "Turn on trusted approvers and state-verified approvers in Developer settings to use this."
   },
+  "BadgeCard": {
+    "Kind": "Badge",
+    "From": "From {{community}}",
+    "Earned": "Earned {{date}}",
+    "EarnedTimes": "Earned {{count}} times",
+    "AllCards": "All cards",
+    "GivenBy": "Given by",
+    "EarnedOn": "Earned",
+    "ValidUntil": "Valid until",
+    "Notes": "Notes from the giver",
+    "NotesPrivate": "Only you see these notes."
+  },
   "Badges": {
     "Badges": "Badges",
     "Badge": "Badge",
