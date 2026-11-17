@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useAgentSession } from './agentSession'
 import { newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
+import { dropKeptListing, keepListing, keptListing } from './keptListings'
 import { logRef } from './roomsLogWords'
 import {
   RECORD_UNOPENED_REASONS,
@@ -182,6 +183,9 @@ export function useRoomPosts(
   counts?: (post: RoomPost) => boolean
 ): RoomPosts {
   const [listing, setListing] = useState<Listing>()
+  // The room's last listing this run, when one is kept (keptListings): shown at once when the room can be listed, while
+  // its first listing reads behind it. A seed that first listing cannot confirm is dropped.
+  const seeded = useRef<Listing | undefined>(undefined)
   // Records read and drawn: `wanted` counted posts, and as many more records as it takes to reach them.
   const [shown, setShown] = useState(POSTS_PAGE)
   const wanted = useRef(POSTS_PAGE)
@@ -193,7 +197,11 @@ export function useRoomPosts(
   // drawn from a listing read since it opened are its own: the listing held then is another room's, when the room
   // changes under the same screen, and its posts are drawn again for a moment.
   const opened = useRef<{ roomId: string; at: number; said: boolean; listing?: Listing }>(undefined)
-  if (opened.current?.roomId !== roomId) opened.current = { roomId, at: Date.now(), said: false, listing }
+  if (opened.current?.roomId !== roomId) {
+    // A kept listing is the room's it was taken for: another room under the same screen may take its own.
+    if (opened.current) seeded.current = undefined
+    opened.current = { roomId, at: Date.now(), said: false, listing: opened.current ? listing : undefined }
+  }
   /** The posts last drawn, and the listing they were drawn from. */
   const drawnFrom = useRef<{ posts: RoomPost[]; listing: Listing }>(undefined)
   const [failed, setFailed] = useState(false)
@@ -251,16 +259,32 @@ export function useRoomPosts(
     let current = true
     const sentOn = openedAt.current
     askedAt.current = Date.now()
+    if (!seeded.current && (!listingNow.current || listingNow.current === opened.current?.listing)) {
+      const kept = keptListing<Listing>(service, roomId)
+      if (kept) {
+        seeded.current = kept
+        setListing(kept)
+      }
+    }
     counted(listingsInFlight, () => service.listNotes(roomId)).then(
       (list) => {
         skips.current = 0
         if (!current) return
-        setListing(listingOf(list))
+        const full = listingOf(list)
+        keepListing(service, roomId, full)
+        setListing(full)
         setFailed(false)
         notePoll(false)
       },
       () => {
         if (!current) return
+        // A kept listing nothing has confirmed is not shown: the room may be left since, or no longer readable.
+        dropKeptListing(service, roomId)
+        if (seeded.current && listingNow.current === seeded.current) {
+          seeded.current = undefined
+          setListing(undefined)
+          setPosts(undefined)
+        }
         listFailedOn.current = sentOn
         setFailed(true)
         setRefreshing(false)
@@ -310,7 +334,10 @@ export function useRoomPosts(
             const fullOn = openedAt.current
             counted(listingsInFlight, () => service.listNotes(roomId)).then(
               (full) => {
-                if (current) setListing(listingOf(full))
+                if (!current) return
+                const replaced = listingOf(full)
+                keepListing(service, roomId, replaced)
+                setListing(replaced)
               },
               () => {
                 skips.current = POLL_SKIPS_AFTER_FAILURE
@@ -324,6 +351,7 @@ export function useRoomPosts(
           // Armed again from what is held now: a signal's watch is spent, and a poll may have moved the room.
           if (current) service.watchRoom?.(roomId, newestVersion((merged?.listing ?? now)?.notes ?? []))
           if (!merged) return
+          keepListing(service, roomId, merged.listing)
           setListing(merged.listing)
           // New posts go first (the chat draws them at its bottom); the posts already shown stay shown.
           if (merged.added > 0) setShown((n) => n + merged.added)
@@ -452,7 +480,10 @@ export function useRoomPosts(
     if (!posts || !opening || opening.said || opening.roomId !== roomId) return
     if (!from || from.posts !== posts || from.listing === opening.listing) return
     opening.said = true
-    service?.note?.(`[Room] ${logRef(roomId)} opened: ${posts.length} posts shown in ${Date.now() - opening.at} ms`)
+    const kept = from.listing === seeded.current ? ' (kept listing)' : ''
+    service?.note?.(
+      `[Room] ${logRef(roomId)} opened: ${posts.length} posts shown in ${Date.now() - opening.at} ms${kept}`
+    )
   }, [posts, roomId, service])
 
   const loadOlder = useCallback(() => {
