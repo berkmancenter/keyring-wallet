@@ -182,6 +182,89 @@ describe('VtiMediatorSession.forward — a community that publishes only TSPTran
   })
 })
 
+// SEDI as it publishes since ~19:30Z on 11-17: DIDCommMessaging → storm's mediator beside TSPTransport. A single
+// forward would leave our mediator to resolve the did:webs; through storm's mediator nothing on the way has to.
+const SEDI_WITH_DIDCOMM = {
+  id: SEDI,
+  service: [
+    { id: `${SEDI}#tsp`, type: ['TSPTransport'], serviceEndpoint: STORM },
+    { id: `${SEDI}#didcomm`, type: ['DIDCommMessaging'], serviceEndpoint: [{ accept: ['didcomm/v2'], uri: STORM }] },
+    { id: `${SEDI}#trust-tasks`, type: ['TrustTaskHTTPS'], serviceEndpoint: 'https://sedi-vtc.openvti.net/v1' },
+  ],
+}
+
+describe('VtiMediatorSession.forward — a did:webs community whose DIDCommMessaging names another mediator', () => {
+  test('SEDI as published now: two layers, through the mediator its DIDCommMessaging names', async () => {
+    const { agent } = makeAgent({ ...DOCS, [SEDI]: SEDI_WITH_DIDCOMM })
+    const { session, frames } = openSession(agent)
+    await session.forward(SEDI, INNER_JWE)
+    expect(frames).toHaveLength(1)
+    const outer = frames[0] as Layer
+    expect(outer.packedFor).toBe(`${OURS}#key-1`)
+    expect(outer.plaintext).toMatchObject({ type: FORWARD, to: [OURS], body: { next: STORM } })
+    const inner = outer.plaintext.attachments[0].data.json as Layer
+    expect(inner.packedFor).toBe(`${STORM}#key-1`)
+    expect(inner.plaintext).toMatchObject({ type: FORWARD, to: [STORM], body: { next: SEDI } })
+    expect(inner.plaintext.attachments[0].data).toEqual({ json: INNER_JWE })
+  })
+
+  test('a did:webs whose DIDCommMessaging names OUR mediator: one forward, as before', async () => {
+    const peer = 'did:webs:farm.example:vtc:EOurs'
+    const { agent } = makeAgent({
+      ...DOCS,
+      [peer]: { id: peer, service: [{ id: `${peer}#didcomm`, type: ['DIDCommMessaging'], serviceEndpoint: OURS }] },
+    })
+    const { session, frames } = openSession(agent)
+    await session.forward(peer, INNER_JWE)
+    expectSingleForward(frames[0], peer)
+  })
+
+  test('a did:webs whose DIDCommMessaging is a URL, not a mediator DID: one forward, as before', async () => {
+    const peer = 'did:webs:elsewhere.example:vtc:EUrl'
+    const { agent } = makeAgent({
+      ...DOCS,
+      [peer]: {
+        id: peer,
+        service: [
+          { id: `${peer}#tsp`, type: 'TSPTransport', serviceEndpoint: STORM },
+          { id: `${peer}#didcomm`, type: 'DIDCommMessaging', serviceEndpoint: 'https://elsewhere.example/didcomm' },
+        ],
+      },
+    })
+    const { session, frames } = openSession(agent)
+    await session.forward(peer, INNER_JWE)
+    expectSingleForward(frames[0], peer)
+  })
+
+  test("its mediator's document does not answer: forwarded as before after ROUTE_LOOKUP_TIMEOUT_MS, never held longer", async () => {
+    jest.useFakeTimers()
+    try {
+      const { agent } = makeAgent({ ...DOCS, [SEDI]: SEDI_WITH_DIDCOMM })
+      const dids = (agent as unknown as { dids: { resolveDidDocument: (did: string) => Promise<unknown> } }).dids
+      const peerOnly = dids.resolveDidDocument
+      // The community's document answers; storm's mediator's never does.
+      dids.resolveDidDocument = (did: string) => (did === STORM ? new Promise<never>(() => undefined) : peerOnly(did))
+      const { session, frames } = openSession(agent)
+      let done = false
+      const sent = session.forward(SEDI, INNER_JWE).then(() => (done = true))
+      await jest.advanceTimersByTimeAsync(ROUTE_LOOKUP_TIMEOUT_MS + 1)
+      expect(done).toBe(true)
+      await sent
+      expectSingleForward(frames[0], SEDI)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test('a did:webvh shaped exactly like SEDI now (DIDCommMessaging → storm): one forward, as first-vtc', async () => {
+    const peer = 'did:webvh:QmSame:webvh.storm.ws:same-shape'
+    const { agent } = makeAgent({ ...DOCS, [peer]: { ...SEDI_WITH_DIDCOMM, id: peer } })
+    const { session, frames } = openSession(agent)
+    await session.forward(peer, INNER_JWE)
+    expectSingleForward(frames[0], peer)
+  })
+})
+
 describe('VtiMediatorSession.forward — every other document is forwarded as before (controls)', () => {
   test.each([
     ["storm's first-vtc (TSPTransport and DIDCommMessaging, another mediator)", FIRST_VTC],

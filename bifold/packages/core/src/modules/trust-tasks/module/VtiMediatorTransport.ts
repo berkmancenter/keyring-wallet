@@ -265,7 +265,8 @@ export async function advertisedMediatorDid(agent: Agent, did: string): Promise<
 }
 
 /**
- * The mediator a peer that publishes NO `DIDCommMessaging` service is reached through over DIDComm: the one its
+ * `peerMediatorRoute`'s `tspOnly` route. The mediator a peer that publishes NO `DIDCommMessaging` service is reached
+ * through over DIDComm: the one its
  * `TSPTransport` service names by DID, when that is not `ownMediatorDid` and its own document publishes a usable
  * `DIDCommMessaging` pair. Undefined for every other document — one with any `DIDCommMessaging` service (a VTA, storm's
  * first-vtc, the lab) or whose TSP mediator is ours; those are forwarded exactly as before. Throws when the peer's
@@ -278,28 +279,59 @@ export async function advertisedMediatorDid(agent: Agent, did: string): Promise<
  * = the recipient; the outer one to ours, `next` = the recipient's mediator.
  */
 /**
- * How long `tspOnlyPeerMediator` waits for the peer's own document: a route hint, not a sign-in. A peer that does not
+ * How long `peerMediatorRoute` waits for the peer's own document: a route hint, not a sign-in. A peer that does not
  * answer in time is forwarded as before, so a slow resolver never stalls a message (ac on #1106). Credo has usually
  * resolved the document already, for the authcrypt just before the forward.
  */
 export const ROUTE_LOOKUP_TIMEOUT_MS = 3_000
 
-export async function tspOnlyPeerMediator(
+/** Why a peer is forwarded through its own mediator rather than ours alone (`peerMediatorRoute`). */
+export type PeerMediatorReason = 'tspOnly' | 'didWebs'
+
+/**
+ * The mediator, other than ours, that a peer's DIDComm must be forwarded through as a second layer, and why:
+ *
+ * - `tspOnly`: no `DIDCommMessaging` service, and a `TSPTransport` service naming another
+ *   mediator by DID.
+ * - `didWebs`: a `did:webs` peer whose `DIDCommMessaging` service names another mediator by DID. A single forward to
+ *   ours leaves our mediator to resolve the `did:webs` itself to route `next`, which an Affinidi mediator does only
+ *   when built with its resolver's opt-in `did-webs` feature; through the mediator the peer names, nothing on the way
+ *   resolves a `did:webs`. Seen on the SEDI VTC (11-17, ~19:30Z): it added `DIDCommMessaging` → storm's mediator,
+ *   which turned the `tspOnly` route off for it.
+ *
+ * Undefined for every other document, which is forwarded exactly as before: a `did:webvh` with `DIDCommMessaging`
+ * whatever mediator it names (storm's first-vtc, a VTA, the lab), a mediator that is ours, an endpoint that is a URL.
+ */
+export async function peerMediatorRoute(
   agent: Agent,
   peerDid: string,
   ownMediatorDid: string
-): Promise<VtiMediatorEndpoints | undefined> {
+): Promise<{ mediator: VtiMediatorEndpoints; reason: PeerMediatorReason } | undefined> {
   const doc = await withinTime(agent.dids.resolveDidDocument(peerDid), ROUTE_LOOKUP_TIMEOUT_MS, 'a peer route')
   const services = (doc.service ?? []) as { type?: unknown; serviceEndpoint?: unknown }[]
   const typesOf = (s: { type?: unknown }) => [s.type].flat().map(String)
-  if (services.some((s) => typesOf(s).some((t) => t === 'DIDCommMessaging' || t === 'dm'))) return undefined
-  const theirs = services
-    .filter((s) => typesOf(s).includes('TSPTransport'))
-    .flatMap((s) => (Array.isArray(s.serviceEndpoint) ? s.serviceEndpoint : [s.serviceEndpoint]))
-    .map((e) => (typeof e === 'string' ? e : (e as { uri?: string } | undefined)?.uri))
-    .find((uri): uri is string => typeof uri === 'string' && uri.startsWith('did:'))
+  const mediatorNamedBy = (match: (type: string) => boolean) =>
+    services
+      .filter((s) => typesOf(s).some(match))
+      .flatMap((s) => (Array.isArray(s.serviceEndpoint) ? s.serviceEndpoint : [s.serviceEndpoint]))
+      .map((e) => (typeof e === 'string' ? e : (e as { uri?: string } | undefined)?.uri))
+      .find((uri): uri is string => typeof uri === 'string' && uri.startsWith('did:'))
+  const isDidComm = (t: string) => t === 'DIDCommMessaging' || t === 'dm'
+  let theirs: string | undefined
+  let reason: PeerMediatorReason
+  if (services.some((s) => typesOf(s).some(isDidComm))) {
+    if (!peerDid.startsWith('did:webs:')) return undefined
+    theirs = mediatorNamedBy(isDidComm)
+    reason = 'didWebs'
+  } else {
+    theirs = mediatorNamedBy((t) => t === 'TSPTransport')
+    reason = 'tspOnly'
+  }
   if (!theirs || theirs === ownMediatorDid) return undefined
-  return resolveVtiMediator(agent, theirs)
+  // Bounded too: a route hint, not a sign-in. `resolveVtiMediator` retries patiently (4 x 15 s), and a peer that could
+  // not be routed is looked at again on its next message, so unbounded this held each send for up to a minute (ac).
+  const mediator = await withinTime(resolveVtiMediator(agent, theirs), ROUTE_LOOKUP_TIMEOUT_MS, 'a peer mediator')
+  return { mediator, reason }
 }
 
 export async function resolveVtiMediator(agent: Agent, mediatorDid: string): Promise<VtiMediatorEndpoints> {
@@ -1310,7 +1342,7 @@ export class VtiMediatorSession {
   async forward(next: string, innerJwe: unknown): Promise<void> {
     let inner = typeof innerJwe === 'string' ? JSON.parse(innerJwe) : innerJwe
     let hop = next
-    // Only a peer with no DIDCommMessaging service of its own, behind another mediator (`tspOnlyPeerMediator`):
+    // Only a peer behind another mediator that ours may not route to (`peerMediatorRoute`: TSP-only, or a did:webs):
     // one more layer, to that mediator. Every other peer is forwarded as it always was.
     const theirs = await this.tspOnlyMediatorFor(next)
     if (theirs) {
@@ -1340,25 +1372,27 @@ export class VtiMediatorSession {
     })
   }
 
-  /** Each peer's `tspOnlyPeerMediator`, read once per session; a peer that could not be read is read again next time. */
+  /** Each peer's `peerMediatorRoute`, read once per session; a peer that could not be read is read again next time. */
   private readonly tspOnlyRoutes = new Map<string, VtiMediatorEndpoints | null>()
   private async tspOnlyMediatorFor(peerDid: string): Promise<VtiMediatorEndpoints | undefined> {
     if (this.tspOnlyRoutes.has(peerDid)) return this.tspOnlyRoutes.get(peerDid) ?? undefined
-    let theirs: VtiMediatorEndpoints | undefined
+    let route: Awaited<ReturnType<typeof peerMediatorRoute>>
     try {
-      theirs = await tspOnlyPeerMediator(this.agent, peerDid, this.mediator.did)
+      route = await peerMediatorRoute(this.agent, peerDid, this.mediator.did)
     } catch {
       // Unread: forwarded as before this time, and looked at again next time.
       return undefined
     }
     // A miss is remembered too, so a peer forwarded as before costs one look a session, not one a message.
-    this.tspOnlyRoutes.set(peerDid, theirs ?? null)
-    if (theirs) {
+    this.tspOnlyRoutes.set(peerDid, route?.mediator ?? null)
+    if (route) {
       this.agent.config.logger.info(
-        `${LOG_PREFIX} ${didPrefix(peerDid)} publishes no DIDCommMessaging; forwarding through its TSP mediator ${didPrefix(theirs.did)}`
+        route.reason === 'tspOnly'
+          ? `${LOG_PREFIX} ${didPrefix(peerDid)} publishes no DIDCommMessaging; forwarding through its TSP mediator ${didPrefix(route.mediator.did)}`
+          : `${LOG_PREFIX} ${didPrefix(peerDid)} is a did:webs on another mediator; forwarding through its DIDComm mediator ${didPrefix(route.mediator.did)}`
       )
     }
-    return theirs
+    return route?.mediator
   }
 
   /** Authcrypt a v2 plaintext to another mediator than this session's (the inner layer of a two-mediator forward). */
