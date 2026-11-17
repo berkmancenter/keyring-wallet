@@ -21,6 +21,7 @@ import { communityCardKey } from '../screens/CommunityCard'
 import { communityHeadingOf, didPathName } from '../screens/communityName'
 import VtaAgentHome, { forgetAgentHoldings, ownHoldings } from '../screens/VtaAgentHome'
 import { localDate } from '../screens/localTime'
+import * as vtiJoinModule from '../module/vtiJoin'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('@react-navigation/native', () => ({
@@ -252,6 +253,55 @@ describe('what your agent holds, card by card', () => {
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentContinueVetting')))
     expect(communityTarget.getChosen()?.communityDid).toBe(B)
     expect(navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+  })
+
+  it('row V5 (Alberto, 11-17): a vetting with nothing sent yet can be stopped from here, after a confirm', async () => {
+    const tree = await renderHome([persona(A), membership(A, linkedAt), persona(B)])
+    expect(tree.getByTestId(testIdWithKey('AgentContinueVetting'))).toBeTruthy()
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentStopVetting')))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('StopVettingSheet'))).toBeTruthy()
+    fireEvent.press(tree.getByTestId(testIdWithKey('StopVettingSheetKeep')))
+    expect(tree.queryByTestId(testIdWithKey('StopVettingSheet'))).toBeNull()
+  })
+
+  it.each([
+    ['unreadable', 'Vetting.StopUnreadable'],
+    ['sent', 'Vetting.StopAlreadySent'],
+    ['partial', 'Vetting.StopPartial'],
+  ] as const)('row V5: a Stop that comes back %s clears nothing, and the card says why', async (done, words) => {
+    jest.spyOn(vtiJoinModule, 'stopVetting').mockResolvedValue(done)
+    const tree = await renderHome([persona(A), membership(A, linkedAt), persona(B)])
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentStopVetting')))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('StopVettingSheetStop')))
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentStopRefused'))).toHaveTextContent(new RegExp(words))
+    expect(tree.getByTestId(testIdWithKey('AgentContinueVetting'))).toBeTruthy()
+  })
+
+  it('row V5, control: a vetting whose request went to the community (deferred) has no Stop here', async () => {
+    const deferred: Rec = {
+      tags: { recordType: 'keyring/vti-community', kind: 'submission', key: B },
+      content: {
+        communityDid: B,
+        personaDid: `${B}:p`,
+        requestId: 'j-1',
+        sentAt: '2026-11-17T02:00:00Z',
+        acknowledgedAt: '2026-11-17T02:01:00Z',
+        status: 'deferred',
+        withInvitation: false,
+        via: 'vetting',
+      },
+    }
+    const tree = await renderHome([persona(A), membership(A, linkedAt), persona(B), deferred])
+    expect(tree.getByTestId(testIdWithKey('AgentContinueVetting'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('AgentStopVetting'))).toBeNull()
   })
 
   it('a waiting invitation is the next step, before a vetting', async () => {

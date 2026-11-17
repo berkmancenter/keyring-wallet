@@ -2468,7 +2468,8 @@
       "attested": "Statement received",
       "statementRefused": "Statement not accepted",
       "declined": "Declined",
-      "cardReceived": "Card received"
+      "cardReceived": "Card received",
+      "stopped": "Stopped by you"
     },
     "ApplicantTitle": "Get vetted",
     "SeatVetter": "You are the vetter",
@@ -2502,7 +2503,23 @@
     "AlreadyApplied": "You'd already applied to this community — here is where that application stands.",
     "ReplaceRequestExplains": "Your earlier request went without your vetting, and the community won't take a second one while it's open. Replace it with a request that includes your vetting?",
     "ReplaceRequest": "Replace my request",
-    "AddWhatTheyAsked": "Add what they asked for"
+    "AddWhatTheyAsked": "Add what they asked for",
+    "WaitingHint": "Your vetter opens the session from their desk. If they gave you a new ticket, use that one instead.",
+    "UseNewTicket": "Use a new ticket instead",
+    "StopVetting": "Stop this vetting",
+    "StoppedWaiting": "You stopped waiting for your vetter. The app doesn't tell them, so let them know.",
+    "StopTitle": "Stop your vetting for {{community}}?",
+    "StopBody": "This phone forgets this vetting and the identity made for it.",
+    "StopNote": "Nothing has gone to {{community}} yet, so there's nothing to take back. Tell your vetter you stopped. To join later, you start again with a new ticket.",
+    "StopKeep": "Keep it",
+    "StopAlreadySent": "Your request already went to {{community}}, so it can't be stopped here. Withdraw it from the community's card on My Agent.",
+    "CantSignInTitle": "This identity can't sign in",
+    "CantSignInBody": "Its agent isn't answering, so your vetter's session can't reach this phone.",
+    "CantSignInHint": "Start over makes a new identity and asks for a new ticket. Tell your vetter.",
+    "TryAgain": "Try again",
+    "StartOver": "Start over",
+    "StopUnreadable": "Couldn't check whether anything went to {{community}}, so nothing was removed. Try again.",
+    "StopPartial": "Part of your vetting for {{community}} may already be removed. Check it before you try again."
   },
   "Directory": {
     "ViewCard": "View card",

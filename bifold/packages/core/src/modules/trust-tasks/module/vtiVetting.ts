@@ -254,6 +254,11 @@ export interface VettingApplicationRequest {
   cardSentAt?: string
   /** When this person said the match codes match: kept, so a relaunch keeps the step (225 gate). */
   matchConfirmedAt?: string
+  /**
+   * When this person stopped waiting for this vetter, to use a new ticket instead (row V, Alberto 11-17). Set with
+   * status `declined`: the protocol gives the applicant no cancel of its own, so the vetter is not told.
+   */
+  stoppedAt?: string
   status: 'sent' | 'accepted' | 'refused' | 'session' | 'cardSent' | 'attested' | 'declined' | 'statementRefused'
   refusalCode?: string
   /** Whether the vetter's eligibility presentation verified (vtiEligibility). */
@@ -2931,6 +2936,15 @@ export class VtiApplicant {
    */
   async abandonSession(vetterDid: string): Promise<void> {
     await this.update(vetterDid, { status: 'declined' })
+  }
+
+  /**
+   * Stop waiting for this vetter, on this phone, so a new ticket can be used (row V, Alberto 11-17). Step 3 had no way
+   * out: no time limit, no cancel and no box for a vetter's new ticket (11-16 demo). The vetter is not told, as with
+   * {@link abandonSession}; the screen asks the person to tell them. A late answer from them finds the request ended.
+   */
+  async stopWaiting(vetterDid: string): Promise<void> {
+    await this.update(vetterDid, { status: 'declined', stoppedAt: new Date().toISOString() })
   }
 
   /**

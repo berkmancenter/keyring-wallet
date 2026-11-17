@@ -60,6 +60,9 @@ import { cardJoinOf, communityCardModel, type CommunityCardPrimary } from './com
 import { communityHeadingOf, communityLabelOf } from './communityName'
 import { communityCardKey as communityKeyOf } from './CommunityCard'
 import { VtaAgentHomeIds } from './VtaAgentHome.ids'
+import StopVettingSheet, { STOP_REFUSED_WORDS } from './StopVettingSheet'
+import { stopVetting } from '../module/vtiJoin'
+import { GenericRecordsVettingStore } from '../module/vtiVetting'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 import { useRoomAboveTabBar } from './aboveTabBar'
 import { absoluteDate, appDateWords } from '../../../utils/localDay'
@@ -322,6 +325,11 @@ const VtaAgentHome: React.FC = () => {
   // Bumped when a community's name is read again, so the cards say it (the name lives in communityTarget).
   const [, setNamesRead] = useState(0)
   const [introPanel, setIntroPanel] = useState(0)
+  /** Row V5: the community whose vetting Stop this vetting was asked for, and whether it is stopping. */
+  const [stopFor, setStopFor] = useState<string>()
+  const [stopping, setStopping] = useState(false)
+  /** Why the last Stop this vetting cleared nothing: it had gone to the community, or what was sent could not be read. */
+  const [stopRefused, setStopRefused] = useState<'sent' | 'unreadable' | 'partial'>()
   const otherWaiting = useOtherAgentsWaiting()
   // The communities' cards read each one's journey; this page reads the same
   // readings, so it leads with a card's next step in the same render as the
@@ -348,6 +356,8 @@ const VtaAgentHome: React.FC = () => {
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: CARD_PADDING, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
+    stopVetting: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+    stopVettingText: { color: ColorPalette.semantic.error },
     mono: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
     strip: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 },
     // A stop and the chevron before it wrap as one, so a narrow screen never
@@ -627,6 +637,15 @@ const VtaAgentHome: React.FC = () => {
     )
   const invitationFor = stepOf('acceptInvitation')
   const vettingFor = stepOf('continueVetting')
+  // Row V5: a vetting can be stopped from here only while nothing has gone to the community (its join reads none).
+  const vettingIndex = vettingFor ? held.indexOf(vettingFor) : -1
+  const vettingNothingSent =
+    vettingIndex >= 0 &&
+    !!holdings &&
+    cardJoinOf(
+      journeys[vettingIndex],
+      holdings.memberships.find((m) => m.communityDid === vettingFor)
+    )?.kind === 'none'
   const nextStep: { kind: 'invitation' | 'vetting'; communityDid: string } | undefined = invitationFor
     ? { kind: 'invitation', communityDid: invitationFor }
     : vettingFor
@@ -971,6 +990,26 @@ const VtaAgentHome: React.FC = () => {
                 nextStep.kind === 'invitation' ? VtaAgentHomeIds.nextInvitation : VtaAgentHomeIds.continueVetting
               )}
             />
+            {nextStep.kind === 'vetting' && vettingNothingSent ? (
+              <Pressable
+                style={styles.stopVetting}
+                onPress={() => setStopFor(nextStep.communityDid)}
+                accessibilityRole="button"
+                testID={testIdWithKey(VtaAgentHomeIds.stopVetting)}
+              >
+                <ThemedText variant="bold" style={styles.stopVettingText}>
+                  {t('Vetting.StopVetting')}
+                </ThemedText>
+              </Pressable>
+            ) : null}
+            {nextStep.kind === 'vetting' && stopRefused ? (
+              <ThemedText style={styles.stopVettingText} testID={testIdWithKey(VtaAgentHomeIds.stopRefused)}>
+                {t(STOP_REFUSED_WORDS[stopRefused], {
+                  community: communityLabelOf(nextStep.communityDid, t),
+                  interpolation: { escapeValue: false },
+                })}
+              </ThemedText>
+            ) : null}
           </View>
         ) : null}
 
@@ -1100,6 +1139,37 @@ const VtaAgentHome: React.FC = () => {
           </>
         ) : null}
       </ScrollView>
+      <StopVettingSheet
+        visible={!!stopFor}
+        community={stopFor ? communityLabelOf(stopFor, t) : ''}
+        busy={stopping}
+        onKeep={() => setStopFor(undefined)}
+        onStop={() => {
+          if (!agent || !stopFor) return
+          setStopping(true)
+          setStopRefused(undefined)
+          void stopVetting(
+            {
+              identityStore: new GenericRecordsIdentityStore(agent),
+              communityStore: new GenericRecordsCommunityStore(agent),
+              vettingStore: new GenericRecordsVettingStore(agent),
+            },
+            stopFor
+          )
+            // The reads never throw (they come back `unreadable`), so a throw here is from clearing: said as partial,
+            // never as "nothing was removed".
+            .catch(() => 'partial' as const)
+            .then((done) => {
+              // Stopped: the card goes once the holdings are read again (stopVetting announces the change). Refused:
+              // nothing was cleared, and the card says why.
+              if (done !== 'stopped') setStopRefused(done)
+            })
+            .finally(() => {
+              setStopping(false)
+              setStopFor(undefined)
+            })
+        }}
+      />
     </SafeAreaView>
   )
 }

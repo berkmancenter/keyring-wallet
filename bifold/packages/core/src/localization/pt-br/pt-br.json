@@ -2342,7 +2342,8 @@
       "attested": "Declaração recebida",
       "statementRefused": "Declaração não aceita",
       "declined": "Recusado",
-      "cardReceived": "Cartão recebido"
+      "cardReceived": "Cartão recebido",
+      "stopped": "Parada por você"
     },
     "ApplicantTitle": "Ser verificado",
     "SeatVetter": "Você é o verificador",
@@ -2376,7 +2377,23 @@
     "AlreadyApplied": "Você já tinha se candidatado a esta comunidade — veja em que pé está essa candidatura.",
     "ReplaceRequestExplains": "Sua solicitação anterior foi enviada sem a sua verificação, e a comunidade não aceita uma segunda enquanto ela estiver aberta. Substituí-la por uma solicitação que inclua a sua verificação?",
     "ReplaceRequest": "Substituir minha solicitação",
-    "AddWhatTheyAsked": "Adicionar o que pediram"
+    "AddWhatTheyAsked": "Adicionar o que pediram",
+    "WaitingHint": "Seu verificador abre a sessão na mesa dele. Se ele lhe deu um novo tíquete, use esse.",
+    "UseNewTicket": "Usar um novo tíquete",
+    "StopVetting": "Parar esta verificação",
+    "StoppedWaiting": "Você parou de esperar seu verificador. O app não avisa, então avise-o.",
+    "StopTitle": "Parar sua verificação para {{community}}?",
+    "StopBody": "Este telefone esquece esta verificação e a identidade criada para ela.",
+    "StopNote": "Nada foi enviado para {{community}} ainda, então não há nada a desfazer. Avise seu verificador que você parou. Para entrar depois, você recomeça com um novo tíquete.",
+    "StopKeep": "Manter",
+    "StopAlreadySent": "Seu pedido já foi para {{community}}, então não pode ser parado aqui. Retire-o pelo cartão da comunidade em Meu agente.",
+    "CantSignInTitle": "Esta identidade não consegue entrar",
+    "CantSignInBody": "O agente dela não responde, então a sessão do seu verificador não chega a este telefone.",
+    "CantSignInHint": "Recomeçar cria uma nova identidade e pede um novo tíquete. Avise seu verificador.",
+    "TryAgain": "Tentar de novo",
+    "StartOver": "Recomeçar",
+    "StopUnreadable": "Não foi possível verificar se algo foi para {{community}}, então nada foi removido. Tente de novo.",
+    "StopPartial": "Parte da sua verificação para {{community}} pode já ter sido removida. Confira antes de tentar de novo."
   },
   "Directory": {
     "ViewCard": "Ver cartão",

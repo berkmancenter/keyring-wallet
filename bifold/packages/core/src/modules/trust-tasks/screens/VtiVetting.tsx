@@ -61,7 +61,9 @@ import {
   type VettingVetterProfile,
   type VettingTicket,
 } from '../module/vtiVetting'
-import { ensurePersonaFor } from '../module/vtiJoin'
+import { ensurePersonaFor, stopVetting } from '../module/vtiJoin'
+import { isMissingKeyCopy, PersonaAgentUnreachable } from '../module/vtiPersonaInbox'
+import StopVettingSheet, { STOP_REFUSED_WORDS } from './StopVettingSheet'
 import { pendingVettingTicket } from '../module/vtiLinks'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
@@ -209,6 +211,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [standing, setStanding] = useState<VetterGrantState>({ state: 'none' })
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<Said>()
+  /** Row V: Stop this vetting's confirm is open (V4). */
+  const [stopAsked, setStopAsked] = useState(false)
+  /** Row V6: the vetting's own identity could not sign in (its agent gone, unreachable, or its sign-in let go). */
+  const [cantSignIn, setCantSignIn] = useState(false)
   // The community answered that an application is already open (and which).
   const [alreadyOpen, setAlreadyOpen] = useState(false)
   // Off unless the person turns it on (VTI-Q14).
@@ -403,6 +409,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       gap: 8,
     },
     buttonSecondaryText: { ...TextTheme.bold, color: ColorPalette.brand.primary, flexShrink: 1, textAlign: 'center' },
+    // Row V: Stop this vetting, a red text button; and the can't-sign-in card (V6).
+    stopLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+    stopLinkText: { ...TextTheme.bold, color: ColorPalette.semantic.error },
+    cantSignIn: { borderColor: ColorPalette.semantic.error, gap: 8 },
     buttonDimmed: { opacity: 0.4 },
     input: {
       borderWidth: 1,
@@ -540,7 +550,16 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
         })
         setConnected(true)
+        setCantSignIn(false)
       } catch (e) {
+        // Row V6: an identity that cannot sign in says so, with Try again, Start over and Stop, not only an error line.
+        if (
+          isMissingKeyCopy(e) ||
+          e instanceof PersonaAgentUnreachable ||
+          (e as Error)?.name === 'VtiSignInTimedOut' ||
+          (e as Error)?.name === 'VtiSignInResting'
+        )
+          setCantSignIn(true)
         setError(sayFailure(e))
       }
     })()
@@ -914,6 +933,44 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // Pinned under the scroll, not at its end: a step's buttons sit anywhere in a
   // long page, and a failure written at the bottom fell below the fold on
   // Android, so the button looked like it did nothing (221).
+  /**
+   * Row V (Alberto, 11-17): stop the vetting under way. `leave` goes back (Stop this vetting); `stay` reads the screen
+   * again, which starts over at the first step with a new identity (V6, Start over). Refused, and said so, when the
+   * request already went to the community: that one is withdrawn, not forgotten.
+   */
+  const stopThis = (then: 'leave' | 'stay') =>
+    run('stop', async () => {
+      if (!stores || !communityDid) return
+      const done = await stopVetting(
+        { identityStore: stores.identity, communityStore: stores.community, vettingStore: stores.vetting },
+        communityDid
+      )
+      setStopAsked(false)
+      if (done !== 'stopped')
+        throw new InWords(
+          t(STOP_REFUSED_WORDS[done], {
+            community: communityLabelOf(communityDid, t),
+            interpolation: { escapeValue: false },
+          })
+        )
+      setCantSignIn(false)
+      applicantRef.current = undefined
+      if (then === 'leave') navigation.goBack()
+    })
+  /** Stop this vetting (V2, V6): only while nothing has gone to the community. */
+  const stopLink =
+    application && !application.submission ? (
+      <Pressable
+        style={styles.stopLink}
+        onPress={() => setStopAsked(true)}
+        disabled={!!busy}
+        accessibilityRole="button"
+        testID={testIdWithKey(VtiVettingIds.stopVetting)}
+      >
+        <Text style={styles.stopLinkText}>{t('Vetting.StopVetting')}</Text>
+      </Pressable>
+    ) : null
+
   const errorLine = error ? (
     <ScrollView style={styles.errorBar} contentContainerStyle={styles.errorBarContent}>
       <SaidFailure said={error} testID={VtiVettingIds.error} style={styles.error} />
@@ -1537,7 +1594,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         {requests.length > 1 ? t('Vetting.YourVetterN', { n: requests.indexOf(r) + 1 }) : t('Vetting.YourVetter')}
       </Text>
       <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.requestStatus)}>
-        {t(`Vetting.Status.${r.status}`)}
+        {r.stoppedAt ? t('Vetting.Status.stopped') : t(`Vetting.Status.${r.status}`)}
         {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
       </Text>
       <RefusalNote kind="Session" refusal={r.sessionRefusal} style={styles.label} errorStyle={styles.error} />
@@ -1799,7 +1856,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           {applicantStep === 'ticket' ? (
             <>
               {stepHeader(applicantNumber, 5, t('Vetting.AskAVetter'))}
-              {ended.length ? (
+              {ended.some((r) => r.stoppedAt) ? (
+                // Row V3: this person stopped waiting for a vetter, to use a new ticket; the app did not tell them.
+                <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.stoppedWaiting)}>
+                  {t('Vetting.StoppedWaiting')}
+                </Text>
+              ) : ended.length ? (
                 <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.sessionEnded)}>
                   {t('Vetting.CodesDifferEnded')}
                 </Text>
@@ -1817,6 +1879,20 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 <Text style={styles.value}>{t('Vetting.WaitingForVetter')}</Text>
               </View>
               {requestCard(active)}
+              {/* Row V2 (Alberto, 11-17): step 3 had no way out (11-16 demo): a vetter's new ticket had nowhere to go. */}
+              <View style={{ gap: 8 }} testID={testIdWithKey(VtiVettingIds.waitingWays)}>
+                <Text style={styles.label}>{t('Vetting.WaitingHint')}</Text>
+                <Pressable
+                  style={look(VtiVettingIds.useNewTicket).button}
+                  onPress={() => run('newTicket', () => applicantRef.current!.stopWaiting(active.vetterDid))}
+                  disabled={!!busy}
+                  accessibilityRole="button"
+                  testID={testIdWithKey(VtiVettingIds.useNewTicket)}
+                >
+                  <Text style={look(VtiVettingIds.useNewTicket).text}>{t('Vetting.UseNewTicket')}</Text>
+                </Pressable>
+                {stopLink}
+              </View>
             </>
           ) : null}
 
@@ -2073,7 +2149,39 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             </>
           ) : null}
 
-          {!connected && applicantStep !== 'member' ? (
+          {cantSignIn && applicantStep !== 'member' && applicantStep !== 'name' ? (
+            // Row V6: the vetting's own identity cannot sign in, so a vetter's session cannot reach this phone.
+            <View style={[styles.card, styles.cantSignIn]} testID={testIdWithKey(VtiVettingIds.cantSignIn)}>
+              <Text style={[styles.value, { fontWeight: '700' }]}>{t('Vetting.CantSignInTitle')}</Text>
+              <Text style={styles.value}>{t('Vetting.CantSignInBody')}</Text>
+              <Text style={styles.label}>{t('Vetting.CantSignInHint')}</Text>
+              <Pressable
+                style={look(VtiVettingIds.tryAgain, VtiVettingIds.tryAgain).button}
+                onPress={() => {
+                  setCantSignIn(false)
+                  setError(undefined)
+                  bump()
+                }}
+                disabled={!!busy}
+                accessibilityRole="button"
+                testID={testIdWithKey(VtiVettingIds.tryAgain)}
+              >
+                <Text style={look(VtiVettingIds.tryAgain, VtiVettingIds.tryAgain).text}>{t('Vetting.TryAgain')}</Text>
+              </Pressable>
+              {application && !application.submission ? (
+                <Pressable
+                  style={look(VtiVettingIds.startOver).button}
+                  onPress={() => void stopThis('stay')}
+                  disabled={!!busy}
+                  accessibilityRole="button"
+                  testID={testIdWithKey(VtiVettingIds.startOver)}
+                >
+                  <Text style={look(VtiVettingIds.startOver).text}>{t('Vetting.StartOver')}</Text>
+                </Pressable>
+              ) : null}
+              {stopLink}
+            </View>
+          ) : !connected && applicantStep !== 'member' ? (
             <View style={styles.row}>
               <ActivityIndicator color={ColorPalette.brand.primary} />
               <Text style={styles.value}>{t('MyAgent.Authenticating')}</Text>
@@ -2081,6 +2189,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           ) : null}
         </KeyboardAwareScrollView>
         {errorLine}
+        <StopVettingSheet
+          visible={stopAsked}
+          community={communityLabelOf(communityDid ?? '', t)}
+          busy={busy === 'stop'}
+          onStop={() => void stopThis('leave')}
+          onKeep={() => setStopAsked(false)}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   )

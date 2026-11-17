@@ -24,6 +24,7 @@ import { vtiAgent } from '../module/vtiAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
 import * as grantState from '../module/vtiGrantState'
 import { VtiApplicant, VtiVetterDesk } from '../module/vtiVetting'
+import * as vtiJoinModule from '../module/vtiJoin'
 import { routeKeyringAgentLink } from '../module/vtiLinks'
 import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { readManifest, type VtiManifest } from '../module/joinManifest'
@@ -1212,4 +1213,144 @@ describe('Vetting — a private attestation arriving moves the applicant on to A
     expect(stored.status).toBe('attested')
     expect(stored.statementId).toBeUndefined()
   })
+})
+
+describe('Vetting — row V (Alberto, 11-17): a vetting under way has a way out', () => {
+  const VETTER = 'did:webvh:example:vetter'
+  const applicationWith = (requests: Record<string, unknown>[], over: Record<string, unknown> = {}): Rec => ({
+    tags: { recordType: 'keyring/vti-vetting', kind: 'application', key: communityDid },
+    content: {
+      communityDid,
+      joinDid: personaDid,
+      minStatements: 1,
+      requiredClaims: ['name.legal'],
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: 'salt',
+      claims: { 'name.legal': 'Ada Lovelace' },
+      requests,
+      startedAt: '2026-11-17T01:50:00Z',
+      ...over,
+    },
+  })
+  const waiting = applicationWith([
+    { vetterDid: VETTER, requestDocumentId: 'req-1', status: 'sent', sentAt: '2026-11-17T01:58:00Z' },
+  ])
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  const renderWith = async (records: Rec[]) => {
+    mockUseAgent.mockReturnValue(withRecords(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+  const id = (key: string) => testIdWithKey(key)
+
+  test('step 3, waiting: Use a new ticket stops waiting for that vetter (V2); before, there was nothing to press', async () => {
+    const stop = jest.spyOn(VtiApplicant.prototype, 'stopWaiting').mockResolvedValue(undefined)
+    const tree = await renderWith([persona, waiting])
+    await tree.findByTestId(id('VettingApplicantStep_waiting'))
+    expect(tree.getByTestId(id('VettingWaitingWays'))).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('VettingUseNewTicket')))
+    })
+    expect(stop).toHaveBeenCalledWith(VETTER)
+  })
+
+  test('after stopping: the ticket box, and a line to tell the vetter (V3); control: codes that differed keep their own line', async () => {
+    const stopped = await renderWith([
+      persona,
+      applicationWith([
+        { vetterDid: VETTER, requestDocumentId: 'req-1', status: 'declined', stoppedAt: '2026-11-17T02:10:00Z' },
+      ]),
+    ])
+    await stopped.findByTestId(id('VettingApplicantStep_ticket'))
+    expect(stopped.getByTestId(id('VettingStoppedWaiting'))).toBeTruthy()
+    expect(stopped.queryByTestId(id('VettingSessionEnded'))).toBeNull()
+    expect(stopped.getByText('Vetting.Status.stopped')).toBeTruthy()
+    stopped.unmount()
+
+    const differed = await renderWith([
+      persona,
+      applicationWith([{ vetterDid: VETTER, requestDocumentId: 'req-1', status: 'declined' }]),
+    ])
+    await differed.findByTestId(id('VettingApplicantStep_ticket'))
+    expect(differed.getByTestId(id('VettingSessionEnded'))).toBeTruthy()
+    expect(differed.queryByTestId(id('VettingStoppedWaiting'))).toBeNull()
+  })
+
+  test('Stop this vetting asks first (V4); Keep it changes nothing, Stop forgets it and goes back', async () => {
+    const stop = jest.spyOn(vtiJoinModule, 'stopVetting').mockResolvedValue('stopped')
+    const tree = await renderWith([persona, waiting])
+    await tree.findByTestId(id('VettingApplicantStep_waiting'))
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('VettingStopVetting')))
+    })
+    expect(tree.getByTestId(id('StopVettingSheet'))).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('StopVettingSheetKeep')))
+    })
+    expect(tree.queryByTestId(id('StopVettingSheet'))).toBeNull()
+    expect(stop).not.toHaveBeenCalled()
+
+    const navigation = useNavigation() as unknown as { goBack: jest.Mock }
+    navigation.goBack.mockClear()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('VettingStopVetting')))
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('StopVettingSheetStop')))
+    })
+    expect(stop).toHaveBeenCalledWith(expect.anything(), communityDid)
+    expect(navigation.goBack).toHaveBeenCalled()
+  })
+
+  test('control: once the application went to the community, there is no Stop this vetting', async () => {
+    const tree = await renderWith([
+      persona,
+      applicationWith([{ vetterDid: VETTER, requestDocumentId: 'req-1', status: 'sent' }], {
+        submission: { requestId: 'j-1', sentAt: '2026-11-17T02:00:00Z' },
+      }),
+    ])
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    expect(tree.queryByTestId(id('VettingStopVetting'))).toBeNull()
+  })
+
+  test.each([
+    ['its agent is gone (a resting sign-in)', 'VtiSignInResting', true],
+    ['its sign-in was let go', 'VtiSignInTimedOut', true],
+    ['control: any other failure', 'Error', false],
+  ])(
+    "the vetting's own identity can't sign in, %s: say so, with Try again, Start over and Stop (V6)",
+    async (_l, name, shown) => {
+      const e = Object.assign(new Error('no'), { name })
+      jest.spyOn(vtiAgent, 'connect').mockRejectedValue(e)
+      const tree = await renderWith([persona, waiting])
+      await tree.findByTestId(id('VettingApplicantStep_waiting'))
+      await act(async () => {
+        jest.advanceTimersByTime(50)
+      })
+      if (shown) {
+        expect(tree.getByTestId(id('VettingCantSignIn'))).toBeTruthy()
+        expect(tree.getByTestId(id('VettingTryAgain'))).toBeTruthy()
+        expect(tree.getByTestId(id('VettingStartOver'))).toBeTruthy()
+      } else expect(tree.queryByTestId(id('VettingCantSignIn'))).toBeNull()
+    }
+  )
 })

@@ -2429,7 +2429,8 @@
       "attested": "Déclaration reçue",
       "statementRefused": "Déclaration non acceptée",
       "declined": "Déclinée",
-      "cardReceived": "Carte reçue"
+      "cardReceived": "Carte reçue",
+      "stopped": "Arrêtée par vous"
     },
     "ApplicantTitle": "Se faire vérifier",
     "SeatVetter": "Vous êtes le vérificateur",
@@ -2463,7 +2464,23 @@
     "AlreadyApplied": "Vous aviez déjà postulé à cette communauté — voici où en est cette candidature.",
     "ReplaceRequestExplains": "Votre demande précédente est partie sans votre vérification, et la communauté n'en accepte pas une deuxième tant qu'elle est ouverte. La remplacer par une demande qui inclut votre vérification ?",
     "ReplaceRequest": "Remplacer ma demande",
-    "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé"
+    "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé",
+    "WaitingHint": "Votre vérificateur ouvre la session depuis son bureau. S'il vous a donné un nouveau ticket, utilisez plutôt celui-là.",
+    "UseNewTicket": "Utiliser un nouveau ticket",
+    "StopVetting": "Arrêter cette vérification",
+    "StoppedWaiting": "Vous n'attendez plus votre vérificateur. L'appli ne le prévient pas : dites-le-lui.",
+    "StopTitle": "Arrêter votre vérification pour {{community}} ?",
+    "StopBody": "Ce téléphone oublie cette vérification et l'identité créée pour elle.",
+    "StopNote": "Rien n'a encore été envoyé à {{community}}, il n'y a donc rien à reprendre. Dites à votre vérificateur que vous arrêtez. Pour rejoindre plus tard, vous recommencerez avec un nouveau ticket.",
+    "StopKeep": "La garder",
+    "StopAlreadySent": "Votre demande a déjà été envoyée à {{community}} ; elle ne peut pas être arrêtée ici. Retirez-la depuis la carte de la communauté dans Mon agent.",
+    "CantSignInTitle": "Cette identité ne peut pas se connecter",
+    "CantSignInBody": "Son agent ne répond pas, donc la session de votre vérificateur ne peut pas atteindre ce téléphone.",
+    "CantSignInHint": "Recommencer crée une nouvelle identité et demande un nouveau ticket. Prévenez votre vérificateur.",
+    "TryAgain": "Réessayer",
+    "StartOver": "Recommencer",
+    "StopUnreadable": "Impossible de vérifier si quelque chose a été envoyé à {{community}} ; rien n'a été supprimé. Réessayez.",
+    "StopPartial": "Une partie de votre vérification pour {{community}} a peut-être déjà été supprimée. Vérifiez-la avant de réessayer."
   },
   "Directory": {
     "ViewCard": "Voir la carte",

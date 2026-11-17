@@ -86,5 +86,13 @@ export const VtiVettingIds = {
   submissionState: 'VettingSubmissionState',
   withdrawButton: 'VettingWithdrawButton',
   error: 'VettingError',
+  // Row V (Alberto, 11-17): a vetting under way has a way out.
+  waitingWays: 'VettingWaitingWays',
+  useNewTicket: 'VettingUseNewTicket',
+  stopVetting: 'VettingStopVetting',
+  stoppedWaiting: 'VettingStoppedWaiting',
+  cantSignIn: 'VettingCantSignIn',
+  tryAgain: 'VettingTryAgain',
+  startOver: 'VettingStartOver',
 } as const
 export type VtiVettingId = (typeof VtiVettingIds)[keyof typeof VtiVettingIds]
