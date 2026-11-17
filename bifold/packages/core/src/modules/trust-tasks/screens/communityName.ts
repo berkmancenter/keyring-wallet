@@ -173,7 +173,15 @@ export function didPathName(did: string): string | undefined {
  */
 export function didDomainPath(did: string): string | undefined {
   const parts = did.split(':')
-  const rest = parts[1] === 'webvh' ? parts.slice(3) : parts[1] === 'web' ? parts.slice(2) : []
+  // did:webs: the host and path, without the trailing AID (sedi/webs/identifier.ts).
+  const rest =
+    parts[1] === 'webvh'
+      ? parts.slice(3)
+      : parts[1] === 'web'
+        ? parts.slice(2)
+        : parts[1] === 'webs'
+          ? parts.slice(2, -1)
+          : []
   if (!rest[0]) return undefined
   try {
     return rest.map((part) => decodeURIComponent(part)).join('/')

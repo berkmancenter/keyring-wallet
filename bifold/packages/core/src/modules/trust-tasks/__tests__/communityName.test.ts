@@ -167,11 +167,14 @@ describe('where a DID says it lives', () => {
     ['did:webvh:QmSCID:keyring-vti-vtc.ngrok.app', 'keyring-vti-vtc.ngrok.app'],
     ['did:web:example.org%3A8443:vtc', 'example.org:8443/vtc'],
     ['did:web:example.org', 'example.org'],
+    // did:webs: the host and path, not the trailing AID (the SEDI VTC).
+    ['did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a', 'webvh.storm.ws/sedi-vtc'],
+    ['did:webs:example.org%3A8443:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a', 'example.org:8443'],
   ])('%s reads %s', (input, shown) => {
     expect(didDomainPath(input)).toBe(shown)
   })
 
-  it.each(['did:peer:2.Ez6LSabc', 'did:key:z6Mkabc', 'did:webvh:QmSCID', 'not a did'])(
+  it.each(['did:peer:2.Ez6LSabc', 'did:key:z6Mkabc', 'did:webvh:QmSCID', 'did:webs:EN7G2PZkzjb3', 'not a did'])(
     '%s has no domain to show',
     (input) => {
       expect(didDomainPath(input)).toBeUndefined()

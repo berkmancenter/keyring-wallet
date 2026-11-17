@@ -95,6 +95,67 @@ describe("Keyring's own reading", () => {
     expect(JSON.stringify(result)).not.toContain('portal.community.example')
   })
 
+  // The SEDI VTC's member sign-in code names the community by its did:webs (report 2FHS-ZNMY: it said "update").
+  describe('a did:webs contact (the SEDI VTC)', () => {
+    const webs = 'did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a'
+    const from = (contact: string, type: string) =>
+      `https://link.trustoverip.org/t#_from=${encodeURIComponent(contact)}&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=${now + 120}&_type=${type}`
+
+    it('carries a did:webs sign-in through, naming the community', () => {
+      const result = readTrigger(from(webs, '/vti/flow/sign-in/0.1'), { now })
+      expect(result).toMatchObject({ outcome: 'accept', flow: 'sign-in', from: webs })
+      expect(triggerAction(result)).toMatchObject({ kind: 'proceed', flow: 'sign-in', trigger: { from: webs } })
+    })
+
+    it('takes did:webs for sign-in only: an agent claim from one is not allowed', () => {
+      expect(readTrigger(from(webs, '/vti/flow/vta-claim/0.1'), { now })).toMatchObject({
+        outcome: 'reject',
+        reason: 'from-not-allowed',
+      })
+      const flows = Object.fromEntries((KEYRING_TRIGGER_CONFIG.flows ?? []).map((f) => [f.flow, f.allowedVidTypes]))
+      expect(flows).toEqual({ 'sign-in': ['did:webvh', 'did:web', 'did:webs'], 'vta-claim': ['did:webvh', 'did:web'] })
+    })
+
+    it('a malformed did:webs (no AID, or a short one) is bad-from', () => {
+      for (const bad of [
+        'did:webs:webvh.storm.ws',
+        'did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZk',
+        'did:webs:host:a!b:' + 'E'.repeat(44),
+      ]) {
+        expect(readTrigger(from(bad, '/vti/flow/sign-in/0.1'), { now })).toMatchObject({ outcome: 'reject' })
+      }
+      expect(readTrigger(from('did:webs:webvh.storm.ws', '/vti/flow/sign-in/0.1'), { now })).toMatchObject({
+        reason: 'bad-from',
+      })
+    })
+
+    it('control: did:webvh and did:web sign-ins and agent claims read exactly as before', () => {
+      const webvh = 'did:webvh:QmCommScid:portal.community.example'
+      for (const contact of [webvh, 'did:web:portal.community.example', 'did:web:localhost%3A3000:vtc:one']) {
+        expect(readTrigger(from(contact, '/vti/flow/sign-in/0.1'), { now })).toMatchObject({
+          outcome: 'accept',
+          flow: 'sign-in',
+          from: contact,
+        })
+        expect(readTrigger(from(contact, '/vti/flow/vta-claim/0.1'), { now })).toMatchObject({
+          outcome: 'accept',
+          flow: 'vta-claim',
+        })
+      }
+      // Methods still not read: as before.
+      for (const contact of ['did:keri:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a', 'did:example:123']) {
+        expect(readTrigger(from(contact, '/vti/flow/sign-in/0.1'), { now })).toMatchObject({
+          outcome: 'reject',
+          reason: 'unsupported-vid',
+        })
+      }
+      expect(readTrigger(from('did:key:z6MkswwZ', '/vti/flow/sign-in/0.1'), { now })).toMatchObject({
+        outcome: 'reject',
+        reason: 'from-not-allowed',
+      })
+    })
+  })
+
   it('implements sign-in and the agent claim', () => {
     expect(KEYRING_TRIGGER_CONFIG.flows?.filter((f) => f.implemented).map((f) => f.flow)).toEqual([
       'sign-in',

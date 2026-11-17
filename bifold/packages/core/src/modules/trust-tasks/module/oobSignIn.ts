@@ -396,7 +396,8 @@ export type SignInDidDocument = {
 
 export type SignInDeps = {
   /**
-   * The community's DID document, its log VERIFIED (a did:webvh), or a throw.
+   * The community's DID document, its log VERIFIED (a did:webvh; a did:webs is not, see {@link agentDidResolver}),
+   * or a throw.
    * Production: the Credo agent's resolver ({@link agentDidResolver}).
    */
   resolveDid: (did: string) => Promise<SignInDidDocument>
@@ -650,7 +651,9 @@ export async function httpsPost(url: string, document: Record<string, unknown>):
 /**
  * The Credo agent's resolver as sign-in's `resolveDid`: Credo's did:webvh
  * resolver (`RetryingWebVhDidResolver`, over didwebvh-ts) returns a document
- * only when its log verifies. Bounded and retried, as every other community
+ * only when its log verifies. A did:webs (a SEDI community) goes through
+ * `WebsDidResolver`, which is NOT KEL-verified: its keys are what the host
+ * publishes over HTTPS, as a did:web's are. Bounded and retried, as every other community
  * lookup in Keyring is, so a host that never answers cannot hold the screen.
  */
 export const agentDidResolver =

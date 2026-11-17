@@ -7,6 +7,7 @@
 import { TypedArrayEncoder } from '@credo-ts/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
 
+import { WebsDidResolver } from '../../../utils/WebsDidResolver'
 import { verifyDocumentProof } from '../documentProof'
 import {
   OOB_TASKS,
@@ -302,6 +303,83 @@ describe('claiming a sign-in code', () => {
 
 // From 0d3f268e (2026-10-28) a community serves only claim 0.2, whose answer names the deadline
 // `decisionClosesAt` (RFC 3339); at vtc 0.14 or before only claim 0.1 (`decisionDeadline`, epoch seconds).
+// The SEDI VTC: a did:webs community whose did.json writes each service type as a list and its keys as `JsonWebKey`,
+// read through the agent's WebsDidResolver (#1107) exactly as agentDidResolver reads it (the document's toJSON).
+describe('signing in to a did:webs community (the SEDI VTC)', () => {
+  const WEBS = 'did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a'
+  const SEDI_BASE = 'https://sedi-vtc.openvti.net/v1'
+  const SEDI_PORTAL = 'https://sedi-vtc.openvti.net/members/'
+  const signing = `${WEBS}#DSigning`
+  const published = {
+    id: WEBS,
+    verificationMethod: [
+      {
+        id: signing,
+        type: 'JsonWebKey',
+        controller: WEBS,
+        publicKeyJwk: {
+          kty: 'OKP',
+          crv: 'Ed25519',
+          x: TypedArrayEncoder.toBase64Url(ed25519.getPublicKey(assertSecret)),
+        },
+      },
+    ],
+    authentication: [signing],
+    assertionMethod: [signing],
+    service: [
+      { id: `${WEBS}#tsp`, type: ['TSPTransport'], serviceEndpoint: 'did:webvh:QmR5:webvh.storm.ws:mediator' },
+      { id: `${WEBS}#trust-tasks`, type: ['TrustTaskHTTPS'], serviceEndpoint: SEDI_BASE },
+      { id: `${WEBS}#sign-in-portal`, type: ['SignInPortal'], serviceEndpoint: SEDI_PORTAL },
+    ],
+  }
+  const resolved = async (): Promise<SignInDidDocument> => {
+    const bytes = new TextEncoder().encode(JSON.stringify(published))
+    const fetchFn = async (url: string) => ({ ok: true, status: 200, url, arrayBuffer: async () => bytes.buffer })
+    const result = await new WebsDidResolver(fetchFn as never).resolve({} as never, WEBS)
+    return result.didDocument!.toJSON() as SignInDidDocument
+  }
+  const websLink = `https://link.trustoverip.org/t#_from=${encodeURIComponent(WEBS)}&_id=${REQUEST_ID}&_exp=${
+    NOW + 120
+  }&_type=/vti/flow/sign-in/0.1`
+  const websAnswer = (claim: Claim) =>
+    answerTo(
+      claim,
+      (_answer, payload) => {
+        _answer.issuer = WEBS
+        payload.service = { did: WEBS, name: 'SEDI VTC' }
+        payload.origin = 'https://sedi-vtc.openvti.net'
+      },
+      { secret: assertSecret, method: signing, purpose: 'assertionMethod' }
+    )
+
+  it("claims it at the community's TrustTaskHTTPS and believes its signed answer", async () => {
+    const { deps, post } = depsWith(websAnswer, { resolveDid: resolved })
+    const claimed = await claimSignIn(websLink, deps)
+    expect(claimed).toMatchObject({
+      vtcDid: WEBS,
+      base: SEDI_BASE,
+      portalOrigin: 'https://sedi-vtc.openvti.net',
+      decisionDeadline: NOW + 120,
+    })
+    expect(post.mock.calls[0][0]).toBe(`${SEDI_BASE}/trust-tasks`)
+  })
+
+  it('refuses an answer signed by another key', async () => {
+    const forged = (claim: Claim) =>
+      answerTo(
+        claim,
+        (answer, payload) => {
+          answer.issuer = WEBS
+          payload.service = { did: WEBS, name: 'SEDI VTC' }
+          payload.origin = 'https://sedi-vtc.openvti.net'
+        },
+        { secret: authSecret, method: signing, purpose: 'assertionMethod' }
+      )
+    const { deps } = depsWith(forged, { resolveDid: resolved })
+    expect((await failureOf(claimSignIn(websLink, deps))).reason).toBe('badAnswer')
+  })
+})
+
 describe('claim 0.2 and 0.1', () => {
   it('reads a 0.2 answer’s decisionClosesAt as the deadline, in epoch seconds', async () => {
     const { deps } = depsWith((claim) =>

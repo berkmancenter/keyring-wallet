@@ -148,7 +148,8 @@ export const KEYRING_TRIGGER_CONFIG: TriggerConfig = {
       typeBase: SIGN_IN_FLOW,
       status: 'draft',
       expRequired: true,
-      allowedVidTypes: ['did:webvh', 'did:web'],
+      // did:webs: a SEDI community's members sign in by its did:webs (the SEDI VTC).
+      allowedVidTypes: ['did:webvh', 'did:web', 'did:webs'],
       supported: { '0': [1] },
       implemented: true,
     },
@@ -276,6 +277,16 @@ const METHOD_SYNTAX: Record<string, (msid: string) => boolean> = {
     )
   },
   web: (msid) => msid.split(':').every((s) => SEGMENT.test(s)),
+  // did:webs (a SEDI community's sign-in code): `<host>[%3Aport][:path…]:<AID>`, the AID a qb64 prefix (base64url,
+  // 44 characters or more), as sedi/webs/identifier.ts parses it. Only sign-in takes it (KEYRING_TRIGGER_CONFIG).
+  webs: (msid) => {
+    const segments = msid.split(':')
+    return (
+      segments.length >= 2 &&
+      segments.every((s) => SEGMENT.test(s)) &&
+      /^[A-Za-z0-9_-]{44,}$/.test(segments[segments.length - 1])
+    )
+  },
   key: (msid) => /^z[1-9A-HJ-NP-Za-km-z]+$/.test(msid),
 }
 
