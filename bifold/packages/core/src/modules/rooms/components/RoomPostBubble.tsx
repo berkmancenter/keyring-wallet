@@ -7,7 +7,7 @@
  *
  * @module rooms/components/RoomPostBubble
  */
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -20,12 +20,31 @@ import { testIdWithKey } from '../../../utils/testable'
 import { postRefusalText } from '../postRefusal'
 import { isWithdrawn, type RoomPost } from '../roomPosts'
 import { arrivedLate, type RoomReactionTally } from '../roomThread'
+import { ROOM_SENDING_LABEL_AFTER_MS, isSendingLabelWaiting } from '../sendingLabelSwitch'
 import type { Identity, RoomFile } from '../types'
 
 import { RoomFileChip } from './RoomFileChip'
 import { RoomQuote, type RoomQuoteTarget } from './RoomQuote'
 import { roomHandle } from './RoomRow'
 import { useMemberWords } from './memberWords'
+
+/**
+ * Whether a post on its way is drawn as one yet. A message with no file is drawn as any other for its first moments
+ * (`sendingLabelSwitch.ts`): most are written before then, and never say "Sending" at all. Counted from when the
+ * bubble first showed the post as sending. A file's upload shows from the start, and so does everything with the
+ * switch off.
+ */
+function useSaysSending(post: RoomPost): boolean {
+  const quietAtFirst =
+    post.delivery === 'sending' && post.progress === undefined && post.files.length === 0 && isSendingLabelWaiting()
+  const [waited, setWaited] = useState(false)
+  useEffect(() => {
+    if (!quietAtFirst) return setWaited(false)
+    const timer = setTimeout(() => setWaited(true), ROOM_SENDING_LABEL_AFTER_MS)
+    return () => clearTimeout(timer)
+  }, [quietAtFirst])
+  return post.delivery === 'sending' && (!quietAtFirst || waited)
+}
 
 export const RoomPostBubble: React.FC<{
   post: RoomPost
@@ -63,6 +82,9 @@ export const RoomPostBubble: React.FC<{
   const words = useDateWords()
   const use24h = useUses24HourClock()
   const mine = post.mine
+  const saysSending = useSaysSending(post)
+  // On its way but not said yet: drawn as a post in the room is.
+  const quietlySending = post.delivery === 'sending' && !saysSending
   const ink = mine ? ColorPalette.grayscale.white : ColorPalette.brand.text
   const muted = mine ? ColorPalette.grayscale.white : ColorPalette.grayscale.mediumGrey
   const styles = StyleSheet.create({
@@ -75,7 +97,7 @@ export const RoomPostBubble: React.FC<{
       gap: 2,
       backgroundColor: mine ? ColorPalette.brand.primary : ColorPalette.brand.secondaryBackground,
       // Not in the room yet: drawn lighter until it is.
-      opacity: post.delivery ? 0.7 : 1,
+      opacity: post.delivery && !quietlySending ? 0.7 : 1,
       borderWidth: post.byAgent ? 1.5 : 1,
       borderStyle: post.byAgent ? 'dashed' : 'solid',
       borderColor: mine ? ColorPalette.brand.primary : ColorPalette.grayscale.lightGrey,
@@ -198,7 +220,10 @@ export const RoomPostBubble: React.FC<{
               </ThemedText>
             </View>
           ) : null}
-          {post.delivery ? (
+          {quietlySending ? (
+            // Nothing to read yet; the mark stays, so a test that asks whether a post is still on its way is told.
+            <View testID={testIdWithKey('RoomPostSending')} accessible={false} />
+          ) : post.delivery ? (
             <ThemedText
               style={[styles.meta, { alignSelf: 'flex-end' }]}
               accessibilityLiveRegion="polite"

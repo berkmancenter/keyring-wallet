@@ -2,7 +2,7 @@
  * The bubble is a Pressable for its long press, inside the outer Pressable a failed post is tapped on to send again.
  * A disabled inner one has to leave the touch to the outer, or the retry is a button that does nothing.
  */
-import { fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
@@ -10,6 +10,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { RoomPostBubble } from '../components/RoomPostBubble'
 import { toInertText } from '../inertText'
 import type { RoomPost } from '../roomPosts'
+import { ROOMS_SENDING_LABEL_WAITS, ROOM_SENDING_LABEL_AFTER_MS } from '../sendingLabelSwitch'
 
 const id = testIdWithKey
 const post = (over: Partial<RoomPost> = {}): RoomPost => ({
@@ -93,5 +94,89 @@ describe('RoomPostBubble: a post that was not opened', () => {
     })
     expect(getByTestId(id('RoomPostRemoved'))).toBeTruthy()
     expect(queryByTestId(id('RoomPostCannotOpen'))).toBeNull()
+  })
+})
+
+// A message is written in about 3 s; until then its bubble said "Sending" on every one (11-17). It now says so only
+// when the post is still on its way after that.
+describe('RoomPostBubble: when a post on its way says so', () => {
+  const SHIPPED = { ...ROOMS_SENDING_LABEL_WAITS }
+  beforeEach(() => {
+    jest.useFakeTimers()
+    Object.assign(ROOMS_SENDING_LABEL_WAITS, { on: true, remoteOff: false })
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    Object.assign(ROOMS_SENDING_LABEL_WAITS, SHIPPED)
+  })
+  const sending = (over: Partial<RoomPost> = {}) => show({ post: post({ delivery: 'sending', ...over }) })
+  const says = (tree: ReturnType<typeof show>) => tree.queryByText('Rooms.PostSending') !== null
+  const opacity = (tree: ReturnType<typeof show>) =>
+    ([] as Array<{ opacity?: number }>).concat(tree.getByTestId(id('RoomPostBubble')).props.style).find(Boolean)
+      ?.opacity
+
+  test('a message says nothing at first and is drawn as any other, still marked as on its way', () => {
+    const tree = sending()
+    expect(says(tree)).toBe(false)
+    expect(opacity(tree)).toBe(1)
+    expect(tree.getByTestId(id('RoomPostSending'))).toBeTruthy()
+    act(() => void jest.advanceTimersByTime(ROOM_SENDING_LABEL_AFTER_MS - 1))
+    expect(says(tree)).toBe(false)
+  })
+
+  test('still on its way after the wait: it says "Sending", drawn lighter, as before', () => {
+    const tree = sending()
+    act(() => void jest.advanceTimersByTime(ROOM_SENDING_LABEL_AFTER_MS))
+    expect(says(tree)).toBe(true)
+    expect(opacity(tree)).toBe(0.7)
+    expect(tree.getByTestId(id('RoomPostSending'))).toHaveTextContent('Rooms.PostSending')
+  })
+
+  test('written before the wait ends: it never says "Sending", and no mark is left', () => {
+    const tree = sending()
+    act(() => void jest.advanceTimersByTime(1000))
+    tree.rerender(
+      <BasicAppContext>
+        <RoomPostBubble post={post()} />
+      </BasicAppContext>
+    )
+    act(() => void jest.advanceTimersByTime(ROOM_SENDING_LABEL_AFTER_MS))
+    expect(says(tree)).toBe(false)
+    expect(tree.queryByTestId(id('RoomPostSending'))).toBeNull()
+  })
+
+  test('one that could not be sent says so at once, wait or no wait (control)', () => {
+    const tree = show({ post: post({ delivery: 'failed' }), onRetry: jest.fn() })
+    expect(tree.getByTestId(id('RoomPostNotSent'))).toBeTruthy()
+    expect(opacity(tree)).toBe(0.7)
+    expect(tree.queryByTestId(id('RoomPostSending'))).toBeNull()
+  })
+
+  test('failing during the wait shows "Not sent" then, not after it', () => {
+    const tree = sending()
+    act(() => void jest.advanceTimersByTime(500))
+    tree.rerender(
+      <BasicAppContext>
+        <RoomPostBubble post={post({ delivery: 'failed' })} onRetry={jest.fn()} />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(id('RoomPostNotSent'))).toBeTruthy()
+  })
+
+  test("a file's upload shows its progress from the start (control)", () => {
+    const tree = sending({ progress: 0.25 })
+    expect(tree.getByTestId(id('RoomPostSending'))).toHaveTextContent('Rooms.PostSendingPercent')
+    expect(opacity(tree)).toBe(0.7)
+  })
+
+  test.each([
+    ['off', { on: false, remoteOff: false }],
+    ['turned off remotely', { on: true, remoteOff: true }],
+    ['not plainly on', { on: 'yes' as unknown as boolean, remoteOff: false }],
+  ])('with the switch %s, "Sending" shows from the first moment, as before (control)', (_name, values) => {
+    Object.assign(ROOMS_SENDING_LABEL_WAITS, values)
+    const tree = sending()
+    expect(says(tree)).toBe(true)
+    expect(opacity(tree)).toBe(0.7)
   })
 })
