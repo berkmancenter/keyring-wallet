@@ -49,7 +49,14 @@ import {
   VtiMediatorSession,
   vtiClientIdentityFromPersona,
 } from './VtiMediatorTransport'
-import { dropOwnSession, keepOwnSession, ownSessionOpening, type OwnSession } from './vtiOwnSessions'
+import {
+  dropOwnSession,
+  keepOwnSession,
+  ownSessionNotOpening,
+  ownSessionOpening,
+  ownSessionsSettling,
+  type OwnSession,
+} from './vtiOwnSessions'
 import { keepForPersona, ownedByInbox } from './vtiPersonaInbox'
 import { frameForm, tspSessionForPersona, unpackTrustTaskFromPeer } from './vtiTsp'
 
@@ -193,6 +200,8 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
     running.delete(did)
     // Asks as this identity stop going out on it before it stops: one in flight is answered or times out as any is.
     if (entry.owned) dropOwnSession(did, entry.owned)
+    // Nor will an open still under way end in a session now: a listing waiting for it asks the shared way at once.
+    ownSessionNotOpening(did, entry.starting)
     // An open still under way finishes on its own and stops what it opened
     // (startOne sees it is no longer running); it is not waited on past the deadline.
     if (entry.starting)
@@ -260,6 +269,14 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
     ownSessionOpening(persona.did, entry.starting)
   }
 
+  /** Where each listener stands, once per change. */
+  let statesSaid = ''
+  const sayStates = (states: string) => {
+    if (states === statesSaid) return
+    statesSaid = states
+    releaseWarn(`[VTI] listeners: ${states}`)
+  }
+
   const reconcileOnce = async () => {
     let all: VtiPersona[] = []
     if (!stopped && !paused) {
@@ -278,13 +295,41 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
     step = 'stopping listeners no longer wanted'
     await Promise.all([...running.keys()].filter((did) => !wantedDids.has(did)).map(stopOne))
     step = 'starting listeners'
-    if (stopped || paused) return
+    if (stopped || paused) return void sayStates(paused ? 'none while the app is in the background' : 'stopped')
     for (const persona of wanted) {
       if (running.has(persona.did)) continue
       const failed = failures.get(persona.did)
       if (failed && now() < failed.until) continue
       startOne(persona)
     }
+    // Every identity of the linked agent's and where its listener stands, said when that changes: a report showed one
+    // identity with no listener for 11 s and nothing to say why (66RA-EWC4, 11-17).
+    const shared = sharedNow()
+    const vtaDid = vtaDidNow()
+    sayStates(
+      all
+        .filter((p) => p.vtaDid === vtaDid && !isAgentsOwnPersona(p))
+        .map((p) => {
+          const entry = running.get(p.did)
+          const failed = failures.get(p.did)
+          const state = entry
+            ? entry.session && !entry.starting
+              ? 'listening'
+              : 'opening'
+            : !p.kmsKeyIds?.keyAgreement
+              ? 'its key is not on the phone'
+              : p.did === shared.did || p.did === shared.signingInAs
+                ? "the shared session's"
+                : p.did === sharedTarget
+                  ? 'kept for the shared session'
+                  : failed && now() < failed.until
+                    ? // The time it is tried again, not how long is left: the same words at every pass until then.
+                      `waits until ${new Date(failed.until).toISOString().slice(11, 19)}Z after ${failed.count} failed open(s)`
+                    : 'not started'
+          return `${didPrefix(p.did)} ${state}`
+        })
+        .join('; ') || 'no identity of the linked agent'
+    )
   }
 
   /** One reconcile at a time; a request made meanwhile runs once it is done. */
@@ -310,6 +355,8 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
       const took = Date.now() - started
       if (took > RECONCILE_SLOW_MS) releaseWarn(`[VTI] listeners: a reconcile took ${Math.round(took / 1000)} s`)
     })
+    // A listing asked while this pass decides waits for it, then for the listener it opens (ownSessionOnceOpen).
+    if (!stopped && !paused) ownSessionsSettling(reconciling)
     return reconciling
   }
 

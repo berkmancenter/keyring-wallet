@@ -237,6 +237,81 @@ describe('the listeners', () => {
       expect(given).toBe(ownSessionFor(b.did))
     })
 
+    it('a listing asked while the listeners are still reading the identities waits for the listener they then open', async () => {
+      const b = persona('b')
+      sharedMoves({ did: persona('a').did, connected: true })
+      let letRead!: () => void
+      const reading = new Promise<void>((resolve) => (letRead = resolve))
+      start([b], { open: sending(), personas: async () => (await reading, [b]) })
+      await flush()
+      // Nothing is opening yet: the identities are not read.
+      expect(ownSessionFor(b.did)).toBeUndefined()
+      const waited = ownSessionOnceOpen(b.did, 60_000)
+      letRead()
+      const given = await waited
+      expect(given).toBeDefined()
+      expect(given).toBe(ownSessionFor(b.did))
+    })
+
+    it('in the background no listener is coming: a listing does not wait for the pass that closes them (control)', async () => {
+      const b = persona('b')
+      sharedMoves({ did: persona('a').did, connected: true })
+      const handlers: Array<(s: string) => void> = []
+      const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
+        handlers.push(h)
+        return { remove: () => undefined }
+      }) as never)
+      // An open that never ends: were the closing pass waited on, the wait below would run its 60 s.
+      let letOpen!: () => void
+      const gate = new Promise<void>((resolve) => (letOpen = resolve))
+      const lend = sending()
+      const stuck = jest.fn(async (p: VtiPersona) => (await gate, lend(p)))
+      // The closing pass waits 3 s on the open it stops: a listing must not wait on that pass, or on that open.
+      start([b], { open: stuck, deadlines: { stopMs: 3_000 } })
+      await flush()
+      handlers.forEach((h) => h('background'))
+      const waited = ownSessionOnceOpen(b.did, 60_000).then((session) => ({ ended: true, session }))
+      const soon = new Promise<{ ended: false }>((resolve) => setTimeout(() => resolve({ ended: false }), 500))
+      await expect(Promise.race([waited, soon])).resolves.toEqual({ ended: true, session: undefined })
+      // The open ends now, for nobody: its session is stopped, never lent.
+      letOpen()
+      await flush()
+      expect(ownSessionFor(b.did)).toBeUndefined()
+      spy.mockRestore()
+    })
+
+    it('says where each identity’s listener stands, once per change, and why one has none', async () => {
+      const a = persona('a')
+      const b = persona('b')
+      const c = persona('c')
+      const said: string[] = []
+      const warn = jest.spyOn(console, 'warn').mockImplementation((line: unknown) => void said.push(String(line)))
+      sharedMoves({ did: a.did, connected: true })
+      const failsFor = (did: string) =>
+        jest.fn(async (p: VtiPersona): Promise<ListenerSession> => {
+          if (p.did === did) throw new Error('challenge answered 503')
+          return sending()(p)
+        })
+      start([a, b, c], { open: failsFor(c.did), retryMs: 60_000 })
+      await flush()
+      // Another pass, with the listeners settled.
+      sharedMoves({ signingInAs: a.did })
+      await flush()
+      const stateLines = () => said.filter((line) => line.startsWith('[VTI] listeners: did:'))
+      const states = stateLines()
+      expect(states[0]).toMatch(/ the shared session's; .* opening; .* opening$/)
+      expect(states[states.length - 1]).toMatch(
+        / the shared session's; .* listening; .* waits until \d\d:\d\d:\d\dZ after 1 failed open\(s\)$/
+      )
+      // Two more passes with nothing changed: nothing more is said.
+      sharedMoves({ signingInAs: undefined })
+      await flush()
+      sharedMoves({ signingInAs: a.did })
+      await flush()
+      warn.mockRestore()
+      expect(stateLines()).toEqual(states)
+    })
+
     it('an identity the shared session holds has no open under way: nothing to wait for (control)', async () => {
       const a = persona('a')
       sharedMoves({ did: a.did, connected: true })

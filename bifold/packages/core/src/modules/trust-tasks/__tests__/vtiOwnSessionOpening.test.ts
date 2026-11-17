@@ -10,6 +10,7 @@ import {
   ownSessionFor,
   ownSessionOnceOpen,
   ownSessionOpening,
+  ownSessionsSettling,
 } from '../module/vtiOwnSessions'
 
 const DID = 'did:webvh:p:tiger-phrase'
@@ -95,6 +96,88 @@ describe('waiting for an identity’s own session that is opening', () => {
     newer.resolve()
     await jest.advanceTimersByTimeAsync(0)
     expect(seen.value).toBe(session)
+  })
+})
+
+// 66RA-EWC4 (11-17): a listing asked while the listeners were still deciding what to open found nothing opening, and
+// signed the shared session in as an identity whose listener opened seconds later.
+describe('waiting while the listeners decide which identities to open', () => {
+  it('waits for the pass, then for the listener it starts, and gives that session', async () => {
+    const pass = deferred()
+    const opening = deferred()
+    ownSessionsSettling(pass.promise)
+    const seen = watch(ownSessionOnceOpen(DID, 15_000))
+    await jest.advanceTimersByTimeAsync(1_000)
+    expect(seen.done).toBe(false)
+    ownSessionOpening(DID, opening.promise)
+    pass.resolve()
+    await jest.advanceTimersByTimeAsync(1_000)
+    expect(seen.done).toBe(false)
+    keepOwnSession(DID, session)
+    opening.resolve()
+    await jest.advanceTimersByTimeAsync(0)
+    expect(seen).toEqual({ done: true, value: session })
+  })
+
+  it('a pass that ends with no listener started for this identity: none, as soon as it ends', async () => {
+    const pass = deferred()
+    ownSessionsSettling(pass.promise)
+    const seen = watch(ownSessionOnceOpen(DID, 15_000))
+    pass.resolve()
+    await jest.advanceTimersByTimeAsync(0)
+    expect(seen).toEqual({ done: true, value: undefined })
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('one bound covers the pass and the open together', async () => {
+    const pass = deferred()
+    ownSessionsSettling(pass.promise)
+    const seen = watch(ownSessionOnceOpen(DID, 15_000))
+    await jest.advanceTimersByTimeAsync(10_000)
+    ownSessionOpening(DID, deferred().promise)
+    pass.resolve()
+    await jest.advanceTimersByTimeAsync(4_999)
+    expect(seen.done).toBe(false)
+    await jest.advanceTimersByTimeAsync(2)
+    expect(seen).toEqual({ done: true, value: undefined })
+  })
+
+  it('a pass that fails, or never ends, holds a listing no longer than the bound', async () => {
+    const failing = deferred()
+    ownSessionsSettling(failing.promise)
+    const failed = watch(ownSessionOnceOpen(DID, 15_000))
+    failing.reject(new Error('identities not read'))
+    await jest.advanceTimersByTimeAsync(0)
+    expect(failed).toEqual({ done: true, value: undefined })
+
+    ownSessionsSettling(deferred().promise)
+    const stuck = watch(ownSessionOnceOpen(DID, 15_000))
+    await jest.advanceTimersByTimeAsync(15_001)
+    expect(stuck).toEqual({ done: true, value: undefined })
+  })
+
+  it('an older pass ending does not end the wait on a newer one', async () => {
+    const older = deferred()
+    const newer = deferred()
+    ownSessionsSettling(older.promise)
+    ownSessionsSettling(newer.promise)
+    older.resolve()
+    await jest.advanceTimersByTimeAsync(0)
+    const seen = watch(ownSessionOnceOpen(DID, 15_000))
+    await jest.advanceTimersByTimeAsync(1_000)
+    expect(seen.done).toBe(false)
+    newer.resolve()
+    await jest.advanceTimersByTimeAsync(0)
+    expect(seen).toEqual({ done: true, value: undefined })
+  })
+
+  it('a pass that ended is not waited on again (control)', async () => {
+    const pass = deferred()
+    ownSessionsSettling(pass.promise)
+    pass.resolve()
+    await jest.advanceTimersByTimeAsync(0)
+    await expect(ownSessionOnceOpen(DID, 15_000)).resolves.toBeUndefined()
+    expect(jest.getTimerCount()).toBe(0)
   })
 })
 
