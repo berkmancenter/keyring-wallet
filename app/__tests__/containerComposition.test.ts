@@ -11,10 +11,12 @@
  * bifold's init() last still passes.)
  */
 import { defaultMessagePickupLifecycle, MainContainer, TOKENS } from '@bifold/core'
+import { DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
 import path from 'path'
 import { container } from 'tsyringe'
 
 import { composeContainers } from '../container-compose'
+import { disarmLivePickup, setLivePickupEnabled } from '../src/utils/livePickup'
 import BCLogger from '../src/utils/logger'
 
 // Stubs, each off the registration path under test. If you add one, say why here:
@@ -62,12 +64,24 @@ describe('container composition', () => {
     // which no longer builds the container itself.)
     expect((bifold as unknown as { log?: unknown }).log).toBe(BCLogger)
 
-    // Behaviour, not just identity: the app's foreground does nothing (useBCAgentSetup restarts
-    // pickup itself); bifold's default would stop and restart polling here.
-    const { agent, recipient } = fakeAgent()
-    await lifecycle.onForeground(agent)
-    expect(recipient.stopMessagePickup).not.toHaveBeenCalled()
-    expect(recipient.initiateMessagePickup).not.toHaveBeenCalled()
+    // Behaviour, not just identity: with live pickup on, the app's foreground restarts LIVE pickup
+    // (useBCAgentSetup restartPickupOnReturn); bifold's default would restart polling here and undo it.
+    setLivePickupEnabled(true)
+    try {
+      const { agent, recipient } = fakeAgent()
+      await lifecycle.onForeground(agent)
+      expect(recipient.initiateMessagePickup).toHaveBeenCalledWith(
+        undefined,
+        DidCommMediatorPickupStrategy.PickUpV2LiveMode
+      )
+      expect(recipient.initiateMessagePickup).not.toHaveBeenCalledWith(
+        undefined,
+        DidCommMediatorPickupStrategy.PickUpV2
+      )
+    } finally {
+      setLivePickupEnabled(false)
+      disarmLivePickup()
+    }
   }, 60_000)
 
   it("a bare bifold container gives bifold's default (the control)", async () => {
