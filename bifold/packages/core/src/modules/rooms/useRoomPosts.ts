@@ -486,6 +486,13 @@ export function useRoomPosts(
     )
   }, [posts, roomId, service])
 
+  // In view: this room's reads go ahead of the agent's queue (RoomsService.roomInView), until it is not.
+  useEffect(() => {
+    if (!service?.roomInView || !enabled || !live) return
+    service.roomInView(roomId, true)
+    return () => service.roomInView?.(roomId, false)
+  }, [service, roomId, enabled, live])
+
   const loadOlder = useCallback(() => {
     setLoadingOlder(true)
     wanted.current += POSTS_PAGE

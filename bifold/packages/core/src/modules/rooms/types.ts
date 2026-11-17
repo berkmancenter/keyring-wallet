@@ -533,6 +533,11 @@ export interface RoomsService {
    */
   readNotes?(roomId: string, keys: readonly string[]): Promise<Note>[]
   /**
+   * The room open on a screen comes into view, or goes (useRoomPosts): its reads may go ahead of the agent's queue.
+   * Counted per room. None for the sample.
+   */
+  roomInView?(roomId: string, inView: boolean): void
+  /**
    * Ask to hear when `roomId` moves past `sinceVersion` (the newest version read), instead of polling it: where the
    * agent and the room's host can watch, the room is armed at its host. Returns at once; nothing is said if it can't.
    */

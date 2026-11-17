@@ -106,7 +106,12 @@ function setup(o: Setup = {}) {
   const sent = (part: string, roomId = ROOM) =>
     agentTask.mock.calls.filter(([t, p]) => t.includes(part) && p.roomId === roomId).map(([, p]) => p)
   const warned = () => (b.warn as jest.Mock).mock.calls.map((c) => String(c[0]))
-  return { service, sent, warned }
+  /** The options each task of a type containing `part` was asked with, for `roomId` (undefined: none given). */
+  const askedWith = (part: string, roomId = ROOM) =>
+    agentTask.mock.calls
+      .filter(([t, p]) => t.includes(part) && p.roomId === roomId)
+      .map((call) => (call as unknown[])[2] as Record<string, unknown> | undefined)
+  return { service, sent, warned, askedWith }
 }
 
 const named = (member: string) => ({ ext: { 'org.openvtc.rooms': { member } } })
@@ -201,5 +206,50 @@ describe('accepting a room this phone holds as another identity', () => {
     await s.service.acceptOffer(preview.token)
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(s.sent('/rooms/keys/backfill/')).toEqual([{ roomId: ROOM, host: COMMUNITY.did }])
+  })
+})
+
+// 11-17: a room's browse waited behind Messages' queued watches and key list (K2QJ-Z9G9). The open room's own reads say
+// so, and may go ahead of the agent's queue (vtaReadLane VTA_ROOM_IN_VIEW_FIRST).
+describe('the room open on a screen', () => {
+  it('its listing and reads are asked as in view, while it is', async () => {
+    const s = setup({ held: { [OTHER]: [NEW] } })
+    await s.service.listMyRooms()
+    s.service.roomInView(OTHER, true)
+    await s.service.listNotes(OTHER)
+    await s.service.readNote(OTHER, 'note/1').catch(() => undefined)
+    expect(s.askedWith('/rooms/keys/browse/', OTHER)).toEqual([{ inView: true }])
+    expect(s.askedWith('/rooms/keys/read/', OTHER)[0]).toMatchObject({ inView: true })
+  })
+
+  it('control: out of view, and another room, are asked exactly as before', async () => {
+    const s = setup({ held: { [OTHER]: [NEW], [ROOM]: [NEW] } })
+    await s.service.listMyRooms()
+    s.service.roomInView(ROOM, true)
+    await s.service.listNotes(OTHER)
+    expect(s.askedWith('/rooms/keys/browse/', OTHER)).toEqual([undefined])
+    s.service.roomInView(ROOM, false)
+    await s.service.listNotes(ROOM)
+    expect(s.askedWith('/rooms/keys/browse/', ROOM)).toEqual([undefined])
+  })
+
+  it('stays in view until every screen of it has gone', async () => {
+    const s = setup({ held: { [OTHER]: [NEW] } })
+    await s.service.listMyRooms()
+    s.service.roomInView(OTHER, true)
+    s.service.roomInView(OTHER, true)
+    s.service.roomInView(OTHER, false)
+    await s.service.listNotes(OTHER)
+    s.service.roomInView(OTHER, false)
+    await s.service.listNotes(OTHER, { sinceVersion: 1 })
+    expect(s.askedWith('/rooms/keys/browse/', OTHER)).toEqual([{ inView: true }, undefined])
+  })
+
+  it('control: a task that is not a read of the room is never asked as in view', async () => {
+    const s = setup()
+    await s.service.listMyRooms()
+    s.service.roomInView(ROOM, true)
+    await s.service.recordFeaturesIn(ROOM)
+    expect(s.askedWith('/rooms/keys/profile/read/')).toEqual([undefined])
   })
 })

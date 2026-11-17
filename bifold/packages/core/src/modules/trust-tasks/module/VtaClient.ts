@@ -110,6 +110,7 @@ import {
   inReadLane,
   VTA_HEARTBEAT_BESIDE,
   isKeyForSignInFirstOn,
+  isRoomInViewFirstOn,
   VTA_READ_LANE_SIZE,
 } from './vtaReadLane'
 import {
@@ -878,6 +879,8 @@ const inFlightPriority = new WeakMap<Promise<void>, Priority>()
 export interface Priority {
   first: boolean
   raise?: () => void
+  /** A read the open room's screen asks (vtaReadLane VTA_ROOM_IN_VIEW_FIRST): goes first where that is on. */
+  inView?: boolean
 }
 
 /** A task dropped from the queue before it was sent ({@link VtaClient.dropQueued}). */
@@ -1646,7 +1649,9 @@ export class VtaClient {
       // A member's own write goes ahead of what is queued, behind any other part of a write, in the order asked; what
       // is on the wire runs on (vtaReadLane, goesFirst). So does a key a sign-in waits for, where that is on.
       const keyFirst = () => isKeyForSignInFirstOn() && priority?.first === true
-      if (goesFirst(type, payload) || keyFirst()) this.placeFirst(queued)
+      // So does the open room's own read, where that is on: a read-lane task only, never anything else asked so.
+      const viewFirst = isRoomInViewFirstOn() && priority?.inView === true && inReadLane(type)
+      if (goesFirst(type, payload) || keyFirst() || viewFirst) this.placeFirst(queued)
       else this.waiting.push(queued)
       if (priority)
         priority.raise = () => {

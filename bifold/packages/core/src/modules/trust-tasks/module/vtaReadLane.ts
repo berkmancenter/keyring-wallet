@@ -149,3 +149,29 @@ export function goesFirst(type: string, payload: Record<string, unknown> | undef
   const completes = document && typeof document === 'object' ? (document as { type?: unknown }).type : undefined
   return typeof completes === 'string' && RECORDS_PUT.test(completes)
 }
+
+/**
+ * The open room's own reads (`rooms/keys/browse` and `rooms/keys/read`, read-lane tasks the room screen asks while it
+ * is in view: VtaClient `Priority.inView`) go ahead of what is queued, as a member's own write does: never ahead of a
+ * task on the wire, in order among whatever else goes first, and still in the read lane. On a tester's phone a room's
+ * browse waited behind Messages' queued watches and key list, 0.25-0.7 s each time (K2QJ-Z9G9, 11-17).
+ *
+ * Two values a release (an OTA included) sets, and nothing else, as for rooms' `liveDeliverySwitch.ts`:
+ * - `on`: the release's choice.
+ * - `remoteOff`: the release's kill. Set it to `true` and every task keeps the order asked again, for everyone at the
+ *   next start, whatever `on` says, until a release sets it back.
+ *
+ * KILL RECIPE (no kill PR is kept open): branch from current main, set `remoteOff: true` below (one line), and publish
+ * it by OTA. Both are Alberto's.
+ *
+ * Nothing is saved on the phone and nothing a person does changes either value; it is read at each queueing, never
+ * cached. It fails closed: anything but both values as booleans, `on` true and `remoteOff` false, reads as off.
+ *
+ * Tests flip the entries and must put them back.
+ */
+export const VTA_ROOM_IN_VIEW_FIRST: { on: boolean; remoteOff: boolean } = { on: true, remoteOff: false }
+
+/** Whether the open room's reads may go ahead of the queue now: switched on, and not turned off. */
+export function isRoomInViewFirstOn(): boolean {
+  return VTA_ROOM_IN_VIEW_FIRST.on === true && VTA_ROOM_IN_VIEW_FIRST.remoteOff === false
+}

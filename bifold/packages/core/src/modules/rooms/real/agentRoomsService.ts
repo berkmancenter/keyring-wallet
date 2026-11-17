@@ -151,8 +151,11 @@ export interface RoomsBackend {
   agentTask(
     type: string,
     payload: Record<string, unknown>,
-    /** `waitForConsent: false`: a task held for consent is refused at once, instead of waiting for the grant. */
-    options?: { timeoutMs?: number; waitForConsent?: boolean }
+    /**
+     * `waitForConsent: false`: a task held for consent is refused at once, instead of waiting for the grant.
+     * `inView`: a read the open room's screen asks, which may go ahead of the agent's queue (VtaClient `Priority`).
+     */
+    options?: { timeoutMs?: number; waitForConsent?: boolean; inView?: boolean }
   ): Promise<unknown>
   communities(): Promise<RoomsCommunity[]>
   /** Send a Trust Task to a community as this phone's persona for it; resolves with the response payload. */
@@ -248,6 +251,8 @@ export const UNSERVED_LISTING_MS = 30 * 60 * 1000
  * file-key, backfill, chain, commit, profile read and seal, at any version (Keyring sends no profile write). Not `read-marker`, `key-package`, `welcome`,
  * `list`, `watch` or `act` (which names its member as the document's issuer).
  */
+/** A read of a room's records: what the open room's screen waits for (roomInView). */
+const ROOM_READ_TASK = /\/rooms\/keys\/(browse|read)\/\d/
 const CUSTODY_TASK = /\/rooms\/keys\/((browse|read|open|file-key|backfill|chain|commit|seal)|profile\/read)\/\d/
 
 /** Keyring's and the agent's extension namespace on rooms tasks. */
@@ -454,6 +459,8 @@ export class AgentRoomsService implements RoomsService {
   private heldBy = new Map<string, Set<string>>()
   /** The rooms already said to be held as more than one identity, so it is said once. */
   private namedSaid = new Set<string>()
+  /** The rooms open on a screen and in view, by how many screens (roomInView). */
+  private readonly inView = new Map<string, number>()
   private roomsInFlight?: Promise<RoomSummary[]>
   /** Counts the accepts and leaves: a listing asked before one is neither joined nor kept after it. */
   private roomsChanged = 0
@@ -779,8 +786,21 @@ export class AgentRoomsService implements RoomsService {
     options?: { timeoutMs?: number; waitForConsent?: boolean }
   ): Promise<unknown> {
     const sent = this.namingMember(type, payload)
+    // A read of the room open on screen says so, and may go ahead of the agent's queue (VtaClient Priority.inView).
+    const viewed = ROOM_READ_TASK.test(type) && typeof payload.roomId === 'string' && this.inView.has(payload.roomId)
+    const asked = viewed ? { ...(options ?? {}), inView: true } : options
     // Asked with the same arguments as before when no options are given.
-    return options ? this.backend.agentTask(type, sent, options) : this.backend.agentTask(type, sent)
+    return asked ? this.backend.agentTask(type, sent, asked) : this.backend.agentTask(type, sent)
+  }
+
+  /**
+   * The room open on a screen, while it is in view (useRoomPosts): its reads go ahead of the agent's queue. Counted, so
+   * two screens of one room (its chat and a part) leave it in view until both have gone.
+   */
+  public roomInView(roomId: string, inView: boolean): void {
+    const n = (this.inView.get(roomId) ?? 0) + (inView ? 1 : -1)
+    if (n > 0) this.inView.set(roomId, n)
+    else this.inView.delete(roomId)
   }
 
   private namingMember(type: string, payload: Record<string, unknown>): Record<string, unknown> {

@@ -130,7 +130,13 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
         options?.timeoutMs,
         undefined,
         undefined,
-        options?.waitForConsent === undefined ? undefined : { waitForConsent: options.waitForConsent }
+        options?.waitForConsent === undefined && !options?.inView
+          ? undefined
+          : {
+              ...(options?.waitForConsent === undefined ? {} : { waitForConsent: options.waitForConsent }),
+              // The open room's read: it may go ahead of the queue (vtaReadLane VTA_ROOM_IN_VIEW_FIRST).
+              ...(options?.inView ? { priority: { first: false, inView: true } } : {}),
+            }
       ),
 
     // The communities this phone holds a membership in under the agent it acts with now, as the

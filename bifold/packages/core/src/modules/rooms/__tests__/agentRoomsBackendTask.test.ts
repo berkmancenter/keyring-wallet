@@ -40,6 +40,22 @@ describe('agentTask', () => {
     expect(mockTask).toHaveBeenCalledWith('t', { a: 1 }, 60000, undefined, undefined, { waitForConsent: false })
   })
 
+  test("the open room's read reaches the client as in view, its other options beside it", async () => {
+    await createAgentRoomsBackend(agent).agentTask('t', { a: 1 }, { inView: true })
+    expect(mockTask).toHaveBeenLastCalledWith('t', { a: 1 }, undefined, undefined, undefined, {
+      priority: { first: false, inView: true },
+    })
+    await createAgentRoomsBackend(agent).agentTask(
+      't',
+      { a: 1 },
+      { timeoutMs: 60000, waitForConsent: false, inView: true }
+    )
+    expect(mockTask).toHaveBeenLastCalledWith('t', { a: 1 }, 60000, undefined, undefined, {
+      waitForConsent: false,
+      priority: { first: false, inView: true },
+    })
+  })
+
   test("a task with no options keeps the client's own defaults (control)", async () => {
     await createAgentRoomsBackend(agent).agentTask('t', { a: 1 })
     expect(mockTask).toHaveBeenCalledWith('t', { a: 1 }, undefined, undefined, undefined, undefined)

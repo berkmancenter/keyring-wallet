@@ -955,3 +955,25 @@ describe("a room's opening, in the app's log", () => {
     expect(lines[1]).toMatch(/opened: 0 posts shown in \d+ ms$/)
   })
 })
+
+// 11-17: the open room's reads may go ahead of the agent's queue while it is in view (RoomsService.roomInView).
+describe('the room in view', () => {
+  it('says it is in view while it is, and that it is not once it goes', async () => {
+    const r = roomWith([note('a', 1)])
+    const roomInView = jest.fn()
+    const hook = await open(Object.assign(r.service, { roomInView }), true)
+    expect(roomInView.mock.calls).toEqual([[ROOM, true]])
+    hook.unmount()
+    expect(roomInView.mock.calls).toEqual([
+      [ROOM, true],
+      [ROOM, false],
+    ])
+  })
+
+  it('control: out of view (behind another screen, or the app away) it says nothing', async () => {
+    const r = roomWith([note('a', 1)])
+    const roomInView = jest.fn()
+    await open(Object.assign(r.service, { roomInView }), false)
+    expect(roomInView).not.toHaveBeenCalled()
+  })
+})
