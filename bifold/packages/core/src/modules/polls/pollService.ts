@@ -28,6 +28,7 @@
  *
  * @module polls/pollService
  */
+import { failureCategory, logRef } from '../rooms/roomsLogWords'
 import { CastFailure, castDelayMs, postCast, type BallotBoxDoor } from './ballotBox'
 import { ballotOf, ballotRefusal, type BallotRefusal, type GivenAnswer } from './ballot'
 import {
@@ -194,12 +195,33 @@ export function createPollService(b: PollsBackend) {
     return name === 'unsupportedVersion' || name === 'unsupportedType'
   }
 
+  /** A community's polls ({@link listPolls}), and how long they took, said once. */
+  const readPolls = async (community: string, filter: { state?: string } = {}): Promise<PollListItem[]> => {
+    // How long a community's polls took, said once per listing: polls were felt slow (11-16) and nothing timed them.
+    const started = b.now()
+    let asks = 0
+    try {
+      const polls = await listPolls(community, filter, () => asks++)
+      b.warn(`[Polls] ${polls.length} listed for ${logRef(community)} in ${b.now() - started} ms (${asks} asked)`)
+      return polls
+    } catch (e) {
+      // By kind alone, as rooms say it (roomsLogWords): a community writes its refusal's code as well as its message.
+      const kind = e instanceof PollRefusal ? e.reason : failureCategory(e)
+      b.warn(`[Polls] not listed for ${logRef(community)} after ${b.now() - started} ms (${asks} asked): ${kind}`)
+      throw e
+    }
+  }
+
   /**
-   * A community's polls, at the newest list it serves.
+   * A community's polls, at the newest list it serves; `asked` is told of each ask.
    *
    * @versionLadder vtc/elections/list
    */
-  const readPolls = async (community: string, filter: { state?: string } = {}): Promise<PollListItem[]> => {
+  const listPolls = async (
+    community: string,
+    filter: { state?: string },
+    asked: () => void
+  ): Promise<PollListItem[]> => {
     const polls: PollListItem[] = []
     let at = communityFrom.get(community) ?? 0
     let cursor: string | undefined
@@ -208,6 +230,7 @@ export function createPollService(b: PollsBackend) {
       for (;;) {
         const type = POLL_GENERATIONS[at].list
         try {
+          asked()
           answer = await b.communityTask(community, type, {
             ...(filter.state ? { state: filter.state } : {}),
             ...(cursor ? { cursor } : {}),

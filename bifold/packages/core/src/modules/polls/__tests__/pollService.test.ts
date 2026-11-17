@@ -1,3 +1,4 @@
+import { logRef } from '../../rooms/roomsLogWords'
 /**
  * The ticket and the cast, through every interruption the plan names ("Sending a vote"): the record is written before
  * anything is asked; a stored cast is the only one ever sent, and the same bytes go again after a kill or a lost
@@ -446,6 +447,40 @@ describe('the newest generation both sides serve', () => {
     w.asked.length = 0
     await w.service.readPoll(COMMUNITY, POLL)
     expect(w.asked).toEqual([G1.show])
+  })
+
+  describe('how long a listing took, said once per listing (11-16)', () => {
+    test('counts every ask, a step down included, and names the community by its short ref', async () => {
+      const w = world()
+      w.state.served = voter(G3)
+      w.state.communityServes = reads(G2)
+      await w.service.readPolls(COMMUNITY)
+      expect(w.warnings.filter((m) => m.startsWith('[Polls] '))).toEqual([
+        `[Polls] 0 listed for ${logRef(COMMUNITY)} in 0 ms (2 asked)`,
+      ])
+    })
+
+    test('control: a version found refused is not asked again, and the next line says one ask', async () => {
+      const w = world()
+      w.state.served = voter(G3)
+      w.state.communityServes = reads(G2)
+      await w.service.readPolls(COMMUNITY)
+      w.warnings.length = 0
+      w.asked.length = 0
+      await w.service.readPolls(COMMUNITY)
+      expect(w.asked).toEqual([G2.list])
+      expect(w.warnings).toEqual([`[Polls] 0 listed for ${logRef(COMMUNITY)} in 0 ms (1 asked)`])
+    })
+
+    test('a listing that fails says so by kind alone, and still fails', async () => {
+      const w = world()
+      w.state.communityRefuses[G1.list] = `vtc/elections/list:${COMMUNITY} says no`
+      await expect(w.service.readPolls(COMMUNITY)).rejects.toThrow()
+      const lines = w.warnings.filter((m) => m.startsWith('[Polls] '))
+      // The default community serves only the oldest list: one ask steps down, the next is refused.
+      expect(lines).toEqual([`[Polls] not listed for ${logRef(COMMUNITY)} after 0 ms (2 asked): failed`])
+      expect(lines.join('\n')).not.toContain('says no')
+    })
   })
 
   test('a list that steps down says the community is too old for the newest show', async () => {
