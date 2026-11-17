@@ -706,6 +706,28 @@
     "GuardianCardOff": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
     "GuardianCardReceive": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
     "GuardianCardResult": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
+    "GuardianOffer": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferActions": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferAgain": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferButton": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferCancel": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferCard": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferCardDemo": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferDetail": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferError": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferSend": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferSentPill": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
+    "GuardianOfferSheet": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetAccept": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetDecline": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetDemo": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetFaceId": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetFailed": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetNeedsAgent": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetNotNow": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetRemoving": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferSheetState": ["src/modules/trust-tasks/components/GuardianOfferSheet.tsx"],
+    "GuardianOfferStatus": ["src/modules/trust-tasks/screens/GuardianOfferRow.tsx"],
     "HardwareAttestation": ["src/screens/Settings.tsx"],
     "HardwareAttestationChangedEnterPIN": ["src/screens/PINVerify.tsx"],
     "HeaderText": [
@@ -2441,6 +2463,36 @@
       "src/modules/trust-tasks/components/DemoPill.tsx": "testID"
     },
     {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.accept"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.decline"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.faceId"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.failed"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.needsAgent"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.notNow"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.pick(action)"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.removing"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.sheet"
+    },
+    {
+      "src/modules/trust-tasks/components/GuardianOfferSheet.tsx": "GuardianOfferSheetIds.state"
+    },
+    {
       "src/modules/trust-tasks/screens/ApproverAskRow.tsx": "ApproverAskRowIds.again"
     },
     {
@@ -2628,6 +2680,39 @@
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Toggle`"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.actions"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.cancel"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.card"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.detail"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.pick(action)"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.row"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.send"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.sentPill"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "GuardianOfferRowIds.status"
+    },
+    {
+      "src/modules/trust-tasks/screens/GuardianOfferRow.tsx": "id"
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.activity"

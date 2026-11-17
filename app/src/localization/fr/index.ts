@@ -208,6 +208,7 @@ const translation = {
     "BecomeK0TestWard": "Je suis la personne protégée de test (K0)",
     "EnableStateCard": "Carte d’État (démo) : afficher dans Justificatifs la carte de tuteur que ce téléphone détient",
     "EnableConfirmItsYou": "C'est bien vous : demander à un contact de confirmer que c'est bien lui (démo). À activer sur les deux téléphones.",
+    "EnableGuardianOffers": "Propositions de tuteur : un tuteur propose d'être l'approbateur d'un contact, avec sa carte de tuteur (démo). Nécessite aussi les approbateurs de confiance et les approbateurs vérifiés par l'État. À activer sur les deux téléphones.",
     "Demos": "Démos",
     "SediDemoGuardian": "Démo tuteur",
     "SediDemoGuardianHint": "Sur le téléphone de l'approbateur. Détient la carte de test Example State et affiche la carte d'État.",
