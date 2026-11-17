@@ -3091,7 +3091,7 @@ export class VtaAgentController {
       .catch(() => [])
     for (const persona of personas) {
       try {
-        await this.client(agent, vtaDid).holdPersonaKeys(persona)
+        await this.client(agent, vtaDid).holdPersonaKeys(persona, 'session sweep')
         DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
       } catch (e) {
         agent.config?.logger?.warn?.(
@@ -3171,7 +3171,7 @@ export class VtaAgentController {
     if (linking) {
       await this.untilOnline(vtaDid, this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
       await this.client(agent, vtaDid)
-        .holdPersonaKeys(persona)
+        .holdPersonaKeys(persona, 'on use')
         .catch((error: unknown) => {
           // This phone's own agent no longer accepts it: the link ends here too (IN-350), and the caller (the persona
           // inbox) still hears the refusal, to word it.
@@ -3188,7 +3188,7 @@ export class VtaAgentController {
     await this.looking?.catch(() => undefined)
     const client = (this.deps.keyClient ?? ((a, did, s) => new VtaClient(a, did, s)))(agent, vtaDid, store)
     try {
-      await client.holdPersonaKeys(persona)
+      await client.holdPersonaKeys(persona, 'on use')
       agent.config?.logger?.info?.(`[VTA] fetched ${persona.did}'s keys through its agent ${didPrefix(vtaDid)} on use`)
       // Whatever waits for this identity's keys (its inbox, its listeners) looks again now.
       DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })

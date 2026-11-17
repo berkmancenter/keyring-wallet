@@ -849,6 +849,16 @@ const personasInFlight = new Map<string, Promise<VtiPersona>>()
  */
 const keysInFlight = new Map<string, Promise<void>>()
 
+/**
+ * Who asked for a key copy, said beside each export's time: the session-open sweep (vtaAgent.holdPersonaKeys) or a
+ * sign-in that needed the key (vtaAgent.fetchKeyCopy). A cold start's first sign-in took 12.7 s on a tester's phone,
+ * about 3.8 s of it in exports one after another (11-16), and the log could not say whose they were.
+ */
+export type KeyFetchSource = 'session sweep' | 'on use'
+
+/** The source each fetch in {@link keysInFlight} was asked by, so a caller that joins one can say whose it joined. */
+const inFlightSource = new WeakMap<Promise<void>, KeyFetchSource | undefined>()
+
 /** A task dropped from the queue before it was sent ({@link VtaClient.dropQueued}). */
 export class VtaTaskDropped extends Error {
   constructor(readonly taskType: string) {
@@ -2715,31 +2725,41 @@ export class VtaClient {
    * needs the key both found it missing and each exported both keys, four exports one after another in the agent's
    * queue for one sign-in (a tester's 277.4 log, 11-02). The second waits for the first's fetch.
    */
-  async holdPersonaKeys(persona: VtiPersona): Promise<boolean> {
+  async holdPersonaKeys(persona: VtiPersona, source?: KeyFetchSource): Promise<boolean> {
     if (!persona.kmsKeyIds?.keyAgreement || !persona.kmsKeyIds.signing) return this.borrowAdoptedKeys(persona)
     const pairs = [
-      [persona.kmsKeyIds?.signing, persona.vtaKeyIds.signing],
-      [persona.kmsKeyIds?.keyAgreement, persona.vtaKeyIds.keyAgreement],
+      ['signing', persona.kmsKeyIds?.signing, persona.vtaKeyIds.signing],
+      ['keyAgreement', persona.kmsKeyIds?.keyAgreement, persona.vtaKeyIds.keyAgreement],
     ] as const
     let fetched = false
-    for (const [kmsKeyId, vtaKeyId] of pairs) {
+    for (const [kind, kmsKeyId, vtaKeyId] of pairs) {
       if (!kmsKeyId || !isInMemoryKeyId(kmsKeyId)) continue
       // Asked without fetching: getPublicKey would fetch a missing copy itself
       // (EphemeralKeyManagementService), and this is the fetch.
       if (await this.holdsKeyNow(kmsKeyId)) continue
       const joined = keysInFlight.get(kmsKeyId)
       if (joined) {
-        await joined
+        const since = Date.now()
+        await joined.finally(() =>
+          this.keyLog(
+            `${kind} copy (${source ?? 'other'}): joined the ${inFlightSource.get(joined) ?? 'other'} fetch, ${Date.now() - since} ms`
+          )
+        )
         // Someone else's fetch: the copy is this agent's only if it is held now. A fetch started before a lock lands
         // in the agent that locked, and a caller after the unlock (a new agent, the same id) would otherwise take it as
         // held. Not held: this caller fetches it itself.
-        if (!(await this.holdsKeyNow(kmsKeyId))) await this.fetchKeyCopy(kmsKeyId, vtaKeyId)
+        if (!(await this.holdsKeyNow(kmsKeyId))) await this.fetchKeyCopy(kind, kmsKeyId, vtaKeyId, source)
       } else {
-        await this.fetchKeyCopy(kmsKeyId, vtaKeyId)
+        await this.fetchKeyCopy(kind, kmsKeyId, vtaKeyId, source)
       }
       fetched = true
     }
     return fetched
+  }
+
+  /** One line of the key-copy timing: by kind and source only, never a key id or an identity. */
+  private keyLog(line: string): void {
+    this.agent.config?.logger?.info?.(`${LOG_PREFIX} key ${line}`)
   }
 
   /**
@@ -2758,14 +2778,24 @@ export class VtaClient {
   }
 
   /** One fetch of a key copy, shared with whoever asks for the same copy while it runs (`keysInFlight`). */
-  private fetchKeyCopy(kmsKeyId: string, vtaKeyId: string): Promise<void> {
+  private fetchKeyCopy(kind: string, kmsKeyId: string, vtaKeyId: string, source?: KeyFetchSource): Promise<void> {
+    const started = Date.now()
     const running = (async () => {
       await this.connect()
       await this.borrowKey(vtaKeyId)
-    })().finally(() => {
-      if (keysInFlight.get(kmsKeyId) === running) keysInFlight.delete(kmsKeyId)
-    })
+    })()
+      .then(
+        () => this.keyLog(`${kind} copy (${source ?? 'other'}): exported in ${Date.now() - started} ms`),
+        (e: unknown) => {
+          this.keyLog(`${kind} copy (${source ?? 'other'}): not exported, after ${Date.now() - started} ms`)
+          throw e
+        }
+      )
+      .finally(() => {
+        if (keysInFlight.get(kmsKeyId) === running) keysInFlight.delete(kmsKeyId)
+      })
     keysInFlight.set(kmsKeyId, running)
+    inFlightSource.set(running, source)
     return running
   }
 

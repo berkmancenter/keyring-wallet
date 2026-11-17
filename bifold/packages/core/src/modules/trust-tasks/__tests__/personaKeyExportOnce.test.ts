@@ -133,3 +133,72 @@ describe("a persona's key copies, asked for twice at the same moment", () => {
     expect(exports).toEqual([`${PERSONA}#key-0`, `${PERSONA}#key-0`, `${PERSONA}#key-1`])
   })
 })
+
+// 11-16: a cold start's first sign-in took 12.7 s on a tester's phone, about 3.8 s of it in key exports one after
+// another, and nothing said which were the session-open sweep's and which the sign-in's. Each export now says its kind,
+// who asked and how long it took; a caller that joins a fetch says whose it joined.
+describe('each key copy says who asked for it and how long it took', () => {
+  /** The phone, with a logger whose info lines are kept. */
+  const logged = () => {
+    const p = phone()
+    const lines: string[] = []
+    Object.assign(p.agent, { config: { logger: { info: (line: string) => lines.push(line) } } })
+    return { ...p, lines }
+  }
+  const timing = (lines: string[]) =>
+    lines.filter((l) => l.startsWith('[TrustTasks:VtaClient] key ')).map((l) => l.replace(/\d+ ms/, 'N ms'))
+
+  it('the sweep exports both, and a sign-in asking at the same moment says it joined the sweep', async () => {
+    const { held, agent, lines } = logged()
+    const exports: string[] = []
+    await Promise.all([
+      client(held, agent, exports).holdPersonaKeys(persona, 'session sweep'),
+      client(held, agent, exports).holdPersonaKeys(persona, 'on use'),
+    ])
+    expect(timing(lines)).toEqual([
+      '[TrustTasks:VtaClient] key signing copy (session sweep): exported in N ms',
+      '[TrustTasks:VtaClient] key signing copy (on use): joined the session sweep fetch, N ms',
+      '[TrustTasks:VtaClient] key keyAgreement copy (session sweep): exported in N ms',
+      '[TrustTasks:VtaClient] key keyAgreement copy (on use): joined the session sweep fetch, N ms',
+    ])
+  })
+
+  it('a sign-in alone says its own exports, and a caller that names no source says other', async () => {
+    const { held, agent, lines } = logged()
+    await client(held, agent, []).holdPersonaKeys(persona, 'on use')
+    held.clear()
+    await client(held, agent, []).holdPersonaKeys(persona)
+    expect(timing(lines)).toEqual([
+      '[TrustTasks:VtaClient] key signing copy (on use): exported in N ms',
+      '[TrustTasks:VtaClient] key keyAgreement copy (on use): exported in N ms',
+      '[TrustTasks:VtaClient] key signing copy (other): exported in N ms',
+      '[TrustTasks:VtaClient] key keyAgreement copy (other): exported in N ms',
+    ])
+  })
+
+  it('an export that fails says so, and still fails', async () => {
+    const { held, agent, lines } = logged()
+    await expect(client(held, agent, [], true).holdPersonaKeys(persona, 'on use')).rejects.toThrow()
+    expect(timing(lines)).toEqual(['[TrustTasks:VtaClient] key signing copy (on use): not exported, after N ms'])
+  })
+
+  it('control: a copy already held is not fetched and says nothing', async () => {
+    const { held, agent, lines } = logged()
+    await client(held, agent, []).holdPersonaKeys(persona, 'session sweep')
+    lines.length = 0
+    await client(held, agent, []).holdPersonaKeys(persona, 'on use')
+    expect(timing(lines)).toEqual([])
+  })
+
+  it('names no key id and no identity', async () => {
+    const { held, agent, lines } = logged()
+    await Promise.all([
+      client(held, agent, []).holdPersonaKeys(persona, 'session sweep'),
+      client(held, agent, []).holdPersonaKeys(persona, 'on use'),
+    ])
+    const said = timing(lines).join('\n')
+    expect(said).not.toContain(PERSONA)
+    expect(said).not.toContain(VTA)
+    expect(said).not.toContain('#key-')
+  })
+})

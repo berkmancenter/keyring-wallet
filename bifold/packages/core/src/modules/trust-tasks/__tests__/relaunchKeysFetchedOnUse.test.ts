@@ -190,7 +190,7 @@ describe('relaunch-keys-fetched-on-use: a plain relaunch, then an identity of th
     expect(await kms.isHeld(signingKey)).toBe(true)
     expect(keyClient).toHaveBeenCalledTimes(1)
     expect((keyClient.mock.calls[0] as unknown[])[1]).toBe(MAIN)
-    expect(main.holdPersonaKeys).toHaveBeenCalledWith(persona)
+    expect(main.holdPersonaKeys).toHaveBeenCalledWith(persona, 'on use')
     expect(main.disconnect).toHaveBeenCalledTimes(1)
     expect(mockCurrentSessionCalls).not.toContain('holdPersonaKeys')
   })

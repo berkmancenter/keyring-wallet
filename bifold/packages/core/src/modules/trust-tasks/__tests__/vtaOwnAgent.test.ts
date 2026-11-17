@@ -1438,7 +1438,7 @@ describe("an identity's key copy used before any session fetched it (TestFlight 
     expect(announced).toEqual([{ did: tiger.did }])
     expect(keyClient).toHaveBeenCalledTimes(1)
     expect((keyClient.mock.calls[0] as unknown[])[1]).toBe(OTHER)
-    expect(other.holdPersonaKeys).toHaveBeenCalledWith(tiger)
+    expect(other.holdPersonaKeys).toHaveBeenCalledWith(tiger, 'on use')
     expect(other.disconnect).toHaveBeenCalledTimes(1)
     // Not on the current agent's session: that agent does not hold this identity's keys.
     expect(held).not.toHaveBeenCalled()
@@ -1456,7 +1456,7 @@ describe("an identity's key copy used before any session fetched it (TestFlight 
     await fetching
     const link = vta.getState().link
     expect(link.kind === 'linked' && link.connection.kind).toBe('online')
-    expect(held).toHaveBeenCalledWith(mine)
+    expect(held).toHaveBeenCalledWith(mine, 'on use')
     expect(keyClient).not.toHaveBeenCalled()
     held.mockRestore()
   })
@@ -1532,7 +1532,7 @@ describe("an identity's key copy used before any session fetched it (TestFlight 
     // The current agent, on the session the restore opens; never taken for
     // "another linked agent" and asked on a second session as the same key.
     expect(keyClient).not.toHaveBeenCalled()
-    expect(held).toHaveBeenCalledWith(mine)
+    expect(held).toHaveBeenCalledWith(mine, 'on use')
     held.mockRestore()
   })
 
@@ -1542,7 +1542,7 @@ describe("an identity's key copy used before any session fetched it (TestFlight 
     const { vta } = await restartedPhone([mine])
     vta.installKeyFetcher(agent as never)
     await vta.refetchPersonaKeys(agent as never, mine)
-    expect(held).toHaveBeenCalledWith(mine)
+    expect(held).toHaveBeenCalledWith(mine, 'on use')
     held.mockRestore()
   })
 

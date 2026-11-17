@@ -650,7 +650,7 @@ describe('when the app replaces its agent (an unlock after a lock builds a new o
 
     expect(VtaClientMock.mock.calls.map((call) => call[0])).toContain(agentB)
     expect(mockClient.connect).toHaveBeenCalled()
-    expect(mockClient.holdPersonaKeys).toHaveBeenCalledWith(persona)
+    expect(mockClient.holdPersonaKeys).toHaveBeenCalledWith(persona, 'session sweep')
     expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
   })
 
@@ -674,7 +674,7 @@ describe('when the app replaces its agent (an unlock after a lock builds a new o
     await new Promise((resolve) => setImmediate(resolve))
 
     expect(mockClient.connect).toHaveBeenCalled()
-    expect(mockClient.holdPersonaKeys).toHaveBeenCalledWith(persona)
+    expect(mockClient.holdPersonaKeys).toHaveBeenCalledWith(persona, 'session sweep')
     expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
   })
 
