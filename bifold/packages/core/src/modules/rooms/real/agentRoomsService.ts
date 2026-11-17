@@ -239,6 +239,9 @@ export interface AgentRoomsOptions {
   sleep?: (ms: number) => Promise<void>
 }
 
+/** How long a room whose listing was refused as `unsupportedVersion` is answered from that refusal: 30 minutes. */
+export const UNSERVED_LISTING_MS = 30 * 60 * 1000
+
 /** The operations this phase implements. */
 export const R1_BUILT: ReadonlySet<RoomsOperation> = new Set<RoomsOperation>([
   'listMyRooms',
@@ -449,6 +452,11 @@ export class AgentRoomsService implements RoomsService {
    * listing before their first read (+0.6–0.9 s on each open, lab sim 10-30).
    */
   private listingInFlight = new Map<string, Promise<NoteList>>()
+  /**
+   * A room whose listing came back `unsupportedVersion`, by room: the browse type asked, when, and the refusal. Asked
+   * again at the same type within {@link UNSERVED_LISTING_MS}, it is answered with that same refusal and nothing is sent.
+   */
+  private unservedListings = new Map<string, { type: string; at: number; refusal: unknown }>()
   /** A record's read being asked now, by room and key: every caller that reads it meanwhile waits for the same one. */
   private readsInFlight = new Map<string, Promise<OpenedRecord>>()
   /** A batch was refused for being a batch (readBatches): this session reads one at a time, as before. */
@@ -865,13 +873,25 @@ export class AgentRoomsService implements RoomsService {
 
   private async readListing(roomId: string, sinceVersion: number | undefined): Promise<NoteList> {
     const room = await this.requireInRoom(roomId, 'listNotes')
-    const listing = parseBrowse(
-      await this.backend.agentTask(this.browseType(), {
+    const type = this.browseType()
+    // A room on a host too old for what the agent asks it was asked again on every listing and refused the same way
+    // each time, a round trip on the shared agent queue each (5 in 3 minutes on a tester's phone, 11-16). Within a
+    // while, at the same type, it is answered from that refusal. An agent that came to serve another type asks again.
+    const unserved = this.unservedListings.get(roomId)
+    if (unserved && unserved.type === type && this.now() - unserved.at < UNSERVED_LISTING_MS) throw unserved.refusal
+    let answer: unknown
+    try {
+      answer = await this.backend.agentTask(type, {
         roomId,
         host: room.host,
         ...(sinceVersion !== undefined ? { sinceVersion } : {}),
       })
-    )
+    } catch (e) {
+      if (refusalCode(e) === 'unsupportedVersion')
+        this.unservedListings.set(roomId, { type, at: this.now(), refusal: e })
+      throw e
+    }
+    const listing = parseBrowse(answer)
     for (const r of listing.records) {
       // A version only goes up: an answer that arrives late never takes a record back.
       const k = listedKey(roomId, r.key)
