@@ -10,7 +10,17 @@ import {
 } from '@credo-ts/anoncreds'
 
 import { AskarKeyManagementService, AskarModule } from '@credo-ts/askar'
-import { Agent, DcqlModule, DidsModule, JwkDidResolver, KeyDidResolver, Kms, PeerDidResolver, WebDidResolver, X509Module } from '@credo-ts/core'
+import {
+  Agent,
+  DcqlModule,
+  DidsModule,
+  JwkDidResolver,
+  KeyDidResolver,
+  Kms,
+  PeerDidResolver,
+  WebDidResolver,
+  X509Module,
+} from '@credo-ts/core'
 
 import {
   DidCommAutoAcceptCredential,
@@ -36,6 +46,7 @@ import { EphemeralKeyManagementService } from '../modules/trust-tasks/module/Eph
 import { EPHEMERAL_KMS_BACKEND } from '../modules/trust-tasks/module/vtaKeys'
 import { WalletSecret } from '../types/security'
 import { RetryingWebVhDidResolver } from './RetryingWebVhDidResolver'
+import { WebsDidResolver } from './WebsDidResolver'
 
 interface GetAgentModulesOptions {
   walletSecret: WalletSecret
@@ -162,6 +173,7 @@ export function getAgentModules({
     dids: new DidsModule({
       resolvers: [
         new RetryingWebVhDidResolver(),
+        new WebsDidResolver(),
         new WebDidResolver(),
         new JwkDidResolver(),
         new KeyDidResolver(),

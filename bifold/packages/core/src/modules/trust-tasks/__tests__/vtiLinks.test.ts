@@ -379,6 +379,53 @@ describe('a bare DID, scanned or pasted', () => {
     expect(keyringAgentLinkKind('didcomm://invite?_oob=eyJ0')).toBeUndefined()
   })
 
+  // The SEDI VTC's QR carries a bare did:webs. It joins as a community; did:webvh routing is unchanged (rows above
+  // and below, and the control here).
+  describe('a bare did:webs (the SEDI VTC)', () => {
+    const websDid = 'did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a'
+
+    it('is claimed to classify, like a did:webvh; did:webvh, did:peer and did:key read as before', () => {
+      expect(keyringAgentLinkKind(websDid)).toBe('did')
+      expect(keyringAgentLinkKind(`${websDid}#vtc-rest`)).toBe('did')
+      expect(keyringAgentLinkKind(communityDid)).toBe('did')
+      expect(keyringAgentLinkKind(agentDid)).toBe('did')
+      expect(keyringAgentLinkKind('did:web:example.org')).toBe('otherDid')
+      expect(keyringAgentLinkKind('did:peer:2.Ez6LSabc')).toBe('otherDid')
+      expect(keyringAgentLinkKind('did:key:z6MkswwZ')).toBe('otherDid')
+    })
+
+    it('a did:webs community goes to Join on that community', async () => {
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(websDid, withDoc(doc(['TSPTransport', 'VTCRest', 'VTCStatusList'])), navigate)
+      expect(navigate).toHaveBeenCalledWith('VtiJoin')
+      expect(communityTarget.getViewing()?.communityDid).toBe(websDid)
+    })
+
+    it('a did:webs that is not a community is explained, and nothing starts', async () => {
+      const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
+      const navigate = jest.fn()
+      await expect(routeKeyringAgentLink(websDid, withDoc(doc(['VTARest'])), navigate)).rejects.toThrow(
+        "This code isn't an agent or a community"
+      )
+      await expect(routeKeyringAgentLink(websDid, withDoc(doc(['DIDCommMessaging'])), navigate)).rejects.toThrow(
+        "This code isn't an agent or a community"
+      )
+      expect(start).not.toHaveBeenCalled()
+      expect(navigate).not.toHaveBeenCalled()
+      expect(communityTarget.getViewing()).toBeUndefined()
+    })
+
+    it('control: a did:webvh agent still starts linking, and a did:webvh community still joins', async () => {
+      const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(agentDid, withDoc(doc(['VTARest'])), navigate)
+      expect(start).toHaveBeenCalledTimes(1)
+      expect(navigate).toHaveBeenLastCalledWith('VtaLink')
+      await routeKeyringAgentLink(communityDid, withDoc(doc(['VTCRest'])), navigate)
+      expect(navigate).toHaveBeenLastCalledWith('VtiJoin')
+    })
+  })
+
   it('a community goes to Join on that community', async () => {
     const navigate = jest.fn()
     await routeKeyringAgentLink(communityDid, withDoc(doc(['VTCRest', 'VTCStatusList'])), navigate)

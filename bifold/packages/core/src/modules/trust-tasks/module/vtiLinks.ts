@@ -130,6 +130,9 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // community (the VTC page, `pnm vta qr`, the browser plugin).
   const did = bareDid(trimmed)
   if (did?.startsWith('did:webvh:')) return 'did'
+  // A bare did:webs: what a SEDI community's QR carries (the SEDI VTC, /v1/community/did-qr.svg). Classified the same
+  // way, but only ever joined as a community (routeBareDid).
+  if (did?.startsWith('did:webs:')) return 'did'
   // Any other bare DID. The browser plugin draws a QR beside every DID it
   // shows, so a person can scan a did:key (a manager or admin key) or the
   // wallet's own did:peer holder address. Neither is an agent or a community,
@@ -316,6 +319,13 @@ async function routeBareDid(
   // Resolved and classified in one call, never longer than its 15 s cap, with
   // why it could not be read when it could not (keyring-bifold#80).
   const kind = await classifyDid(agent, did)
+  // A did:webs is reached as a community only: nothing in Keyring links to an agent by one yet, so anything else it
+  // turns out to be is said, in words, as any other DID is.
+  if (did.startsWith('did:webs:') && kind.kind !== 'community') {
+    if (kind.kind === 'unresolvable' && kind.reason === 'offline')
+      throw new KeyringLinkError("This code couldn't be read. Check your connection and try again.")
+    throw new KeyringLinkError(otherDidMessage(did))
+  }
   switch (kind.kind) {
     case 'community':
       communityTarget.set({ communityDid: did })

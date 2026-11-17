@@ -121,6 +121,7 @@ export {
   SHORT_GRANT_POLL_WINDOW_MS,
 } from './utils/e2eClocks'
 export { RetryingWebVhDidResolver } from './utils/RetryingWebVhDidResolver'
+export { WebsDidResolver } from './utils/WebsDidResolver'
 export {
   hasOtaApplyBlockers,
   notifyReturnLocked,
