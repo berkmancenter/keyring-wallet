@@ -166,8 +166,7 @@ export interface BadgeCardView {
 export function badgeCardView(vc: Record<string, unknown>): BadgeCardView;
 ```
 
-- **Bubble lookups.** `wall/show` takes a directory `entryId`, not a DID. `useAuthorBadges` resolves author DID → entryId through the directory's existing per-author lookup, and caches both under the directory names' rules. If the directory cannot map an author, the bubble shows no chip.
-- **Images.** These come only through `images/get`, never from the Achievement's public URL, so a Wallet card or bubble never contacts anything but the member's own community.
+- **Images.** These come only through `images/get`, never from the Achievement's public URL, so a Wallet card never contacts anything but the member's own community.
 
 ## The kill
 
