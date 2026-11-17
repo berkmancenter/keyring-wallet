@@ -13,6 +13,8 @@
  *
  * Every other rule and set in the row is kept exactly as it is.
  *
+ * `changeApprovers` is written only for two approvers or more ({@link CHANGE_APPROVERS_MIN}).
+ *
  * @module trust-tasks/module/trustedApprovers
  */
 
@@ -63,6 +65,41 @@ export const TRUSTED_TASKS = [
 ] as const
 
 export type TrustedKey = (typeof TRUSTED_TASKS)[number]['key']
+
+/**
+ * The fewest approvers that may hold `changeApprovers` (policy/upsert, the rule change that removes an approver).
+ * With one, that approver could refuse their own removal and only the agent's operator could undo it (guardian
+ * research, keri-holder-plan/2026-11-16-al.md §4, option (b), Alberto's choice): so with fewer than two the phone
+ * leaves that one action out and writes the rest. It leaves it out rather than refusing the write, so going down to
+ * one approver, or to none, is never itself refused. A second approver brings it back when it was asked for.
+ */
+export const CHANGE_APPROVERS_MIN = 2
+
+/** `keys` as they may be written for `approverCount` approvers: `changeApprovers` only with {@link CHANGE_APPROVERS_MIN} or more. */
+export function writableKeys<K extends string>(approverCount: number, keys: readonly K[]): K[] {
+  return approverCount >= CHANGE_APPROVERS_MIN ? [...keys] : keys.filter((key) => key !== 'changeApprovers')
+}
+
+/**
+ * What removing an approver takes, as the screen says it:
+ * - `withoutTheirYes`: one approver and no rule on changing who approves (the rule above), so they are removed at once;
+ * - `theirYes`: one approver who holds that rule, set before this rule existed: removing them waits for their yes;
+ * - `oneOfThem`: two or more who hold it: a yes from any one of them, so no one of them can block it alone;
+ * - `mayAsk`: anything else (the rule held by another rule, or not chosen): the agent may ask, as it always said.
+ */
+export type RemovalNeeds = 'withoutTheirYes' | 'theirYes' | 'oneOfThem' | 'mayAsk'
+
+export function removalNeeds(view: {
+  approvers: readonly string[]
+  keys: readonly string[]
+  heldElsewhere?: readonly string[]
+}): RemovalNeeds {
+  // Another rule holds changing who approves: whoever that rule names may be asked, so only the hedge is true.
+  if (view.heldElsewhere?.includes('changeApprovers')) return 'mayAsk'
+  const held = view.keys.includes('changeApprovers')
+  if (view.approvers.length >= CHANGE_APPROVERS_MIN) return held ? 'oneOfThem' : 'mayAsk'
+  return held ? 'theirYes' : 'withoutTheirYes'
+}
 
 const taskTypesOf = (key: TrustedKey): readonly string[] =>
   TRUSTED_TASKS.find((t) => t.key === key)?.taskTypes.flatMap((uri) => [...versionsOf(uri)]) ?? []
@@ -131,10 +168,12 @@ export function withTrustedApprovers(
   const sets: ApproverSets = { ...model.sets }
   delete sets[TRUSTED_SET]
   const members = [...new Set(approvers)]
-  if (members.length === 0 || keys.length === 0) return { rules: others, sets }
+  // With one approver, `changeApprovers` is left out (CHANGE_APPROVERS_MIN); if it was all they held, nothing is.
+  const writable = writableKeys(members.length, keys)
+  if (members.length === 0 || writable.length === 0) return { rules: others, sets }
 
   const rules: ApprovalRule[] = [...others]
-  for (const key of keys) {
+  for (const key of writable) {
     const listed = taskTypesOf(key)
     const clash = others.find((rule) => listed.includes(rule.taskType))
     if (clash) throw new TrustedRuleRefused('held-elsewhere', clash.taskType)

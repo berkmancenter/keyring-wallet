@@ -3664,6 +3664,12 @@
     "Unnamed": "Alguém fora dos seus contatos",
     "Remove": "Remover {{name}}",
     "RemoveNeedsYes": "Seu agente pode consultar seus aprovadores antes de remover um.",
+    "Removal": {
+      "withoutTheirYes": "Com um só aprovador, você pode removê-lo sem o sim dele. Mudar quem aprova precisa de pelo menos dois aprovadores, para que nenhum aprovador possa bloquear a própria remoção.",
+      "theirYes": "Remover seu aprovador precisa do sim dele, por causa de uma regra definida antes de o Keyring pedir dois aprovadores. Adicionar um segundo aprovador também precisa do sim dele. Depois disso, nenhum aprovador pode bloquear a própria remoção.",
+      "oneOfThem": "Remover um aprovador precisa do sim de um dos seus aprovadores, então nenhum deles pode bloquear isso sozinho."
+    },
+    "ChangeNeedsTwo": "Mudar quem aprova ainda não está incluído. Isso precisa de pelo menos dois aprovadores, para que nenhum aprovador possa bloquear a própria remoção.",
     "Check": "Verificar se seu agente espera por eles",
     "CheckHint": "O Keyring envia ao seu agente um pedido de prática sobre o qual só este telefone é consultado, nunca seus aprovadores. Seu agente deve retê-lo.",
     "CheckAfterAdd": "{{name}} foi adicionado. Para verificar se seu agente espera o sim dessa pessoa, use a solicitação de prática em Configurações › Desenvolvedor › Demos.",
@@ -3734,7 +3740,7 @@
     "AskBody": "{{name}} pode aprovar o que você escolher, como entrar em uma comunidade. Seu agente espera o sim de {{name}} antes de fazer isso.",
     "PickTitle": "O que precisa do sim de {{name}}?",
     "PickBody": "Seu agente segura isto até {{name}} responder. Quem usar suas chaves também precisa esperar.",
-    "AlwaysOn": "Sempre ativado, para que ninguém convença você a remover {{name}} sem o sim de {{name}}.",
+    "AlwaysOn": "Sempre pedido. Passa a valer quando você tem pelo menos dois aprovadores, para que nenhum aprovador possa bloquear a própria remoção.",
     "MayNotHoldYet": "Seu agente talvez ainda não segure esta.",
     "PickOne": "Escolha pelo menos uma.",
     "Send": "Enviar para {{name}}",

@@ -1,7 +1,9 @@
 import { EMPTY_APPROVALS, withPhoneRule } from '../module/approvalRules'
 import {
+  CHANGE_APPROVERS_MIN,
   TRUSTED_SET,
   TrustedRuleRefused,
+  removalNeeds,
   trustedApproversView,
   withTrustedApproverReplaced,
   withTrustedApprovers,
@@ -74,8 +76,14 @@ describe('trusted approvers', () => {
     // VTI main 887370a3b dispatches acl/grant only at 0.3: the rule is written there, not for nothing.
     const main = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['addDevice'], [`${SPEC}acl/grant/0.3`])
     expect(main.rules.map((r) => r.taskType)).toEqual([`${SPEC}acl/grant/0.3`])
-    // Changing who approves, on VTI main (policy/upsert 0.2 retired, 0.3 served): only 0.3.
-    const rules = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['changeApprovers'], [`${SPEC}policy/upsert/0.3`])
+    // Changing who approves, on VTI main (policy/upsert 0.2 retired, 0.3 served): only 0.3. (Two approvers: with one,
+    // it is not written at all; see "changing who approves needs two approvers".)
+    const rules = withTrustedApprovers(
+      EMPTY_APPROVALS,
+      [JORDAN, RILEY],
+      ['changeApprovers'],
+      [`${SPEC}policy/upsert/0.3`]
+    )
     expect(rules.rules.map((r) => r.taskType)).toEqual([`${SPEC}policy/upsert/0.3`])
     // Unknown: every listed version.
     const all = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['addDevice'])
@@ -128,5 +136,71 @@ describe('trusted approvers', () => {
     expect(swapped.changed).toBe(true)
     expect(swapped.sets[TRUSTED_SET]).toEqual(['did:peer:2.jordans-new-key'])
     expect(withTrustedApproverReplaced(row, RILEY, 'did:peer:2.x').changed).toBe(false)
+  })
+
+  // Guardian research §4, option (b): with one approver, a rule on changing who approves (policy/upsert) would let
+  // that approver refuse their own removal. So it is written only for two or more; everything else is as it was.
+  describe('changing who approves needs two approvers', () => {
+    const UPSERT = [`${SPEC}policy/upsert/0.3`, `${SPEC}policy/upsert/0.2`]
+    const upserts = (row: { rules: { taskType: string }[] }) => row.rules.filter((r) => UPSERT.includes(r.taskType))
+
+    it('is two', () => {
+      expect(CHANGE_APPROVERS_MIN).toBe(2)
+    })
+
+    it('with one approver, leaves changing who approves out and writes every other chosen action as before', () => {
+      const one = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['joinCommunity', 'changeApprovers'])
+      expect(upserts(one)).toEqual([])
+      // Control: exactly what choosing joinCommunity alone writes, set included.
+      expect(one).toEqual(withTrustedApprovers(EMPTY_APPROVALS, [JORDAN], ['joinCommunity']))
+      expect(trustedApproversView(one)).toEqual({ approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: [] })
+    })
+
+    it('with two approvers, writes it (the control)', () => {
+      const two = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN, RILEY], ['joinCommunity', 'changeApprovers'])
+      expect(upserts(two).map((r) => r.taskType)).toEqual(UPSERT)
+      expect(trustedApproversView(two).keys).toEqual(['joinCommunity', 'changeApprovers'])
+    })
+
+    it('a duplicate DID is one approver, not two', () => {
+      expect(
+        upserts(withTrustedApprovers(EMPTY_APPROVALS, [JORDAN, JORDAN], ['changeApprovers', 'addDevice']))
+      ).toEqual([])
+    })
+
+    it('going down to one is written, never refused: it drops only that rule', () => {
+      const two = withTrustedApprovers(EMPTY_APPROVALS, [JORDAN, RILEY], ['shareCredential', 'changeApprovers'])
+      const one = withTrustedApprovers(two, [JORDAN], ['shareCredential', 'changeApprovers'])
+      expect(upserts(one)).toEqual([])
+      expect(trustedApproversView(one)).toEqual({ approvers: [JORDAN], keys: ['shareCredential'], heldElsewhere: [] })
+    })
+
+    it('with one approver and nothing else chosen, writes no trusted rule and no set', () => {
+      const phone = withPhoneRule(EMPTY_APPROVALS, `${SPEC}vta/contexts/create/1.0`, true, ME)
+      const only = withTrustedApprovers(phone, [JORDAN], ['changeApprovers'])
+      expect(only.rules).toEqual(phone.rules)
+      expect(only.sets[TRUSTED_SET]).toBeUndefined()
+    })
+
+    it('keeps every other rule and set exactly as it was, at one approver as at two', () => {
+      const phone = withPhoneRule(EMPTY_APPROVALS, `${SPEC}vta/contexts/create/1.0`, true, ME)
+      for (const approvers of [[JORDAN], [JORDAN, RILEY]]) {
+        const row = withTrustedApprovers(phone, approvers, ['joinCommunity', 'changeApprovers'])
+        expect(row.rules.slice(0, phone.rules.length)).toEqual(phone.rules)
+        for (const [name, members] of Object.entries(phone.sets)) expect(row.sets[name]).toEqual(members)
+      }
+    })
+
+    it('says what removing an approver takes', () => {
+      expect(removalNeeds({ approvers: [JORDAN], keys: ['joinCommunity'] })).toBe('withoutTheirYes')
+      // A one-approver rule written before this rule existed: removal waits for their yes, and the screen says so.
+      expect(removalNeeds({ approvers: [JORDAN], keys: ['changeApprovers'] })).toBe('theirYes')
+      expect(removalNeeds({ approvers: [JORDAN, RILEY], keys: ['changeApprovers'] })).toBe('oneOfThem')
+      expect(removalNeeds({ approvers: [JORDAN, RILEY], keys: ['joinCommunity'] })).toBe('mayAsk')
+      // Another rule holds it: whoever it names may be asked, so the hedge (control: the first line above).
+      expect(removalNeeds({ approvers: [JORDAN], keys: ['joinCommunity'], heldElsewhere: ['changeApprovers'] })).toBe(
+        'mayAsk'
+      )
+    })
   })
 })

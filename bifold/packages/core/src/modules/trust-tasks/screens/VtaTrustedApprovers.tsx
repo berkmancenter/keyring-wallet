@@ -65,7 +65,7 @@ import {
 } from '../guardianEvidence'
 import { releaseWarn } from '../module/releaseLog'
 import { isStateVerifiedApproversEnabled } from '../module/stateVerifiedApproversFlag'
-import { trustedKeyOf } from '../module/trustedApprovers'
+import { removalNeeds, trustedKeyOf, writableKeys } from '../module/trustedApprovers'
 import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type TrustedApproversState, type VtiApproval } from '../module/vtaAgent'
 import { waitingRequests } from '../module/waitingRequests'
@@ -89,6 +89,9 @@ export const TrustedApproversIds = {
   none: 'TrustedApproversNone',
   approver: (did: string) => `TrustedApprover_${did}`,
   remove: (did: string) => `TrustedApproverRemove_${did}`,
+  // What removing an approver takes (removalNeeds), and the note that changing who approves needs two.
+  removalNeeds: 'TrustedApproversRemovalNeeds',
+  changeNeedsTwo: 'TrustedApproversChangeNeedsTwo',
   accepted: (connectionId: string) => `TrustedApproverAccepted_${connectionId}`,
   add: (connectionId: string) => `TrustedApproverAdd_${connectionId}`,
   notNow: (connectionId: string) => `TrustedApproverNotNow_${connectionId}`,
@@ -964,6 +967,18 @@ const VtaTrustedApprovers: React.FC = () => {
   )
 
   /** What the agent won't do without this person's yes (or would not, once they are added): its own section. */
+  /**
+   * What removing an approver takes, said as it is (removalNeeds): with one approver and no rule on changing who
+   * approves, at once; with an older such rule, their yes; with two or more, any one's yes. Unread: the old hedge.
+   */
+  const removalWords = (v: TrustedApproversState['view'] | null | undefined) => {
+    const needs = v ? removalNeeds(v) : 'mayAsk'
+    return needs === 'mayAsk' ? 'Approver.RemoveNeedsYes' : `Approver.Removal.${needs}`
+  }
+  /** The actions `ask`'s yes would be written for once added: never `changeApprovers` while they would be the only one. */
+  const afterAdding = (ask: RoleOfferAsk): readonly string[] =>
+    view ? writableKeys(nextTrustedRules(view, ask).approvers.length, ask.actions) : ask.actions
+
   const needsBox = (did: string, name: string, keys: readonly string[], opts: { added: boolean }) =>
     section(
       t(opts.added ? 'Approver.NeedsTitle' : 'Approver.NeedsTitleOnceAdded', {
@@ -1398,7 +1413,9 @@ const VtaTrustedApprovers: React.FC = () => {
           >
             {busy === did ? <ActivityIndicator color={ColorPalette.brand.primary} /> : undefined}
           </Button>
-          <ThemedText style={styles.muted}>{t('Approver.RemoveNeedsYes')}</ThemedText>
+          <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.removalNeeds)}>
+            {t(removalWords(view))}
+          </ThemedText>
         </View>
       </>
     )
@@ -1420,7 +1437,12 @@ const VtaTrustedApprovers: React.FC = () => {
       </ThemedText>,
       <>
         {stateCardSection(ask.acceptedAs, name)}
-        {needsBox(ask.acceptedAs ?? ask.connectionId, name, ask.actions, { added: false })}
+        {needsBox(ask.acceptedAs ?? ask.connectionId, name, afterAdding(ask), { added: false })}
+        {ask.actions.includes('changeApprovers') && !afterAdding(ask).includes('changeApprovers') ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.changeNeedsTwo)}>
+            {t('Approver.ChangeNeedsTwo')}
+          </ThemedText>
+        ) : null}
         <View style={styles.bar}>
           {isAside ? null : (
             <ThemedText style={styles.muted}>{t('Approver.PersonNothingUntilAdded', words)}</ThemedText>
@@ -1687,7 +1709,9 @@ const VtaTrustedApprovers: React.FC = () => {
               </ThemedText>
             ) : null}
             {view && view.approvers.length > 0 ? (
-              <ThemedText style={styles.muted}>{t('Approver.RemoveNeedsYes')}</ThemedText>
+              <ThemedText style={styles.muted} testID={testIdWithKey(TrustedApproversIds.removalNeeds)}>
+                {t(removalWords(view))}
+              </ThemedText>
             ) : null}
             {/* More: the held-request note and this phone's codes for a state office, off the main list. */}
             <View style={styles.more} testID={testIdWithKey(TrustedApproversIds.more)}>

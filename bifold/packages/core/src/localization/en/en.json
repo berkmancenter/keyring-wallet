@@ -3790,6 +3790,12 @@
     "Unnamed": "Someone not in your contacts",
     "Remove": "Remove {{name}}",
     "RemoveNeedsYes": "Your agent may ask your approvers before it removes one.",
+    "Removal": {
+      "withoutTheirYes": "With one approver, you can remove them without their yes. Changing who approves needs at least two approvers, so that no one approver can block their own removal.",
+      "theirYes": "Removing your approver needs their yes, because of a rule set before Keyring asked for two approvers. Adding a second approver needs their yes too. After that, no one approver can block their own removal.",
+      "oneOfThem": "Removing an approver needs a yes from one of your approvers, so no one of them can block it alone."
+    },
+    "ChangeNeedsTwo": "Changing who approves isn't included yet. It needs at least two approvers, so that no one approver can block their own removal.",
     "Check": "Check that your agent waits for them",
     "CheckHint": "Keyring sends your agent a practice request that only this phone is asked about, never your approvers. Your agent should hold it.",
     "CheckAfterAdd": "{{name}} is added. To check that your agent waits for their yes, use the practice request in Settings › Developer › Demos.",
@@ -3860,7 +3866,7 @@
     "AskBody": "{{name}} can approve the things you choose, like joining a community. Your agent waits for {{name}}'s yes before it does them.",
     "PickTitle": "What needs {{name}}'s yes?",
     "PickBody": "Your agent holds these until {{name}} answers. Anyone using your keys has to wait too.",
-    "AlwaysOn": "Always on, so nobody can talk you into removing {{name}} without {{name}}'s yes.",
+    "AlwaysOn": "Always asked for. It starts once you have at least two approvers, so that no one approver can block their own removal.",
     "MayNotHoldYet": "Your agent may not hold this one yet.",
     "PickOne": "Choose at least one.",
     "Send": "Send to {{name}}",

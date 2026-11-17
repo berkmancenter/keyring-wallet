@@ -1136,6 +1136,47 @@ describe('Who approves', () => {
     expect(tree.getByTestId(id(TrustedApproversIds.none))).toBeTruthy()
   })
 
+  // Guardian research §4, option (b): changing who approves only with two approvers, and the screen says what removing
+  // one takes, truly, in each case.
+  test.each([
+    [[JORDAN], ['shareCredential'], 'Approver.Removal.withoutTheirYes'],
+    [[JORDAN], ['shareCredential', 'changeApprovers'], 'Approver.Removal.theirYes'],
+    [[AMY, JORDAN], ['shareCredential', 'changeApprovers'], 'Approver.Removal.oneOfThem'],
+    // Control: the line as it always was.
+    [[AMY, JORDAN], ['shareCredential'], 'Approver.RemoveNeedsYes'],
+  ] as const)('with %j holding %j, removing one says %s', async (approvers, keys, words) => {
+    kept([], { [JORDAN]: 'Jordan' })
+    jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([...approvers], [...keys]))
+    for (const tree of [await show(<VtaTrustedApprovers />), await show(personPage('approver', JORDAN))]) {
+      const lines = tree.getAllByTestId(id(TrustedApproversIds.removalNeeds))
+      expect(lines.length).toBeGreaterThan(0)
+      for (const line of lines) expect(line.props.children).toBe(words)
+    }
+  })
+
+  test('a first approver is added without changing who approves, and the page says why (control: a second, with it)', async () => {
+    const offered = ask({ state: 'accepted', acceptedAs: JORDAN, actions: ['joinCommunity', 'changeApprovers'] })
+    kept([offered], { [JORDAN]: 'Jordan' })
+    jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([], []))
+    const write = jest.spyOn(vtaAgent, 'setTrustedApprovers').mockResolvedValue(held([JORDAN], ['joinCommunity']))
+    jest.spyOn(approverRole, 'closeRoleOffer').mockResolvedValue(undefined)
+    const first = await show(personPage('yes', CONN))
+    expect(first.getByTestId(id(TrustedApproversIds.changeNeedsTwo)).props.children).toBe('Approver.ChangeNeedsTwo')
+    await act(async () => {
+      fireEvent.press(first.getByTestId(id(TrustedApproversIds.add(CONN))))
+    })
+    expect(write).toHaveBeenCalledWith(AGENT, [JORDAN], ['joinCommunity'])
+
+    write.mockClear()
+    jest.spyOn(vtaAgent, 'trustedApprovers').mockResolvedValue(held([AMY], ['joinCommunity']))
+    const second = await show(personPage('yes', CONN))
+    expect(second.queryByTestId(id(TrustedApproversIds.changeNeedsTwo))).toBeNull()
+    await act(async () => {
+      fireEvent.press(second.getByTestId(id(TrustedApproversIds.add(CONN))))
+    })
+    expect(write).toHaveBeenCalledWith(AGENT, [AMY, JORDAN], ['joinCommunity', 'changeApprovers'])
+  })
+
   test('switched off, or turned off remotely over a saved on, it shows only that, and asks the agent nothing (control: on)', async () => {
     // Its own guard, not only the row that opens it: navigation restore or the remote off must not leave it working.
     kept([ask({ state: 'accepted', acceptedAs: JORDAN, actions: ['shareCredential'] })], { [JORDAN]: 'Jordan' })

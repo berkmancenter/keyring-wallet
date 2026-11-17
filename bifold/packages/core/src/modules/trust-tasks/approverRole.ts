@@ -38,7 +38,7 @@ import {
   type RoleStepDownPayload,
 } from './approverRoleSpec'
 import { signDocumentProof, verifyDocumentProof } from './documentProof'
-import { trustedKeyOf } from './module/trustedApprovers'
+import { trustedKeyOf, writableKeys } from './module/trustedApprovers'
 import { isTrustedApproversEnabled } from './module/trustedApproversFlag'
 import type { GuardianOnAsk } from './guardianEvidence'
 import type { InboundContext } from './registry'
@@ -452,7 +452,8 @@ export function agentAlreadyCovers(
   actions: readonly RoleAction[]
 ): boolean {
   if (!view || !agentListsApprover(view, ask)) return false
-  return actions.every((action) => view.keys.includes(action))
+  // `changeApprovers` asked of the only approver adds nothing: it is not written for one (writableKeys).
+  return writableKeys(view.approvers.length, actions).every((action) => view.keys.includes(action))
 }
 
 /** The offer this phone sent on `connectionId`, if any, in whatever state it is now (the contact's row reads it). */
@@ -476,16 +477,20 @@ export function nextTrustedRules(
   ask: Pick<RoleOfferAsk, 'acceptedAs' | 'actions'>
 ): { approvers: string[]; keys: RoleAction[] } {
   const next = approversWithAccepted(view, ask)
-  return { approvers: next.approvers, keys: next.keys.filter((key) => !view.heldElsewhere.includes(key)) }
+  const keys = next.keys.filter((key) => !view.heldElsewhere.includes(key))
+  return { approvers: next.approvers, keys: writableKeys(next.approvers.length, keys) }
 }
 
-/** What to write on the agent to take `did` off: the others keep every action; with nobody left, nothing is held. */
+/**
+ * What to write on the agent to take `did` off: the others keep every action, except `changeApprovers` when one is left
+ * (`writableKeys`); with nobody left, nothing is held.
+ */
 export function withoutApprover(
   view: { approvers: readonly string[]; keys: readonly RoleAction[] },
   did: string
 ): { approvers: string[]; keys: RoleAction[] } {
   const approvers = view.approvers.filter((member) => member !== did)
-  return { approvers, keys: approvers.length ? [...view.keys] : [] }
+  return { approvers, keys: approvers.length ? writableKeys(approvers.length, view.keys) : [] }
 }
 
 /**

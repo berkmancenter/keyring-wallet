@@ -20,6 +20,7 @@ import {
   approvingFor,
   closeRoleOffer,
   isYesNotAdded,
+  agentAlreadyCovers,
   nextTrustedRules,
   setAsideRoleOffer,
   setAsideRoleOffers,
@@ -36,6 +37,7 @@ import {
   restoreRoleOfferPrompts,
   roleOfferPromptStore,
 } from '../../../src/modules/trust-tasks/approverRole'
+import type { RoleAction, RoleOfferAsk } from '../../../src/modules/trust-tasks/approverRole'
 import {
   REMOVED_TYPE_URI,
   ROLE_ACTIONS,
@@ -526,6 +528,42 @@ describe('what the screens read', () => {
         keys: [],
       }
     )
+  })
+
+  // Guardian research §4, option (b): changing who approves is written only for two approvers or more, so what the
+  // screen previews and what it writes leave it out the same way.
+  test('changing who approves: left out with one approver, kept with two, dropped when one is removed', () => {
+    const none = { approvers: [] as string[], keys: [] as RoleAction[], heldElsewhere: [] as RoleAction[] }
+    const ask = { acceptedAs: JORDAN_APPROVES_AS, actions: ['joinCommunity' as const, 'changeApprovers' as const] }
+    // The first approver: not written.
+    expect(nextTrustedRules(none, ask)).toEqual({ approvers: [JORDAN_APPROVES_AS], keys: ['joinCommunity'] })
+    // A second approver (control): written, from their ask.
+    const amy = { approvers: ['did:peer:2.amy'], keys: ['joinCommunity' as const], heldElsewhere: [] as RoleAction[] }
+    expect(nextTrustedRules(amy, ask)).toEqual({
+      approvers: ['did:peer:2.amy', JORDAN_APPROVES_AS],
+      keys: ['joinCommunity', 'changeApprovers'],
+    })
+    // Two down to one: dropped, everything else kept.
+    const two = {
+      approvers: ['did:peer:2.amy', JORDAN_APPROVES_AS],
+      keys: ['joinCommunity', 'changeApprovers'] as RoleAction[],
+    }
+    expect(withoutApprover(two, JORDAN_APPROVES_AS)).toEqual({ approvers: ['did:peer:2.amy'], keys: ['joinCommunity'] })
+    // Three down to two (control): kept.
+    const three = { ...two, approvers: [...two.approvers, 'did:peer:2.riley'] }
+    expect(withoutApprover(three, JORDAN_APPROVES_AS).keys).toEqual(['joinCommunity', 'changeApprovers'])
+  })
+
+  test('asking the only approver again for changing who approves adds nothing, so it is "already covered"', () => {
+    const ask = { acceptedAs: JORDAN_APPROVES_AS } as RoleOfferAsk
+    const actions: RoleAction[] = ['joinCommunity', 'changeApprovers']
+    expect(agentAlreadyCovers({ approvers: [JORDAN_APPROVES_AS], keys: ['joinCommunity'] }, ask, actions)).toBe(true)
+    // Control: with a second approver, changing who approves would be new, so the ask goes.
+    expect(
+      agentAlreadyCovers({ approvers: [JORDAN_APPROVES_AS, 'did:peer:2.amy'], keys: ['joinCommunity'] }, ask, actions)
+    ).toBe(false)
+    // And an action they do not hold is still asked for.
+    expect(agentAlreadyCovers({ approvers: [JORDAN_APPROVES_AS], keys: [] }, ask, actions)).toBe(false)
   })
 
   test('an approver is named from the relationship the offer went over; a no names nobody', async () => {

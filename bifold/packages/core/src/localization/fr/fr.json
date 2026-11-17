@@ -3748,6 +3748,12 @@
     "Unnamed": "Une personne absente de vos contacts",
     "Remove": "Retirer {{name}}",
     "RemoveNeedsYes": "Votre agent peut demander à vos approbateurs avant d’en retirer un.",
+    "Removal": {
+      "withoutTheirYes": "Avec un seul approbateur, vous pouvez le retirer sans son accord. Changer qui approuve demande au moins deux approbateurs, pour qu'aucun approbateur ne puisse bloquer son propre retrait.",
+      "theirYes": "Retirer votre approbateur demande son accord, à cause d'une règle définie avant que Keyring demande deux approbateurs. Ajouter un deuxième approbateur demande aussi son accord. Ensuite, aucun approbateur ne peut bloquer son propre retrait.",
+      "oneOfThem": "Retirer un approbateur demande l'accord de l'un de vos approbateurs, donc aucun d'eux ne peut le bloquer seul."
+    },
+    "ChangeNeedsTwo": "Changer qui approuve n'est pas encore inclus. Il faut au moins deux approbateurs, pour qu'aucun approbateur ne puisse bloquer son propre retrait.",
     "Check": "Vérifier que votre agent les attend",
     "CheckHint": "Keyring envoie à votre agent une demande d’essai sur laquelle seul ce téléphone est consulté, jamais vos approbateurs. Votre agent devrait la retenir.",
     "CheckAfterAdd": "{{name}} est ajouté. Pour vérifier que votre agent attend son accord, utilisez la demande d’essai dans Paramètres › Développeur › Démos.",
@@ -3818,7 +3824,7 @@
     "AskBody": "{{name}} peut approuver ce que vous choisissez, comme rejoindre une communauté. Votre agent attend l’accord de {{name}} avant de le faire.",
     "PickTitle": "Qu’est-ce qui demande l’accord de {{name}} ?",
     "PickBody": "Votre agent retient ces actions jusqu’à la réponse de {{name}}. Quiconque utilise vos clés doit attendre aussi.",
-    "AlwaysOn": "Toujours activé, pour que personne ne vous pousse à retirer {{name}} sans l’accord de {{name}}.",
+    "AlwaysOn": "Toujours demandé. Cela s'applique dès que vous avez au moins deux approbateurs, pour qu'aucun approbateur ne puisse bloquer son propre retrait.",
     "MayNotHoldYet": "Votre agent ne retient peut-être pas encore celle-ci.",
     "PickOne": "Choisissez-en au moins une.",
     "Send": "Envoyer à {{name}}",
