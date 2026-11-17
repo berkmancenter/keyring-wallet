@@ -3966,6 +3966,6 @@
     "TryAgain": "Tentar de novo",
     "WhatItIs": "O que é",
     "HowEarned": "Como se recebe",
-    "StaysInCommunity": "Os distintivos ficam em {{community}}: o Keyring não os mostra em nenhum outro lugar."
+    "StaysInCommunity": "Os distintivos ficam em {{community}}. Fora dela, só você os vê, na sua Carteira."
   }
 }

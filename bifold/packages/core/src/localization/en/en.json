@@ -4092,6 +4092,6 @@
     "TryAgain": "Try again",
     "WhatItIs": "What it is",
     "HowEarned": "How it's earned",
-    "StaysInCommunity": "Badges stay in {{community}}: Keyring doesn't show them anywhere else."
+    "StaysInCommunity": "Badges stay in {{community}}. Outside it, only you see them, in your own Wallet."
   }
 }

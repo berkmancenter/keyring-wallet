@@ -4050,6 +4050,6 @@
     "TryAgain": "Réessayer",
     "WhatItIs": "Ce que c'est",
     "HowEarned": "Comment l'obtenir",
-    "StaysInCommunity": "Les badges restent dans {{community}} : Keyring ne les montre nulle part ailleurs."
+    "StaysInCommunity": "Les badges restent dans {{community}}. En dehors, vous seul les voyez, dans votre Portefeuille."
   }
 }
