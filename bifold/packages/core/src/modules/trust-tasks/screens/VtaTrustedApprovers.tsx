@@ -22,7 +22,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
 import { EventEmitter } from 'events'
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialIcons'
@@ -67,7 +67,8 @@ import { releaseWarn } from '../module/releaseLog'
 import { isStateVerifiedApproversEnabled } from '../module/stateVerifiedApproversFlag'
 import { trustedKeyOf } from '../module/trustedApprovers'
 import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
-import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
+import { vtaAgent, type TrustedApproversState, type VtiApproval } from '../module/vtaAgent'
+import { waitingRequests } from '../module/waitingRequests'
 
 import { localClock, localDate } from './localTime'
 import { deviceErrorWords } from './VtaDevices'
@@ -104,6 +105,12 @@ export const TrustedApproversIds = {
   approvingFor: 'TrustedApproversApprovingFor',
   // Design B (11-14): a row per person on the list, and the person's own page.
   row: (kind: string, id: string) => `TrustedApproverRow_${kind}_${id}`,
+  /** Row I2 (Alberto, 11-17): on a card in I approve for, what you approve as tags, and your Guardian card's line. */
+  approvingTags: (connectionId: string) => `TrustedApproverApprovingTags_${connectionId}`,
+  approvingCardLine: (connectionId: string) => `TrustedApproverApprovingCardLine_${connectionId}`,
+  /** Row I4: a request from this person's agent waits on this phone's yes; its code, and Open. */
+  approvingWaiting: (connectionId: string) => `TrustedApproverApprovingWaiting_${connectionId}`,
+  approvingOpen: (connectionId: string) => `TrustedApproverApprovingOpen_${connectionId}`,
   saidYes: (connectionId: string) => `TrustedApproverSaidYes_${connectionId}`,
   person: 'TrustedApproverPerson',
   personGone: 'TrustedApproverPersonGone',
@@ -166,6 +173,14 @@ export const initialsOf = (name: string): string =>
     .toUpperCase()
 
 /** A card the check found revoked, in any of its three ways (its own revocation, the issuer's or the state's record). */
+/** Each action's icon on a card's tags in I approve for (row I2); MaterialIcons names. */
+const ACTION_ICON: Record<string, string> = {
+  shareCredential: 'badge',
+  joinCommunity: 'groups',
+  addDevice: 'smartphone',
+  changeApprovers: 'person-add',
+}
+
 const REVOKED = ['revoked', 'revokedInIssuerRecord', 'revokedInStateRecord']
 const isRevoked = (standing: GuardianStanding | undefined) =>
   standing?.kind === 'unverified' && REVOKED.includes(standing.outcome)
@@ -226,6 +241,27 @@ const VtaTrustedApprovers: React.FC = () => {
   /** A task the agent holds for consent, and its code: shown on each approver it waits on. */
   const held = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().awaitingConsentFor)
   const heldCode = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().awaitingConsentCode)
+  /**
+   * Row I4 (Alberto, 11-17): requests from the agents this phone approves for that wait on its yes, from every linked
+   * agent's list (as the My Agent badge counts them). A person with one goes first in I approve for, with the code.
+   * Read at render: an expired one drops out the next time the list changes or the tab redraws.
+   */
+  // Each list goes through waitingRequests as it is read, so a request from someone else's agent never shows while
+  // the trusted-approvers switch is off (approvalsShownThroughSwitch).
+  const approvals = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().approvals)
+  const otherRequests = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().otherRequests)
+  const waitingForMe = useMemo(() => {
+    const now = Date.now()
+    return [
+      ...waitingRequests(approvals, now),
+      ...Object.values(otherRequests ?? {}).flatMap((o) => waitingRequests(o.approvals, now)),
+    ].filter((a): a is VtiApproval & { forAgent: NonNullable<VtiApproval['forAgent']> } => !!a.forAgent)
+  }, [approvals, otherRequests])
+  /** The request waiting on this phone from this person's agent, if any (the newest). */
+  const waitingFrom = (prompt: RoleOfferPrompt) =>
+    waitingForMe
+      .filter((a) => a.forAgent.agentDid === prompt.agentDid)
+      .sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt)))[0]
 
   const wordsFor = useCallback((e: unknown) => deviceErrorWords(e, t), [t])
 
@@ -534,6 +570,57 @@ const VtaTrustedApprovers: React.FC = () => {
       backgroundColor: ColorPalette.brand.primaryBackground,
     },
     chipText: { fontSize: 15 },
+    // Row I2 (Alberto, 11-17): each person in I approve for is a card, not a flat row.
+    approvingCard: {
+      backgroundColor: ColorPalette.grayscale.white,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      borderRadius: 14,
+      padding: 14,
+      gap: 10,
+    },
+    approvingCardWaiting: { borderWidth: 2, borderColor: ColorPalette.brand.primary },
+    approvingTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    waitStrip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      borderRadius: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      backgroundColor: ColorPalette.brand.primaryBackground,
+    },
+    codeBold: { fontWeight: '700' },
+    openButton: {
+      minHeight: 44,
+      minWidth: 64,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: ColorPalette.brand.primary,
+    },
+    openButtonText: { color: ColorPalette.grayscale.white, fontWeight: '700' },
+    approvingName: { fontSize: 19, lineHeight: 24 },
+    tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    tag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      backgroundColor: ColorPalette.brand.primaryBackground,
+    },
+    tagText: { fontSize: 14, lineHeight: 18, fontWeight: '600' },
+    cardLine: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderTopWidth: 1,
+      borderTopColor: ColorPalette.grayscale.lightGrey,
+      paddingTop: 10,
+    },
     linkRow: { minHeight: 44, justifyContent: 'center' },
     link: { color: ColorPalette.brand.primary, fontWeight: '700' },
     spread: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1105,6 +1192,105 @@ const VtaTrustedApprovers: React.FC = () => {
     interpolation: { escapeValue: false },
   })
 
+  /**
+   * One person in I approve for (row I2, Alberto, 11-17: the list was "very flat"): a card with their initials and name,
+   * when they asked, what you approve as short tags, and one line for your Guardian card. The whole card opens their
+   * page. "Guardian" is never said as a role here: this phone sent a card, and only the person's phone checks what the
+   * state named (7d). The date is when they asked; there is no separate date for the yes.
+   */
+  const approvingCard = (prompt: RoleOfferPrompt) => {
+    const { asker } = askerOf(prompt)
+    const stopAsked = isStopAsked(prompt)
+    const waiting = waitingFrom(prompt)
+    // The same gate as the card switch on their page: no line when this phone holds no card to send.
+    const card =
+      shareable && isStateVerifiedApproversEnabled()
+        ? stopAsked
+          ? 'stopped'
+          : consents[prompt.connectionId] === 'yes'
+            ? 'sent'
+            : 'notSent'
+        : undefined
+    return (
+      <Pressable
+        key={`approving_${prompt.connectionId}`}
+        onPress={() => navigation.navigate(Screens.VtaApproverPerson, { kind: 'approving', id: prompt.connectionId })}
+        accessibilityRole="button"
+        accessibilityLabel={asker}
+        testID={testIdWithKey(TrustedApproversIds.row('approving', prompt.connectionId))}
+        style={[styles.approvingCard, waiting && styles.approvingCardWaiting]}
+      >
+        <View style={styles.approvingTop}>
+          {avatar(asker)}
+          <View style={styles.personRowText}>
+            <ThemedText variant="bold" style={styles.approvingName}>
+              {asker}
+            </ThemedText>
+            <ThemedText style={styles.muted}>
+              {t('Approver.AskedYouOn', { date: localDate(prompt.receivedAt) })}
+            </ThemedText>
+          </View>
+          {stopAsked ? (
+            <StatusPill
+              tone="unknown"
+              words={t('Approver.AskedToStop')}
+              testID={TrustedApproversIds.stopAsked(prompt.connectionId)}
+            />
+          ) : null}
+          <Icon name="chevron-right" size={24} color={ColorPalette.grayscale.mediumGrey} />
+        </View>
+        {waiting ? (
+          <View
+            style={styles.waitStrip}
+            testID={testIdWithKey(TrustedApproversIds.approvingWaiting(prompt.connectionId))}
+          >
+            <View style={{ flex: 1, gap: 2 }}>
+              <ThemedText variant="bold">{t('Approver.NeedsYourYesNow')}</ThemedText>
+              {waiting.matchCode ? (
+                <ThemedText style={styles.muted}>
+                  {t('Approver.CodeLabel')}{' '}
+                  <ThemedText style={[styles.code, styles.codeBold]}>{waiting.matchCode}</ThemedText>
+                </ThemedText>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={() => navigation.navigate(Screens.VtaRequests)}
+              accessibilityRole="button"
+              accessibilityLabel={t('Approver.OpenRequest', { name: asker, interpolation: { escapeValue: false } })}
+              testID={testIdWithKey(TrustedApproversIds.approvingOpen(prompt.connectionId))}
+              style={styles.openButton}
+            >
+              <ThemedText style={styles.openButtonText}>{t('Approver.Open')}</ThemedText>
+            </Pressable>
+          </View>
+        ) : null}
+        <View style={styles.tags} testID={testIdWithKey(TrustedApproversIds.approvingTags(prompt.connectionId))}>
+          {prompt.actions.map((key) => (
+            <View key={key} style={styles.tag}>
+              <Icon name={ACTION_ICON[key] ?? 'check'} size={15} color={ColorPalette.brand.primary} />
+              <ThemedText style={styles.tagText}>{t(`Approver.ActionShort.${key}`)}</ThemedText>
+            </View>
+          ))}
+        </View>
+        {card ? (
+          <View style={styles.cardLine}>
+            <Icon
+              name={card === 'sent' ? 'verified-user' : card === 'stopped' ? 'remove-moderator' : 'shield'}
+              size={18}
+              color={card === 'sent' ? ColorPalette.semantic.success : ColorPalette.grayscale.mediumGrey}
+            />
+            <ThemedText
+              style={{ flex: 1 }}
+              testID={testIdWithKey(TrustedApproversIds.approvingCardLine(prompt.connectionId))}
+            >
+              {t(`Approver.YourCardLine.${card}`)}
+            </ThemedText>
+          </View>
+        ) : null}
+      </Pressable>
+    )
+  }
+
   /** One person on the list: their initials, name, one line, a pill, the way to their page, and a wait under it. */
   const personRow = (
     kind: PersonKind,
@@ -1525,21 +1711,10 @@ const VtaTrustedApprovers: React.FC = () => {
               <ThemedText style={styles.muted}>{t('Approver.IApproveForIntro')}</ThemedText>
             )}
             {stepDownErrorLine}
-            {mine.map((prompt) =>
-              personRow(
-                'approving',
-                prompt.connectionId,
-                askerOf(prompt).asker,
-                t('Approver.RowApproving', { count: prompt.actions.length, date: localDate(prompt.receivedAt) }),
-                isStopAsked(prompt) ? (
-                  <StatusPill
-                    tone="unknown"
-                    words={t('Approver.AskedToStop')}
-                    testID={TrustedApproversIds.stopAsked(prompt.connectionId)}
-                  />
-                ) : null
-              )
-            )}
+            {/* Row I4: whoever has a request waiting on this phone first; otherwise as listed. */}
+            {[...mine]
+              .sort((a, b) => Number(!!waitingFrom(b)) - Number(!!waitingFrom(a)))
+              .map((prompt) => approvingCard(prompt))}
           </View>
         )}
       </ScrollView>

@@ -716,3 +716,143 @@ describe('row E (Alberto, 11-16): each person is one card, in sections, with far
     expect(initialsOf('')).toBe('')
   })
 })
+
+describe('rows I2 and I4 (Alberto, 11-17): in I approve for, each person is a card, and one waiting on me comes first', () => {
+  const SAM_AGENT = 'did:webvh:sams-agent.example'
+  const RILEY_AGENT = 'did:webvh:rileys-agent.example'
+  const prompt = (connectionId: string, asker: string, agentDid: string, actions: string[], over = {}) =>
+    ({
+      connectionId,
+      asker,
+      agentDid,
+      actions,
+      receivedAt: '2026-11-16T12:00:00Z',
+      answered: 'accepted',
+      inForce: { agentDid, as: 'did:peer:2.me', actions },
+      ...over,
+    }) as unknown as approverRole.RoleOfferPrompt
+  const SAM = prompt('c-sam', 'Sam', SAM_AGENT, ['shareCredential', 'addDevice'])
+  const RILEY = prompt('c-riley', 'Riley', RILEY_AGENT, ['joinCommunity'])
+  const waitingFrom = (agentDid: string, matchCode = '382 540', over = {}) => {
+    const real = vtaAgent.getState()
+    jest.spyOn(vtaAgent, 'getState').mockReturnValue({
+      ...real,
+      approvals: [
+        {
+          id: 'req-1',
+          status: 'pending',
+          receivedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          matchCode,
+          forAgent: { agentDid, asker: 'x' },
+          ...over,
+        },
+      ] as never,
+    })
+  }
+  const theirsTab = async (people: approverRole.RoleOfferPrompt[]) => {
+    ;(useRoute as jest.Mock).mockReturnValue({ params: undefined })
+    jest.spyOn(approverRole, 'listeningFor').mockResolvedValue(people)
+    standings.mockResolvedValue({ cards: {}, social: {} })
+    demos.mockResolvedValue({})
+    const tree = render(
+      <BasicAppContext>
+        <VtaTrustedApprovers />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    await act(async () => fireEvent.press(tree.getByTestId(id(Ids.tabTheirs))))
+    return tree
+  }
+  const order = (tree: Tree) =>
+    tree
+      .getAllByTestId(/TrustedApproverRow_approving_/)
+      .map((n) => String(n.props.testID).replace(/.*TrustedApproverRow_approving_/, ''))
+
+  test('a card: who, when they asked, what I approve as tags, and my Guardian card sent (control: no "N things" line)', async () => {
+    jest.spyOn(guardianEvidence, 'cardToShare').mockResolvedValue({ state: UTAH } as never)
+    jest.spyOn(guardianEvidence, 'cardConsents').mockResolvedValue({ 'c-sam': 'yes' })
+    const tree = await theirsTab([SAM])
+    const card = within(tree.getByTestId(id(Ids.row('approving', 'c-sam'))))
+    expect(card.getByText('Sam')).toBeTruthy()
+    expect(card.getByText('Approver.AskedYouOn')).toBeTruthy()
+    const tags = within(tree.getByTestId(id(Ids.approvingTags('c-sam'))))
+    expect(tags.getByText('Approver.ActionShort.shareCredential')).toBeTruthy()
+    expect(tags.getByText('Approver.ActionShort.addDevice')).toBeTruthy()
+    expect(tags.queryByText('Approver.ActionShort.joinCommunity')).toBeNull()
+    expect(tree.getByTestId(id(Ids.approvingCardLine('c-sam'))).props.children).toBe('Approver.YourCardLine.sent')
+    expect(card.queryByText('Approver.RowApproving')).toBeNull()
+  })
+
+  test.each([
+    ['not sent', {}, {}, 'Approver.YourCardLine.notSent'],
+    [
+      'stopped when I asked to stop',
+      { 'c-sam': 'yes' },
+      { stopAskedAt: '2026-11-16T13:00:00Z' },
+      'Approver.YourCardLine.stopped',
+    ],
+  ])('my Guardian card %s', async (_label, consents, over, line) => {
+    jest.spyOn(guardianEvidence, 'cardToShare').mockResolvedValue({ state: UTAH } as never)
+    jest.spyOn(guardianEvidence, 'cardConsents').mockResolvedValue(consents as never)
+    const tree = await theirsTab([{ ...SAM, ...over } as approverRole.RoleOfferPrompt])
+    expect(tree.getByTestId(id(Ids.approvingCardLine('c-sam'))).props.children).toBe(line)
+  })
+
+  test('control: no card on this phone, no card line (nothing to send)', async () => {
+    const tree = await theirsTab([SAM])
+    expect(tree.queryByTestId(id(Ids.approvingCardLine('c-sam')))).toBeNull()
+  })
+
+  test('a request from Riley waits on me: Riley first, with the code and Open (control: none waiting keeps the order)', async () => {
+    const calm = await theirsTab([SAM, RILEY])
+    expect(order(calm)).toEqual(['c-sam', 'c-riley'])
+    expect(calm.queryByTestId(id(Ids.approvingWaiting('c-riley')))).toBeNull()
+    calm.unmount()
+
+    waitingFrom(RILEY_AGENT)
+    const tree = await theirsTab([SAM, RILEY])
+    expect(order(tree)).toEqual(['c-riley', 'c-sam'])
+    const strip = within(tree.getByTestId(id(Ids.approvingWaiting('c-riley'))))
+    expect(strip.getByText('Approver.NeedsYourYesNow')).toBeTruthy()
+    expect(strip.getByText('382 540')).toBeTruthy()
+    expect(tree.queryByTestId(id(Ids.approvingWaiting('c-sam')))).toBeNull()
+    const nav = (require('@react-navigation/native').useNavigation as () => { navigate: jest.Mock })().navigate
+    nav.mockClear()
+    await act(async () => fireEvent.press(tree.getByTestId(id(Ids.approvingOpen('c-riley')))))
+    expect(nav).toHaveBeenCalledWith('Requests')
+  })
+
+  test('the switch off (remote off): a request waiting from Riley promotes nothing, shows no code (ac, #1090; control: on, above)', async () => {
+    waitingFrom(RILEY_AGENT)
+    TRUSTED_APPROVERS_REMOTE_OFF.off = true
+    try {
+      ;(useRoute as jest.Mock).mockReturnValue({ params: undefined })
+      jest.spyOn(approverRole, 'listeningFor').mockResolvedValue([SAM, RILEY])
+      standings.mockResolvedValue({ cards: {}, social: {} })
+      demos.mockResolvedValue({})
+      const tree = render(
+        <BasicAppContext>
+          <VtaTrustedApprovers />
+        </BasicAppContext>
+      )
+      await act(async () => undefined)
+      expect(tree.getByTestId(id(Ids.off))).toBeTruthy()
+      expect(tree.queryByTestId(id(Ids.approvingWaiting('c-riley')))).toBeNull()
+      expect(tree.queryByText('382 540')).toBeNull()
+      expect(tree.queryAllByTestId(/TrustedApproverRow_approving_/)).toHaveLength(0)
+    } finally {
+      TRUSTED_APPROVERS_REMOTE_OFF.off = false
+    }
+  })
+
+  test.each([
+    ['expired', { expiresAt: new Date(Date.now() - 1000).toISOString() }],
+    ['already decided', { status: 'approved' }],
+  ])('control: a request %s does not count as waiting', async (_label, over) => {
+    waitingFrom(RILEY_AGENT, '382 540', over)
+    const tree = await theirsTab([SAM, RILEY])
+    expect(order(tree)).toEqual(['c-sam', 'c-riley'])
+    expect(tree.queryByTestId(id(Ids.approvingWaiting('c-riley')))).toBeNull()
+  })
+})

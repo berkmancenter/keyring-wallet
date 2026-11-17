@@ -3799,8 +3799,22 @@
     "RowApproves_other": "Approves {{count}} things",
     "RowSteppedDown": "Stepped down: remove {{name}}",
     "RowAddHint": "To add someone, ask them from their contact page.",
-    "RowApproving_one": "{{count}} thing · since {{date}}",
-    "RowApproving_other": "{{count}} things · since {{date}}",
+    "AskedYouOn": "Asked you on {{date}}",
+    "NeedsYourYesNow": "Needs your yes now",
+    "CodeLabel": "Code",
+    "OpenRequest": "Open the request from {{name}}",
+    "Open": "Open",
+    "ActionShort": {
+      "shareCredential": "Credentials",
+      "joinCommunity": "Communities",
+      "addDevice": "Devices",
+      "changeApprovers": "Approvers"
+    },
+    "YourCardLine": {
+      "sent": "Your Guardian card: sent",
+      "notSent": "Your Guardian card: not sent",
+      "stopped": "Your Guardian card: stopped when you asked to stop"
+    },
     "SectionStateCard": "State card",
     "Details": "Details",
     "HideDetails": "Hide details",
