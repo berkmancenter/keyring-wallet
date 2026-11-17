@@ -1172,6 +1172,61 @@ describe('an ask as an identity, over its own session', () => {
     await again
   })
 
+  // GXT8-STDZ (278.27, 11-17): three identities' own-session listings went out at 19:01:42.137; 13 ms later the shared
+  // session signed in as another identity, and its `disconnect` cleared every ask with no waiter, which an ask still
+  // being sent has. The three answers came back "answers no ask: dropped" and each listing waited out its clock.
+  describe('the shared session signs in as another identity while an own-session ask is still being sent', () => {
+    const MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
+    /** An own session whose send is held until `release()`: the ask is recorded, and nothing waits on it yet. */
+    const held = () => {
+      const sent: SentAs[] = []
+      let release = () => undefined as void
+      const gate = new Promise<void>((resolve) => (release = resolve))
+      const session = {
+        sendTo: async (_to: string, message: unknown) => {
+          sent.push(message as SentAs)
+          await gate
+        },
+      }
+      return { sent, session, release: () => release() }
+    }
+
+    it("keeps that ask: its answer, heard on the identity's listener, still answers it", async () => {
+      const community = 'did:webvh:c:gxt8-own'
+      await connectTo(community, 'didcomm', 'did:webvh:p:gxt8-shared-before')
+      const mine = held()
+      keepOwnSession('did:webvh:p:gxt8-own', mine.session)
+      const asked = vtiAgent.askAs(persona('did:webvh:p:gxt8-own'), community, MEMBERSHIPS, {}, 2000)
+      await until(() => mine.sent.length === 1)
+      // Mid-send, the shared session moves to another identity (the kicked persona's sign-in, in the report).
+      await connectTo(community, 'didcomm', 'did:webvh:p:gxt8-shared-after')
+      mine.release()
+      const reply = didcommReply(mine.sent[0], MEMBERSHIPS, { items: ['kept'] })
+      expect(vtiAgent.answerFromListener('did:webvh:p:gxt8-own', reply as never)).toBe('answered')
+      expect(await asked).toMatchObject({ body: { payload: { items: ['kept'] } } })
+    })
+
+    it("still clears the shared session's own ask that nothing waits on, in the same sign-in (control)", async () => {
+      const community = 'did:webvh:c:gxt8-control'
+      const before = await connectTo(community, 'didcomm', 'did:webvh:p:gxt8-ctl-before')
+      // The shared session's ask: its clock runs out, so nothing waits on it.
+      const sharedAsk = vtiAgent.ask(community, MEMBERSHIPS, {}, 1)
+      await until(() => before.didcomm.length === 1)
+      expect(await sharedAsk).toBeUndefined()
+      const mine = held()
+      keepOwnSession('did:webvh:p:gxt8-ctl-own', mine.session)
+      const asked = vtiAgent.askAs(persona('did:webvh:p:gxt8-ctl-own'), community, MEMBERSHIPS, {}, 2000)
+      await until(() => mine.sent.length === 1)
+      await connectTo(community, 'didcomm', 'did:webvh:p:gxt8-ctl-after')
+      mine.release()
+      const sharedReply = didcommReply((before.didcomm as Sent[])[0], MEMBERSHIPS, { items: [] })
+      expect(vtiAgent.answerFromListener('did:webvh:p:gxt8-ctl-before', sharedReply as never)).toBe('orphan')
+      const ownReply = didcommReply(mine.sent[0], MEMBERSHIPS, { items: ['own'] })
+      expect(vtiAgent.answerFromListener('did:webvh:p:gxt8-ctl-own', ownReply as never)).toBe('answered')
+      expect(await asked).toMatchObject({ body: { payload: { items: ['own'] } } })
+    })
+  })
+
   it("a listener that stops drops only its own session, never a newer one's (control)", () => {
     const older = own().session
     const newer = own().session

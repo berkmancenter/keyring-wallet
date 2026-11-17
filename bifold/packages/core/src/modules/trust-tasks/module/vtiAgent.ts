@@ -595,6 +595,8 @@ interface AskVia {
   did: string
   /** Who signs the document: the identity asking, when its signing key is borrowed. */
   signer?: VtiPersona
+  /** The shared session (`ask`) rather than an identity's own (`askAs`). */
+  shared: boolean
 }
 
 interface AskEntry {
@@ -612,6 +614,8 @@ interface AskEntry {
   lastSentAt: number
   /** Callers waiting on it now. */
   waiters: ((plaintext: DidCommV2PlaintextMessage) => void)[]
+  /** Sent over the shared session (`ask`), not an identity's own (`askAs`): only these go when the shared one does. */
+  shared: boolean
   /** Set when the answer clock ran out: until then a late answer is kept. */
   heldUntil?: number
   /** A late answer, kept for the next caller. */
@@ -1739,8 +1743,13 @@ class VtiAgentController {
     // What this session asked can no longer be answered on it, but its answer can still come: a switch to another
     // identity leaves that identity's listener hearing it (`answerFromListener`). So an ask a caller still waits on stays
     // until the caller's own clock ends. Cleared, the answer was dropped as answering nothing and the caller waited out
-    // its clock for it (277.11). Nothing else stays.
-    for (const [id, entry] of this.asks) if (!entry.waiters.length) this.asks.delete(id)
+    // its clock for it (277.11). Nothing else of this session's stays.
+    //
+    // An ask an identity sends over its own session is not this session's, and a sign-in as another identity must not
+    // take it. Between being recorded and its caller starting to wait it has no waiter (it is still being built and
+    // sent), and cleared then, its answer was dropped as answering nothing and it waited out its clock (GXT8-STDZ,
+    // 11-17: three communities' own-session listings, sent 13 ms before the shared session signed in as another).
+    for (const [id, entry] of this.asks) if (entry.shared && !entry.waiters.length) this.asks.delete(id)
     this.tsp = undefined
     this.persona = undefined
     this.set({
@@ -1945,7 +1954,14 @@ class VtiAgentController {
     const session = this.session
     const did = this.state.did
     if (!session || !did) throw new Error('vtiAgent: not connected')
-    return this.askOn({ carrier: session, did, signer: this.persona }, communityDid, type, payload, timeoutMs, prepared)
+    return this.askOn(
+      { carrier: session, did, signer: this.persona, shared: true },
+      communityDid,
+      type,
+      payload,
+      timeoutMs,
+      prepared
+    )
   }
 
   /**
@@ -1977,7 +1993,7 @@ class VtiAgentController {
       `vtiAgent: ${taskName(type)} asked as ${didPrefix(persona.did)} over its own session (no sign-in)`
     )
     return this.askOn(
-      { carrier: own, did: persona.did, signer: persona },
+      { carrier: own, did: persona.did, signer: persona, shared: false },
       communityDid,
       type,
       payload,
@@ -2050,6 +2066,7 @@ class VtiAgentController {
       sentAt: Date.now(),
       lastSentAt: Date.now(),
       waiters: [],
+      shared: via.shared,
     }
     this.asks.set(threadId, entry)
     try {
@@ -2218,6 +2235,7 @@ class VtiAgentController {
             sentAt: Date.now(),
             lastSentAt: Date.now(),
             waiters: [],
+            shared: true,
           }
           this.asks.set(threadId, entry)
           const document = await this.taskDocument(communityDid, type, {}, threadId)
