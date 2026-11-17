@@ -28,6 +28,7 @@ import { createSession } from '../lib/driver.js';
 import { applicant, installedHash, unlockToHome } from '../lib/keyringRoles.js';
 import { launchListening } from './tuiListeners.js';
 import { allMembers } from './communityMembers.js';
+import { p1OwnMember } from './p1Member.mjs';
 import * as tuiRoles from './tuiRoles.js';
 
 const { values: a } = parseArgs({
@@ -75,6 +76,9 @@ mkdirSync(runDir, { recursive: true });
 const log = path.join(runDir, 'steps.jsonl');
 const opts = { log };
 const startedAt = new Date().toISOString();
+// The members before this run, for its cleanup (p1OwnMember): undefined when they cannot be read, and then none is named.
+let membersBefore;
+try { membersBefore = new Set(allMembers(memberSource).map((m) => m.did)); } catch { membersBefore = undefined; }
 const report = { runId, label: a.label, expect: a.expect, startedAt, openvtcVersion: a['openvtc-version'], platform: a.platform, apk: a.apk, udid: a.udid, via: a.via, steps: [], result: undefined };
 const say = (m) => console.log(`[phase1 ${a.label}] ${m}`);
 
@@ -158,6 +162,16 @@ try {
   report.failedAt = e.record ? `${e.record.role}.${e.record.step}` : e.message.split('\n')[0];
   report.error = e.message.split('\n')[0];
 } finally {
+  // For the leg's cleanup (p1.sh, lib.sh c_members_remove): this run's own member, only when it can be told apart
+  // (p1OwnMember: passed, new since the start, not a fixture, the only one new in the window).
+  try {
+    const fixtures = [a['tui-persona'], process.env.VETTER_DID, process.env.HV_VETTER_DID, process.env.HV_TUI_PERSONA, process.env.P2_VETTER_DID];
+    const own = p1OwnMember({ before: membersBefore, after: allMembers(memberSource), startedAt, fixtures, green: !failure && report.communityHasMember });
+    if (own.did) console.log(`JOIN_MEMBER ${own.did}`);
+    say(`cleanup: ${own.did ? `member …${own.did.slice(-24)} is this run's` : 'no member named'} (${own.why})`);
+  } catch (e) {
+    say(`the community's members could not be read for the cleanup: ${e.message.split('\n')[0]}`);
+  }
   report.openvtcLog = tuiRoles.vettingLogLines(a['fixture-dir'], a.profile, startedAt);
   await tui.stop();
   await d.deleteSession().catch(() => undefined);

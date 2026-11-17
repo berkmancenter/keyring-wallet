@@ -19,7 +19,11 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsTestId, scrollToTestId, tapTestId, waitForTestId } from "../driver.js";
-import { handleBiometricConfirmIfPresent, pasteLinkFromHome } from "../flows.js";
+import { CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent, pasteLinkFromHome } from "../flows.js";
+
+// The confirm sheet's own failure ("offers only Cancel", a PIN entry that stays open) is not thrown here, as before,
+// but it is said: otherwise the leg stalls on the sheet and the next step's timeout is all a run shows.
+const confirmSaid = (e) => console.log(`[e2e] confirm sheet: ${e?.message ?? e}`);
 import { APP_ID } from "../config.js";
 import { awaitSwitched } from "./agents.js";
 import { awaitScreen, clockOf, elog, failWith, rowText, runStep, said, shot, textOf } from "./step.js";
@@ -190,7 +194,7 @@ export const join = {
       // fold; Android has no element for it until it scrolls in, and the check alone would skip it without a word.
       await scrollToTestId(d, "JoinAsContinue", 8).catch(() => undefined);
       if (await existsTestId(d, "JoinAsContinue", 3000)) await tapTestId(d, "JoinAsContinue", 10000);
-      await handleBiometricConfirmIfPresent(d).catch(() => undefined);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS }).catch(confirmSaid);
       await owner(`${tag} identity`);
       await settled(d, `${tag} ask`, { clock });
       return { value: { askId, again } };
@@ -210,7 +214,7 @@ export const join = {
       const start = await scrollToTestId(d, `JoinWayStart_${way}`, 6, { from: 0.6 }).catch(() => undefined);
       if (!start) throw failWith(`no Start for the way "${way}" (JoinWayStart_${way})`, { way });
       await start.click();
-      await handleBiometricConfirmIfPresent(d).catch(() => undefined);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS }).catch(confirmSaid);
       await owner(`way ${way}`);
       const landed = await awaitScreen(d, ["JoinMakeIdentity", "JoinStanding", "JoinRequestSent", "VettingApplicantStep_", "JoinError"], { page: PAGE, markers: JOIN_MARKERS, timeoutMs: 60000, clock });
       return { value: { landed } };
@@ -258,7 +262,7 @@ export const join = {
             retry = { at: `${new Date(clock.now()).toISOString().slice(11, 19)}Z`, error };
             console.log(`RETRY join ${retry.at} — ${error.slice(0, 160)}`);
             await tapTestId(d, "JoinAsContinue", 10000);
-            await handleBiometricConfirmIfPresent(d).catch(() => undefined);
+            await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS }).catch(confirmSaid);
             await owner("retry identity");
             continue;
           }
@@ -312,7 +316,7 @@ export const join = {
       await waitForTestId(d, "JoinAsContinue", 30000).catch(() => undefined);
       const continued = await existsTestId(d, "JoinAsContinue", 3000);
       if (continued) await tapTestId(d, "JoinAsContinue", 10000);
-      await handleBiometricConfirmIfPresent(d).catch(() => undefined);
+      await handleBiometricConfirmIfPresent(d, { appearWithin: CONFIRM_APPEARS_WITHIN_MS }).catch(confirmSaid);
       await owner("send again identity");
       await settled(d, "send again", { clock: clockOf(opts) });
       return { value: { continued } };
