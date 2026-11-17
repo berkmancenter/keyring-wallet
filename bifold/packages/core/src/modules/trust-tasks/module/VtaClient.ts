@@ -103,7 +103,14 @@ import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
 import { didOfKeyId, isAgentsOwnDid, isAgentsOwnPersona } from './agentOwnIdentity'
-import { besideQueue, goesFirst, inReadLane, VTA_HEARTBEAT_BESIDE, VTA_READ_LANE_SIZE } from './vtaReadLane'
+import {
+  besideQueue,
+  goesFirst,
+  inReadLane,
+  VTA_HEARTBEAT_BESIDE,
+  isKeyForSignInFirstOn,
+  VTA_READ_LANE_SIZE,
+} from './vtaReadLane'
 import {
   DECLARATIVE_POLICY_ID,
   DECLARATIVE_POLICY_NAME,
@@ -859,6 +866,19 @@ export type KeyFetchSource = 'session sweep' | 'on use'
 /** The source each fetch in {@link keysInFlight} was asked by, so a caller that joins one can say whose it joined. */
 const inFlightSource = new WeakMap<Promise<void>, KeyFetchSource | undefined>()
 
+/** Each fetch's place in its agent's queue, so a sign-in that joins one the sweep queued can raise it. */
+const inFlightPriority = new WeakMap<Promise<void>, Priority>()
+
+/**
+ * Whether a task goes ahead of what is queued (VTA_KEY_FOR_SIGN_IN_FIRST), said when it is asked, or after it was queued
+ * by `raise`, which enqueue sets: a task still waiting moves up; one started, or one first already, is left as it is.
+ * `first` set before the task is queued places it first when it is.
+ */
+export interface Priority {
+  first: boolean
+  raise?: () => void
+}
+
 /** A task dropped from the queue before it was sent ({@link VtaClient.dropQueued}). */
 export class VtaTaskDropped extends Error {
   constructor(readonly taskType: string) {
@@ -1496,12 +1516,14 @@ export class VtaClient {
      * about itself, where the approver a rule names may be this phone, so the
      * wait could never end (approvalRules.ts, PHONE_SENDS).
      */
-    sendOptions: { waitForConsent?: boolean } = {}
+    sendOptions: { waitForConsent?: boolean; priority?: Priority } = {}
   ): Promise<T> {
     // A reload would lose all of this (the queue, a step-up, a wait for consent
     // that can last minutes, the re-submits): none of it is stored. So no
     // downloaded update applies until the task ends (utils/otaApply).
-    const done = this.enqueue<T>(type, payload, timeoutMs, documentExtras, onSent).catch(async (error: unknown) => {
+    // A step-up's or a consent grant's re-submit below is sent at once (sendTask), not queued: it has no place to lose.
+    const queued = this.enqueue<T>(type, payload, timeoutMs, documentExtras, onSent, sendOptions.priority)
+    const done = queued.catch(async (error: unknown) => {
       const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
       if (stepUp)
         return this.answerStepUp<T>(stepUp, error, type, () =>
@@ -1576,7 +1598,8 @@ export class VtaClient {
     payload: Record<string, unknown>,
     timeoutMs: number,
     documentExtras: Record<string, unknown>,
-    onSent?: () => void
+    onSent?: () => void,
+    priority?: Priority
   ): Promise<T> {
     const ticket = ++this.tickets
     return new Promise<T>((resolve, reject) => {
@@ -1592,15 +1615,18 @@ export class VtaClient {
       }
       const queued: QueuedTask = { ticket, type, start: () => run().then(resolve, reject) }
       // A member's own write goes ahead of what is queued, behind any other part of a write, in the order asked; what
-      // is on the wire runs on (vtaReadLane, goesFirst).
-      if (goesFirst(type, payload)) {
-        queued.first = true
-        const at = this.waiting.findIndex((t) => !t.first)
-        if (at >= 0) {
-          this.agent.config.logger.info(`${LOG_PREFIX} ${type} goes ahead of ${this.waiting.length - at} queued`)
-          this.waiting.splice(at, 0, queued)
-        } else this.waiting.push(queued)
-      } else this.waiting.push(queued)
+      // is on the wire runs on (vtaReadLane, goesFirst). So does a key a sign-in waits for, where that is on.
+      const keyFirst = () => isKeyForSignInFirstOn() && priority?.first === true
+      if (goesFirst(type, payload) || keyFirst()) this.placeFirst(queued)
+      else this.waiting.push(queued)
+      if (priority)
+        priority.raise = () => {
+          if (queued.first || !keyFirst()) return
+          const at = this.waiting.indexOf(queued)
+          if (at < 0) return // started already
+          this.waiting.splice(at, 1)
+          this.placeFirst(queued)
+        }
       // One task at a time: one queued behind another says what it waits on, so a
       // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
       // A heartbeat beside the queue holds nothing: what is named is the other task on the wire, if there is one.
@@ -1614,6 +1640,16 @@ export class VtaClient {
       // Scheduled, not started: nothing of the task runs before the caller has its promise (task(), the OTA blocker).
       void Promise.resolve().then(() => this.pump())
     })
+  }
+
+  /** Queue a task ahead of every one that doesn't go first, behind those that do, and say how many it passed. */
+  private placeFirst(queued: QueuedTask): void {
+    queued.first = true
+    const at = this.waiting.findIndex((t) => !t.first)
+    if (at >= 0) {
+      this.agent.config.logger.info(`${LOG_PREFIX} ${queued.type} goes ahead of ${this.waiting.length - at} queued`)
+      this.waiting.splice(at, 0, queued)
+    } else this.waiting.push(queued)
   }
 
   private sharesLane(type: string): boolean {
@@ -2699,11 +2735,26 @@ export class VtaClient {
    * an identity's keys only (agentOwnIdentity).
    */
   async borrowKey(
-    vtaKeyId: string
+    vtaKeyId: string,
+    /** Its place in the queue: a sign-in's goes first, where that is on (VTA_KEY_FOR_SIGN_IN_FIRST). */
+    priority?: Priority
   ): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519'; publicKeyMultibase: string }> {
     if (isAgentsOwnDid(didOfKeyId(vtaKeyId), this.vtaDid))
       throw new Error(`${LOG_PREFIX} not borrowed: the key is the agent's own, not an identity's`)
-    const exported = await this.task<VtaExportedKey>(VTA_TASK.keysExportSecret, { keyId: vtaKeyId })
+    // With a place, the task's own defaults for the rest (undefined), so they never drift from task()'s; without one,
+    // asked exactly as before.
+    const exported = priority
+      ? await this.task<VtaExportedKey>(
+          VTA_TASK.keysExportSecret,
+          { keyId: vtaKeyId },
+          undefined,
+          undefined,
+          undefined,
+          {
+            priority,
+          }
+        )
+      : await this.task<VtaExportedKey>(VTA_TASK.keysExportSecret, { keyId: vtaKeyId })
     // Held in memory only (#10, plan part C), under an id that is the same every
     // session, so a persona's record keeps naming it across restarts.
     const into = { backend: EPHEMERAL_KMS_BACKEND, keyId: inMemoryKeyId(this.vtaDid, vtaKeyId) }
@@ -2739,6 +2790,12 @@ export class VtaClient {
       if (await this.holdsKeyNow(kmsKeyId)) continue
       const joined = keysInFlight.get(kmsKeyId)
       if (joined) {
+        // A sign-in waits for this copy: the fetch it joins goes first now, if the sweep queued it behind others.
+        const place = source === 'on use' ? inFlightPriority.get(joined) : undefined
+        if (place) {
+          place.first = true
+          place.raise?.()
+        }
         const since = Date.now()
         await joined.finally(() =>
           this.keyLog(
@@ -2780,9 +2837,10 @@ export class VtaClient {
   /** One fetch of a key copy, shared with whoever asks for the same copy while it runs (`keysInFlight`). */
   private fetchKeyCopy(kind: string, kmsKeyId: string, vtaKeyId: string, source?: KeyFetchSource): Promise<void> {
     const started = Date.now()
+    const priority: Priority = { first: source === 'on use' }
     const running = (async () => {
       await this.connect()
-      await this.borrowKey(vtaKeyId)
+      await this.borrowKey(vtaKeyId, priority)
     })()
       .then(
         () => this.keyLog(`${kind} copy (${source ?? 'other'}): exported in ${Date.now() - started} ms`),
@@ -2796,6 +2854,7 @@ export class VtaClient {
       })
     keysInFlight.set(kmsKeyId, running)
     inFlightSource.set(running, source)
+    inFlightPriority.set(running, priority)
     return running
   }
 

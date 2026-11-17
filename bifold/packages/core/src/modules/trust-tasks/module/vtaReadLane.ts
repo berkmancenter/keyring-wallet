@@ -111,6 +111,35 @@ export const VTA_SEND_ACT_TYPES: ReadonlySet<string> = new Set([
 
 const RECORDS_PUT = /^https:\/\/trusttasks\.org\/spec\/rooms\/records\/put\/[\d.]+$/
 
+/**
+ * A key copy a sign-in is waiting for (vtaAgent.fetchKeyCopy, "on use") goes ahead of what is queued, as a member's own
+ * write does: never ahead of a task on the wire, still alone, never resent, never in the read lane, and in order among
+ * whatever else goes first. The session-open sweep's exports keep their place, unless a sign-in joins one still queued:
+ * then it goes first too (VtaClient `Priority.raise`). A cold start's first sign-in waited behind the start's reads and
+ * the sweep's exports for 3-5 of its 12.7 s on a tester's phone (11-16).
+ *
+ * Only this phone's own agent's client is ordered so: a key for an identity under another linked agent is fetched on that
+ * agent's own short side session (vtaAgent.fetchKeyCopy), where nothing else is queued and a place means nothing.
+ *
+ * Two values a release (an OTA included) sets, and nothing else, as for rooms' `liveDeliverySwitch.ts`:
+ * - `on`: the release's choice. It ships off (11-17, Alberto); turning it on is his, from #1091's measured numbers.
+ * - `remoteOff`: the release's kill. Set it to `true` and every task keeps the order asked again, for everyone at the next
+ *   start, whatever `on` says, until a release sets it back.
+ *
+ * KILL RECIPE (no kill PR is kept open): branch from current main, set `remoteOff: true` below (one line), and publish
+ * it by OTA. Turning it on is the same with `on: true`; both are Alberto's.
+ *
+ * Nothing is saved on the phone and nothing a person does changes either value; it is read at each queueing and each
+ * raise, never cached. It fails closed: anything but both values as booleans, `on` true and `remoteOff` false, reads as
+ * off. Tests flip the entries and must put them back.
+ */
+export const VTA_KEY_FOR_SIGN_IN_FIRST: { on: boolean; remoteOff: boolean } = { on: false, remoteOff: false }
+
+/** Whether a key a sign-in waits for may go ahead of the queue now: switched on, and not turned off. */
+export function isKeyForSignInFirstOn(): boolean {
+  return VTA_KEY_FOR_SIGN_IN_FIRST.on === true && VTA_KEY_FOR_SIGN_IN_FIRST.remoteOff === false
+}
+
 /** Whether a task is part of a member's own write, which goes ahead of what is queued ({@link VTA_SENDS_FIRST}). */
 export function goesFirst(type: string, payload: Record<string, unknown> | undefined): boolean {
   if (!VTA_SENDS_FIRST) return false
