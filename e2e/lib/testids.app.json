@@ -76,6 +76,7 @@
     "ToggleEnableAppToAppPersonFlow": ["src/screens/Developer.tsx"],
     "ToggleEnableConfirmItsYou": ["src/screens/Developer.tsx"],
     "ToggleEnableDidCommV2": ["src/screens/Developer.tsx"],
+    "ToggleEnableGuardianOffers": ["src/screens/Developer.tsx"],
     "ToggleEnableLivePickup": ["src/screens/Developer.tsx"],
     "ToggleEnableSharedConnect": ["src/screens/Developer.tsx"],
     "ToggleEnableSharedConnectInvite": ["src/screens/Developer.tsx"],

@@ -65,6 +65,12 @@ export interface Developer {
    */
   enableConfirmItsYou: boolean
   /**
+   * "Guardian offers": a guardian holding a state Guardian card offers to be a contact's approver; the contact's phone
+   * checks the card first. bifold's setGuardianOffersEnabled; it counts only with trusted approvers and state-verified
+   * approvers on as well. GUARDIAN_OFFERS_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+   */
+  enableGuardianOffers: boolean
+  /**
    * Developer › Demos: which side of the SEDI demo this phone takes ('' for neither). bifold's setSediDemoSide at
    * start-up, so the codes screen shows this side's code after a restart.
    */
@@ -94,6 +100,7 @@ enum DeveloperDispatchAction {
   TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
   TOGGLE_STATE_CARD = 'developer/toggleStateCard',
   TOGGLE_CONFIRM_ITS_YOU = 'developer/toggleConfirmItsYou',
+  TOGGLE_GUARDIAN_OFFERS = 'developer/toggleGuardianOffers',
   SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
   SET_SEDI_DEMO_SIDE = 'developer/setSediDemoSide',
 }
@@ -178,6 +185,8 @@ const developerState: Developer = {
   demoStateHost: '',
   // Off by default, as above: CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
   enableConfirmItsYou: false,
+  // Off by default, as above: GUARDIAN_OFFERS_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+  enableGuardianOffers: false,
   sediDemoSide: '',
 }
 
@@ -202,6 +211,7 @@ export enum BCLocalStorageKeys {
   EnableTrustTestState = 'EnableTrustTestState',
   EnableStateCard = 'EnableStateCard',
   EnableConfirmItsYou = 'EnableConfirmItsYou',
+  EnableGuardianOffers = 'EnableGuardianOffers',
   DemoStateHost = 'DemoStateHost',
   SediDemoSide = 'SediDemoSide',
 }
@@ -354,6 +364,17 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableConfirmItsYou }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableConfirmItsYou, developer.enableConfirmItsYou)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_GUARDIAN_OFFERS: {
+      const enableGuardianOffers: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableGuardianOffers }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableGuardianOffers,
+        developer.enableGuardianOffers
+      )
 
       return { ...state, developer }
     }
