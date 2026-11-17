@@ -1,12 +1,14 @@
 jest.mock('../agentBadgesBackend', () => ({ createAgentBadgesBackend: jest.fn() }))
 
-import { isMemberBadgesOn, MEMBER_BADGES } from '../badgesSwitch'
+import { areBadgesInWallet, BADGES_IN_WALLET, isMemberBadgesOn, MEMBER_BADGES } from '../badgesSwitch'
 import { createFakeBadgeService } from '../fakeBadgeService'
 import { badgeServiceFor, resetBadgeService, setBadgeServiceForTests } from '../useBadges'
 
 const SHIPPED = { ...MEMBER_BADGES }
+const SHIPPED_IN_WALLET = { ...BADGES_IN_WALLET }
 afterEach(() => {
   Object.assign(MEMBER_BADGES, SHIPPED)
+  Object.assign(BADGES_IN_WALLET, SHIPPED_IN_WALLET)
   resetBadgeService()
 })
 
@@ -31,6 +33,31 @@ describe('the badges switch', () => {
     expect(isMemberBadgesOn()).toBe(false)
     Object.assign(MEMBER_BADGES, { on: true, remoteOff: undefined as unknown as boolean })
     expect(isMemberBadgesOn()).toBe(false)
+  })
+})
+
+describe('the Wallet badges switch', () => {
+  it('ships not showing badges in the Wallet, with no remote off', () => {
+    expect(SHIPPED_IN_WALLET).toEqual({ on: false, remoteOff: false })
+    expect(areBadgesInWallet()).toBe(false)
+  })
+
+  it('shows them only while on and not turned off remotely', () => {
+    Object.assign(BADGES_IN_WALLET, { on: true, remoteOff: false })
+    expect(areBadgesInWallet()).toBe(true)
+    BADGES_IN_WALLET.remoteOff = true
+    expect(areBadgesInWallet()).toBe(false)
+  })
+
+  it('reads anything not plainly on as off', () => {
+    Object.assign(BADGES_IN_WALLET, { on: 'yes' as unknown as boolean, remoteOff: false })
+    expect(areBadgesInWallet()).toBe(false)
+    Object.assign(BADGES_IN_WALLET, { on: true, remoteOff: undefined as unknown as boolean })
+    expect(areBadgesInWallet()).toBe(false)
+  })
+
+  it('leaves the badges themselves on: the community page still shows them', () => {
+    expect(isMemberBadgesOn()).toBe(true)
   })
 })
 

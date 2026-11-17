@@ -1,7 +1,9 @@
 /**
  * The Wallet's badge cards (docs/plans/member-badges-plan.md, Wallet): a community's badge credential is a badge card
  * after the community's passes, not an ordinary card and not a pass; with badges off (the kill) it is listed as the
- * ordinary credential it is. The badge is the credential lane's fixture, built to upstream's shape.
+ * ordinary credential it is. While the Wallet does not show badges (BADGES_IN_WALLET, the release's choice), a community's
+ * badge is not listed at all, and nothing else changes. The badge is the credential lane's fixture, built to upstream's
+ * shape.
  */
 import { W3cCredentialRecord } from '@credo-ts/core'
 import { render } from '@testing-library/react-native'
@@ -9,7 +11,7 @@ import React from 'react'
 import { useCredentials } from '@bifold/react-hooks'
 
 import ListCredentials from '../../src/screens/ListCredentials'
-import { MEMBER_BADGES } from '../../src/modules/badges/badgesSwitch'
+import { BADGES_IN_WALLET, MEMBER_BADGES } from '../../src/modules/badges/badgesSwitch'
 import { badgeCredential } from '../../src/modules/trust-tasks/__tests__/fixtures/badgeCredential'
 import { testIdWithKey } from '../../src/utils/testable'
 import { membershipCard } from '../helpers/cardVault'
@@ -78,15 +80,20 @@ function wallet(records: W3cCredentialRecord[]) {
   )
 }
 
+const SHIPPED_IN_WALLET = { ...BADGES_IN_WALLET }
+
 describe('the Wallet’s badge cards', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     MEMBER_BADGES.on = true
     MEMBER_BADGES.remoteOff = false
+    // These rows are the Wallet showing badges: the control for the rows below, where it does not.
+    Object.assign(BADGES_IN_WALLET, { on: true, remoteOff: false })
   })
   afterAll(() => {
     MEMBER_BADGES.on = true
     MEMBER_BADGES.remoteOff = false
+    Object.assign(BADGES_IN_WALLET, SHIPPED_IN_WALLET)
   })
 
   test('a badge is a badge card, not an ordinary card and not a pass', async () => {
@@ -116,6 +123,57 @@ describe('the Wallet’s badge cards', () => {
   ])('%s: the badge is listed as an ordinary credential, and no badge card is drawn', async (_name, value) => {
     Object.assign(MEMBER_BADGES, value)
     const tree = wallet([badge()])
+    expect(await tree.findAllByTestId('OrdinaryCard')).toHaveLength(1)
+    expect(tree.queryByTestId(id('BadgeCard'))).toBeNull()
+  })
+})
+
+/** An Open Badge that did not come from a community: its achievement names no community badge id. */
+const elsewhere = () => {
+  const vc = badgeCredential({ id: 'urn:uuid:elsewhere' })
+  const subject = vc.credentialSubject as { achievement: Record<string, unknown> }
+  subject.achievement = { ...subject.achievement, id: 'https://issuer.example/achievements/first-aid' }
+  return recordOf(vc, 4)
+}
+
+describe('the Wallet while it does not show badges', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    Object.assign(MEMBER_BADGES, { on: true, remoteOff: false })
+    Object.assign(BADGES_IN_WALLET, SHIPPED_IN_WALLET)
+  })
+  afterAll(() => {
+    Object.assign(MEMBER_BADGES, { on: true, remoteOff: false })
+    Object.assign(BADGES_IN_WALLET, SHIPPED_IN_WALLET)
+  })
+
+  test('the release ships it not showing them', () => {
+    expect(SHIPPED_IN_WALLET).toEqual({ on: false, remoteOff: false })
+  })
+
+  test('a community badge is neither a badge card nor an ordinary card; passes and other credentials stay', async () => {
+    const tree = wallet([badge(), membership(), other()])
+    expect(await tree.findAllByTestId(id('CommunityPass'))).toHaveLength(1)
+    expect(tree.getAllByTestId('OrdinaryCard')).toHaveLength(1)
+    expect(tree.queryByTestId(id('BadgeCard'))).toBeNull()
+  })
+
+  test('turned off remotely while on, a community badge is not listed', async () => {
+    Object.assign(BADGES_IN_WALLET, { on: true, remoteOff: true })
+    const tree = wallet([badge(), other()])
+    expect(await tree.findAllByTestId('OrdinaryCard')).toHaveLength(1)
+    expect(tree.queryByTestId(id('BadgeCard'))).toBeNull()
+  })
+
+  test('with badges also killed, a community badge is still not listed (not as an ordinary credential)', async () => {
+    Object.assign(MEMBER_BADGES, { on: true, remoteOff: true })
+    const tree = wallet([badge(), other()])
+    expect(await tree.findAllByTestId('OrdinaryCard')).toHaveLength(1)
+    expect(tree.queryByTestId(id('BadgeCard'))).toBeNull()
+  })
+
+  test('an Open Badge from elsewhere is listed as the credential it is', async () => {
+    const tree = wallet([elsewhere(), badge()])
     expect(await tree.findAllByTestId('OrdinaryCard')).toHaveLength(1)
     expect(tree.queryByTestId(id('BadgeCard'))).toBeNull()
   })

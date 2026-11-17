@@ -29,3 +29,23 @@ export const MEMBER_BADGES: { on: boolean; remoteOff: boolean } = {
 export function isMemberBadgesOn(): boolean {
   return MEMBER_BADGES.on === true && MEMBER_BADGES.remoteOff === false
 }
+
+/**
+ * Whether a community's badges show in the Wallet (off from 11-17: the badges belong on the community's page). The same
+ * two values as `MEMBER_BADGES`, read the same way: shown only while `on` is true and `remoteOff` false. Off, the Wallet
+ * lists no community badge, neither as a badge card nor as an ordinary credential; the badges stay on the community's
+ * page, and the Wallet's copies stay stored (what a proof request reads is untouched). Nothing is deleted, so turning it
+ * on shows them again at once.
+ *
+ * Before turning it on: the Wallet's badge cards (ListCredentials `badgeCards`, #1100) take any OpenBadgeCredential,
+ * not only a community's, so an Open Badge from elsewhere would get a badge card with a "From <community>" line.
+ */
+export const BADGES_IN_WALLET: { on: boolean; remoteOff: boolean } = {
+  on: false,
+  remoteOff: false,
+}
+
+/** Whether the Wallet shows a community's badges now. */
+export function areBadgesInWallet(): boolean {
+  return BADGES_IN_WALLET.on === true && BADGES_IN_WALLET.remoteOff === false
+}

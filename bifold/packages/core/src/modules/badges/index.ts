@@ -4,7 +4,7 @@
  * @module badges
  */
 export * from './types'
-export { isMemberBadgesOn, MEMBER_BADGES } from './badgesSwitch'
+export { areBadgesInWallet, BADGES_IN_WALLET, isMemberBadgesOn, MEMBER_BADGES } from './badgesSwitch'
 export {
   badgeServiceFor,
   resetBadgeService,

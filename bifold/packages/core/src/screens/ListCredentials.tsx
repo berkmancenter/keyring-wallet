@@ -22,7 +22,7 @@ import { GenericCredentialExchangeRecord } from '../types/credentials'
 import { BaseTourID } from '../types/tour'
 import { OpenIDCredentialType } from '../modules/openid/types'
 import CredentialCardGen from '../components/misc/CredentialCardGen'
-import { isMemberBadgesOn } from '../modules/badges/badgesSwitch'
+import { areBadgesInWallet, isMemberBadgesOn } from '../modules/badges/badgesSwitch'
 import BadgeCardPass from '../modules/badges/wallet/BadgeCardPass'
 import PassStack from '../modules/trust-tasks/components/PassStack'
 import { liftFrom } from '../modules/trust-tasks/components/passGeometry'
@@ -225,6 +225,16 @@ const ListCredentials: React.FC = () => {
   // Filter out credentials that should be hidden from wallet view
   credentials = credentials.filter((r) => !shouldHideFromWallet(r))
 
+  // A community's badge is not listed while the Wallet does not show badges (BADGES_IN_WALLET): its copy stays stored
+  // (a proof request does not read this list), and the community's page shows it. Only a badge in the shape a community
+  // gives (a badge id in its achievement) is left out; an Open Badge from anywhere else is listed as the credential it is.
+  if (!areBadgesInWallet())
+    credentials = credentials.filter((r) => {
+      if (!(r instanceof W3cCredentialRecord)) return true
+      const vc = (toRawCredential(r) ?? {}) as Record<string, unknown>
+      return !(isBadgeCredential(vc) && badgeCardView(vc).badgeId !== undefined)
+    })
+
   // Filter out hidden credentials when not in dev mode
   if (!store.preferences.developerModeEnabled) {
     credentials = credentials.filter((r) => {
@@ -239,14 +249,15 @@ const ListCredentials: React.FC = () => {
     (r): r is W3cCredentialRecord =>
       r instanceof W3cCredentialRecord && isCommunityCard((toRawCredential(r) ?? {}) as Record<string, unknown>)
   )
-  // A community's badges are badge cards, after its passes, while badges are on (badgesSwitch); with them off, each is
-  // listed as the ordinary credential it is.
-  const badgeCards = isMemberBadgesOn()
-    ? sorted.filter(
-        (r): r is W3cCredentialRecord =>
-          r instanceof W3cCredentialRecord && isBadgeCredential((toRawCredential(r) ?? {}) as Record<string, unknown>)
-      )
-    : []
+  // A community's badges are badge cards, after its passes, while badges are on (badgesSwitch); with them off, and the
+  // Wallet showing badges, each is listed as the ordinary credential it is.
+  const badgeCards =
+    isMemberBadgesOn() && areBadgesInWallet()
+      ? sorted.filter(
+          (r): r is W3cCredentialRecord =>
+            r instanceof W3cCredentialRecord && isBadgeCredential((toRawCredential(r) ?? {}) as Record<string, unknown>)
+        )
+      : []
   const otherCards = sorted.filter(
     (r) => !communityCards.includes(r as W3cCredentialRecord) && !badgeCards.includes(r as W3cCredentialRecord)
   )
