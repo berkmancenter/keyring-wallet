@@ -24,7 +24,7 @@ import { currentAgentDid } from './currentAgent'
 import { GenericRecordsCommunityStore, ofCurrentAgent } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import { pickOwnVetterGrant, type VetterGrantState } from './vtiGrantState'
-import { readJoinState, type CommunityJoinState } from './vtiJoin'
+import { askForCardIfOwed, readJoinState, type CommunityJoinState } from './vtiJoin'
 import { GenericRecordsVettingStore, type VettingApplication } from './vtiVetting'
 
 export interface CommunityJourney {
@@ -106,10 +106,17 @@ export interface CommunityJourneyReaders {
   join: (agent: Agent, communityDid: string, options: { poll: boolean; local?: boolean }) => Promise<CommunityJoinState>
   application: (agent: Agent, communityDid: string) => Promise<VettingApplication | undefined>
   vetterGrant: (agent: Agent, communityDid: string) => Promise<VetterGrantState>
+  /**
+   * The person's "Check now", before the join is read with a poll: for a request this phone already knows was approved
+   * and holds no card for, ask the community where it stands and to send the card again (vtiJoin `askForCardIfOwed`,
+   * IN-617). Anything else asks nothing.
+   */
+  askForCard: (agent: Agent, communityDid: string) => Promise<unknown>
 }
 
 export const defaultJourneyReaders: CommunityJourneyReaders = {
   join: (agent, communityDid, { poll, local }) => readJoinState(agent, communityDid, { poll, local }),
+  askForCard: (agent, communityDid) => askForCardIfOwed(agent, communityDid),
   application: (agent, communityDid) => new GenericRecordsVettingStore(agent).getApplication(communityDid),
   vetterGrant: async (agent, communityDid) => {
     const grants = await new GenericRecordsCommunityStore(agent).listHeldCredentials('vetter-grant', communityDid)
@@ -324,8 +331,20 @@ export function useCommunityJourney(
   )
 
   const refresh = useCallback(() => read(false), [read])
-  /** Ask the community where a request stands now (the person's "Check now"). */
-  const check = useCallback(() => read(true), [read])
+  /**
+   * Ask the community where a request stands now (the person's "Check now"). A request already known as approved is
+   * not polled by the read (readJoinState polls only an open one), so Check now returned at once and changed nothing
+   * while the card never came: a SEDI tester on 278.25, 11-17 (report 3K8Y-BHKN). It asks for the card first, as the
+   * join screen's Check again does; a failed ask changes nothing, and the read goes on as before.
+   */
+  const check = useCallback(async (): Promise<void> => {
+    if (!agent || !communityDid) return
+    const askForCard = readersRef.current?.askForCard ?? defaultJourneyReaders.askForCard
+    await Promise.resolve()
+      .then(() => askForCard(agent, communityDid))
+      .catch(() => undefined)
+    await read(true)
+  }, [agent, communityDid, read])
 
   // Coming into view: an effect on focus, so it runs once each time the screen
   // is shown (not on every render). A change while it is shown is read by the

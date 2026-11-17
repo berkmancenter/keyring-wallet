@@ -199,10 +199,11 @@ describe('the journey hook', () => {
     return <Text testID="join">{journey ? (joinKnown(journey)?.kind ?? 'unknown') : 'loading'}</Text>
   }
 
-  const readersWith = (join: jest.Mock): Partial<CommunityJourneyReaders> => ({
+  const readersWith = (join: jest.Mock, askForCard: jest.Mock = jest.fn(async () => undefined)) => ({
     join,
     application: jest.fn(async () => undefined),
     vetterGrant: jest.fn(async () => ({ state: 'none' as const })),
+    askForCard,
   })
 
   test('reads where the phone stands when it comes into view', async () => {
@@ -254,5 +255,60 @@ describe('the journey hook', () => {
     const tree = render(<Journey readers={readersWith(join)} />)
     await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('unknown'))
     expect(tree.getByTestId('join')).not.toHaveTextContent('none')
+  })
+
+  describe('Check now', () => {
+    const Checker: React.FC<{
+      readers: Partial<CommunityJourneyReaders>
+      onReady: (check: () => Promise<void>) => void
+    }> = ({ readers, onReady }) => {
+      const { journey, check } = useCommunityJourney(agent, A, { readers })
+      onReady(check)
+      return <Text testID="join">{journey ? (joinKnown(journey)?.kind ?? 'unknown') : 'loading'}</Text>
+    }
+
+    test('asks for an owed card first, then reads with a poll (3K8Y-BHKN: approved, no card, Check now did nothing)', async () => {
+      const order: string[] = []
+      const join = jest.fn(async (_a: Agent, _d: string, o: { poll: boolean }) => {
+        order.push(`join poll=${o.poll}`)
+        return none
+      })
+      const askForCard = jest.fn(async () => {
+        order.push('askForCard')
+        return { polled: true, resend: 'queued' }
+      })
+      let check: () => Promise<void> = async () => undefined
+      const tree = render(<Checker readers={readersWith(join, askForCard)} onReady={(c) => (check = c)} />)
+      await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+      order.length = 0
+      await act(async () => check())
+      expect(askForCard).toHaveBeenCalledWith(agent, A)
+      // Before anything is read: the store's local read, then the read with a poll, both come after it.
+      expect(order[0]).toBe('askForCard')
+      expect(order.slice(1)).toContain('join poll=true')
+    })
+
+    test('an ask that fails changes nothing: the read with a poll still runs', async () => {
+      const join = jest.fn(async () => none)
+      const askForCard = jest.fn(async () => {
+        throw new Error('the community did not answer')
+      })
+      let check: () => Promise<void> = async () => undefined
+      const tree = render(<Checker readers={readersWith(join, askForCard)} onReady={(c) => (check = c)} />)
+      await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+      join.mockClear()
+      await act(async () => check())
+      expect(join).toHaveBeenCalledWith(agent, A, { poll: true })
+    })
+
+    test("coming into view and a local change never ask for the card: only the person's Check now does", async () => {
+      const join = jest.fn(async () => none)
+      const askForCard = jest.fn(async () => undefined)
+      const tree = render(<Journey readers={readersWith(join, askForCard)} poll />)
+      await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+      emitCommunityChanged(A, 'membership')
+      await settle()
+      expect(askForCard).not.toHaveBeenCalled()
+    })
   })
 })
