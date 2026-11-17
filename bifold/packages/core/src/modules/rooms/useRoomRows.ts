@@ -44,6 +44,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
 
+import { RUN_STARTED_AT } from '../../utils/runStart'
 import { onSessionOpened } from './agentSession'
 import type { InertText } from './inertText'
 import { failureCategory, logRef } from './roomsLogWords'
@@ -153,6 +154,13 @@ const feed: Feed = {
 }
 // The app's log, from the poll: one line per read, so a tester's report says when the rows came and why not.
 let log: ((line: string) => void) | undefined
+/**
+ * Whether this run said when Messages first had rows to show, which no line marked: the listed line comes only once
+ * every room's posts are read, after the rows are shown (11-17). It says how long after launch (runStart), so a cold
+ * start's sign-ins and session waits before the read are in the number, and how far into this read, as the listed
+ * line counts.
+ */
+let firstRowsSaid = false
 // Per service, so another agent (and its service) starts with none.
 let tracks = new WeakMap<RoomsService, Map<string, Track>>()
 
@@ -367,6 +375,14 @@ async function readAll(service: RoomsService): Promise<void> {
       feed.all = next
       showRows(service)
       publish()
+      const shownNow = feed.rows ?? []
+      if (!firstRowsSaid && shownNow.length > 0) {
+        firstRowsSaid = true
+        const reading = shownNow.filter((row) => row.reading).length
+        log?.(
+          `[Rooms:rows] first rows shown: ${shownNow.length}, ${reading} reading, ${Date.now() - RUN_STARTED_AT} ms after launch (${Date.now() - began} ms into this read)`
+        )
+      }
     }
     if (feed.service !== service) return
     show()
@@ -658,6 +674,7 @@ export function resetRoomRows(): void {
   feed.lastAsk = 0
   feed.inView = 0
   log = undefined
+  firstRowsSaid = false
   tracks = new WeakMap()
   stopRetrying()
   seenVersions = undefined

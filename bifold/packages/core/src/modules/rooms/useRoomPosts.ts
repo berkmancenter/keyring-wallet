@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useAgentSession } from './agentSession'
 import { newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
+import { logRef } from './roomsLogWords'
 import {
   RECORD_UNOPENED_REASONS,
   RoomsRefused,
@@ -187,6 +188,14 @@ export function useRoomPosts(
   const countsNow = useRef(counts)
   countsNow.current = counts
   const [posts, setPosts] = useState<RoomPost[]>()
+  // When this room was opened here, and whether the first posts shown since were said: how long a room takes to open
+  // was in no report (11-17). Once per opening, by the room's short ref and a count; never a post's words. Only posts
+  // drawn from a listing read since it opened are its own: the listing held then is another room's, when the room
+  // changes under the same screen, and its posts are drawn again for a moment.
+  const opened = useRef<{ roomId: string; at: number; said: boolean; listing?: Listing }>(undefined)
+  if (opened.current?.roomId !== roomId) opened.current = { roomId, at: Date.now(), said: false, listing }
+  /** The posts last drawn, and the listing they were drawn from. */
+  const drawnFrom = useRef<{ posts: RoomPost[]; listing: Listing }>(undefined)
   const [failed, setFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
@@ -362,10 +371,14 @@ export function useRoomPosts(
       return why ? { ...post, unreadWhy: why } : post
     }
     const postsOf = (notes: NoteSummary[]) => withRepliesToReactions(notes.map(postOfSummary))
-    const draw = (notes: NoteSummary[]) => setPosts(postsOf(notes))
+    const put = (drawn: RoomPost[]) => {
+      drawnFrom.current = { posts: drawn, listing }
+      setPosts(drawn)
+    }
+    const draw = (notes: NoteSummary[]) => put(postsOf(notes))
     const show = () => {
       const drawn = postsOf(page)
-      setPosts(drawn)
+      put(drawn)
       // A page short of the posts it is counted in, with records left, reads on by the shortfall. Only once a page
       // is read: on a private room a note's title is sealed with its body, so the listing cannot tell one. On an open
       // room the notes it can tell were never read, so a shortfall round reads only what may be a chat post.
@@ -432,6 +445,15 @@ export function useRoomPosts(
       current = false
     }
   }, [service, roomId, listing, shown, actingAs])
+
+  useEffect(() => {
+    const opening = opened.current
+    const from = drawnFrom.current
+    if (!posts || !opening || opening.said || opening.roomId !== roomId) return
+    if (!from || from.posts !== posts || from.listing === opening.listing) return
+    opening.said = true
+    service?.note?.(`[Room] ${logRef(roomId)} opened: ${posts.length} posts shown in ${Date.now() - opening.at} ms`)
+  }, [posts, roomId, service])
 
   const loadOlder = useCallback(() => {
     setLoadingOlder(true)

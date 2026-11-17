@@ -10,6 +10,7 @@ import { AppState } from 'react-native'
 import { toInertText } from '../inertText'
 import { PENDING_WRITE_MAX_MS } from '../pendingRecordWrites'
 import { isChatPost, type RoomPost } from '../roomPosts'
+import { logRef } from '../roomsLogWords'
 import { RoomsRefused, type Note, type NoteList, type NoteSummary, type RoomsService } from '../types'
 import { useInViewAndActive } from '../useInViewAndActive'
 import {
@@ -889,5 +890,68 @@ describe('a post the agent cannot open', () => {
     await tick()
     const a = result.current.posts?.find((p) => p.key === 'a')
     expect([a?.unread, a?.unreadWhy]).toEqual([false, undefined])
+  })
+})
+
+// 11-17: how long a room took to open was in no tester's report.
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+describe("a room's opening, in the app's log", () => {
+  const opened = (note: jest.Mock) => note.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[Room] '))
+
+  it("is said once, by the room's short ref and how many posts it showed, never their words", async () => {
+    const r = roomWith([note('a', 1), note('b', 2)])
+    const noteLine = jest.fn()
+    const service = Object.assign(r.service, { note: noteLine })
+    await open(service)
+    await tick()
+    await tick()
+
+    const lines = opened(noteLine)
+    expect(lines).toHaveLength(1)
+    // By the room's short ref (roomsLogWords), as every rooms line.
+    expect(lines[0]).toMatch(new RegExp(`^\\[Room\\] ${escape(logRef(ROOM))} opened: 2 posts shown in \\d+ ms$`))
+    expect(lines[0]).not.toContain('post a')
+  })
+
+  it('control: a room whose posts never came says nothing of opening', async () => {
+    const r = roomWith([note('a', 1)])
+    r.service.listNotes.mockRejectedValue(new Error('agent not ready'))
+    const noteLine = jest.fn()
+    await open(Object.assign(r.service, { note: noteLine }))
+    await tick()
+
+    expect(opened(noteLine)).toEqual([])
+  })
+
+  it('another room opened under the same screen is said once its own posts are shown', async () => {
+    const r = roomWith([note('a', 1)])
+    const noteLine = jest.fn()
+    const service = Object.assign(r.service, { note: noteLine })
+    const hook = renderHook<RoomPosts, { roomId: string }>(
+      ({ roomId }) => useRoomPosts(service, roomId, ME, true, true),
+      { initialProps: { roomId: ROOM } }
+    )
+    await flush()
+    await flush()
+    expect(opened(noteLine)).toHaveLength(1)
+
+    let release: () => void = () => undefined
+    const second = new Promise<NoteList>((resolve) => {
+      release = () => resolve({ notes: [], complete: true, check: CONSISTENT })
+    })
+    const first = r.service.listNotes.getMockImplementation()!
+    r.service.listNotes.mockImplementation((roomId: string, options?: { sinceVersion?: number }) =>
+      roomId === 'did:webvh:r:two' ? second : first(roomId, options)
+    )
+    hook.rerender({ roomId: 'did:webvh:r:two' })
+    await flush()
+    // The first room's posts still on screen are not the second room's.
+    expect(opened(noteLine)).toHaveLength(1)
+
+    await act(async () => release())
+    await flush()
+    const lines = opened(noteLine)
+    expect(lines).toHaveLength(2)
+    expect(lines[1]).toMatch(/opened: 0 posts shown in \d+ ms$/)
   })
 })

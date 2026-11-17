@@ -1,4 +1,6 @@
 /* eslint-disable import/no-cycle */
+// First, for its effect: when this run began (runStart), before anything else is evaluated.
+import './utils/runStart'
 import type { OnboardingStyleSheet } from './screens/Onboarding'
 
 import AgentProvider from '@bifold/react-hooks'
