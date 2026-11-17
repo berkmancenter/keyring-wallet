@@ -212,6 +212,7 @@ export function getBCAgentModules({
     dids: new DidsModule({
       resolvers: [
         new BifoldCore.RetryingWebVhDidResolver(),
+        new BifoldCore.WebsDidResolver(),
         new WebDidResolver(),
         new JwkDidResolver(),
         new KeyDidResolver(),
