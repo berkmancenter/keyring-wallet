@@ -44,6 +44,15 @@ export {
   DTG_REGISTRY_CONTEXT_V1_DOCUMENT,
 } from './dtgRegistryContextV1'
 
+// Open Badges 3.0 (community badge credentials), bundled byte for byte with
+// its sha256, so storing a badge for the Wallet fetches nothing
+export {
+  OPEN_BADGES_CONTEXT_V3_URL,
+  OPEN_BADGES_CONTEXT_V3_SHA256,
+  OPEN_BADGES_CONTEXT_V3_TEXT,
+  OPEN_BADGES_CONTEXT_V3_DOCUMENT,
+} from './openBadgesContextV3'
+
 /**
  * Ed25519Signature2018 suite context URL.
  *

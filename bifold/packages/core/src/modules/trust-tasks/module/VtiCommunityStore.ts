@@ -20,6 +20,7 @@
 
 import type { Agent } from '@credo-ts/core'
 
+import { badgeKeyOf, laterBadge } from './badgeCredentials'
 import { type CommunityBrandRecord, httpsLogoUrl, normalisedAccent } from './communityBrand'
 import { changeOfHeldCredential, emitCommunityBrandSaved, emitCommunityChanged } from './communityChanged'
 import { currentAgentDid } from './currentAgent'
@@ -186,6 +187,8 @@ export interface VtiCommunityStore {
   listHeldCredentials(kind?: VtiHeldCredential['kind'], communityDid?: string): Promise<VtiHeldCredential[]>
   /** That this phone's member left a community, and how — so its screens say "You left", not "Join". */
   getDeparture?(communityDid: string, personaDid?: string): Promise<VtiDeparture | undefined>
+  /** Every departure kept, for telling a left community's cards from anyone else's. */
+  listDepartures?(): Promise<VtiDeparture[]>
   saveDeparture?(departure: VtiDeparture): Promise<void>
   /** The last join request sent to a community. Optional: a store without it records none. */
   getSubmission?(communityDid: string, personaDid?: string): Promise<JoinSubmission | undefined>
@@ -193,7 +196,7 @@ export interface VtiCommunityStore {
 }
 
 export interface VtiHeldCredential {
-  kind: 'role' | 'vetter-grant' | 'vetting-statement' | 'identity-check' | 'other'
+  kind: 'role' | 'vetter-grant' | 'vetting-statement' | 'identity-check' | 'badge' | 'other'
   communityDid: string
   subjectDid: string
   credential: Record<string, unknown>
@@ -208,7 +211,13 @@ const RECORD_TYPE = 'keyring/vti-community'
  * persona inbox both store what arrives — is one record, not two. Keying the
  * fallback on the arrival time counted one statement as several ("2 of 1").
  */
-export function heldCredentialKey(item: Pick<VtiHeldCredential, 'kind' | 'communityDid' | 'credential'>): string {
+export function heldCredentialKey(
+  item: Pick<VtiHeldCredential, 'kind' | 'communityDid' | 'credential'> & { subjectDid?: string }
+): string {
+  // A badge is renewed under a new id each time: it is one record per holder and badge, so a
+  // re-issue replaces the copy it renews (badgeCredentials, `badgeKeyOf`).
+  const badge = item.kind === 'badge' ? badgeKeyOf(item.credential) : undefined
+  if (badge) return `badge:${item.subjectDid ?? ''}|${badge}`
   const id = (item.credential as { id?: unknown }).id
   if (typeof id === 'string' && id) return id
   // FNV-1a over the credential, stable across launches and cheap; a record key
@@ -406,6 +415,10 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     return this.ofIdentity<VtiDeparture>('departure', communityDid, personaDid, false)
   }
 
+  listDepartures() {
+    return this.list<VtiDeparture>('departure')
+  }
+
   async saveDeparture(departure: VtiDeparture) {
     await this.putForIdentity('departure', departure)
     emitCommunityChanged(departure.communityDid, 'departure')
@@ -430,7 +443,9 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     for (const c of wanted) {
       const key = heldCredentialKey(c)
       const seen = byIdentity.get(key)
-      if (!seen || c.receivedAt < seen.receivedAt) byIdentity.set(key, c)
+      // Of two copies of one badge, the later issue; of anything else, the first that arrived.
+      const replaces = seen && c.kind === 'badge' ? laterBadge(seen.credential, c.credential) === 'arriving' : undefined
+      if (!seen || (replaces ?? c.receivedAt < seen.receivedAt)) byIdentity.set(key, c)
     }
     return [...byIdentity.values()]
   }

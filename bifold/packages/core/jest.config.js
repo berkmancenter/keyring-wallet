@@ -63,6 +63,9 @@ module.exports = {
     '^uuid$': require.resolve('uuid'),
     '^@bifold/oca$': '<rootDir>/../oca/src/index.ts',
     '^@bifold/trust-tasks$': '<rootDir>/../trust-tasks/src/index.ts',
+    // To its source, as for trust-tasks above: a worktree whose node_modules is shared with another
+    // tree resolves the package to THAT tree's build, so a suite would test a tree nobody chose.
+    '^@bifold/vrc-contexts$': '<rootDir>/../vrc-contexts/src/index.ts',
     '^@bifold/verifier$': '<rootDir>/../verifier/src/index.ts',
     'expo-crypto': '<rootDir>/__mocks__/@expo/expo-crypto.js',
     'expo-image-picker': '<rootDir>/__mocks__/@expo/expo-image-picker.js',

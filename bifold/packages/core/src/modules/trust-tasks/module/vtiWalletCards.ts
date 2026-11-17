@@ -44,6 +44,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
+import { badgeKeyOf, isBadgeCredential } from './badgeCredentials'
 import { COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { withKeyLock } from './keyedRecords'
 import { roleNameOf } from './vtiInbox'
@@ -144,6 +145,42 @@ const ofUnlinkedAgent =
     return Boolean(vtaDid) && !linked.includes(vtaDid as string)
   }
 
+/**
+ * The key the reconcile matches a copy by: `walletCardKey`, except for a
+ * badge, which is renewed under a new id each time and so is matched by its
+ * holder and badge (`badgeKeyOf`). A renewal then replaces the copy it renews
+ * the way a renewed card does, new copy first, instead of adding a second.
+ */
+function mirrorKey(vc: Json): string | undefined {
+  const badge = isBadgeCredential(vc) ? badgeKeyOf(vc) : undefined
+  if (badge) {
+    const subject = vc.credentialSubject as { id?: unknown } | undefined
+    return `urn:keyring:badge:${String(subject?.id ?? '')}|${badge}`
+  }
+  return walletCardKey(vc)
+}
+
+/**
+ * The identities this phone's badges are about: every identity it holds, and
+ * every one the store names (a membership, ended or not, a held card, a
+ * departure — leaving forgets the identity but keeps the departure). A badge
+ * credential the Wallet holds is this module's copy only when its subject is
+ * one of them. Its issuer is not enough: a badge a known community gave
+ * someone else is not this phone's to remove, and neither is any Open Badge
+ * received some other way.
+ */
+async function badgeOwners(store: VtiCommunityStore, personas: { did: string }[]): Promise<(vc: Json) => boolean> {
+  const subjects = new Set(personas.map((p) => p.did))
+  for (const m of await store.listMemberships()) subjects.add(m.personaDid)
+  for (const h of await store.listHeldCredentials()) if (h.subjectDid) subjects.add(h.subjectDid)
+  for (const d of (await store.listDepartures?.().catch(() => [])) ?? []) if (d.personaDid) subjects.add(d.personaDid)
+  const subjectOf = (vc: Json) => (vc.credentialSubject as { id?: unknown } | undefined)?.id
+  return (vc) => {
+    const subject = subjectOf(vc)
+    return isBadgeCredential(vc) && typeof subject === 'string' && subjects.has(subject)
+  }
+}
+
 /** The cards the store holds that the Wallet shows, by `walletCardKey`. */
 async function heldCards(
   store: VtiCommunityStore,
@@ -163,11 +200,15 @@ async function heldCards(
   }
   const roleCards: { vc: Json; communityDid: string; ofMembership: boolean }[] = []
   const withMembershipCard = new Set<string>()
+  /** `${communityDid}|${personaDid}` of each membership that stands: a badge is shown only beside one. */
+  const standing = new Set<string>()
+  const badges: Json[] = []
   for (const m of await store.listMemberships()) {
     // A membership the community removed is not a card the person holds.
     if ((m as { removal?: unknown }).removal) continue
     // Nor is one held through an agent no longer linked to this phone.
     if (hidden(m.personaDid)) continue
+    standing.add(`${m.communityDid}|${m.personaDid}`)
     if (add(m.vmc, true)) withMembershipCard.add(m.communityDid)
     if (m.roleVec) roleCards.push({ vc: m.roleVec, communityDid: m.communityDid, ofMembership: true })
   }
@@ -175,6 +216,13 @@ async function heldCards(
     if (hidden(h.subjectDid)) continue
     if (h.kind === 'role') roleCards.push({ vc: h.credential, communityDid: h.communityDid, ofMembership: false })
     else if (h.kind === 'vetter-grant' || h.kind === 'identity-check') add(h.credential)
+    else if (h.kind === 'badge' && standing.has(`${h.communityDid}|${h.subjectDid}`)) badges.push(h.credential)
+  }
+  // A badge is shown while it stands and its holder's membership does; one past its end date leaves
+  // (a badge only members see is renewed before then), as any card that is not the membership's own.
+  for (const vc of badges) {
+    const key = mirrorKey(vc)
+    if (key && cardStandingOf(vc, now).state === 'held') held.set(key, vc)
   }
   for (const { vc, communityDid, ofMembership } of roleCards) {
     if (withMembershipCard.has(communityDid) && isPlainMemberRole(vc)) continue
@@ -265,11 +313,10 @@ export function syncCardsToWallet(
 ): Promise<{ added: string[]; replaced: string[]; removed: string[]; failed: string[] }> {
   return withKeyLock(LOCK, async () => {
     const linked = 'linkedAgents' in options ? options.linkedAgents : linkedAgentsNow()
-    const personas = linked
-      ? await (options.identities ?? new GenericRecordsIdentityStore(agent)).listPersonas().catch(() => [])
-      : []
+    const personas = await (options.identities ?? new GenericRecordsIdentityStore(agent)).listPersonas().catch(() => [])
     const agentOf = new Map(personas.map((p) => [p.did, p.vtaDid || undefined] as const))
     const held = await heldCards(store, options.now ?? Date.now(), ofUnlinkedAgent(agentOf, linked))
+    const ownBadge = await badgeOwners(store, personas)
     const done = { added: [] as string[], replaced: [] as string[], removed: [] as string[], failed: [] as string[] }
     const seen = new Set<string>()
     // A copy that already matches the store is met first, so it is the one kept
@@ -277,15 +324,17 @@ export function syncCardsToWallet(
     // the old: the old is then a duplicate, and nothing is stored again.
     const current = (r: W3cCredentialRecord) => {
       const vc = jsonOf(r)
-      const key = vc ? walletCardKey(vc) : undefined
+      const key = vc ? mirrorKey(vc) : undefined
       const want = key ? held.get(key) : undefined
       return vc && want && sameCard(vc, want) ? 0 : 1
     }
     const records = (await agent.w3cCredentials.getAll()).sort((a, b) => current(a) - current(b))
     for (const record of records) {
       const vc = jsonOf(record)
-      if (!vc || !isCommunityCard(vc)) continue
-      const id = walletCardKey(vc) ?? ''
+      if (!vc || !(isCommunityCard(vc) || ownBadge(vc))) continue
+      // A badge that cannot be keyed cannot be mirrored: it is left alone, never removed.
+      if (!isCommunityCard(vc) && !mirrorKey(vc)) continue
+      const id = mirrorKey(vc) ?? ''
       const want = held.get(id)
       if (!want || seen.has(id)) {
         await agent.w3cCredentials.deleteById(record.id)

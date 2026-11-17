@@ -26,8 +26,9 @@ import {
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DeviceEventEmitter } from 'react-native'
 
+import { isBadgeCredential, laterBadge } from './badgeCredentials'
 import { membershipLockKey, withKeyLock } from './keyedRecords'
-import { isCurrentMembership, type VtiCommunityStore, type VtiMembership } from './VtiCommunityStore'
+import { heldCredentialKey, isCurrentMembership, type VtiCommunityStore, type VtiMembership } from './VtiCommunityStore'
 import type { VtiCardCheckRefusal, VtiDeliveredCardCheck } from './vtiDeliveredCheck'
 
 /**
@@ -62,6 +63,7 @@ export type VtiCredentialKind =
   | 'vetter-grant'
   | 'vetting-statement'
   | 'identity-check'
+  | 'badge'
   | 'other'
 
 export interface VtiReceivedCredential {
@@ -129,6 +131,8 @@ export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCred
   // StatementCredential (DTG Credentials v1). Its community is in the body.
   const statement = vettingStatementBody(vc)
   if (t.includes('MembershipCredential')) kind = 'membership'
+  // A community badge (Open Badges 3.0, issued by the community: badgeCredentials).
+  else if (isBadgeCredential(vc)) kind = 'badge'
   else if (statement && isCommunityIdentityCheck(vc)) {
     // A community's own identity check (vetted/1 by the community it names,
     // none of the vetter-only members): evidence it holds about this person,
@@ -178,7 +182,13 @@ export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCred
  * checks every issued credential since #380): `proof`, `notYetValid`,
  * `expired`, `revoked`. Until then Keyring kept a card on the sender alone.
  */
-export type VtiCredentialRefusal = 'issuerNotSender' | 'notFromCommunity' | 'subject' | VtiCardCheckRefusal
+export type VtiCredentialRefusal =
+  | 'issuerNotSender'
+  | 'notFromCommunity'
+  | 'subject'
+  /** A badge from a community this persona is not a current member of: a badge is a member's, in that community. */
+  | 'notMember'
+  | VtiCardCheckRefusal
 
 /** Whether a delivered credential may be kept, and if not why: see `VtiCredentialRefusal`. */
 export function credentialRefusal(
@@ -258,6 +268,13 @@ export async function receiveIssue(
       options.onRefused?.(item, refusal)
       continue
     }
+    if (item.kind === 'badge') {
+      const member = await store.getMembership(item.communityDid, personaDid)
+      if (!member || !isCurrentMembership(member)) {
+        options.onRefused?.(item, 'notMember')
+        continue
+      }
+    }
     // The sender is the community the card names; now the card itself.
     const checked = await options.checkCard(item.credential, sender)
     if (checked) {
@@ -274,6 +291,12 @@ export async function receiveIssue(
       // the membership back.
       const ended = await store.getMembership(item.communityDid, personaDid)
       if (ended && !isCurrentMembership(ended) && ended.vmc?.id === item.credential.id) continue
+    }
+    if (item.kind === 'badge') {
+      if (!(await keepBadge(store, personaDid, item))) continue
+      kept.push(item)
+      options.onFiled?.(item)
+      continue
     }
     kept.push(item)
     const onMembership =
@@ -299,6 +322,24 @@ export async function receiveIssue(
     options.onFiled?.(item)
   }
   return kept
+}
+
+/**
+ * Keep a badge: one copy per badge and holder (`heldCredentialKey`), so a
+ * renewal, which comes under a new id, replaces the copy it renews, and an
+ * older copy delivered again after it is not kept over it (`laterBadge`).
+ * False when the copy already kept is the later one.
+ */
+async function keepBadge(store: VtiCommunityStore, personaDid: string, item: VtiReceivedCredential): Promise<boolean> {
+  const badge = { ...item, kind: 'badge' as const, subjectDid: personaDid }
+  const key = heldCredentialKey(badge)
+  return withKeyLock(key, async () => {
+    const held = (await store.listHeldCredentials?.('badge', item.communityDid).catch(() => [])) ?? []
+    const same = held.find((h) => heldCredentialKey(h) === key)
+    if (same && laterBadge(same.credential, item.credential) === 'kept') return false
+    await store.saveHeldCredential(badge)
+    return true
+  })
 }
 
 /** The role card this persona holds for a community without a membership to keep it on, if any. */

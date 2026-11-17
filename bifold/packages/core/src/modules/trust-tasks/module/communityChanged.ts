@@ -104,6 +104,7 @@ export function changeOfHeldCredential(kind: VtiHeldCredential['kind']): Communi
       return 'grant'
     case 'role':
     case 'identity-check':
+    case 'badge':
       return 'membership'
     default:
       return 'application'

@@ -26,6 +26,8 @@ import {
   CREDENTIALS_V2_CONTEXT_DOCUMENT,
   DTG_REGISTRY_CONTEXT_V1_URL,
   DTG_REGISTRY_CONTEXT_V1_DOCUMENT,
+  OPEN_BADGES_CONTEXT_V3_URL,
+  OPEN_BADGES_CONTEXT_V3_DOCUMENT,
 } from '@bifold/vrc-contexts'
 
 /**
@@ -198,6 +200,13 @@ export function createVrcDocumentLoader(agentContext: AgentContext) {
     // only the exact URL is served from here.
     if (url === DTG_REGISTRY_CONTEXT_V1_URL) {
       return { contextUrl: null, documentUrl: url, document: DTG_REGISTRY_CONTEXT_V1_DOCUMENT }
+    }
+
+    // Open Badges 3.0.3 (a community's badge credentials): 1EdTech's published
+    // bytes, never fetched, so a badge is stored for the Wallet offline. Only
+    // the exact versioned URL is served from here.
+    if (url === OPEN_BADGES_CONTEXT_V3_URL) {
+      return { contextUrl: null, documentUrl: url, document: OPEN_BADGES_CONTEXT_V3_DOCUMENT }
     }
 
     // Handle well-known W3C/DID/security contexts locally to avoid
