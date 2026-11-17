@@ -38,7 +38,13 @@ import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
-import { disarmLivePickup, isLivePickupEnabled, livePickupFor, trackingWebSocketClass } from '@/utils/livePickup'
+import {
+  appRestartsPickupOnReturn,
+  disarmLivePickup,
+  isLivePickupEnabled,
+  livePickupFor,
+  trackingWebSocketClass,
+} from '@/utils/livePickup'
 import BCLogger from '@/utils/logger'
 import { chooseMediator } from '@/utils/mediatorPreference'
 import { singleFlight } from '@/utils/singleFlight'
@@ -123,6 +129,25 @@ export const configureMessagePickup = async (agent: Agent): Promise<void> => {
   // every running loop (the anti-stacking guard in the credo patch), the v4
   // start does not, so this order leaves exactly one loop per mediator.
   await startV2MessagePickup(agent)
+}
+
+/**
+ * Restart message pickup on a return to the foreground: a stop first, so a
+ * resumed loop never stacks on a stale one, then the app's own start, in live
+ * mode or polling. Never throws. Run once per return, by whichever handler owns
+ * it (livePickup.ts appRestartsPickupOnReturn).
+ */
+export const restartPickupOnReturn = async (
+  agent: Agent,
+  logger: { info(message: string): void; warn(message: string): void }
+): Promise<void> => {
+  try {
+    await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
+    await configureMessagePickup(agent)
+    logger.info('Message pickup restarted after returning to the foreground')
+  } catch (error) {
+    logger.warn(`Could not restart message pickup on foreground: ${(error as Error).message}`)
+  }
 }
 
 /**
@@ -470,28 +495,26 @@ const useBCAgentSetup = () => {
   // and a fresh agent re-initiated pickup. Observed on device 2026-08-26; a
   // 24-minute stall that drained instantly on restart.
   //
-  // stopMessagePickup() first so a resumed loop never stacks on a stale one.
-  // This is the ONLY foreground restart. bifold core's ActivityProvider used to
-  // restart pickup on the same transition, always as polling; both handlers
-  // racing their stop→start once left a Galaxy A03s with two loops and 50 s of
-  // inbound lag (2026-09-13), and its hard-coded PickUpV2 would undo live mode.
-  // It now hands the transition to TOKENS.UTIL_MESSAGE_PICKUP, which this app
-  // registers with background handling only (livePickup.ts,
-  // appMessagePickupLifecycle). In live mode this restart is also the check on
-  // return: it closes the socket, which may have died while suspended, and
-  // starts on a fresh one.
+  // ONE restart per return (restartPickupOnReturn). bifold core's
+  // ActivityProvider used to restart pickup on the same transition, always as
+  // polling; both handlers racing their stop→start once left a Galaxy A03s with
+  // two loops and 50 s of inbound lag (2026-09-13), and its hard-coded PickUpV2
+  // would undo live mode. It now hands the transition to
+  // TOKENS.UTIL_MESSAGE_PICKUP, the app's own lifecycle (livePickup.ts), and a
+  // return it handles is its: a restart through the same function, or a lock-out
+  // (appRestartsPickupOnReturn). This handler covers the returns it doesn't see,
+  // while onboarding. In live mode the restart is also the check on return: it
+  // closes the socket, which may have died while suspended, and starts on a
+  // fresh one.
   useEffect(() => {
+    let last = AppState.currentState
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState !== 'active') return
+      const from = last
+      last = nextAppState
+      if (!appRestartsPickupOnReturn(from, nextAppState)) return
       const activeAgent = agentInstanceRef.current
       if (!activeAgent?.isInitialized) return
-      try {
-        await activeAgent.modules.didcomm.mediationRecipient.stopMessagePickup()
-        await configureMessagePickup(activeAgent)
-        logger.info('Message pickup restarted after returning to the foreground')
-      } catch (error) {
-        logger.warn(`Could not restart message pickup on foreground: ${(error as Error).message}`)
-      }
+      await restartPickupOnReturn(activeAgent, logger)
     })
 
     return () => subscription.remove()

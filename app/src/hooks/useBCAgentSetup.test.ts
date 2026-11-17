@@ -7,9 +7,10 @@
  * anti-stacking guard, unlike the patched v1/v2 start; see
  * src/utils/mediatorPickupStrategy.guard.test.ts).
  */
+import { DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
 import Config from 'react-native-config'
 
-import { provisionV2MediationIfConfigured } from './useBCAgentSetup'
+import { provisionV2MediationIfConfigured, restartPickupOnReturn } from './useBCAgentSetup'
 
 const mockFindV2MediationRecord = jest.fn()
 const mockProvisionV2Mediation = jest.fn()
@@ -86,5 +87,50 @@ describe('provisionV2MediationIfConfigured', () => {
 
     await expect(provisionV2MediationIfConfigured(fakeAgent(), true)).resolves.toBeUndefined()
     expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
+  })
+})
+
+// The one restart on a return to the foreground, run by whichever handler owns the return (utils/livePickup.ts
+// appRestartsPickupOnReturn). Polling here: the live switch is off by default.
+describe('restartPickupOnReturn', () => {
+  const pickupAgent = (stop: () => Promise<void> = async () => undefined) => {
+    const calls: string[] = []
+    const mediationRecipient = {
+      stopMessagePickup: jest.fn(async () => {
+        calls.push('stop')
+        await stop()
+      }),
+      initiateMessagePickup: jest.fn(async (_record: unknown, strategy: string) => {
+        calls.push(`initiate ${strategy}`)
+      }),
+    }
+    return { agent: { modules: { didcomm: { mediationRecipient } } } as never, calls }
+  }
+  const logger = { info: jest.fn(), warn: jest.fn() }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockStartV2MessagePickup.mockResolvedValue(undefined)
+  })
+
+  it("stops, then starts the app's own pickup (PickUpV2 named explicitly), and says so", async () => {
+    const { agent, calls } = pickupAgent()
+    await restartPickupOnReturn(agent, logger)
+    expect(calls).toEqual(['stop', 'stop', `initiate ${DidCommMediatorPickupStrategy.PickUpV2}`])
+    expect(mockStartV2MessagePickup).toHaveBeenCalledTimes(1)
+    expect(logger.info).toHaveBeenCalledWith('Message pickup restarted after returning to the foreground')
+    expect(logger.warn).not.toHaveBeenCalled()
+  })
+
+  it('never throws: a store closing under it is one warning, nothing else', async () => {
+    const { agent, calls } = pickupAgent(async () => {
+      throw new Error('Error executing query. Invalid store handle')
+    })
+    await expect(restartPickupOnReturn(agent, logger)).resolves.toBeUndefined()
+    expect(calls).toEqual(['stop'])
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Could not restart message pickup on foreground: Error executing query. Invalid store handle'
+    )
+    expect(logger.info).not.toHaveBeenCalled()
   })
 })

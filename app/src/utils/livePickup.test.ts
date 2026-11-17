@@ -4,6 +4,7 @@ import {
   LIVE_CHECK_INTERVAL_MS,
   LIVE_CHECK_TIMEOUT_MS,
   appMessagePickupLifecycle,
+  appRestartsPickupOnReturn,
   closeAgentSockets,
   createLivePickup,
   livePickupFor,
@@ -176,19 +177,20 @@ describe('the agent WebSocket class', () => {
 })
 
 describe('appMessagePickupLifecycle (ActivityProvider)', () => {
+  const restartOnReturn = jest.fn(async () => undefined)
   afterEach(() => setLivePickupEnabled(false))
 
   it('polling: background stops pickup, as before', async () => {
     setLivePickupEnabled(false)
     const { agent, calls } = makeAgent()
-    await appMessagePickupLifecycle(logger).onBackground(agent)
+    await appMessagePickupLifecycle(logger, restartOnReturn).onBackground(agent)
     expect(calls).toEqual(['stop'])
   })
 
   it('live: background pauses live pickup', async () => {
     setLivePickupEnabled(true)
     const { agent, calls } = makeAgent()
-    await appMessagePickupLifecycle(logger).onBackground(agent)
+    await appMessagePickupLifecycle(logger, restartOnReturn).onBackground(agent)
     expect(calls).toEqual(['stop'])
     // No check fires afterwards.
     jest.useFakeTimers()
@@ -197,13 +199,85 @@ describe('appMessagePickupLifecycle (ActivityProvider)', () => {
     jest.useRealTimers()
   })
 
-  it('foreground does nothing: the app restarts pickup itself (useBCAgentSetup), in either mode', async () => {
+  it("foreground is the app's own restart, with the agent, in either mode; nothing of bifold's", async () => {
     for (const live of [false, true]) {
       setLivePickupEnabled(live)
+      restartOnReturn.mockClear()
       const { agent, calls } = makeAgent()
-      await appMessagePickupLifecycle(logger).onForeground(agent)
+      await appMessagePickupLifecycle(logger, restartOnReturn).onForeground(agent)
+      expect(restartOnReturn).toHaveBeenCalledTimes(1)
+      expect(restartOnReturn).toHaveBeenCalledWith(agent)
       expect(calls).toEqual([])
     }
+  })
+})
+
+// One restart per return, by whichever handler owns it (ZAF5-PR5N: the app's own restart ran on a return that locked
+// the app, on the agent whose store the lock-out was closing, and failed with "Invalid store handle").
+describe('appRestartsPickupOnReturn: who restarts pickup on a return', () => {
+  const restartOnReturn = jest.fn(async () => undefined)
+  beforeEach(() => {
+    restartOnReturn.mockClear()
+    appRestartsPickupOnReturn('background', 'active') // whatever an earlier case left: the next return is unowned
+  })
+
+  it('a return ActivityProvider saw is its own: the app handler leaves it alone', async () => {
+    const { agent } = makeAgent()
+    await appMessagePickupLifecycle(logger, restartOnReturn).onBackground(agent)
+    expect(appRestartsPickupOnReturn('background', 'active')).toBe(false)
+  })
+
+  it('a return that locks restarts nothing (ActivityProvider locks and does not call onForeground)', async () => {
+    const { agent, calls } = makeAgent()
+    const lifecycle = appMessagePickupLifecycle(logger, restartOnReturn)
+    await lifecycle.onBackground(agent)
+    calls.length = 0
+    expect(appRestartsPickupOnReturn('background', 'active')).toBe(false)
+    expect(restartOnReturn).not.toHaveBeenCalled()
+    expect(calls).toEqual([])
+  })
+
+  it('the control: a return that does not lock restarts exactly once, through onForeground', async () => {
+    const { agent } = makeAgent()
+    const lifecycle = appMessagePickupLifecycle(logger, restartOnReturn)
+    await lifecycle.onBackground(agent)
+    const appRestarts = appRestartsPickupOnReturn('background', 'active')
+    await lifecycle.onForeground(agent)
+    expect(appRestarts).toBe(false)
+    expect(restartOnReturn).toHaveBeenCalledTimes(1)
+  })
+
+  it("without ActivityProvider (onboarding, the agent already running), the return is the app handler's", () => {
+    expect(appRestartsPickupOnReturn('background', 'active')).toBe(true)
+  })
+
+  it("the hand-over is taken once: the next return ActivityProvider did not see is the app handler's", async () => {
+    const { agent } = makeAgent()
+    await appMessagePickupLifecycle(logger, restartOnReturn).onBackground(agent)
+    expect(appRestartsPickupOnReturn('background', 'active')).toBe(false)
+    expect(appRestartsPickupOnReturn('background', 'active')).toBe(true)
+  })
+
+  it('only a return from the background counts, as ActivityProvider counts one', () => {
+    expect(appRestartsPickupOnReturn('inactive', 'active')).toBe(false) // a Face ID sheet, Control Center
+    expect(appRestartsPickupOnReturn('active', 'inactive')).toBe(false)
+    expect(appRestartsPickupOnReturn('active', 'background')).toBe(false)
+    expect(appRestartsPickupOnReturn('inactive', 'background')).toBe(false)
+    expect(appRestartsPickupOnReturn('background', 'inactive')).toBe(true)
+  })
+
+  it('a flip that is not a return leaves the hand-over in place for the real return', async () => {
+    const { agent } = makeAgent()
+    await appMessagePickupLifecycle(logger, restartOnReturn).onBackground(agent)
+    expect(appRestartsPickupOnReturn('inactive', 'active')).toBe(false)
+    expect(appRestartsPickupOnReturn('background', 'active')).toBe(false)
+  })
+
+  it('a background whose pause fails still hands the return to ActivityProvider', async () => {
+    const { agent, mediationRecipient } = makeAgent()
+    mediationRecipient.stopMessagePickup.mockRejectedValueOnce(new Error('Invalid store handle'))
+    await expect(appMessagePickupLifecycle(logger, restartOnReturn).onBackground(agent)).rejects.toThrow()
+    expect(appRestartsPickupOnReturn('background', 'active')).toBe(false)
   })
 })
 

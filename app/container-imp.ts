@@ -46,7 +46,7 @@ import { Config } from 'react-native-config'
 import { DependencyContainer } from 'tsyringe'
 
 import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
-import useBCAgentSetup from '@/hooks/useBCAgentSetup'
+import useBCAgentSetup, { restartPickupOnReturn } from '@/hooks/useBCAgentSetup'
 import AppGlobalListeners from '@/components/AppGlobalListeners'
 import { appPushNotificationsConfig } from '@/push/pushDefaults'
 import { appMessagePickupLifecycle, setLivePickupEnabled } from '@/utils/livePickup'
@@ -530,15 +530,18 @@ export class AppContainer implements Container {
     this._container.registerInstance(TOKENS.ONBOARDING, generateOnboardingWorkflowSteps)
 
     this._container.registerInstance(TOKENS.UTIL_LOGGER, logger)
-    // Background pauses live pickup or stops polling; the foreground restart is
-    // the app's own (useBCAgentSetup), so bifold's ActivityProvider never
-    // restarts pickup with a strategy of its own.
+    // Background pauses live pickup or stops polling; on a return that doesn't
+    // lock, the restart is the app's own (useBCAgentSetup restartPickupOnReturn),
+    // so bifold's ActivityProvider never restarts pickup with a strategy of its own.
     // This shadows bifold's default because it is registered in THIS child container
     // and the app resolves from it (container-compose.ts, App.tsx). Registered on the
     // parent, or resolved from bifold's container, ActivityProvider would silently get
     // bifold's polling restart and undo live pickup on every return
     // (__tests__/containerComposition.test.ts).
-    this._container.registerInstance(TOKENS.UTIL_MESSAGE_PICKUP, appMessagePickupLifecycle(logger))
+    this._container.registerInstance(
+      TOKENS.UTIL_MESSAGE_PICKUP,
+      appMessagePickupLifecycle(logger, (agent) => restartPickupOnReturn(agent, logger))
+    )
 
     // Initialize VRC module (credential display handlers, localization, container registration)
     initializeVrcModule(this._container)
