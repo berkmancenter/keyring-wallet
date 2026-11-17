@@ -687,7 +687,8 @@ export class AgentRoomsService implements RoomsService {
         next.set(custody.roomId, this.fromCustody(custody))
     // A listing asked before an accept or a leave answers its callers, but does not undo what that changed. Its
     // callers may see a room just left once more: the next listing, asked afresh after the leave, drops it. Answering
-    // them from this.rooms instead would show no rooms at all after an accept, which empties it.
+    // them from this.rooms instead would give them a list this read did not make: the cache as the accept or leave
+    // since changed it.
     if (changes === this.roomsChanged) this.rooms = next
     this.keptBack = kept.map((c) => ({
       communityDid: c.did,
@@ -1610,7 +1611,9 @@ export class AgentRoomsService implements RoomsService {
     timed('Welcome')
     const joined = done()
     // The epoch keys the member may read. Asked now and not waited for: the room is shown first, and its reads go to
-    // the agent after this one, as the agent client sends them in order. A failure here leaves reads to repair it.
+    // the agent after this one. That order is not incidental: rooms/keys/backfill is not in vtaReadLane.ts's
+    // VTA_READ_LANE_TYPES, so VtaClient runs it alone and starts nothing behind it until it is answered (mayStart,
+    // pump; backfillRunsAlone.test.ts guards it). A failure here leaves reads to repair it.
     if ((this.served?.types ?? []).includes(ROOMS_TASK.keysBackfill)) {
       const asked = this.now()
       void this.backend
