@@ -1,0 +1,55 @@
+{
+  "visibility": "members",
+  "kudosTotal": 14,
+  "entries": [
+    {
+      "badge": {
+        "badgeId": "bdg_W5k2N8xRb3Qz7TpL",
+        "kind": "community",
+        "name": "Workshop host",
+        "description": "Ran a workshop for the community.",
+        "criteria": "Hosted any workshop on the community calendar. A badge owner gives it after the session.",
+        "image": {
+          "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+          "mediaType": "image/png",
+          "size": 61440
+        },
+        "repeatable": true,
+        "requestable": true,
+        "listed": true,
+        "shareableOutside": true,
+        "groupId": "grp_Hs7Qm2Lk9Tn4Bv1X",
+        "state": "active",
+        "holderCount": 2,
+        "createdAt": "2026-03-01T09:00:02Z",
+        "createdBy": "dir_AnnaReyes0000000"
+      },
+      "count": 3,
+      "since": "2026-03-14T19:30:00Z",
+      "latestAt": "2026-10-31T20:10:00Z",
+      "pinned": true
+    },
+    {
+      "badge": {
+        "badgeId": "bdg_Kd8sPq2Vn4Xm7Rt1",
+        "kind": "kudos",
+        "name": "Clamp whisperer",
+        "description": "Found the good clamps when nobody else could.",
+        "image": {
+          "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+          "mediaType": "image/webp",
+          "size": 18342
+        },
+        "repeatable": true,
+        "listed": true,
+        "state": "active",
+        "createdAt": "2026-11-06T09:05:01Z",
+        "createdBy": "dir_TomasVega0000000"
+      },
+      "count": 5,
+      "since": "2026-11-06T12:00:00Z",
+      "latestAt": "2026-11-06T14:30:00Z",
+      "pinned": false
+    }
+  ]
+}
