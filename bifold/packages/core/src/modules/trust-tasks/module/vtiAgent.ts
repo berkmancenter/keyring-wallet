@@ -22,7 +22,7 @@ import type { Agent } from '@credo-ts/core'
 import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
-import { DeviceEventEmitter } from 'react-native'
+import { AppState, DeviceEventEmitter } from 'react-native'
 
 import { signDocumentProof } from '../documentProof'
 import { purposeForDocumentType } from './proofPurpose'
@@ -278,6 +278,52 @@ export interface VtiSignInRest {
   failedAt: number
   /** Failures in a row; 0 once it signs in. */
   count: number
+  /**
+   * The last failure was the identity's agent not found: the borrowed key's agent DID resolved to `notFound` (its DID
+   * log is gone, a 404). Not a time-out, a 5xx or no network, which may pass. While the rest runs, a screen's listing
+   * leaves this identity alone too, not only a background sign-in (11-17: one such identity held every sign-in).
+   */
+  gone?: true
+}
+
+/**
+ * How long one sign-in may hold the phone's one sign-in turn, counted from when its turn starts (not from when it
+ * queued). Above a slow but healthy cold start: a borrowed key waits up to `KEY_FETCH_WAIT_MS` (20 s) for the link and
+ * again for the session, then fetches (11-16: 12.7 s seen). Past it, that sign-in fails and the turn goes to the next.
+ * A trip to the background stops the clock with the app's JS; back in front, a turn already past it ends at once.
+ * 11-17 (ZAF5): one identity whose agent was gone held the turn for 20 minutes and every sign-in waited behind it.
+ */
+export const VTI_SIGNIN_TURN_MS = 60_000
+
+/**
+ * A sign-in that held the turn longer than `VTI_SIGNIN_TURN_MS`: it is let go, and whatever it opens later is closed.
+ * The message names no DID.
+ */
+export class VtiSignInTimedOut extends Error {
+  constructor(readonly afterMs: number) {
+    super(`vtiAgent: the sign-in took over ${Math.round(afterMs / 1000)} s; it was let go so others can sign in`)
+    // A literal, so a caller can read it by name (a class name does not survive minifying).
+    this.name = 'VtiSignInTimedOut'
+  }
+}
+
+/** The borrowed key's agent was not found (its DID log is gone): `KeyCopyUnavailable` naming `notFound`. */
+export const isAgentGone = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  return /in-memory copy of .* could not be fetched: .*\bnotFound\b/.test(message)
+}
+
+/**
+ * AppState, read once as the module loads: react-native's export is a lazy getter, and a sign-in that starts late (a
+ * screen gone, a test file torn down) must not require it then (CI on #1095).
+ */
+const appStateAtLoad = AppState
+
+/** One sign-in's claim on the turn: let go when its time runs out, so what it opens after that is closed. */
+interface SignInTicket {
+  abandoned: boolean
+  /** The session the attempt made, once made: stopped the moment the attempt is let go (`signIn`). */
+  session?: { stop(): Promise<void> }
 }
 
 /** When a background sign-in may try this identity again (0: now). */
@@ -1090,6 +1136,8 @@ class VtiAgentController {
 
   /** The connect in flight, so a second caller waits for it instead of racing it. */
   private connecting?: Promise<void>
+  /** How long one sign-in may hold the turn (`VTI_SIGNIN_TURN_MS`); a test makes it short. */
+  signInTurnMs = VTI_SIGNIN_TURN_MS
   /** The holds on the session (`holding`), and the ordinary connects waiting for one to end, by DID. */
   private readonly holds = new Map<symbol, SessionHold>()
   private readonly foregroundWaiting = new Map<symbol, string>()
@@ -1292,9 +1340,13 @@ class VtiAgentController {
    * open session: `noteSignIn` runs only when a sign-in named a DID, so a connect that named none can leave the session
    * open as an identity whose rest, kept from an earlier launch, has not run out.
    */
-  private refuseIfResting(did: string): void {
+  private refuseIfResting(did: string, goneOnly = false): void {
     if (this.session?.isOpen && this.state.did === did) return
-    const until = signInRestUntil(this.rests.get(did))
+    const rest = this.rests.get(did)
+    // A screen's listing leaves alone only an identity whose agent is gone: anything else may pass, and a listing the
+    // person is looking at should try it.
+    if (goneOnly && !rest?.gone) return
+    const until = signInRestUntil(rest)
     if (until > this.now()) throw new VtiSignInResting(until)
   }
 
@@ -1312,20 +1364,36 @@ class VtiAgentController {
    * Note how a sign-in as `did` ended. A success ends its rest. A failure starts one, or doubles it while the phone is
    * online (`VTI_SIGNIN_ONLINE_WITHIN_MS`). Kept on the phone without waiting for the write.
    */
-  private noteSignIn(agent: Agent, did: string, signedIn: boolean): void {
+  private noteSignIn(agent: Agent, did: string, signedIn: boolean, gone = false): void {
     const now = this.now()
     const before = this.rests.get(did)
     if (signedIn) this.lastSignedInAt = now
     if (signedIn && !before?.count) return
     const online = this.lastSignedInAt !== undefined && now - this.lastSignedInAt <= VTI_SIGNIN_ONLINE_WITHIN_MS
     const count = signedIn ? 0 : online ? (before?.count ?? 0) + 1 : Math.max(before?.count ?? 0, 1)
-    const rest: VtiSignInRest = { did, failedAt: signedIn ? 0 : now, count }
+    const rest: VtiSignInRest = {
+      did,
+      failedAt: signedIn ? 0 : now,
+      count,
+      ...(!signedIn && gone ? { gone: true } : {}),
+    }
     this.rests.set(did, rest)
     if (!signedIn)
       releaseWarn(
         `vtiAgent: sign-in as ${didPrefix(did)} failed (${count} in a row); background sign-ins leave it until ${new Date(signInRestUntil(rest)).toISOString()}`
       )
     void putKeyed(agent, SIGNIN_REST_RECORD, SIGNIN_REST_KIND, did, rest as unknown as Record<string, unknown>).catch(
+      () => undefined
+    )
+  }
+
+  /** A let-go sign-in's attempt found since that its agent is gone: mark the rest it already started (`gone`). */
+  private markGone(agent: Agent, did: string): void {
+    const rest = this.rests.get(did)
+    if (!rest || rest.gone) return
+    const marked: VtiSignInRest = { ...rest, gone: true }
+    this.rests.set(did, marked)
+    void putKeyed(agent, SIGNIN_REST_RECORD, SIGNIN_REST_KIND, did, marked as unknown as Record<string, unknown>).catch(
       () => undefined
     )
   }
@@ -1392,16 +1460,17 @@ class VtiAgentController {
     let saidWaiting = false
     // A background sign-in leaves alone an identity whose last sign-in failed, until its rest runs out: refused before
     // it queues, and again once the sign-in it queued behind settles (which may have been that identity failing).
-    if (background && wantedDid) {
+    // A listing leaves alone an identity whose agent is gone, while its rest runs (VtiSignInRest.gone).
+    if ((background || listing) && wantedDid) {
       await this.readRests(agent)
-      this.refuseIfResting(wantedDid)
+      this.refuseIfResting(wantedDid, listing)
     }
     try {
       for (;;) {
         if (this.connecting) releaseWarn('vtiAgent: connect waits for an earlier sign-in to settle')
         while (this.connecting) await this.connecting.catch(() => undefined)
         // Checked after the earlier sign-in settles, and nothing awaited between this and `connecting` being set.
-        if (background && wantedDid) this.refuseIfResting(wantedDid)
+        if ((background || listing) && wantedDid) this.refuseIfResting(wantedDid, listing)
         const blocker = this.blockerFor(wantedDid, background, listing)
         if (!blocker) break
         if ('refuse' in blocker) {
@@ -1427,15 +1496,69 @@ class VtiAgentController {
       // `listing` is fixed for the call, so the waiter is in one map at most and `||` skips nothing.
       if (this.foregroundWaiting.delete(waiter) || this.listingWaiting.delete(waiter)) this.holdsChanged()
     }
-    const attempt = this.connectNow(agent, mediatorDid, options)
-    this.connecting = attempt
+    const ticket: SignInTicket = { abandoned: false }
+    const attempt = this.connectNow(agent, mediatorDid, options, ticket)
+    // Let go after VTI_SIGNIN_TURN_MS, counted from here, when the turn starts: the next sign-in need not wait on one
+    // that hangs (11-17). Measured by the wall clock: a timer pauses with the app's JS in the background, so the time
+    // away is also checked when the app comes back to the front (a2, #1022).
+    //
+    // Letting go releases the TURN for whoever waits behind; it never rejects this caller from the timer. The attempt
+    // runs on, writes nothing more, and closes whatever it opens (`ticket`), so its caller hears VtiSignInTimedOut if
+    // it ever settles, else its own failure. A rejection fired from the timer would reach a caller that may be long
+    // gone (a screen unmounted, a test file torn down), as an unhandled rejection (CI on #1095).
+    const turnStart = this.now()
+    let releaseTurn = () => undefined as void
+    const released = new Promise<void>((resolve) => (releaseTurn = resolve))
+    // The turn others wait on: the attempt settling, or its limit, whichever comes first. It never rejects.
+    const turn: Promise<void> = Promise.race([
+      attempt.then(
+        () => undefined,
+        () => undefined
+      ),
+      released,
+    ])
+    const expire = () => {
+      if (ticket.abandoned) return
+      ticket.abandoned = true
+      // The socket is closed now, half-open or not: stop() closes whatever socket the session holds and makes it final
+      // (a stopped session never reopens), so a socket the OS kept alive does not hold the DID's one mediator slot.
+      // connectNow stops it again if its open was already under way (belt and braces).
+      // Only this attempt's own session object: never by DID, so an identity's own session (vtiOwnSessions, sessions
+      // phase B) that an ask is using is never touched here.
+      void ticket.session?.stop().catch(() => undefined)
+      const timedOut = new VtiSignInTimedOut(this.signInTurnMs)
+      releaseWarn(`vtiAgent: sign-in as ${wantedDid ? didPrefix(wantedDid) : '(new identity)'}: ${timedOut.message}`)
+      if (this.connecting === turn) {
+        this.set({ status: 'failed', signingInAs: undefined, error: timedOut.message })
+        this.connecting = undefined
+      }
+      // Rests as a failure does, from now: the identity is let go whether or not its attempt ever settles.
+      if (wantedDid) this.noteSignIn(agent, wantedDid, false)
+      releaseTurn()
+    }
+    const timer = setTimeout(expire, this.signInTurnMs)
+    // Where the runtime allows it (Node, for tests), a pending limit never keeps the process alive on its own.
+    ;(timer as unknown as { unref?: () => void }).unref?.()
+    let back: { remove(): void } | undefined
+    try {
+      back = appStateAtLoad.addEventListener('change', (next) => {
+        if (next === 'active' && this.now() - turnStart >= this.signInTurnMs) expire()
+      })
+    } catch {
+      // Without the app's state the timer alone lets the turn go.
+    }
+    this.connecting = turn
     try {
       await attempt
     } catch (error) {
-      if (wantedDid) this.noteSignIn(agent, wantedDid, false)
+      // Let go: its failure was noted when it was let go; a gone agent found since still marks the rest.
+      if (wantedDid && !ticket.abandoned) this.noteSignIn(agent, wantedDid, false, isAgentGone(error))
+      else if (wantedDid && isAgentGone(error)) this.markGone(agent, wantedDid)
       throw error
     } finally {
-      if (this.connecting === attempt) this.connecting = undefined
+      clearTimeout(timer)
+      back?.remove()
+      if (this.connecting === turn) this.connecting = undefined
     }
     if (wantedDid) this.noteSignIn(agent, wantedDid, true)
     if (!background && wantedDid && claims) {
@@ -1460,9 +1583,14 @@ class VtiAgentController {
       persona?: VtiPersona
       peerRevisionStore?: TspPeerRevisionStore
       probeStore?: TspProbeStore
-    }
+    },
+    ticket?: SignInTicket
   ): Promise<void> {
     this.agent = agent
+    // Let go of (`signIn`'s time limit): nothing more is written here, and a session it opens is closed.
+    const letGo = () => {
+      if (ticket?.abandoned) throw new VtiSignInTimedOut(this.signInTurnMs)
+    }
     const wantedDid = options.persona?.did ?? options.identity?.did
     if (this.session?.isOpen && (!wantedDid || wantedDid === this.state.did)) return
     if (this.session) await this.disconnect()
@@ -1494,6 +1622,7 @@ class VtiAgentController {
         )
       }
       const mediator = await resolveVtiMediator(agent, mediatorDid)
+      letGo()
       step(`mediator resolved: ws ${mediator.wsEndpoint}, auth ${mediator.authEndpoint}`)
       this.mediator = mediator
       this.mediatorDid = mediatorDid
@@ -1518,6 +1647,7 @@ class VtiAgentController {
         }
       }
       identity ??= await vtiClientIdentityFromDid(agent, await createVtiClientDid(agent, mediator))
+      letGo()
       const did = identity.did
       this.tsp = tspSession
       this.persona = options.persona
@@ -1544,18 +1674,35 @@ class VtiAgentController {
             }
           : {}),
       })
+      if (ticket) ticket.session = session
       // Whatever else holds a connection for this DID lets go first: a mediator
       // keeps one live connection per DID (vtiIdentityListeners).
       for (const guard of [...this.signInGuards]) await guard(did).catch(() => undefined)
+      letGo()
       step(`signing in as ${didPrefix(did)} (challenge, then the socket)`)
       this.set({ signingInAs: did })
       await session.start()
+      // Let go while the socket opened: the mediator keeps one live connection per DID, so this one is closed, never
+      // kept beside whatever signed in since.
+      if (ticket?.abandoned) {
+        await session.stop().catch(() => undefined)
+        throw new VtiSignInTimedOut(this.signInTurnMs)
+      }
       step('socket open')
       // No pause here for the backlog the mediator flushes on live delivery: every message goes through `deliver`
       // whenever it comes, and an answer reaches its ask by its thread id (`askAnswered`). The one reply that could be
       // mistaken for a fresh answer — one naming no thread and no time — is not matched by type for
       // `VTI_BACKLOG_GRACE_MS` after this. The fixed 2 s this used to wait for every sign-in (2.002-2.030 s on 35 of
       // 36 sign-ins, 277.12) delayed each one, several in a row at launch.
+      // Everything awaited is read BEFORE the commit below, so a let-go cannot land between this session becoming the
+      // live one and the state saying so (ac, #1095: it stopped the live session and then said connected).
+      const peerRevisions =
+        (await this.peerRevisionStore?.list().catch(() => undefined)) ?? this.state.peerRevisions ?? []
+      if (ticket?.abandoned) {
+        await session.stop().catch(() => undefined)
+        throw new VtiSignInTimedOut(this.signInTurnMs)
+      }
+      // The commit: no await from here to `connected`.
       this.openedAt = this.now()
       this.session = session
       const peerLeg = getPeerLegCarriage()
@@ -1570,11 +1717,13 @@ class VtiAgentController {
         signingInAs: undefined,
         peerLeg: peerLeg === 'tsp' && tspSession ? 'tsp' : 'didcomm',
         tspReady: Boolean(tspSession),
-        peerRevisions: (await this.peerRevisionStore?.list().catch(() => undefined)) ?? this.state.peerRevisions ?? [],
+        peerRevisions,
       })
       step('connected')
     } catch (error) {
       step(`failed: ${error instanceof Error ? error.message : String(error)}`)
+      // Let go: the turn and the state are the next sign-in's now; `signIn` already said this one failed.
+      if (ticket?.abandoned) throw error
       this.set({
         status: 'failed',
         signingInAs: undefined,

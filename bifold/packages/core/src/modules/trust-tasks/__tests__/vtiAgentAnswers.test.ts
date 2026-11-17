@@ -27,6 +27,13 @@ const mockTspVia: Record<string, string | undefined> = {}
 const mockPacked: Record<string, unknown>[] = []
 /** Identities whose sign-in fails, as a mediator answering 503 does. */
 const mockFailStart = new Set<string>()
+/** Identities whose sign-in fails as a borrowed key whose agent is gone does (its DID log 404). */
+const mockGoneStart = new Set<string>()
+/** Identities whose socket never opens until released (`mockRelease`), as a sign-in suspended in the background. */
+const mockHangStart = new Set<string>()
+const mockRelease: Record<string, () => void> = {}
+/** Sessions stopped, by DID. */
+const mockStopped: string[] = []
 let mockStarts = 0
 
 jest.mock('@bifold/trust-tasks', () => ({
@@ -81,10 +88,17 @@ jest.mock('../module/VtiMediatorTransport', () => ({
       mockStarts++
       if (mockFailStart.has(this.record.did))
         throw new Error('challenge answered 503 with a non-JSON body: no available server')
+      if (mockGoneStart.has(this.record.did))
+        throw new Error(
+          `the in-memory copy of vta-copy:did:webvh:gone-agent:${this.record.did}#key-1 could not be fetched: Unable to resolve did document for did 'did:webvh:gone-agent': notFound resolver_error: HTTP error! status: 404`
+        )
+      if (mockHangStart.has(this.record.did))
+        await new Promise<void>((resolve) => (mockRelease[this.record.did] = resolve))
       this.open = true
     }
     async stop() {
       this.open = false
+      mockStopped.push(this.record.did)
     }
     async sendTspFrame(bytes: Uint8Array) {
       this.record.tsp.push(bytes)
@@ -118,7 +132,7 @@ jest.mock('../module/tspCapability', () => ({
   }),
 }))
 
-import { DeviceEventEmitter } from 'react-native'
+import { AppState, DeviceEventEmitter } from 'react-native'
 
 import { plainError } from '../screens/plainError'
 import {
@@ -127,6 +141,7 @@ import {
   VTI_SIGNIN_ONLINE_WITHIN_MS,
   VTI_SIGNIN_REST_FIRST_MS,
   VTI_SIGNIN_REST_MAX_MS,
+  VTI_SIGNIN_TURN_MS,
   VtiNoOwnSession,
   VtiSentNoAnswer,
   isVtiReadTask,
@@ -863,6 +878,191 @@ describe('an identity whose sign-in failed rests from background sign-ins', () =
     const tries = mockStarts
     expect(await refusedName(tryAs(DEAD, true, withRecords))).toBe('VtiSignInResting')
     expect(mockStarts).toBe(tries)
+  })
+})
+
+describe('one sign-in cannot hold the turn: a time limit, a late socket closed, a gone agent rests from listings (11-17)', () => {
+  const C = 'did:webvh:c:turn'
+  const HUNG = 'did:webvh:p:turn-hung'
+  const NEXT = 'did:webvh:p:turn-next'
+  const GONE = 'did:webvh:p:turn-gone'
+  const DOWN = 'did:webvh:p:turn-down'
+  const as = (who: string, opts: { background?: boolean; listing?: boolean } = {}) => {
+    mockTspVia[C] = 'did:webvh:their-mediator'
+    return vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(who), ...opts })
+  }
+  const outcome = async (p: Promise<unknown>) =>
+    (await p.then(
+      () => 'signed in',
+      (e: Error) => e.name
+    )) as string
+  /** A sign-in that never opens until released; its outcome is read once it settles. */
+  const hang = () => {
+    mockHangStart.add(HUNG)
+    let ended: string | undefined
+    void outcome(as(HUNG)).then((o) => (ended = o))
+    return { ended: () => ended }
+  }
+  beforeEach(() => {
+    vtiAgent.forgetSignInRestsForTests()
+    vtiAgent.signInTurnMs = 150
+    for (const set of [mockFailStart, mockGoneStart, mockHangStart]) set.clear()
+    mockStopped.length = 0
+    mockStarts = 0
+  })
+  afterEach(async () => {
+    // A hung attempt is released, so nothing is left running into the next test.
+    for (const did of Object.keys(mockRelease)) mockRelease[did]()
+    await new Promise((r) => setTimeout(r, 10))
+    for (const did of Object.keys(mockRelease)) delete mockRelease[did]
+    vtiAgent.signInTurnMs = VTI_SIGNIN_TURN_MS
+    vtiAgent.now = () => Date.now()
+    vtiAgent.forgetSignInRestsForTests()
+    for (const set of [mockFailStart, mockGoneStart, mockHangStart]) set.clear()
+  })
+
+  it('a sign-in that hangs is let go at the limit: the one queued behind it signs in', async () => {
+    const hung = hang()
+    expect(await outcome(as(NEXT))).toBe('signed in')
+    expect(vtiAgent.getState()).toMatchObject({ status: 'connected', did: NEXT })
+    // The let-go caller is not rejected from the timer: it hears VtiSignInTimedOut once its attempt settles.
+    expect(hung.ended()).toBeUndefined()
+    mockRelease[HUNG]()
+    await until(() => hung.ended() !== undefined, 500)
+    expect(hung.ended()).toBe('VtiSignInTimedOut')
+  })
+
+  it('control: a slow but healthy sign-in inside the limit signs in', async () => {
+    vtiAgent.signInTurnMs = 2000
+    const slow = hang()
+    await until(() => !!mockRelease[HUNG])
+    await new Promise((r) => setTimeout(r, 100))
+    mockRelease[HUNG]()
+    await until(() => slow.ended() !== undefined, 500)
+    expect(slow.ended()).toBe('signed in')
+    expect(vtiAgent.getState()).toMatchObject({ status: 'connected', did: HUNG })
+  })
+
+  it('the let-go sign-in opening late is closed, never kept beside the one that signed in since', async () => {
+    hang()
+    expect(await outcome(as(NEXT))).toBe('signed in')
+    mockRelease[HUNG]()
+    await until(() => mockStopped.includes(HUNG))
+    expect(vtiAgent.getState()).toMatchObject({ status: 'connected', did: NEXT })
+  })
+
+  it('the limit is wall time: back from a background longer than it, the turn ends at once (control: a short trip does not)', async () => {
+    vtiAgent.signInTurnMs = 10_000
+    let clock = Date.parse('2026-11-17T02:37:15Z')
+    vtiAgent.now = () => clock
+    let onChange: ((s: string) => void) | undefined
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
+      onChange = h
+      return { remove: () => undefined }
+    }) as never)
+    hang()
+    await until(() => !!onChange && !!mockRelease[HUNG])
+    let next: string | undefined
+    void outcome(as(NEXT)).then((o) => (next = o))
+    // A short trip away: back before the limit, the queued sign-in still waits.
+    clock += 5_000
+    onChange!('active')
+    await new Promise((r) => setTimeout(r, 30))
+    expect(next).toBeUndefined()
+    // 14 minutes away, as on 11-17: the first look back lets the turn go, though the paused timer has not fired.
+    clock += 14 * 60_000
+    onChange!('active')
+    await until(() => next !== undefined, 500)
+    expect(next).toBe('signed in')
+  })
+
+  it('let go after its socket opened, during its last read: never committed, and the sign-in after it keeps the session (ac, #1095)', async () => {
+    let releaseRead = () => undefined as void
+    const slowStore = {
+      list: () => new Promise<[]>((resolve) => (releaseRead = () => resolve([]))),
+    }
+    mockTspVia[C] = 'did:webvh:their-mediator'
+    let ended: string | undefined
+    void outcome(
+      vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(HUNG), peerRevisionStore: slowStore as never })
+    ).then((o) => (ended = o))
+    // The socket opens (no hang), then the last read waits: the limit lets the turn go there.
+    await until(() => mockStopped.includes(HUNG), 1000)
+    // connect keeps a given store for later sign-ins: the next one brings its own, so it does not wait on the slow one.
+    const fast = { list: async () => [] }
+    mockTspVia[C] = 'did:webvh:their-mediator'
+    expect(
+      await outcome(
+        vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(NEXT), peerRevisionStore: fast as never })
+      )
+    ).toBe('signed in')
+    releaseRead()
+    await until(() => ended !== undefined, 500)
+    expect(ended).toBe('VtiSignInTimedOut')
+    // The let-go attempt committed nothing: the later sign-in still owns the state and the session.
+    expect(vtiAgent.getState()).toMatchObject({ status: 'connected', did: NEXT })
+    expect(mockSessions.filter((m) => m.did === HUNG)).toHaveLength(1)
+    expect(mockStopped).toContain(HUNG)
+    expect(mockStopped).not.toContain(NEXT)
+  })
+
+  it('the let-go sign-in is closed at once, while its socket is still opening (the DID has one mediator slot)', async () => {
+    hang()
+    // Not released: the socket never opened, and the session is already stopped.
+    await until(() => mockStopped.includes(HUNG), 1000)
+  })
+
+  it("letting a sign-in go stops only that attempt's session, never another identity's own session (ac, #1095)", async () => {
+    const OTHER = 'did:webvh:p:turn-own-other'
+    const kept = { sendTo: async () => undefined }
+    keepOwnSession(OTHER, kept)
+    hang()
+    await until(() => mockStopped.includes(HUNG), 1000)
+    // The other identity's own session is untouched: the let-go stops the attempt's session object, not by DID.
+    expect(ownSessionFor(OTHER)).toBe(kept)
+    expect(mockStopped).toEqual([HUNG])
+    dropAllOwnSessions()
+  })
+
+  it('a let-go identity rests from background sign-ins at once, as a failure does', async () => {
+    hang()
+    await until(() => mockStopped.includes(HUNG), 1000)
+    const tries = mockStarts
+    expect(await outcome(as(HUNG, { background: true }))).toBe('VtiSignInResting')
+    expect(mockStarts).toBe(tries)
+  })
+
+  it("an identity whose agent is gone rests from a screen's listing too, without a try", async () => {
+    mockGoneStart.add(GONE)
+    expect(await outcome(as(GONE, { listing: true }))).toBe('Error')
+    const tries = mockStarts
+    expect(await outcome(as(GONE, { listing: true }))).toBe('VtiSignInResting')
+    expect(mockStarts).toBe(tries)
+    // The person's own step still tries.
+    expect(await outcome(as(GONE))).toBe('Error')
+    expect(mockStarts).toBe(tries + 1)
+  })
+
+  it('control: any other failure (a mediator answering 503) still lets a listing try', async () => {
+    mockFailStart.add(DOWN)
+    expect(await outcome(as(DOWN, { listing: true }))).toBe('Error')
+    const tries = mockStarts
+    expect(await outcome(as(DOWN, { listing: true }))).toBe('Error')
+    expect(mockStarts).toBe(tries + 1)
+  })
+
+  it('no rejection ever comes from the limit itself: a hung sign-in nobody waits on rejects nothing (CI on #1095)', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (e: unknown) => unhandled.push(e)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      hang()
+      await until(() => mockStopped.includes(HUNG), 1000)
+      await new Promise((r) => setTimeout(r, 50))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 })
 
