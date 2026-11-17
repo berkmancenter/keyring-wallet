@@ -19,6 +19,7 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
+import { MemberBadgesRow } from '../../badges/components/MemberBadgesRow'
 import { communityLabelOf } from '../../trust-tasks/screens/communityName'
 import { MemberPicture } from '../components/MemberPicture'
 import { directoryRetryable, directoryStatusText, memberRoleText } from '../components/directoryWords'
@@ -143,6 +144,8 @@ const CommunityMemberCard: React.FC = () => {
             {t('Directory.NothingElseShown')}
           </ThemedText>
         )}
+        {/* Their badges, as the community shows them to this member: by entry only, never looked up by DID. */}
+        <MemberBadgesRow communityDid={communityDid} entryId={params.entryId} />
       </>
     )
   }

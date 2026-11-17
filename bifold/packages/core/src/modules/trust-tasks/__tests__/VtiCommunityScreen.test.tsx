@@ -28,6 +28,7 @@ import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVe
 import { ROOMS_LEFT_EVENT } from '../../rooms/useMyRooms'
 import { readDirectoryDisclosure } from '../module/directoryDisclosure'
 import { statement } from './fixtures/directoryStatement'
+import { createFakeBadgeService, resetBadgeService, setBadgeServiceForTests } from '../../badges'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../module/vtiAgent', () => ({
@@ -414,6 +415,36 @@ describe('the community screen, for a member', () => {
     } finally {
       mockRoomsService = undefined
       mockPersona = undefined
+    }
+  })
+
+  it("a member sees this community's Badges, between Polls and Rooms; someone not a member sees none", async () => {
+    setBadgeServiceForTests(createFakeBadgeService())
+    mockRoomsService = {
+      isSample: false,
+      capabilities: async () => jest.requireActual('../../rooms/capabilities').sampleCapabilities(),
+      listMyRooms: async () => [],
+      listOffers: async () => [],
+    }
+    try {
+      mockJourney = { join: { kind: 'member', membership }, vetterGrant: { state: 'none' } }
+      const tree = show()
+      await act(async () => undefined)
+      const order = tree.UNSAFE_root.findAll((n) => typeof n.props.testID === 'string' && typeof n.type === 'string')
+        .map((n) => n.props.testID as string)
+        .filter((testID, i, all) => all.indexOf(testID) === i)
+      const badges = order.indexOf(testIdWithKey('CommunityBadges'))
+      expect(badges).toBeGreaterThanOrEqual(0)
+      expect(badges).toBeLessThan(order.indexOf(testIdWithKey('CommunityRooms')))
+      tree.unmount()
+
+      mockJourney = notMember
+      const outside = show()
+      await act(async () => undefined)
+      expect(outside.queryByTestId(testIdWithKey('CommunityBadges'))).toBeNull()
+    } finally {
+      mockRoomsService = undefined
+      resetBadgeService()
     }
   })
 

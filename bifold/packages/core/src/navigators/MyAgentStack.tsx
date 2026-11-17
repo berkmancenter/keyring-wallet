@@ -39,6 +39,7 @@ import CommunityMemberCard from '../modules/directory/screens/CommunityMemberCar
 import CommunityMembers from '../modules/directory/screens/CommunityMembers'
 import Poll from '../modules/polls/screens/Poll'
 import PollBallot from '../modules/polls/screens/PollBallot'
+import BadgeDetail from '../modules/badges/screens/BadgeDetail'
 import { MyAgentStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
@@ -100,6 +101,11 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.PollBallot}
         component={PollBallot}
         options={{ title: t('Polls.Ballot'), ...ScreenOptionsDictionary[Screens.PollBallot] }}
+      />
+      <Stack.Screen
+        name={Screens.BadgeDetail}
+        component={BadgeDetail}
+        options={{ title: t('Badges.Badge'), ...ScreenOptionsDictionary[Screens.BadgeDetail] }}
       />
       <Stack.Screen
         name={Screens.CommunityMembers}

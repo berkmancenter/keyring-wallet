@@ -260,6 +260,16 @@
     "BackToHome": ["src/screens/CredentialOfferAccept.tsx", "src/screens/ProofRequestAccept.tsx"],
     "BackToList": ["src/screens/ProofDetails.tsx"],
     "BackToProofList": ["src/screens/MobileVerifierLoading.tsx"],
+    "BadgeDetail": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeDetailDescription": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeDetailEarned": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeDetailGiver": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeDetailName": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeDetailReadFailed": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeDetailReading": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeDetailTryAgain": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeImage": ["src/modules/badges/components/Badges.ids.ts"],
+    "BadgeImageStandIn": ["src/modules/badges/components/Badges.ids.ts"],
     "BiometricChangedEnterPIN": ["src/screens/PINVerify.tsx"],
     "BiometricConfirmationScroll": ["src/components/modals/BiometricConfirmationModal.tsx"],
     "Biometrics": ["src/screens/Settings.tsx"],
@@ -349,6 +359,18 @@
     "CloseWitnessChoiceModal": ["src/modules/vrc/components/WitnessChoiceModal.tsx"],
     "CloseWitnessErrorModal": ["src/modules/vrc/components/WitnessErrorDialog.tsx"],
     "CommunityAddHolderAgent": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
+    "CommunityBadgeAccept": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeDecline": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeHeld": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeHeldCount": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeKudos": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeKudosTotal": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeOffer": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeOfferExpires": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeOfferFailed": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgeOfferNote": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadges": ["src/modules/badges/components/Badges.ids.ts"],
+    "CommunityBadgesOnlyYou": ["src/modules/badges/components/Badges.ids.ts"],
     "CommunityCardDetails": [
       "src/modules/trust-tasks/screens/CommunityCardDetails.tsx",
       "src/modules/trust-tasks/screens/CommunityPassDetails.tsx"
@@ -925,6 +947,8 @@
     "LostPhoneRotate": ["src/modules/trust-tasks/screens/LostPhoneCard.tsx"],
     "LostPhoneState": ["src/modules/trust-tasks/screens/LostPhoneCard.tsx"],
     "MemberCard": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
+    "MemberCardBadge": ["src/modules/badges/components/Badges.ids.ts"],
+    "MemberCardBadges": ["src/modules/badges/components/Badges.ids.ts"],
     "MemberCardFields": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
     "MemberCardLoading": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
     "MemberCardName": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
@@ -2068,6 +2092,78 @@
     },
     {
       "src/components/texts/Link.tsx": "testIdForAccessabilityLabel(linkText)"
+    },
+    {
+      "src/modules/badges/components/BadgeImage.tsx": "BadgesIds.image"
+    },
+    {
+      "src/modules/badges/components/BadgeImage.tsx": "BadgesIds.imageStandIn"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.accept"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.decline"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.held"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.heldCount"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.kudos"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.kudosTotal"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.offer"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.offerExpires"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.offerFailed"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.offerNote"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.onlyYou"
+    },
+    {
+      "src/modules/badges/components/CommunityBadgesSection.tsx": "BadgesIds.section"
+    },
+    {
+      "src/modules/badges/components/MemberBadgesRow.tsx": "BadgesIds.memberChip"
+    },
+    {
+      "src/modules/badges/components/MemberBadgesRow.tsx": "BadgesIds.memberRow"
+    },
+    {
+      "src/modules/badges/screens/BadgeDetail.tsx": "BadgesIds.detailDescription"
+    },
+    {
+      "src/modules/badges/screens/BadgeDetail.tsx": "BadgesIds.detailEarned"
+    },
+    {
+      "src/modules/badges/screens/BadgeDetail.tsx": "BadgesIds.detailGiver"
+    },
+    {
+      "src/modules/badges/screens/BadgeDetail.tsx": "BadgesIds.detailName"
+    },
+    {
+      "src/modules/badges/screens/BadgeDetail.tsx": "BadgesIds.detailReadFailed"
+    },
+    {
+      "src/modules/badges/screens/BadgeDetail.tsx": "BadgesIds.detailReading"
+    },
+    {
+      "src/modules/badges/screens/BadgeDetail.tsx": "BadgesIds.detailTryAgain"
+    },
+    {
+      "src/modules/badges/screens/BadgeDetail.tsx": "BadgesIds.screen"
     },
     {
       "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.clearSearch"

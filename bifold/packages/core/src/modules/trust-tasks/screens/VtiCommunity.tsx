@@ -33,6 +33,7 @@ import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
 import { communityTarget } from '../module/vtiCommunityLink'
 import { joinKnown, readFailed, useCommunityJourney, vetterGrantKnown } from '../module/communityJourney'
+import { CommunityBadgesSection } from '../../badges/components/CommunityBadgesSection'
 import { CommunityPollsSection } from '../../polls/components/CommunityPollsSection'
 import { CommunityRoomsSection } from '../../rooms/components/CommunityRoomsSection'
 import { afterLeavingCommunity } from '../../rooms/roomsLeave'
@@ -364,6 +365,8 @@ const VtiCommunity: React.FC = () => {
         {/* A member's rooms and room offers in this community, beside membership and vetting (rooms flag on only). */}
         {/* The community's polls, when it lists any: open ones first (Community Polls mock, A). */}
         {membership ? <CommunityPollsSection communityDid={communityDid} /> : null}
+        {/* The member's badges here: offers to answer, the badges they hold, their kudos (member badges plan). */}
+        {membership ? <CommunityBadgesSection communityDid={communityDid} /> : null}
         {membership ? <CommunityRoomsSection communityDid={communityDid} /> : null}
         {/* The community's member directory: its members, and the member's own card there. */}
         {membership ? <CommunityDirectorySection communityDid={communityDid} /> : null}
