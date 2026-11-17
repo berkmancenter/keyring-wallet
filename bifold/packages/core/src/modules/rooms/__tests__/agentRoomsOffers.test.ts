@@ -8,6 +8,7 @@ import {
 import { OFFERS_LIST_TYPES, ROOMS_TASK } from '../real/wire'
 import { PREVIEW_TOKEN_TTL_MS, RoomsPreviewExpired, RoomsRefused, RoomsUnavailable } from '../types'
 import { logRef } from '../roomsLogWords'
+import { ACCEPT_FROM_PREVIEW_MAX_AGE_MS, ROOMS_ACCEPT_FROM_PREVIEW } from '../acceptFromPreviewSwitch'
 
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', personaDid: 'did:key:persona-a' }
 const OPEN_ROOM = 'did:webvh:room:open1'
@@ -611,13 +612,16 @@ describe('AgentRoomsService offers', () => {
     expect(err).toMatchObject({ name: 'RoomsRefused', code: 'joinFailed', retryable: true })
   })
 
-  it('does not accept again what another surface already finished', async () => {
+  // When the offers are read again first (acceptFromPreviewSwitch off, or an offer read over a minute ago). Going ahead
+  // on the offer previewed finishes it again instead: 'an offer accepted elsewhere since its preview' below.
+  it('does not accept again what another surface already finished, read so', async () => {
     const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
     const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))
     s.communityTask.mockImplementation(async (_did: string, type: string) => {
       s.calls.push(type)
       return { items: [offer(OPEN_ROOM, 'open', 'accepted')] }
     })
+    s.advance(ACCEPT_FROM_PREVIEW_MAX_AGE_MS + 1)
     expect(await s.service.acceptOffer(preview.token)).toEqual({ roomId: OPEN_ROOM })
     expect(s.calls).not.toContain(ROOMS_TASK.offersAccept)
     expect(s.calls).not.toContain(ROOMS_TASK.vaultReceive)
@@ -816,9 +820,9 @@ describe('what an accept leaves for the room screen', () => {
       'a sealed room',
       SEALED_ROOM,
       'attributed',
-      ['offers read', 'credentials stored', 'key package', 'accept', 'Welcome'],
+      ['offer as previewed', 'credentials stored', 'key package', 'accept', 'Welcome'],
     ],
-    ['an open room', OPEN_ROOM, 'open', ['offers read', 'credentials stored', 'accept']],
+    ['an open room', OPEN_ROOM, 'open', ['offer as previewed', 'credentials stored', 'accept']],
   ])('says how long %s took to join, step by step, once', async (_name, roomId, visibility, names) => {
     const s = setup({ offers: [offer(roomId, visibility, 'open')] })
     const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, roomId))
@@ -835,9 +839,15 @@ describe('what an accept leaves for the room screen', () => {
   it('says an accept another surface already finished as that, and a failed accept not at all', async () => {
     const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
     const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))
-    // Accepted elsewhere between the preview and the accept.
+    // Accepted elsewhere between the preview and the accept, and read so: the accept reads the offers again first
+    // when the switch is off (acceptFromPreviewSwitch), as every accept did before it.
     s.communityTask.mockImplementation(async () => ({ items: [offer(OPEN_ROOM, 'open', 'accepted')] }))
-    await s.service.acceptOffer(preview.token)
+    ROOMS_ACCEPT_FROM_PREVIEW.on = false
+    try {
+      await s.service.acceptOffer(preview.token)
+    } finally {
+      ROOMS_ACCEPT_FROM_PREVIEW.on = true
+    }
     expect(warned(s)).toContain(`rooms: ${logRef(OPEN_ROOM)} accepted in 0 ms (offers read 0 ms, already joined 0 ms)`)
 
     const refused = setup({
@@ -849,6 +859,119 @@ describe('what an accept leaves for the room screen', () => {
     const again = await refused.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))
     await expect(refused.service.acceptOffer(again.token)).rejects.toBeInstanceOf(RoomsRefused)
     expect(warned(refused).some((w) => w.includes(' accepted in '))).toBe(false)
+  })
+})
+
+// 11-17: the accept read the community's offers again before anything else, and that read waited for the community
+// session: 21.6 s of a 31 s accept on a tester's phone (YDXH-SH9W). An offer previewed moments ago is accepted as shown.
+describe('an accept on the offer just previewed', () => {
+  const listsAsked = (s: ReturnType<typeof setup>) =>
+    s.communityTask.mock.calls.filter((c) => (OFFERS_LIST_TYPES as readonly string[]).includes(c[1])).length
+  const steps = (s: ReturnType<typeof setup>, roomId: string) =>
+    (s.b.warn as jest.Mock).mock.calls
+      .map((c) => String(c[0]))
+      .filter((w) => w.startsWith(`rooms: ${logRef(roomId)} accepted in `))
+  const previewed = async (s: ReturnType<typeof setup>, roomId: string) => {
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, roomId))
+    return { token: preview.token, before: listsAsked(s) }
+  }
+  afterEach(() => {
+    ROOMS_ACCEPT_FROM_PREVIEW.on = true
+    ROOMS_ACCEPT_FROM_PREVIEW.remoteOff = false
+  })
+
+  it.each([
+    ['an open room', OPEN_ROOM, 'open'],
+    ['a sealed room', SEALED_ROOM, 'attributed'],
+  ])('%s previewed moments ago is accepted without reading the offers again', async (_name, roomId, visibility) => {
+    const s = setup({ offers: [offer(roomId, visibility, 'open')] })
+    const { token, before } = await previewed(s, roomId)
+    expect(before).toBe(1)
+    s.advance(ACCEPT_FROM_PREVIEW_MAX_AGE_MS)
+
+    expect(await s.service.acceptOffer(token)).toEqual({ roomId })
+    expect(listsAsked(s)).toBe(before)
+    expect(s.calls.filter((t) => t === ROOMS_TASK.vaultReceive)).toHaveLength(2)
+    expect(steps(s, roomId)).toEqual([expect.stringContaining('(offer as previewed 0 ms, credentials stored')])
+  })
+
+  it('control: an offer read longer ago is read again first, as before', async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    const { token, before } = await previewed(s, OPEN_ROOM)
+    s.advance(ACCEPT_FROM_PREVIEW_MAX_AGE_MS + 1)
+
+    expect(await s.service.acceptOffer(token)).toEqual({ roomId: OPEN_ROOM })
+    expect(listsAsked(s)).toBe(before + 1)
+    expect(steps(s, OPEN_ROOM)).toEqual([expect.stringContaining('(offers read 0 ms, credentials stored')])
+  })
+
+  it.each([
+    ['switched off', { on: false, remoteOff: false }],
+    ['turned off remotely', { on: true, remoteOff: true }],
+    ['not a boolean (fails closed)', { on: 'true' as unknown as boolean, remoteOff: false }],
+  ])('control: %s, an offer previewed moments ago is read again first, as before', async (_name, values) => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    const { token, before } = await previewed(s, OPEN_ROOM)
+    Object.assign(ROOMS_ACCEPT_FROM_PREVIEW, values)
+
+    expect(await s.service.acceptOffer(token)).toEqual({ roomId: OPEN_ROOM })
+    expect(listsAsked(s)).toBe(before + 1)
+  })
+
+  it('control: an offer read again and no longer listed is refused before anything is stored, as before', async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    const { token } = await previewed(s, OPEN_ROOM)
+    s.advance(ACCEPT_FROM_PREVIEW_MAX_AGE_MS + 1)
+    s.communityTask.mockImplementation(async () => ({ items: [] }))
+
+    await expect(s.service.acceptOffer(token)).rejects.toMatchObject({ name: 'RoomsRefused', code: 'notFound' })
+    expect(s.calls).not.toContain(ROOMS_TASK.vaultReceive)
+  })
+
+  it('control: a read again that fails fails the accept, as before, with nothing stored', async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    const { token } = await previewed(s, OPEN_ROOM)
+    s.advance(ACCEPT_FROM_PREVIEW_MAX_AGE_MS + 1)
+    s.communityTask.mockImplementation(async () => {
+      throw new FakeRefusal('taskFailed', { code: 'vtc/rooms/offers/list:notAMember' })
+    })
+
+    await expect(s.service.acceptOffer(token)).rejects.toThrow()
+    expect(s.calls).not.toContain(ROOMS_TASK.vaultReceive)
+    expect(s.calls).not.toContain(ROOMS_TASK.offersAccept)
+  })
+
+  // What going ahead on the offer shown gives up: the early word. The community's own accept step says it instead,
+  // after the two cards are stored.
+  it('an offer withdrawn since its preview is refused by the community, after the cards are stored', async () => {
+    const s = setup({
+      offers: [offer(OPEN_ROOM, 'open', 'open')],
+      accept: () => {
+        throw taskRefusal('offerWithdrawn')
+      },
+    })
+    const { token, before } = await previewed(s, OPEN_ROOM)
+
+    await expect(s.service.acceptOffer(token)).rejects.toBeInstanceOf(RoomsRefused)
+    expect(listsAsked(s)).toBe(before)
+    expect(s.calls.filter((t) => t === ROOMS_TASK.vaultReceive)).toHaveLength(2)
+    expect(steps(s, OPEN_ROOM)).toEqual([])
+  })
+
+  it('an offer accepted elsewhere since its preview is finished again, each step answering its repeat', async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    const { token, before } = await previewed(s, OPEN_ROOM)
+    // What a read now would say; the accept, sent again, is answered as the first one was.
+    const answer = s.communityTask.getMockImplementation()!
+    s.communityTask.mockImplementation(async (did: string, type: string, payload: Record<string, unknown>) =>
+      (OFFERS_LIST_TYPES as readonly string[]).includes(type)
+        ? { items: [offer(OPEN_ROOM, 'open', 'accepted')] }
+        : answer(did, type, payload)
+    )
+
+    expect(await s.service.acceptOffer(token)).toEqual({ roomId: OPEN_ROOM })
+    expect(listsAsked(s)).toBe(before)
+    expect(s.calls).toContain(ROOMS_TASK.offersAccept)
   })
 })
 
