@@ -570,7 +570,7 @@ export async function stopVetting(
   // told nothing was removed when something may have been (ac, #1097).
   try {
     await deps.vettingStore.forgetApplication?.(communityDid)
-    if (!membership) await deps.identityStore.forgetPersona(communityDid)
+    if (!membership) await deps.identityStore.forgetPersona(communityDid) // tier-exempt(deletes stored records): 278.24 already runs forgetPersona (leaveCommunity) and forgetApplication (vtiPersonaInbox on 'removed'); a pre-#1097 bundle reads a stopped vetting as kind 'none' (readJoinState); reached only from the Stop control
   } catch {
     emitCommunityChanged(communityDid, 'forgotten')
     return 'partial'
