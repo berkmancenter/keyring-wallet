@@ -1509,27 +1509,47 @@ export class AgentRoomsService implements RoomsService {
     if (!entry) throw new RoomsPreviewExpired(token)
     const { community } = entry
     const roomId = entry.offer.roomId
+    // How long each step took, said once the room is joined: an accept was felt slow (11-16) and nothing timed it.
+    const steps: string[] = []
+    const started = this.now()
+    let mark = started
+    const timed = (name: string) => {
+      const at = this.now()
+      steps.push(`${name} ${at - mark} ms`)
+      mark = at
+    }
     const offer = (await this.offersOf(community)).items.find((o) => o.roomId === roomId && o.host === community.did)
+    timed('offers read')
     if (!offer) throw new RoomsRefused('acceptOffer', 'notFound', false, `${community.did} no longer lists ${roomId}`)
     this.requireSealedSupport(offer)
     const sealed = isSealed(offer.tier)
     const done = () => {
       this.offers.delete(pending.offerId)
-      this.rooms = new Map() // the next read lists the room
+      // The room joined is known at once from its offer, so the room screen opened next reads it without a listing
+      // of every community first (3-13 s on testers' phones, 11-16): emptying the rooms here sent getRoom to one.
+      // The rooms already listed stay. The next listing replaces them all with what the communities say.
+      const rooms = new Map(this.rooms)
+      rooms.set(roomId, this.joinedFrom(community, offer))
+      this.rooms = rooms
       this.heldInFlight = undefined // nor joins a key list asked before the room was held
-      this.roomsChanged++
+      this.roomsChanged++ // nor does a listing asked before the accept replace the room joined, when it answers
       this.roomsInFlight = undefined
+      this.backend.warn(`rooms: ${logRef(roomId)} accepted in ${this.now() - started} ms (${steps.join(', ')})`)
       return { roomId }
     }
 
     // Joined already: from another surface, or an earlier run whose answer was lost.
-    if (offer.state === 'accepted' && (!sealed || (await this.holds(roomId, community.personaDid)))) return done()
+    if (offer.state === 'accepted' && (!sealed || (await this.holds(roomId, community.personaDid)))) {
+      timed('already joined')
+      return done()
+    }
 
     for (const what of ['membership', 'authority'] as const) {
       await this.agentStep('acceptOffer', `store the ${what} credential`, ROOMS_TASK.vaultReceive, {
         credential: credentialOf(offer.credentials[what], what),
       })
     }
+    timed('credentials stored')
     // The agent's own KeyPackage: the community completes an admission only with one the member's key holder
     // minted, and the agent answers a repeat with the one it already gave.
     let keyPackage: string | undefined
@@ -1541,6 +1561,7 @@ export class AgentRoomsService implements RoomsService {
         })
       )?.keyPackage
       if (!keyPackage) throw new Error('the agent answered without a key package')
+      timed('key package')
     }
 
     let accepted: NonNullable<ReturnType<typeof parseAccept>>
@@ -1549,10 +1570,14 @@ export class AgentRoomsService implements RoomsService {
     } catch (e) {
       // Accepted with this KeyPackage too long ago to be answered again, but joined: that is done.
       if (e instanceof RoomsRefused && e.code === 'alreadyAccepted' && sealed) {
-        if (await this.holds(roomId, community.personaDid).catch(() => false)) return done()
+        if (await this.holds(roomId, community.personaDid).catch(() => false)) {
+          timed('accepted already')
+          return done()
+        }
       }
       throw e
     }
+    timed('accept')
     if (!sealed) return done()
     if (!accepted.welcome)
       throw new RoomsRefused(
@@ -1582,15 +1607,38 @@ export class AgentRoomsService implements RoomsService {
         )
       this.backend.warn(`rooms: ${logRef(roomId)} Welcome: not used, the agent already holds a group for this room`)
     }
-    // The epoch keys the member may read, so the room opens at once. A failure here leaves reads to repair it.
+    timed('Welcome')
+    const joined = done()
+    // The epoch keys the member may read. Asked now and not waited for: the room is shown first, and its reads go to
+    // the agent after this one, as the agent client sends them in order. A failure here leaves reads to repair it.
     if ((this.served?.types ?? []).includes(ROOMS_TASK.keysBackfill)) {
-      await this.backend
+      const asked = this.now()
+      void this.backend
         .agentTask(ROOMS_TASK.keysBackfill, { roomId, host: offer.host })
+        .then(() => this.backend.warn(`rooms: ${logRef(roomId)} backfill after joining: ${this.now() - asked} ms`))
         .catch((e) =>
           this.backend.warn(`rooms: backfill of ${logRef(roomId)} after joining failed: ${failureCategory(e)}`)
         )
     }
-    return done()
+    return joined
+  }
+
+  /**
+   * A room just joined, from the offer accepted: what its membership will say, until a listing reads it. A sealed room
+   * is joined only once the agent holds it, so it is never `joined: false` here.
+   */
+  private joinedFrom(community: RoomsCommunity, offer: OfferRecord): KnownRoom {
+    const { joined: _joined, ...room } = this.fromMembership(community, {
+      roomId: offer.roomId,
+      host: offer.host,
+      label: offer.label,
+      description: offer.description,
+      tier: offer.tier,
+      actions: offer.actions,
+      validUntil: offer.validUntil,
+      state: 'admitted',
+    })
+    return room
   }
 
   /** An agent task on an operation's path, its refusal reported as the operation's. */

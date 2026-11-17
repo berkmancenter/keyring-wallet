@@ -688,6 +688,170 @@ describe('AgentRoomsService offers', () => {
 
 // The agent's key list is one read shared by every caller while it is in flight (#725). An accept must never be
 // answered from, or leave behind, a read that left before the room was held.
+// 11-16: after an accept the room screen opened on an emptied room cache, so getRoom listed every community first
+// (3-13 s on testers' phones), and the accept waited for the key backfill before it answered.
+describe('what an accept leaves for the room screen', () => {
+  const membership = (roomId: string) => ({
+    roomId,
+    host: COMMUNITY.did,
+    label: 'Listed before',
+    visibility: 'open',
+    actions: ['read'],
+    state: 'admitted',
+  })
+  /** Lets the community answer a rooms listing with `items`, counting the listings asked. */
+  const listing = (s: ReturnType<typeof setup>, items: Record<string, unknown>[]) => {
+    const answer = s.communityTask.getMockImplementation()!
+    s.communityTask.mockImplementation(async (did: string, type: string, payload: Record<string, unknown>) =>
+      type === ROOMS_TASK.membershipsList ? { items } : answer(did, type, payload)
+    )
+    return () => sent(s.communityTask, ROOMS_TASK.membershipsList).length
+  }
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  const warned = (s: ReturnType<typeof setup>) => (s.b.warn as jest.Mock).mock.calls.map((c) => String(c[0]))
+
+  it.each([
+    ['an open room', OPEN_ROOM, 'open'],
+    ['a sealed room', SEALED_ROOM, 'attributed'],
+  ])('%s just joined opens with no listing of the communities first', async (_name, roomId, visibility) => {
+    const s = setup({ offers: [offer(roomId, visibility, 'open')] })
+    const listings = listing(s, [])
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, roomId))
+    await s.service.acceptOffer(preview.token)
+
+    const room = await s.service.getRoom(roomId)
+    expect(listings()).toBe(0)
+    expect(room).toMatchObject({
+      roomId,
+      name: `Room ${roomId.slice(-7)}`,
+      nameFrom: 'community',
+      source: 'community',
+      communityDid: COMMUNITY.did,
+      tier: visibility,
+      verbs: ['read', 'write'],
+      standing: 'member',
+      actingAs: { did: COMMUNITY.personaDid },
+    })
+    // Joined: the agent holds a sealed room before the accept answers, so it is never shown as waiting to join.
+    expect(room).not.toHaveProperty('joined')
+  })
+
+  it('keeps the rooms already listed, and the next listing reads them all again', async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    const listings = listing(s, [membership(JOINED_ROOM)])
+    await s.service.listMyRooms()
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))
+    await s.service.acceptOffer(preview.token)
+
+    expect(await s.service.getRoom(JOINED_ROOM)).toMatchObject({ name: 'Listed before' })
+    expect(listings()).toBe(1)
+    // Control: a listing asked after the accept asks the community, and what it says replaces the offer's word.
+    listing(s, [membership(JOINED_ROOM), { ...membership(OPEN_ROOM), label: 'As the community lists it' }])
+    await s.service.listMyRooms()
+    expect(listings()).toBe(2)
+    expect(await s.service.getRoom(OPEN_ROOM)).toMatchObject({ name: 'As the community lists it' })
+  })
+
+  it('a listing asked before the accept does not drop the room joined when it answers', async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const answer = s.communityTask.getMockImplementation()!
+    s.communityTask.mockImplementation(async (did: string, type: string, payload: Record<string, unknown>) => {
+      if (type !== ROOMS_TASK.membershipsList) return answer(did, type, payload)
+      await gate
+      return { items: [] }
+    })
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))
+    const before = s.service.listMyRooms()
+    await settle()
+    await s.service.acceptOffer(preview.token)
+    release()
+    await before
+
+    expect(await s.service.getRoom(OPEN_ROOM)).toMatchObject({ roomId: OPEN_ROOM })
+  })
+
+  it('answers a sealed accept before the key backfill does, and still asks it', async () => {
+    const s = setup({ offers: [offer(SEALED_ROOM, 'attributed', 'open')] })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const answer = s.agentTask.getMockImplementation()!
+    s.agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysBackfill) await gate
+      return answer(type, payload)
+    })
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, SEALED_ROOM))
+    let answered: unknown
+    void s.service.acceptOffer(preview.token).then((r) => (answered = r))
+    await settle()
+
+    expect(answered).toEqual({ roomId: SEALED_ROOM })
+    expect(s.agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysBackfill, { roomId: SEALED_ROOM, host: COMMUNITY.did })
+    release()
+    await settle()
+    expect(warned(s).some((w) => w.startsWith(`rooms: ${logRef(SEALED_ROOM)} backfill after joining: `))).toBe(true)
+  })
+
+  it('a backfill that fails after the accept answered is said, by kind alone, and fails nothing', async () => {
+    const s = setup({ offers: [offer(SEALED_ROOM, 'attributed', 'open')] })
+    const answer = s.agentTask.getMockImplementation()!
+    s.agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysBackfill) throw new Error(`no such room on ${COMMUNITY.did}`)
+      return answer(type, payload)
+    })
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, SEALED_ROOM))
+    expect(await s.service.acceptOffer(preview.token)).toEqual({ roomId: SEALED_ROOM })
+    await settle()
+
+    const line = warned(s).find((w) => w.startsWith(`rooms: backfill of ${logRef(SEALED_ROOM)} after joining failed: `))
+    expect(line).toBeDefined()
+    expect(line).not.toContain(COMMUNITY.did)
+  })
+
+  it.each([
+    [
+      'a sealed room',
+      SEALED_ROOM,
+      'attributed',
+      ['offers read', 'credentials stored', 'key package', 'accept', 'Welcome'],
+    ],
+    ['an open room', OPEN_ROOM, 'open', ['offers read', 'credentials stored', 'accept']],
+  ])('says how long %s took to join, step by step, once', async (_name, roomId, visibility, names) => {
+    const s = setup({ offers: [offer(roomId, visibility, 'open')] })
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, roomId))
+    await s.service.acceptOffer(preview.token)
+
+    const lines = warned(s).filter((w) => w.startsWith(`rooms: ${logRef(roomId)} accepted in `))
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toBe(
+      `rooms: ${logRef(roomId)} accepted in 0 ms (${(names as string[]).map((n) => `${n} 0 ms`).join(', ')})`
+    )
+    expect(lines[0]).not.toContain(COMMUNITY.did)
+  })
+
+  it('says an accept another surface already finished as that, and a failed accept not at all', async () => {
+    const s = setup({ offers: [offer(OPEN_ROOM, 'open', 'open')] })
+    const preview = await s.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))
+    // Accepted elsewhere between the preview and the accept.
+    s.communityTask.mockImplementation(async () => ({ items: [offer(OPEN_ROOM, 'open', 'accepted')] }))
+    await s.service.acceptOffer(preview.token)
+    expect(warned(s)).toContain(`rooms: ${logRef(OPEN_ROOM)} accepted in 0 ms (offers read 0 ms, already joined 0 ms)`)
+
+    const refused = setup({
+      offers: [offer(OPEN_ROOM, 'open', 'open')],
+      accept: () => {
+        throw taskRefusal('offerWithdrawn')
+      },
+    })
+    const again = await refused.service.previewOffer(offerIdOf(COMMUNITY.did, OPEN_ROOM))
+    await expect(refused.service.acceptOffer(again.token)).rejects.toBeInstanceOf(RoomsRefused)
+    expect(warned(refused).some((w) => w.includes(' accepted in '))).toBe(false)
+  })
+})
+
 describe('the shared key-list read across an accept', () => {
   /** Holds every key-list answer until released; returns the release. */
   const gateKeyList = (s: ReturnType<typeof setup>) => {
