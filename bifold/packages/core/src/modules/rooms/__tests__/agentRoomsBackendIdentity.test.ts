@@ -29,7 +29,8 @@ jest.mock('../../trust-tasks/module/VtiCommunityStore', () => ({
 jest.mock('../../trust-tasks/module/vtiJoin', () => ({ leaveCommunity: jest.fn() }))
 jest.mock('../../trust-tasks/module/vtiVetting', () => ({ GenericRecordsVettingStore: class {} }))
 jest.mock('../../trust-tasks/module/vtiAgent', () => ({
-  vtiAgent: { holding: (...a: unknown[]) => mockHolding(...a), communityTask: jest.fn() },
+  // No identity's own session is open here: these rows are the shared way (sessions phase B is on in the release).
+  vtiAgent: { holding: (...a: unknown[]) => mockHolding(...a), communityTask: jest.fn(), ownSessionOpen: () => false },
 }))
 jest.mock('../../trust-tasks/module/vtaAgent', () => ({ vtaAgent: {} }))
 jest.mock('../../trust-tasks/module/vtiTsp', () => ({ GenericRecordsTspPeerRevisionStore: class {} }))

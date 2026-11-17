@@ -49,6 +49,7 @@ import {
   VtiMediatorSession,
   vtiClientIdentityFromPersona,
 } from './VtiMediatorTransport'
+import { dropOwnSession, keepOwnSession, type OwnSession } from './vtiOwnSessions'
 import { keepForPersona, ownedByInbox } from './vtiPersonaInbox'
 import { frameForm, tspSessionForPersona, unpackTrustTaskFromPeer } from './vtiTsp'
 
@@ -58,6 +59,15 @@ export interface ListenerSession {
   stop(): Promise<void>
   /** Back in the foreground: ask the mediator for something, and reopen if nothing comes back. */
   checkAlive(): void
+  /** Sends on it, for an ask as this identity (sessions phase B, vtiOwnSessions). A session without it only listens. */
+  sendTo?: OwnSession['sendTo']
+}
+
+/** One identity's listener, as the manager tracks it: the session, the open under way, and what it lent to asks. */
+interface ListenerEntry {
+  session?: ListenerSession
+  starting?: Promise<void>
+  owned?: OwnSession
 }
 
 /** Messages already said to be left on the mediator, by identity and message id; kept small. */
@@ -168,7 +178,7 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   /** What the reconcile under way is doing, for the slow-reconcile line. */
   let step = 'idle'
 
-  const running = new Map<string, { session?: ListenerSession; starting?: Promise<void> }>()
+  const running = new Map<string, ListenerEntry>()
   const failures = new Map<string, { count: number; until: number }>()
   let stopped = false
   let paused = AppState.currentState === 'background'
@@ -181,6 +191,8 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
     const entry = running.get(did)
     if (!entry) return
     running.delete(did)
+    // Asks as this identity stop going out on it before it stops: one in flight is answered or times out as any is.
+    if (entry.owned) dropOwnSession(did, entry.owned)
     // An open still under way finishes on its own and stops what it opened
     // (startOne sees it is no longer running); it is not waited on past the deadline.
     if (entry.starting)
@@ -190,7 +202,7 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   }
 
   const startOne = (persona: VtiPersona) => {
-    const entry: { session?: ListenerSession; starting?: Promise<void> } = {}
+    const entry: ListenerEntry = {}
     running.set(persona.did, entry)
     entry.starting = (async () => {
       try {
@@ -210,6 +222,12 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
         clearTimeout(retryTimers.get(persona.did))
         retryTimers.delete(persona.did)
         releaseWarn(`[VTI] listener for ${didPrefix(persona.did)} (${didPrefix(persona.communityDid)}): listening`)
+        // The identity's only session (one per DID at the mediator): asks as it may go out on it, from now on.
+        if (session.sendTo && running.get(persona.did) === entry) {
+          const sendTo = session.sendTo.bind(session)
+          entry.owned = { sendTo }
+          keepOwnSession(persona.did, entry.owned)
+        }
       } catch (error) {
         const prior = failures.get(persona.did)?.count ?? 0
         const wait = Math.min((options.retryMs ?? LISTENER_RETRY_MS) * 2 ** prior, LISTENER_RETRY_MAX_MS)
@@ -219,6 +237,7 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
             `[VTI] listener for ${didPrefix(persona.did)} did not open (${error instanceof Error ? error.message : String(error)}); retried in ${Math.round(wait / 1000)} s`
           )
         if (running.get(persona.did) === entry) running.delete(persona.did)
+        if (entry.owned) dropOwnSession(persona.did, entry.owned)
         if (entry.session) await withDeadline(entry.session.stop(), deadline.stopMs, 'stopping').catch(() => undefined)
         // Tried again at the end of its wait, whatever else happens or does not.
         clearTimeout(retryTimers.get(persona.did))

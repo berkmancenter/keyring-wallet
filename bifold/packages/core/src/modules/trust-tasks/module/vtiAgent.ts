@@ -29,6 +29,7 @@ import { purposeForDocumentType } from './proofPurpose'
 import { MEMBER_VMC, type MemberVmcReceipt } from './vtiMemberVmc'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
+import { ownSessionFor, type OwnSession } from './vtiOwnSessions'
 import {
   advertisedMediatorDid,
   advertisedTspMediatorDid,
@@ -226,6 +227,14 @@ export const VTI_BACKGROUND_HOLD_MAX_MS = 2 * 60_000
  * `VTI_FOREGROUND_CLAIM_MS`. Nothing was disconnected; the caller tries again later. The message names no DID: a hold
  * may be a hidden-vetting step's.
  */
+/** `askAs` was asked for an identity whose own session is not open: the caller asks the shared way instead. */
+export class VtiNoOwnSession extends Error {
+  constructor(readonly did: string) {
+    super("vtiAgent: this identity's own session is not open")
+    this.name = 'VtiNoOwnSession'
+  }
+}
+
 export class VtiSessionHeld extends Error {
   constructor(
     /**
@@ -525,6 +534,16 @@ type Listener = () => void
  * holds every id either can carry: the document's `threadId` and `id`, and
  * each DIDComm message id it was sent under.
  */
+/** What an ask goes out on: the shared session, or an identity's own (sessions phase B, `askAs`). */
+interface AskVia {
+  /** TSP may carry it only on a carrier that sends frames: the shared session, whose TSP session this controller holds. */
+  carrier: OwnSession & { sendTspFrame?: (bytes: Uint8Array) => Promise<void> }
+  /** Who asks: the document's issuer, and the identity its answer must come back to. */
+  did: string
+  /** Who signs the document: the identity asking, when its signing key is borrowed. */
+  signer?: VtiPersona
+}
+
 interface AskEntry {
   /** The request document's `threadId`. */
   id: string
@@ -1770,8 +1789,84 @@ class VtiAgentController {
     const session = this.session
     const did = this.state.did
     if (!session || !did) throw new Error('vtiAgent: not connected')
+    return this.askOn({ carrier: session, did, signer: this.persona }, communityDid, type, payload, timeoutMs, prepared)
+  }
 
+  /**
+   * Whether `did` has a session of its own open now: the listener every identity the shared session is not signed in as
+   * holds (vtiIdentityListeners). Sessions phase B asks over it, as that identity, with no switch of the shared session.
+   */
+  ownSessionOpen(did: string): boolean {
+    return did !== this.state.did && ownSessionFor(did) !== undefined
+  }
+
+  /**
+   * `ask`, as `persona`, over that identity's own session (`ownSessionOpen`) rather than the shared one: no sign-in, no
+   * hold, nothing taken from a step holding the shared session as another identity. Its answer comes back on the same
+   * session and is given to this ask by `answerFromListener`, which matches the identity. DIDComm only for now: the TSP
+   * session a listener opens frames with is its own, and nothing here packs with it yet.
+   */
+  async askAs(
+    persona: VtiPersona,
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs = this.answerTimeoutMs,
+    prepared?: Record<string, unknown>
+  ): Promise<DidCommV2PlaintextMessage | undefined> {
+    const own = persona.did === this.state.did ? undefined : ownSessionFor(persona.did)
+    if (!own) throw new VtiNoOwnSession(persona.did)
+    // Said per ask, as the shared session's connects are: a report shows which path each one took (sessions B A/B).
+    this.agent?.config.logger.info(
+      `vtiAgent: ${taskName(type)} asked as ${didPrefix(persona.did)} over its own session (no sign-in)`
+    )
+    return this.askOn(
+      { carrier: own, did: persona.did, signer: persona },
+      communityDid,
+      type,
+      payload,
+      timeoutMs,
+      prepared
+    )
+  }
+
+  /** `communityTask`, as `persona`, over its own session (`askAs`). */
+  async communityTaskAs(
+    persona: VtiPersona,
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    return this.answerOf(communityDid, type, await this.askAs(persona, communityDid, type, payload))
+  }
+
+  /** `sendCompleted`, as `persona`, over its own session (`askAs`). */
+  async sendCompletedAs(
+    persona: VtiPersona,
+    recipientDid: string,
+    document: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const type = typeof document.type === 'string' ? document.type : ''
+    const payload = (document.payload ?? {}) as Record<string, unknown>
+    if (!type) throw new Error('vtiAgent: a completed document names no type')
+    return this.answerOf(
+      recipientDid,
+      type,
+      await this.askAs(persona, recipientDid, type, payload, undefined, document)
+    )
+  }
+
+  private async askOn(
+    via: AskVia,
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs: number,
+    prepared?: Record<string, unknown>
+  ): Promise<DidCommV2PlaintextMessage | undefined> {
+    const { did } = via
     this.dropExpiredHolds()
+
     const write = !isVtiReadTask(type)
     const payloadKey = JSON.stringify(payload)
     const earlier = [...this.asks.values()].find(
@@ -1802,7 +1897,7 @@ class VtiAgentController {
     }
     this.asks.set(threadId, entry)
     try {
-      return await this.sendAsk(session, did, entry, payload, timeoutMs, prepared)
+      return await this.sendAsk(via, entry, payload, timeoutMs, prepared)
     } catch (error) {
       // Nothing to hold for a request that did not go out.
       this.asks.delete(threadId)
@@ -1812,18 +1907,18 @@ class VtiAgentController {
 
   /** `ask`'s sending half: one document, over TSP or DIDComm, and the wait for its answer. */
   private async sendAsk(
-    session: VtiMediatorSession,
-    did: string,
+    via: AskVia,
     entry: AskEntry,
     payload: Record<string, unknown>,
     timeoutMs: number,
     prepared?: Record<string, unknown>
   ): Promise<DidCommV2PlaintextMessage | undefined> {
     const { communityDid, type, write, id: threadId } = entry
+    const { carrier, did } = via
     // One document for either carriage, addressed and dated as the framework
     // requires (`issuer`, `recipient`, `issuedAt`), and signed as the persona
     // when the task's specification declares the proof REQUIRED.
-    const document = prepared ?? (await this.taskDocument(communityDid, type, payload, threadId))
+    const document = prepared ?? (await this.taskDocument(communityDid, type, payload, threadId, via))
     entry.correlation.add(String(document.id))
     // A reply threads on the request document's `threadId` (SPEC §4.9); a prepared document may carry its own.
     if (prepared && typeof prepared.threadId === 'string') entry.correlation.add(prepared.threadId)
@@ -1835,7 +1930,7 @@ class VtiAgentController {
     // it. The reply arrives through `deliver()` either way — `receiveTspFrame`
     // presents an opened TSP envelope as the same plaintext shape — so nothing
     // downstream of `ask` needs to know which envelope carried it.
-    if (this.agent && this.tsp) {
+    if (this.agent && this.tsp && carrier.sendTspFrame) {
       await this.preferDidcommAcrossMediators(communityDid)
       const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), {
         decided: this.carriageByPeer,
@@ -1846,7 +1941,7 @@ class VtiAgentController {
         // To an upstream service TSP means TSP 1.0 (cutover plan §6.2).
         await this.ensureGreeted(communityDid, 'v1')
         const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, document, 'v1')
-        await session.sendTspFrame(packed.bytes)
+        await carrier.sendTspFrame(packed.bytes)
         this.agent.config.logger.info(
           `${TSP_LOG_PREFIX} asked ${named(type, communityDid, 'the community')} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
         )
@@ -1884,7 +1979,7 @@ class VtiAgentController {
     // The VTC threads its DIDComm reply, and any problem-report, on this id.
     entry.correlation.add(messageId)
     entry.lastSentAt = Date.now()
-    await session.sendTo(communityDid, {
+    await carrier.sendTo(communityDid, {
       id: messageId,
       typ: 'application/didcomm-plain+json',
       type: TRUST_TASK_V2_ENVELOPE_TYPE,
@@ -1988,20 +2083,21 @@ class VtiAgentController {
     communityDid: string,
     type: string,
     payload: Record<string, unknown>,
-    threadId: string
+    threadId: string,
+    via: Pick<AskVia, 'did' | 'signer'> = { did: this.state.did ?? '', signer: this.persona }
   ): Promise<Record<string, unknown>> {
     const document: Record<string, unknown> = {
       id: `urn:uuid:${utils.uuid()}`,
       type,
       threadId,
-      issuer: this.state.did,
+      issuer: via.did,
       recipient: communityDid,
       issuedAt: new Date().toISOString(),
       payload,
     }
-    const persona = this.persona
+    const persona = via.signer
     const agent = this.agent
-    if (!agent || !persona || persona.did !== this.state.did || !persona.kmsKeyIds?.signing) {
+    if (!agent || !persona || persona.did !== via.did || !persona.kmsKeyIds?.signing) {
       agent?.config.logger.warn(`vtiAgent: ${type} needs a proof and this session cannot sign one; sending it unsigned`)
       return document
     }

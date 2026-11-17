@@ -18,7 +18,9 @@ import {
 } from '../../trust-tasks/module/sharedIdentity'
 import { leaveCommunity } from '../../trust-tasks/module/vtiJoin'
 import { GenericRecordsVettingStore } from '../../trust-tasks/module/vtiVetting'
-import { vtiAgent } from '../../trust-tasks/module/vtiAgent'
+import { isSessionsPerIdentityOn } from '../../trust-tasks/module/sessionsPerIdentitySwitch'
+import type { VtiPersona } from '../../trust-tasks/module/VtiIdentityStore'
+import { vtiAgent, VtiNoOwnSession } from '../../trust-tasks/module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vtiTsp'
 
 import { isRoomLiveDeliveryOn } from '../liveDeliverySwitch'
@@ -62,7 +64,12 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
   // one persona's listings run together, so a phone in two communities switches once per persona, not once per task
   // (two communities' polls flipped it every 4 s and stopped each other's asks, 10-31). An accept is the person's own
   // act, and holds the session as an ordinary caller does.
-  const asPersona = async <T>(communityDid: string, poll: boolean, fn: () => Promise<T>): Promise<T> => {
+  const asPersona = async <T>(
+    communityDid: string,
+    poll: boolean,
+    fn: () => Promise<T>,
+    own?: (persona: VtiPersona) => Promise<T>
+  ): Promise<T> => {
     // The identity kept for this community, or the one its membership names when it was kept only for another
     // community (sharedIdentity, IN-517). None: a named refusal the screens word, not a community that didn't answer.
     const persona = await personaForCommunity(identityStore, communityStore, communityDid)
@@ -77,6 +84,16 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     if (!canConnectAs(persona)) {
       agent.config?.logger?.warn?.("[Rooms] the identity's keys are not on the phone yet: nothing asked (keysNotHeld)")
       throw new VtiKeysNotHeld("rooms: this identity's keys are not on this phone yet")
+    }
+    // Sessions phase B: the identity's own session, where it is open, so no sign-in or hold of the shared session is
+    // needed and one community's ask no longer waits on another's (rooms-slow §8b). Only a session that turned out not
+    // to be open falls back, and that is said before anything is sent: a write never goes out twice.
+    if (own && isSessionsPerIdentityOn() && vtiAgent.ownSessionOpen(persona.did)) {
+      try {
+        return await own(persona)
+      } catch (error) {
+        if (!(error instanceof VtiNoOwnSession)) throw error
+      }
     }
     return vtiAgent.holding(agent, options.mediatorDid, persona, fn, {
       peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
@@ -123,10 +140,20 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     },
 
     communityTask: (communityDid, type, payload) =>
-      asPersona(communityDid, isRoomsListing(type), () => vtiAgent.communityTask(communityDid, type, payload)),
+      asPersona(
+        communityDid,
+        isRoomsListing(type),
+        () => vtiAgent.communityTask(communityDid, type, payload),
+        (persona) => vtiAgent.communityTaskAs(persona, communityDid, type, payload)
+      ),
 
     sendCompleted: (communityDid, recipientDid, document) =>
-      asPersona(communityDid, false, () => vtiAgent.sendCompleted(recipientDid, document)),
+      asPersona(
+        communityDid,
+        false,
+        () => vtiAgent.sendCompleted(recipientDid, document),
+        (persona) => vtiAgent.sendCompletedAs(persona, recipientDid, document)
+      ),
 
     newId: () => utils.uuid(),
 

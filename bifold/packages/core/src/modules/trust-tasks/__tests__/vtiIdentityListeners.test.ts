@@ -71,6 +71,7 @@ import {
   startIdentityListeners,
   type ListenerSession,
 } from '../module/vtiIdentityListeners'
+import { dropAllOwnSessions, ownSessionFor } from '../module/vtiOwnSessions'
 
 const persona = (name: string, over: Partial<VtiPersona> = {}): VtiPersona =>
   ({
@@ -190,6 +191,62 @@ describe('the listeners', () => {
     await flush()
     expect(live(b.did)).toBe(true)
     expect(live(a.did)).toBe(false)
+  })
+
+  // Sessions phase B: a listener is its identity's only session at the mediator, so asks as that identity go out on it.
+  describe('lending its session to asks as its identity', () => {
+    const sending = (fail = false) =>
+      jest.fn(async (p: VtiPersona): Promise<ListenerSession> => {
+        const base = await open(p)
+        return {
+          ...base,
+          start: fail
+            ? async () => {
+                throw new Error('challenge answered 503')
+              }
+            : base.start,
+          sendTo: async () => undefined,
+        }
+      })
+    afterEach(() => dropAllOwnSessions())
+
+    it('lends it once listening, and takes it back before the shared session signs in as that identity', async () => {
+      const a = persona('a')
+      const b = persona('b')
+      sharedMoves({ did: a.did, connected: true })
+      start([a, b], { open: sending() })
+      await flush()
+      expect([ownSessionFor(a.did), ownSessionFor(b.did) !== undefined]).toEqual([undefined, true])
+      for (const guard of mockGuards) await guard(b.did)
+      expect(ownSessionFor(b.did)).toBeUndefined()
+    })
+
+    it('takes every one back when the listeners stop', async () => {
+      const b = persona('b')
+      sharedMoves({ did: persona('a').did, connected: true })
+      const stop = start([b], { open: sending() })
+      await flush()
+      expect(ownSessionFor(b.did)).toBeDefined()
+      await stop()
+      expect(ownSessionFor(b.did)).toBeUndefined()
+    })
+
+    it('a session that only listens lends nothing (control)', async () => {
+      const b = persona('b')
+      sharedMoves({ did: persona('a').did, connected: true })
+      start([b])
+      await flush()
+      expect(live(b.did)).toBe(true)
+      expect(ownSessionFor(b.did)).toBeUndefined()
+    })
+
+    it('one that did not start lends nothing (control)', async () => {
+      const b = persona('b')
+      sharedMoves({ did: persona('a').did, connected: true })
+      start([b], { open: sending(true) })
+      await flush()
+      expect(ownSessionFor(b.did)).toBeUndefined()
+    })
   })
 
   it('close every listener when the app goes to the background, and open them again when it comes back', async () => {
