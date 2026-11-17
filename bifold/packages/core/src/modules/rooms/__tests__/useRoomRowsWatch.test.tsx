@@ -29,6 +29,7 @@ import {
   useRoomRowsPoll,
   useRoomsUnreadCount,
 } from '../useRoomRows'
+import { ROOMS_WATCH_WHENEVER_OPEN } from '../watchWheneverOpenSwitch'
 
 // The agent's session, without the agent: only what the poll is told.
 let mockSession: { sessionOpenedAt?: number } = {}
@@ -161,12 +162,83 @@ describe("Messages' rooms watched at their hosts", () => {
     )
   })
 
-  test('out of view: nothing is armed (control)', async () => {
-    const s = serviceWith([room('a')], { a: [note('a1', 1)] })
-    const w = watching(s)
-    mount(s)
-    await flush()
-    expect(w.watchRoom).not.toHaveBeenCalled()
+  // 11-17: seven of ten reports had no room armed. A read that ended with the person on another tab armed nothing, and
+  // the unread count waited for Messages to be opened.
+  describe('with Messages out of view', () => {
+    const SHIPPED = { ...ROOMS_WATCH_WHENEVER_OPEN }
+    beforeEach(() => Object.assign(ROOMS_WATCH_WHENEVER_OPEN, { on: true, remoteOff: false }))
+    afterEach(() => Object.assign(ROOMS_WATCH_WHENEVER_OPEN, SHIPPED))
+    const lab = () => {
+      const notes = { a: [note('a1', 1)], b: [note('b1', 2)] }
+      const s = serviceWith([room('a'), room('b')], notes)
+      return { s, notes, w: watching(s) }
+    }
+
+    test('the rooms read are armed all the same, from the newest version read', async () => {
+      const { s, w } = lab()
+      mount(s)
+      await flush()
+      expect(armed(w.watchRoom)).toEqual(
+        expect.arrayContaining([
+          ['a', 1],
+          ['b', 2],
+        ])
+      )
+    })
+
+    test("a signal's read moves the number on the Messages tab", async () => {
+      const { s, notes, w } = lab()
+      const { list } = mount(s)
+      await flush()
+      expect(list.result.current.unread).toBe(0)
+      notes.a.push(note('a2', 5))
+      await w.signal('a')
+      await flush()
+      expect(list.result.current.unread).toBe(1)
+    })
+
+    test("a signal's read moves the count and the words on the room's row, and only that room's", async () => {
+      const { s, notes, w } = lab()
+      const { list } = mount(s)
+      await flush()
+      notes.a.push(note('a2', 5))
+      await w.signal('a')
+      await flush()
+      const row = (roomId: string) => list.result.current.rows.rows.find((r) => r.roomId === roomId)
+      expect([row('a')?.unread, row('a')?.lastPost?.text]).toEqual([1, 'a2'])
+      expect(row('b')?.unread).toBe(0)
+      // Armed again from what was read, so the next post signals too.
+      expect(armed(w.watchRoom)).toContainEqual(['a', 5])
+    })
+
+    test.each([
+      ['off', { on: false, remoteOff: false }],
+      ['turned off remotely', { on: true, remoteOff: true }],
+      ['not plainly on', { on: 'yes' as unknown as boolean, remoteOff: false }],
+    ])('with the switch %s, nothing is armed out of view, as before (control)', async (_name, values) => {
+      Object.assign(ROOMS_WATCH_WHENEVER_OPEN, values)
+      const { s, w } = lab()
+      mount(s)
+      await flush()
+      expect(w.watchRoom).not.toHaveBeenCalled()
+    })
+
+    test('with the switch off, in view still arms (control)', async () => {
+      Object.assign(ROOMS_WATCH_WHENEVER_OPEN, { on: false, remoteOff: false })
+      const { s, w } = lab()
+      mount(s)
+      await inView()
+      await flush()
+      expect(w.watchRoom).toHaveBeenCalled()
+    })
+
+    test('with the app in the background, nothing is armed (control)', async () => {
+      const { s, w } = lab()
+      Object.defineProperty(AppState, 'currentState', { value: 'background', writable: true, configurable: true })
+      mount(s)
+      await flush()
+      expect(w.watchRoom).not.toHaveBeenCalled()
+    })
   })
 
   test(`more rooms than ${ROWS_WATCHED_MAX}: only the most recently active are armed`, async () => {

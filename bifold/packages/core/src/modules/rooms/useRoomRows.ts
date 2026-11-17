@@ -51,6 +51,7 @@ import { askOffersAgain } from './useRoomOffersCount'
 import { failureCategory, logRef } from './roomsLogWords'
 import { isNote, newestFirst, placeOf, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
+import { isRoomWatchWheneverOpenOn } from './watchWheneverOpenSwitch'
 
 /** While Messages is in view: about the offers poll's idle pace, never faster. */
 export const ROWS_POLL_MS = 120_000
@@ -433,8 +434,8 @@ function readSignalledWhileReading(service: RoomsService): void {
 }
 
 /**
- * While Messages is in view, the {@link ROWS_WATCHED_MAX} most recently active rooms read are armed at their hosts, from
- * the newest version read, so a post in one reaches its row on the agent's signal rather than at the next two-minute
+ * While the app is open (or only while Messages is in view, with `watchWheneverOpenSwitch` off), the
+ * {@link ROWS_WATCHED_MAX} most recently active rooms read are armed at their hosts, from the newest version read, so a post in one reaches its row on the agent's signal rather than at the next two-minute
  * read. Arming one already armed from that version sends nothing (roomWatches). Where the agent, the host or the release
  * switch can't watch, nothing is armed and the rows read as before.
  *
@@ -443,7 +444,10 @@ function readSignalledWhileReading(service: RoomsService): void {
  * and that room is polled (roomWatches), so the cost of a residue is polling, never a missed post.
  */
 function watchActive(service: RoomsService): void {
-  if (!service.watchRoom || feed.inView === 0 || AppState.currentState !== 'active') return
+  if (!service.watchRoom || AppState.currentState !== 'active') return
+  // Out of view too, where the release says so: else a read that ends on another tab arms nothing, and the unread
+  // count waits for Messages to be opened (watchWheneverOpenSwitch).
+  if (feed.inView === 0 && !isRoomWatchWheneverOpenOn()) return
   const byRoom = tracks.get(service)
   if (!byRoom) return
   const active = [...(feed.listed?.keys() ?? [])]
