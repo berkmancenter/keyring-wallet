@@ -240,6 +240,52 @@ describe('the listeners', () => {
       expect(ownSessionFor(b.did)).toBeUndefined()
     })
 
+    // #1095: a shared sign-in that reaches its limit is let go (the turn released, its attempt stopped). The identity it
+    // went for must have no own session lent meanwhile, and the one lent before must never come back: an ask as it
+    // falls back to the shared way (VtiNoOwnSession) rather than going out on a socket the listener gave up.
+    it('a shared sign-in for it that is let go leaves no own session, and only a fresh one is lent after', async () => {
+      const a = persona('a')
+      const b = persona('b')
+      sharedMoves({ did: a.did, connected: true })
+      start([a, b], { open: sending() })
+      await flush()
+      const before = ownSessionFor(b.did)
+      expect(before).toBeDefined()
+      // The shared session goes for b; at its limit the attempt is let go: neither signed in nor signing in.
+      for (const guard of mockGuards) await guard(b.did)
+      sharedMoves({ did: undefined, signingInAs: undefined, connected: false })
+      await flush()
+      expect(ownSessionFor(b.did)).toBeUndefined()
+      // It goes for a instead: b's listener opens again and lends a new session, never the one from before.
+      for (const guard of mockGuards) await guard(a.did)
+      sharedMoves({ did: a.did, connected: true })
+      await flush()
+      expect(ownSessionFor(b.did)).toBeDefined()
+      expect(ownSessionFor(b.did)).not.toBe(before)
+    })
+
+    it('a trip to the background takes the session back, and the return lends a fresh one', async () => {
+      const handlers: Array<(s: string) => void> = []
+      const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
+        handlers.push(h)
+        return { remove: () => undefined }
+      }) as never)
+      const b = persona('b')
+      sharedMoves({ did: persona('a').did, connected: true })
+      start([b], { open: sending() })
+      await flush()
+      const before = ownSessionFor(b.did)
+      expect(before).toBeDefined()
+      handlers.forEach((h) => h('background'))
+      await flush()
+      expect(ownSessionFor(b.did)).toBeUndefined()
+      handlers.forEach((h) => h('active'))
+      await flush()
+      expect(ownSessionFor(b.did)).toBeDefined()
+      expect(ownSessionFor(b.did)).not.toBe(before)
+      spy.mockRestore()
+    })
+
     it('one that did not start lends nothing (control)', async () => {
       const b = persona('b')
       sharedMoves({ did: persona('a').did, connected: true })
