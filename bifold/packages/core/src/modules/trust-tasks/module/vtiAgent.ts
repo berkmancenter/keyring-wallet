@@ -29,7 +29,7 @@ import { purposeForDocumentType } from './proofPurpose'
 import { MEMBER_VMC, type MemberVmcReceipt } from './vtiMemberVmc'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
-import { ownSessionFor, type OwnSession } from './vtiOwnSessions'
+import { ownSessionFor, ownSessionOnceOpen as heldOnceOpen, type OwnSession } from './vtiOwnSessions'
 import {
   advertisedMediatorDid,
   advertisedTspMediatorDid,
@@ -294,6 +294,12 @@ export interface VtiSignInRest {
  * 11-17 (ZAF5): one identity whose agent was gone held the turn for 20 minutes and every sign-in waited behind it.
  */
 export const VTI_SIGNIN_TURN_MS = 60_000
+/**
+ * How long a listing waits for its identity's own session while that session is opening (`ownSessionOnceOpen`). A
+ * launch's first listener listened 11–13 s after it started in 11-17's reports (the borrowed keys are fetched first),
+ * so less than that would fall back mid-open and bring the two-socket fight back.
+ */
+export const VTI_OWN_SESSION_OPENING_WAIT_MS = 15_000
 
 /**
  * A sign-in that held the turn longer than `VTI_SIGNIN_TURN_MS`: it is let go, and whatever it opens later is closed.
@@ -1970,6 +1976,26 @@ class VtiAgentController {
    */
   ownSessionOpen(did: string): boolean {
     return did !== this.state.did && ownSessionFor(did) !== undefined
+  }
+
+  /**
+   * `ownSessionOpen`, after waiting up to `maxMs` for a listener of `did`'s that is opening now. For listings only
+   * (rooms, polls): nothing is opening → no wait, and the caller asks the shared way exactly as before. The wait and
+   * how it ended are said once, so a report shows which path a launch's first listings took.
+   */
+  async ownSessionOnceOpen(did: string, maxMs = VTI_OWN_SESSION_OPENING_WAIT_MS): Promise<boolean> {
+    if (did === this.state.did) return false
+    if (ownSessionFor(did)) return true
+    const t0 = Date.now()
+    // Asked again after the wait: the shared session may have signed in as this identity meanwhile, and its own session
+    // used then would be a second socket for the DID.
+    const open = (await heldOnceOpen(did, maxMs)) !== undefined && did !== this.state.did
+    const waited = Date.now() - t0
+    if (open || waited >= 50)
+      releaseWarn(
+        `vtiAgent: a listing as ${didPrefix(did)} waited ${waited} ms for its own session: ${open ? 'open' : 'not open, asked the shared way'}`
+      )
+    return open
   }
 
   /**

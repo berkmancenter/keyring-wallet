@@ -75,7 +75,13 @@ export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: s
     // longer signs the shared session in as this identity and waits on another community's rooms listing (Y74V-MEPV,
     // 11-17: +2.2 s before elections/show, lists ~5.9 s). Only a session found not open falls back, and that is decided
     // before anything is sent: a ticket request never goes out twice.
-    if (own && isSessionsPerIdentityOn() && vtiAgent.ownSessionOpen(persona.did)) {
+    // A listing also waits, bounded, for that session while it is opening (as rooms; QG4P-MQCT, 11-17). Never a ticket
+    // request: that goes at once, as before.
+    if (
+      own &&
+      isSessionsPerIdentityOn() &&
+      (vtiAgent.ownSessionOpen(persona.did) || (listing && (await vtiAgent.ownSessionOnceOpen(persona.did))))
+    ) {
       try {
         return await own(persona)
       } catch (error) {

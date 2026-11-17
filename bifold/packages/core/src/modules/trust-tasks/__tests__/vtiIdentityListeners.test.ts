@@ -71,7 +71,7 @@ import {
   startIdentityListeners,
   type ListenerSession,
 } from '../module/vtiIdentityListeners'
-import { dropAllOwnSessions, ownSessionFor } from '../module/vtiOwnSessions'
+import { dropAllOwnSessions, ownSessionFor, ownSessionOnceOpen } from '../module/vtiOwnSessions'
 
 const persona = (name: string, over: Partial<VtiPersona> = {}): VtiPersona =>
   ({
@@ -219,6 +219,30 @@ describe('the listeners', () => {
       expect([ownSessionFor(a.did), ownSessionFor(b.did) !== undefined]).toEqual([undefined, true])
       for (const guard of mockGuards) await guard(b.did)
       expect(ownSessionFor(b.did)).toBeUndefined()
+    })
+
+    it('says it is opening, so a listing as that identity waits for it and gets the session it then lends', async () => {
+      const b = persona('b')
+      sharedMoves({ did: persona('a').did, connected: true })
+      let letOpen!: () => void
+      const gate = new Promise<void>((resolve) => (letOpen = resolve))
+      const lend = sending()
+      start([b], { open: jest.fn(async (p: VtiPersona) => (await gate, lend(p))) })
+      await flush()
+      expect(ownSessionFor(b.did)).toBeUndefined()
+      const waited = ownSessionOnceOpen(b.did, 60_000)
+      letOpen()
+      const given = await waited
+      expect(given).toBeDefined()
+      expect(given).toBe(ownSessionFor(b.did))
+    })
+
+    it('an identity the shared session holds has no open under way: nothing to wait for (control)', async () => {
+      const a = persona('a')
+      sharedMoves({ did: a.did, connected: true })
+      start([a, persona('b')], { open: sending() })
+      await flush()
+      await expect(ownSessionOnceOpen(a.did, 60_000)).resolves.toBeUndefined()
     })
 
     it('takes every one back when the listeners stop', async () => {

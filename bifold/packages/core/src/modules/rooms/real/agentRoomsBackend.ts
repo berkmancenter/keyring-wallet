@@ -88,7 +88,14 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     // Sessions phase B: the identity's own session, where it is open, so no sign-in or hold of the shared session is
     // needed and one community's ask no longer waits on another's (rooms-slow §8b). Only a session that turned out not
     // to be open falls back, and that is said before anything is sent: a write never goes out twice.
-    if (own && isSessionsPerIdentityOn() && vtiAgent.ownSessionOpen(persona.did)) {
+    // A listing also waits, bounded, for that session while it is opening (the seconds after launch): signing the
+    // shared session in as the same identity then put two sockets on one DID and lost the answer (QG4P-MQCT, 11-17).
+    // Never an accept or a write: those go at once, as before.
+    if (
+      own &&
+      isSessionsPerIdentityOn() &&
+      (vtiAgent.ownSessionOpen(persona.did) || (poll && (await vtiAgent.ownSessionOnceOpen(persona.did))))
+    ) {
       try {
         return await own(persona)
       } catch (error) {

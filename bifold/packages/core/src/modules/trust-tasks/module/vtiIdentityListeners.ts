@@ -49,7 +49,7 @@ import {
   VtiMediatorSession,
   vtiClientIdentityFromPersona,
 } from './VtiMediatorTransport'
-import { dropOwnSession, keepOwnSession, type OwnSession } from './vtiOwnSessions'
+import { dropOwnSession, keepOwnSession, ownSessionOpening, type OwnSession } from './vtiOwnSessions'
 import { keepForPersona, ownedByInbox } from './vtiPersonaInbox'
 import { frameForm, tspSessionForPersona, unpackTrustTaskFromPeer } from './vtiTsp'
 
@@ -256,6 +256,8 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
         entry.starting = undefined
       }
     })()
+    // A listing as this identity waits for this, rather than signing the shared session in as it (ownSessionOnceOpen).
+    ownSessionOpening(persona.did, entry.starting)
   }
 
   const reconcileOnce = async () => {

@@ -19,6 +19,8 @@ export interface OwnSession {
 }
 
 const open = new Map<string, OwnSession>()
+/** The identities whose listener is opening now, and the attempt: it settles when the listener listens, fails or stops. */
+const opening = new Map<string, Promise<unknown>>()
 
 /** The session `did` holds now, while its listener is listening. */
 export const ownSessionFor = (did: string): OwnSession | undefined => open.get(did)
@@ -33,7 +35,38 @@ export function dropOwnSession(did: string, session?: OwnSession): void {
   if (!session || open.get(did) === session) open.delete(did)
 }
 
+/** A listener for `did` is opening: `attempt` settles once it listens (and is kept), fails, or is stopped. */
+export function ownSessionOpening(did: string, attempt: Promise<unknown>): void {
+  opening.set(did, attempt)
+  const done = () => {
+    if (opening.get(did) === attempt) opening.delete(did)
+  }
+  void attempt.then(done, done)
+}
+
+/**
+ * The session `did` holds, waiting up to `maxMs` for a listener that is opening now. Nothing opening: no wait, and
+ * none. A listing asked in the seconds after launch otherwise signed the shared session in as an identity whose own
+ * listener was a moment from listening: two sockets for one DID, the mediator closed one (`duplicate-channel`), and the
+ * answer was lost to the ask's clock (QG4P-MQCT, 11-17: 43 s for one community, every room row behind it).
+ */
+export async function ownSessionOnceOpen(did: string, maxMs: number): Promise<OwnSession | undefined> {
+  const held = open.get(did)
+  if (held) return held
+  const attempt = opening.get(did)
+  if (!attempt) return undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const settled = attempt.then(
+    () => undefined,
+    () => undefined
+  )
+  await Promise.race([settled, new Promise<void>((resolve) => (timer = setTimeout(resolve, maxMs)))])
+  clearTimeout(timer)
+  return open.get(did)
+}
+
 /** For tests. */
 export function dropAllOwnSessions(): void {
   open.clear()
+  opening.clear()
 }

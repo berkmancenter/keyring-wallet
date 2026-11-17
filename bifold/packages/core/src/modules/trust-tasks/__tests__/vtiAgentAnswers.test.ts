@@ -151,7 +151,13 @@ import {
 import { fakeAgent } from '../../../../__tests__/helpers/cardVault'
 import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 import { OFFERS_LIST_TYPES } from '../../rooms/real/wire'
-import { dropAllOwnSessions, dropOwnSession, keepOwnSession, ownSessionFor } from '../module/vtiOwnSessions'
+import {
+  dropAllOwnSessions,
+  dropOwnSession,
+  keepOwnSession,
+  ownSessionFor,
+  ownSessionOpening,
+} from '../module/vtiOwnSessions'
 
 const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() }
 const agent = { config: { logger } } as never
@@ -1127,6 +1133,39 @@ describe('an ask as an identity, over its own session', () => {
     await expect(
       vtiAgent.askAs(persona('did:webvh:p:shared-self'), community, STATUS, {}, 1000)
     ).rejects.toBeInstanceOf(VtiNoOwnSession)
+  })
+
+  // A listing waits for a listener that is opening (#1114, QG4P-MQCT). What the wait must never end in: the identity's
+  // own session used while the shared session is signed in as that identity, two sockets on one DID again.
+  describe('a listing’s wait for an own session that is opening', () => {
+    const opening = (did: string) => {
+      let listens!: () => void
+      ownSessionOpening(did, new Promise<void>((resolve) => (listens = resolve)))
+      return () => (keepOwnSession(did, own().session), listens())
+    }
+
+    it('ends open once the listener listens', async () => {
+      await connectTo('did:webvh:c:wait-open', 'didcomm', 'did:webvh:p:wait-shared')
+      const listens = opening('did:webvh:p:wait-own')
+      const waited = vtiAgent.ownSessionOnceOpen('did:webvh:p:wait-own', 5000)
+      listens()
+      await expect(waited).resolves.toBe(true)
+    })
+
+    it('ends not open when the shared session signed in as that identity during the wait, though its listener listened', async () => {
+      await connectTo('did:webvh:c:wait-taken', 'didcomm', 'did:webvh:p:wait-other')
+      const listens = opening('did:webvh:p:wait-taken')
+      const waited = vtiAgent.ownSessionOnceOpen('did:webvh:p:wait-taken', 5000)
+      await connectTo('did:webvh:c:wait-taken', 'didcomm', 'did:webvh:p:wait-taken')
+      listens()
+      await expect(waited).resolves.toBe(false)
+    })
+
+    it('does not wait at all for the identity the shared session is signed in as (control)', async () => {
+      await connectTo('did:webvh:c:wait-self', 'didcomm', 'did:webvh:p:wait-self')
+      opening('did:webvh:p:wait-self')
+      await expect(vtiAgent.ownSessionOnceOpen('did:webvh:p:wait-self', 60_000)).resolves.toBe(false)
+    })
   })
 
   // ee's read of #1022 (11-12): the listener can let go of the identity while its ask is out. A poll signs the shared
