@@ -17,8 +17,9 @@
  * Settled cards fold to one line (Alberto, 278.19). Mine (Alberto, 11-16, canvas row F: "slimmer and more simpler"):
  * confirmed, not them, unanswered or cancelled is always a compact card of one or two lines (an icon, who, how and
  * when), also when the answer arrives while the chat is open. A tap opens the record: the note, a one-line caveat for a
- * yes, What to do now for "not them", Ask again for no answer, and Hide. "Not them" stays red and says not to act on it
- * on the compact card itself. The contact's request answered or expired folds to one line once the chat is opened
+ * yes, What to do now for "not them", Ask again for no answer. "Not them" stays red and says not to act on it on the
+ * compact card itself. Row H (Alberto, 11-17): the compact card ends in a round down-chevron, so it reads as one that
+ * opens; opened, an up-chevron in its corner folds it again. The contact's request answered or expired folds to one line once the chat is opened
  * again; one answered here stays open while its row stays mounted, so the answer just given is seen in full.
  *
  * Shown only while the "Confirm it's you" switch is on and neither its own nor the SEDI/KERI remote off is set
@@ -72,6 +73,8 @@ export const ConfirmChatCardIds = {
   mineLine: 'ConfirmChatMineLine',
   theirLine: 'ConfirmChatTheirLine',
   hide: 'ConfirmChatHide',
+  /** Row H: the round down-chevron on a folded card of mine, which says it opens (Alberto, 11-17). */
+  foldOpen: 'ConfirmChatFoldOpen',
   received: 'ConfirmChatReceived',
   /** One per side: both cards can be in one chat at once (I asked them, they asked me). */
   expiresMine: 'ConfirmChatExpiresMine',
@@ -266,6 +269,22 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
     compactRed: { backgroundColor: ColorPalette.semantic.error, borderColor: ColorPalette.semantic.error },
     compactText: { flex: 1, gap: 1 },
     askAgainLink: { color: ColorPalette.brand.primary, fontWeight: 'bold', textDecorationLine: 'underline' },
+    // Row H: a round chevron says a card of mine opens (down) or folds (up), in the same spot on both.
+    fold: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderColor: ColorPalette.grayscale.lightGrey,
+      backgroundColor: ColorPalette.grayscale.white,
+    },
+    foldGood: { borderColor: ColorPalette.semantic.success },
+    foldRed: { borderColor: ColorPalette.grayscale.white, backgroundColor: 'rgba(255,255,255,0.22)' },
+    // An opened card of mine: its fold button sits top right, so the text keeps clear of it.
+    foldCorner: { position: 'absolute', top: 8, right: 8 },
+    openMine: { paddingRight: 56 },
   })
 
   const n = { name, interpolation: { escapeValue: false } }
@@ -307,16 +326,29 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
       <ThemedText style={[styles.hideText, style]}>{t('ConfirmItsYou.HideRecord')}</ThemedText>
     </Pressable>
   )
-  // On a settled card of mine, tapped open: back to its compact card.
-  const hideMine = (style?: object) => (
+  /** The round chevron of row H: down on a folded card (it opens), up on an opened one (it folds). */
+  const foldLook = (tone: 'red' | 'good' | 'plain') => [
+    styles.fold,
+    tone === 'red' ? styles.foldRed : tone === 'good' ? styles.foldGood : undefined,
+  ]
+  const foldTint = (tone: 'red' | 'good' | 'plain') =>
+    tone === 'red'
+      ? ColorPalette.grayscale.white
+      : tone === 'good'
+        ? ColorPalette.semantic.success
+        : ColorPalette.brand.primary
+  // On a settled card of mine, tapped open: back to its compact card, from the up-chevron in its corner (row H).
+  const hideMine = (tone: 'red' | 'good' | 'plain') => (
     <Pressable
-      style={styles.hide}
+      style={[...foldLook(tone), styles.foldCorner]}
       onPress={() => setExpanded(false)}
       accessibilityRole="button"
+      accessibilityLabel={t('ConfirmItsYou.HideRecord')}
+      accessibilityState={{ expanded: true }}
       hitSlop={8}
       testID={testIdWithKey(ConfirmChatCardIds.hide)}
     >
-      <ThemedText style={[styles.hideText, style]}>{t('ConfirmItsYou.HideRecord')}</ThemedText>
+      <Icon name="chevron-up" size={24} color={foldTint(tone)} />
     </Pressable>
   )
   const kindLine = (who: string, style?: object) => (
@@ -372,6 +404,7 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
             accessibilityRole="button"
             accessibilityLabel={`${title}. ${sub}`}
             accessibilityHint={t('ConfirmItsYou.ShowRecord')}
+            accessibilityState={{ expanded: false }}
             testID={testIdWithKey(newest ? ConfirmChatCardIds.mineLine : ConfirmChatCardIds.earlier)}
           >
             <Icon name={icon} size={24} color={tint} />
@@ -396,16 +429,26 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
                 ) : null}
               </ThemedText>
             </View>
-            <Icon name="chevron-right" size={22} color={tint} />
+            {/* Row H: a round down-chevron, so the card reads as one that opens (a faded › read as "another screen"). */}
+            <View
+              style={foldLook(red ? 'red' : status === 'itsMe' ? 'good' : 'plain')}
+              testID={testIdWithKey(ConfirmChatCardIds.foldOpen)}
+            >
+              <Icon
+                name="chevron-down"
+                size={24}
+                color={foldTint(red ? 'red' : status === 'itsMe' ? 'good' : 'plain')}
+              />
+            </View>
           </Pressable>
           {said_}
         </View>
       )
     }
     const mine = (style: object | undefined, body: React.ReactNode) => (
-      <View style={[styles.card, style]} testID={testIdWithKey(ConfirmChatCardIds.mine)}>
+      <View style={[styles.card, style, settled && styles.openMine]} testID={testIdWithKey(ConfirmChatCardIds.mine)}>
         {body}
-        {settled ? hideMine() : null}
+        {settled ? hideMine(status === 'itsMe' ? 'good' : 'plain') : null}
       </View>
     )
     switch (status) {
@@ -451,7 +494,7 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
         // Opened (F5): the warning, how and when, the note, and What to do now.
         return (
           <View
-            style={[styles.card, styles.red]}
+            style={[styles.card, styles.red, styles.openMine]}
             accessibilityRole="alert"
             testID={testIdWithKey(ConfirmChatCardIds.mine)}
           >
@@ -471,7 +514,7 @@ const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged
               <ThemedText style={styles.onRed}>• {t('ConfirmItsYou.StepCallBack', n)}</ThemedText>
               <ThemedText style={styles.onRed}>• {t('ConfirmItsYou.StepNoCodes')}</ThemedText>
             </View>
-            {hideMine(styles.onRed)}
+            {hideMine('red')}
           </View>
         )
       case 'expired':

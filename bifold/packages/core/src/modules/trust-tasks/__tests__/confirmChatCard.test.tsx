@@ -644,3 +644,43 @@ describe('row F (Alberto, 11-16): settled cards of mine are one or two lines, th
     expect(tree.getByText('ConfirmItsYou.CompactSent')).toBeTruthy()
   })
 })
+
+describe('row H (Alberto, 11-17): a folded card of mine looks like it opens, and folds from the same spot', () => {
+  const settledYes = () => ask({ state: 'itsMe', respondedAt: new Date().toISOString(), confirmedWith: 'faceId' })
+  const iconOf = (tree: ReturnType<typeof render>, testId: string) =>
+    tree.getByTestId(id(testId)).findAll((n) => typeof n.props.name === 'string' && /chevron/.test(n.props.name))[0]
+      ?.props.name
+
+  test.each([
+    ['a yes', () => settledYes()],
+    ['"not them"', () => ask({ state: 'notMe', respondedAt: new Date().toISOString() })],
+    ['no answer', () => ask({ expiresAt: new Date(Date.now() - MIN).toISOString() })],
+  ])(
+    '%s, folded: a round down-chevron, and the card says it is collapsed; opened: an up-chevron says expanded and folds it back',
+    async (_label, make) => {
+      const tree = await show({ side: 'mine', ask: make(), newest: true })
+      expect(iconOf(tree, ConfirmChatCardIds.foldOpen)).toBe('chevron-down')
+      expect(tree.getByTestId(id(ConfirmChatCardIds.mineLine)).props.accessibilityState).toMatchObject({
+        expanded: false,
+      })
+      // The faded › that read as "another screen" is gone.
+      expect(iconOf(tree, ConfirmChatCardIds.mineLine)).toBe('chevron-down')
+      await press(tree, ConfirmChatCardIds.mineLine)
+      const fold = tree.getByTestId(id(ConfirmChatCardIds.hide))
+      expect(fold.props.accessibilityState).toMatchObject({ expanded: true })
+      expect(fold.props.accessibilityLabel).toBe('ConfirmItsYou.HideRecord')
+      expect(iconOf(tree, ConfirmChatCardIds.hide)).toBe('chevron-up')
+      expect(tree.queryByTestId(id(ConfirmChatCardIds.foldOpen))).toBeNull()
+      await press(tree, ConfirmChatCardIds.hide)
+      expect(tree.getByTestId(id(ConfirmChatCardIds.foldOpen))).toBeTruthy()
+      expect(tree.queryByTestId(id(ConfirmChatCardIds.mine))).toBeNull()
+    }
+  )
+
+  test('control: a request still waiting is the whole card, with neither chevron (nothing to fold yet)', async () => {
+    const tree = await show({ side: 'mine', ask: ask(), newest: true })
+    expect(tree.getByTestId(id(ConfirmChatCardIds.mine))).toBeTruthy()
+    expect(tree.queryByTestId(id(ConfirmChatCardIds.foldOpen))).toBeNull()
+    expect(tree.queryByTestId(id(ConfirmChatCardIds.hide))).toBeNull()
+  })
+})
