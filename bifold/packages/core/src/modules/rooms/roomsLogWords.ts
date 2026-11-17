@@ -211,9 +211,48 @@ function loggedReason(e: unknown): string | undefined {
 const refusedAs = (code: string, reason: string | undefined) =>
   reason ? `refused (${code}, ${reason})` : `refused (${code})`
 
-/** A `VtiRefusal` by its closed code and reason. Its message is the community's and is never read here. */
+/**
+ * Why an agent could not reach a room's host, where its `hostUnreachable` refusal says: one word from a closed list,
+ * read off the agent's own sentence and never the sentence itself (it names the host, and can name more). The agent
+ * turns every failed send into `hostUnreachable` (vta-service `room_group.rs` `host_failure`), and what went wrong is
+ * only in its words (`operations/outbound.rs`): the host's DID not resolving, its key not retrieved, its reply's proof
+ * not verifying, or no answer at all. A report held only the code (ATZC-JPDE, 11-17: a did:webs community's room, one
+ * agent refusing what another read), so which of them it was could not be told. Words not listed here add nothing: the
+ * line reads `refused (hostUnreachable)` as before.
+ *
+ * The first that matches is the word, so the order is behaviour: a narrower sentence stands above a wider one
+ * (`hostMethodNotResolved` above `hostKeyNotRetrieved`, whose words it also holds).
+ */
+const HOST_FAILURE_KINDS: [RegExp, string][] = [
+  [/does not resolve, so there is nothing to send to/, 'hostDidNotResolved'],
+  [/unsupportedDidMethod|a method this agent does not resolve/, 'hostMethodNotResolved'],
+  [/could not retrieve .{0,400}verification key/, 'hostKeyNotRetrieved'],
+  [/unsigned or its proof does not verify/, 'replyProofNotVerified'],
+  [/will not dial/, 'endpointNotDialled'],
+  [/did not answer/, 'noAnswer'],
+  [/cannot read as a Trust-Task|not a Trust-Task document|unreadable body|is not JSON/, 'replyUnreadable'],
+  // vti-common error.rs `NoMatchingProtocol`: "no transport in common with `<peer>`: it advertises […] and this agent
+  // can initiate […]". The literal phrase only.
+  [/no transport in common with/, 'noMatchingProtocol'],
+]
+
+function hostFailureKind(said: unknown): string | undefined {
+  if (typeof said !== 'string' || !said) return undefined
+  return HOST_FAILURE_KINDS.find(([words]) => words.test(said))?.[1]
+}
+
+/** `refused (hostUnreachable: <kind>)` where the agent's words say which; any other code as before. */
+const refusedWith = (code: string, reason: string | undefined, said: unknown) => {
+  const kind = code === 'hostUnreachable' && !reason ? hostFailureKind(said) : undefined
+  return kind ? `refused (${code}: ${kind})` : refusedAs(code, reason)
+}
+
+/**
+ * A `VtiRefusal` by its closed code and reason. Its message is the community's or the agent's and is never repeated
+ * here; for `hostUnreachable` alone it is matched against a closed list (`hostFailureKind`).
+ */
 function refusalKind(e: Error): string {
-  return refusedAs(loggedCode(refusalCode(e)), loggedReason(e))
+  return refusedWith(loggedCode(refusalCode(e)), loggedReason(e), e.message)
 }
 
 /**
@@ -224,7 +263,12 @@ function refusalKind(e: Error): string {
 export function failureCategory(e: unknown): string {
   if (isSessionHeld(e)) return 'the session is kept for another identity'
   if (e instanceof RoomsUnavailable) return `unavailable (${e.reason})`
-  if (e instanceof RoomsRefused) return refusedAs(loggedCode(e.code), loggedReason(e.refusal))
+  if (e instanceof RoomsRefused)
+    return refusedWith(
+      loggedCode(e.code),
+      loggedReason(e.refusal),
+      (e.refusal as { message?: unknown } | undefined)?.message
+    )
   if (e instanceof Error && e.name === 'VtiRefusal') return refusalKind(e)
   if (e instanceof Error && e.name === 'VtiSentNoAnswer') return 'no answer yet'
   return e instanceof Error && e.name && e.name !== 'Error' ? e.name : 'failed'

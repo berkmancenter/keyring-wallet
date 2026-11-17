@@ -159,4 +159,81 @@ describe('rooms log words', () => {
       }
     })
   })
+
+  describe("why an agent could not reach a room's host", () => {
+    const HOST = 'did:webs:webvh.example:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a'
+    const said = (why: string) => `room host \`${HOST}\` could not be reached: ${why}`
+    // The agent's own sentences (vta-service operations/outbound.rs, at vta-service-v0.83.0).
+    it.each([
+      [`\`${HOST}\` does not resolve, so there is nothing to send to: timeout`, 'hostDidNotResolved'],
+      [
+        `could not retrieve \`${HOST}\`'s verification key: its reply is signed as a did:webs, a method this agent does not resolve (unsupportedDidMethod), so it was not checked`,
+        'hostMethodNotResolved',
+      ],
+      [
+        `could not retrieve \`${HOST}\`'s verification key, so its reply was not checked and is not believed`,
+        'hostKeyNotRetrieved',
+      ],
+      [`the reply from \`${HOST}\` is unsigned or its proof does not verify (bad signature)`, 'replyProofNotVerified'],
+      [`\`${HOST}\` advertises a REST endpoint this VTA will not dial: private address`, 'endpointNotDialled'],
+      [`\`${HOST}\` at https://vtc.example/v1/trust-tasks did not answer: connection reset`, 'noAnswer'],
+      [`\`${HOST}\` sent a body that is not a Trust-Task document (HTTP 502, 12 bytes)`, 'replyUnreadable'],
+      [
+        `no transport in common with \`${HOST}\`: it advertises [tsp] and this agent can initiate [rest]. The document is issued by \`did:webvh:QmPersona:vta.example:p\``,
+        'noMatchingProtocol',
+      ],
+    ])('%s', (why, kind) => {
+      const line = failureCategory(new VtiRefusal('rooms/keys/read:hostUnreachable', said(why)))
+      expect(line).toBe(`refused (hostUnreachable: ${kind})`)
+      // One word from the list: never the agent's sentence, the host, or anything else it names.
+      expect(line).not.toMatch(/did:|https?:|example|EN7G/)
+    })
+
+    it('reads it from the refusal a RoomsRefused passes on, too', () => {
+      const agents = new VtiRefusal(
+        'rooms/keys/read:hostUnreachable',
+        said(`\`${HOST}\` does not resolve, so there is nothing to send to: x`)
+      )
+      expect(failureCategory(new RoomsRefused('listNotes', 'hostUnreachable', true, 'x', agents))).toBe(
+        'refused (hostUnreachable: hostDidNotResolved)'
+      )
+      expect(failureCategory(new RoomsRefused('listNotes', 'hostUnreachable', true, 'x'))).toBe(
+        'refused (hostUnreachable)'
+      )
+    })
+
+    it('CONTROL: the loose words of that sentence alone are not it', () => {
+      for (const why of [
+        'this agent can initiate [rest]',
+        'refused as identityMismatch',
+        'No Transport In Common With x',
+      ])
+        expect(failureCategory(new VtiRefusal('rooms/keys/read:hostUnreachable', said(why)))).toBe(
+          'refused (hostUnreachable)'
+        )
+    })
+
+    it('the first listed sentence that matches is the word', () => {
+      const both = said(`\`${HOST}\` advertises a REST endpoint this VTA will not dial, and it did not answer`)
+      expect(failureCategory(new VtiRefusal('rooms/keys/read:hostUnreachable', both))).toBe(
+        'refused (hostUnreachable: endpointNotDialled)'
+      )
+    })
+
+    it('CONTROL: words not on the list add nothing', () => {
+      expect(failureCategory(new VtiRefusal('rooms/keys/read:hostUnreachable', said('something else entirely')))).toBe(
+        'refused (hostUnreachable)'
+      )
+    })
+
+    it('CONTROL: no other code reads the words, whatever they say', () => {
+      const why = said(`\`${HOST}\` does not resolve, so there is nothing to send to: x`)
+      expect(failureCategory(new VtiRefusal('rooms/keys/read:hostRefused', why))).toBe('refused (hostRefused)')
+      expect(failureCategory(new VtiRefusal('permissionDenied', why))).toBe('refused (permissionDenied)')
+      expect(failureCategory(new VtiRefusal('taskFailed', why, { reason: 'conflict' }))).toBe(
+        'refused (taskFailed, conflict)'
+      )
+      expect(failureCategory(new VtiRefusal('rooms/keys/read:hostUnreachable', ''))).toBe('refused (hostUnreachable)')
+    })
+  })
 })
