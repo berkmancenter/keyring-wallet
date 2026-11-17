@@ -8,7 +8,7 @@
 
 ## Goal
 
-A member sees the badges their community gave them, accepts or declines the ones they are offered, and sees the badges of the people they meet in that community. The surfaces are the community screen, a member's card, the Wallet and room posts.
+A member sees the badges their community gave them, accepts or declines the ones they are offered, and sees the badges of the people they meet in that community. The surfaces are the community screen, a member's card and the Wallet.
 
 Keyring is the holder only. Administrators and badge owners create, offer and take back badges in the community's own console (VTC admin UI). None of that moves into the app.
 
@@ -76,7 +76,7 @@ Not built: sharing a badge outside the community (`awards/share`), giving kudos,
   - No badge is shown on the vetting desk or any vetting screen.
   - A badge whose name, criteria or rule mentions vetting is shown as an ordinary badge and never as a check or a verification.
   - Hidden-vetting outcomes are never displayed as, or derived into, a badge (zero-knowledge plan, `plan/zero-knowledge`, :196, :366).
-- **No member lists.** Bubble lookups are made per author on screen. The app never builds a list of a community's members from badge or holder answers, as for directory names (`modules/directory/names.ts`).
+- **No member lists.** The app never builds a list of a community's members from badge or holder answers, as for directory names (`modules/directory/names.ts`).
 - **Notes stay private.** The note a giver attached travels in the credential's evidence. The holder sees it on their own badge and nowhere else.
 - **Visibility is the community's.** A member's card shows only what `wall/show` returns for this viewer, and the app never works around a refusal.
 - **Words.** A badge is a badge. It is never called verified, checked or proven. The community's name is said as the giver.
@@ -144,11 +144,9 @@ export declare function useMemberWall(
   communityDid: string,
   entryId: string,
 ): { wall?: WallBadge[]; state: "loading" | "shown" | "hidden" | "notServed" };
-export declare function useAuthorBadges(): (
-  communityDid: string,
-  authorDid: string,
-) => WallBadge[] | undefined; // bubbles: per author on screen
 ```
+
+The authoritative shapes are in `modules/badges/types.ts` (bifold #1096), which follow the tasks' own answers: a held badge is one per badge with its `count`, `since`, `latestAt`, `pinned` and `hidden`.
 
 ```ts
 // trust-tasks/module/badgeCredentials.ts — owned by the credential lane
