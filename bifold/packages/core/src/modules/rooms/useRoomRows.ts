@@ -46,9 +46,17 @@ import { AppState } from 'react-native'
 
 import { RUN_STARTED_AT } from '../../utils/runStart'
 import { onSessionOpened } from './agentSession'
-import type { InertText } from './inertText'
+import { toInertText, type InertText } from './inertText'
 import { askOffersAgain } from './useRoomOffersCount'
 import { failureCategory, logRef } from './roomsLogWords'
+import {
+  emptyRowsAtStart,
+  isRowsAtStartOn,
+  isRowsWallet,
+  keepRowsAtStart,
+  readRowsAtStart,
+  type RowAtStart,
+} from './rowsAtStart'
 import { isNote, newestFirst, placeOf, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
 import { isRoomWatchWheneverOpenOn } from './watchWheneverOpenSwitch'
@@ -163,6 +171,11 @@ let log: ((line: string) => void) | undefined
  * line counts.
  */
 let firstRowsSaid = false
+/** Whether this run looked for the last run's rows (rowsAtStart): once, before its first listing. */
+let rowsAtStartLooked = false
+let keepTimer: ReturnType<typeof setTimeout> | undefined
+/** How long the rows settle before they are kept for the next start: a listing publishes once per room read. */
+export const ROWS_KEEP_DELAY_MS = 2_000
 // Per service, so another agent (and its service) starts with none.
 let tracks = new WeakMap<RoomsService, Map<string, Track>>()
 
@@ -285,6 +298,79 @@ const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | unde
   ...(room.joined === false ? { notJoined: true } : track ? {} : { reading: true }),
 })
 
+const NAMES_FROM: readonly RoomRow['nameFrom'][] = ['community', 'personal', 'roomId']
+
+/** A row as kept for the next start: what it names, never its newest post's words. */
+const keptRowOf = (row: RoomRow): RowAtStart => ({
+  key: row.key,
+  roomId: row.roomId,
+  roomName: row.roomName,
+  nameFrom: row.nameFrom,
+  communityDid: row.communityDid,
+  ...(row.communityName !== undefined ? { communityName: row.communityName } : {}),
+  ...(row.lastActivityAt ? { lastActivityAt: row.lastActivityAt.toISOString() } : {}),
+  ...(row.notJoined ? { notJoined: true } : {}),
+})
+
+/** A row kept by the last run, shown as reading until the first listing replaces it. Its words read as inert again. */
+const rowFromKept = (kept: RowAtStart): RoomRow => ({
+  key: kept.key,
+  roomId: kept.roomId,
+  roomName: toInertText(kept.roomName),
+  nameFrom: NAMES_FROM.find((n) => n === kept.nameFrom) ?? 'roomId',
+  communityDid: kept.communityDid,
+  ...(kept.communityName !== undefined ? { communityName: toInertText(kept.communityName) } : {}),
+  ...(kept.lastActivityAt ? { lastActivityAt: new Date(kept.lastActivityAt) } : {}),
+  // None until the first listing reads the room: a count kept from the last run is not this run's (Alberto, 11-18).
+  unread: 0,
+  ...(kept.notJoined ? { notJoined: true } : { reading: true }),
+})
+
+/**
+ * The last run's rows, shown at once on a cold start while the first listing reads (rowsAtStart): once a run, and only
+ * while Messages has no rows of this run yet, so a listing that answered first is never replaced by them.
+ */
+function showRowsAtStart(service: RoomsService): void {
+  if (rowsAtStartLooked) return
+  rowsAtStartLooked = true
+  const agent = service.runsOn
+  if (!isRowsWallet(agent)) return
+  // Off: nothing is shown, and what an earlier run kept is emptied, so the kill undoes the names at rest too.
+  if (!isRowsAtStartOn()) {
+    emptyRowsAtStart(agent).catch((e: unknown) =>
+      log?.(`[Rooms:rows] the last run's rows were not emptied: ${failureCategory(e)}`)
+    )
+    return
+  }
+  readRowsAtStart(agent).then(
+    (kept) => {
+      if (!kept || feed.service !== service || feed.all !== undefined) return
+      feed.all = kept.map(rowFromKept)
+      showRows(service)
+      publish()
+      log?.(
+        `[Rooms:rows] ${feed.rows?.length ?? 0} rows from the last run shown, ${Date.now() - RUN_STARTED_AT} ms after launch`
+      )
+    },
+    (e: unknown) => log?.(`[Rooms:rows] the last run's rows were not read: ${failureCategory(e)}`)
+  )
+}
+
+/** Keeps the rows for the next start once they settle, the most recently active first (rowsAtStart). */
+function keepRowsSoon(service: RoomsService): void {
+  const agent = service.runsOn
+  if (!isRowsWallet(agent) || !isRowsAtStartOn()) return
+  if (keepTimer) clearTimeout(keepTimer)
+  keepTimer = setTimeout(() => {
+    keepTimer = undefined
+    if (feed.service !== service || !feed.all) return
+    const rows = [...feed.all].sort((a, b) => (b.lastActivityAt?.getTime() ?? 0) - (a.lastActivityAt?.getTime() ?? 0))
+    keepRowsAtStart(agent, rows.map(keptRowOf)).catch((e: unknown) =>
+      log?.(`[Rooms:rows] the rows were not kept for the next start: ${failureCategory(e)}`)
+    )
+  }, ROWS_KEEP_DELAY_MS)
+}
+
 /**
  * Whether two rows read the same: the room and its community (the row reads names and petnames by the community, and
  * Messages' chips are built from it), its newest post, when, its unread and whether it is reading. `key` is the room's
@@ -344,6 +430,7 @@ async function readAll(service: RoomsService): Promise<void> {
   const began = feed.lastAsk
   try {
     await readSeen()
+    showRowsAtStart(service)
     const listed = await service.listMyRooms()
     if (feed.service === service)
       for (const listener of listedListeners) {
@@ -377,6 +464,7 @@ async function readAll(service: RoomsService): Promise<void> {
       feed.all = next
       showRows(service)
       publish()
+      keepRowsSoon(service)
       const shownNow = feed.rows ?? []
       if (!firstRowsSaid && shownNow.length > 0) {
         firstRowsSaid = true
@@ -680,6 +768,9 @@ export function resetRoomRows(): void {
   feed.inView = 0
   log = undefined
   firstRowsSaid = false
+  rowsAtStartLooked = false
+  if (keepTimer) clearTimeout(keepTimer)
+  keepTimer = undefined
   tracks = new WeakMap()
   stopRetrying()
   seenVersions = undefined
