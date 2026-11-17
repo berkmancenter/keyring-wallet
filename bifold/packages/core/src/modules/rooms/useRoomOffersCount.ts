@@ -24,6 +24,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
 
+import { isOffersOnMessagesOn } from './offersOnMessagesSwitch'
 import type { RoomOffer, RoomsService } from './types'
 
 /** One minute while offers wait: each poll is one signed request per community. */
@@ -92,6 +93,15 @@ export function useRoomOfferIds(communityDid?: string): string {
       .sort()
       .join('\n')
   )
+}
+
+/**
+ * Ask the running poll for the offers again, within its floor (no ask within OFFERS_REFRESH_FLOOR_MS of the last, none
+ * while one is out), when the switch is on: Messages coming into focus, or the member trying the rooms again there
+ * (offersOnMessagesSwitch). Nothing when no poll runs.
+ */
+export function askOffersAgain(): void {
+  if (isOffersOnMessagesOn()) badge.refresh?.()
 }
 
 /** My Agent's badge: the count the poll last read; coming into focus asks again (within the floor). */

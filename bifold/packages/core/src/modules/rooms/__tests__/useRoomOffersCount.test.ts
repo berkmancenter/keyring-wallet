@@ -15,8 +15,10 @@ import {
   OFFERS_IDLE_POLL_MS,
   OFFERS_POLL_MS,
   OFFERS_REFRESH_FLOOR_MS,
+  askOffersAgain,
   useRoomOffersCount,
 } from '../useRoomOffersCount'
+import { ROOMS_OFFERS_ON_MESSAGES } from '../offersOnMessagesSwitch'
 
 let onAppState: ((state: string) => void) | undefined
 let focus: (() => void) | undefined
@@ -224,5 +226,77 @@ describe('the offers badge poll', () => {
     await flush()
     expect(service.capabilities).toHaveBeenCalled()
     expect(service.listOffers).not.toHaveBeenCalled()
+  })
+})
+
+// 11-17: nothing pushes an offer, and the poll asks every two minutes while none wait: Messages asks again too.
+describe('asking again from Messages (askOffersAgain)', () => {
+  afterEach(() => {
+    ROOMS_OFFERS_ON_MESSAGES.on = true
+    ROOMS_OFFERS_ON_MESSAGES.remoteOff = false
+  })
+
+  test('asks the running poll at once, past its floor', async () => {
+    const service = serviceWith(0)
+    renderHook(() => useRoomOffersCount(service, true))
+    await flush()
+    expect(service.listOffers).toHaveBeenCalledTimes(1)
+    await advance(OFFERS_REFRESH_FLOOR_MS)
+
+    await act(async () => askOffersAgain())
+    expect(service.listOffers).toHaveBeenCalledTimes(2)
+  })
+
+  // ac (11-17): a second guard, apart from the floor: an ask still out is never doubled.
+  test('control: while an ask is still out, past the floor, asks nothing more', async () => {
+    const service = serviceWith(0)
+    let answer: () => void = () => undefined
+    renderHook(() => useRoomOffersCount(service, true))
+    await flush()
+    await advance(OFFERS_REFRESH_FLOOR_MS)
+    service.listOffers.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = () => resolve([])
+        })
+    )
+    await act(async () => askOffersAgain())
+    expect(service.listOffers).toHaveBeenCalledTimes(2)
+    await advance(OFFERS_REFRESH_FLOOR_MS)
+
+    await act(async () => askOffersAgain())
+    expect(service.listOffers).toHaveBeenCalledTimes(2)
+    await act(async () => answer())
+  })
+
+  test('control: within the floor of the last ask, asks nothing more', async () => {
+    const service = serviceWith(0)
+    renderHook(() => useRoomOffersCount(service, true))
+    await flush()
+    await advance(OFFERS_REFRESH_FLOOR_MS - 1)
+
+    await act(async () => askOffersAgain())
+    expect(service.listOffers).toHaveBeenCalledTimes(1)
+  })
+
+  test.each([
+    ['switched off', { on: false, remoteOff: false }],
+    ['turned off remotely', { on: true, remoteOff: true }],
+    ['not a boolean (fails closed)', { on: 'true' as unknown as boolean, remoteOff: false }],
+  ])('control: %s, asks nothing; the poll asks as before', async (_name, values) => {
+    const service = serviceWith(0)
+    renderHook(() => useRoomOffersCount(service, true))
+    await flush()
+    await advance(OFFERS_REFRESH_FLOOR_MS)
+    Object.assign(ROOMS_OFFERS_ON_MESSAGES, values)
+
+    await act(async () => askOffersAgain())
+    expect(service.listOffers).toHaveBeenCalledTimes(1)
+    await advance(OFFERS_IDLE_POLL_MS - OFFERS_REFRESH_FLOOR_MS)
+    expect(service.listOffers).toHaveBeenCalledTimes(2)
+  })
+
+  test('control: with no poll running, asks nothing and throws nothing', () => {
+    expect(() => askOffersAgain()).not.toThrow()
   })
 })

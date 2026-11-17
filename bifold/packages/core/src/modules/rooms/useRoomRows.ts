@@ -47,6 +47,7 @@ import { AppState } from 'react-native'
 import { RUN_STARTED_AT } from '../../utils/runStart'
 import { onSessionOpened } from './agentSession'
 import type { InertText } from './inertText'
+import { askOffersAgain } from './useRoomOffersCount'
 import { failureCategory, logRef } from './roomsLogWords'
 import { isNote, newestFirst, placeOf, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
@@ -761,12 +762,17 @@ export function useRoomRows(): RoomRows {
     useCallback(() => {
       feed.inView++
       refreshRoomRows(ROWS_FOCUS_FLOOR_MS)
+      // A new invite shows where the member looks for it, not at the poll's next two-minute ask (11-17).
+      askOffersAgain()
       return () => {
         feed.inView = Math.max(0, feed.inView - 1)
       }
     }, [])
   )
-  const reload = useCallback(() => refreshRoomRows(), [])
+  const reload = useCallback(() => {
+    refreshRoomRows()
+    askOffersAgain()
+  }, [])
   return { rows, reload, failed }
 }
 
