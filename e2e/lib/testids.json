@@ -1661,6 +1661,7 @@
     "TrustedApproverStepDownError": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApprovers": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversApprovingFor": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversChangeNeedsTwo": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversCheck": ["src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx"],
     "TrustedApproversCheckPrompt": ["src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx"],
     "TrustedApproversCheckResult": ["src/modules/trust-tasks/screens/approver/EnforcementCheckCard.tsx"],
@@ -1668,6 +1669,7 @@
     "TrustedApproversMore": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversNone": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversOff": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
+    "TrustedApproversRemovalNeeds": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversSetAside": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversSetAsideOpen": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
     "TrustedApproversTabMine": ["src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx"],
@@ -3403,6 +3405,9 @@
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.cardStop(prompt.connectionId)"
     },
     {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.changeNeedsTwo"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.checkAgain(did)"
     },
     {
@@ -3470,6 +3475,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.personGone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.removalNeeds"
     },
     {
       "src/modules/trust-tasks/screens/VtaTrustedApprovers.tsx": "TrustedApproversIds.remove(did)"
