@@ -457,8 +457,13 @@ export type AskForCardOptions = Pick<
  * Only for a request this phone already knows as approved and holds no card
  * for, and only after the community's own answer says `credentialsDelivered:
  * false`. A community that predates the field omits it, and would refuse a
- * poll carrying `resendCredentials` (its schema takes no unknown member). Never
- * from a background poll: the person asks. The community rate-limits it too.
+ * poll carrying `resendCredentials` (its schema takes no unknown member). The
+ * person asks (Check again, Check now), with ONE exception: the join watch
+ * (`vtiJoinWatch`) asks on its own, for a `did:webs` community only, once per
+ * request while it runs, and still only after the community's own answer says
+ * `credentialsDelivered: false`. No other background caller may: a new one
+ * needs those same three guards and its own switch. The community rate-limits
+ * it too.
  * Throws as a poll does; nothing is changed then.
  */
 export async function askForCardIfOwed(

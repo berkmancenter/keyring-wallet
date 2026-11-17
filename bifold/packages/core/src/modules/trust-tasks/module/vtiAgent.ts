@@ -2645,12 +2645,17 @@ class VtiAgentController {
    */
   async status(
     communityDid: string,
-    options: { requestId?: string; resendCredentials?: boolean } = {}
+    options: { requestId?: string; resendCredentials?: boolean; as?: VtiPersona } = {}
   ): Promise<JoinRequestStatus | undefined> {
-    const answer = await this.ask(communityDid, STATUS, {
+    const asked = {
       ...(options.requestId ? { requestId: options.requestId } : {}),
       ...(options.resendCredentials ? { resendCredentials: true } : {}),
-    })
+    }
+    // `as`: over that identity's own session (`askAs`: no sign-in, nothing taken from the shared session), for a look
+    // nobody asked for (vtiJoinWatch). Throws `VtiNoOwnSession` when it has none. Without it, exactly as before.
+    const answer = options.as
+      ? await this.askAs(options.as, communityDid, STATUS, asked)
+      : await this.ask(communityDid, STATUS, asked)
     if (!answer) throw this.sentNoAnswer(communityDid, STATUS)
     const refusal = refusalOf(answer)
     if (refusal) {

@@ -45,6 +45,7 @@ import { useVtiCardRenewal } from '../modules/trust-tasks/module/vtiCardRenewal'
 import { useCardAgentNames } from '../modules/trust-tasks/screens/cardAgentNames'
 // How a community's card reads in the Wallet (registers itself on import).
 import '../modules/trust-tasks/screens/communityCardDisplay'
+import { useVtiJoinWatch } from '../modules/trust-tasks/module/vtiJoinWatch'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { logHiddenVettingSeams } from '../modules/trust-tasks/hiddenVettingModules'
 import { useVtiIdentityListeners } from '../modules/trust-tasks/module/vtiIdentityListeners'
@@ -107,6 +108,9 @@ const TabStack: React.FC = () => {
   // The community a link chose (else the build's suggestion) gets the inbox.
   const inboxCommunityDid = useChosenCommunityDid(vti?.communityDid)
   useVtiPersonaInbox(agent, { mediatorDid: vti?.mediatorDid, communityDid: inboxCommunityDid, onError: onInboxError })
+  // A join request at a did:webs community is asked about while the person is elsewhere (vtiJoinWatch); no other
+  // community's is.
+  useVtiJoinWatch(agent)
   // …and every other identity this phone holds listens on its own, so what a
   // community sends any of them arrives, whichever is chosen (IN-102).
   useVtiIdentityListeners(agent, vti?.mediatorDid)
