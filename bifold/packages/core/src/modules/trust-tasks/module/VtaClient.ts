@@ -102,6 +102,7 @@ import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type Ts
 import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
+import { isReplacedSessionStopsOn } from './replacedSessionSwitch'
 import { didOfKeyId, isAgentsOwnDid, isAgentsOwnPersona } from './agentOwnIdentity'
 import {
   besideQueue,
@@ -1340,7 +1341,23 @@ export class VtaClient {
     return did
   }
 
+  /** The connect in flight, which a second caller joins (replacedSessionSwitch). */
+  private connecting?: Promise<void>
+
+  /**
+   * One connect at a time: back in the foreground, the foreground handler and the dropped-session reconnect both
+   * called this in the same moment, each found no open socket, and each opened a session as the same DID (report
+   * EFNN-34F9, 11-17). A second caller now joins the first, and gets its outcome.
+   */
   async connect(): Promise<void> {
+    if (!isReplacedSessionStopsOn()) return this.connectOnce()
+    this.connecting ??= this.connectOnce().finally(() => {
+      this.connecting = undefined
+    })
+    return this.connecting
+  }
+
+  private async connectOnce(): Promise<void> {
     if (this.session?.isOpen) return
     this.mediator ??= await resolveVtaMediator(this.agent, this.vtaDid)
     const did = await this.ensureManagerIdentity()
@@ -1377,6 +1394,18 @@ export class VtaClient {
     this.heardFromAgent = false
     this.replyThreading = 'unknown'
     this.probeWaiter = undefined
+    // The session this one replaces is stopped first: left alone it keeps its renewal timer and reopens its socket by
+    // itself as the same DID, and the mediator's one socket per DID then has each close the other's at every renewal
+    // (replacedSessionSwitch). Said, so a report shows whether a replacement happened and what state the old one was in.
+    const replaced = this.session
+    if (replaced && isReplacedSessionStopsOn()) {
+      releaseWarn(
+        `${LOG_PREFIX} the session to the agent is replaced by a new one (its socket was ${
+          replaced.isOpen ? 'open' : 'closed'
+        }): the old one is stopped`
+      )
+      await replaced.stop().catch(() => undefined)
+    }
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {
       onError: (error) => this.options.onError?.(error),
       onMessage: (plaintext) => this.deliver(plaintext),
