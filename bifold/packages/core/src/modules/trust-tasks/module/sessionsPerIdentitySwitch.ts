@@ -13,6 +13,12 @@
  *
  * It fails closed to today's path: anything but `on` true and `remoteOff` false reads as off.
  *
+ * THE KILL IS A RECIPE, NOT A KEPT PULL REQUEST (bifold #1093, closed 11-17): a kept kill PR needs its conflict
+ * resolved whenever main changes this file, and its CI green expires whenever main moves. Branch from current main, set `SESSIONS_PER_IDENTITY.remoteOff` to `true` in this file
+ * (packages/core/src/modules/trust-tasks/module/sessionsPerIdentitySwitch.ts) and change nothing else; merge, pin, cut,
+ * and Alberto publishes. Tier ota-strict (this file sits on the VTI protocol line). It acts at each phone's next start.
+ * Its proof is #1022's remoteOff rows (agentRoomsBackendOwnSession) and #1093's green on the flipped line.
+ *
  * Tests flip the entries and must put them back.
  *
  * @module trust-tasks/module/sessionsPerIdentitySwitch

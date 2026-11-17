@@ -227,7 +227,14 @@ export const VTI_BACKGROUND_HOLD_MAX_MS = 2 * 60_000
  * `VTI_FOREGROUND_CLAIM_MS`. Nothing was disconnected; the caller tries again later. The message names no DID: a hold
  * may be a hidden-vetting step's.
  */
-/** `askAs` was asked for an identity whose own session is not open: the caller asks the shared way instead. */
+/**
+ * `askAs` was asked for an identity whose own session is not open: the caller asks the shared way instead.
+ *
+ * THROWN IN ONE PLACE ONLY, before anything is packed or sent (`askAs`, right after the registry lookup). That is what
+ * makes the callers' fallback safe: `agentRoomsBackend.asPersona` asks again the shared way on this error, so a write
+ * is never sent twice only because nothing after a send can throw it. Throwing it from a second place, after a send,
+ * would silently break that.
+ */
 export class VtiNoOwnSession extends Error {
   constructor(readonly did: string) {
     super("vtiAgent: this identity's own session is not open")
