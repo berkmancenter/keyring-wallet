@@ -242,6 +242,22 @@ export interface AgentRoomsOptions {
 /** How long a room whose listing was refused as `unsupportedVersion` is answered from that refusal: 30 minutes. */
 export const UNSERVED_LISTING_MS = 30 * 60 * 1000
 
+/**
+ * The custody tasks that pick the member they act as (vta-service `room_member.rs`, MEMBER_EXT): browse, read, open,
+ * file-key, backfill, chain, commit, profile read and seal, at any version (Keyring sends no profile write). Not `read-marker`, `key-package`, `welcome`,
+ * `list`, `watch` or `act` (which names its member as the document's issuer).
+ */
+const CUSTODY_TASK = /\/rooms\/keys\/((browse|read|open|file-key|backfill|chain|commit|seal)|profile\/read)\/\d/
+
+/** Keyring's and the agent's extension namespace on rooms tasks. */
+const ROOMS_EXT = 'org.openvtc.rooms'
+
+/** A member the agent takes: a DID, never a DID URL. */
+const MEMBER_DID = /^did:[^#]+$/
+
+const asRecord = (v: unknown): Record<string, unknown> | undefined =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined
+
 /** The operations this phase implements. */
 export const R1_BUILT: ReadonlySet<RoomsOperation> = new Set<RoomsOperation>([
   'listMyRooms',
@@ -430,6 +446,13 @@ export class AgentRoomsService implements RoomsService {
   /** How many asks of what the agent serves were started: only the latest one's answer is kept. */
   private servedAsks = 0
   private heldInFlight?: Promise<HeldRoom[]>
+  /**
+   * Which of this phone's identities the agent holds each room's keys as, from its last key list (`rooms/keys/list`
+   * 0.2 names the member). A room held as two of them is one the agent cannot pick a member for by itself.
+   */
+  private heldBy = new Map<string, Set<string>>()
+  /** The rooms already said to be held as more than one identity, so it is said once. */
+  private namedSaid = new Set<string>()
   private roomsInFlight?: Promise<RoomSummary[]>
   /** Counts the accepts and leaves: a listing asked before one is neither joined nor kept after it. */
   private roomsChanged = 0
@@ -492,7 +515,7 @@ export class AgentRoomsService implements RoomsService {
     this.now = options.now ?? (() => Date.now())
     this.watches = new RoomWatches({
       served: () => this.served?.types,
-      agentTask: (type, payload, opts) => this.backend.agentTask(type, payload, opts),
+      agentTask: (type, payload, opts) => this.agentTask(type, payload, opts),
       consentHolds: backend.consentHolds,
       now: () => this.now(),
       warn: (line) => this.backend.warn(line),
@@ -729,9 +752,49 @@ export class AgentRoomsService implements RoomsService {
   /** @versionLadder rooms/keys/list */
   private async readHeldRooms(): Promise<HeldRoom[]> {
     const served = this.served?.types ?? []
-    if (served.includes(ROOMS_TASK.keysList02))
-      return parseKeysList(await this.backend.agentTask(ROOMS_TASK.keysList02, { includePersonal: true }))
-    return parseKeysList(await this.backend.agentTask(ROOMS_TASK.keysList01, {}))
+    const held = served.includes(ROOMS_TASK.keysList02)
+      ? parseKeysList(await this.agentTask(ROOMS_TASK.keysList02, { includePersonal: true }))
+      : parseKeysList(await this.agentTask(ROOMS_TASK.keysList01, {}))
+    const by = new Map<string, Set<string>>()
+    for (const h of held) if (h.member) by.set(h.roomId, (by.get(h.roomId) ?? new Set()).add(h.member))
+    this.heldBy = by
+    return held
+  }
+
+  /**
+   * A task to the agent, naming the member it acts as where the agent could not tell which one it is.
+   *
+   * A room the agent holds keys for as two of this phone's identities (one left and joined again as a new identity)
+   * has every custody task refused `conflict`: the agent "acts as the one its caller acts as, and refuses rather than
+   * choose" (vta-service `room_member.rs` `acting`). The task then names the room's own identity in
+   * `ext["org.openvtc.rooms"].member`, which only narrows: the agent acts as it only if it is one the caller may act as
+   * holding the room (`acting_as`). A room held as one identity, or none, is asked exactly as before, and so is any task
+   * that is not a custody task. Older agents take `ext` and leave a member they don't know of alone (SPEC 4.5.1).
+   */
+  private agentTask(
+    type: string,
+    payload: Record<string, unknown>,
+    options?: { timeoutMs?: number; waitForConsent?: boolean }
+  ): Promise<unknown> {
+    const sent = this.namingMember(type, payload)
+    // Asked with the same arguments as before when no options are given.
+    return options ? this.backend.agentTask(type, sent, options) : this.backend.agentTask(type, sent)
+  }
+
+  private namingMember(type: string, payload: Record<string, unknown>): Record<string, unknown> {
+    if (!CUSTODY_TASK.test(type) || typeof payload.roomId !== 'string') return payload
+    const roomId = payload.roomId
+    const holders = this.heldBy.get(roomId)
+    const member = this.rooms.get(roomId)?.actingAs.did
+    if (!holders || holders.size < 2 || !member || !holders.has(member) || !MEMBER_DID.test(member)) return payload
+    if (!this.namedSaid.has(roomId)) {
+      this.namedSaid.add(roomId)
+      this.backend.warn(
+        `rooms: ${logRef(roomId)} is held as ${holders.size} of this phone's identities: its tasks name the room's`
+      )
+    }
+    const ext = asRecord(payload.ext) ?? {}
+    return { ...payload, ext: { ...ext, [ROOMS_EXT]: { ...(asRecord(ext[ROOMS_EXT]) ?? {}), member } } }
   }
 
   private fromMembership(community: RoomsCommunity, record: RoomMembershipRecord, held?: HeldRoom): KnownRoom {
@@ -882,7 +945,7 @@ export class AgentRoomsService implements RoomsService {
     if (unserved && unserved.type === type && this.now() - unserved.at < UNSERVED_LISTING_MS) throw unserved.refusal
     let answer: unknown
     try {
-      answer = await this.backend.agentTask(type, {
+      answer = await this.agentTask(type, {
         roomId,
         host: room.host,
         ...(sinceVersion !== undefined ? { sinceVersion } : {}),
@@ -1064,7 +1127,7 @@ export class AgentRoomsService implements RoomsService {
       let answers: ReturnType<typeof parseReadBatch>
       try {
         answers = parseReadBatch(
-          await this.backend.agentTask(
+          await this.agentTask(
             type,
             { roomId, host: room.host, keys: asked },
             { timeoutMs: READ_BATCH_TIMEOUT_MS, waitForConsent: false }
@@ -1133,7 +1196,7 @@ export class AgentRoomsService implements RoomsService {
     const drops = this.drops
     const opened = parseRead(
       // version-pinned: one record, as ever; 0.2 is sent only for a batch (readBatches says why)
-      await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key }),
+      await this.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key }),
       (s) => this.backend.decodeBase64Url(s)
     )
     if (!opened) throw new Error(`the agent's answer for note ${key} could not be read`)
@@ -1427,7 +1490,7 @@ export class AgentRoomsService implements RoomsService {
       try {
         for (const [what, tag] of RENEWED) {
           const replaces = await this.heldCredential(get, renewal.roomId, community.personaDid, tag)
-          await this.backend.agentTask(ROOMS_TASK.vaultReceive, {
+          await this.agentTask(ROOMS_TASK.vaultReceive, {
             credential: credentialOf(renewal.credentials[what], what),
             ...(replaces ? { id: replaces } : {}),
           })
@@ -1441,10 +1504,9 @@ export class AgentRoomsService implements RoomsService {
 
   /** The vault's handle of the one credential of `tag` the room issued `member`, if it holds one. */
   private async heldCredential(get: string, roomId: string, member: string, tag: string): Promise<string | undefined> {
-    const found = parseVaultQuery(await this.backend.agentTask(ROOMS_TASK.vaultQuery, { type: tag, issuerDid: roomId }))
+    const found = parseVaultQuery(await this.agentTask(ROOMS_TASK.vaultQuery, { type: tag, issuerDid: roomId }))
     const mine: string[] = []
-    for (const { id } of found)
-      if (vaultCredentialSubject(await this.backend.agentTask(get, { id })) === member) mine.push(id)
+    for (const { id } of found) if (vaultCredentialSubject(await this.agentTask(get, { id })) === member) mine.push(id)
     if (mine.length > 1)
       throw new Error(
         `the agent holds ${mine.length} ${tag}s ${roomId} issued ${member}, and acts with none until one is left`
@@ -1532,6 +1594,10 @@ export class AgentRoomsService implements RoomsService {
       const rooms = new Map(this.rooms)
       rooms.set(roomId, this.joinedFrom(community, offer))
       this.rooms = rooms
+      // The agent now holds a sealed room as this identity too: one held before as another is then held as two, and the
+      // backfill below already names this one (agentTask).
+      const heldAs = this.heldBy.get(roomId)
+      if (sealed && heldAs) heldAs.add(community.personaDid)
       this.heldInFlight = undefined // nor joins a key list asked before the room was held
       this.roomsChanged++ // nor does a listing asked before the accept replace the room joined, when it answers
       this.roomsInFlight = undefined
@@ -1589,7 +1655,7 @@ export class AgentRoomsService implements RoomsService {
       )
 
     try {
-      await this.backend.agentTask(ROOMS_TASK.keysWelcome, {
+      await this.agentTask(ROOMS_TASK.keysWelcome, {
         roomId,
         welcome: accepted.welcome,
         invitation: offer.credentials.invitation,
@@ -1616,8 +1682,7 @@ export class AgentRoomsService implements RoomsService {
     // pump; backfillRunsAlone.test.ts guards it). A failure here leaves reads to repair it.
     if ((this.served?.types ?? []).includes(ROOMS_TASK.keysBackfill)) {
       const asked = this.now()
-      void this.backend
-        .agentTask(ROOMS_TASK.keysBackfill, { roomId, host: offer.host })
+      void this.agentTask(ROOMS_TASK.keysBackfill, { roomId, host: offer.host })
         .then(() => this.backend.warn(`rooms: ${logRef(roomId)} backfill after joining: ${this.now() - asked} ms`))
         .catch((e) =>
           this.backend.warn(`rooms: backfill of ${logRef(roomId)} after joining failed: ${failureCategory(e)}`)
@@ -1652,7 +1717,7 @@ export class AgentRoomsService implements RoomsService {
     payload: Record<string, unknown>
   ): Promise<unknown> {
     try {
-      return await this.backend.agentTask(type, payload)
+      return await this.agentTask(type, payload)
     } catch (e) {
       const code = refusalCode(e)
       if (code) throw new RoomsRefused(operation, code, false, `the agent would not ${what}: ${message(e)}`, e)
@@ -1981,9 +2046,7 @@ export class AgentRoomsService implements RoomsService {
         })
       )
     try {
-      const profile = parseProfileRead(
-        await this.backend.agentTask(ROOMS_TASK.keysProfileRead, { roomId: room.roomId, host })
-      )
+      const profile = parseProfileRead(await this.agentTask(ROOMS_TASK.keysProfileRead, { roomId: room.roomId, host }))
       const { listed } = profile
       const current = profile.status === 'found' && !profile.stale
       if (epoch !== undefined) {
@@ -2300,7 +2363,7 @@ export class AgentRoomsService implements RoomsService {
     try {
       return parseRead(
         // version-pinned: one record's version, as ever; 0.2 is sent only for a batch (readBatches says why)
-        await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId: room.roomId, host: room.host, key }),
+        await this.agentTask(ROOMS_TASK.keysRead, { roomId: room.roomId, host: room.host, key }),
         (s) => this.backend.decodeBase64Url(s)
       )?.version
     } catch (e) {
@@ -2343,7 +2406,7 @@ export class AgentRoomsService implements RoomsService {
   }
 
   private async readFiles(room: KnownRoom, roomId: string): Promise<{ file: FileManifest; record: OpenedRecord }[]> {
-    const listing = parseBrowse(await this.backend.agentTask(this.browseType(), { roomId, host: room.host }))
+    const listing = parseBrowse(await this.agentTask(this.browseType(), { roomId, host: room.host }))
     const files: { file: FileManifest; record: OpenedRecord }[] = []
     let opened = 0
     let failure: unknown
@@ -2354,7 +2417,7 @@ export class AgentRoomsService implements RoomsService {
         try {
           read = parseRead(
             // version-pinned: one record, as ever; 0.2 is sent only for a batch (readBatches says why)
-            await this.backend.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key: record.key }),
+            await this.agentTask(ROOMS_TASK.keysRead, { roomId, host: room.host, key: record.key }),
             (s) => this.backend.decodeBase64Url(s)
           )
         } catch (e) {
