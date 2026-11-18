@@ -98,6 +98,9 @@ const clearKills = () => {
 beforeEach(() => {
   clearKills()
   allSwitchesOff()
+  // Confirm it's you ships on and is no demo switch (turnOffSediDemo leaves it alone): turned off here so that "never
+  // turned on by either side" is something these rows can see.
+  setConfirmItsYouEnabled(false)
 })
 afterEach(() => {
   jest.restoreAllMocks()

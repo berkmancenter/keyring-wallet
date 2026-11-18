@@ -11,7 +11,7 @@
  *
  * Person to person: no agent or VTA is involved, so it works between any two Keyring contacts.
  *
- * Off unless the "Confirm it's you" switch is on (confirmItsYouFlag.ts).
+ * On for everyone, unless a release turns it off (confirmItsYouFlag.ts).
  *
  * Records are changed in place, never deleted (one per contact on each phone), so this goes out over the air.
  *
@@ -48,7 +48,7 @@ const LOG_PREFIX = '[TrustTasks:ConfirmItsYou]'
 /** Why an arriving request or answer went no further: logged, never silent. Names the connection, never the note. */
 const dropped = (agent: Agent, what: string, connectionId: string, why: string) =>
   agent.config?.logger?.warn(`${LOG_PREFIX} ${what} on connection ${connectionId} not taken: ${why}`)
-const SWITCHED_OFF = "Confirm it's you is switched off on this phone (Settings › Developer)"
+const SWITCHED_OFF = "Confirm it's you is switched off on this phone"
 const NO_RELATIONSHIP = 'no relationship with this contact to check it against'
 const refusedAs = (kind: string) => `it did not pass its check (${kind})`
 

@@ -2,6 +2,9 @@
  * One switch per SEDI/KERI feature, plus one kill for all of them (Alberto, 2026-11-10). Each feature's switch is off
  * by default; its own remote off and the umbrella SEDI_KERI_REMOTE_OFF each beat a saved "on", and neither turns it on.
  *
+ * One feature ships on: "Confirm it's you" (Alberto, 2026-11-18), named in {@link SHIPS_ON}. Its two kills must beat
+ * what it ships as, not only what an app set: with nothing setting it, a kill is the only way it goes off.
+ *
  * The switches are found, not listed: every `export const …_REMOTE_OFF` in the package's source is a SEDI/KERI
  * feature's own kill unless {@link NOT_SEDI_KERI} says otherwise, and its module's `set…Enabled` / `is…Enabled` are
  * checked here. So a new switch that does not answer the umbrella fails here without anyone remembering to add it.
@@ -24,6 +27,12 @@ const SRC = join(__dirname, '..', '..', '..')
  * short: a new remote off is a SEDI/KERI switch until someone says here that it is not.
  */
 const NOT_SEDI_KERI = new Set(['SEDI_KERI_REMOTE_OFF', 'SHARED_CONNECT_REMOTE_OFF'])
+
+/**
+ * The switches that ship on, by their own kill's name. Kept by hand on purpose: a switch whose default moves to on
+ * without being named here fails "ships off", so no other SEDI/KERI feature comes out from behind its switch unnoticed.
+ */
+const SHIPS_ON = new Set(['CONFIRM_ITS_YOU_REMOTE_OFF'])
 
 /** Every source file of the package (no tests). */
 function sourceFiles(dir: string): string[] {
@@ -56,12 +65,38 @@ const SWITCHES = KILLS.filter(({ kill }) => !NOT_SEDI_KERI.has(kill)).map(({ fil
   const is = oneExport(module, /^is\w+Enabled$/, file)
   return {
     name: relative(SRC, file),
+    file,
+    kill,
+    shipsOn: SHIPS_ON.has(kill),
     exports: [kill, set, is],
     set: module[set] as (enabled: boolean) => void,
     is: module[is] as () => boolean,
     own: module[kill] as { off: boolean },
   }
 })
+
+/**
+ * A switch as a start-up finds it: its module loaded anew, with nothing having set it, beside the umbrella that same
+ * load reads. The suite's own copies are set and reset by every row, so they cannot say what a release ships.
+ */
+function asShipped(file: string, kill: string) {
+  let found: { is: () => boolean; set: (enabled: boolean) => void; own: { off: boolean }; umbrella: { off: boolean } }
+  jest.isolateModules(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const module = require(file) as Record<string, unknown>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const umbrella = require(join(SRC, 'modules', 'trust-tasks', 'module', 'sediKeriRemoteOff')) as {
+      SEDI_KERI_REMOTE_OFF: { off: boolean }
+    }
+    found = {
+      is: module[oneExport(module, /^is\w+Enabled$/, file)] as () => boolean,
+      set: module[oneExport(module, /^set\w+Enabled$/, file)] as (enabled: boolean) => void,
+      own: module[kill] as { off: boolean },
+      umbrella: umbrella.SEDI_KERI_REMOTE_OFF,
+    }
+  })
+  return found!
+}
 
 afterEach(() => {
   setTrustTestStateEnabled(false)
@@ -84,6 +119,11 @@ describe('the switches found', () => {
     )
   })
 
+  it('every switch said to ship on is one of them (the list is not stale)', () => {
+    const found = new Set(SWITCHES.map((s) => s.kill))
+    expect([...SHIPS_ON].filter((kill) => !found.has(kill))).toEqual([])
+  })
+
   it('every remote off said not to be SEDI/KERI is still in the source (the allowance is not stale)', () => {
     const found = new Set(KILLS.map((k) => k.kill))
     expect([...NOT_SEDI_KERI].filter((kill) => !found.has(kill))).toEqual([])
@@ -98,8 +138,54 @@ describe('the switches found', () => {
   )
 })
 
+describe.each(SWITCHES.filter((s) => !s.shipsOn))('the $name switch, which ships off', (s) => {
+  it('is off as a start-up finds it, until the app turns it on', () => {
+    const shipped = asShipped(s.file, s.kill)
+    expect(shipped.is()).toBe(false)
+    shipped.set(true)
+    expect(shipped.is()).toBe(true)
+  })
+})
+
+describe.each(SWITCHES.filter((s) => s.shipsOn))('the $name switch, which ships on', (s) => {
+  it('is on as a start-up finds it, with nothing having set it (control: a run can still turn it off)', () => {
+    const shipped = asShipped(s.file, s.kill)
+    expect(shipped.is()).toBe(true)
+    shipped.set(false)
+    expect(shipped.is()).toBe(false)
+  })
+
+  it('its own remote off beats what it ships as (control: with the kill back off, it is on again)', () => {
+    const shipped = asShipped(s.file, s.kill)
+    shipped.own.off = true
+    expect(shipped.is()).toBe(false)
+    shipped.own.off = false
+    expect(shipped.is()).toBe(true)
+  })
+
+  it('the SEDI/KERI kill beats what it ships as (control: with the kill back off, it is on again)', () => {
+    const shipped = asShipped(s.file, s.kill)
+    shipped.umbrella.off = true
+    expect(shipped.is()).toBe(false)
+    shipped.umbrella.off = false
+    expect(shipped.is()).toBe(true)
+  })
+
+  it('both kills on, then one lifted: still off', () => {
+    const shipped = asShipped(s.file, s.kill)
+    shipped.own.off = true
+    shipped.umbrella.off = true
+    shipped.own.off = false
+    expect(shipped.is()).toBe(false)
+    shipped.own.off = true
+    shipped.umbrella.off = false
+    expect(shipped.is()).toBe(false)
+  })
+})
+
 describe.each(SWITCHES)('the $name switch', (s) => {
-  it('is off until the app turns it on', () => {
+  it('turned off for a run, it is off; turned on, it is on', () => {
+    s.set(false)
     expect(s.is()).toBe(false)
     s.set(true)
     expect(s.is()).toBe(true)

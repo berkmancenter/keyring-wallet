@@ -5,6 +5,10 @@
  *
  * One deliberate change since: the two Alice relationships share a name, so each now carries the "Same person?"
  * merge offer (ContactMergeSection). Their snapshots gained that section and nothing else; Bob's is as recorded.
+ *
+ * Recorded with "Confirm it's you" off, which was how it shipped. It ships on now and adds a Safety section to the
+ * page, so it is turned off here: this file is about how relationships are grouped, and the Safety section has its own
+ * rows (ContactDetails.test.tsx).
  */
 import { render, waitFor } from '@testing-library/react-native'
 import React from 'react'
@@ -15,6 +19,7 @@ import ContactDetails from '../../../../src/modules/vrc/screens/ContactDetails'
 import { ContainerProvider } from '../../../../src/container-api'
 import { MainContainer } from '../../../../src/container-impl'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
+import { setConfirmItsYouEnabled } from '../../../../src/modules/trust-tasks/module/confirmItsYouFlag'
 import { ContactCredentialDetails } from '../../../../src/types/navigators'
 import { ALICE_AGAIN, ALICE_FIRST, BOB, SEVERAL_RELATIONSHIPS } from '../fixtures/severalRelationships'
 
@@ -34,6 +39,7 @@ const Container: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 )
 
 beforeEach(() => {
+  setConfirmItsYouEnabled(false)
   jest.spyOn(console, 'log').mockImplementation(() => null)
   mockUseAgent.mockReturnValue({
     agent: {

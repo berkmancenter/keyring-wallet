@@ -758,12 +758,17 @@ describe('ContactDetails Screen', () => {
   })
 
   describe('the Safety section', () => {
+    // Forces it off for the rows after this one, as it always has: before the switch shipped on this read as "put the
+    // default back", and it is deliberately not changed to that, since the later rows in this file were written
+    // against off.
     afterEach(() => setConfirmItsYouEnabled(false))
 
     test("with Confirm it's you on, the Safety heading shows; off, there is no Safety section at all", async () => {
       mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
 
+      // It ships on: off is something a run (or a release's kill) has to do.
+      setConfirmItsYouEnabled(false)
       const off = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
       expect(await off.findByText('Alice Smith')).toBeTruthy()
       await relationshipRead()
