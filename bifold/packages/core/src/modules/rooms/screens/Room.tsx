@@ -294,10 +294,12 @@ const Room: React.FC = () => {
   useEffect(() => {
     if (inView && feed.posts?.length) markRoomSeen(service, roomId, Math.max(...feed.posts.map((p) => p.version)))
   }, [inView, feed.posts, service, roomId])
-  const pendingPosts = useMemo(
-    () => outbox.pending.map((p) => pendingAsPost(p, room?.actingAs)),
-    [outbox.pending, room?.actingAs]
-  )
+  // A sent post leaves the outbox in the effect above, so one frame after the list first carries it. Drawn for that
+  // frame it showed twice, and the chat jumped up a bubble and back (279.3): it is left out here as soon as it is listed.
+  const pendingPosts = useMemo(() => {
+    const listed = new Set(feed.posts?.map((p) => p.key))
+    return outbox.pending.filter((p) => !(p.key && listed.has(p.key))).map((p) => pendingAsPost(p, room?.actingAs))
+  }, [outbox.pending, feed.posts, room?.actingAs])
   // The list is drawn from the bottom up, so offset 0 is the newest post: a post just sent shows there.
   const list = useRef<FlatList<Item>>(null)
   // The day of the posts at the top of the screen, floated while the member scrolls (as the person-to-person chat's).

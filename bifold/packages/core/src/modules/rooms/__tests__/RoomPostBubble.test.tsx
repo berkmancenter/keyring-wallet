@@ -4,6 +4,7 @@
  */
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
@@ -122,6 +123,15 @@ describe('RoomPostBubble: when a post on its way says so', () => {
     expect(tree.getByTestId(id('RoomPostSending'))).toBeTruthy()
     act(() => void jest.advanceTimersByTime(ROOM_SENDING_LABEL_AFTER_MS - 1))
     expect(says(tree)).toBe(false)
+  })
+
+  // The bubble spaces its lines with a gap, and an empty view in its flow takes one: the bubble was 2 pt taller while
+  // sending, and the chat moved by that when the post was written (279.3).
+  test('the mark of a post quietly on its way is out of the flow, so the bubble is the size it will be once written', () => {
+    const tree = sending()
+    expect(StyleSheet.flatten(tree.getByTestId(id('RoomPostSending')).props.style)).toMatchObject({
+      position: 'absolute',
+    })
   })
 
   test('still on its way after the wait: it says "Sending", drawn lighter, as before', () => {

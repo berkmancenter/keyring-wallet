@@ -159,6 +159,32 @@ describe('posting to a room', () => {
     expect(tree.getAllByText('See you Thursday.')).toHaveLength(1)
   })
 
+  // The sent post left the outbox in an effect, one frame after the list first carried it: for that frame the chat drew
+  // it twice and jumped up a bubble and back (279.3). Every draw of the list is looked at, not only the last.
+  test('a post the list now carries is never drawn twice, in any draw of the chat', async () => {
+    const words = 'Only once.'
+    const draws: number[] = []
+    const draw = FlatList.prototype.render
+    const drawn = jest.spyOn(FlatList.prototype, 'render').mockImplementation(function (this: FlatList<unknown>) {
+      const items = (this.props.data ?? []) as Array<{ kind?: string; post?: { text?: unknown } }>
+      draws.push(items.filter((item) => item.kind === 'post' && String(item.post?.text) === words).length)
+      return draw.call(this)
+    })
+    try {
+      const tree = show(PLANNING)
+      await type(tree, words)
+      await send(tree)
+      await waitFor(() => expect(tree.queryByTestId(id('RoomPostSending'))).toBeNull())
+      await waitFor(() => expect(tree.getAllByText(words)).toHaveLength(1))
+      // It was drawn (control), and in no draw more than once. The greatest of the draws, on purpose: if the list's
+      // draws stop being seen at all, there are none, their greatest is -Infinity, and this fails. `draws.every(...)`
+      // would pass on none, for ever.
+      expect(Math.max(...draws)).toBe(1)
+    } finally {
+      drawn.mockRestore()
+    }
+  })
+
   test('shows the post as sending until it is written', async () => {
     const service = mockService as RoomsService
     let release: () => void = () => undefined

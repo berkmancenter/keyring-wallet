@@ -111,6 +111,7 @@ export const RoomPostBubble: React.FC<{
     text: { color: ink },
     quiet: { color: muted, fontStyle: 'italic' },
     line: { flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: 2 },
+    mark: { position: 'absolute' },
     lineText: { flexShrink: 1, color: muted, fontSize: 13, lineHeight: 18 },
   })
   const by = post.author
@@ -221,8 +222,10 @@ export const RoomPostBubble: React.FC<{
             </View>
           ) : null}
           {quietlySending ? (
-            // Nothing to read yet; the mark stays, so a test that asks whether a post is still on its way is told.
-            <View testID={testIdWithKey('RoomPostSending')} accessible={false} />
+            // Nothing to read yet; the mark stays, so a test that asks whether a post is still on its way is told. Out
+            // of the bubble's flow: an empty view in it still takes one of the bubble's gaps, so the bubble was 2 pt
+            // taller while sending and the chat moved by that when the post was written (279.3).
+            <View testID={testIdWithKey('RoomPostSending')} accessible={false} style={styles.mark} />
           ) : post.delivery ? (
             <ThemedText
               style={[styles.meta, { alignSelf: 'flex-end' }]}
