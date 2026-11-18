@@ -52,7 +52,7 @@ export function useDirectoryService(mediatorDid?: string): DirectoryService | un
 /** At most this many authors are looked up each time a room's authors change, one at a time. */
 export const NAME_LOOKUPS_PER_VISIT = 20
 /**
- * A member asked about this recently is not asked again yet. A room's authors change as it scrolls and re-renders,
+ * A member asked about this recently, and answered (a name, or none), is not asked again yet. A room's authors change as it scrolls and re-renders,
  * and every ask waits in the same queue as the community's other tasks: a rename shows within a quarter hour, and
  * reopening rooms doesn't keep asking about the same people.
  */
@@ -112,7 +112,15 @@ export function useDirectoryNames(
         for (const did of ask) {
           if (!live) return
           asked.set(did, Date.now())
-          const name = await service.lookupName(communityDid, did)
+          let name: string | undefined
+          try {
+            name = await service.lookupName(communityDid, did)
+          } catch (error) {
+            // Not answered: asked again at the next visit, not in a quarter hour. The floor is for an answer, found
+            // or not.
+            asked.delete(did)
+            throw error
+          }
           if (name === kept.get(did)) {
             if (name) confirmed.push(did)
             continue

@@ -955,10 +955,14 @@ class VtiAgentController {
    * moved on before the answer came, so nothing collects as that persona: left on the mediator, it came back at every
    * drain (15 s) until the session's next turn as the persona (277.8, SHARED-SESSION-ORPHAN-REPLY).
    *
-   * - 'answered': the ask it threads on, sent as that persona, is given it, as `deliver` gives it.
+   * - 'answered': the ask it threads on, sent as that persona, is given it, as `deliver` gives it. A refusal threaded
+   *   on such an ask (a `trust-task-error`, or a DIDComm problem-report) answers it too: left on the mediator, the ask
+   *   waited out its clock as "no answer" while the community's reason sat unread, redelivered at every drain (a
+   *   directory lookup over an identity's own session, ZN6C-WNXG, 11-18).
    * - 'orphan': it threads on no ask, and answers a read (`VTI_READ_TASKS`): nothing waits for it and the read is asked
    *   again, so it may be dropped.
-   * - undefined: anything else stays the shared session's. A request, a refusal, a reply naming no thread (matched by
+   * - undefined: anything else stays the shared session's. A request, a refusal that threads on no ask this identity
+   *   sent, a reply naming no thread (matched by
    *   type, which a listener must not guess at), an ask of another identity, or an unclaimed answer to a write, whose
    *   only copy this may be (276.10: a vetting request taken by a listener was lost).
    *
@@ -968,7 +972,9 @@ class VtiAgentController {
   answerFromListener(did: string, received: DidCommV2PlaintextMessage): 'answered' | 'orphan' | undefined {
     const plaintext = unwrapBindingEnvelope(received)
     const type = String(plaintext.type ?? '')
-    if (!type.endsWith(RESPONSE_SUFFIX)) return undefined
+    const response = type.endsWith(RESPONSE_SUFFIX)
+    const refusal = type.startsWith(TASK_ERROR) || type === PROBLEM_REPORT
+    if (!response && !refusal) return undefined
     const threadId = (plaintext.body as { threadId?: unknown } | undefined)?.threadId
     const threaded = [threadId, plaintext.thid, plaintext.pthid].some((id) => typeof id === 'string' && id.length > 0)
     if (!threaded) return undefined
@@ -976,9 +982,19 @@ class VtiAgentController {
     const entry = this.askAnswered(plaintext)
     if (entry) {
       if (entry.did !== did) return undefined
-      this.settle(entry, plaintext)
+      // Said as `deliver` says a refusal it receives, with its code: a report then shows why, not only that.
+      if (type.startsWith(TASK_ERROR)) {
+        const words = refusalWordsOf(plaintext)
+        const who = isHiddenVettingType(entry.type) ? 'the community' : didPrefix(plaintext.from)
+        this.agent?.config?.logger?.warn?.(
+          `vtiAgent: ${who} refused ${taskName(entry.type)}: ${words.code}${words.message ? ` — ${words.message}` : ''}`
+        )
+      }
+      this.settle(entry, type === PROBLEM_REPORT ? problemReportAsRefusal(plaintext) : plaintext)
       return 'answered'
     }
+    // A refusal that threads on no ask of this phone's is never dropped here: it stays the shared session's.
+    if (!response) return undefined
     return isVtiReadTask(type.slice(0, -RESPONSE_SUFFIX.length)) ? 'orphan' : undefined
   }
 

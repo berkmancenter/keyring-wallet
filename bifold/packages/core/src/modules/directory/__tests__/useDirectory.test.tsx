@@ -198,6 +198,38 @@ describe('room authors’ own names', () => {
     expect(confirmDirectoryNames).not.toHaveBeenCalled()
   })
 
+  // ZN6C-WNXG (11-18): a lookup that got no answer still counted as asked, so that member waited a quarter hour.
+  it('a lookup that failed is asked again at the next open, at once; one that was answered waits out the floor (control)', async () => {
+    const now = Date.parse('2026-11-18T00:42:00Z')
+    jest.spyOn(Date, 'now').mockImplementation(() => now)
+    const service = createFakeDirectoryService({ shown: { [BO]: 'Bo' } })
+    const lookup = service.lookupName.bind(service)
+    let fail = true
+    service.lookupName = async (community, did) => {
+      if (did === ANA && fail) {
+        service.calls.push(`lookupName ${did} (no answer)`)
+        throw Object.assign(new Error('no answer yet'), { name: 'VtiSentNoAnswer' })
+      }
+      return lookup(community, did)
+    }
+    // Bo is answered; Ana's lookup fails.
+    const first = renderHook(() => useDirectoryNames(service, COMMUNITY, [BO]))
+    await waitFor(() => expect(service.calls).toEqual([`lookupName ${BO}`]))
+    first.unmount()
+    const second = renderHook(() => useDirectoryNames(service, COMMUNITY, [ANA]))
+    await waitFor(() => expect(mockAgent.config.logger.warn).toHaveBeenCalled())
+    second.unmount()
+    expect(service.calls).toEqual([`lookupName ${BO}`, `lookupName ${ANA} (no answer)`])
+
+    // Opened again in the same instant: Ana is asked again, Bo is not.
+    fail = false
+    const again = renderHook(() => useDirectoryNames(service, COMMUNITY, [ANA, BO]))
+    await waitFor(() => expect(service.calls).toHaveLength(3))
+    await waitFor(() => expect(loadDirectoryNames).toHaveBeenCalledTimes(3))
+    expect(service.calls).toEqual([`lookupName ${BO}`, `lookupName ${ANA} (no answer)`, `lookupName ${ANA}`])
+    again.unmount()
+  })
+
   it('asks for at most NAME_LOOKUPS_PER_VISIT authors at a time, and stops at a failure', async () => {
     const many = Array.from({ length: NAME_LOOKUPS_PER_VISIT + 5 }, (_, i) => `did:key:m${i}`)
     const service = createFakeDirectoryService({ shown: {} })
