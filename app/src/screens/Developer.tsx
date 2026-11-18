@@ -32,6 +32,8 @@ import {
   SEDI_KERI_REMOTE_OFF,
   CONFIRM_ITS_YOU_REMOTE_OFF,
   setConfirmItsYouEnabled,
+  GUARDIAN_OFFERS_REMOTE_OFF,
+  setGuardianOffersEnabled,
   setDemoStateHost,
   sediDemoHiddenByKill,
   EnforcementCheckCard,
@@ -136,6 +138,7 @@ const Developer: React.FC = () => {
   const [enableTrustTestState, setEnableTrustTestState] = useState(!!store.developer.enableTrustTestState)
   const [enableStateCard, setEnableStateCard] = useState(!!store.developer.enableStateCard)
   const [enableConfirmItsYou, setEnableConfirmItsYou] = useState(!!store.developer.enableConfirmItsYou)
+  const [enableGuardianOffers, setEnableGuardianOffers] = useState(!!store.developer.enableGuardianOffers)
   const [demoStateHostText, setDemoStateHostText] = useState(store.developer.demoStateHost ?? '')
   // Which demo switch is on: one side per phone, or neither. Saved, and handed to bifold at start-up (container-imp).
   const [sediDemoSide, setSediDemoSideShown] = useState<SediDemoSide | ''>(store.developer.sediDemoSide ?? '')
@@ -528,6 +531,17 @@ const Developer: React.FC = () => {
     // Read live: the contact page and an arriving request read it from the next render, no restart.
     setConfirmItsYouEnabled(next)
     setEnableConfirmItsYou(next)
+  }
+
+  const toggleEnableGuardianOffersSwitch = () => {
+    const next = !enableGuardianOffers
+    dispatch({
+      type: BCDispatchAction.TOGGLE_GUARDIAN_OFFERS,
+      payload: [next],
+    })
+    // Read live: the contact page, an arriving offer and an arriving ask read it at each check, no restart.
+    setGuardianOffersEnabled(next)
+    setEnableGuardianOffers(next)
   }
 
   const toggleEnableTrustTestStateSwitch = () => {
@@ -1337,6 +1351,24 @@ const Developer: React.FC = () => {
                   ios_backgroundColor={ColorPalette.grayscale.lightGrey}
                   onValueChange={toggleEnableConfirmItsYouSwitch}
                   value={enableConfirmItsYou}
+                />
+              </SectionRow>
+            )}
+            {/* Hidden while its own remote off is set, as above. Counts only with trusted approvers and state-verified
+            approvers on too (bifold's isGuardianOffersOn), as its words say. */}
+            {!GUARDIAN_OFFERS_REMOTE_OFF.off && (
+              <SectionRow
+                title={t('Developer.EnableGuardianOffers')}
+                accessibilityLabel={t('Developer.EnableGuardianOffers')}
+                testID={testIdWithKey('ToggleEnableGuardianOffers')}
+                onPress={toggleEnableGuardianOffersSwitch}
+              >
+                <Switch
+                  trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+                  thumbColor={enableGuardianOffers ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+                  ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+                  onValueChange={toggleEnableGuardianOffersSwitch}
+                  value={enableGuardianOffers}
                 />
               </SectionRow>
             )}

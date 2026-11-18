@@ -211,6 +211,7 @@ const translation = {
     "BecomeK0TestWard": "I'm the test ward (K0)",
     "EnableStateCard": "State card (demo): show the state Guardian card this phone holds in Credentials",
     "EnableConfirmItsYou": "Confirm it's you: ask a contact to confirm it's really them (demo). Turn it on on both phones.",
+    "EnableGuardianOffers": "Guardian offers: a guardian offers to be a contact's approver, with their Guardian card (demo). Needs trusted approvers and state-verified approvers on too. Turn it on on both phones.",
     "Demos": "Demos",
     "SediDemoGuardian": "Guardian demo",
     "SediDemoGuardianHint": "On the approver's phone. Holds the Example State test card and shows the state card.",

@@ -184,6 +184,7 @@ const translation = {
     "BecomeK0TestWard": "Sou a pessoa tutelada de teste (K0)",
     "EnableStateCard": "Cartão do estado (demo): mostrar em Credenciais o cartão de responsável que este telefone guarda",
     "EnableConfirmItsYou": "É você mesmo: pedir a um contato que confirme que é mesmo ele (demo). Ative nos dois telefones.",
+    "EnableGuardianOffers": "Ofertas de tutor: um tutor se oferece para aprovar por um contato, com seu cartão de tutor (demo). Requer também aprovadores de confiança e aprovadores verificados pelo estado. Ative nos dois telefones.",
     "Demos": "Demos",
     "SediDemoGuardian": "Demo do tutor",
     "SediDemoGuardianHint": "No telefone do aprovador. Guarda o cartão de teste do Example State e mostra o cartão do Estado.",
