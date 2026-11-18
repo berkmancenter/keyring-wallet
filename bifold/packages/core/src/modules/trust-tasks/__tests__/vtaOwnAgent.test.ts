@@ -31,6 +31,8 @@ const POLICY_UPSERT = 'https://trusttasks.org/spec/policy/upsert/0.2'
 const CONTEXTS_CREATE = 'https://trusttasks.org/spec/vta/contexts/create/1.0'
 const CONTEXTS_DELETE = 'https://trusttasks.org/spec/vta/contexts/delete/1.0'
 const CONTEXTS_DELETE_11 = 'https://trusttasks.org/spec/vta/contexts/delete/1.1'
+// From VTI main a78a040e8 (#2763), the only version served; also the version the screen offers the rule at.
+const CONTEXTS_DELETE_12 = 'https://trusttasks.org/spec/vta/contexts/delete/1.2'
 const DISCOVERY = 'https://trusttasks.org/spec/trust-task-discovery/0.3'
 const VTA = 'did:webvh:QmFarm:farm.example:alice'
 const PHONE = 'did:peer:2.phone'
@@ -242,6 +244,7 @@ jest.mock('../module/VtiMediatorTransport', () => ({
           return
         case CONTEXTS_DELETE:
         case CONTEXTS_DELETE_11:
+        case CONTEXTS_DELETE_12:
           if (!mockVta.contextsDelete.includes(body.type)) {
             // helpers.rs method_not_found: the family is served, at another version.
             refuse({
@@ -1859,7 +1862,8 @@ describe('"Ask me before…": the agent\'s approval rules', () => {
     const { vta } = await linkedPhone()
     expect(await vta.sendTestRequest(agent)).toEqual({ kind: 'letThrough', cleanedUp: true })
     expect(sentOf(CREATE)[0].payload).toMatchObject({ name: 'Keyring test request' })
-    // An agent before vta-service v0.67.0 refuses 1.1 and is asked 1.0.
+    // An agent before vta-service v0.67.0 refuses 1.2 and 1.1 and is asked 1.0.
+    expect(sentOf(CONTEXTS_DELETE_12)).toHaveLength(1)
     expect(sentOf(CONTEXTS_DELETE_11)).toHaveLength(1)
     expect(sentOf(CONTEXTS_DELETE)[0].payload).toEqual({ id: sentOf(CREATE)[0].payload.id, force: true })
     expect(mockVta.contexts.size).toBe(0)
@@ -1874,20 +1878,39 @@ describe('"Ask me before…": the agent\'s approval rules', () => {
     expect(mockVta.contexts.size).toBe(0)
   })
 
+  // VTI main a78a040e8 (#2763): what the Farm's agents ran from 11-18, still calling themselves 0.83.0. Before the
+  // ladder asked 1.2 the test context was left on the agent (cleanedUp false).
+  it('an agent serving contexts/delete only at 1.2 has the test context deleted at 1.2, at the first ask', async () => {
+    mockVta.contextsDelete = [CONTEXTS_DELETE_12]
+    const { vta } = await linkedPhone()
+    expect(await vta.sendTestRequest(agent)).toEqual({ kind: 'letThrough', cleanedUp: true })
+    expect(sentOf(CONTEXTS_DELETE_12)[0].payload).toEqual({ id: sentOf(CREATE)[0].payload.id, force: true })
+    expect(sentOf(CONTEXTS_DELETE_11)).toEqual([])
+    expect(sentOf(CONTEXTS_DELETE)).toEqual([])
+    expect(mockVta.contexts.size).toBe(0)
+  })
+
   it('"ask me before deleting a context" names every version the agent dispatches', async () => {
     const ruleOf = () => (rulesHeld() as { taskType: string }[]).map((r) => r.taskType)
     mockVta.discovery = [CONTEXTS_DELETE_11, CREATE]
     const { vta } = await linkedPhone()
-    const on = await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, true)
+    const on = await vta.setApprovalRule(agent, CONTEXTS_DELETE_12, true)
     expect(ruleOf()).toEqual([CONTEXTS_DELETE_11])
     expect(on.view.offered.find((o) => o.key === 'contextsDelete')).toMatchObject({ on: true, renew: false })
 
     // v0.67.0 dispatches both, gated apart.
     mockVta.discovery = [CONTEXTS_DELETE, CONTEXTS_DELETE_11, CREATE]
-    await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, true)
+    await vta.setApprovalRule(agent, CONTEXTS_DELETE_12, true)
     expect(ruleOf()).toEqual([CONTEXTS_DELETE_11, CONTEXTS_DELETE])
-    await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, false)
+    await vta.setApprovalRule(agent, CONTEXTS_DELETE_12, false)
     expect(ruleOf()).toEqual([])
+
+    // An agent on VTI main a78a040e8 dispatches only 1.2: one rule, at 1.2. Offered at 1.1, this was refused as
+    // not served and no rule could be set there.
+    mockVta.discovery = [CONTEXTS_DELETE_12, CREATE]
+    const on12 = await vta.setApprovalRule(agent, CONTEXTS_DELETE_12, true)
+    expect(ruleOf()).toEqual([CONTEXTS_DELETE_12])
+    expect(on12.view.offered.find((o) => o.key === 'contextsDelete')).toMatchObject({ on: true, renew: false })
   })
 
   it('on an agent updated to serve contexts/delete only at 1.1, an old 1.0 rule reads off and, turned on again, holds', async () => {
@@ -1895,7 +1918,7 @@ describe('"Ask me before…": the agent\'s approval rules', () => {
     mockVta.discovery = [CONTEXTS_DELETE, CREATE]
     mockVta.enforceRules = true
     const { vta } = await linkedPhone()
-    await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, true)
+    await vta.setApprovalRule(agent, CONTEXTS_DELETE_12, true)
 
     // The agent is updated (61c23f20): 1.1 only. The 1.0 rule now holds nothing — the test context goes unasked.
     mockVta.contextsDelete = [CONTEXTS_DELETE_11]
@@ -1907,7 +1930,7 @@ describe('"Ask me before…": the agent\'s approval rules', () => {
     })
 
     // Turned on again: the rule is re-written at 1.1, and a deletion is held for this phone's approval.
-    const renewed = await vta.setApprovalRule(agent, CONTEXTS_DELETE_11, true)
+    const renewed = await vta.setApprovalRule(agent, CONTEXTS_DELETE_12, true)
     expect(renewed.view.offered.find((o) => o.key === 'contextsDelete')).toMatchObject({ on: true, renew: false })
     expect(await vta.sendTestRequest(agent)).toEqual({ kind: 'letThrough', cleanedUp: false })
     expect(mockVta.contexts.size).toBe(1)

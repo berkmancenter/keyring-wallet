@@ -51,6 +51,7 @@ const V0_65 = at({
   'device/heartbeat': [['0.1'], ['0.2']],
   'auth/step-up/approve-response': [['0.1', '0.2', '0.3']],
   'vta/contexts/delete': [['1.0']],
+  'vta/webvh/dids/list': [['1.0']],
 })
 
 /** vta-service-v0.67.0 (93d36996): the old versions withdrawn, nothing at the edge below the current one. */
@@ -72,6 +73,7 @@ const V0_67 = at({
   'auth/step-up/approve-response': [['0.6']],
   // Both, gated apart; only 1.1 from 61c23f20 (#2332).
   'vta/contexts/delete': [['1.0', '1.1']],
+  'vta/webvh/dids/list': [['1.0']],
 })
 
 /**
@@ -112,6 +114,21 @@ const MAIN_887370A3B: Model = {
     ...V0_68.table.filter((u) => !u.includes('/acl/')),
     `${SPEC}acl/list/0.4`,
     ...['grant', 'revoke', 'update'].map((f) => `${SPEC}acl/${f}/0.3`),
+  ],
+  edge: [],
+}
+
+/**
+ * VTI main a78a040e8 (#2763, 2026-11-17; untagged, vta-service still 0.83.0; the Farm ran it from 11-18): the list of
+ * identities is the method-neutral `vta/dids/list/0.1` and `vta/webvh/dids/list/1.0` is gone, and contexts/delete is
+ * served only at 1.2 (`dispatch_table!` at that commit against the vta-service-v0.83.0 tag). The tagged v0.83.0 is
+ * v0.68.0's for these two families: contexts/delete at 1.1, the did:webvh list.
+ */
+const MAIN_A78A040E8: Model = {
+  table: [
+    ...MAIN_887370A3B.table.filter((u) => !u.includes('/contexts/delete/') && !u.includes('/webvh/dids/list/')),
+    `${SPEC}vta/contexts/delete/1.2`,
+    `${SPEC}vta/dids/list/0.1`,
   ],
   edge: [],
 }
@@ -172,7 +189,8 @@ const ASKS_0_65: Record<string, string[]> = {
   deviceAclList: ['acl/list/0.4', 'acl/list/0.3', 'acl/list/0.2', 'acl/list/0.1'],
   deviceAclRevoke: ['acl/revoke/0.3', 'acl/revoke/0.2', 'acl/revoke/0.1'],
   vaultCredentialsGet: ['vault/credentials/get/0.2', 'vault/credentials/get/0.1'],
-  contextsDelete: ['vta/contexts/delete/1.1', 'vta/contexts/delete/1.0'],
+  contextsDelete: ['vta/contexts/delete/1.2', 'vta/contexts/delete/1.1', 'vta/contexts/delete/1.0'],
+  didsList: ['vta/dids/list/0.1', 'vta/webvh/dids/list/1.0'],
 }
 
 beforeEach(() => forgetAllVersions())
@@ -227,7 +245,9 @@ describe('every ladder against a v0.65.0 agent (v0.60.0 to v0.66.0)', () => {
 
 /** The access-list ladders, which ask VTI main's acl versions first (afc06a431) and so step down once on a tag. */
 const ACL_FAMILIES = Object.keys(ASKS_0_65).filter((f) => LADDERS[f][0].includes('/acl/'))
-const NOT_ACL = Object.keys(ASKS_0_65).filter((f) => !ACL_FAMILIES.includes(f))
+/** The ladders that ask what VTI main serves from a78a040e8 (#2763) first, and so step down once on every tag. */
+const SINCE_2763 = ['contextsDelete', 'didsList']
+const NOT_ACL = Object.keys(ASKS_0_65).filter((f) => !ACL_FAMILIES.includes(f) && !SINCE_2763.includes(f))
 
 describe('the same ladders against v0.68.0', () => {
   it.each(NOT_ACL)('%s is answered at its first ask by v0.68.0', async (family) => {
@@ -275,7 +295,9 @@ describe('the same ladders against v0.67.0 and 0d3f268e', () => {
       const contextsDelete = LADDERS[family][0].includes('/contexts/delete/')
       expect(asked[0]).toBe(LADDERS[family][0])
       if (acl) expect(asked[asked.length - 1]).toMatch(/\/acl\/[a-z]+\/0\.1$/)
-      else if (contextsDelete) expect(short(asked)).toEqual(['vta/contexts/delete/1.1', 'vta/contexts/delete/1.0'])
+      else if (contextsDelete)
+        expect(short(asked)).toEqual(['vta/contexts/delete/1.2', 'vta/contexts/delete/1.1', 'vta/contexts/delete/1.0'])
+      else if (family === 'didsList') expect(short(asked)).toEqual(['vta/dids/list/0.1', 'vta/webvh/dids/list/1.0'])
       else expect(asked).toHaveLength(1)
     }
   })
@@ -288,6 +310,61 @@ describe('the same ladders against v0.67.0 and 0d3f268e', () => {
     const refusal = new TaskVersions().ask('deviceList', LADDERS.deviceList, answer)
     await expect(refusal).rejects.toMatchObject({ code: 'unsupportedVersion' })
     expect(short(asked)).toEqual(['device/list/0.3', 'device/list/0.2'])
+  })
+})
+
+describe('the two ladders VTI main changed at a78a040e8 (#2763), with vta-service still calling itself 0.83.0', () => {
+  it.each([
+    ['contextsDelete', ['vta/contexts/delete/1.2', 'vta/contexts/delete/1.1']],
+    ['didsList', ['vta/dids/list/0.1', 'vta/webvh/dids/list/1.0']],
+  ])('%s steps down once on every tag from v0.67.0 to the tagged v0.83.0', async (family, expected) => {
+    for (const model of [V0_67, V0_68, MAIN_887370A3B]) {
+      const { asked, answer } = agent(model)
+      const { uri } = await new TaskVersions().ask(family, LADDERS[family], answer)
+      expect(short(asked)).toEqual(expected)
+      expect(uri.slice(SPEC.length)).toBe(expected[expected.length - 1])
+    }
+  })
+
+  it.each(SINCE_2763)('%s is answered at its first ask by main a78a040e8', async (family) => {
+    const { asked, answer } = agent(MAIN_A78A040E8)
+    await new TaskVersions().ask(family, LADDERS[family], answer)
+    expect(asked).toEqual([LADDERS[family][0]])
+  })
+
+  it('the ladders as they were (1.1 then 1.0; the did:webvh list alone) are both refused there: what testers met', async () => {
+    const before = agent(MAIN_A78A040E8)
+    await expect(
+      new TaskVersions().ask('contextsDelete', LADDERS.contextsDelete.slice(1), before.answer)
+    ).rejects.toMatchObject({ code: 'unsupportedVersion' })
+    // The did:webvh list has no version left at all there, so its refusal names nothing to go to.
+    await expect(new TaskVersions().ask('didsList', LADDERS.didsList.slice(1), before.answer)).rejects.toMatchObject({
+      code: 'unsupportedType',
+      details: undefined,
+    })
+  })
+
+  it('contexts/delete on an agent updated while the app runs goes up to 1.2, which its refusal names', async () => {
+    const versions = new TaskVersions()
+    await versions.ask('contextsDelete', LADDERS.contextsDelete, agent(V0_68).answer)
+    const updated = agent(MAIN_A78A040E8)
+    const { uri } = await versions.ask('contextsDelete', LADDERS.contextsDelete, updated.answer)
+    expect(short(updated.asked)).toEqual(['vta/contexts/delete/1.1', 'vta/contexts/delete/1.2'])
+    expect(uri).toBe(`${SPEC}vta/contexts/delete/1.2`)
+  })
+
+  it('the list on an agent updated while the app runs is refused once, and the next ask starts from the top', async () => {
+    // Two families: the refusal of the did:webvh list names nothing, so the ladder cannot go up within one ask. What
+    // was remembered is dropped, and VtaClient.listDids asks once more (agentDidsList.test.ts holds that).
+    const versions = new TaskVersions()
+    await versions.ask('didsList', LADDERS.didsList, agent(V0_68).answer)
+    const updated = agent(MAIN_A78A040E8)
+    await expect(versions.ask('didsList', LADDERS.didsList, updated.answer)).rejects.toMatchObject({
+      code: 'unsupportedType',
+    })
+    const { uri } = await versions.ask('didsList', LADDERS.didsList, updated.answer)
+    expect(short(updated.asked)).toEqual(['vta/webvh/dids/list/1.0', 'vta/dids/list/0.1'])
+    expect(uri).toBe(`${SPEC}vta/dids/list/0.1`)
   })
 })
 

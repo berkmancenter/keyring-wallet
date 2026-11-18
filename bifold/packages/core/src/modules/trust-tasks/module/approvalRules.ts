@@ -31,7 +31,7 @@ const SPEC = 'https://trusttasks.org/spec/'
  */
 export const OFFERED_TASKS = [
   { taskType: `${SPEC}vta/contexts/create/1.0`, key: 'contextsCreate' },
-  { taskType: `${SPEC}vta/contexts/delete/1.1`, key: 'contextsDelete' },
+  { taskType: `${SPEC}vta/contexts/delete/1.2`, key: 'contextsDelete' },
   { taskType: `${SPEC}vta/webvh/dids/delete/1.0`, key: 'didsDelete' },
   { taskType: `${SPEC}keys/revoke/0.1`, key: 'keysRevoke' },
 ] as const
@@ -47,12 +47,14 @@ export type OfferedKey = (typeof OFFERED_TASKS)[number]['key']
  * apart, and pnm sends 1.1), and only at 1.1 from 61c23f20 (#2332), where a
  * rule naming 1.0 is not moved to 1.1 (vta-policy approvals.rs
  * RETIRED_TASK_TYPES has no entry for it) and never holds anything again.
+ * From a78a040e8 (#2763, main after the tagged v0.83.0) it serves only 1.2.
  *
  * Add a family here whenever an agent in use serves an offered task at a
  * version other than the one in {@link OFFERED_TASKS}.
  */
 export const OLDER_VERSIONS: Readonly<Record<string, readonly string[]>> = {
-  [`${SPEC}vta/contexts/delete/1.1`]: [`${SPEC}vta/contexts/delete/1.0`],
+  // version-set: the older versions a rule must also name; written into a rule's row, never sent as a task
+  [`${SPEC}vta/contexts/delete/1.2`]: [`${SPEC}vta/contexts/delete/1.1`, `${SPEC}vta/contexts/delete/1.0`],
 }
 
 /** Every version of an offered task, newest first. */
@@ -92,7 +94,7 @@ export const ruleVersionsFor = (taskType: string, served?: readonly string[]): r
  * hold the phone itself. `policy/upsert/0.2` is here because the phone sends
  * it to change rules: a rule on it would lock this screen out for good.
  * `vta/contexts/create/1.0` is sent only by "Send me a test request", which
- * expects it to be held, and `vta/contexts/delete` (1.1, else 1.0) only to clean up after
+ * expects it to be held, and `vta/contexts/delete` (1.2, else 1.1, else 1.0) only to clean up after
  * a test request the agent let through — which happens only when the agent
  * enforces no rules at all.
  */
@@ -105,6 +107,7 @@ export const PHONE_SENDS: readonly string[] = [
   'auth/step-up/approve-response/0.7',
   'config/show/0.1',
   'vta/contexts/list/1.0',
+  'vta/dids/list/0.1',
   'vta/webvh/dids/list/1.0',
   'vta/webvh/dids/create/1.0',
   'vta/webvh/dids/create/1.1',
@@ -186,6 +189,7 @@ export const PHONE_SENDS: readonly string[] = [
  */
 export const TEST_REQUEST_TASKS = [
   `${SPEC}vta/contexts/create/1.0`,
+  `${SPEC}vta/contexts/delete/1.2`,
   `${SPEC}vta/contexts/delete/1.1`,
   `${SPEC}vta/contexts/delete/1.0`,
 ] as const

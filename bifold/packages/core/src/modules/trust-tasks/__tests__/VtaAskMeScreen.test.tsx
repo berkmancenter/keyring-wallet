@@ -29,6 +29,8 @@ const CREATE = 'https://trusttasks.org/spec/vta/contexts/create/1.0'
 const SET_WAKE = 'https://trusttasks.org/spec/device/set-wake/0.2'
 const DELETE_10 = 'https://trusttasks.org/spec/vta/contexts/delete/1.0'
 const DELETE_11 = 'https://trusttasks.org/spec/vta/contexts/delete/1.1'
+// The version the screen offers the rule at; the rule written names whichever the agent dispatches.
+const DELETE_12 = 'https://trusttasks.org/spec/vta/contexts/delete/1.2'
 const id = (key: string) => testIdWithKey(key)
 
 const stateOf = (model: ApprovalsModel, canChange = true, served?: string[]): ApprovalRulesState => ({
@@ -95,9 +97,9 @@ describe('Ask me before…', () => {
   })
 
   test('a rule only on a version the updated agent no longer serves reads off, with "turn it on again"', async () => {
-    const old = { ...withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME, [DELETE_10]), version: 1 }
+    const old = { ...withPhoneRule(EMPTY_APPROVALS, DELETE_12, true, ME, [DELETE_10]), version: 1 }
     jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(old, true, [DELETE_11]))
-    const renewed = { ...withPhoneRule(old, DELETE_11, true, ME, [DELETE_11]), version: 2 }
+    const renewed = { ...withPhoneRule(old, DELETE_12, true, ME, [DELETE_11]), version: 2 }
     const set = jest.spyOn(vtaAgent, 'setApprovalRule').mockResolvedValue(stateOf(renewed, true, [DELETE_11]))
     const tree = await show()
     expect(tree.getByTestId(id('AskMeSwitch_contextsDelete')).props.accessibilityState).toMatchObject({
@@ -108,7 +110,7 @@ describe('Ask me before…', () => {
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AskMeSwitch_contextsDelete')))
     })
-    expect(set).toHaveBeenCalledWith({}, DELETE_11, true)
+    expect(set).toHaveBeenCalledWith({}, DELETE_12, true)
     expect(tree.getByTestId(id('AskMeSwitch_contextsDelete')).props.accessibilityState).toMatchObject({ checked: true })
     expect(tree.queryByTestId(id('AskMeTurnOnAgain_contextsDelete'))).toBeNull()
   })

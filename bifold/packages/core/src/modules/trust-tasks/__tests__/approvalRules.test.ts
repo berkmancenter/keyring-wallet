@@ -32,6 +32,7 @@ const SET_WAKE = 'https://trusttasks.org/spec/device/set-wake/0.2'
 const ACL_GRANT = 'https://trusttasks.org/spec/acl/grant/0.1'
 const DELETE_10 = 'https://trusttasks.org/spec/vta/contexts/delete/1.0'
 const DELETE_11 = 'https://trusttasks.org/spec/vta/contexts/delete/1.1'
+const DELETE_12 = 'https://trusttasks.org/spec/vta/contexts/delete/1.2'
 
 const elsewhere = {
   rules: [
@@ -119,7 +120,8 @@ describe('what the screen shows', () => {
  * A rule holds only the version it names, and vta-service dispatches
  * contexts/delete at 1.0 up to v0.66.0, at both in v0.67.0 (gated apart), and
  * only at 1.1 from 61c23f20: a rule naming 1.0 there never holds anything, and
- * nothing moves it to 1.1.
+ * nothing moves it to 1.1. From a78a040e8 (#2763, main after the tagged v0.83.0)
+ * it dispatches only 1.2, and a rule naming 1.1 holds nothing there.
  */
 describe('a task agents serve in more than one version', () => {
   const versions = (rules: { taskType: string }[]) => rules.map((r) => r.taskType)
@@ -127,31 +129,34 @@ describe('a task agents serve in more than one version', () => {
     approvalsView(model, ME, served).offered.find((o) => o.key === 'contextsDelete')
 
   it('one rule per version the agent dispatches; with no answer, every version Keyring knows', () => {
-    const rules = (served?: string[]) => versions(withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME, served).rules)
+    const rules = (served?: string[]) => versions(withPhoneRule(EMPTY_APPROVALS, DELETE_12, true, ME, served).rules)
+    expect(rules([DELETE_12, CREATE])).toEqual([DELETE_12])
     expect(rules([DELETE_11, CREATE])).toEqual([DELETE_11])
     expect(rules([DELETE_10, DELETE_11])).toEqual([DELETE_11, DELETE_10])
     expect(rules([DELETE_10, CREATE])).toEqual([DELETE_10])
-    expect(rules(undefined)).toEqual([DELETE_11, DELETE_10])
+    expect(rules(undefined)).toEqual([DELETE_12, DELETE_11, DELETE_10])
+    // The version before the newest is no longer one a rule can be asked for by name: the screen asks by the offered one.
+    expect(() => withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME)).toThrow(/does not set approval rules/)
     // An answer that names none of its versions: refused, never a row naming types the agent may have retired (an
     // agent refuses the whole row for one retired type; VTI main retires contexts/delete 1.0).
     expect(() => rules([CREATE])).toThrow(NotServed)
     // The rules it writes are a row the agent takes.
-    const both = withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME)
+    const both = withPhoneRule(EMPTY_APPROVALS, DELETE_12, true, ME)
     expect(() => validateApprovals(both.rules, both.sets)).not.toThrow()
   })
 
   it('a not-served refusal reaches the person in its own words, without the task URI (control: a plain error)', () => {
     // Left to the generic branch it read "Your agent couldn't do that." and the reason was dropped.
-    const said = deviceRefusalOf(new NotServed(DELETE_11))
+    const said = deviceRefusalOf(new NotServed(DELETE_12))
     expect(said.reason).toBe('notServed')
     expect(said.message).not.toMatch(/https?:|trusttasks/)
     expect(deviceRefusalOf(new Error('something else')).reason).toBe('failed')
   })
 
   it('a rule only on a version the agent no longer dispatches reads off, to be turned on again', () => {
-    const old = { ...withPhoneRule(EMPTY_APPROVALS, DELETE_11, true, ME, [DELETE_10]), version: 1 }
+    const old = { ...withPhoneRule(EMPTY_APPROVALS, DELETE_12, true, ME, [DELETE_10]), version: 1 }
     expect(versions(old.rules)).toEqual([DELETE_10])
-    expect(deleteSwitch(old, [DELETE_10])).toMatchObject({ taskType: DELETE_11, on: true, renew: false })
+    expect(deleteSwitch(old, [DELETE_10])).toMatchObject({ taskType: DELETE_12, on: true, renew: false })
     expect(deleteSwitch(old, [DELETE_11])).toMatchObject({ on: false, renew: true })
     // v0.67.0 dispatches both, apart: a 1.0 rule alone lets 1.1 through.
     expect(deleteSwitch(old, [DELETE_10, DELETE_11])).toMatchObject({ on: false, renew: true })
@@ -159,10 +164,17 @@ describe('a task agents serve in more than one version', () => {
     expect(deleteSwitch(old)).toMatchObject({ on: true, renew: false })
 
     // Turned on again on the updated agent: one rule, at the version it now dispatches.
-    const renewed = { ...withPhoneRule(old, DELETE_11, true, ME, [DELETE_11]), version: 2 }
+    const renewed = { ...withPhoneRule(old, DELETE_12, true, ME, [DELETE_11]), version: 2 }
     expect(versions(renewed.rules)).toEqual([DELETE_11])
     expect(deleteSwitch(renewed, [DELETE_11])).toMatchObject({ on: true, renew: false })
-    expect(withPhoneRule(renewed, DELETE_11, false, ME).rules).toEqual([])
+
+    // The agent moves again, to one that dispatches only 1.2 (#2763): the 1.1 rule holds nothing there, reads off, and
+    // is turned on again as one rule at 1.2.
+    expect(deleteSwitch(renewed, [DELETE_12])).toMatchObject({ on: false, renew: true })
+    const again = { ...withPhoneRule(renewed, DELETE_12, true, ME, [DELETE_12]), version: 3 }
+    expect(versions(again.rules)).toEqual([DELETE_12])
+    expect(deleteSwitch(again, [DELETE_12])).toMatchObject({ on: true, renew: false })
+    expect(withPhoneRule(again, DELETE_12, false, ME).rules).toEqual([])
   })
 
   it('a task with one version is unaffected', () => {
