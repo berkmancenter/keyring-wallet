@@ -158,7 +158,7 @@ const settle = async () => {
   for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-/** What the release ships (off until the device proof, #1138): these rows run with the cache on, and put it back. */
+/** What the release ships (on, by Alberto's decision, before the device proof): these rows run it on, and put it back. */
 const SHIPPED = { ...ROOMS_MESSAGE_CACHE }
 let biometry = true
 beforeEach(() => {

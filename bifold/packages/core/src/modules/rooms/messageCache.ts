@@ -30,13 +30,13 @@ import { onRoomsListed } from './useRoomRows'
  * a journal first and replayed at each start, so one a crash or a failed write cut short is finished then.
  *
  * Two values a release (an OTA included) sets, and nothing else, as for `liveDeliverySwitch.ts`:
- * - `on`: the release's choice. **It ships OFF on main** (the coordinator, 11-18, a5's option 1): this is the first
- *   change that stores message text on the phone, and no routine cut from main may start doing that before it is
- *   proven. Turning it on takes, in order: the device proof (plan phase 3: every wipe seen to empty on a phone),
- *   then a ring0 preview cut that carries the flip to `on: true` in its own commit, then Alberto's own word on that
- *   preview. Off, the cache keeps and shows nothing, and every start empties any copy an earlier bundle kept.
- * - `remoteOff`: the release's kill. Set it to `true` and nothing is kept or shown, and the first start empties what
- *   was kept, for everyone, whatever `on` says, until a release sets it back.
+ * - `on`: the release's choice. **On by default on main from 279.4, by Alberto's decision (11-18), before the device
+ *   proof** (plan phase 3: every wipe seen to empty on a phone) **and without a ring0 check.** Before that, main
+ *   shipped it off (#1138) and the cuts carried it from #1140's branch: 279.2 for open rooms, 279.3 for open and
+ *   attributed rooms. This is the first change that stores message text on the phone; the kill below is how it comes
+ *   back off. Off, the cache keeps and shows nothing, and every start empties any copy an earlier bundle kept.
+ * - `remoteOff`: the release's kill. Set it to `true` by OTA and nothing is kept or shown, and the first start empties
+ *   every copy, for everyone, whatever `on` says, until a release sets it back.
  *
  * KILL RECIPE (no kill PR is kept open): branch from current main, set `remoteOff: true` below (one line), and publish
  * it by OTA. Both are Alberto's.
@@ -48,7 +48,7 @@ import { onRoomsListed } from './useRoomRows'
  *
  * @module rooms/messageCache
  */
-export const ROOMS_MESSAGE_CACHE: { on: boolean; remoteOff: boolean } = { on: false, remoteOff: false }
+export const ROOMS_MESSAGE_CACHE: { on: boolean; remoteOff: boolean } = { on: true, remoteOff: false }
 
 export function isMessageCacheOn(): boolean {
   return ROOMS_MESSAGE_CACHE.on === true && ROOMS_MESSAGE_CACHE.remoteOff === false

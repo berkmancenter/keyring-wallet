@@ -65,12 +65,12 @@ beforeEach(() => {
   biometry = true
   setMessageCacheBiometryGate(async () => biometry)
   resetMessageCache()
-  // These rows are about the cache at work: switched on, as a ring0 preview carries it.
+  // These rows are about the cache at work: switched on, as main ships it.
   ROOMS_MESSAGE_CACHE.on = true
 })
 afterEach(() => {
-  // As main ships it: off (rooms/messageCache).
-  ROOMS_MESSAGE_CACHE.on = false
+  // As main ships it: on (rooms/messageCache).
+  ROOMS_MESSAGE_CACHE.on = true
   ROOMS_MESSAGE_CACHE.remoteOff = false
 })
 
@@ -153,8 +153,8 @@ describe('keeping and reading', () => {
   })
 })
 
-// The coordinator, 11-18 (a5's option 1): main ships it off until the device proof, a ring0 preview and Alberto's word.
-describe('as main ships it', () => {
+// A later bundle that ships it off again (`on: false`): what an earlier bundle kept goes at its first start.
+describe('a bundle that ships it off again', () => {
   it('is off: nothing kept, nothing shown, and a start empties any copy an earlier bundle kept', async () => {
     const w = wallet()
     await keepRoomPosts(w, room(), [post('a')], NOW)
@@ -451,13 +451,13 @@ describe('what ends access with no room in view', () => {
   })
 })
 
-// Read from the module as it ships, not as a test left it: main ships the cache off.
+// Read from the module as it ships, not as a test left it: main ships the cache on (Alberto, 11-18).
 describe('the shipped default', () => {
-  it('is on: false, remoteOff: false', () => {
+  it('is on: true, remoteOff: false', () => {
     jest.isolateModules(() => {
       const { ROOMS_MESSAGE_CACHE: shipped, isMessageCacheOn: on } = jest.requireActual('../messageCache')
-      expect(shipped).toEqual({ on: false, remoteOff: false })
-      expect(on()).toBe(false)
+      expect(shipped).toEqual({ on: true, remoteOff: false })
+      expect(on()).toBe(true)
     })
   })
 })
