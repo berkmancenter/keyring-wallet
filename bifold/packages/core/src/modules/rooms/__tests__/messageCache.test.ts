@@ -14,6 +14,7 @@ import {
   emptyGoneRooms,
   emptyMessageCache,
   hashOf,
+  isMessageCacheOn,
   keepRoomPosts,
   MSG_CACHE_BODY_MAX,
   MSG_CACHE_BYTES,
@@ -64,9 +65,12 @@ beforeEach(() => {
   biometry = true
   setMessageCacheBiometryGate(async () => biometry)
   resetMessageCache()
+  // These rows are about the cache at work: switched on, as a ring0 preview carries it.
+  ROOMS_MESSAGE_CACHE.on = true
 })
 afterEach(() => {
-  ROOMS_MESSAGE_CACHE.on = true
+  // As main ships it: off (rooms/messageCache).
+  ROOMS_MESSAGE_CACHE.on = false
   ROOMS_MESSAGE_CACHE.remoteOff = false
 })
 
@@ -146,6 +150,20 @@ describe('keeping and reading', () => {
     const [record] = [...w.records.values()]
     ;(record.content.posts as unknown[]).push({ key: 'bad', version: -1 }, 'nonsense')
     expect((await readRoomPosts(w, ME, ROOM, NOW))?.posts.map((p) => p.key)).toEqual(['a', 'b'])
+  })
+})
+
+// The coordinator, 11-18 (a5's option 1): main ships it off until the device proof, a ring0 preview and Alberto's word.
+describe('as main ships it', () => {
+  it('is off: nothing kept, nothing shown, and a start empties any copy an earlier bundle kept', async () => {
+    const w = wallet()
+    await keepRoomPosts(w, room(), [post('a')], NOW)
+    ROOMS_MESSAGE_CACHE.on = false
+    expect(isMessageCacheOn()).toBe(false)
+    expect(await keepRoomPosts(w, room({ roomId: ROOM2 }), [post('b')], NOW)).toBe(false)
+    expect(await readRoomPosts(w, ME, ROOM, NOW)).toBeUndefined()
+    await sweepMessageCache(w, [{ communityDid: LAB, personaDid: ME }], NOW)
+    expect(w.copies()).toEqual([{ v: 1, emptied: true }])
   })
 })
 
@@ -430,5 +448,16 @@ describe('what ends access with no room in view', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     await emptyMessageCache(w, { community: 'did:webvh:none' }, 'settle')
     expect(w.copies().every((c) => c.emptied === true)).toBe(true)
+  })
+})
+
+// Read from the module as it ships, not as a test left it: main ships the cache off.
+describe('the shipped default', () => {
+  it('is on: false, remoteOff: false', () => {
+    jest.isolateModules(() => {
+      const { ROOMS_MESSAGE_CACHE: shipped, isMessageCacheOn: on } = jest.requireActual('../messageCache')
+      expect(shipped).toEqual({ on: false, remoteOff: false })
+      expect(on()).toBe(false)
+    })
   })
 })

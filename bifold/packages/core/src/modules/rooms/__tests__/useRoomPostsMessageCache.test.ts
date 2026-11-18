@@ -106,10 +106,13 @@ beforeEach(() => {
   jest.spyOn(AppState, 'addEventListener').mockImplementation((() => ({ remove: jest.fn() })) as never)
   setMessageCacheBiometryGate(async () => true)
   resetMessageCache()
+  // These rows are about the cache at work: switched on, as a ring0 preview carries it.
+  ROOMS_MESSAGE_CACHE.on = true
   resetKeptListings()
 })
 afterEach(() => {
-  ROOMS_MESSAGE_CACHE.on = true
+  // As main ships it: off (rooms/messageCache).
+  ROOMS_MESSAGE_CACHE.on = false
   ROOMS_MESSAGE_CACHE.remoteOff = false
   jest.useRealTimers()
   jest.restoreAllMocks()
