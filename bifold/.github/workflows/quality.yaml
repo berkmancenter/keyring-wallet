@@ -207,24 +207,31 @@ jobs:
           fi
 
       # Jest's transform cache (babel output per file, keyed by jest on content and config), so a run re-transforms
-      # only what changed. Restored from the newest run with the same dependencies and config.
+      # only what changed.
       #
       # One entry per pull request and part, not per push: a key is never saved twice, so a PR's entry is written on
       # its first push and its later pushes restore it and write nothing (four entries per PR instead of four per push,
       # in a store at its size limit). Files a later push changes re-transform on each run, so a long-lived PR gets
-      # less from it over time; that is the trade. A push to main keeps its sha, or main's entry would freeze at its
-      # first save. A PR that changes yarn.lock or core's babel or jest config gets a new key each push, as it must.
-      # The `-part<N>-` fallback matches every ref's entries; a run reads only its own ref's caches and its base
-      # branch's (GitHub's cache scoping), which is what keeps one PR from restoring another's. That holds only while
-      # this never runs on a ref PRs share.
+      # less from it over time; that is the trade. A PR that changes yarn.lock or core's babel or jest config gets a
+      # new key each push, as it must.
+      #
+      # A new PR's first run of each part transforms cold, and that is accepted. This job runs only on pull requests,
+      # so its entries sit under each PR's own ref (refs/pull/N/merge) and nothing is ever saved under main; a run
+      # reads only its own ref's caches and its base branch's (GitHub's cache scoping), so no PR warms from another's.
+      # Nothing here restores from main: there is no such entry to restore. A daily plain run of these parts on main
+      # would make one, and was weighed and declined (ac, 11-18): the full suite's entries are coverage-instrumented,
+      # so a plain run cannot read them and it would have to be a second run, and its extra daily entries risked
+      # evicting the per-PR ones.
+      # The `-part<N>-` fallback is for a PR that changes yarn.lock or core's babel or jest config mid-review: its exact
+      # key changes, and the fallback restores that same PR's earlier entry. It reaches no other PR's, which holds only
+      # while this never runs on a ref PRs share.
       - name: Restore jest's cache
         if: steps.plan.outputs.work == 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: packages/core/.jest/cache
-          key: jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-${{ github.event_name == 'push' && format('{0}-{1}', github.ref, github.sha) || github.ref }}
+          key: jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-${{ github.ref }}
           restore-keys: |
-            jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-refs/heads/main-
             jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part${{ matrix.part }}-
 
       # Jest's default workers: on the runner's 4 vCPUs that leaves one free for jest itself and the tests' timers.
