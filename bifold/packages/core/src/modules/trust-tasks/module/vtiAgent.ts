@@ -66,6 +66,7 @@ import { PROBLEM_REPORT, problemReportWords } from './problemReportWords'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { listKeyed, putKeyed } from './keyedRecords'
 import { releaseWarn } from './releaseLog'
+import { isReadReaskOn, VTI_READ_REASK_AFTER_MS } from './readReaskSwitch'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
 import { httpsLogoUrl } from './communityBrand'
 import { readManifest, type VtiManifest } from './joinManifest'
@@ -626,6 +627,12 @@ interface AskEntry {
   heldUntil?: number
   /** A late answer, kept for the next caller. */
   answer?: DidCommV2PlaintextMessage
+  /** Its place among this phone's asks, in the order they were sent: an answered ask with a higher one was sent later. */
+  seq: number
+  /** Sends it once more as a new request (readReaskSwitch.ts). Only a read this session built and sent over DIDComm has one. */
+  reask?: () => Promise<void>
+  /** It was sent a second time: never a third. */
+  reasked?: boolean
 }
 
 /** A trust-task-error's code and words, cut short for a log line that reaches problem reports. */
@@ -699,8 +706,14 @@ class VtiAgentController {
    * a reply. Those go to the inbox.
    */
   private readonly asks = new Map<string, AskEntry>()
+  /** The next ask's place in the order sent (`AskEntry.seq`). */
+  private askSeq = 0
+  /** By identity and community: the latest-sent ask that community has answered (readReaskSwitch.ts). */
+  private readonly answeredSeq = new Map<string, number>()
   /** How long `ask` waits for an answer when the caller names no time. */
   answerTimeoutMs = 30000
+  /** How long a read waits before it may be asked once more (readReaskSwitch.ts). A test shortens it. */
+  readReaskAfterMs = VTI_READ_REASK_AFTER_MS
   /**
    * How long a join submit waits. A community deciding a join may look up the
    * applicant's DIDs, and after a DID host's 429 it retries 30 s later
@@ -1000,6 +1013,7 @@ class VtiAgentController {
 
   /** Hand an answer to whoever waits on the ask, or keep it for the next caller. */
   private settle(entry: AskEntry, answer: DidCommV2PlaintextMessage): void {
+    this.noteAnswered(entry)
     if (entry.waiters.length) {
       this.asks.delete(entry.id)
       for (const resolve of entry.waiters.splice(0)) resolve(answer)
@@ -1037,6 +1051,7 @@ class VtiAgentController {
       return Promise.resolve(entry.answer)
     }
     entry.heldUntil = undefined
+    const began = Date.now()
     return new Promise((resolve) => {
       const waiter = (plaintext: DidCommV2PlaintextMessage) => {
         clearTimeout(timer)
@@ -1045,9 +1060,68 @@ class VtiAgentController {
       const timer = setTimeout(() => {
         entry.waiters = entry.waiters.filter((w) => w !== waiter)
         if (!entry.waiters.length) entry.heldUntil = Date.now() + VTI_ANSWER_HOLD_MS
+        this.sayUnanswered(entry, timeoutMs, Date.now() - began)
         resolve(undefined)
       }, timeoutMs)
       entry.waiters.push(waiter)
+    })
+  }
+
+  /**
+   * An ask's clock ran out with no answer: said once per waiter, with how long the wait really was. A clock runs only
+   * while the app does, so a wait that took longer than its clock was partly spent with the app not running (in the
+   * background, iOS stops the timers): a "30 s" wait read as 69 s in a report, and nothing said why (BC46-XSQD).
+   * The task and DID prefixes only, and no DID at all for hidden vetting.
+   */
+  private sayUnanswered(entry: AskEntry, timeoutMs: number, waitedMs: number): void {
+    const who = isHiddenVettingType(entry.type) ? '' : ` as ${didPrefix(entry.did)}`
+    const over = waitedMs - timeoutMs
+    this.agent?.config?.logger?.warn?.(
+      `vtiAgent: ${taskName(entry.type)} asked${who} over ${entry.shared ? 'the shared session' : 'its own session'} had no answer when its ${timeoutMs} ms clock ran out${
+        over >= 2000 ? `, ${waitedMs} ms after the wait began (the app was not running for about ${over} ms of it)` : ''
+      }${entry.reasked ? '; it had been asked a second time' : ''}`
+    )
+  }
+
+  /**
+   * A community answered `entry`. Kept: the latest-sent ask it has answered, by identity and community. Then any
+   * earlier read of the same identity's to the same community, still unanswered, may be asked again (`maybeReask`).
+   */
+  private noteAnswered(entry: AskEntry): void {
+    const key = `${entry.did}|${entry.communityDid}`
+    if ((this.answeredSeq.get(key) ?? -1) < entry.seq) this.answeredSeq.set(key, entry.seq)
+    if (!isReadReaskOn()) return
+    // Each ask is judged by its own identity and community (`maybeReask`): this answer moves only theirs.
+    for (const other of [...this.asks.values()]) if (other !== entry) this.maybeReask(other)
+  }
+
+  /**
+   * Send a read once more, when it is owed that (readReaskSwitch.ts): it has waited
+   * {@link VTI_READ_REASK_AFTER_MS} with no answer, someone still waits for it, and the same community has answered
+   * an ask this identity sent after it. Looked at when the wait is up and at each answer from that community.
+   */
+  private maybeReask(entry: AskEntry, waitIsUp = false): void {
+    if (!isReadReaskOn() || !entry.reask || entry.reasked || entry.answer || !entry.waiters.length) return
+    if (this.asks.get(entry.id) !== entry) return
+    const waited = Date.now() - entry.sentAt
+    // The wait's own timer says the wait is up: it can fire a millisecond early by the clock, and nothing would look
+    // again if that read as "not yet" (the later answer is already in).
+    if (!waitIsUp && waited < this.readReaskAfterMs) return
+    if ((this.answeredSeq.get(`${entry.did}|${entry.communityDid}`) ?? -1) <= entry.seq) return
+    // The shared session is another identity's now: nothing is sent as this one over it.
+    if (entry.shared && this.state.did !== entry.did) return
+    entry.reasked = true
+    // By prefix, and with no DID at all for hidden vetting, as every line here that reaches a report.
+    const hidden = isHiddenVettingType(entry.type)
+    this.agent?.config?.logger?.warn?.(
+      `vtiAgent: ${taskName(entry.type)} asked${hidden ? '' : ` as ${didPrefix(entry.did)}`} had no answer in ${waited} ms while ${
+        hidden ? 'the community' : didPrefix(entry.communityDid)
+      } answered a later ask: asked once more`
+    )
+    void entry.reask().catch((error: unknown) => {
+      this.agent?.config?.logger?.warn?.(
+        `vtiAgent: ${taskName(entry.type)} could not be asked once more: ${error instanceof Error ? error.name : 'an error'}`
+      )
     })
   }
 
@@ -1976,6 +2050,13 @@ class VtiAgentController {
     const session = this.session
     const did = this.state.did
     if (!session || !did) throw new Error('vtiAgent: not connected')
+    // Said per ask, as an ask over an identity's own session is (`askAs`): a report then shows that it went out, and
+    // as which identity. Without it an ask that got no answer could not be told from one never sent (BC46-XSQD).
+    this.agent?.config?.logger?.info?.(
+      isHiddenVettingType(type)
+        ? `vtiAgent: ${taskName(type)} asked over the shared session`
+        : `vtiAgent: ${taskName(type)} asked as ${didPrefix(did)} over the shared session`
+    )
     return this.askOn(
       { carrier: session, did, signer: this.persona, shared: true },
       communityDid,
@@ -2109,6 +2190,7 @@ class VtiAgentController {
       lastSentAt: Date.now(),
       waiters: [],
       shared: via.shared,
+      seq: this.askSeq++,
     }
     this.asks.set(threadId, entry)
     try {
@@ -2205,6 +2287,35 @@ class VtiAgentController {
       expires_time: now + 300,
       body: document,
     })
+    // A read this session built may be asked once more if the community answers a later ask and not this one
+    // (readReaskSwitch.ts): as a new request with its own thread, so the community sees an ordinary ask and not the
+    // same document twice, and either answer is this ask's. Never a write, and never a document prepared elsewhere.
+    if (!write && !prepared && isReadReaskOn()) {
+      entry.reask = async () => {
+        const again = `urn:uuid:${utils.uuid()}`
+        entry.correlation.add(again)
+        const second = await this.taskDocument(communityDid, type, payload, again, via)
+        entry.correlation.add(String(second.id))
+        const at = Math.floor(Date.now() / 1000)
+        const id = `urn:uuid:${utils.uuid()}`
+        entry.correlation.add(id)
+        entry.lastSentAt = Date.now()
+        await carrier.sendTo(communityDid, {
+          id,
+          typ: 'application/didcomm-plain+json',
+          type: TRUST_TASK_V2_ENVELOPE_TYPE,
+          from: did,
+          to: [communityDid],
+          thid: again,
+          created_time: at,
+          expires_time: at + 300,
+          body: second,
+        })
+      }
+      const timer = setTimeout(() => this.maybeReask(entry, true), this.readReaskAfterMs)
+      // The wait holds nothing open: a process with nothing else to do may end.
+      ;(timer as unknown as { unref?: () => void }).unref?.()
+    }
     return this.waitFor(entry, timeoutMs)
   }
 
@@ -2278,6 +2389,7 @@ class VtiAgentController {
             lastSentAt: Date.now(),
             waiters: [],
             shared: true,
+            seq: this.askSeq++,
           }
           this.asks.set(threadId, entry)
           const document = await this.taskDocument(communityDid, type, {}, threadId)

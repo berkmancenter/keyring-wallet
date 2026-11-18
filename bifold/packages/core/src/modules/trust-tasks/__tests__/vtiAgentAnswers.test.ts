@@ -150,6 +150,7 @@ import {
 } from '../module/vtiAgent'
 import { fakeAgent } from '../../../../__tests__/helpers/cardVault'
 import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
+import { VTI_READ_REASK, VTI_READ_REASK_AFTER_MS, isReadReaskOn } from '../module/readReaskSwitch'
 import { OFFERS_LIST_TYPES } from '../../rooms/real/wire'
 import {
   dropAllOwnSessions,
@@ -1364,5 +1365,394 @@ describe('an ask as an identity, over its own session', () => {
     expect(ownSessionFor('did:webvh:p:own-two')).toBe(newer)
     dropOwnSession('did:webvh:p:own-two', newer)
     expect(ownSessionFor('did:webvh:p:own-two')).toBeUndefined()
+  })
+})
+
+// BC46-XSQD (279.4, 11-18): nine asks went to one community in the same millisecond; seven were answered within a
+// second, two never were, and a rooms listing waited out a clock for one of them. A read left unanswered while the
+// community answers something sent after it is asked once more (readReaskSwitch.ts). This treats the symptom: why
+// the first got no answer is not known here.
+describe('a read left unanswered while the community answers a later ask', () => {
+  const MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
+  const OFFERS = OFFERS_LIST_TYPES[0]
+  const WAIT = 60
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  type SentRead = Sent & { thid: string; from: string; to: string[]; body: Sent['body'] & { id: string } }
+  const sentOf = (session: { didcomm: unknown[] }) => session.didcomm as SentRead[]
+
+  beforeEach(() => {
+    vtiAgent.readReaskAfterMs = WAIT
+    Object.assign(VTI_READ_REASK, { on: true, remoteOff: false })
+    logger.warn.mockClear()
+  })
+  afterEach(() => {
+    vtiAgent.readReaskAfterMs = VTI_READ_REASK_AFTER_MS
+    Object.assign(VTI_READ_REASK, { on: true, remoteOff: false })
+  })
+
+  /** A session to `community`, one read sent and unanswered, then a later read sent and answered. */
+  async function overtaken(name: string) {
+    const community = `did:webvh:c:reask-${name}`
+    const session = await connectTo(community, 'didcomm', `did:webvh:p:reask-${name}`)
+    const first = vtiAgent.ask(community, MEMBERSHIPS, {}, 2000)
+    await until(() => session.didcomm.length === 1)
+    const later = vtiAgent.ask(community, OFFERS, {}, 2000)
+    await until(() => session.didcomm.length === 2)
+    return { community, session, first, later }
+  }
+
+  it('the switch ships on, with three seconds of wait, and reads as off for anything but on true and remoteOff false', () => {
+    expect(isReadReaskOn()).toBe(true)
+    expect(VTI_READ_REASK_AFTER_MS).toBe(3000)
+    for (const [on, remoteOff] of [
+      [true, true],
+      [false, false],
+      [1, false],
+      [true, undefined],
+    ]) {
+      Object.assign(VTI_READ_REASK, { on, remoteOff })
+      expect(isReadReaskOn()).toBe(false)
+    }
+  })
+
+  it('is asked once more, as a new request with its own thread; the answer to that one is the ask’s', async () => {
+    const { session, first, later } = await overtaken('second')
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    // Answered at once, before the wait is up: not yet.
+    expect(session.didcomm).toHaveLength(2)
+    await until(() => session.didcomm.length === 3)
+    expect(logger.warn.mock.calls.map((call) => String(call[0])).filter((l) => l.includes('asked once more'))).toEqual([
+      expect.stringMatching(
+        /^vtiAgent: vtc\/rooms\/memberships\/list asked as did:webvh:p:reask-second had no answer in \d+ ms while did:webvh:c:reask-second answered a later ask: asked once more$/
+      ),
+    ])
+    const [one, , again] = sentOf(session)
+    expect(again.body.type).toBe(MEMBERSHIPS)
+    expect(again.to).toEqual(one.to)
+    expect(again.from).toBe(one.from)
+    // A new message, a new document and a new thread: an ordinary second request, not the first one twice.
+    expect(again.id).not.toBe(one.id)
+    expect(again.thid).not.toBe(one.thid)
+    expect(again.body.threadId).not.toBe(one.body.threadId)
+    expect(again.thid).toBe(again.body.threadId)
+    expect(again.body.id).not.toBe(one.body.id)
+    session.onMessage(didcommReply(again, MEMBERSHIPS, { items: ['second'] }))
+    expect(await first).toMatchObject({ body: { payload: { items: ['second'] } } })
+  })
+
+  it('the answer to the first request, coming after all, is the ask’s too', async () => {
+    const { session, first, later } = await overtaken('first')
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await until(() => session.didcomm.length === 3)
+    session.onMessage(didcommReply(sentOf(session)[0], MEMBERSHIPS, { items: ['first'] }))
+    expect(await first).toMatchObject({ body: { payload: { items: ['first'] } } })
+  })
+
+  // A reply names its request by the message it answers, by the request document's thread, or by the document's own
+  // id (`askAnswered`): each of the second request's three is the ask's, as each of the first's is.
+  it.each([
+    ['its thread alone, as a reply over TSP does', (again: SentRead) => ({ thread: again.body.threadId })],
+    ['its document’s id alone', (again: SentRead) => ({ thread: again.body.id })],
+    ['its message alone', (again: SentRead) => ({ thread: again.id })],
+  ])('an answer naming the second request by %s is the ask’s', async (_name, by) => {
+    const { session, first, later } = await overtaken(`by-${_name.split(' ')[1]}`)
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await until(() => session.didcomm.length === 3)
+    const { thread } = by(sentOf(session)[2])
+    session.onMessage({
+      id: 'urn:uuid:reply-to-the-second',
+      type: `${MEMBERSHIPS}#response`,
+      thid: thread,
+      body: { type: `${MEMBERSHIPS}#response`, payload: { items: ['named'] } },
+    })
+    expect(await first).toMatchObject({ body: { payload: { items: ['named'] } } })
+  })
+
+  it('a wait whose timer fires a moment early by the clock still asks: nothing else would look again', async () => {
+    const { session, first, later } = await overtaken('early-timer')
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    // From here the clock reads 20 ms behind: when the wait's timer fires, the clock says the wait is not up yet.
+    const real = Date.now
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => real() - 20)
+    await new Promise((resolve) => setTimeout(resolve, WAIT + 15))
+    clock.mockRestore()
+    expect(session.didcomm).toHaveLength(3)
+    session.onMessage(didcommReply(sentOf(session)[2], MEMBERSHIPS, { items: [] }))
+    expect(await first).toBeDefined()
+  })
+
+  it('is asked at the later answer, when that comes after the wait is up', async () => {
+    const { session, first, later } = await overtaken('late-answer')
+    await pause(WAIT + 40)
+    // The wait is up and the community has answered nothing: nothing more is sent.
+    expect(session.didcomm).toHaveLength(2)
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await until(() => session.didcomm.length === 3)
+    session.onMessage(didcommReply(sentOf(session)[2], MEMBERSHIPS, { items: [] }))
+    expect(await first).toBeDefined()
+  })
+
+  it('once: more later answers ask it no third time', async () => {
+    const { community, session, first, later } = await overtaken('once')
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await until(() => session.didcomm.length === 3)
+    const more = vtiAgent.ask(community, STATUS, {}, 2000)
+    await until(() => session.didcomm.length === 4)
+    session.onMessage(didcommReply(sentOf(session)[3], STATUS, { status: 'pending' }))
+    await more
+    await pause(WAIT + 40)
+    expect(session.didcomm).toHaveLength(4)
+    session.onMessage(didcommReply(sentOf(session)[2], MEMBERSHIPS, { items: [] }))
+    await first
+  })
+
+  it('control: a community that answers nothing is not asked more', async () => {
+    const { session } = await overtaken('silent')
+    await pause(WAIT + 60)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('control: an answer to an ask sent EARLIER does not count: the community may be taking them in turn', async () => {
+    const community = 'did:webvh:c:reask-earlier'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:reask-earlier')
+    const earlier = vtiAgent.ask(community, OFFERS, {}, 2000)
+    await until(() => session.didcomm.length === 1)
+    void vtiAgent.ask(community, MEMBERSHIPS, {}, 2000)
+    await until(() => session.didcomm.length === 2)
+    await pause(WAIT + 20)
+    session.onMessage(didcommReply(sentOf(session)[0], OFFERS, { items: [] }))
+    await earlier
+    await pause(WAIT + 40)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('control: another community’s answer does not count', async () => {
+    const one = 'did:webvh:c:reask-one'
+    const other = 'did:webvh:c:reask-other'
+    mockTspVia[other] = 'did:webvh:their-mediator'
+    const session = await connectTo(one, 'didcomm', 'did:webvh:p:reask-two-communities')
+    void vtiAgent.ask(one, MEMBERSHIPS, {}, 2000)
+    await until(() => session.didcomm.length === 1)
+    const elsewhere = vtiAgent.ask(other, OFFERS, {}, 2000)
+    await until(() => session.didcomm.length === 2)
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await elsewhere
+    await pause(WAIT + 60)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('control: a write is never sent twice, whatever the community answers after it', async () => {
+    const community = 'did:webvh:c:reask-write'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:reask-write')
+    void vtiAgent.ask(community, SUBMIT, { vp: {} }, 2000)
+    await until(() => session.didcomm.length === 1)
+    const later = vtiAgent.ask(community, OFFERS, {}, 2000)
+    await until(() => session.didcomm.length === 2)
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await pause(WAIT + 60)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('control: a document prepared elsewhere is never made again here', async () => {
+    const community = 'did:webvh:c:reask-prepared'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:reask-prepared')
+    const prepared = { id: 'urn:uuid:prepared', type: MEMBERSHIPS, threadId: 'urn:uuid:prepared-thread', payload: {} }
+    void vtiAgent.ask(community, MEMBERSHIPS, {}, 2000, prepared)
+    await until(() => session.didcomm.length === 1)
+    const later = vtiAgent.ask(community, OFFERS, {}, 2000)
+    await until(() => session.didcomm.length === 2)
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await pause(WAIT + 60)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it.each([
+    ['remoteOff', { on: true, remoteOff: true }],
+    ['on false', { on: false, remoteOff: false }],
+  ])('kill: with %s nothing is asked a second time', async (name, values) => {
+    Object.assign(VTI_READ_REASK, values)
+    const { session, later } = await overtaken(`kill-${name.replace(' ', '-')}`)
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await pause(WAIT + 60)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('turned off after the read was sent: it is not asked again', async () => {
+    const { session, later } = await overtaken('off-during')
+    VTI_READ_REASK.remoteOff = true
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await pause(WAIT + 60)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('turned on after the read was sent: that read was set up for none, and is not asked again', async () => {
+    VTI_READ_REASK.remoteOff = true
+    const { session, later } = await overtaken('on-during')
+    VTI_READ_REASK.remoteOff = false
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await pause(WAIT + 60)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('a read whose clock has run out is not asked again: nobody waits for it', async () => {
+    const community = 'did:webvh:c:reask-gone'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:reask-gone')
+    vtiAgent.readReaskAfterMs = 120
+    const first = vtiAgent.ask(community, MEMBERSHIPS, {}, 30)
+    await until(() => session.didcomm.length === 1)
+    const later = vtiAgent.ask(community, OFFERS, {}, 2000)
+    await until(() => session.didcomm.length === 2)
+    expect(await first).toBeUndefined()
+    await pause(140)
+    session.onMessage(didcommReply(sentOf(session)[1], OFFERS, { items: [] }))
+    await later
+    await pause(60)
+    expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('the shared session moved to another identity: nothing is sent as the first one over it', async () => {
+    const community = 'did:webvh:c:reask-moved'
+    const before = await connectTo(community, 'didcomm', 'did:webvh:p:reask-moved-before')
+    vtiAgent.readReaskAfterMs = 150
+    void vtiAgent.ask(community, MEMBERSHIPS, {}, 2000)
+    await until(() => before.didcomm.length === 1)
+    const later = vtiAgent.ask(community, OFFERS, {}, 2000)
+    await until(() => before.didcomm.length === 2)
+    const after = await connectTo(community, 'didcomm', 'did:webvh:p:reask-moved-after')
+    // The first identity's listener hears the later ask's answer, as it would after the switch.
+    const reply = didcommReply(sentOf(before)[1], OFFERS, { items: [] })
+    expect(vtiAgent.answerFromListener('did:webvh:p:reask-moved-before', reply as never)).toBe('answered')
+    await later
+    await pause(200)
+    expect(before.didcomm).toHaveLength(2)
+    expect(after.didcomm).toHaveLength(0)
+  })
+
+  it('over an identity’s own session: asked once more over that session, as that identity', async () => {
+    const community = 'did:webvh:c:reask-own'
+    const shared = await connectTo(community, 'didcomm', 'did:webvh:p:reask-own-shared')
+    const sent: SentRead[] = []
+    const who = 'did:webvh:p:reask-own'
+    keepOwnSession(who, { sendTo: async (_to: string, message: unknown) => void sent.push(message as never) })
+    try {
+      const first = vtiAgent.askAs(persona(who), community, MEMBERSHIPS, {}, 2000)
+      await until(() => sent.length === 1)
+      const later = vtiAgent.askAs(persona(who), community, OFFERS, {}, 2000)
+      await until(() => sent.length === 2)
+      expect(vtiAgent.answerFromListener(who, didcommReply(sent[1], OFFERS, { items: [] }) as never)).toBe('answered')
+      await later
+      await until(() => sent.length === 3)
+      expect(sent[2].from).toBe(who)
+      expect(sent[2].body.type).toBe(MEMBERSHIPS)
+      expect(shared.didcomm).toHaveLength(0)
+      expect(vtiAgent.answerFromListener(who, didcommReply(sent[2], MEMBERSHIPS, { items: [] }) as never)).toBe(
+        'answered'
+      )
+      expect(await first).toBeDefined()
+    } finally {
+      dropAllOwnSessions()
+    }
+  })
+
+  it('control: the shared session’s answers do not count for an ask over an identity’s own session', async () => {
+    const community = 'did:webvh:c:reask-own-ctl'
+    const shared = await connectTo(community, 'didcomm', 'did:webvh:p:reask-own-ctl-shared')
+    const sent: Sent[] = []
+    const who = 'did:webvh:p:reask-own-ctl'
+    keepOwnSession(who, { sendTo: async (_to: string, message: unknown) => void sent.push(message as never) })
+    try {
+      void vtiAgent.askAs(persona(who), community, MEMBERSHIPS, {}, 2000)
+      await until(() => sent.length === 1)
+      const later = vtiAgent.ask(community, OFFERS, {}, 2000)
+      await until(() => shared.didcomm.length === 1)
+      shared.onMessage(didcommReply(sentOf(shared)[0], OFFERS, { items: [] }))
+      await later
+      await pause(WAIT + 60)
+      expect(sent).toHaveLength(1)
+    } finally {
+      dropAllOwnSessions()
+    }
+  })
+})
+
+// What a report needs to tell an ask that went out and was not answered from one that never left (BC46-XSQD).
+describe('what the log says of an ask over the shared session', () => {
+  const MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
+  const PCS_HIDDEN = 'https://trusttasks.org/spec/vtc/vetting/pcs-challenge/0.1'
+  const said = (level: 'info' | 'warn') => logger[level].mock.calls.map((call) => String(call[0]))
+  /** A DID as a log line names it (didPrefix). */
+  const short = (did: string) => (did.length > 24 ? `${did.slice(0, 24)}…` : did)
+  beforeEach(() => {
+    logger.info.mockClear()
+    logger.warn.mockClear()
+  })
+
+  it('says it went out, the task and as which identity, by prefix', async () => {
+    const community = 'did:webvh:c:said-sent'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:said-sent')
+    void vtiAgent.ask(community, MEMBERSHIPS, {}, 50)
+    await until(() => session.didcomm.length === 1)
+    expect(said('info')).toContain(
+      `vtiAgent: vtc/rooms/memberships/list asked as ${short('did:webvh:p:said-sent')} over the shared session`
+    )
+    await new Promise((resolve) => setTimeout(resolve, 80))
+  })
+
+  it('says when its clock ran out with no answer', async () => {
+    const community = 'did:webvh:c:said-unanswered'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:said-unanswered')
+    const asked = vtiAgent.ask(community, MEMBERSHIPS, {}, 40)
+    await until(() => session.didcomm.length === 1)
+    expect(await asked).toBeUndefined()
+    expect(said('warn')).toContain(
+      `vtiAgent: vtc/rooms/memberships/list asked as ${short('did:webvh:p:said-unanswered')} over the shared session had no answer when its 40 ms clock ran out`
+    )
+  })
+
+  it('says how long the wait really was when the app was not running for part of it', async () => {
+    const community = 'did:webvh:c:said-slept'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:said-slept')
+    const real = Date.now
+    const asked = vtiAgent.ask(community, MEMBERSHIPS, {}, 40)
+    await until(() => session.didcomm.length === 1)
+    // The clock stops with the app in the background: by the time it fires, 39 s more have passed.
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => real() + 39_000)
+    expect(await asked).toBeUndefined()
+    now.mockRestore()
+    const line = said('warn').find((l) => l.includes('had no answer when its 40 ms clock ran out'))
+    expect(line).toMatch(/, 39\d{3} ms after the wait began \(the app was not running for about 3[89]\d{3} ms of it\)$/)
+  })
+
+  it('control: an answered ask says nothing of a clock', async () => {
+    const community = 'did:webvh:c:said-answered'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:said-answered')
+    const asked = vtiAgent.ask(community, MEMBERSHIPS, {}, 500)
+    await until(() => session.didcomm.length === 1)
+    session.onMessage(didcommReply((session.didcomm as Sent[])[0], MEMBERSHIPS, { items: [] }))
+    await asked
+    // Its own identity's lines only: an earlier row's unanswered ask may run out its clock meanwhile.
+    expect(said('warn').filter((l) => l.includes('clock ran out') && l.includes('said-answered'))).toEqual([])
+  })
+
+  it('names no identity for a hidden-vetting task', async () => {
+    const community = 'did:webvh:c:said-hidden'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:said-hidden')
+    const asked = vtiAgent.ask(community, PCS_HIDDEN, {}, 40)
+    await until(() => session.didcomm.length === 1)
+    expect(await asked).toBeUndefined()
+    const lines = [...said('info'), ...said('warn')].filter((l) => l.includes('asked'))
+    expect(lines.length).toBeGreaterThan(0)
+    expect(lines.filter((l) => l.includes('said-hidden'))).toEqual([])
   })
 })
