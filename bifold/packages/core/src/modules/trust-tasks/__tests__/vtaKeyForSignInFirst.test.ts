@@ -123,14 +123,56 @@ async function drain(h: ReturnType<typeof harness>, n: number) {
   return h.sent()
 }
 
-afterEach(() => {
+/** What the release ships, read before any row flips it. */
+const SHIPPED = { ...VTA_KEY_FOR_SIGN_IN_FIRST }
+
+// Each row starts from off and says what it turns on; what the release ships is put back after, and has its own rows.
+beforeEach(() => {
   VTA_KEY_FOR_SIGN_IN_FIRST.on = false
   VTA_KEY_FOR_SIGN_IN_FIRST.remoteOff = false
 })
+afterEach(() => {
+  Object.assign(VTA_KEY_FOR_SIGN_IN_FIRST, SHIPPED)
+})
+
+describe('what the release ships', () => {
+  it('is on, and not killed', () => {
+    expect(SHIPPED).toEqual({ on: true, remoteOff: false })
+  })
+
+  it('as shipped, an export asked as first goes ahead of the queued reads, not the task on the wire', async () => {
+    Object.assign(VTA_KEY_FOR_SIGN_IN_FIRST, SHIPPED)
+    expect(isKeyForSignInFirstOn()).toBe(true)
+    const h = harness()
+    const start = await busyStart(h)
+    const exported = exportKey(h.client, 'k', { first: true })
+    expect(await drain(h, 4)).toEqual([
+      'auth/whoami/0.1',
+      'keys/export-secret/0.1',
+      'config/show/0.1',
+      'device/list/0.3',
+    ])
+    await Promise.all([...start, exported])
+  })
+
+  it('CONTROL: as shipped but killed (remoteOff), it keeps the order asked', async () => {
+    Object.assign(VTA_KEY_FOR_SIGN_IN_FIRST, SHIPPED, { remoteOff: true })
+    const h = harness()
+    const start = await busyStart(h)
+    const exported = exportKey(h.client, 'k', { first: true })
+    expect(await drain(h, 4)).toEqual([
+      'auth/whoami/0.1',
+      'config/show/0.1',
+      'device/list/0.3',
+      'keys/export-secret/0.1',
+    ])
+    await Promise.all([...start, exported])
+  })
+})
 
 describe("a sign-in's key copy on the agent's channel", () => {
-  it('ships off: an export asked as first keeps the order asked', async () => {
-    expect(VTA_KEY_FOR_SIGN_IN_FIRST.on).toBe(false)
+  it('off: an export asked as first keeps the order asked', async () => {
+    expect(isKeyForSignInFirstOn()).toBe(false)
     const h = harness()
     const start = await busyStart(h)
     const exported = exportKey(h.client, 'k', { first: true })
