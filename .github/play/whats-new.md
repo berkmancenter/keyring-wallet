@@ -1,5 +1,8 @@
 # Google Play release notes for the next build (at most 500 characters).
 # Lines starting with # are ignored.
 
-• Confirm it's you (Developer switch): the "Confirm with" sheet opens clean, with just the note and Send. Answers in the chat are now short cards; tap one for the note and what to do. "Wasn't them" stays a red warning.
-• If someone says it wasn't them, contact them using details you already have, never ones the request gave you.
+• Rooms are much faster: your rooms show as soon as you open Keyring, and new posts arrive on any screen.
+• Room chat: reply, react, edit or withdraw your messages, in rooms set up for it.
+• Several communities sign in side by side, so one slow one no longer holds up the rest.
+• Join and sign in to communities that use did:webs.
+• New: member badges in communities that turn them on. Faster polls, and linked devices work again.
