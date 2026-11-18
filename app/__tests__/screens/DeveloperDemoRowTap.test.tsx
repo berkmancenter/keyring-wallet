@@ -28,7 +28,7 @@ jest.mock('@bifold/react-hooks', () => ({
 }))
 const mockSetUp = jest.fn<Promise<string>, [unknown, string]>(async () => 'done')
 const mockTurnOff = jest.fn<void, []>()
-const mockSetConfirm = jest.fn<void, [boolean]>()
+const mockSetTrusted = jest.fn<void, [boolean]>()
 /** The four K0 test-state actions, each its own mock, so a row reaching the wrong one fails. */
 const mockK0 = {
   holdK0TestGuardianCard: jest.fn<Promise<string>, [unknown]>(async () => 'done'),
@@ -48,7 +48,7 @@ jest.mock('@bifold/core', () => ({
   setUpSediDemoAsGuardian: (agent: unknown) => mockSetUp(agent, 'guardian'),
   setUpSediDemoAsWard: (agent: unknown) => mockSetUp(agent, 'ward'),
   turnOffSediDemo: () => mockTurnOff(),
-  setConfirmItsYouEnabled: (on: boolean) => mockSetConfirm(on),
+  setTrustedApproversEnabled: (on: boolean) => mockSetTrusted(on),
 }))
 
 const shown = () =>
@@ -70,7 +70,7 @@ afterEach(() => {
   jest.restoreAllMocks()
   mockSetUp.mockClear()
   mockTurnOff.mockClear()
-  mockSetConfirm.mockClear()
+  mockSetTrusted.mockClear()
   for (const action of Object.values(mockK0)) action.mockClear()
   mockTrustTestState = true
   SEDI_KERI_REMOTE_OFF.off = false
@@ -132,12 +132,14 @@ describe('Developer › Demos: the whole action row takes the tap', () => {
     expect(within(row).getByText(`Developer.${key}`)).toBeTruthy()
   })
 
-  test("control: a switch row's words still take no tap (Confirm it's you stays as it was)", async () => {
+  // The control was the "Confirm it's you" row until that row went (the feature has no setting now); any switch row
+  // serves, and trusted approvers' is shown whatever else is on.
+  test("control: a switch row's words still take no tap (trusted approvers stays as it was)", async () => {
     const tree = shown()
-    await userEvent.setup().press(tree.getByText('Developer.EnableConfirmItsYou'))
-    expect(mockSetConfirm).not.toHaveBeenCalled()
+    await userEvent.setup().press(tree.getByText('Developer.EnableTrustedApprovers'))
+    expect(mockSetTrusted).not.toHaveBeenCalled()
     // ...while its own pressable still toggles it, so the control can fail.
-    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('ToggleEnableConfirmItsYou'))))
-    expect(mockSetConfirm).toHaveBeenCalledTimes(1)
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('ToggleEnableTrustedApprovers'))))
+    expect(mockSetTrusted).toHaveBeenCalledTimes(1)
   })
 })
