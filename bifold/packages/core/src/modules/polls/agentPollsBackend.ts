@@ -117,9 +117,17 @@ export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: s
         false,
         (persona) => vtiAgent.sendCompletedAs(persona, community, document)
       ),
-    agentTask: async (type, payload) =>
-      (await (await client()).task(type, payload as Record<string, unknown>)) as Record<string, unknown>,
-    agentServedTypes: async () => (await vtaAgent.roomsClient(agent))?.supportedTypes(),
+    agentTask: async (type, payload) => {
+      try {
+        return (await (await client()).task(type, payload as Record<string, unknown>)) as Record<string, unknown>
+      } catch (error) {
+        // Refused as a task the agent does not serve: what was kept of its answer is asked for again now.
+        vtaAgent.servedRefused(agent, error)
+        throw error
+      }
+    },
+    // The agent's last answer, asked again behind the session's first work (agentLastKnownSwitch.ts).
+    agentServedTypes: () => vtaAgent.servedTypes(agent),
     currentAgent: () => vtaAgent.agentAddress(),
     linkedAgents: () => (vtaAgent.getState().agents ?? []).map((a) => a.vtaDid),
     voterTarget: async (community) => {

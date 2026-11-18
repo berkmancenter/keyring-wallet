@@ -58,6 +58,12 @@ export interface VtaLink {
    * none, and read "your agent" beside another that did (Alberto, 10-06).
    */
   nickname?: string
+  /**
+   * Which Trust Task types the agent said it serves (its `trust-task-discovery` answer), and when (epoch ms). A
+   * session starts from it and asks again behind (agentLastKnownSwitch.ts). Written only while that switch is on; a
+   * build without it carries the field along untouched.
+   */
+  served?: { types: string[]; at: number }
 }
 
 export interface VtaLinkStore {
@@ -81,6 +87,16 @@ export interface VtaLinkStore {
 }
 
 import type { AgentLabel } from './agentLabel'
+
+/**
+ * The lock over one agent's link record (`withKeyLock`, keyedRecords.ts). `set` replaces the whole record with what it
+ * is given, so every change of a link is a read, a change and a write of all of it: two of them side by side, and the
+ * later write puts back what it read before the earlier one, which is lost. A name the person typed for the agent is
+ * never asked for again, so that loss would be for good. Every writer of a link takes this lock, reads the link
+ * inside it and writes once (vtaAgent `changeLink`); so does taking a link out, or a change that read the link before
+ * would write it back.
+ */
+export const vtaLinkLockKey = (vtaDid: string): string => `keyring/vta-link:${vtaDid}`
 
 const RECORD_TYPE = 'keyring.vta-link'
 /** Which agent is current: one record, its DID. */

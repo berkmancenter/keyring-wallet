@@ -144,22 +144,34 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     consentHolds: storedConsentHolds(() => vtaAgent.agentAddress()),
     // A watched room's change, pushed by the linked agent on this phone's own channel: no identity switch to hear it.
     onRoomSignal: (listener) => vtaAgent.onRoomSignal(listener),
-    agentServedTypes: async () => (await vtaAgent.roomsClient(agent))?.supportedTypes(),
-    agentTask: async (type, payload, options) =>
-      (await client()).task(
-        type,
-        payload,
-        options?.timeoutMs,
-        undefined,
-        undefined,
-        options?.waitForConsent === undefined && !options?.inView
-          ? undefined
-          : {
-              ...(options?.waitForConsent === undefined ? {} : { waitForConsent: options.waitForConsent }),
-              // The open room's read: it may go ahead of the queue (vtaReadLane VTA_ROOM_IN_VIEW_FIRST).
-              ...(options?.inView ? { priority: { first: false, inView: true } } : {}),
-            }
-      ),
+    // The agent's last answer, asked again behind the session's first work (agentLastKnownSwitch.ts); the stamp
+    // moves when asking again found a different one.
+    agentServedTypes: () => vtaAgent.servedTypes(agent),
+    agentServedStamp: () => vtaAgent.servedTypesStamp(),
+    agentTask: async (type, payload, options) => {
+      try {
+        return await (
+          await client()
+        ).task(
+          type,
+          payload,
+          options?.timeoutMs,
+          undefined,
+          undefined,
+          options?.waitForConsent === undefined && !options?.inView
+            ? undefined
+            : {
+                ...(options?.waitForConsent === undefined ? {} : { waitForConsent: options.waitForConsent }),
+                // The open room's read: it may go ahead of the queue (vtaReadLane VTA_ROOM_IN_VIEW_FIRST).
+                ...(options?.inView ? { priority: { first: false, inView: true } } : {}),
+              }
+        )
+      } catch (error) {
+        // Refused as a task the agent does not serve: what was kept of its answer is asked for again now.
+        vtaAgent.servedRefused(agent, error)
+        throw error
+      }
+    },
 
     // The communities this phone holds a membership in under the agent it acts with now, as the
     // persona that holds it. A membership the community has ended (its removal notice) is left out.

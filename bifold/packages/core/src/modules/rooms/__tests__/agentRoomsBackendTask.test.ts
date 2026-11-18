@@ -3,9 +3,18 @@
  * consent only mean something if they reach the client's own arguments.
  */
 const mockTask = jest.fn(async (..._args: unknown[]) => ({}))
+const mockServedRefused = jest.fn()
+const mockServedTypes = jest.fn(async (..._args: unknown[]) => ['a'])
+const mockServedTypesStamp = jest.fn(() => 7)
 
 jest.mock('../../trust-tasks/module/vtaAgent', () => ({
-  vtaAgent: { roomsClient: async () => ({ task: mockTask }), agentAddress: () => 'did:key:agent' },
+  vtaAgent: {
+    roomsClient: async () => ({ task: mockTask }),
+    agentAddress: () => 'did:key:agent',
+    servedRefused: (...args: unknown[]) => mockServedRefused(...args),
+    servedTypes: (...args: unknown[]) => mockServedTypes(...args),
+    servedTypesStamp: () => mockServedTypesStamp(),
+  },
 }))
 jest.mock('../../trust-tasks/module/vtiAgent', () => ({ vtiAgent: {}, VtiRefusal: class extends Error {} }))
 jest.mock('../../trust-tasks/module/vtiJoin', () => ({ leaveCommunity: jest.fn() }))
@@ -33,7 +42,35 @@ import { createAgentRoomsBackend } from '../real/agentRoomsBackend'
 const agent = { config: { logger: { warn: jest.fn() } } } as never
 
 describe('agentTask', () => {
-  beforeEach(() => mockTask.mockClear())
+  beforeEach(() => {
+    mockTask.mockClear()
+    mockServedRefused.mockClear()
+  })
+
+  // agentLastKnownSwitch.ts: a task refused as unserved has the agent's kept answer asked for again. Which refusals
+  // count is the agent controller's to say (vtaAgentLastKnown.test.ts); the backend hands it every one, and the
+  // caller still gets the same error.
+  test('a refused task is handed to the agent controller, and the caller gets the same error', async () => {
+    const refusal = new Error('unsupportedVersion')
+    mockTask.mockImplementationOnce(async () => {
+      throw refusal
+    })
+    await expect(createAgentRoomsBackend(agent).agentTask('t', { a: 1 })).rejects.toBe(refusal)
+    expect(mockServedRefused).toHaveBeenCalledTimes(1)
+    expect(mockServedRefused).toHaveBeenCalledWith(agent, refusal)
+  })
+
+  test('an answered task hands it nothing (control)', async () => {
+    await expect(createAgentRoomsBackend(agent).agentTask('t', { a: 1 })).resolves.toEqual({})
+    expect(mockServedRefused).not.toHaveBeenCalled()
+  })
+
+  test('what the agent serves, and its stamp, come from the agent controller', async () => {
+    const backend = createAgentRoomsBackend(agent)
+    await expect(backend.agentServedTypes()).resolves.toEqual(['a'])
+    expect(mockServedTypes).toHaveBeenCalledWith(agent)
+    expect(backend.agentServedStamp?.()).toBe(7)
+  })
 
   test('a timeout and waitForConsent reach the client where it reads them', async () => {
     await createAgentRoomsBackend(agent).agentTask('t', { a: 1 }, { timeoutMs: 60000, waitForConsent: false })

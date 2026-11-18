@@ -406,6 +406,84 @@ describe('AgentRoomsService', () => {
     expect(agentServedTypes).toHaveBeenCalledTimes(2)
   })
 
+  // The real backend gives the agent's last answer at once and asks the agent again behind (agentLastKnownSwitch.ts):
+  // its stamp moves when the agent turned out to serve something else, and the answer held here is read again.
+  describe('an answer the backend says has moved', () => {
+    const stamped = () => {
+      let stamp = 0
+      let types: string[] = [ROOMS_TASK.keysList01]
+      const agentServedTypes = jest.fn(async () => types)
+      const { b } = backend({ agentServedTypes, agentServedStamp: () => stamp })
+      return {
+        service: new AgentRoomsService(b),
+        agentServedTypes,
+        /** The agent was asked again and serves something else now. */
+        move: (now: string[]) => {
+          types = now
+          stamp++
+        },
+      }
+    }
+
+    it('is read again by the next caller, and what it derives follows the new answer', async () => {
+      const { service, agentServedTypes, move } = stamped()
+      expect((await service.capabilities()).listMyRooms.status).toBe('available')
+      expect(agentServedTypes).toHaveBeenCalledTimes(1)
+      move([])
+      expect((await service.capabilities()).listMyRooms).toMatchObject({ status: 'unavailable' })
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+      // Read once for the move, not on every call after it.
+      await service.capabilities()
+      await service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+    })
+
+    it('control: an answer that has not moved is not read again', async () => {
+      const { service, agentServedTypes } = stamped()
+      await service.capabilities()
+      await service.capabilities()
+      await service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(1)
+    })
+
+    it('is read again once, however many callers find it moved together', async () => {
+      const { service, agentServedTypes, move } = stamped()
+      await service.capabilities()
+      move([ROOMS_TASK.keysList02])
+      const answers = await Promise.all([service.capabilities(), service.capabilities(), service.capabilities()])
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+      expect(answers.map((c) => c.listMyRooms.status)).toEqual(['available', 'available', 'available'])
+    })
+
+    it('that moves while a read is out is read again by the caller after it', async () => {
+      let stamp = 0
+      const answers: ((types: string[]) => void)[] = []
+      const agentServedTypes = jest.fn(() => new Promise<string[]>((resolve) => answers.push(resolve)))
+      const { b } = backend({ agentServedTypes, agentServedStamp: () => stamp })
+      const service = new AgentRoomsService(b)
+      const first = service.capabilities()
+      // The agent's new answer lands while the first read is still out: that read may carry either answer.
+      stamp++
+      answers[0]([ROOMS_TASK.keysList01])
+      await first
+      const second = service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+      answers[1]([])
+      expect((await second).listMyRooms).toMatchObject({ status: 'unavailable' })
+      await service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+    })
+
+    it('control: a backend with no stamp is asked once, as before', async () => {
+      const agentServedTypes = jest.fn(async () => [ROOMS_TASK.keysList01])
+      const { b } = backend({ agentServedTypes })
+      const service = new AgentRoomsService(b)
+      await service.capabilities()
+      await service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it.each([
     ['the earlier ask answers first', ['A', 'B']],
     ['the earlier ask answers last', ['B', 'A']],

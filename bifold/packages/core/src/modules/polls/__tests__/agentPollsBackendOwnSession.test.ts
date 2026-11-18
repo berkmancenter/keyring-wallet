@@ -54,7 +54,16 @@ jest.mock('../../trust-tasks/module/vtiAgent', () => {
     },
   }
 })
-jest.mock('../../trust-tasks/module/vtaAgent', () => ({ vtaAgent: {} }))
+const mockAgentTask = jest.fn(async (..._a: unknown[]): Promise<unknown> => ({ ok: true }))
+const mockServedRefused = jest.fn()
+const mockServedTypes = jest.fn(async (..._a: unknown[]) => ['a'])
+jest.mock('../../trust-tasks/module/vtaAgent', () => ({
+  vtaAgent: {
+    roomsClient: async () => ({ task: (...a: unknown[]) => mockAgentTask(...a) }),
+    servedRefused: (...a: unknown[]) => mockServedRefused(...a),
+    servedTypes: (...a: unknown[]) => mockServedTypes(...a),
+  },
+}))
 jest.mock('../../trust-tasks/module/vtiTsp', () => ({ GenericRecordsTspPeerRevisionStore: class {} }))
 jest.mock('../ballotBoxDoor', () => ({ createBallotBoxDoor: () => ({}) }))
 
@@ -216,5 +225,35 @@ describe('the polls backend, with its identity’s own session still opening', (
     await expect(listing()).resolves.toBe('shared')
     expect(mockOnceOpen).not.toHaveBeenCalled()
     expect(mockTaskAs).not.toHaveBeenCalled()
+  })
+})
+
+// agentLastKnownSwitch.ts: the polls service reads what the agent serves through the agent controller (its last answer,
+// asked again behind), and a task the agent refuses is handed to it, which asks again when the refusal says "not served".
+describe('the polls backend and what the agent serves', () => {
+  beforeEach(() => {
+    mockAgentTask.mockClear()
+    mockServedRefused.mockClear()
+  })
+
+  it('reads it from the agent controller', async () => {
+    await expect(createAgentPollsBackend(agent).agentServedTypes()).resolves.toEqual(['a'])
+    expect(mockServedTypes).toHaveBeenCalledWith(agent)
+  })
+
+  it('hands a refused agent task to the agent controller, and the caller gets the same error', async () => {
+    const refusal = new Error('unsupportedVersion')
+    mockAgentTask.mockImplementationOnce(async () => {
+      throw refusal
+    })
+    await expect(createAgentPollsBackend(agent).agentTask('t', { a: 1 })).rejects.toBe(refusal)
+    expect(mockServedRefused).toHaveBeenCalledTimes(1)
+    expect(mockServedRefused).toHaveBeenCalledWith(agent, refusal)
+  })
+
+  it('control: an answered agent task hands it nothing', async () => {
+    await expect(createAgentPollsBackend(agent).agentTask('t', { a: 1 })).resolves.toEqual({ ok: true })
+    expect(mockAgentTask).toHaveBeenCalledWith('t', { a: 1 })
+    expect(mockServedRefused).not.toHaveBeenCalled()
   })
 })

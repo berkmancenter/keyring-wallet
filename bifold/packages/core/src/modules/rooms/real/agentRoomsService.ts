@@ -148,6 +148,12 @@ export interface RoomsBackend {
   agentLinked(): boolean
   /** The agent's `trust-task-discovery` answer; undefined when it could not be asked. */
   agentServedTypes(): Promise<readonly string[] | undefined>
+  /**
+   * Moves when the backend's answer to `agentServedTypes` has changed since it was last given (the real backend gives
+   * the agent's last answer at once and asks again behind, agentLastKnownSwitch.ts). The answer held here is read
+   * again when it has moved. Absent: an answer, once held, stands until a refresh.
+   */
+  agentServedStamp?(): number
   /** Send a Trust Task to the person's own agent; resolves with the response payload. */
   agentTask(
     type: string,
@@ -448,7 +454,8 @@ export class AgentRoomsService implements RoomsService {
     return this.backend.runsOn
   }
 
-  private served?: { types: readonly string[] | undefined; at: number }
+  /** What the agent serves, when it was read, and the backend's stamp from before the read (`agentServedStamp`). */
+  private served?: { types: readonly string[] | undefined; at: number; stamp?: number }
   private servedInFlight?: Promise<void>
   /** How many asks of what the agent serves were started: only the latest one's answer is kept. */
   private servedAsks = 0
@@ -541,7 +548,10 @@ export class AgentRoomsService implements RoomsService {
   public async capabilities(options: { refresh?: boolean } = {}): Promise<RoomsCapabilities> {
     const linked = this.backend.agentLinked()
     const unknownAged = !this.served?.types && this.now() - (this.served?.at ?? -Infinity) >= SERVED_UNKNOWN_RETRY_MS
-    if (linked && (options.refresh || unknownAged)) await this.askServed(options.refresh)
+    // The backend's answer moved since the one held was read: read it again. Whoever asks while that read is out
+    // waits for the same one.
+    const moved = this.served !== undefined && this.backend.agentServedStamp?.() !== this.served.stamp
+    if (linked && (options.refresh || unknownAged || moved)) await this.askServed(options.refresh)
     return deriveCapabilities({ agentLinked: linked, servedTypes: this.served?.types, built: this.built })
   }
 
@@ -559,8 +569,10 @@ export class AgentRoomsService implements RoomsService {
     const asked = ++this.servedAsks
     const latest = () => asked === this.servedAsks
     this.servedInFlight = (async () => {
+      // Read before the ask: an answer that moves while this one is out is read again by the next caller.
+      const stamp = this.backend.agentServedStamp?.()
       const types = await this.backend.agentServedTypes()
-      if (latest()) this.served = { types, at: this.now() }
+      if (latest()) this.served = { types, at: this.now(), stamp }
     })().finally(() => {
       if (latest()) this.servedInFlight = undefined
     })
