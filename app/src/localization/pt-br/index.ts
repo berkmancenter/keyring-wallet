@@ -183,7 +183,6 @@ const translation = {
     "HoldK0RevokedOmittedCard": "Guardar o cartão revogado sem a sua revogação (K0)",
     "BecomeK0TestWard": "Sou a pessoa tutelada de teste (K0)",
     "EnableStateCard": "Cartão do estado (demo): mostrar em Credenciais o cartão de responsável que este telefone guarda",
-    "EnableConfirmItsYou": "É você mesmo: pedir a um contato que confirme que é mesmo ele (demo). Ative nos dois telefones.",
     "Demos": "Demos",
     "SediDemoGuardian": "Demo do tutor",
     "SediDemoGuardianHint": "No telefone do aprovador. Guarda o cartão de teste do Example State e mostra o cartão do Estado.",
