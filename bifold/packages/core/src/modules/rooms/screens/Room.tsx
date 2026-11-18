@@ -203,8 +203,10 @@ const Room: React.FC = () => {
     !!room && canList && room.joined !== false,
     inView,
     isChatPost,
-    // An open room's chat is kept in the wallet and opens on it (rooms/messageCache); a sealed room's never is.
-    room?.tier === 'open' && room.communityDid
+    // The chat of an open or attributed room is kept in the wallet and opens on it (rooms/messageCache; Alberto,
+    // 11-18). A private room's never is, nor a room whose tier is unknown (custody-only): the tiers are named, never
+    // "not private".
+    (room?.tier === 'open' || room?.tier === 'attributed') && room.communityDid
       ? { messageCache: { communityDid: room.communityDid, validUntil: room.validUntil } }
       : {}
   )

@@ -244,8 +244,8 @@ export function useRoomPosts(
   counts?: (post: RoomPost) => boolean,
   options: {
     /**
-     * Keep this room's posts in the wallet, and open on them (rooms/messageCache): the chat of an open room, by its
-     * community and end. Absent for a sealed room, and for every other screen.
+     * Keep this room's posts in the wallet, and open on them (rooms/messageCache): the chat of an open or attributed
+     * room, by its community and end. Absent for a private room or one of unknown tier, and for every other screen.
      */
     messageCache?: { communityDid: string; validUntil?: string }
   } = {}
@@ -341,7 +341,7 @@ export function useRoomPosts(
         setListing(kept)
       }
     }
-    // Else the wallet's kept copy of this open room, when there is one (rooms/messageCache): it checks the switch, the
+    // Else the wallet's kept copy of this room, when there is one (rooms/messageCache): it checks the switch, the
     // biometric unlock, the identity, the room's end and the journal itself.
     const wallet = service.runsOn
     const cache = cacheNow.current
