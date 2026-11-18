@@ -886,7 +886,7 @@ export class VtiMediatorSession {
     // mediator queued while this DID was offline — a consent request pushed to
     // an approver before its app opened — is fetched with an explicit
     // delivery-request; the `delivery` response is unpacked in `handleFrame`.
-    await this.requestDelivery(true)
+    await this.requestDelivery(true, this.armFirstDrain())
     // And a live push can be missed — measured: a vetting statement sat in the
     // recipient's queue while its socket was open (VTI-24's shape again). A
     // periodic delivery-request is the backstop; an empty queue answers with a
@@ -904,6 +904,35 @@ export class VtiMediatorSession {
       this.unansweredPolls += 1
       void this.requestDelivery().catch(() => undefined)
     }, DELIVERY_POLL_MS)
+  }
+
+  /** The delivery-request a start sent, and what waits for the mediator's answer to it (`firstDrained`). */
+  private firstDrain?: { id: string; promise: Promise<void>; answered: () => void }
+
+  /** A new wait for the answer to the delivery-request this start is about to send; returns that request's id. */
+  private armFirstDrain(): string {
+    const id = uuid()
+    let answered: () => void = () => undefined
+    const promise = new Promise<void>((resolve) => {
+      answered = resolve
+    })
+    this.firstDrain = { id, promise, answered }
+    return id
+  }
+
+  /**
+   * Resolves once the mediator has answered the delivery-request the latest start sent: a `delivery`, once what it
+   * carried has been handed on, or a `status` threaded to that request (nothing was queued). Never rejects, and may
+   * never resolve (a mediator that does not thread its `status`): a caller bounds it. Before any start it resolves
+   * at once, having nothing to wait for.
+   */
+  firstDrained(): Promise<void> {
+    return this.firstDrain?.promise ?? Promise.resolve()
+  }
+
+  /** A pickup `status`: the first drain's answer when it is threaded to that request. */
+  private heardDrainStatus(frame: { type?: unknown; thid?: unknown }): void {
+    if (frame.type === PICKUP_STATUS && this.firstDrain && frame.thid === this.firstDrain.id) this.firstDrain.answered()
   }
 
   /** Backstop polls sent since the mediator last said anything at all on this socket. */
@@ -942,10 +971,10 @@ export class VtiMediatorSession {
    * limit}` (`MessagePickupDeliveryRequest`, affinidi-messaging-sdk) — without
    * `recipient_did` it answers a problem-report and nothing is delivered.
    */
-  private async requestDelivery(onSocketOnly = false): Promise<void> {
+  private async requestDelivery(onSocketOnly = false, id = uuid()): Promise<void> {
     this.lastDeliveryRequestAt = Date.now()
     await (onSocketOnly ? this.sendOnSocket.bind(this) : this.send.bind(this))({
-      id: uuid(),
+      id,
       typ: PLAIN,
       type: DELIVERY_REQUEST,
       from: this.identity.did,
@@ -1025,6 +1054,7 @@ export class VtiMediatorSession {
       // agent: Credo has no handler for it and rejects it as invalid. Frames
       // carrying a peer's message are JWEs, so a plaintext `status` is ours.
       if (isPickup(frame.type)) {
+        this.heardDrainStatus(frame)
         this.heardPickup(frame)
         return
       }
@@ -1034,7 +1064,13 @@ export class VtiMediatorSession {
         // as attachments; unpack and route each, then acknowledge them so the
         // mediator drops them from the queue.
         if (plaintext.type === DELIVERY) {
-          await this.handleDelivery(plaintext as unknown as DeliveryMessage)
+          // Whatever it carried is handed on before the first drain counts as answered: a delivery only ever
+          // answers a delivery-request, and each one empties what was queued when it was asked.
+          try {
+            await this.handleDelivery(plaintext as unknown as DeliveryMessage)
+          } finally {
+            this.firstDrain?.answered()
+          }
           return
         }
         // The mediator authcrypts its own bookkeeping too, so a frame's type is
@@ -1043,6 +1079,7 @@ export class VtiMediatorSession {
         // Its own frames are never queued messages: acknowledging one provokes
         // another status reply, forever (vti-didcomm-js, mediator-transport.js).
         if (isPickup(plaintext.type)) {
+          this.heardDrainStatus(plaintext)
           this.heardPickup(plaintext)
           return
         }

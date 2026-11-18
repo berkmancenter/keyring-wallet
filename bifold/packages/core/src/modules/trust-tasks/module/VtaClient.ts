@@ -102,6 +102,7 @@ import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type Ts
 import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
+import { isConnectDrainEarlyOn } from './connectDrainSwitch'
 import { isReplacedSessionStopsOn } from './replacedSessionSwitch'
 import { didOfKeyId, isAgentsOwnDid, isAgentsOwnPersona } from './agentOwnIdentity'
 import {
@@ -1219,7 +1220,13 @@ export class VtaClient {
     // takes it, and the rest of the session goes one at a time.
     const [only] = this.pendings.size === 1 ? [...this.pendings] : []
     const sentAt = only ? only[1].sentAt : Math.min(...[...this.pendings.values()].map((p) => p.sentAt))
-    const stale = typeof plaintext.created_time === 'number' && plaintext.created_time * 1000 < sentAt - 5000
+    // One with no time at all cannot be told from an old one. While this connect's drain may still be arriving
+    // (the wait ended early, `drainSettlesAt`), it is taken for old: before that wait could end early, such a reply
+    // was handed over while nothing was asked yet and so answered nothing. After that time, as before.
+    const untimedWhileDraining = typeof plaintext.created_time !== 'number' && Date.now() < this.drainSettlesAt
+    const stale =
+      untimedWhileDraining ||
+      (typeof plaintext.created_time === 'number' && plaintext.created_time * 1000 < sentAt - 5000)
     if (stale) {
       this.options.onInbound?.(plaintext)
       return
@@ -1348,6 +1355,12 @@ export class VtaClient {
   private connecting?: Promise<void>
 
   /**
+   * Until when (ms) a reply with no thread and no time is taken for old: set when a connect's drain wait ended early
+   * (connectDrainSwitch), to when the whole wait would have ended. 0: never ended early, or switched off.
+   */
+  private drainSettlesAt = 0
+
+  /**
    * One connect at a time: back in the foreground, the foreground handler and the dropped-session reconnect both
    * called this in the same moment, each found no open socket, and each opened a session as the same DID (report
    * EFNN-34F9, 11-17). A second caller now joins the first, and gets its outcome.
@@ -1436,7 +1449,29 @@ export class VtaClient {
     // and this DID is persisted, so that backlog can include stale replies from
     // earlier sessions. No reply to any request of ours can exist yet, so a
     // short drain with nothing pending discards the backlog before the first send.
-    await new Promise((resolve) => setTimeout(resolve, this.options.connectDrainMs ?? 2000))
+    // The whole time is the ceiling; where the mediator says the queue was handed over, the wait ends there
+    // (connectDrainSwitch). Which of the two it was is said, so a report shows what the wait cost.
+    const ceilingMs = this.options.connectDrainMs ?? 2000
+    const began = Date.now()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const ceiling = new Promise<'ceiling'>((resolve) => {
+      timer = setTimeout(() => resolve('ceiling'), ceilingMs)
+    })
+    const early =
+      isConnectDrainEarlyOn() && typeof session.firstDrained === 'function'
+        ? session.firstDrained().then(() => 'answered' as const)
+        : undefined
+    const ended = await (early ? Promise.race([early, ceiling]) : ceiling)
+    if (timer) clearTimeout(timer)
+    // Ended early: until the whole drain time has passed, what was queued may still be arriving (a queue larger than
+    // one delivery, a mediator slow to send the rest). `deliver` is stricter about an unthreaded reply until then.
+    this.drainSettlesAt = ended === 'answered' ? began + ceilingMs : 0
+    if (early)
+      this.agent.config.logger.info(
+        ended === 'answered'
+          ? `${LOG_PREFIX} connect: the mediator handed over its queue in ${Date.now() - began} ms; going on`
+          : `${LOG_PREFIX} connect: the mediator did not answer the queue request within ${ceilingMs} ms; going on`
+      )
   }
 
   /** Ask the session to prove its socket answers (back in the foreground); one that does not is reopened. */
