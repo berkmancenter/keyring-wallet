@@ -206,9 +206,15 @@ const Room: React.FC = () => {
     // The chat of an open or attributed room is kept in the wallet and opens on it (rooms/messageCache; Alberto,
     // 11-18). A private room's never is, nor a room whose tier is unknown (custody-only): the tiers are named, never
     // "not private".
-    (room?.tier === 'open' || room?.tier === 'attributed') && room.communityDid
-      ? { messageCache: { communityDid: room.communityDid, validUntil: room.validUntil } }
-      : {}
+    {
+      ...((room?.tier === 'open' || room?.tier === 'attributed') && room.communityDid
+        ? { messageCache: { communityDid: room.communityDid, validUntil: room.validUntil } }
+        : {}),
+      // Before the room is known, its kept copy is drawn by the identity this phone says acts there, and taken down if
+      // the room, once read, says otherwise or cannot be read (useRoomPosts `seedBeforeRoom`).
+      seedBeforeRoom: true,
+      roomNotRead: state.failed && !room,
+    }
   )
   // The posts drawn are the phone's own copy from before (the kept copy, or this run's last listing), and the room's
   // first listing has not answered yet (useRoomPosts `unconfirmed`). Said under the newest post until it has.

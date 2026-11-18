@@ -501,6 +501,12 @@ export interface RoomsService {
   readonly label: string
   /** The app's agent a real service is built on (`RoomsBackend.runsOn`); none for the sample. */
   readonly runsOn?: object
+  /**
+   * Each community this phone is a member of now and the identity it acts as there, from the wallet alone (no agent
+   * or community is asked): what a room's kept posts are drawn by before the room is known (rooms/messageCache
+   * `readRoomPostsBeforeRoom`). None for the sample.
+   */
+  localCommunities?(): Promise<ReadonlyArray<{ did: string; personaDid: string }>>
   /** A line for the app's log, from a screen's read of the rooms: what failed, and each retry. None for the sample. */
   note?(line: string): void
   /** One status per operation. Cached per agent; `refresh` asks again. */

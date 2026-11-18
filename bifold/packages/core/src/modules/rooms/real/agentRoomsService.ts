@@ -446,12 +446,19 @@ export class AgentRoomsService implements RoomsService {
 
   /** The communities the last rooms listing skipped because the session was kept for another identity. */
   private keptBack: HeldBackCommunity[] = []
+  /** The last rooms listing heard from every community: a room it does not hold is not among this member's rooms. */
+  private listedWhole = false
   public heldBack(): HeldBackCommunity[] {
     return this.keptBack
   }
   public readonly label = 'rooms: the person’s own agent and communities'
   public get runsOn(): object | undefined {
     return this.backend.runsOn
+  }
+
+  /** The backend's communities, read from the wallet alone: a room's kept posts are drawn by them before it is known. */
+  public async localCommunities(): Promise<ReadonlyArray<{ did: string; personaDid: string }>> {
+    return (await this.backend.communities()).map(({ did, personaDid }) => ({ did, personaDid }))
   }
 
   /** What the agent serves, when it was read, and the backend's stamp from before the read (`agentServedStamp`). */
@@ -739,6 +746,8 @@ export class AgentRoomsService implements RoomsService {
     // them from this.rooms instead would give them a list this read did not make: the cache as the accept or leave
     // since changed it.
     if (changes === this.roomsChanged) this.rooms = next
+    this.listedWhole =
+      changes === this.roomsChanged && unreachable.length + tooOld.length + kept.length + awaitingKeys.length === 0
     this.keptBack = kept.map((c) => ({
       communityDid: c.did,
       ...(c.name !== undefined ? { communityName: toInertText(c.name) } : {}),
@@ -873,7 +882,15 @@ export class AgentRoomsService implements RoomsService {
   private async known(roomId: string): Promise<KnownRoom> {
     if (!this.rooms.has(roomId)) await this.listMyRooms()
     const room = this.rooms.get(roomId)
-    if (!room) throw new Error(`no room ${roomId} among this member's rooms`)
+    if (!room) {
+      // Listed whole and not among them: its kept posts go too (rooms/messageCache), or a cold start would open on them
+      // again before each read says so. Never from a listing some community did not answer (unreachable, held back
+      // for another identity, not serving, keys not here yet): the room may be among those.
+      const wallet = this.backend.runsOn
+      if (this.listedWhole && isCacheWallet(wallet))
+        void emptyMessageCache(wallet, { room: roomId }, 'not listed').catch(() => undefined)
+      throw new Error(`no room ${roomId} among this member's rooms`)
+    }
     return room
   }
 

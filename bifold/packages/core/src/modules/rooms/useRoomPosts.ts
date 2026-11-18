@@ -21,13 +21,20 @@
  *
  * @module rooms/useRoomPosts
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAgentSession } from './agentSession'
 import { newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
 import { inertFlags, toInertText } from './inertText'
 import { dropKeptListing, keepListing, keptListing } from './keptListings'
-import { type CachedPost, emptyMessageCache, isCacheWallet, keepRoomPosts, readRoomPosts } from './messageCache'
+import {
+  type CachedPost,
+  emptyMessageCache,
+  isCacheWallet,
+  keepRoomPosts,
+  readRoomPosts,
+  readRoomPostsBeforeRoom,
+} from './messageCache'
 import { logRef } from './roomsLogWords'
 import {
   RECORD_UNOPENED_REASONS,
@@ -248,18 +255,34 @@ export function useRoomPosts(
      * room, by its community and end. Absent for a private room or one of unknown tier, and for every other screen.
      */
     messageCache?: { communityDid: string; validUntil?: string }
+    /**
+     * Open on the wallet's kept copy before the room is known (rooms/messageCache `readRoomPostsBeforeRoom`): the
+     * room's chat, while its screen still waits for the first rooms listing to say which identity acts here. Taken
+     * down when the room, once known, acts as another identity or is not kept, and when it cannot be read
+     * (`roomNotRead`). Under the cache's own switch, biometric unlock and checks.
+     */
+    seedBeforeRoom?: boolean
+    /** The room itself could not be read (useRoom `failed`, no room yet): a copy drawn before it is taken down. */
+    roomNotRead?: boolean
   } = {}
 ): RoomPosts {
   const [listing, setListing] = useState<Listing>()
   // The room's last listing this run, when one is kept (keptListings): shown at once when the room can be listed, while
   // its first listing reads behind it. A seed that first listing cannot confirm is dropped.
   const seeded = useRef<Listing | undefined>(undefined)
+  // Where the seed came from, for the opening's log line: this run's kept listing, or the wallet's kept copy (c0).
+  const seedFrom = useRef<'kept listing' | 'wallet copy' | 'wallet copy, before the room'>('kept listing')
   // The room's first listing of this opening answered: a kept copy read after it is never shown.
   const confirmed = useRef(false)
   const cacheNow = useRef(options.messageCache)
   cacheNow.current = options.messageCache
   const actingAsNow = useRef(actingAs)
   actingAsNow.current = actingAs
+  // The identity and community the copy drawn before the room was known is of (seedBeforeRoom), until the room agrees.
+  const seededBefore = useRef<{ personaDid: string; communityDid: string } | undefined>(undefined)
+  const [drawnBeforeAs, setDrawnBeforeAs] = useState<string>()
+  // A copy drawn before the room, once taken down: never drawn again from a render that still held it.
+  const takenDown = useRef<Listing | undefined>(undefined)
   // Records read and drawn: `wanted` counted posts, and as many more records as it takes to reach them.
   const [shown, setShown] = useState(POSTS_PAGE)
   const wanted = useRef(POSTS_PAGE)
@@ -328,6 +351,54 @@ export function useRoomPosts(
   const listFailedOn = useRef<number | undefined>(undefined)
   const pollFailedOn = useRef<number | undefined>(undefined)
 
+  // Before the room is known: the wallet's kept copy, drawn by the identity this phone itself says acts in its community
+  // (readRoomPostsBeforeRoom), so a cold start opens on it without waiting for the first rooms listing (279.3: 6 s).
+  const seedBeforeRoom = options.seedBeforeRoom === true
+  useEffect(() => {
+    if (!service || enabled || !seedBeforeRoom || !service.localCommunities) return
+    const wallet = service.runsOn
+    if (!isCacheWallet(wallet) || seeded.current || listingNow.current) return
+    let current = true
+    service
+      .localCommunities()
+      .then((communities) => readRoomPostsBeforeRoom(wallet, roomId, communities))
+      .then(
+        (copy) => {
+          if (!current || !copy || confirmed.current || seeded.current || listingNow.current) return
+          const seed = seedOf(copy.posts, reads.current.notes)
+          seeded.current = seed
+          seedFrom.current = 'wallet copy, before the room'
+          seededBefore.current = { personaDid: copy.room.personaDid, communityDid: copy.room.communityDid }
+          setDrawnBeforeAs(copy.room.personaDid)
+          setListing(seed)
+        },
+        () => undefined
+      )
+    return () => {
+      current = false
+    }
+  }, [service, roomId, enabled, seedBeforeRoom])
+
+  // The room known (it names who acts in it), or not readable: a copy drawn before it stays only when the room can be
+  // listed, acts as the identity the copy was of, in its community, and is kept (messageCache given). Else it comes
+  // down at once, before any listing answers: a room left, one not listable, a private one, another identity's.
+  const roomNotRead = options.roomNotRead === true
+  const cacheCommunity = options.messageCache?.communityDid
+  const knownAs = actingAs?.did
+  useEffect(() => {
+    const before = seededBefore.current
+    if (!before || (knownAs === undefined && !roomNotRead)) return
+    seededBefore.current = undefined
+    const agrees = enabled && !roomNotRead && knownAs === before.personaDid && cacheCommunity === before.communityDid
+    if (agrees) return
+    if (seeded.current && listingNow.current === seeded.current) {
+      takenDown.current = seeded.current
+      seeded.current = undefined
+      setListing(undefined)
+      setPosts(undefined)
+    }
+  }, [enabled, roomNotRead, knownAs, cacheCommunity])
+
   useEffect(() => {
     if (!service || !enabled) return
     let current = true
@@ -338,6 +409,7 @@ export function useRoomPosts(
       const kept = keptListing<Listing>(service, roomId)
       if (kept) {
         seeded.current = kept
+        seedFrom.current = 'kept listing'
         setListing(kept)
       }
     }
@@ -352,6 +424,7 @@ export function useRoomPosts(
           if (!current || !copy || confirmed.current || seeded.current) return
           const seed = seedOf(copy.posts, reads.current.notes)
           seeded.current = seed
+          seedFrom.current = 'wallet copy'
           setListing(seed)
         },
         () => undefined
@@ -481,14 +554,21 @@ export function useRoomPosts(
     }
   }, [service, roomId, enabled, live, listed, notePoll])
 
+  // Until the room is known, a copy drawn before it is drawn as the identity it was of, so the member's own posts are on
+  // their side from the start and nothing moves when the room arrives.
+  const drawnAs = useMemo(
+    () => actingAs ?? (drawnBeforeAs ? { did: drawnBeforeAs } : undefined),
+    [actingAs, drawnBeforeAs]
+  )
   useEffect(() => {
-    if (!service || !listing) return
+    // A copy taken down (above) is still this render's `listing` when the room's arrival reruns this effect with it.
+    if (!service || !listing || listing === takenDown.current) return
     let current = true
     const read = reads.current.notes
     const unopened = reads.current.unopened
     const page = listing.notes.slice(0, shown)
     const postOfSummary = (summary: NoteSummary) => {
-      const post = postOf(read.get(readKey(summary)) ?? summary, actingAs)
+      const post = postOf(read.get(readKey(summary)) ?? summary, drawnAs)
       const why = post.unread ? unopened.get(readKey(summary)) : undefined
       return why ? { ...post, unreadWhy: why } : post
     }
@@ -515,7 +595,7 @@ export function useRoomPosts(
     // A record its listing already shows is not counted is not read for this page: an open room lists a note's title
     // in cleartext, and the chat leaves notes out (the Notes part reads them for itself). Where a listing carries no
     // title (attributed and private rooms seal it with the body), each record is read to tell, as before.
-    const leftOut = (summary: NoteSummary) => !!countsNow.current && !countsNow.current(postOf(summary, actingAs))
+    const leftOut = (summary: NoteSummary) => !!countsNow.current && !countsNow.current(postOf(summary, drawnAs))
     const ready = (summary: NoteSummary) =>
       summary.status === 'retracted' || read.has(readKey(summary)) || leftOut(summary)
     // The posts that can be drawn now: newest first, up to the first one still being read.
@@ -566,7 +646,7 @@ export function useRoomPosts(
     return () => {
       current = false
     }
-  }, [service, roomId, listing, shown, actingAs])
+  }, [service, roomId, listing, shown, drawnAs])
 
   useEffect(() => {
     const opening = opened.current
@@ -574,7 +654,7 @@ export function useRoomPosts(
     if (!posts || !opening || opening.said || opening.roomId !== roomId) return
     if (!from || from.posts !== posts || from.listing === opening.listing) return
     opening.said = true
-    const kept = from.listing === seeded.current ? ' (kept listing)' : ''
+    const kept = from.listing === seeded.current ? ` (${seedFrom.current})` : ''
     service?.note?.(
       `[Room] ${logRef(roomId)} opened: ${posts.length} posts shown in ${Date.now() - opening.at} ms${kept}`
     )

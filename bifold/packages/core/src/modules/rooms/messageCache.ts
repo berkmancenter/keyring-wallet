@@ -426,6 +426,38 @@ export async function readRoomPosts(
   return read
 }
 
+/**
+ * The kept copy a room opens on before the room itself is known (useRoomPosts `seedBeforeRoom`): at a cold start the
+ * room screen learns which identity acts in a room only from the first rooms listing, seconds away (6 s on 279.3,
+ * 20-55 s on slower phones), and the copy waited for it. Here the identity comes from what the phone already holds:
+ * `communities`, each community this phone is a member of now and the identity it acts as there (the rooms backend's
+ * `communities`, read from the wallet alone, the same answer the listing names a room's `actingAs` by).
+ *
+ * A copy is drawn only when exactly one of the room's kept copies is of a community and identity among them, and that
+ * community is acted as by that identity alone. Otherwise nothing: never a guess between two identities, whose copies
+ * are each shown only on their own screen. The read itself is {@link readRoomPosts}'s, with every check it makes (the
+ * switch, biometric unlock, the journal, the room's end, the age), and the room screen takes the copy down if the room,
+ * once known, acts as another identity or is not kept.
+ */
+export async function readRoomPostsBeforeRoom(
+  agent: CacheWallet,
+  roomId: string,
+  communities: ReadonlyArray<{ did: string; personaDid: string }>,
+  now = Date.now()
+): Promise<{ room: CachedRoom; posts: CachedPost[] } | undefined> {
+  if (!(await messageCacheAllowed())) return undefined
+  const records = await agent.genericRecords.findAllByQuery({ type: RECORD_TYPE, room: hashOf(roomId) })
+  const mine = records
+    .map(contentOf)
+    .filter((c): c is NonNullable<typeof c> => !!c && c.roomId === roomId)
+    .filter((c) => {
+      const actedAs = communities.filter((m) => m.did === c.communityDid)
+      return actedAs.length === 1 && actedAs[0].personaDid === c.personaDid
+    })
+  if (mine.length !== 1) return undefined
+  return readRoomPosts(agent, mine[0].personaDid, roomId, now)
+}
+
 function readInTurn(
   agent: CacheWallet,
   personaDid: string,

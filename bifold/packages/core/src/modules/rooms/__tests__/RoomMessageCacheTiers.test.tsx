@@ -82,7 +82,7 @@ describe("the room screen's chat, by the room's tier", () => {
     const { sample } = roomOfTier(tier)
     const room = await sample.getRoom(ROOM)
     show()
-    await waitFor(() => expect(last()).toEqual({ messageCache: expect.anything() }))
+    await waitFor(() => expect(last()).toMatchObject({ messageCache: expect.anything() }))
     expect((last() as { messageCache: { communityDid: string } }).messageCache.communityDid).toBe(room.communityDid)
   })
 
@@ -90,7 +90,7 @@ describe("the room screen's chat, by the room's tier", () => {
     const { wallet } = roomOfTier(tier)
     const tree = show()
     await waitFor(() => expect(tree.getAllByTestId(/RoomPost_/).length).toBeGreaterThan(0))
-    expect(last()).toEqual({})
+    expect((last() as { messageCache?: unknown }).messageCache).toBeUndefined()
     expect(mockOptions.every((o) => !(o as { messageCache?: unknown }).messageCache)).toBe(true)
     expect(wallet.genericRecords.save).not.toHaveBeenCalled()
     expect(wallet.genericRecords.findById).not.toHaveBeenCalled()
