@@ -82,7 +82,7 @@ import { usePetnames } from '../usePetname'
 import { useInViewAndActive } from '../useInViewAndActive'
 import { type RoomListing, useRoom } from '../useRoom'
 import { POSTS_PAGE, ROOM_POLL_MS, useRoomPosts } from '../useRoomPosts'
-import { markRoomSeen } from '../useRoomRows'
+import { markRoomSeen, useRoomRows } from '../useRoomRows'
 import { useRoomDraft } from '../useRoomDraft'
 import { type PendingPost, useRoomSend } from '../useRoomSend'
 import { useRoomsService } from '../useRoomsService'
@@ -219,6 +219,8 @@ const Room: React.FC = () => {
   // The posts drawn are the phone's own copy from before (the kept copy, or this run's last listing), and the room's
   // first listing has not answered yet (useRoomPosts `unconfirmed`). Said under the newest post until it has.
   const unconfirmed = isUnconfirmed(feed)
+  // The room's name as Messages' row has it, for the posts drawn before the room is known (below).
+  const rowName = useRoomRows().rows.find((row) => row.roomId === roomId)?.roomName
   // A reaction, edit or withdrawal the member just asked for, laid over the posts until the room's list carries it.
   const pendingWrites = usePendingWrites(feed.posts)
   // The member's own writes that succeeded but have not landed in the posts: the room keeps its 10 s poll for them, so a
@@ -425,6 +427,7 @@ const Room: React.FC = () => {
     list: { paddingHorizontal: 12, paddingBottom: 16, gap: 2 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     centered: { padding: 16, gap: 8 },
+    beforeName: { paddingHorizontal: 16, paddingVertical: 8, fontWeight: 'bold' },
     floatingDay: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
     warn: {
       flexDirection: 'row',
@@ -450,11 +453,54 @@ const Room: React.FC = () => {
       </SafeAreaView>
     )
 
+  // Before the room is known (a cold start waits for the first rooms listing to say which identity acts here), its kept
+  // posts are drawn read-only, under the name Messages' row has, with nothing to post from until the room arrives
+  // (useRoomPosts `seedBeforeRoom`). Until 279.5 this branch drew only a spinner, so the copy #1146 drew in the feed
+  // never reached the screen (YJPT-6WC8).
+  const drawnBefore =
+    !room && unconfirmed && !state.unreachable
+      ? withDayPills(byArrival(thread.posts.filter((post) => drawnInChat(post, thread, thread.held.get(post.key)))))
+      : []
   if (!room || !roomCapabilities)
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomScreen')}>
         <SampleDataBanner service={service} />
-        {state.unreachable ? (
+        {drawnBefore.length > 0 ? (
+          <View style={{ flex: 1 }} testID={testIdWithKey('RoomBeforeKnown')}>
+            {rowName ? (
+              <ThemedText style={[styles.muted, styles.beforeName]} numberOfLines={1}>
+                {String(rowName)}
+              </ThemedText>
+            ) : null}
+            <FlatList
+              testID={testIdWithKey('RoomPosts')}
+              data={drawnBefore}
+              keyExtractor={(item) => item.key}
+              inverted
+              initialNumToRender={POSTS_PAGE * 2}
+              contentContainerStyle={styles.list}
+              renderItem={({ item }) =>
+                item.kind === 'day' ? (
+                  <DayPill date={item.date} />
+                ) : isNoteMarker(item.post) ? (
+                  <RoomNoteMarker
+                    title={item.post.title ?? firstLineOf(item.post.text)}
+                    onOpen={() => navigation.navigate(Screens.RoomPart, { roomId, part: 'notes' })}
+                  />
+                ) : (
+                  <RoomThreadPost thread={thread} post={item.post} />
+                )
+              }
+              ListHeaderComponent={<RoomFromLastTime />}
+              // Laid out with posts: they are on the screen, and only now is the opening said (useRoomPosts `painted`).
+              // `h > 0` alone is enough here only because this list exists only while `drawnBefore.length > 0` (above):
+              // a list drawn with no posts must guard on them too, as the room's own list below does (ac).
+              onContentSizeChange={(_w, h) => {
+                if (h > 0) feed.painted()
+              }}
+            />
+          </View>
+        ) : state.unreachable ? (
           <View style={styles.centered}>
             <ThemedText testID={testIdWithKey('RoomReadFailed')}>{t('Rooms.AgentUnknown')}</ThemedText>
             <Button
@@ -654,6 +700,10 @@ const Room: React.FC = () => {
               // its top. No button.
               onEndReached={feed.hasOlder && !feed.loadingOlder ? feed.loadOlder : undefined}
               onEndReachedThreshold={0.25}
+              // Laid out with posts: they are on the screen, and only now is the opening said (useRoomPosts `painted`).
+              onContentSizeChange={(_w, h) => {
+                if (h > 0 && shown.length > 0) feed.painted()
+              }}
               onViewableItemsChanged={floating.onViewableItemsChanged}
               viewabilityConfig={floating.viewabilityConfig}
               onScrollBeginDrag={floating.onScrollStart}

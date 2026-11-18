@@ -113,6 +113,7 @@ describe('a room opened again this run', () => {
     // Before its listing answers: the posts read before.
     expect(keys(again.result.current.posts)).toEqual(['b', 'a'])
     expect(again.result.current.failed).toBe(false)
+    act(() => again.result.current.painted())
     const lines = r.service.note.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[Room] '))
     expect(lines[lines.length - 1]).toMatch(/opened: \d+ posts shown in \d+ ms \(kept listing\)$/)
 

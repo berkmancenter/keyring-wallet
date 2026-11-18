@@ -898,13 +898,17 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 describe("a room's opening, in the app's log", () => {
   const opened = (note: jest.Mock) => note.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[Room] '))
 
-  it("is said once, by the room's short ref and how many posts it showed, never their words", async () => {
+  it("is said once the screen drew the posts, by the room's short ref and how many, never their words", async () => {
     const r = roomWith([note('a', 1), note('b', 2)])
     const noteLine = jest.fn()
     const service = Object.assign(r.service, { note: noteLine })
-    await open(service)
+    const hook = await open(service)
     await tick()
     await tick()
+    // The posts are set, and nothing is said: only the screen knows they are on it (YJPT-6WC8).
+    expect(opened(noteLine)).toEqual([])
+    act(() => hook.result.current.painted())
+    act(() => hook.result.current.painted())
 
     const lines = opened(noteLine)
     expect(lines).toHaveLength(1)
@@ -917,8 +921,9 @@ describe("a room's opening, in the app's log", () => {
     const r = roomWith([note('a', 1)])
     r.service.listNotes.mockRejectedValue(new Error('agent not ready'))
     const noteLine = jest.fn()
-    await open(Object.assign(r.service, { note: noteLine }))
+    const hook = await open(Object.assign(r.service, { note: noteLine }))
     await tick()
+    act(() => hook.result.current.painted())
 
     expect(opened(noteLine)).toEqual([])
   })
@@ -933,6 +938,7 @@ describe("a room's opening, in the app's log", () => {
     )
     await flush()
     await flush()
+    act(() => hook.result.current.painted())
     expect(opened(noteLine)).toHaveLength(1)
 
     let release: () => void = () => undefined
@@ -946,10 +952,12 @@ describe("a room's opening, in the app's log", () => {
     hook.rerender({ roomId: 'did:webvh:r:two' })
     await flush()
     // The first room's posts still on screen are not the second room's.
+    act(() => hook.result.current.painted())
     expect(opened(noteLine)).toHaveLength(1)
 
     await act(async () => release())
     await flush()
+    act(() => hook.result.current.painted())
     const lines = opened(noteLine)
     expect(lines).toHaveLength(2)
     expect(lines[1]).toMatch(/opened: 0 posts shown in \d+ ms$/)

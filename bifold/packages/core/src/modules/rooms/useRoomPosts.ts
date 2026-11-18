@@ -105,6 +105,12 @@ export interface RoomPosts {
    * tick; setting it draws nothing.
    */
   awaitWrites: (written: readonly { key: string; version: number }[]) => void
+  /**
+   * The screen drew the posts (its list laid them out): the opening's log line is said now, and only from here, so it
+   * never claims a paint that did not happen. 279.4 said "9 posts shown in 135 ms" while the room screen still showed
+   * only its spinner (YJPT-6WC8).
+   */
+  painted: () => void
 }
 
 /** The newest version a listing holds: a poll asks for the records above it. 0 for an empty room. */
@@ -648,7 +654,9 @@ export function useRoomPosts(
     }
   }, [service, roomId, listing, shown, drawnAs])
 
-  useEffect(() => {
+  // The opening's line, said only when the screen says it drew the posts (`painted`, from its list's layout), never
+  // when they are set: 279.4 said "9 posts shown in 135 ms" while the room screen still showed its spinner (YJPT-6WC8).
+  const sayOpened = useCallback(() => {
     const opening = opened.current
     const from = drawnFrom.current
     if (!posts || !opening || opening.said || opening.roomId !== roomId) return
@@ -730,5 +738,6 @@ export function useRoomPosts(
     pollNow,
     unconfirmed: !!listing && listing === seeded.current,
     awaitWrites,
+    painted: sayOpened,
   }
 }
