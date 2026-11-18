@@ -103,6 +103,7 @@ import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
 import { isConnectDrainEarlyOn } from './connectDrainSwitch'
+import { isKeyCopiesTogetherOn } from './keyCopySweep'
 import { isReplacedSessionStopsOn } from './replacedSessionSwitch'
 import { didOfKeyId, isAgentsOwnDid, isAgentsOwnPersona } from './agentOwnIdentity'
 import {
@@ -1636,7 +1637,7 @@ export class VtaClient {
     const done = queued.catch(async (error: unknown) => {
       const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
       if (stepUp)
-        return this.answerStepUp<T>(stepUp, error, type, () =>
+        return this.stepUpInTurn<T>(stepUp, error, type, () =>
           this.sendTask<T>(type, payload, timeoutMs, documentExtras)
         )
       // A task the policy holds for consent is refused with
@@ -1765,7 +1766,10 @@ export class VtaClient {
   }
 
   private sharesLane(type: string): boolean {
-    return this.readLaneSize > 1 && this.replyThreading === 'threaded' && inReadLane(type)
+    if (this.readLaneSize <= 1 || this.replyThreading !== 'threaded') return false
+    // A key copy shares the lane where that is on (keyCopySweep.ts): its answer changes nothing at the agent and its
+    // order among reads does not matter. Not through VTA_READ_LANE_TYPES, which other code reads as "a rooms read".
+    return inReadLane(type) || (type === VTA_TASK.keysExportSecret && isKeyCopiesTogetherOn())
   }
 
   /** Whether a task of `type` at the head of the queue could start now. */
@@ -1787,6 +1791,71 @@ export class VtaClient {
         this.pump()
       })
     }
+  }
+
+  /** How the step-up answered last on this client ended, for those that came while it was being answered. */
+  private stepUpBefore?: Promise<{ approved: true } | { approved: false; error: unknown }>
+
+  /**
+   * One step-up at a time on this client. Tasks side by side (the read lane, key copies where that is on) can each be
+   * refused with a step-up at the same moment, and the person is shown one card at a time (vtaAgent askStepUp keeps
+   * one): a second ask replaced the first's card, whose task then waited out the whole time allowed for an answer
+   * nobody could give. So a step-up that comes while another is being answered waits for it, and then does what a
+   * task sent after it would have done:
+   * - the one before was approved: this session is elevated, so the task is sent again first, and the person is asked
+   *   only if the agent still wants a step-up for it;
+   * - the one before was not approved (declined, not answered, could not be asked): this one ends the same way,
+   *   without asking the person again.
+   *
+   * With nothing being answered it is `answerStepUp`, exactly. Only where key copies go together (keyCopySweep.ts):
+   * off, every step-up is answered as it comes, as before.
+   */
+  private stepUpInTurn<T>(
+    first: NonNullable<ReturnType<typeof stepUpRequestOf>>,
+    refusal: unknown,
+    taskType: string,
+    resubmit: () => Promise<T>
+  ): Promise<T> {
+    if (!isKeyCopiesTogetherOn()) return this.answerStepUp<T>(first, refusal, taskType, resubmit)
+    const before = this.stepUpBefore
+    // Whether this session was approved by the time this one ended: by the one before, or by the person here.
+    let approved = false
+    const run = (async (): Promise<T> => {
+      let stepUp = first
+      let refused = refusal
+      if (before) {
+        this.agent.config.logger.info(`${LOG_PREFIX} ${taskType}: its step-up waits for the one being answered`)
+        const outcome = await before
+        if (!outcome.approved) throw outcome.error
+        approved = true
+        try {
+          const answer = await resubmit()
+          this.agent.config.logger.info(`${LOG_PREFIX} ${taskType}: went through after that step-up, with no second`)
+          return answer
+        } catch (again) {
+          const still = this.managerDid
+            ? stepUpRequestOf(again, { vtaDid: this.vtaDid, me: this.managerDid })
+            : undefined
+          if (!still) throw again
+          approved = false
+          stepUp = still
+          refused = again
+        }
+      }
+      return this.answerStepUp<T>(stepUp, refused, taskType, () => {
+        approved = true
+        return resubmit()
+      })
+    })()
+    const mine = run.then(
+      () => ({ approved: true as const }),
+      (error: unknown) => (approved ? { approved: true as const } : { approved: false as const, error })
+    )
+    this.stepUpBefore = mine
+    void mine.then(() => {
+      if (this.stepUpBefore === mine) this.stepUpBefore = undefined
+    })
+    return run
   }
 
   /**

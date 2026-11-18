@@ -32,6 +32,7 @@ import { setCurrentAgentDid } from './currentAgent'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
 import { mayApprove } from './afterStepDown'
 import { approvedAgentOf, sendForeignDecision, takeForeignReply } from './foreignApproval'
+import { isKeyCopiesTogetherOn, KEY_COPIES_AT_ONCE, sweepKeyCopies } from './keyCopySweep'
 import type { StepUpRequest } from './stepUp'
 import { releaseWarn } from './releaseLog'
 import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
@@ -3097,22 +3098,43 @@ export class VtaAgentController {
     const personas = await Promise.resolve(this.identityStore(agent).listPersonas?.())
       .then((all) => (all ?? []).filter((p) => p.vtaDid === vtaDid))
       .catch(() => [])
-    for (const persona of personas) {
-      try {
-        await this.client(agent, vtaDid).holdPersonaKeys(persona, 'session sweep')
-        DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
-      } catch (e) {
-        agent.config?.logger?.warn?.(
-          `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
-        )
-        // This phone's own agent refusing its key is the link's end, as a refused heartbeat is (IN-350). Another
-        // linked agent refusing says nothing about this link.
-        if (refusedAsNotOnAcl(e) && vtaDid === this.agentAddress()) {
-          this.refused(e)
-          return
+    // One identity after another, or the first alone and then a few side by side (keyCopySweep.ts). Either way
+    // nothing more is started after a refusal that ends the link.
+    const atOnce = isKeyCopiesTogetherOn() ? KEY_COPIES_AT_ONCE : 1
+    const began = this.now()
+    let fetchedFor = 0
+    let ended = false
+    await sweepKeyCopies(
+      personas,
+      async (persona) => {
+        try {
+          if (await this.client(agent, vtaDid).holdPersonaKeys(persona, 'session sweep')) fetchedFor++
+          DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
+        } catch (e) {
+          agent.config?.logger?.warn?.(
+            `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
+          )
+          // This phone's own agent refusing its key is the link's end, as a refused heartbeat is (IN-350). Another
+          // linked agent refusing says nothing about this link.
+          // Several running side by side may each be refused: `refused` ends a working link only, so once.
+          if (refusedAsNotOnAcl(e) && vtaDid === this.agentAddress()) {
+            this.refused(e)
+            ended = true
+            return 'stop'
+          }
         }
-      }
-    }
+        return 'go'
+      },
+      atOnce
+    )
+    // Counts and a time only, never an identity or a key id: what a report needs to say whether the copies went
+    // together and what that took.
+    if (fetchedFor > 0 && !ended)
+      agent.config?.logger?.info?.(
+        `[VTA] key copies: fetched for ${fetchedFor} of ${personas.length} identities in ${this.now() - began} ms (${
+          atOnce > 1 ? `the first alone, then up to ${atOnce} at a time` : 'one at a time'
+        })`
+      )
   }
 
   /**

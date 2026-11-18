@@ -9,6 +9,7 @@
  * removal, and never moves the link.
  */
 import { VtiRefusal } from '../module/vtiAgent'
+import { KEY_COPIES_TOGETHER } from '../module/keyCopySweep'
 import { VtaAgentController } from '../module/vtaAgent'
 
 const LINKED_AT = '2026-09-30T06:00:00.000Z'
@@ -216,5 +217,74 @@ describe('the removal, whoever connects and however the agent words it', () => {
     ;(vta as unknown as { set(next: Record<string, unknown>): void }).set({ link: shown })
     vta.presenceFailed(NOT_ON_ACL())
     expect(vta.getState().link).toMatchObject({ kind: 'showingKey' })
+  })
+})
+
+// The session's key sweep fetches a few identities side by side (keyCopySweep.ts). A removed phone must still meet
+// the agent's refusal once, with one ask, and start nothing after it.
+describe('the key sweep of a phone its agent removed', () => {
+  beforeAll(() => jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] }))
+  afterAll(() => jest.useRealTimers())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockClient.whoAmI.mockImplementation(async () => ({ roles: ['admin'] }))
+    mockClient.holdPersonaKeys.mockImplementation(async () => false)
+  })
+  afterEach(() => Object.assign(KEY_COPIES_TOGETHER, { on: true, remoteOff: false }))
+
+  const five = ['a', 'b', 'c', 'd', 'e'].map((n) => ({
+    did: `did:webvh:${n}`,
+    vtaDid: 'did:webvh:bob',
+    kmsKeyIds: { signing: `mem:${n}` },
+  }))
+  // The shared mock is declared with no arguments; what it was called with is read as the sweep passes it.
+  const asked = () =>
+    (mockClient.holdPersonaKeys.mock.calls as unknown as Array<[{ did: string }]>).map(([persona]) => persona.did)
+  /** The agent hands over the first identity's keys and refuses every other as not on its access list. */
+  const refusesAfterTheFirst = (async (persona: { did: string }) => {
+    if (persona.did === 'did:webvh:a') return true
+    throw NOT_ON_ACL()
+  }) as unknown as () => Promise<boolean>
+  const removals = () =>
+    logger.warn.mock.calls.filter(([line]) => /no longer accepts this phone; the link is removed/.test(String(line)))
+
+  it('refused at the first identity: one ask, nothing else started, removed once', async () => {
+    mockClient.holdPersonaKeys.mockRejectedValue(NOT_ON_ACL())
+    const vta = await onlineController({ personas: five, expect: 'revoked' })
+    expect(vta.getState().link).toMatchObject({ kind: 'revoked' })
+    expect(asked()).toEqual(['did:webvh:a'])
+    expect(removals()).toHaveLength(1)
+  })
+
+  it('refused once several go together: the three running are all refused, removed once, and the fifth is never asked', async () => {
+    mockClient.holdPersonaKeys.mockImplementation(refusesAfterTheFirst)
+    const vta = await onlineController({ personas: five, expect: 'revoked' })
+    expect(vta.getState().link).toMatchObject({ kind: 'revoked' })
+    expect(asked()).toEqual(['did:webvh:a', 'did:webvh:b', 'did:webvh:c', 'did:webvh:d'])
+    expect(removals()).toHaveLength(1)
+    // A sweep the agent ended reports no time: there is none to compare.
+    expect(logger.info.mock.calls.map(([l]) => String(l)).some((l) => l.startsWith('[VTA] key copies:'))).toBe(false)
+  })
+
+  it('killed: one identity after another, and a refusal at the second stops it there', async () => {
+    KEY_COPIES_TOGETHER.remoteOff = true
+    mockClient.holdPersonaKeys.mockImplementation(refusesAfterTheFirst)
+    await onlineController({ personas: five, expect: 'revoked' })
+    expect(asked()).toEqual(['did:webvh:a', 'did:webvh:b'])
+    expect(removals()).toHaveLength(1)
+  })
+
+  it('all fetched: every identity is asked once, and the report line says how they went, by count only', async () => {
+    mockClient.holdPersonaKeys.mockImplementation(async () => true)
+    await onlineController({ personas: five })
+    expect(asked()).toEqual(five.map((p) => p.did))
+    const line = logger.info.mock.calls.map(([l]) => String(l)).find((l) => l.startsWith('[VTA] key copies:'))
+    expect(line).toMatch(/fetched for 5 of 5 identities in \d+ ms \(the first alone, then up to 3 at a time\)/)
+    expect(line).not.toMatch(/did:/)
+  })
+
+  it('nothing to fetch (every copy is held): no report line', async () => {
+    await onlineController({ personas: five })
+    expect(logger.info.mock.calls.map(([l]) => String(l)).some((l) => l.startsWith('[VTA] key copies:'))).toBe(false)
   })
 })
