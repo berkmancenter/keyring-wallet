@@ -99,17 +99,25 @@ jobs:
         run: |
           yarn build
 
-      # Jest's transform cache, read only, from the newest entry main's Testing parts wrote (quality.yaml): files this
-      # branch changed are transformed again, the rest are not.
+      # Jest's transform cache, under this workflow's own name: nothing else reads or writes `jest-targeted-v1-`, so no
+      # required check ever depends on what a run started by hand produced. Every run restores the newest entry; only
+      # a run on main saves one, at most once a UTC day (a key is never saved twice). A branch run never writes.
+      # The entry holds the transforms of whatever that day's run on main loaded, so it is as warm as that run was
+      # wide: files it did not load, and files a branch changed, are transformed again.
+      - name: Date jest's cache
+        id: jest-cache
+        if: inputs.package == 'packages/core'
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
       - name: Restore jest's cache
+        id: jest-restore
         if: inputs.package == 'packages/core'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: packages/core/.jest/cache
-          key: jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part1-${{ github.ref }}
+          key: jest-targeted-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ steps.jest-cache.outputs.day }}
           restore-keys: |
-            jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part1-refs/heads/main-
-            jest-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-part1-
+            jest-targeted-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-
 
       - name: Run jest
         env:
@@ -126,6 +134,14 @@ jobs:
           if [ -n "$PATTERN" ]; then args+=(-t "$PATTERN"); fi
           cd "$PACKAGE"
           yarn jest --maxWorkers=2 "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/jest.log"
+
+      # Only on main, only when the tests passed, and only if today's entry is not there yet.
+      - name: Save jest's cache
+        if: success() && inputs.package == 'packages/core' && github.ref == 'refs/heads/main' && steps.jest-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: packages/core/.jest/cache
+          key: jest-targeted-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ steps.jest-cache.outputs.day }}
 
       - name: Say what ran
         if: always()
