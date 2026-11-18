@@ -62,6 +62,7 @@ import { didPrefix } from './didPrefix'
 import { isProblemReport, problemReportWords } from './problemReportWords'
 import { releaseWarn } from './releaseLog'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
+import { isPeerRouteReadOnceOn, PEER_ROUTE_TRIES_FOR_WEBS, VtiPeerRouteUnread } from './peerRouteSwitch'
 
 const LOG_PREFIX = '[TrustTasks:VtiMediatorTransport]'
 
@@ -1411,25 +1412,66 @@ export class VtiMediatorSession {
 
   /** Each peer's `peerMediatorRoute`, read once per session; a peer that could not be read is read again next time. */
   private readonly tspOnlyRoutes = new Map<string, VtiMediatorEndpoints | null>()
-  private async tspOnlyMediatorFor(peerDid: string): Promise<VtiMediatorEndpoints | undefined> {
-    if (this.tspOnlyRoutes.has(peerDid)) return this.tspOnlyRoutes.get(peerDid) ?? undefined
-    let route: Awaited<ReturnType<typeof peerMediatorRoute>>
-    try {
-      route = await peerMediatorRoute(this.agent, peerDid, this.mediator.did)
-    } catch {
-      // Unread: forwarded as before this time, and looked at again next time.
-      return undefined
+  /** A peer's route being read now: sends that start meanwhile wait for this read (peerRouteSwitch.ts). */
+  private readonly routesBeingRead = new Map<string, Promise<VtiMediatorEndpoints | undefined>>()
+
+  private tspOnlyMediatorFor(peerDid: string): Promise<VtiMediatorEndpoints | undefined> {
+    if (this.tspOnlyRoutes.has(peerDid)) return Promise.resolve(this.tspOnlyRoutes.get(peerDid) ?? undefined)
+    // Off: each send reads for itself, once, and an unread peer is forwarded through our mediator alone, as before.
+    if (!isPeerRouteReadOnceOn()) return this.readPeerRoute(peerDid, 1, false)
+    const reading = this.routesBeingRead.get(peerDid)
+    if (reading) return reading
+    const webs = peerDid.startsWith('did:webs:')
+    const read = this.readPeerRoute(peerDid, webs ? PEER_ROUTE_TRIES_FOR_WEBS : 1, webs).finally(() => {
+      if (this.routesBeingRead.get(peerDid) === read) this.routesBeingRead.delete(peerDid)
+    })
+    this.routesBeingRead.set(peerDid, read)
+    return read
+  }
+
+  /**
+   * Read a peer's route, up to `tries` times, and keep it for the session. A route that could not be read is said in
+   * the log, by the peer's prefix and how it failed, never by anything a message carries. Then either the send fails
+   * (`failUnread`: a `did:webs` peer, which our mediator alone cannot reach) or the peer is forwarded as before this
+   * time and read again next time.
+   */
+  private async readPeerRoute(
+    peerDid: string,
+    tries: number,
+    failUnread: boolean
+  ): Promise<VtiMediatorEndpoints | undefined> {
+    for (let attempt = 1; attempt <= tries; attempt++) {
+      let route: Awaited<ReturnType<typeof peerMediatorRoute>>
+      try {
+        route = await peerMediatorRoute(this.agent, peerDid, this.mediator.did)
+      } catch (error) {
+        const how = /took over \d+ s$/.test(String((error as Error)?.message)) ? 'no answer in time' : 'the read failed'
+        const last = attempt === tries
+        this.agent.config.logger.warn(
+          `${LOG_PREFIX} the route to ${didPrefix(peerDid)} could not be read (${how}), try ${attempt} of ${tries}${
+            !last
+              ? ''
+              : failUnread
+                ? ': nothing is sent, through our mediator alone it cannot arrive'
+                : ': forwarded through our mediator alone this time'
+          }`
+        )
+        continue
+      }
+      // A miss is remembered too, so a peer forwarded as before costs one look a session, not one a message.
+      this.tspOnlyRoutes.set(peerDid, route?.mediator ?? null)
+      if (route) {
+        this.agent.config.logger.info(
+          route.reason === 'tspOnly'
+            ? `${LOG_PREFIX} ${didPrefix(peerDid)} publishes no DIDCommMessaging; forwarding through its TSP mediator ${didPrefix(route.mediator.did)}`
+            : `${LOG_PREFIX} ${didPrefix(peerDid)} is a did:webs on another mediator; forwarding through its DIDComm mediator ${didPrefix(route.mediator.did)}`
+        )
+      }
+      return route?.mediator
     }
-    // A miss is remembered too, so a peer forwarded as before costs one look a session, not one a message.
-    this.tspOnlyRoutes.set(peerDid, route?.mediator ?? null)
-    if (route) {
-      this.agent.config.logger.info(
-        route.reason === 'tspOnly'
-          ? `${LOG_PREFIX} ${didPrefix(peerDid)} publishes no DIDCommMessaging; forwarding through its TSP mediator ${didPrefix(route.mediator.did)}`
-          : `${LOG_PREFIX} ${didPrefix(peerDid)} is a did:webs on another mediator; forwarding through its DIDComm mediator ${didPrefix(route.mediator.did)}`
-      )
-    }
-    return route?.mediator
+    // Unread: nothing is kept, so the next send reads it again.
+    if (failUnread) throw new VtiPeerRouteUnread(didPrefix(peerDid))
+    return undefined
   }
 
   /** Authcrypt a v2 plaintext to another mediator than this session's (the inner layer of a two-mediator forward). */

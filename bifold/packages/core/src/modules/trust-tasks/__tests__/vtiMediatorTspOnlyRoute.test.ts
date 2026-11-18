@@ -1,3 +1,4 @@
+import { PEER_ROUTE_READ_ONCE, PEER_ROUTE_TRIES_FOR_WEBS, VtiPeerRouteUnread } from '../module/peerRouteSwitch'
 import {
   ROUTE_LOOKUP_TIMEOUT_MS,
   VtiMediatorSession,
@@ -87,11 +88,20 @@ const mediator: VtiMediatorEndpoints = {
   kid: `${OURS}#key-1`,
 }
 
+const SHIPPED = { ...PEER_ROUTE_READ_ONCE }
+afterEach(() => Object.assign(PEER_ROUTE_READ_ONCE, SHIPPED))
+
 function makeAgent(docs: Record<string, unknown>) {
   const resolved: string[] = []
+  const said: string[] = []
   const agent = {
     config: {
-      logger: { info: () => undefined, debug: () => undefined, warn: () => undefined, error: () => undefined },
+      logger: {
+        info: (line: string) => void said.push(line),
+        debug: () => undefined,
+        warn: (line: string) => void said.push(line),
+        error: () => undefined,
+      },
     },
     context: {},
     dids: {
@@ -112,7 +122,7 @@ function makeAgent(docs: Record<string, unknown>) {
       }),
     },
   } as never
-  return { agent, resolved }
+  return { agent, resolved, said }
 }
 
 /** A session with an open socket that records each frame sent. */
@@ -236,14 +246,50 @@ describe('VtiMediatorSession.forward — a did:webs community whose DIDCommMessa
     expectSingleForward(frames[0], peer)
   })
 
-  test("its mediator's document does not answer: forwarded as before after ROUTE_LOOKUP_TIMEOUT_MS, never held longer", async () => {
+  /** SEDI as published now, whose mediator's document never answers; the community's own does. */
+  const stormSilent = () => {
+    const made = makeAgent({ ...DOCS, [SEDI]: SEDI_WITH_DIDCOMM })
+    const dids = (made.agent as unknown as { dids: { resolveDidDocument: (did: string) => Promise<unknown> } }).dids
+    const peerOnly = dids.resolveDidDocument
+    dids.resolveDidDocument = (did: string) => (did === STORM ? new Promise<never>(() => undefined) : peerOnly(did))
+    return made
+  }
+
+  test("its mediator's document does not answer: read twice, then the send fails and nothing goes through our mediator alone", async () => {
     jest.useFakeTimers()
     try {
-      const { agent } = makeAgent({ ...DOCS, [SEDI]: SEDI_WITH_DIDCOMM })
-      const dids = (agent as unknown as { dids: { resolveDidDocument: (did: string) => Promise<unknown> } }).dids
-      const peerOnly = dids.resolveDidDocument
-      // The community's document answers; storm's mediator's never does.
-      dids.resolveDidDocument = (did: string) => (did === STORM ? new Promise<never>(() => undefined) : peerOnly(did))
+      const { agent, said } = stormSilent()
+      const { session, frames } = openSession(agent)
+      let outcome: unknown = 'pending'
+      const sent = session.forward(SEDI, INNER_JWE).then(
+        () => (outcome = 'sent'),
+        (e: unknown) => (outcome = e)
+      )
+      // One try's time: still reading (the second try).
+      await jest.advanceTimersByTimeAsync(ROUTE_LOOKUP_TIMEOUT_MS + 1)
+      expect(outcome).toBe('pending')
+      await jest.advanceTimersByTimeAsync(ROUTE_LOOKUP_TIMEOUT_MS + 1)
+      await sent
+      expect(outcome).toBeInstanceOf(VtiPeerRouteUnread)
+      expect((outcome as VtiPeerRouteUnread).code).toBe('peerRouteUnread')
+      // Through our mediator alone a did:webs cannot arrive: not sent at all.
+      expect(frames).toEqual([])
+      const lines = said.filter((line) => line.includes('could not be read'))
+      expect(lines).toHaveLength(PEER_ROUTE_TRIES_FOR_WEBS)
+      expect(lines[0]).toMatch(/\(no answer in time\), try 1 of 2$/)
+      expect(lines[1]).toMatch(
+        /\(no answer in time\), try 2 of 2: nothing is sent, through our mediator alone it cannot arrive$/
+      )
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test("killed, its mediator's document does not answer: forwarded as before after ROUTE_LOOKUP_TIMEOUT_MS, never held longer, and said", async () => {
+    PEER_ROUTE_READ_ONCE.remoteOff = true
+    jest.useFakeTimers()
+    try {
+      const { agent, said } = stormSilent()
       const { session, frames } = openSession(agent)
       let done = false
       const sent = session.forward(SEDI, INNER_JWE).then(() => (done = true))
@@ -251,6 +297,10 @@ describe('VtiMediatorSession.forward — a did:webs community whose DIDCommMessa
       expect(done).toBe(true)
       await sent
       expectSingleForward(frames[0], SEDI)
+      // The line is written whether the switch is on or off: this loss used to be silent.
+      expect(said.filter((line) => line.includes('could not be read'))).toEqual([
+        expect.stringMatching(/try 1 of 1: forwarded through our mediator alone this time$/),
+      ])
     } finally {
       jest.useRealTimers()
     }
@@ -304,30 +354,165 @@ describe('VtiMediatorSession.forward — every other document is forwarded as be
     expectSingleForward(frames[0], peer)
   })
 
-  test('a peer whose document cannot be read: one forward, as before, and it is read again next time', async () => {
-    const { agent, resolved } = makeAgent({ [STORM]: DOCS[STORM] })
+  // A peer that is not a did:webs and cannot be read is forwarded through our mediator alone: for it that is the route.
+  const UNREADABLE = 'did:webvh:QmGone:elsewhere.example:vtc'
+
+  test('a did:webvh peer whose document cannot be read: one try, one forward as before, said, and read again next time', async () => {
+    const { agent, resolved, said } = makeAgent({ [STORM]: DOCS[STORM] })
     const { session, frames } = openSession(agent)
-    await session.forward(SEDI, INNER_JWE)
-    await session.forward(SEDI, INNER_JWE)
-    expectSingleForward(frames[0], SEDI)
-    expectSingleForward(frames[1], SEDI)
-    expect(resolved.filter((d) => d === SEDI)).toHaveLength(2)
+    await session.forward(UNREADABLE, INNER_JWE)
+    await session.forward(UNREADABLE, INNER_JWE)
+    expectSingleForward(frames[0], UNREADABLE)
+    expectSingleForward(frames[1], UNREADABLE)
+    expect(resolved.filter((d) => d === UNREADABLE)).toHaveLength(2)
+    expect(said.filter((line) => line.includes('could not be read'))).toEqual([
+      expect.stringMatching(/\(the read failed\), try 1 of 1: forwarded through our mediator alone this time$/),
+      expect.stringMatching(/\(the read failed\), try 1 of 1: forwarded through our mediator alone this time$/),
+    ])
   })
 
-  test('a peer whose document does not answer: forwarded as before after ROUTE_LOOKUP_TIMEOUT_MS, never held longer', async () => {
+  test('a did:webvh peer whose document does not answer: forwarded as before after ROUTE_LOOKUP_TIMEOUT_MS, never held longer', async () => {
     jest.useFakeTimers()
     try {
       const { agent } = makeAgent(DOCS)
       ;(agent as unknown as { dids: { resolveDidDocument: () => Promise<never> } }).dids.resolveDidDocument = () =>
         new Promise<never>(() => undefined)
       const { session, frames } = openSession(agent)
-      const sent = session.forward(SEDI, INNER_JWE)
+      const sent = session.forward(UNREADABLE, INNER_JWE)
       await jest.advanceTimersByTimeAsync(ROUTE_LOOKUP_TIMEOUT_MS + 1)
       await sent
       expect(ROUTE_LOOKUP_TIMEOUT_MS).toBeLessThanOrEqual(3_000)
-      expectSingleForward(frames[0], SEDI)
+      expectSingleForward(frames[0], UNREADABLE)
     } finally {
       jest.useRealTimers()
+    }
+  })
+
+  test('a did:webs peer whose own document cannot be read: the send fails, nothing is kept, and the next send reads it again', async () => {
+    const docs: Record<string, unknown> = { [STORM]: DOCS[STORM] }
+    const { agent, resolved } = makeAgent(docs)
+    const { session, frames } = openSession(agent)
+    await expect(session.forward(SEDI, INNER_JWE)).rejects.toBeInstanceOf(VtiPeerRouteUnread)
+    expect(frames).toEqual([])
+    expect(resolved.filter((d) => d === SEDI)).toHaveLength(PEER_ROUTE_TRIES_FOR_WEBS)
+    // The document can be read now: the next send reads it, and goes the two-layer way.
+    docs[SEDI] = SEDI_WITH_DIDCOMM
+    await session.forward(SEDI, INNER_JWE)
+    expect(frames).toHaveLength(1)
+    expect((frames[0] as Layer).plaintext.body.next).toBe(STORM)
+  })
+})
+
+// Report BC46-XSQD (279.4, 11-18): nine asks to SEDI in one millisecond after the session connected. Each send that
+// got to the forward before the first had stored the route read it for itself, and one whose read failed went through
+// our mediator alone, where a did:webs cannot arrive, with nothing said. Two of the nine were never answered.
+describe('VtiMediatorSession.forward — many sends to one peer at once', () => {
+  const NINE = Array.from({ length: 9 }, (_, i) => i)
+  const sediNow = () => makeAgent({ ...DOCS, [SEDI]: SEDI_WITH_DIDCOMM })
+  const twoLayers = (frame: unknown) => (frame as Layer).plaintext.body.next === STORM
+
+  test('nine at once: the route is read once, and all nine go the two-layer way', async () => {
+    const { agent, resolved } = sediNow()
+    const { session, frames } = openSession(agent)
+    await Promise.all(NINE.map(() => session.forward(SEDI, INNER_JWE)))
+    expect(frames).toHaveLength(9)
+    expect(frames.every(twoLayers)).toBe(true)
+    expect(resolved.filter((d) => d === SEDI)).toHaveLength(1)
+    expect(resolved.filter((d) => d === STORM)).toHaveLength(1)
+  })
+
+  test('killed (control): nine at once each read it for themselves, the burst there was before', async () => {
+    PEER_ROUTE_READ_ONCE.remoteOff = true
+    const { agent, resolved } = sediNow()
+    const { session, frames } = openSession(agent)
+    await Promise.all(NINE.map(() => session.forward(SEDI, INNER_JWE)))
+    expect(frames).toHaveLength(9)
+    expect(resolved.filter((d) => d === STORM)).toHaveLength(9)
+  })
+
+  test.each([
+    ['on false', { on: false, remoteOff: false }],
+    ['on not a boolean', { on: 'true', remoteOff: false }],
+    ['remoteOff not a boolean', { on: true, remoteOff: 'false' }],
+    ['remoteOff missing', { on: true, remoteOff: undefined }],
+  ])('fails closed (%s): each send reads for itself', async (_name, values) => {
+    Object.assign(PEER_ROUTE_READ_ONCE, values)
+    const { agent, resolved } = sediNow()
+    const { session } = openSession(agent)
+    await Promise.all([0, 1, 2].map(() => session.forward(SEDI, INNER_JWE)))
+    expect(resolved.filter((d) => d === STORM)).toHaveLength(3)
+  })
+
+  // `resolveVtiMediator` retries a refused resolution itself, patiently, and the route's own time limit cuts that off:
+  // a try that fails is one that ran out of time. So these rows run on fake timers.
+  const unreadLines = (said: string[]) => said.filter((line) => line.includes('could not be read'))
+
+  test("the mediator's document is refused through the first try, then answers: all nine wait for the one read and go the two-layer way", async () => {
+    jest.useFakeTimers()
+    try {
+      const { agent, said } = sediNow()
+      const dids = (agent as unknown as { dids: { resolveDidDocument: (did: string) => Promise<unknown> } }).dids
+      const real = dids.resolveDidDocument
+      // Refused (a host's 421 under a burst) until the first try has been given up.
+      dids.resolveDidDocument = (did: string) =>
+        did === STORM && unreadLines(said).length === 0
+          ? Promise.reject(new Error('421 Misdirected Request'))
+          : real(did)
+      const { session, frames } = openSession(agent)
+      const sent = Promise.all(NINE.map(() => session.forward(SEDI, INNER_JWE)))
+      // Just short of the first try's time: all nine are waiting on the one read, and none has gone through our
+      // mediator alone.
+      await jest.advanceTimersByTimeAsync(ROUTE_LOOKUP_TIMEOUT_MS - 1)
+      expect(frames).toEqual([])
+      expect(unreadLines(said)).toEqual([])
+      // The first try is given up, and the second finds the document answering.
+      await jest.advanceTimersByTimeAsync(2)
+      await sent
+      expect(frames).toHaveLength(9)
+      expect(frames.every(twoLayers)).toBe(true)
+      expect(unreadLines(said)).toEqual([expect.stringMatching(/\(no answer in time\), try 1 of 2$/)])
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test('the route cannot be read at all: all nine fail the same way, none is sent, and it was tried twice, not eighteen times', async () => {
+    jest.useFakeTimers()
+    try {
+      const { agent, said } = makeAgent({ ...DOCS, [SEDI]: SEDI_WITH_DIDCOMM, [STORM]: undefined })
+      const { session, frames } = openSession(agent)
+      const ended = Promise.allSettled(NINE.map(() => session.forward(SEDI, INNER_JWE)))
+      await jest.advanceTimersByTimeAsync(2 * (ROUTE_LOOKUP_TIMEOUT_MS + 1))
+      const results = await ended
+      expect(results.map((one) => one.status)).toEqual(NINE.map(() => 'rejected'))
+      for (const one of results) expect((one as PromiseRejectedResult).reason).toBeInstanceOf(VtiPeerRouteUnread)
+      expect(frames).toEqual([])
+      expect(unreadLines(said)).toHaveLength(PEER_ROUTE_TRIES_FOR_WEBS)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test('a did:webvh peer that cannot be read, three at once: one read, and each is forwarded as before', async () => {
+    const peer = 'did:webvh:QmGone:elsewhere.example:vtc'
+    const { agent, resolved } = makeAgent({ [STORM]: DOCS[STORM] })
+    const { session, frames } = openSession(agent)
+    await Promise.all([0, 1, 2].map(() => session.forward(peer, INNER_JWE)))
+    expect(frames).toHaveLength(3)
+    for (const frame of frames) expectSingleForward(frame, peer)
+    expect(resolved.filter((d) => d === peer)).toHaveLength(1)
+  })
+
+  test('the line about an unread route names the peer by its prefix and carries nothing of the message', async () => {
+    const { agent, said } = makeAgent({ [STORM]: DOCS[STORM] })
+    const { session } = openSession(agent)
+    await session.forward(SEDI, INNER_JWE).catch(() => undefined)
+    const lines = said.filter((line) => line.includes('could not be read'))
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) {
+      expect(line).not.toContain(INNER_JWE.ciphertext)
+      expect(line).not.toContain(INNER_JWE.protected)
+      expect(line).not.toContain(identity.did)
     }
   })
 })
