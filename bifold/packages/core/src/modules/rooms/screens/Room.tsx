@@ -55,6 +55,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import EmojiPickerSheet from '../../chat/emoji/EmojiPickerSheet'
 import { type ComposerContext, RoomComposer } from '../components/RoomComposer'
 import { RoomFileSheet } from '../components/RoomFileSheet'
+import { isUnconfirmed, RoomFromLastTime } from '../components/RoomFromLastTime'
 import { useFloatingDay } from '../components/useFloatingDay'
 import { isComingSoon, RoomFeatureCard } from '../components/RoomFeatureCard'
 import { RoomHeader } from '../components/RoomHeader'
@@ -207,6 +208,9 @@ const Room: React.FC = () => {
       ? { messageCache: { communityDid: room.communityDid, validUntil: room.validUntil } }
       : {}
   )
+  // The posts drawn are the phone's own copy from before (the kept copy, or this run's last listing), and the room's
+  // first listing has not answered yet (useRoomPosts `unconfirmed`). Said under the newest post until it has.
+  const unconfirmed = isUnconfirmed(feed)
   // A reaction, edit or withdrawal the member just asked for, laid over the posts until the room's list carries it.
   const pendingWrites = usePendingWrites(feed.posts)
   // The member's own writes that succeeded but have not landed in the posts: the room keeps its 10 s poll for them, so a
@@ -616,7 +620,8 @@ const Room: React.FC = () => {
                   />
                 )
               }
-              // The header of a list drawn bottom up is at its bottom, under the newest post: where a failed poll is said.
+              // The header of a list drawn bottom up is at its bottom, under the newest post: where a failed poll is said, and
+              // that the posts are the phone's copy from last time until the room's first listing answers.
               ListHeaderComponent={
                 feed.pollFailed && shown.length > 0 ? (
                   <View style={styles.pollFailed} testID={testIdWithKey('RoomPollFailed')}>
@@ -631,6 +636,8 @@ const Room: React.FC = () => {
                       <ThemedText style={styles.tryAgain}>{t('Rooms.TryAgain')}</ThemedText>
                     </Pressable>
                   </View>
+                ) : unconfirmed && shown.length > 0 ? (
+                  <RoomFromLastTime />
                 ) : null
               }
               // Older posts load as the member scrolls up to them, as a chat's do: the end of a list drawn bottom up is

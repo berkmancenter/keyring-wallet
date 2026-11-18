@@ -26,6 +26,7 @@ import { useDirectoryNames, useDirectoryService } from '../../directory/useDirec
 import { PetnamesProvider } from '../components/memberWords'
 import { RoomFileSheet } from '../components/RoomFileSheet'
 import { RoomFilesTab } from '../components/RoomFilesTab'
+import { isUnconfirmed, RoomFromLastTime } from '../components/RoomFromLastTime'
 import { RoomIdentitySheet } from '../components/RoomIdentitySheet'
 import { RoomMembersTab } from '../components/RoomMembersTab'
 import { type NoteEditorTarget, RoomNoteEditor } from '../components/RoomNoteEditor'
@@ -147,6 +148,8 @@ const RoomPart: React.FC = () => {
             }
           />
         ) : null}
+        {/* Notes drawn from this run's last listing, before the room's first listing answers. */}
+        {part === 'notes' && isUnconfirmed(feed) && feed.posts?.some(isNote) ? <RoomFromLastTime /> : null}
         {part === 'notes' ? (
           <RoomNotesTab
             notes={feed.posts?.filter(isNote)}

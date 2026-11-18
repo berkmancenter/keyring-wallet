@@ -3261,6 +3261,7 @@
     "PostArrivedLate": "Chegou atrasada. Diz ter sido escrita em {{when}}.",
     "PostsFailed": "Não foi possível ler as mensagens desta sala. Puxe para baixo para tentar de novo.",
     "RefreshFailed": "Não foi possível atualizar",
+    "FromLastTimeUpdating": "Da última vez · Atualizando…",
     "PostsNone": "Nenhuma mensagem ainda.",
     "NotesWaiting_one": "{{count}} nota nesta sala",
     "NotesWaiting_other": "{{count}} notas nesta sala",

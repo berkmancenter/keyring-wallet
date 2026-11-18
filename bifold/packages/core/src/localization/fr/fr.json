@@ -3345,6 +3345,7 @@
     "PostArrivedLate": "Arrivé en retard. Il indique avoir été écrit le {{when}}.",
     "PostsFailed": "Impossible de lire les messages de ce salon. Tirez vers le bas pour réessayer.",
     "RefreshFailed": "Actualisation impossible",
+    "FromLastTimeUpdating": "De la dernière fois · Mise à jour…",
     "PostsNone": "Aucun message pour l'instant.",
     "NotesWaiting_one": "{{count}} note dans ce salon",
     "NotesWaiting_other": "{{count}} notes dans ce salon",
