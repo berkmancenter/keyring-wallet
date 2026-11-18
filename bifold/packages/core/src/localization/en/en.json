@@ -3721,6 +3721,7 @@
     },
     "From": "A request from {{asker}}",
     "PromptTitle": "{{asker}} asks you to confirm",
+    "PromptExplains": "{{asker}} is asking you to confirm it's really you. Confirm with your phone's lock, or tap Not now if you'd rather not: that's fine.",
     "TheirNote": "{{asker}}'s note",
     "AnswerOnlyForYou": "Answer only for yourself. If this wasn't you, say so.",
     "NotMe": "No, that wasn't me",

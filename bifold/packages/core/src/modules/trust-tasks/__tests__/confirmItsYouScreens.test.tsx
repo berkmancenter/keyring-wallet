@@ -409,6 +409,32 @@ describe('the words (IN-677/678)', () => {
     for (const text of allStrings(en)) expect(text).not.toMatch(/it's me|it's you/i)
   })
 
+  // The feature has no setting, so the line under the sheet's title is all a first-time person gets (Alberto's words,
+  // 2026-11-18). English is held word for word.
+  test('the request sheet explains itself, naming who asks and that not answering is fine', () => {
+    expect(wordsOf('en').PromptExplains).toBe(
+      "{{asker}} is asking you to confirm it's really you. Confirm with your phone's lock, or tap Not now if you'd rather not: that's fine."
+    )
+    for (const lang of LANGS) expect(String(wordsOf(lang).PromptExplains).startsWith('{{asker}} ')).toBe(true)
+  })
+
+  // "Not now" sends nothing. "No, that wasn't me" sends a signed answer, and the asker's phone then shows "This may be
+  // a scam." A line that said only "decline" would send a person who would simply rather not to the button that reads
+  // most like a refusal, and a contact who really asked would be warned of a scam. So the line names the button that
+  // is safe, in each language's own words for it, and never offers a refusal by any other name.
+  test.each(LANGS)(
+    '%s: the line points "I\'d rather not" at the Not now button, by that button\'s own words',
+    (lang) => {
+      const words = wordsOf(lang)
+      const line = String(words.PromptExplains)
+      expect(line).toContain(String(words.NotNow))
+      expect(line).not.toContain(String(words.NotMe))
+      expect(line).not.toMatch(/declin|refus|recus|approv|approuv|aprov/i)
+      // Control: the button it must not be confused with is a different one, with its own words.
+      expect(words.NotMe).not.toBe(words.NotNow)
+    }
+  )
+
   test('every language has exactly the keys English has', () => {
     const keys = (w: Record<string, unknown>) => Object.keys(w).sort()
     for (const lang of ['fr', 'pt-br']) expect(keys(wordsOf(lang))).toEqual(keys(wordsOf('en')))
@@ -424,6 +450,8 @@ describe('the words (IN-677/678)', () => {
     const sheet = await show(<ConfirmItsYouModal />)
     expect(sheet.getByText('ConfirmItsYou.PromptTitle')).toBeTruthy()
     expect(sheet.queryByText('ConfirmItsYou.DemoChip')).toBeNull()
+    // The explaining line is on an open request's sheet, under its title.
+    expect(sheet.getByText('ConfirmItsYou.PromptExplains')).toBeTruthy()
   })
 })
 

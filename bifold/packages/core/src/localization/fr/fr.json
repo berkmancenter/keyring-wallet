@@ -3679,6 +3679,7 @@
     },
     "From": "Une demande de {{asker}}",
     "PromptTitle": "{{asker}} vous demande de confirmer",
+    "PromptExplains": "{{asker}} vous demande de confirmer que c'est bien vous. Confirmez avec le verrouillage de votre téléphone, ou touchez Plus tard si vous préférez : ce n'est pas un problème.",
     "TheirNote": "La note de {{asker}}",
     "AnswerOnlyForYou": "Répondez seulement pour vous. Si ce n'était pas vous, dites-le.",
     "NotMe": "Non, ce n'était pas moi",

@@ -301,6 +301,10 @@ const ConfirmItsYouModal: React.FC = () => {
           <ThemedText variant="headingThree" accessibilityRole="header">
             {t('ConfirmItsYou.PromptTitle', words)}
           </ThemedText>
+          {/* What this is, for someone who has never seen it: the feature has no setting, so this line is all a person
+              gets before they choose. The name is the one this phone knows the contact by, never one the request
+              carries (confirmItsYou.ts handleConfirmRequest). */}
+          <ThemedText>{t('ConfirmItsYou.PromptExplains', words)}</ThemedText>
           <View style={styles.quote}>
             <ThemedText style={styles.muted}>{t('ConfirmItsYou.TheirNote', words)}</ThemedText>
             {/* Exactly as the asker typed it: plain text, never links or markup. */}

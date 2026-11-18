@@ -3595,6 +3595,7 @@
     },
     "From": "Um pedido de {{asker}}",
     "PromptTitle": "{{asker}} pede que você confirme",
+    "PromptExplains": "{{asker}} está pedindo que você confirme que é você mesmo. Confirme com o bloqueio do seu telefone, ou toque em Agora não se preferir: tudo bem.",
     "TheirNote": "Nota de {{asker}}",
     "AnswerOnlyForYou": "Responda só por você. Se não foi você, diga isso.",
     "NotMe": "Não, não fui eu",
