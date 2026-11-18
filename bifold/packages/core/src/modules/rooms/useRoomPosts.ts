@@ -251,8 +251,8 @@ export function useRoomPosts(
   counts?: (post: RoomPost) => boolean,
   options: {
     /**
-     * Keep this room's posts in the wallet, and open on them (rooms/messageCache): the chat of an open or attributed
-     * room, by its community and end. Absent for a private room or one of unknown tier, and for every other screen.
+     * Keep this room's posts in the wallet, and open on them (rooms/messageCache): the chat of an open, attributed or
+     * private room, by its community and end. Absent for a room of unknown tier, and for every other screen.
      */
     messageCache?: { communityDid: string; validUntil?: string }
     /**

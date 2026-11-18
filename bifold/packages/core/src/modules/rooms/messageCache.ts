@@ -14,13 +14,13 @@ import { onRoomsListed } from './useRoomRows'
  * of truth: this is a small, disposable copy of what the member was shown while they had access, never an archive and
  * never evidence of anything.
  *
- * What is kept, per identity and open or attributed room: at most {@link MSG_CACHE_POSTS} posts,
+ * What is kept, per identity and open, attributed or private room: at most {@link MSG_CACHE_POSTS} posts,
  * {@link MSG_CACHE_BYTES} bytes and {@link MSG_CACHE_DAYS} days, across at most {@link MSG_CACHE_ROOMS} rooms (Alberto,
  * 11-18). Each post as the chat draws it: key, version, kind, author, when, its words, what it replies to, reaction
  * counts, its check's verdict. Never a file's bytes, a post the agent could not open, or one whose signature was
- * refused. Private rooms, and rooms whose tier is unknown, are never kept (Room.tsx names the tiers kept). An
- * attributed room's words are kept as the agent opened them: a copy that removal from the room's group no longer
- * protects; only the emptyings here do (plan, Privacy).
+ * refused. Rooms whose tier is unknown (custody-only) are never kept (Room.tsx names the tiers kept). An attributed or
+ * private room's words, and a private room's author (which its host never sees), are kept as the agent opened them: a
+ * copy that removal from the room's group no longer protects; only the emptyings here do (plan, Privacy).
  *
  * Off, and emptied, on a phone without biometric unlock: there the wallet key is kept ACCESSIBLE.ALWAYS
  * (services/keychain.ts), no better than the PIN it comes from (Alberto, 11-18, decision 6).
@@ -353,7 +353,7 @@ function journaled(entries: JournalEntry[], room: CachedRoom): boolean {
 }
 
 /**
- * Keeps `posts` as the identity's copy of an open or attributed room, trimmed to the caps, when the cache is allowed.
+ * Keeps `posts` as the identity's copy of an open, attributed or private room, trimmed to the caps, when allowed.
  * The room used longest ago goes first past {@link MSG_CACHE_ROOMS}. Nothing is kept for a room the journal means to
  * empty.
  */
@@ -438,6 +438,10 @@ export async function readRoomPosts(
  * are each shown only on their own screen. The read itself is {@link readRoomPosts}'s, with every check it makes (the
  * switch, biometric unlock, the journal, the room's end, the age), and the room screen takes the copy down if the room,
  * once known, acts as another identity or is not kept.
+ *
+ * A room's id is taken to name one room across communities (a did:webvh of its own), so a copy found by its room tag is
+ * this room's. Were room ids ever scoped by community, a copy of another room of the member's could be drawn here for
+ * a moment; the takedown, which checks the room's community as well as its identity, is what covers that (ac).
  */
 export async function readRoomPostsBeforeRoom(
   agent: CacheWallet,

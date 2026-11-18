@@ -203,11 +203,11 @@ const Room: React.FC = () => {
     !!room && canList && room.joined !== false,
     inView,
     isChatPost,
-    // The chat of an open or attributed room is kept in the wallet and opens on it (rooms/messageCache; Alberto,
-    // 11-18). A private room's never is, nor a room whose tier is unknown (custody-only): the tiers are named, never
-    // "not private".
+    // The chat of an open, attributed or private room is kept in the wallet and opens on it (rooms/messageCache;
+    // Alberto, 11-18: private rooms too). Never a room whose tier is unknown (custody-only): the tiers are named, never
+    // "not unknown".
     {
-      ...((room?.tier === 'open' || room?.tier === 'attributed') && room.communityDid
+      ...((room?.tier === 'open' || room?.tier === 'attributed' || room?.tier === 'private') && room.communityDid
         ? { messageCache: { communityDid: room.communityDid, validUntil: room.validUntil } }
         : {}),
       // Before the room is known, its kept copy is drawn by the identity this phone says acts there, and taken down if
