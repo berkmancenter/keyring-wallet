@@ -39,6 +39,7 @@ import { VtiRefusal } from '../../trust-tasks/module/vtiAgent'
 import { roomRef } from '../roomRef'
 import { ACCEPT_FROM_PREVIEW_MAX_AGE_MS, isAcceptFromPreviewOn } from '../acceptFromPreviewSwitch'
 import { holdsTwoAuthorities, permanentRefusal } from '../postRefusal'
+import { emptyMessageCache, isCacheWallet } from '../messageCache'
 import { failureCategory, logRef } from '../roomsLogWords'
 import { takesRepliesOrReactions } from '../recordPermits'
 import { keepRecordsOn, recordsWereOnAt } from '../recordsWereOn'
@@ -656,6 +657,10 @@ export class AgentRoomsService implements RoomsService {
           else if (e instanceof Error && e.name === 'VtiKeysNotHeld') awaitingKeys.push(community.did)
           else if (refusalCode(e) === 'unsupportedType') tooOld.push(community.did)
           else unreachable.push(community.did)
+          // Refused as no member: what was kept of its rooms goes, whether or not a removal notice ever came (b0).
+          const wallet = this.backend.runsOn
+          if (refusalCode(e) === 'notAMember' && isCacheWallet(wallet))
+            void emptyMessageCache(wallet, { community: community.did }, 'not a member').catch(() => undefined)
           return []
         }),
       }))

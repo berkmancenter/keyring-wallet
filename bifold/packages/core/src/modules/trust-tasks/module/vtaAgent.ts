@@ -90,6 +90,7 @@ import {
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { migratePersonaKeys } from './vtaKeyMigration'
 import { forgetKeyCopy, setInMemoryKeyFetcher } from './vtaKeys'
+import { VTA_UNLINKING_EVENT } from './unlinkEvent'
 import {
   initialLinkState,
   QUIET_DROP_MS,
@@ -806,6 +807,9 @@ export class VtaAgentController {
         this.agent?.config?.logger?.warn?.(
           `[VTA] the agent no longer accepts this phone; the link is removed: ${event.reason}`
         )
+        // The phone has lost its agent as surely as by an unlink, and most often because it was lost (a revoke from
+        // another device): what it keeps for the agent's identities goes too (unlinkEvent; a2's finding, #1130).
+        DeviceEventEmitter.emit(VTA_UNLINKING_EVENT, { vtaDid: next.vtaDid, revoked: true })
         // The session the agent no longer accepts is closed, and no screen reads it as connected (IN-350, run
         // 1022-1822: the link moved to revoked while the status stayed 'connected').
         this.set({ status: 'disconnected' })
@@ -1319,6 +1323,8 @@ export class VtaAgentController {
    * An agent still on the list afterwards is marked failed, for a retry.
    */
   async unlinkAgent(agent: Agent, vtaDid: string): Promise<void> {
+    // Before anything of it is let go: what the phone keeps for its identities goes with it (unlinkEvent).
+    DeviceEventEmitter.emit(VTA_UNLINKING_EVENT, { vtaDid })
     const link = this.state.link
     if ((link.kind === 'linked' || link.kind === 'revoked') && link.vtaDid === vtaDid) return this.unlink(agent)
     if (this.state.unlinkingOthers?.[vtaDid] === 'unlinking') return
@@ -1487,6 +1493,8 @@ export class VtaAgentController {
    */
   async unlink(agent: Agent): Promise<void> {
     const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    // Before anything of it is let go: what the phone keeps for its identities goes with it (unlinkEvent).
+    DeviceEventEmitter.emit(VTA_UNLINKING_EVENT, { vtaDid })
     // Every state published until the next agent is up says an unlink is under
     // way, so no screen draws "Link your agent" in between (Phase 1).
     this.set({ unlinking: true })

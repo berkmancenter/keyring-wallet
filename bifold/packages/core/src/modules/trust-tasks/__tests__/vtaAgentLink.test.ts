@@ -17,6 +17,7 @@ import { currentAgentDid } from '../module/currentAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { EnrolmentError } from '../module/vtaEnrolment'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
+import { VTA_UNLINKING_EVENT } from '../module/unlinkEvent'
 
 // The controller runs the whole link — submit, wait for the admin, sign in as
 // the temporary key, rotate onto a long-lived one, remember the agent — and
@@ -387,6 +388,38 @@ describe('a linked phone after a restart', () => {
     await vta.restore({} as never)
     await new Promise((resolve) => setImmediate(resolve))
     expect(vta.getState().link).toMatchObject({ kind: 'revoked', reason: expect.stringMatching(/not in ACL/) })
+  })
+
+  // a2's finding on #1130: a phone revoked from another device (lost) loses what it keeps, as an unlink does.
+  it('says the phone has lost its agent when the agent no longer accepts it', async () => {
+    const said: unknown[] = []
+    const sub = DeviceEventEmitter.addListener(VTA_UNLINKING_EVENT, (e) => said.push(e))
+    try {
+      mockClient.connect.mockImplementation(async () => {
+        throw new Error('refusing trust task: DID not in ACL')
+      })
+      const { vta } = controller({ linked })
+      await vta.restore({} as never)
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(vta.getState().link.kind).toBe('revoked')
+      expect(said).toEqual([{ vtaDid: expect.any(String), revoked: true }])
+    } finally {
+      sub.remove()
+    }
+  })
+
+  it('control: a linked phone whose agent answers says nothing of losing it', async () => {
+    const said: unknown[] = []
+    const sub = DeviceEventEmitter.addListener(VTA_UNLINKING_EVENT, (e) => said.push(e))
+    try {
+      const { vta } = controller({ linked })
+      await vta.restore({} as never)
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(vta.getState().link.kind).toBe('linked')
+      expect(said).toEqual([])
+    } finally {
+      sub.remove()
+    }
   })
 })
 
@@ -911,6 +944,25 @@ describe('unlinking this phone from its agent', () => {
   const SET_WAKE = 'https://trusttasks.org/spec/device/set-wake/0.2'
   const REVOKE = 'https://trusttasks.org/spec/auth/revoke-session/0.2'
   const told = () => mockClient.task.mock.calls.map(([type, payload]) => ({ type, payload }))
+
+  // 11-18: what the phone keeps for the agent's identities goes with it (rooms/messageCache listens), before anything.
+  it('says it is unlinking before anything of the agent is let go', async () => {
+    const said: unknown[] = []
+    const sub = DeviceEventEmitter.addListener(VTA_UNLINKING_EVENT, (e) =>
+      said.push([e, mockClient.task.mock.calls.length])
+    )
+    try {
+      mockClient.task.mockClear()
+      const { vta } = unlinkable()
+      await vta.restore({} as never)
+      await new Promise((resolve) => setImmediate(resolve))
+      await vta.unlink({} as never)
+      // Said once, with the agent's DID, before the agent was told anything.
+      expect(said).toEqual([[{ vtaDid: expect.any(String) }, 0]])
+    } finally {
+      sub.remove()
+    }
+  })
 
   it('tells a reachable agent first: stop waking this phone, then end its sessions', async () => {
     mockClient.task.mockClear()

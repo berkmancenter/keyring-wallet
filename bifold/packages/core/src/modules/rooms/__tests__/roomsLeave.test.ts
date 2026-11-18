@@ -18,6 +18,11 @@ jest.mock('../../directory/myPhoto', () => ({
   keepSentPhoto: (a: unknown, d: string, s: unknown) => mockKeepPhoto(a, d, s),
 }))
 jest.mock('../useRoomRows', () => ({ refreshRoomRows: () => mockRefreshRows() }))
+const mockEmptyCache = jest.fn(async (..._args: unknown[]) => 0)
+jest.mock('../messageCache', () => ({
+  isCacheWallet: () => true,
+  emptyMessageCache: (...args: unknown[]) => mockEmptyCache(...args),
+}))
 jest.mock('../../trust-tasks/module/vtiWalletCards', () => ({
   isCommunityCard: (vc: { type?: string[] }) => !!vc.type?.includes('MembershipCredential'),
 }))
@@ -98,6 +103,23 @@ describe('after leaving a community', () => {
       // An error's own words can name an identity (roomsLogWords).
       for (const words of ['locked', 'store closed']) expect(line).not.toContain(words)
     }
+  })
+
+  // 11-18: what was read in its rooms is not this phone's to keep (rooms/messageCache).
+  it("empties the posts kept of its rooms, and only its rooms'", async () => {
+    const agent = fakeAgent({}, [])
+    await afterLeavingCommunity(agent as never, COMMUNITY)
+    expect(mockEmptyCache).toHaveBeenCalledTimes(1)
+    expect(mockEmptyCache).toHaveBeenCalledWith(agent, { community: COMMUNITY }, 'left')
+  })
+
+  it('says, by kind, when the kept posts could not be emptied, and still does the rest', async () => {
+    mockEmptyCache.mockRejectedValueOnce(new Error('disk'))
+    const agent = fakeAgent({}, [])
+    await afterLeavingCommunity(agent as never, COMMUNITY)
+    const lines = agent.config.logger.warn.mock.calls.map(([line]) => String(line))
+    expect(lines).toContainEqual(expect.stringMatching(/^\[Rooms:leave\] kept posts for .+ not cleared: /))
+    expect(mockDropNames).toHaveBeenCalled()
   })
 
   it('says nothing about the clears when both are done (control)', async () => {

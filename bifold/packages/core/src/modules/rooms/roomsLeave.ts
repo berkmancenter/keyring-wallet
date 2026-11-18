@@ -13,6 +13,7 @@ import { keepSentPhoto } from '../directory/myPhoto'
 import { dropDirectoryNames } from '../directory/names'
 import { isCommunityCard } from '../trust-tasks/module/vtiWalletCards'
 
+import { emptyMessageCache, isCacheWallet } from './messageCache'
 import { failureCategory, logRef } from './roomsLogWords'
 import type { RoomsService } from './types'
 import { ROOMS_LEFT_EVENT } from './useMyRooms'
@@ -87,6 +88,9 @@ export async function afterLeavingCommunity(agent: Agent, communityDid: string, 
   // Neither clear fails the leave, which is done; one that fails is said, so a name or photo still kept is explained.
   const notCleared = (what: string) => (e: unknown) =>
     agent.config?.logger?.warn?.(`[Rooms:leave] ${what} for ${logRef(communityDid)} not cleared: ${failureCategory(e)}`)
+  // The posts kept of its rooms go first: what was read there is not this phone's to keep (rooms/messageCache).
+  if (isCacheWallet(agent))
+    await emptyMessageCache(agent, { community: communityDid }, 'left').catch(notCleared('kept posts'))
   // The names its members wrote on their cards, kept for the rooms, go with it.
   await dropDirectoryNames(agent, communityDid).catch(notCleared('member names'))
   // And what this phone remembers of the photo it put on the member's card there.

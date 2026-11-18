@@ -26,6 +26,8 @@ import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vti
 import { isRoomLiveDeliveryOn } from '../liveDeliverySwitch'
 import { isRoomRecordSendingOn } from '../recordSendingSwitch'
 import { afterLeavingCommunity } from '../roomsLeave'
+import { bindMessageCache, standingMemberships } from '../messageCache'
+import { cardStandingOf } from '../../trust-tasks/module/vtiCardStanding'
 
 import type { RoomsBackend, RoomsCommunity, RoomsUploadBackend } from './agentRoomsService'
 import { storedConsentHolds } from './consentHolds'
@@ -113,6 +115,26 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     if (!c) throw new Error('rooms: no agent is linked to this phone')
     return c
   }
+
+  // The rooms' kept posts answer to this agent, and are swept as it starts: a copy whose membership no longer stands (a
+  // removal or an identity let go with the app closed) is emptied before any room can show it (rooms/messageCache).
+  void bindMessageCache(
+    agent,
+    async () => {
+      const out: { communityDid: string; personaDid: string }[] = []
+      for (const membership of await communityStore.listMemberships()) {
+        if (membership.removal) continue
+        // A card the community revoked, as its status list was last read, stands no more, notice or not (b0's finding).
+        if (cardStandingOf(membership.vmc).state === 'revoked') continue
+        const persona = await personaForCommunity(identityStore, communityStore, membership.communityDid)
+        if (persona?.did === membership.personaDid)
+          out.push({ communityDid: membership.communityDid, personaDid: membership.personaDid })
+      }
+      // An agent that no longer accepts this phone leaves no membership standing here.
+      return standingMemberships(vtaAgent.getState().link.kind, out)
+    },
+    (line) => agent.config?.logger?.warn?.(line)
+  )
 
   return {
     runsOn: agent,

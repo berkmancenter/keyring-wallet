@@ -43,6 +43,7 @@ import { roomTitle } from './components/RoomRow'
 import { toInertText } from './inertText'
 import { postRefusalWhy } from './postRefusal'
 import { type AccessNotice, nextAccessNotice } from './roomAccess'
+import { useMessageCacheBiometryGuard } from './useMessageCacheBiometryGuard'
 import type { RoomOffer } from './types'
 import { useRoomOffersCount } from './useRoomOffersCount'
 import { onRoomsListed, useRoomRowsPoll } from './useRoomRows'
@@ -153,6 +154,8 @@ export function accessWords(notice: AccessNotice, t: TFunction): { text1: string
 }
 
 export function useRoomNotices(): void {
+  // Biometric unlock turned off empties the rooms' kept posts at once (rooms/messageCache).
+  useMessageCacheBiometryGuard()
   const { t } = useTranslation()
   const bottomOffset = useToastAboveTabBar()
   const navigation = useNavigation() as unknown as { navigate: (name: string, params?: object) => void }
