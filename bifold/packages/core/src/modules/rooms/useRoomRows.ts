@@ -60,6 +60,7 @@ import {
 import { isNote, newestFirst, placeOf, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
 import { isRoomWatchWheneverOpenOn } from './watchWheneverOpenSwitch'
+import { isRoomsPartialListingOn } from './partialListingSwitch'
 
 /** While Messages is in view: about the offers poll's idle pace, never faster. */
 export const ROWS_POLL_MS = 120_000
@@ -431,7 +432,62 @@ async function readAll(service: RoomsService): Promise<void> {
   try {
     await readSeen()
     showRowsAtStart(service)
-    const listed = await service.listMyRooms()
+    let byRoom = tracks.get(service)
+    if (!byRoom) tracks.set(service, (byRoom = new Map()))
+    const known = byRoom
+    // While the listing waits for every community, each that answers puts its rooms on screen and has them read
+    // (rooms/partialListingSwitch); the rows of the communities still to answer stay as they were. Drawn only: nothing
+    // is kept for the next start, no listener is told, and the listing that ends replaces it all, as before.
+    const readThisAsk = new Set<string>()
+    let listingEnded = false
+    let partial: { rooms: (RoomSummary & { communityDid: string })[]; answered: Set<string> } | undefined
+    let readingPartial: Promise<void> = Promise.resolve()
+    const showPartial = () => {
+      if (!partial || listingEnded || feed.service !== service) return
+      const { rooms: answeredRooms, answered } = partial
+      const ids = new Set(answeredRooms.map((room) => room.roomId))
+      const waiting = (feed.all ?? []).filter((row) => !answered.has(row.communityDid) && !ids.has(row.roomId))
+      const next = [...answeredRooms.map((room) => rowOf(room, known.get(room.roomId))), ...waiting]
+      const before = feed.all
+      if (before && next.length === before.length && next.every((row, i) => sameRow(row, before[i]))) return
+      feed.all = next
+      feed.failed = false
+      showRows(service)
+      publish()
+      const shownNow = feed.rows ?? []
+      if (!firstRowsSaid && shownNow.length > 0) {
+        firstRowsSaid = true
+        const reading = shownNow.filter((row) => row.reading).length
+        log?.(
+          `[Rooms:rows] first rows shown: ${shownNow.length}, ${reading} reading, ${Date.now() - RUN_STARTED_AT} ms after launch (${Date.now() - began} ms into this read; ${answered.size} communities answered so far)`
+        )
+      }
+    }
+    const onPartial = (rooms: RoomSummary[], answered: readonly string[]) => {
+      if (listingEnded || feed.service !== service || !isRoomsPartialListingOn()) return
+      const answeredRooms = rooms.filter(shown)
+      partial = { rooms: answeredRooms, answered: new Set(answered) }
+      showPartial()
+      readingPartial = readingPartial.then(async () => {
+        for (const room of answeredRooms) {
+          if (listingEnded || feed.service !== service) return
+          if (room.joined === false || readThisAsk.has(room.roomId)) continue
+          readThisAsk.add(room.roomId)
+          try {
+            known.set(room.roomId, await readRoom(service, room, known.get(room.roomId)))
+          } catch (e) {
+            // Read again with the rest once the listing ends.
+            readThisAsk.delete(room.roomId)
+            log?.(`[Rooms:rows] ${logRef(room.roomId)} of ${logRef(room.communityDid)} not read: ${failureCategory(e)}`)
+          }
+          showPartial()
+        }
+      })
+    }
+    const listed = await service.listMyRooms(isRoomsPartialListingOn() ? { onPartial } : {})
+    listingEnded = true
+    // A room being read for a partial answer finishes before the rooms are read again: never two reads of one room.
+    await readingPartial
     if (feed.service === service)
       for (const listener of listedListeners) {
         try {
@@ -448,9 +504,6 @@ async function readAll(service: RoomsService): Promise<void> {
     // community's DID, whichever it is. Nothing more is asked for them: they are shown, not read.
     const skipped = new Set((service.heldBack?.() ?? []).map((c) => c.communityDid))
     const listedIds = new Set(rooms.map((room) => room.roomId))
-    let byRoom = tracks.get(service)
-    if (!byRoom) tracks.set(service, (byRoom = new Map()))
-    const known = byRoom
     // Shown as listed, then again as each room is read: a slow agent delays a room's posts, never its row.
     // Messages and the tab's badge re-render on each publish, so a room whose row reads the same publishes nothing. A
     // failure shown before still clears: the read's `finally` publishes once it ends.
@@ -478,8 +531,9 @@ async function readAll(service: RoomsService): Promise<void> {
     show()
     for (const room of rooms) {
       if (feed.service !== service) return
-      // Not joined: there are no keys to read it with, and asking again every poll only fails again.
-      if (room.joined === false) continue
+      // Not joined: there are no keys to read it with, and asking again every poll only fails again. Read already for
+      // a partial answer of this listing: once is enough.
+      if (room.joined === false || readThisAsk.has(room.roomId)) continue
       try {
         byRoom.set(room.roomId, await readRoom(service, room, byRoom.get(room.roomId)))
       } catch (e) {

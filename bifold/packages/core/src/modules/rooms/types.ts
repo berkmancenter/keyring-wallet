@@ -512,7 +512,14 @@ export interface RoomsService {
   /** One status per operation. Cached per agent; `refresh` asks again. */
   capabilities(options?: { refresh?: boolean }): Promise<RoomsCapabilities>
 
-  listMyRooms(): Promise<RoomSummary[]>
+  /**
+   * `onPartial`: while the listing waits for every community, the rooms of those that have answered so far, each time
+   * one answers, with their DIDs (rooms/partialListingSwitch). For drawing only: the listing that resolves is the
+   * member's rooms. None from the sample.
+   */
+  listMyRooms(options?: {
+    onPartial?: (rooms: RoomSummary[], answered: readonly string[]) => void
+  }): Promise<RoomSummary[]>
   /**
    * The communities the last `listMyRooms` could not read for now because the community session was kept for another
    * of this phone's identities: their rooms come with a read again (`onReadable`). Never why. None for the sample.

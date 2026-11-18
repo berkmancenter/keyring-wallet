@@ -40,6 +40,7 @@ import { roomRef } from '../roomRef'
 import { ACCEPT_FROM_PREVIEW_MAX_AGE_MS, isAcceptFromPreviewOn } from '../acceptFromPreviewSwitch'
 import { holdsTwoAuthorities, permanentRefusal } from '../postRefusal'
 import { emptyMessageCache, isCacheWallet } from '../messageCache'
+import { isRoomsPartialListingOn } from '../partialListingSwitch'
 import { failureCategory, logRef } from '../roomsLogWords'
 import { takesRepliesOrReactions } from '../recordPermits'
 import { keepRecordsOn, recordsWereOnAt } from '../recordsWereOn'
@@ -636,13 +637,27 @@ export class AgentRoomsService implements RoomsService {
     return true
   }
 
-  public listMyRooms(): Promise<RoomSummary[]> {
+  /** Who asked the listing in flight for its partial answers (rooms/partialListingSwitch); joiners included. */
+  private partialListeners = new Set<(rooms: RoomSummary[], answered: readonly string[]) => void>()
+
+  public listMyRooms(
+    options: { onPartial?: (rooms: RoomSummary[], answered: readonly string[]) => void } = {}
+  ): Promise<RoomSummary[]> {
+    if (options.onPartial) this.partialListeners.add(options.onPartial)
     if (this.roomsInFlight) return this.roomsInFlight
     const listing = this.readMyRooms().finally(() => {
-      if (this.roomsInFlight === listing) this.roomsInFlight = undefined
+      if (this.roomsInFlight === listing) {
+        this.roomsInFlight = undefined
+        this.partialListeners.clear()
+      }
     })
     this.roomsInFlight = listing
     return listing
+  }
+
+  /** A room as the listing summarises it: what a screen is given, never the community or the identity it acts as. */
+  private summaryOf({ community: _community, actingAs: _actingAs, ...summary }: KnownRoom): RoomSummary {
+    return summary
   }
 
   private async readMyRooms(): Promise<RoomSummary[]> {
@@ -666,27 +681,65 @@ export class AgentRoomsService implements RoomsService {
     const kept: RoomsCommunity[] = []
     // Its identity's keys are not on the phone yet (sharedIdentity's VtiKeysNotHeld, read by name): not unreached.
     const awaitingKeys: string[] = []
+    // Each community that answers, its rooms told at once to whoever asked for partial answers (useRoomRows), with
+    // those of every community that answered before it, in the listing's order. Only while the listing waits: nothing
+    // here is kept as the member's rooms, and nothing is told once it has ended. A key list that fails tells nothing.
+    const answered = new Map<string, RoomMembershipRecord[]>()
+    let ended = false
+    const tellPartial = async (community: RoomsCommunity, records: RoomMembershipRecord[]) => {
+      if (!isRoomsPartialListingOn() || this.partialListeners.size === 0) return
+      answered.set(community.did, records)
+      const held = await heldAsked.catch(() => undefined)
+      if (!held || ended || this.partialListeners.size === 0) return
+      const rooms: RoomSummary[] = []
+      for (const c of communities)
+        for (const record of answered.get(c.did) ?? [])
+          if (record.state !== 'offered')
+            rooms.push(
+              this.summaryOf(
+                this.fromMembership(
+                  c,
+                  record,
+                  held.find((h) => holdsAs(h, record.roomId, c.personaDid))
+                )
+              )
+            )
+      const dids = communities.filter((c) => answered.has(c.did)).map((c) => c.did)
+      for (const listener of this.partialListeners) {
+        try {
+          listener(rooms, dids)
+        } catch {
+          // A listener's failure is its own.
+        }
+      }
+    }
     const memberships = await Promise.all(
       communities.map(async (community) => ({
         community,
-        records: await this.membershipsOf(community).catch((e: unknown): RoomMembershipRecord[] => {
-          // By short id, and why by kind alone: no error's words beside a community (roomsLogWords).
-          this.backend.warn(`rooms: ${logRef(community.did)} did not list this member's rooms: ${failureCategory(e)}`)
-          if (this.sessionKept(community, e)) kept.push(community)
-          else if (e instanceof Error && e.name === 'VtiKeysNotHeld') awaitingKeys.push(community.did)
-          else if (refusalCode(e) === 'unsupportedType') tooOld.push(community.did)
-          else unreachable.push(community.did)
-          // Refused as no member: what was kept of its rooms goes, whether or not a removal notice ever came (b0).
-          const wallet = this.backend.runsOn
-          if (refusalCode(e) === 'notAMember' && isCacheWallet(wallet))
-            void emptyMessageCache(wallet, { community: community.did }, 'not a member').catch(() => undefined)
-          return []
-        }),
+        records: await this.membershipsOf(community)
+          .then((records) => {
+            void tellPartial(community, records)
+            return records
+          })
+          .catch((e: unknown): RoomMembershipRecord[] => {
+            // By short id, and why by kind alone: no error's words beside a community (roomsLogWords).
+            this.backend.warn(`rooms: ${logRef(community.did)} did not list this member's rooms: ${failureCategory(e)}`)
+            if (this.sessionKept(community, e)) kept.push(community)
+            else if (e instanceof Error && e.name === 'VtiKeysNotHeld') awaitingKeys.push(community.did)
+            else if (refusalCode(e) === 'unsupportedType') tooOld.push(community.did)
+            else unreachable.push(community.did)
+            // Refused as no member: what was kept of its rooms goes, whether or not a removal notice ever came (b0).
+            const wallet = this.backend.runsOn
+            if (refusalCode(e) === 'notAMember' && isCacheWallet(wallet))
+              void emptyMessageCache(wallet, { community: community.did }, 'not a member').catch(() => undefined)
+            return []
+          }),
       }))
     )
     // When none answered, custody alone is not the member's rooms: an open room holds no keys and would be
     // missing, and every other room would show by its id. The read fails instead, and the screen says why — unless
     // only a kept session stopped them: that is not a failure, and the read again follows.
+    ended = true
     const failedAll = unreachable.length + tooOld.length + kept.length + awaitingKeys.length === communities.length
     if (unreachable.length > 0 && failedAll)
       throw new RoomsUnavailable(
