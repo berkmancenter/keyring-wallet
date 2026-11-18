@@ -1248,6 +1248,7 @@
     "RevocationMessage": ["src/screens/CredentialDetails.tsx"],
     "RevokedDate": ["src/screens/CredentialDetails.tsx"],
     "RevokedOrNotAvailable": ["src/components/misc/Card11Pure.tsx"],
+    "RoomBeforeKnown": ["src/modules/rooms/screens/Room.tsx"],
     "RoomComposer": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerAttach": ["src/modules/rooms/components/RoomComposer.tsx"],
     "RoomComposerContextCancel": ["src/modules/rooms/components/RoomComposer.tsx"],
