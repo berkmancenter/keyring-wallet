@@ -201,7 +201,11 @@ const Room: React.FC = () => {
     room?.actingAs,
     !!room && canList && room.joined !== false,
     inView,
-    isChatPost
+    isChatPost,
+    // An open room's chat is kept in the wallet and opens on it (rooms/messageCache); a sealed room's never is.
+    room?.tier === 'open' && room.communityDid
+      ? { messageCache: { communityDid: room.communityDid, validUntil: room.validUntil } }
+      : {}
   )
   // A reaction, edit or withdrawal the member just asked for, laid over the posts until the room's list carries it.
   const pendingWrites = usePendingWrites(feed.posts)

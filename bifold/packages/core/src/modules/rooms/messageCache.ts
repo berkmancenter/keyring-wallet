@@ -535,10 +535,13 @@ let cacheLog: ((line: string) => void) | undefined
  */
 export async function messageCacheCounts(
   agent: CacheWallet
-): Promise<{ records: number; kept: number; journal: number }> {
+): Promise<{ records: number; kept: number; journal: number; bytes: number }> {
   const records = await agent.genericRecords.findAllByQuery({ type: RECORD_TYPE })
   const { entries } = await journalOf(agent)
-  return { records: records.length, kept: records.filter((r) => !!contentOf(r)).length, journal: entries.length }
+  const kept = records.map(contentOf).filter((c) => !!c)
+  // The posts' bytes as kept, what the caps count (the device proof reports them: c0).
+  const bytes = kept.reduce((n, c) => n + utf8ToBytes(JSON.stringify(c?.posts ?? [])).length, 0)
+  return { records: records.length, kept: kept.length, journal: entries.length, bytes }
 }
 
 /** Says the counts, after `reason`: one line, counts and a kind only. */
@@ -546,7 +549,7 @@ async function sayCounts(agent: CacheWallet, reason: string): Promise<void> {
   if (!cacheLog) return
   try {
     const c = await messageCacheCounts(agent)
-    cacheLog(`[Rooms:cache] records ${c.records}, kept ${c.kept}, journal ${c.journal} (${reason})`)
+    cacheLog(`[Rooms:cache] records ${c.records}, kept ${c.kept}, bytes ${c.bytes}, journal ${c.journal} (${reason})`)
   } catch {
     // Only a line.
   }
