@@ -52,7 +52,8 @@ const savedAt = (key: string) => {
 /** What was saved for the four demo keys, in key order. */
 const savedFour = () => FOUR.map(savedAt)
 const savedSide = () => savedAt(BCLocalStorageKeys.SediDemoSide)
-const savedConfirm = () => savedAt(BCLocalStorageKeys.EnableConfirmItsYou)
+/** The key the "Confirm it's you" Developer switch saved under, before it left this screen: no longer written. */
+const savedConfirm = () => savedAt('EnableConfirmItsYou')
 
 const shown = () =>
   render(
@@ -104,15 +105,16 @@ describe('Developer: each demo switch saves the switches bifold turned, and its 
     }
   )
 
-  test("Confirm it's you is never saved by the demo, on or off (it is its own switch)", async () => {
+  test("Confirm it's you is never saved by the demo, on or off (it is no setting; control: the demo's own keys are)", async () => {
     const tree = shown()
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.guardian)))
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.ward)))
     await act(async () => fireEvent.press(tree.getByTestId(DEMO.ward)))
     expect(savedConfirm()).toBeUndefined()
-    // Control: its own row does save it.
-    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('ToggleEnableConfirmItsYou'))))
-    expect(savedConfirm()).toBe(true)
+    // Control: the same taps did save the demo's own keys, so "never saved" is not "nothing was saved".
+    expect(savedSide()).not.toBeUndefined()
+    // And nothing on the screen offers it.
+    expect(tree.queryByTestId(testIdWithKey('ToggleEnableConfirmItsYou'))).toBeNull()
   })
 
   test("the ward after the guardian on one phone saves the state card OFF and the side ward (a restart can't bring either back)", async () => {
