@@ -100,22 +100,36 @@ export interface PollState {
   behind?: boolean
   failed: boolean
   reload: () => Promise<void>
+  /** Show this record now (what a ticket just left on this phone), ahead of any read still on its way. */
+  showRecord: (record: PollRecord) => void
 }
 
-/** One poll whole, this phone's record of it, and whether the agent can vote, read on opening and on coming back. */
+/**
+ * One poll whole, this phone's record of it, and whether the agent can vote, read on opening and on coming back.
+ *
+ * The record is this phone's own, so it is read first and shown at once: after a ticket or a vote the screen showed
+ * the step before ("Get my ticket", "Vote now") for as long as the poll took to be read again. Only the latest read is
+ * shown: one overtaken by a later read is dropped when it answers.
+ */
 export function usePoll(communityDid: string, electionId: string): PollState {
   const service = usePollService()
-  const [state, setState] = useState<Omit<PollState, 'reload'>>({ failed: false })
+  const [state, setState] = useState<Omit<PollState, 'reload' | 'showRecord'>>({ failed: false })
+  const latest = useRef(0)
   const reload = useCallback(async () => {
     if (!service) return
+    const turn = ++latest.current
+    const current = () => turn === latest.current
     try {
+      const own = await service.record(communityDid, electionId).catch(() => undefined)
+      if (current() && own) setState((s) => ({ ...s, record: own }))
       const shown = await service.readPoll(communityDid, electionId)
       const [record, readiness] = await Promise.all([
         service.record(communityDid, electionId, shown.manifest.community),
         service.agentReadiness(),
       ])
-      setState({ shown, record, readiness, failed: false })
+      if (current()) setState({ shown, record, readiness, failed: false })
     } catch (e) {
+      if (!current()) return
       // A poll this agent, or this app, can't carry: which of them to update is what the member can act on.
       const reason = e instanceof PollRefusal ? e.reason : undefined
       setState((s) => ({
@@ -126,10 +140,11 @@ export function usePoll(communityDid: string, electionId: string): PollState {
       }))
     }
   }, [service, communityDid, electionId])
+  const showRecord = useCallback((record: PollRecord) => setState((s) => ({ ...s, record })), [])
   useFocusEffect(
     useCallback(() => {
       void reload()
     }, [reload])
   )
-  return { ...state, reload }
+  return { ...state, reload, showRecord }
 }

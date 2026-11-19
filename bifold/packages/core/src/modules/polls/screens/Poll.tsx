@@ -119,7 +119,8 @@ const Poll: React.FC = () => {
     setTaking(true)
     setRefusal(undefined)
     try {
-      await service.takeTicket(communityDid, electionId)
+      // The ticket shows as soon as it is held, with Get my ticket gone: the poll is read again behind it.
+      poll.showRecord(await service.takeTicket(communityDid, electionId))
     } catch (e) {
       setRefusal(e instanceof PollRefusal ? e : new PollRefusal('refused'))
     } finally {

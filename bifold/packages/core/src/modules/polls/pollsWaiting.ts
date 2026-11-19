@@ -27,6 +27,7 @@ import { GenericRecordsCommunityStore, isCurrentMembership } from '../trust-task
 import { vtaAgent } from '../trust-tasks/module/vtaAgent'
 
 import type { PollService } from './pollService'
+import { isPollsCheckParallelOn } from './pollsReadSwitch'
 import { usePollService } from './usePolls'
 
 /** One poll waiting for the member: which community, which poll, and when it closes. Nothing it asks or says. */
@@ -178,35 +179,58 @@ export async function hidePollCard(
 /**
  * The polls waiting in these communities: voting open, not closed, not voted in or on its way, not hidden. A community
  * that can't be read is skipped this time.
+ *
+ * With `POLLS_CHECK_PARALLEL` on, every community is asked at once (each on its own identity's session; listings on the
+ * shared one take turns there), and `onEach` hears the list so far as each one answers, in the communities' order.
+ * Off: one community after another, as before.
  */
 export async function findPollsWaiting(
   service: Pick<PollService, 'readPolls' | 'record'>,
   communityDids: readonly string[],
   hidden: HiddenPolls,
-  now: number
+  now: number,
+  onEach?: (answered: ReadonlyMap<string, PollWaiting[]>) => void
 ): Promise<PollWaiting[]> {
-  const found = new Map<string, PollWaiting>()
-  for (const communityDid of communityDids) {
+  const communities = [...new Set(communityDids)]
+  const answered = new Map<string, PollWaiting[]>()
+  const readOne = async (communityDid: string) => {
     let polls
     try {
       polls = await service.readPolls(communityDid, { state: 'voting' })
     } catch {
-      continue
+      answered.set(communityDid, [])
+      onEach?.(answered)
+      return
     }
+    const found: PollWaiting[] = []
     for (const poll of polls) {
       if (poll.state !== 'voting') continue
       if (now < Date.parse(poll.votingOpensAt) || now >= Date.parse(poll.votingClosesAt)) continue
       const record = await service.record(communityDid, poll.electionId).catch(() => undefined)
       if (record?.votedAt !== undefined || record?.pending) continue
       if (isHidden(hidden, communityDid, poll.electionId, now)) continue
-      found.set(keyOf(communityDid, poll.electionId), {
-        communityDid,
-        electionId: poll.electionId,
-        votingClosesAt: poll.votingClosesAt,
-      })
+      if (found.some((p) => p.electionId === poll.electionId)) continue
+      found.push({ communityDid, electionId: poll.electionId, votingClosesAt: poll.votingClosesAt })
     }
+    answered.set(communityDid, found)
+    onEach?.(answered)
   }
-  return [...found.values()]
+  if (isPollsCheckParallelOn()) await Promise.all(communities.map(readOne))
+  else for (const communityDid of communities) await readOne(communityDid)
+  return communities.flatMap((c) => answered.get(c) ?? [])
+}
+
+/**
+ * What the stack shows while a check is under way: each community that has answered with what it said, and every other
+ * with what the stack shows for it now (the last check's, less any hidden since), in the communities' order. A
+ * community no longer in the list shows nothing.
+ */
+export function mergeAnswered(
+  shown: readonly PollWaiting[],
+  communityDids: readonly string[],
+  answered: ReadonlyMap<string, PollWaiting[]>
+): PollWaiting[] {
+  return [...new Set(communityDids)].flatMap((c) => answered.get(c) ?? shown.filter((p) => p.communityDid === c))
 }
 
 /** The communities this phone is a current member of, once each. */
@@ -256,7 +280,10 @@ export function usePollsWaitingCheck(): void {
           memberCommunities(agent as Agent),
           loadHiddenPolls(agent as Agent),
         ])
-        const found = await findPollsWaiting(service, communities, hidden, Date.now())
+        // Each community's cards as it answers (POLLS_CHECK_PARALLEL): the others keep what the stack shows until theirs do.
+        const found = await findPollsWaiting(service, communities, hidden, Date.now(), (answered) => {
+          if (live && isPollsCheckParallelOn()) publish(mergeAnswered(waiting.items ?? NONE, communities, answered))
+        })
         if (live) publish(found)
       } catch {
         // The stack keeps what the last check found.

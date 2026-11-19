@@ -29,6 +29,7 @@
  * @module polls/pollService
  */
 import { failureCategory, logRef } from '../rooms/roomsLogWords'
+import { isPollsSharedReadOn, SHARED_READ_MS } from './pollsReadSwitch'
 import { CastFailure, castDelayMs, postCast, type BallotBoxDoor } from './ballotBox'
 import { ballotOf, ballotRefusal, type BallotRefusal, type GivenAnswer } from './ballot'
 import {
@@ -195,8 +196,45 @@ export function createPollService(b: PollsBackend) {
     return name === 'unsupportedVersion' || name === 'unsupportedType'
   }
 
-  /** A community's polls ({@link listPolls}), and how long they took, said once. */
+  /**
+   * Shared reads (`POLLS_SHARED_READ`): per community, the whole list's read while it is on its way, and its answer for
+   * `SHARED_READ_MS` after. A failed read is not kept, and a ticket or a vote there ends the share (`returned`, below).
+   */
+  const shared = new Map<string, { read: Promise<PollListItem[]>; at?: number }>()
+
+  /**
+   * A community's polls. With `POLLS_SHARED_READ` on, one read serves every screen that asks within the share (the
+   * Waiting for you check and the community's page asked a second apart at launch, BC46-XSQD): the whole list is read,
+   * and a `state` filter is applied here.
+   */
   const readPolls = async (community: string, filter: { state?: string } = {}): Promise<PollListItem[]> => {
+    if (!isPollsSharedReadOn()) return readPollsNow(community, filter)
+    const started = b.now()
+    const kept = shared.get(community)
+    let polls: PollListItem[]
+    if (kept && (kept.at === undefined || started - kept.at < SHARED_READ_MS)) {
+      polls = await kept.read
+      b.warn(`[Polls] ${polls.length} listed for ${logRef(community)} in ${b.now() - started} ms (shared read)`)
+    } else {
+      const entry: { read: Promise<PollListItem[]>; at?: number } = { read: Promise.resolve([]) }
+      entry.read = readPollsNow(community, {}).then(
+        (answer) => {
+          if (shared.get(community) === entry) entry.at = b.now()
+          return answer
+        },
+        (e: unknown) => {
+          if (shared.get(community) === entry) shared.delete(community)
+          throw e
+        }
+      )
+      shared.set(community, entry)
+      polls = await entry.read
+    }
+    return filter.state ? polls.filter((p) => p.state === filter.state) : polls
+  }
+
+  /** A community's polls ({@link listPolls}), read now, and how long they took, said once. */
+  const readPollsNow = async (community: string, filter: { state?: string } = {}): Promise<PollListItem[]> => {
     // How long a community's polls took, said once per listing: polls were felt slow (11-16) and nothing timed them.
     const started = b.now()
     let asks = 0
@@ -478,11 +516,17 @@ export function createPollService(b: PollsBackend) {
     }
   }
 
+  /** A ticket or a vote changes what a community lists for this member: its shared read ends once either returns. */
+  const returned =
+    <A extends unknown[], R>(work: (via: string, ...rest: A) => Promise<R>) =>
+    (via: string, ...rest: A): Promise<R> =>
+      work(via, ...rest).finally(() => shared.delete(via))
+
   return {
     readPolls,
     readPoll,
-    takeTicket,
-    vote,
+    takeTicket: returned(takeTicket),
+    vote: returned(vote),
     resumePending,
     agentReadiness,
     record: recordOf,

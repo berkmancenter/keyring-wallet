@@ -7,6 +7,7 @@ import { logRef } from '../../rooms/roomsLogWords'
 import { CastFailure, type BallotBoxDoor } from '../ballotBox'
 import { POLL_GENERATIONS, POLL_TASK } from '../pollTasks'
 import { PollRefusal, createPollService, type PollRecord, type PollsBackend } from '../pollService'
+import { SHARED_READ_MS } from '../pollsReadSwitch'
 
 const [G3, G2, G1] = POLL_GENERATIONS
 // The ticket request is the agent's document, sent as it came: register 0.5 builds a 0.3 one, the others a 0.1.
@@ -467,6 +468,9 @@ describe('the newest generation both sides serve', () => {
       await w.service.readPolls(COMMUNITY)
       w.warnings.length = 0
       w.asked.length = 0
+      // Keep this clock advance: without it the second read would be served from the shared read (pollsReadSwitch,
+      // SHARED_READ_MS), nothing would go to the community, and this row would pass without testing the ladder at all.
+      await w.backend.sleep(SHARED_READ_MS)
       await w.service.readPolls(COMMUNITY)
       expect(w.asked).toEqual([G2.list])
       expect(w.warnings).toEqual([`[Polls] 0 listed for ${logRef(COMMUNITY)} in 0 ms (1 asked)`])

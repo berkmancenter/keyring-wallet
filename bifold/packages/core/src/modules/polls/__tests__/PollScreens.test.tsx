@@ -35,7 +35,7 @@ const mockState: { shown?: PollShown; record?: PollRecord; readiness?: string; b
 const mockService = { takeTicket: jest.fn(), vote: jest.fn() }
 jest.mock('../usePolls', () => ({
   usePollService: () => mockService,
-  usePoll: () => ({ ...mockState, reload: jest.fn(async () => undefined) }),
+  usePoll: () => ({ ...mockState, reload: jest.fn(async () => undefined), showRecord: jest.fn() }),
 }))
 
 const shownWith = (over: Partial<PollShown['manifest']> = {}, disclosure: Partial<PollShown['disclosure']> = {}) =>
