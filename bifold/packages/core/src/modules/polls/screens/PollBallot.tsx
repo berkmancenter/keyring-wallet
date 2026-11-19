@@ -37,6 +37,7 @@ import { CastFailure } from '../ballotBox'
 import { PollCallout, PollLine, PollStepBar } from '../components/PollParts'
 import { PollsIds } from '../components/Polls.ids'
 import { PollRefusal, type VoteStep } from '../pollService'
+import { isPollsVoteBehindOn } from '../pollsVoteBehindSwitch'
 import type { Question } from '../pollTasks'
 import { boardLine, castFailureText, minutesSinceTicket, pollTitle, refusalText } from '../pollWords'
 import { usePoll, usePollService } from '../usePolls'
@@ -127,10 +128,21 @@ const PollBallot: React.FC = () => {
     setCasting(true)
     setFailure(undefined)
     setStep(undefined)
+    // With POLLS_VOTE_BEHIND, the ballot goes back once the cast is stored: the pause, the send and the receipt carry
+    // on behind, and the poll shows them, a failure included. Nothing before that has been sent: until then it holds.
+    let gone = false
+    const goneOnceStored = isPollsVoteBehindOn()
+      ? () => {
+          gone = true
+          navigation.goBack()
+        }
+      : undefined
     try {
-      await service.vote(communityDid, electionId, given, setStep)
-      navigation.goBack()
+      await service.vote(communityDid, electionId, given, setStep, goneOnceStored)
+      if (!gone) navigation.goBack()
     } catch (e) {
+      // Kept on the poll's record, and shown there: this screen is gone.
+      if (gone) return
       setFailure(
         e instanceof CastFailure
           ? castFailureText(t, e)

@@ -1141,6 +1141,7 @@
     "PollVoteLaterAdvice": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteLaterKeeps": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVoteNow": ["src/modules/polls/components/Polls.ids.ts"],
+    "PollVoteStopped": ["src/modules/polls/components/Polls.ids.ts"],
     "PollVotesCounted": ["src/modules/polls/components/Polls.ids.ts"],
     "PollWaitingCard": ["src/modules/polls/components/Polls.ids.ts"],
     "PollWaitingCardNotNow": ["src/modules/polls/components/Polls.ids.ts"],
@@ -2367,6 +2368,9 @@
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.voteNow"
+    },
+    {
+      "src/modules/polls/screens/Poll.tsx": "PollsIds.voteStopped"
     },
     {
       "src/modules/polls/screens/Poll.tsx": "PollsIds.whoRunsIt"

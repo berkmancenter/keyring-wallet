@@ -374,6 +374,16 @@ const Poll: React.FC = () => {
     return screen(
       <>
         <PollStepBar at="vote" />
+        {record.stopped?.kind === 'refused' ? (
+          // A cast the ballot box refused, perhaps after the member left the ballot (POLLS_VOTE_BEHIND): said here.
+          <ThemedText
+            style={styles.error}
+            accessibilityLiveRegion="polite"
+            testID={testIdWithKey(PollsIds.voteStopped)}
+          >
+            {castFailureText(t, record.stopped)}
+          </ThemedText>
+        ) : null}
         <View style={styles.ticket} testID={testIdWithKey(PollsIds.ticketHeld)}>
           <View style={[styles.notch, { left: -10 }]} />
           <View style={[styles.notch, { right: -10 }]} />

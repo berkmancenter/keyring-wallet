@@ -12,7 +12,7 @@
 import type { Agent } from '@credo-ts/core'
 import { useAgent } from '@bifold/react-hooks'
 import { useFocusEffect } from '@react-navigation/native'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { createAgentPollsBackend } from './agentPollsBackend'
 import { createPollService, PollRefusal, type PollRecord, type PollService } from './pollService'
@@ -146,5 +146,13 @@ export function usePoll(communityDid: string, electionId: string): PollState {
       void reload()
     }, [reload])
   )
+  // A vote carried on behind the ballot (POLLS_VOTE_BEHIND) shows here as each step is written: nothing is asked.
+  useEffect(() => {
+    if (!service) return
+    return service.onRecord((r) => {
+      if (r.electionId === electionId && (r.via === communityDid || r.community === communityDid))
+        setState((s) => ({ ...s, record: r }))
+    })
+  }, [service, communityDid, electionId])
   return { ...state, reload, showRecord }
 }

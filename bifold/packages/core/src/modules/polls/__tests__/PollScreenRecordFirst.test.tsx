@@ -57,6 +57,8 @@ const mockService = {
   takeTicket: jest.fn(),
   vote: jest.fn(),
   resumePending: jest.fn(async () => undefined),
+  // The real service tells a shown poll of each record written (#1155); these rows write none behind it.
+  onRecord: jest.fn(() => () => undefined),
 }
 jest.mock('../pollService', () => ({
   ...jest.requireActual('../pollService'),

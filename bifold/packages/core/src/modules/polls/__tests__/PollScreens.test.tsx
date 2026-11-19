@@ -390,10 +390,12 @@ describe('the ballot', () => {
     const tree = renderIn(<PollBallot />)
     fireEvent.press(tree.getAllByTestId(id(PollsIds.option))[0])
     fireEvent.press(tree.getByTestId(id(PollsIds.cast)))
+    // The steps, and (POLLS_VOTE_BEHIND, shipped on) what the ballot does once the cast is stored: it goes back.
     expect(mockService.vote).toHaveBeenCalledWith(
       COMMUNITY,
       'charter',
       { motion: { choice: [CHOICE] } },
+      expect.any(Function),
       expect.any(Function)
     )
 

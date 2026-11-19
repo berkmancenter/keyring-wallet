@@ -70,4 +70,6 @@ export const PollsIds = {
   waitingCardOpen: 'PollWaitingCardOpen',
   waitingCardNotNow: 'PollWaitingCardNotNow',
   waitingFold: 'MessagesWaitingForYouMore',
+  // Polls speed (fix 3): a cast the ballot box refused after the member left the ballot
+  voteStopped: 'PollVoteStopped',
 } as const
