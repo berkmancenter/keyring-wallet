@@ -1,66 +1,33 @@
 #!/bin/sh
+# Auto-append a Signed-off-by trailer if the message doesn't already have
+# one, so nobody has to remember `-s`. commitlint (.husky/commit-msg) still
+# rejects a commit with no trailer at all -- this just means that check
+# should never actually fire in practice. See CLAUDE.md's Commit
+# conventions section.
 
-if [ "$LEFTHOOK_VERBOSE" = "1" -o "$LEFTHOOK_VERBOSE" = "true" ]; then
-  set -x
-fi
+COMMIT_MSG_FILE="$1"
 
-if [ "$LEFTHOOK" = "0" ]; then
+if [ -z "$COMMIT_MSG_FILE" ] || [ ! -f "$COMMIT_MSG_FILE" ]; then
   exit 0
 fi
 
-call_lefthook()
-{
-  if test -n "$LEFTHOOK_BIN"
-  then
-    "$LEFTHOOK_BIN" "$@"
-  elif lefthook -h >/dev/null 2>&1
-  then
-    lefthook "$@"
-  else
-    dir="$(git rev-parse --show-toplevel)"
-    osArch=$(uname | tr '[:upper:]' '[:lower:]')
-    cpuArch=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/x64/')
-    if test -f "$dir/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook"
-    then
-      "$dir/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook" "$@"
-    elif test -f "$dir/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook"
-    then
-      "$dir/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook" "$@"
-    elif test -f "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook"
-    then
-      "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook" "$@"
-    elif test -f "$dir/node_modules/lefthook/bin/index.js"
-    then
-      "$dir/node_modules/lefthook/bin/index.js" "$@"
-    
-    elif go tool lefthook -h >/dev/null 2>&1
-    then
-      go tool lefthook "$@"
-    elif bundle exec lefthook -h >/dev/null 2>&1
-    then
-      bundle exec lefthook "$@"
-    elif yarn lefthook -h >/dev/null 2>&1
-    then
-      yarn lefthook "$@"
-    elif pnpm lefthook -h >/dev/null 2>&1
-    then
-      pnpm lefthook "$@"
-    elif swift package lefthook >/dev/null 2>&1
-    then
-      swift package --build-path .build/lefthook --disable-sandbox lefthook "$@"
-    elif command -v mint >/dev/null 2>&1
-    then
-      mint run csjones/lefthook-plugin "$@"
-    elif uv run lefthook -h >/dev/null 2>&1
-    then
-      uv run lefthook "$@"
-    elif mise exec -- lefthook -h >/dev/null 2>&1
-    then
-      mise exec -- lefthook "$@"
-    else
-      echo "Can't find lefthook in PATH"
-    fi
-  fi
-}
+# Idempotent: a message that already carries one (hand-written, or this is
+# a --amend of a commit we already signed off) is left untouched.
+if grep -qi "^Signed-off-by:" "$COMMIT_MSG_FILE"; then
+  exit 0
+fi
 
-call_lefthook run "prepare-commit-msg" "$@"
+name=$(git config user.name)
+email=$(git config user.email)
+
+# Nothing sane to write -- leave it to commitlint to reject with a clear
+# error rather than inject a blank/malformed trailer.
+if [ -z "$name" ] || [ -z "$email" ]; then
+  exit 0
+fi
+
+if [ -s "$COMMIT_MSG_FILE" ]; then
+  printf '\nSigned-off-by: %s <%s>\n' "$name" "$email" >> "$COMMIT_MSG_FILE"
+else
+  printf 'Signed-off-by: %s <%s>\n' "$name" "$email" >> "$COMMIT_MSG_FILE"
+fi

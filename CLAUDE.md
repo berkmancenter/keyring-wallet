@@ -66,10 +66,41 @@ Note: emulators/simulators cannot do hardware attestation — the app silently f
 
 ## Commit conventions
 
+**Non-negotiable, no exceptions:** every commit, in either repo, made by a human or an
+agent, carries both a valid cryptographic signature and a `Signed-off-by:` trailer as the
+last line. This slipped twice before — two `main`-bound commits merged with no trailer at
+all, back when this file wrongly documented the rule as bifold-only and nothing auto-added
+one. Both gaps are closed below.
+
 - Conventional commits enforced by commitlint: `feat|fix|docs|style|refactor|perf|test|chore|revert`, lower-case type.
-- Commits in the `bifold/` submodule require a `Signed-off-by:` trailer as the **last line** of the message (commitlint rejects anything after it), naming the commit's own author — i.e. your configured `user.name` / `user.email`, the same as `git commit -s` produces. A sign-off is an attestation by whoever made the commit, so never sign off as another contributor. Do not add agent co-author trailers to bifold commits.
-- For message-only rewrites in bifold, use `git commit-tree -S` (SSH signing) to keep commits Verified; fallback `git commit -S -F msg.txt` with `HUSKY=0`.
-- Every commit on `main` (both repos) must also be cryptographically signed and verified by GitHub — enforced by branch protection and by the `commit-checks` CI workflow. `.husky/pre-commit` (root) and `bifold/.githooks/pre-commit` only check that `commit.gpgsign` is enabled locally, since a hook can't see the signature itself (git signs after hooks run).
+- **Signing** is checked locally by `scripts/check-commit-signing.sh` (run from
+  `.husky/pre-commit`), which fails the commit if `commit.gpgsign` isn't `true`. This
+  repo's `.git/config` already sets it once per clone, so every worktree inherits it —
+  there's normally nothing to configure yourself. The actual verification of the
+  signature happens server-side: GitHub branch protection and the `commit-checks` CI
+  workflow, on `main` in both repos — a hook can't see the signature itself, since git
+  signs after hooks run. A `U` from `git log --show-signature` (a valid signature this
+  machine's local key store doesn't vouch for) is not a failure.
+- **Sign-off** is auto-appended by `.husky/prepare-commit-msg` when a message doesn't
+  already have one, using `git config user.name`/`user.email` — you don't need to
+  remember `-s`. It's idempotent (a message that already carries a trailer is left alone,
+  so `--amend` and squash are safe). `commit-msg` (commitlint) still rejects a commit with
+  no trailer at all, as a backstop for a checkout where hooks aren't installed. A sign-off
+  names whoever made the commit, so never override `user.name`/`user.email` to sign off as
+  someone else, and do not add agent co-author trailers to bifold commits.
+- **Never bypass either check instead of satisfying it** — `--no-verify`, `--no-gpg-sign`,
+  `-c commit.gpgsign=false`, `HUSKY=0`/`SKIP=...`. `HUSKY=0` has exactly one sanctioned
+  use, the bifold message-only rewrite below, and even there only alongside `-S` and a
+  trailer, never on its own.
+- **Verify a commit right after making it**, before treating the work as done: `git log
+  -1 --format='%H %G? %(trailers:key=Signed-off-by,valueonly)'`. If either field is
+  missing on a commit **not yet pushed**, fix it in place (`git commit --amend -s`,
+  re-signed automatically). If it's already pushed, don't rewrite it unilaterally — flag
+  it and let a human decide, since that needs a force-push and affects whoever already
+  has it.
+- For message-only rewrites in bifold, use `git commit-tree -S` (SSH signing) to keep
+  commits Verified; fallback `git commit -S -F msg.txt` with `HUSKY=0` — the one
+  sanctioned use of `HUSKY=0` above.
 
 ## Ongoing upgrade work
 
