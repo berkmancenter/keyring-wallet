@@ -1,0 +1,12 @@
+# Never commit a keystore, its keys, its passcode, a venv or a publish tree.
+.venv/
+venv/
+__pycache__/
+*.pyc
+keystore*/
+.keyring-sedi-k1*/
+*-keystore/
+keys/
+publish/
+*.token
+*.passcode

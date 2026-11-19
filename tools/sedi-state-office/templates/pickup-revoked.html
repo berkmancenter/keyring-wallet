@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Guardian card revoked · Demo</title>
+    <!-- The same pick-up page after the card was revoked: no QR and no Open in Keyring link. Placeholders and the rules for filling them: README.md beside this file. -->
+    <style>
+      :root {
+        --bg: #f4f5f6;
+        --panel: #fff;
+        --fg: #1d2125;
+        --muted: #5b636b;
+        --line: #d7dbdf;
+        --danger: #a3242b;
+        --danger-bg: #fbeaeb;
+        --banner-bg: #3b3f44;
+        --banner-fg: #fff;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #15181b;
+          --panel: #1e2226;
+          --fg: #e7eaed;
+          --muted: #a3abb3;
+          --line: #353b41;
+          --danger: #f08a8f;
+          --danger-bg: #3a1d20;
+          --banner-bg: #2a2e33;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          17px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+      }
+      .banner {
+        background: var(--banner-bg);
+        color: var(--banner-fg);
+        padding: 10px 16px;
+        text-align: center;
+        font-size: 14px;
+      }
+      main {
+        max-width: 520px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .eyebrow {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 2px 0 0;
+        font-size: 26px;
+        line-height: 1.25;
+      }
+      .panel {
+        background: var(--danger-bg);
+        border: 2px solid var(--danger);
+        border-radius: 14px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .panel strong {
+        color: var(--danger);
+        font-size: 19px;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 4px 12px;
+        margin: 0;
+        font-size: 14px;
+      }
+      dt {
+        color: var(--muted);
+      }
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      footer {
+        color: var(--muted);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="banner" role="note">
+      <strong>{{stateName}} (Demo)</strong>: a test issuer for Keyring, not a
+      government service. This is a demo card. {{notIssuedBy}}
+    </div>
+    <main>
+      <div>
+        <p class="eyebrow">{{stateName}} · Demo</p>
+        <h1>This Guardian card was revoked</h1>
+      </div>
+      <section class="panel" role="status">
+        <strong>Revoked on {{revokedAt}}</strong>
+        <span
+          >It can no longer be picked up. A phone that already has it shows it
+          as revoked the next time it checks.</span
+        >
+      </section>
+      <dl>
+        <dt>Issued</dt>
+        <dd>{{issuedAt}}</dd>
+        <dt>Revoked</dt>
+        <dd>{{revokedAt}}</dd>
+        <dt>Status</dt>
+        <dd><a href="{{statusJsonUrl}}">Check the current status</a></dd>
+      </dl>
+      <footer>Published by a demo issuer at {{host}}.</footer>
+    </main>
+  </body>
+</html>
