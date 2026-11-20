@@ -15,7 +15,13 @@ import Toast, { type ToastShowParams } from 'react-native-toast-message'
 
 import { ToastType } from '../../../components/toast/BaseToast'
 
-import { KeyringLinkError, keyringAgentLinkKind, routeKeyringAgentLink, type MyAgentDestination } from './vtiLinks'
+import {
+  KeyringLinkError,
+  keyringAgentLinkKind,
+  LinkNotOurs,
+  routeKeyringAgentLink,
+  type MyAgentDestination,
+} from './vtiLinks'
 
 /** What to tell the person while and after a link is opened. */
 export type KeyringLinkNotice =
@@ -32,14 +38,20 @@ export async function openKeyringLink(
   navigate: (destination: MyAgentDestination) => void,
   notify: (notice: KeyringLinkNotice) => void
 ): Promise<void> {
-  // A did:webvh is resolved, and a community's invitation offer redeemed, over
-  // the network; everything else is read from the link itself and answers at once.
+  // A did:webvh is resolved, a community's invitation offer redeemed and a join code read over the network;
+  // everything else is read from the link itself and answers at once.
   const kind = keyringAgentLinkKind(link)
-  if (kind === 'did' || kind === 'invitationOffer') notify({ kind: 'reading' })
+  if (kind === 'did' || kind === 'invitationOffer' || kind === 'joinLink') notify({ kind: 'reading' })
   try {
     await routeKeyringAgentLink(link, agent, navigate)
     notify({ kind: 'opened' })
   } catch (error) {
+    // Not ours after all: an opened link of that shape did nothing before, and does nothing now. The "reading"
+    // notice is taken down.
+    if (error instanceof LinkNotOurs) {
+      notify({ kind: 'opened' })
+      return
+    }
     notify({ kind: 'unusable', message: error instanceof KeyringLinkError ? error.message : undefined })
   }
 }

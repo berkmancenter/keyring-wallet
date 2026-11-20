@@ -523,6 +523,12 @@ const refusalOf = (plaintext: DidCommV2PlaintextMessage): VtiRefusal | undefined
 }
 
 /**
+ * How long a manifest a join code brought waits for the read it replaces (`manifestFromLink`): long enough for Join
+ * to open after the scan, short enough that a read made later, for any other reason, asks the community.
+ */
+const LINK_MANIFEST_MS = 60_000
+
+/**
  * Whether an answer naming `named` is about the community `asked`. A did:webvh is the same community wherever it is
  * hosted: its SCID (the segment after the method) is fixed for its life while the host can move, so two webvh DIDs
  * with one SCID are one community. Anything else must match exactly.
@@ -2447,6 +2453,13 @@ class VtiAgentController {
    */
   async fetchManifest(communityDid: string, agent?: Agent, prefer?: JoinWire): Promise<VtiManifest> {
     const withAgent = agent ?? this.agent
+    // A manifest a join code brought, checked as the community's own: it serves this one read (`manifestFromLink`).
+    // Not a read made for a version (`prefer`): that one follows a refusal, and asks the community.
+    const brought = prefer ? undefined : this.broughtByLink.get(communityDid)
+    if (brought) {
+      this.broughtByLink.delete(communityDid)
+      if (Date.now() - brought.at < LINK_MANIFEST_MS) return brought.manifest
+    }
     // Packing to the community resolves its document; warm that resolution
     // patiently so a tunnel's rate limit does not surface as a failed send.
     if (withAgent) await resolveDidDocumentRetrying(withAgent, communityDid)
@@ -2519,6 +2532,26 @@ class VtiAgentController {
   /** The manifest `communityDid` last answered the current identity with, this run, if it has. Read offline. */
   lastManifest(communityDid: string): VtiManifest | undefined {
     return this.manifests.get(this.manifestKey(communityDid))
+  }
+
+  /**
+   * Manifests that came attached to a join code (joinLink), by community, each waiting for the one read it replaces.
+   * In memory only.
+   */
+  private broughtByLink = new Map<string, { manifest: VtiManifest; at: number }>()
+
+  /**
+   * A join code brought `communityDid`'s manifest with it, and the caller has checked it is the community's own and
+   * current (`attachedManifest`: its proof under the community's DID). It is learned as a read is, so the name the
+   * community publishes shows at once, and it serves the next `fetchManifest` in place of asking again: once, and
+   * only for a short while. Every read after that asks the community. It is the community's public answer, the one
+   * it gives an asker it does not know.
+   */
+  manifestFromLink(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): void {
+    this.broughtByLink.set(communityDid, {
+      manifest: this.learnManifest(communityDid, agent, manifest),
+      at: Date.now(),
+    })
   }
 
   private learnManifest(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): VtiManifest {

@@ -30,6 +30,7 @@ import { agentHomeScreen } from '../screens/agentHome'
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
 import { sameIdentity } from './didScid'
+import { attachedManifest, isWebInteractionLink, joinLinkShape, readJoinLink } from './joinLink'
 import { isSharedConnectEnabled } from './sharedConnectFlag'
 import {
   readTrigger,
@@ -42,6 +43,7 @@ import {
 import { GenericRecordsCommunityStore, isCurrentMembership } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import { vtaAgent } from './vtaAgent'
+import { vtiAgent } from './vtiAgent'
 import { communityTarget, isCommunityLink, parseCommunityLink } from './vtiCommunityLink'
 import { isVtiInvitationLink, parseVtiInvitationLink } from './vtiInvitation'
 import {
@@ -67,6 +69,12 @@ export class KeyringLinkError extends Error {
     super(message)
   }
 }
+
+/**
+ * A link claimed by its shape that, once read, is not ours after all (a link with `_oobid` whose answer is not a join
+ * code): whoever routed it goes on as if it had never been claimed. Never shown to the person.
+ */
+export class LinkNotOurs extends Error {}
 
 /** A KeyringLinkError in the person's language where the screen can translate it, else as written. */
 export const keyringLinkErrorText = (e: KeyringLinkError, t?: (key: string) => string): string =>
@@ -99,11 +107,15 @@ export type KeyringAgentLinkKind =
   | 'invitationOffer'
   | 'ticket'
   | 'community'
+  | 'joinLink'
   | 'did'
   | 'otherDid'
   | 'guardianCard'
 
-/** Which of our links this is, if any — cheap, no parsing beyond the prefix. */
+/**
+ * Which of our links this is, if any: cheap, with no parsing beyond the prefix, but for a link with an inline
+ * invitation (`_oob`), which is decoded to see whether it is a join code.
+ */
 export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undefined {
   const trimmed = text.trim()
   // An agent host's automatic connection: JSON with a callback. Claimed even
@@ -126,6 +138,10 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   if (isInvitationOfferLink(trimmed)) return 'invitationOffer'
   if (isTicketUri(trimmed)) return 'ticket'
   if (isCommunityLink(trimmed)) return 'community'
+  // A community's join code as other wallets read it (joinLink): a link to ask (`_oobid`, `iuv=1`), an invitation
+  // carried inline whose goal is joining, or anything under `web+interaction:`. A link that has to be asked is claimed
+  // before it is known to be a join code; one that is not is handed on (`LinkNotOurs`).
+  if (isWebInteractionLink(trimmed) || joinLinkShape(trimmed)) return 'joinLink'
   // A bare did:webvh — what upstream's QR codes carry for an agent or a
   // community (the VTC page, `pnm vta qr`, the browser plugin).
   const did = bareDid(trimmed)
@@ -384,6 +400,55 @@ async function routeBareDid(
   }
 }
 
+/** What a join code that cannot be used says, each in words. */
+export const JOIN_LINK_WORDS = {
+  cantUse: "Keyring can't use this code yet.",
+  unreadable: "This code couldn't be read. Check your connection and try again.",
+  expired: 'This join code has expired. Ask the community for a new one.',
+  notACommunity: "This join code doesn't lead to a community Keyring can join.",
+} as const
+
+/**
+ * A community's join code as a link (joinLink): read, and when it is a join code, Join opens for the community it is
+ * from, as it does for that community's scanned DID. The goal code alone decides; a join code never becomes a
+ * contact, a sign-in or an agent link, and one that cannot be used says why.
+ *
+ * A link that had to be asked and is not a join code is handed on when another reader took it before
+ * (`LinkNotOurs`), and answered in words when only this path reads it (`web+interaction:`).
+ */
+async function routeJoinLink(
+  text: string,
+  agent: Agent,
+  navigate: (destination: MyAgentDestination) => void
+): Promise<void> {
+  const shape = joinLinkShape(text)
+  if (!shape) throw new KeyringLinkError(JOIN_LINK_WORDS.cantUse)
+  const read = await readJoinLink(shape)
+  // The kind alone: a link's id and host are whoever made it.
+  agent?.config?.logger?.info(`[Join link] ${shape.via}: ${read.kind}`)
+  if (read.kind === 'notJoin' || read.kind === 'unreadable') {
+    if (shape.via === 'fetch' && shape.passOn) throw new LinkNotOurs()
+    throw new KeyringLinkError(read.kind === 'unreadable' ? JOIN_LINK_WORDS.unreadable : JOIN_LINK_WORDS.cantUse)
+  }
+  if (read.kind === 'expired') throw new KeyringLinkError(JOIN_LINK_WORDS.expired)
+  if (read.kind === 'unusable') throw new KeyringLinkError(JOIN_LINK_WORDS.notACommunity)
+  // The DID is whatever the link says. It is joined only when its own document says it is a community: a code that
+  // both an agent and a community answer to is a community here, since the code asked to join.
+  const kind = await classifyDid(agent, read.communityDid)
+  if (kind.kind !== 'community' && kind.kind !== 'ambiguous') {
+    throw new KeyringLinkError(
+      kind.kind === 'unresolvable' && kind.reason === 'offline'
+        ? JOIN_LINK_WORDS.unreadable
+        : JOIN_LINK_WORDS.notACommunity
+    )
+  }
+  // The manifest it brought, when it is the community's own: Join shows it without asking again.
+  const manifest = await attachedManifest(agent, read.communityDid, read.manifest)
+  if (manifest) vtiAgent.manifestFromLink(read.communityDid, agent, manifest)
+  communityTarget.set({ communityDid: read.communityDid })
+  navigate(communityLinkReturn.take() ? 'VtiInvited' : 'VtiJoin')
+}
+
 /** A screen a link lands on, inside the My Agent stack. Not SignIn: that one is reached only with its code (below). */
 export type MyAgentScreenName =
   | 'VtaLink'
@@ -629,6 +694,8 @@ export async function routeKeyringAgentLink(
       navigate(communityLinkReturn.take() ? 'VtiInvited' : 'VtiJoin')
       return
     }
+    case 'joinLink':
+      return routeJoinLink(trimmed, agent, navigate)
     case 'did':
       return routeBareDid(bareDid(trimmed) as string, agent, navigate)
     case 'otherDid':

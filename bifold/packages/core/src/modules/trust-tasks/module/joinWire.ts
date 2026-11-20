@@ -46,6 +46,16 @@ export const joinTaskType = (task: JoinTask, wire: JoinWire): string => `${FAMIL
 /** The Trust Task `type` of the join manifest at one of its versions. */
 export const manifestTaskType = (wire: ManifestWire): string => `${FAMILY.manifest}/${wire}`
 
+/** Whether `type` is the join submit task, at any version: what a join code's goal code names (joinLink). */
+export const isJoinSubmitType = (type: unknown): boolean =>
+  typeof type === 'string' &&
+  type.startsWith(`${FAMILY.submit}/`) &&
+  /^\d+(\.\d+)+$/.test(type.slice(FAMILY.submit.length + 1))
+
+/** The manifest version a document `type` is the answer of (`…/manifest/<version>#response`), among those read here. */
+export const manifestWireOfResponse = (type: unknown): ManifestWire | undefined =>
+  MANIFEST_WIRES.find((wire) => type === `${manifestTaskType(wire)}#response`)
+
 /** Every manifest `type` this wallet may send: each is a read. */
 export const JOIN_MANIFEST_TYPES: readonly string[] = MANIFEST_WIRES.map(manifestTaskType)
 

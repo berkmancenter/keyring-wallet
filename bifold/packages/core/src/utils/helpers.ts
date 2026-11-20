@@ -40,7 +40,12 @@ import { BifoldLogger } from '../services/logger'
 import { Role } from '../types/chat'
 import { BifoldError } from '../types/error'
 import { Screens, Stacks, TabStacks } from '../types/navigators'
-import { keyringAgentLinkKind, myAgentLinkParams, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
+import {
+  keyringAgentLinkKind,
+  LinkNotOurs,
+  myAgentLinkParams,
+  routeKeyringAgentLink,
+} from '../modules/trust-tasks/module/vtiLinks'
 import {
   CredentialDataForProof,
   ProofCredentialAttributes,
@@ -1306,13 +1311,19 @@ export const connectFromScanOrDeepLink = async (
   // An agent enrolment offer or a community invitation: ours, not DIDComm, and
   // needing no mediator — routed before the transport wait below.
   if (keyringAgentLinkKind(uri)) {
-    await routeKeyringAgentLink(uri, agent, (destination) =>
-      navigation.navigate(Stacks.TabStack as any, {
-        screen: TabStacks.MyAgentStack,
-        params: myAgentLinkParams(destination),
-      })
-    )
-    return
+    try {
+      await routeKeyringAgentLink(uri, agent, (destination) =>
+        navigation.navigate(Stacks.TabStack as any, {
+          screen: TabStacks.MyAgentStack,
+          params: myAgentLinkParams(destination),
+        })
+      )
+      return
+    } catch (error) {
+      // A link that had to be asked whether it is a community's join code, and is not one (joinLink): it goes on
+      // below, untouched, as it always has.
+      if (!(error instanceof LinkNotOurs)) throw error
+    }
   }
 
   if (isDeepLink) {
