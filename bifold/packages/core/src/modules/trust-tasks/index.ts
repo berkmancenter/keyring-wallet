@@ -39,6 +39,11 @@ export {
   isTspCarriageEnabled,
   setDidCommV2Enabled,
   isDidCommV2Enabled,
+  canMintV2Invitation,
+  DIDCOMM_V2_ON_BY_DEFAULT,
+  DIDCOMM_V2_MINT_REMOTE_OFF,
+  TSP_CARRIAGE_ON_BY_DEFAULT,
+  TSP_SEND_REMOTE_OFF,
   selectCarriage,
   TRUST_TASKS_MIN_RCE_VERSION,
 } from './ceremony'
@@ -110,7 +115,22 @@ export { trustTaskPromptStore } from './trustTaskPromptStore'
 export type { PendingTrustTaskPrompt } from './trustTaskPromptStore'
 export { trustTaskDisplayRegistry } from './display/trustTaskDisplayRegistry'
 export { registerTrustTaskDisplay } from './display/register'
-export { findV2MediationRecord, getRoutingForV2, provisionV2Mediation, startV2MessagePickup } from './v2Routing'
+export {
+  findV2MediationRecord,
+  getRoutingForV2,
+  routingForInvitation,
+  provisionV2Mediation,
+  startV2MessagePickup,
+  setV2MediationEnabled,
+  isV2MediationEnabled,
+} from './v2Routing'
+export {
+  advertiseTspCarriage,
+  askPeerReadsTsp,
+  peerReadsTsp,
+  recordPeerReadsTsp,
+  TSP_ENVELOPE_PROTOCOL_URI,
+} from './module/contactTspCapability'
 export {
   VtiMediatorSession,
   VtiMediatorOutboundTransport,

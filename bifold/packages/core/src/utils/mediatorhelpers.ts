@@ -1,6 +1,8 @@
 import { Agent } from '@credo-ts/core'
 import { DidCommMediationRecord } from '@credo-ts/didcomm'
 
+import { routingForInvitation } from '../modules/trust-tasks/v2Routing'
+
 export const isMediatorInvitation = async (agent: Agent, url: string): Promise<boolean> => {
   try {
     const invitation = await agent.modules.didcomm.oob.parseInvitation(url)
@@ -32,12 +34,20 @@ const provisionMediationRecordFromMediatorUrl = async (
     }
 
     const outOfBandRecord = await agent.modules.didcomm.oob.findByReceivedInvitationId(invitation.id)
-    let [connection] = outOfBandRecord ? await agent.modules.didcomm.connections.findAllByOutOfBandId(outOfBandRecord.id) : []
+    let [connection] = outOfBandRecord
+      ? await agent.modules.didcomm.connections.findAllByOutOfBandId(outOfBandRecord.id)
+      : []
 
     if (!connection) {
       agent.config.logger.warn(`No connection found for out-of-band record: ${outOfBandRecord?.id}`)
       const invite = await agent.modules.didcomm.oob.parseInvitation(url)
-      const { connectionRecord: newConnection } = await agent.modules.didcomm.oob.receiveInvitation(invite)
+      // A v2 invitation needs v2 routing (routingForInvitation): the default mediator cannot route it. Always a config
+      // object: this Credo's receiveInvitation destructures it, so none at all throws.
+      const routing = await routingForInvitation(agent, invite)
+      const { connectionRecord: newConnection } = await agent.modules.didcomm.oob.receiveInvitation(
+        invite,
+        routing ? { routing } : {}
+      )
 
       if (!newConnection) {
         agent.config.logger.error(`Failed to create connection from invitation: ${JSON.stringify(invite, null, 2)}`)
@@ -46,7 +56,9 @@ const provisionMediationRecordFromMediatorUrl = async (
       connection = newConnection
     }
 
-    const result = connection.isReady ? connection : await agent.modules.didcomm.connections.returnWhenIsConnected(connection.id)
+    const result = connection.isReady
+      ? connection
+      : await agent.modules.didcomm.connections.returnWhenIsConnected(connection.id)
     return agent.modules.didcomm.mediationRecipient.provision(result)
   } catch (error) {
     agent.config.logger.error(`Failed to get connection ID from mediator URL: ${error}`)

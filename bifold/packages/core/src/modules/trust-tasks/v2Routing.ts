@@ -23,6 +23,23 @@ import { DidCommMediationState, DidCommMediatorPickupStrategy } from '@credo-ts/
 
 const LOG_PREFIX = '[TrustTasks:V2Mediation]'
 
+/**
+ * The v2 mailbox switch: whether this phone uses Coordinate Mediation 2.0 at all (provisions it, runs its Pickup 4.0
+ * loop, and mints out-of-band/2.0 invitations through it). OFF by default, and independent of accepting DIDComm v2:
+ * a phone accepts v2 by default, but a v2 invitation it mints must name a mailbox a peer can deliver to, and a phone
+ * has outbound transports only (tsp-reference/ref-17). Without a v2 mailbox the phone mints v1. The wallet app sets
+ * it at start-up from its saved setting.
+ */
+let v2MediationEnabled = false
+
+export function setV2MediationEnabled(enabled: boolean): void {
+  v2MediationEnabled = enabled
+}
+
+export function isV2MediationEnabled(): boolean {
+  return v2MediationEnabled
+}
+
 /** The granted Coordinate Mediation 2.0 record, if this wallet has one. */
 export async function findV2MediationRecord(agent: Agent): Promise<DidCommMediationRecord | undefined> {
   const records = await agent.modules.didcomm.mediationRecipient.getMediators()
@@ -40,6 +57,19 @@ export async function getRoutingForV2(agent: Agent): Promise<DidCommRouting> {
   const v2 = await findV2MediationRecord(agent)
   if (v2) return agent.modules.didcomm.mediationRecipient.getRouting({ mediatorId: v2.id })
   return agent.modules.didcomm.mediationRecipient.getRouting({ useDefaultMediator: false })
+}
+
+/**
+ * The routing to accept an invitation with: for an out-of-band/2.0 invitation, {@link getRoutingForV2}, because the
+ * default (v1) mediator cannot route a did:peer:2 and Credo throws "DIDComm v2 OOB with mediated routing requires
+ * Coordinate Mediation 2.0" (tsp-reference/ref-17 finding 1); for a v1 invitation, undefined, so Credo routes through
+ * the default mediator exactly as before. Every path that accepts an invitation goes through this.
+ */
+export async function routingForInvitation(
+  agent: Agent,
+  invitation: { v2Invitation?: unknown } | null | undefined
+): Promise<DidCommRouting | undefined> {
+  return invitation?.v2Invitation ? getRoutingForV2(agent) : undefined
 }
 
 /**
@@ -88,6 +118,11 @@ export async function provisionV2Mediation(
  * every running loop first (the anti-stacking guard), the v4 start does not.
  */
 export async function startV2MessagePickup(agent: Agent): Promise<boolean> {
+  // Off, no second loop runs, even on a phone that provisioned a v2 record while the switch was on. That strands what
+  // reaches its v2 connections: their mail waits uncollected in the v2 mailbox until the switch is on again. Accepted
+  // (Alberto, 2026-11-20: no Pickup 4.0 loop for anyone with the switch off); only a phone that turned the switch on
+  // has such connections, and no store build ships a v2 mailbox.
+  if (!v2MediationEnabled) return false
   const record = await findV2MediationRecord(agent)
   if (!record) return false
   await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(record, DidCommMediatorPickupStrategy.PickUpV4)

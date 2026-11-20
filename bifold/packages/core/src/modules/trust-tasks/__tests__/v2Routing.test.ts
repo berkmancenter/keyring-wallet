@@ -4,7 +4,15 @@
  */
 import { DidCommMediationState, DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
 
-import { findV2MediationRecord, getRoutingForV2, provisionV2Mediation, startV2MessagePickup } from '../v2Routing'
+import {
+  findV2MediationRecord,
+  getRoutingForV2,
+  isV2MediationEnabled,
+  provisionV2Mediation,
+  routingForInvitation,
+  setV2MediationEnabled,
+  startV2MessagePickup,
+} from '../v2Routing'
 
 const v1 = { id: 'm-v1', protocolVersion: 'v1', state: DidCommMediationState.Granted }
 const v2 = { id: 'm-v2', protocolVersion: 'v2', state: DidCommMediationState.Granted, routingDid: 'did:peer:2.Ez6…' }
@@ -88,7 +96,23 @@ describe('provisionV2Mediation', () => {
 })
 
 describe('startV2MessagePickup', () => {
-  it('starts Pickup 4.0 for the v2 record and reports whether it did', async () => {
+  afterEach(() => setV2MediationEnabled(false))
+
+  it('the v2 mailbox is off as shipped', () => {
+    jest.isolateModules(() => {
+      expect((require('../v2Routing') as typeof import('../v2Routing')).isV2MediationEnabled()).toBe(false)
+    })
+    expect(isV2MediationEnabled()).toBe(false)
+  })
+
+  it('with the v2 mailbox off, no Pickup 4.0 loop starts, even for a v2 record provisioned while it was on', async () => {
+    const { agent, recipient } = fakeAgent([v1, v2])
+    expect(await startV2MessagePickup(agent)).toBe(false)
+    expect(recipient.initiateMessagePickup).not.toHaveBeenCalled()
+  })
+
+  it('CONTROL: with the v2 mailbox on, it starts Pickup 4.0 for the v2 record and reports whether it did', async () => {
+    setV2MediationEnabled(true)
     const { agent, recipient } = fakeAgent([v1, v2])
     expect(await startV2MessagePickup(agent)).toBe(true)
     expect(recipient.initiateMessagePickup).toHaveBeenCalledWith(v2, DidCommMediatorPickupStrategy.PickUpV4)
@@ -96,5 +120,24 @@ describe('startV2MessagePickup', () => {
     const none = fakeAgent([v1])
     expect(await startV2MessagePickup(none.agent)).toBe(false)
     expect(none.recipient.initiateMessagePickup).not.toHaveBeenCalled()
+  })
+})
+
+describe('routingForInvitation: every accept path routes a v2 invitation the v2 way', () => {
+  it('a v2 invitation: v2 routing (the v2 record, or unmediated), never the v1 default', async () => {
+    const withRecord = fakeAgent([v1, v2])
+    await expect(routingForInvitation(withRecord.agent, { v2Invitation: {} })).resolves.toEqual({
+      options: { mediatorId: 'm-v2' },
+    })
+    const without = fakeAgent([v1])
+    await expect(routingForInvitation(without.agent, { v2Invitation: {} })).resolves.toEqual({
+      options: { useDefaultMediator: false },
+    })
+  })
+
+  it('CONTROL: a v1 invitation: undefined, so Credo routes through the default mediator exactly as before', async () => {
+    const { agent, recipient } = fakeAgent([v1, v2])
+    await expect(routingForInvitation(agent, {})).resolves.toBeUndefined()
+    expect(recipient.getRouting).not.toHaveBeenCalled()
   })
 })

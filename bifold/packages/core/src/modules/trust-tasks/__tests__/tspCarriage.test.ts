@@ -62,7 +62,13 @@ jest.mock('@bifold/credo-tsp-adapter', () => {
     unpackForConnection: async (
       _agent: unknown,
       envelope: Uint8Array,
-      connection: { id: string; did?: string; theirDid?: string; previousDids?: string[]; previousTheirDids?: string[] },
+      connection: {
+        id: string
+        did?: string
+        theirDid?: string
+        previousDids?: string[]
+        previousTheirDids?: string[]
+      },
       resolver: unknown
     ) => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -95,12 +101,34 @@ type FakeConnection = {
   didcommVersion?: 'v1' | 'v2'
   previousDids?: string[]
   previousTheirDids?: string[]
+  /** What the contact said about reading TSP (contactTspCapability.ts), kept on the record. */
+  tspCapability?: { reads: boolean; at: number; from: 'discovery' | 'envelope' }
 }
 
-function makeFakeAgent(connections: Record<string, FakeConnection>) {
+function makeFakeAgent(
+  connections: Record<string, FakeConnection>,
+  discovery: { queryFeatures: jest.Mock } = { queryFeatures: jest.fn(async () => ({ features: [] })) }
+) {
   const sent: unknown[] = []
+  const record = (id: string) => {
+    const conn = connections[id]
+    if (!conn) return undefined
+    return {
+      id,
+      ...conn,
+      metadata: {
+        get: (key: string) => (key === 'keyring:tspCarriage' ? (conn.tspCapability ?? null) : null),
+        set: (key: string, value: FakeConnection['tspCapability']) => {
+          if (key === 'keyring:tspCarriage') conn.tspCapability = value
+        },
+      },
+    }
+  }
   let registeredHandler:
-    | ((messageContext: { message: TspEnvelopeMessage; connection: { id: string } & FakeConnection }) => Promise<unknown>)
+    | ((messageContext: {
+        message: TspEnvelopeMessage
+        connection: { id: string } & FakeConnection
+      }) => Promise<unknown>)
     | undefined
 
   const container = {
@@ -126,11 +154,14 @@ function makeFakeAgent(connections: Record<string, FakeConnection>) {
       didcomm: {
         connections: {
           getById: async (id: string) => {
-            const conn = connections[id]
+            const conn = record(id)
             if (!conn) throw new Error(`fake connections: no connection ${id}`)
-            return { id, ...conn }
+            return conn
           },
+          findById: async (id: string) => record(id) ?? null,
+          update: async () => undefined,
         },
+        discovery,
       },
     },
   }
@@ -212,54 +243,109 @@ describe('carriage selection (ceremony.ts)', () => {
     issueRCardForAcceptedExchange: jest.fn(),
   }))
 
+  const ceremony = () => require('../ceremony') as typeof import('../ceremony')
+  const capability = () => require('../module/contactTspCapability') as typeof import('../module/contactTspCapability')
+  const yes = { reads: true, at: Date.now(), from: 'discovery' as const }
+  const freshNo = { reads: false, at: Date.now(), from: 'discovery' as const }
+
   afterEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require('../ceremony').setTspCarriageEnabled(false)
+    ceremony().setTspCarriageEnabled(true)
+    ceremony().TSP_SEND_REMOTE_OFF.off = false
+    capability().resetTspCapabilityQuestions()
   })
 
-  test('defaults to the DIDComm-v1 carriage', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { sendTrustTaskDocument, isTspCarriageEnabled } = require('../ceremony')
-    expect(isTspCarriageEnabled()).toBe(false)
-
-    const did = 'did:example:default-carriage'
-    registerIdentity(did)
-    const { agent, sent } = makeFakeAgent({ 'conn-1': { did, theirDid: did } })
-
-    await sendTrustTaskDocument(agent, 'conn-1', { type: 'x', id: '1' })
-    expect(sent[0]).not.toBeInstanceOf(TspEnvelopeMessage)
+  test('TSP carriage is on as shipped', () => {
+    jest.isolateModules(() => {
+      const fresh = require('../ceremony') as typeof import('../ceremony')
+      expect(fresh.TSP_CARRIAGE_ON_BY_DEFAULT).toBe(true)
+      expect(fresh.isTspCarriageEnabled()).toBe(true)
+    })
   })
 
-  test('setTspCarriageEnabled(true) switches sendTrustTaskDocument onto the TSP carriage', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { sendTrustTaskDocument, setTspCarriageEnabled, isTspCarriageEnabled } = require('../ceremony')
-    setTspCarriageEnabled(true)
-    expect(isTspCarriageEnabled()).toBe(true)
-
+  test('CONTROL: TSP on, and the contact has said it reads TSP: the document goes as a TSP envelope', async () => {
     const aliceDid = 'did:example:selected-alice'
     const bobDid = 'did:example:selected-bob'
     registerIdentity(aliceDid)
     registerIdentity(bobDid)
-    const { agent, sent } = makeFakeAgent({ 'conn-1': { did: aliceDid, theirDid: bobDid } })
+    const { agent, sent } = makeFakeAgent({ 'conn-1': { did: aliceDid, theirDid: bobDid, tspCapability: yes } })
 
-    await sendTrustTaskDocument(agent, 'conn-1', { type: 'x', id: '1' })
+    await ceremony().sendTrustTaskDocument(agent, 'conn-1', { type: 'x', id: '1' })
     expect(sent[0]).toBeInstanceOf(TspEnvelopeMessage)
   })
 
-  test.each([
-    [false, 'v1', 'didcomm-v1'],
-    [false, 'v2', 'didcomm-v2'],
-    [true, 'v1', 'tsp'],
-    [true, 'v2', 'tsp'],
-  ])('selectCarriage: TSP flag %s on a %s connection → %s (V2T: TSP rides either DIDComm version)', async (flag, version, expected) => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { selectCarriage, setTspCarriageEnabled } = require('../ceremony')
-    setTspCarriageEnabled(flag)
-    const { agent } = makeFakeAgent({
-      'conn-1': { did: 'did:example:a', theirDid: 'did:example:b', didcommVersion: version as 'v1' | 'v2' },
-    })
-    expect(await selectCarriage(agent, 'conn-1')).toBe(expected)
+  test('TSP on, but nothing is known about the contact: the binding, and the contact is asked once, in the background', async () => {
+    const did = 'did:example:unknown-peer'
+    registerIdentity(did)
+    const queryFeatures = jest.fn(async () => ({ features: [] }))
+    const { agent, sent } = makeFakeAgent({ 'conn-1': { did, theirDid: did } }, { queryFeatures })
+
+    await ceremony().sendTrustTaskDocument(agent, 'conn-1', { type: 'x', id: '1' })
+    expect(sent[0]).not.toBeInstanceOf(TspEnvelopeMessage)
+    expect(queryFeatures).toHaveBeenCalledTimes(1)
+    expect(queryFeatures).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectionId: 'conn-1',
+        protocolVersion: 'v2',
+        queries: [{ featureType: 'protocol', match: capability().TSP_ENVELOPE_PROTOCOL_URI }],
+      })
+    )
   })
+
+  test('TSP on, and the contact said it does not read TSP: the binding, and it is not asked again the same day', async () => {
+    const did = 'did:example:old-build'
+    registerIdentity(did)
+    const queryFeatures = jest.fn(async () => ({ features: [] }))
+    const { agent, sent } = makeFakeAgent(
+      { 'conn-1': { did, theirDid: did, tspCapability: freshNo } },
+      { queryFeatures }
+    )
+
+    await ceremony().sendTrustTaskDocument(agent, 'conn-1', { type: 'x', id: '1' })
+    expect(sent[0]).not.toBeInstanceOf(TspEnvelopeMessage)
+    expect(queryFeatures).not.toHaveBeenCalled()
+  })
+
+  test("a contact's no older than a day is asked again (it may have updated); this send still takes the binding", async () => {
+    const did = 'did:example:stale-no'
+    const queryFeatures = jest.fn(async () => ({ features: [] }))
+    const stale = { reads: false, at: Date.now() - capability().TSP_NO_RECHECK_MS - 1, from: 'discovery' as const }
+    const { agent } = makeFakeAgent({ 'conn-1': { did, theirDid: did, tspCapability: stale } }, { queryFeatures })
+
+    expect(await ceremony().selectCarriage(agent, 'conn-1')).toBe('didcomm-v1')
+    expect(queryFeatures).toHaveBeenCalledTimes(1)
+  })
+
+  test('the release kill beats a contact that reads TSP: the binding', async () => {
+    ceremony().TSP_SEND_REMOTE_OFF.off = true
+    const { agent } = makeFakeAgent({
+      'conn-1': { did: 'did:example:a', theirDid: 'did:example:b', tspCapability: yes },
+    })
+    expect(ceremony().isTspCarriageEnabled()).toBe(false)
+    expect(await ceremony().selectCarriage(agent, 'conn-1')).toBe('didcomm-v1')
+  })
+
+  test.each([
+    [false, 'v1', true, 'didcomm-v1'],
+    [false, 'v2', true, 'didcomm-v2'],
+    [true, 'v1', true, 'tsp'],
+    [true, 'v2', true, 'tsp'],
+    [true, 'v1', false, 'didcomm-v1'],
+    [true, 'v2', false, 'didcomm-v2'],
+  ])(
+    'selectCarriage: TSP setting %s on a %s connection, contact reads TSP %s → %s (TSP rides either DIDComm version)',
+    async (flag, version, reads, expected) => {
+      ceremony().setTspCarriageEnabled(flag)
+      const { agent } = makeFakeAgent({
+        'conn-1': {
+          did: 'did:example:a',
+          theirDid: 'did:example:b',
+          didcommVersion: version as 'v1' | 'v2',
+          tspCapability: reads ? yes : freshNo,
+        },
+      })
+      expect(await ceremony().selectCarriage(agent, 'conn-1')).toBe(expected)
+    }
+  )
 })
 
 describe('TspCarriage over a DIDComm v2 connection whose DID rotated (V2T change 3)', () => {
@@ -299,7 +385,9 @@ describe('TspCarriage over a DIDComm v2 connection whose DID rotated (V2T change
     registerIdentity(strangerDid)
 
     const stranger = makeFakeAgent({ s: { did: strangerDid, theirDid: witnessDid, didcommVersion: 'v2' } })
-    const witness = makeFakeAgent({ s: { did: witnessDid, theirDid: walletDid, didcommVersion: 'v2', previousTheirDids: [] } })
+    const witness = makeFakeAgent({
+      s: { did: witnessDid, theirDid: walletDid, didcommVersion: 'v2', previousTheirDids: [] },
+    })
     let handlerRan = false
     createTspCarriage(witness.agent).onDocument(async () => {
       handlerRan = true

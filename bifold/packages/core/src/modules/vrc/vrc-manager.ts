@@ -2813,27 +2813,15 @@ export const createRelationshipInvitation = async (
   const goalCode = mode === 'bidirectional' ? 'relationship.credential.bidirectional' : 'relationship.credential'
   agent.config.logger.info(`[VRC] Creating out-of-band invitation with goalCode: ${goalCode}`)
 
-  // Developer-flagged DIDComm v2 (didcomm_v2_subtask.md C12): an Out-of-Band 2.0
-  // invitation on did:peer:2. Off, this is the v1 invitation it has always been.
-  // Lazy require, like the other ceremony imports in this file: ceremony.ts imports
+  // DIDComm v2 (didcomm_v2_subtask.md C12): an Out-of-Band 2.0 invitation on did:peer:2, only when this phone has a
+  // v2 mailbox to route it through (canMintV2Invitation, ceremony.ts says why each condition holds). Otherwise the v1
+  // invitation it has always been. Lazy require, like the other ceremony imports in this file: ceremony.ts imports
   // this module's DID helpers, so a static import would be circular.
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  const { isDidCommV2Enabled } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
-  // The flag is a live developer setting, but the agent's own DidCommModule
-  // was configured with `didcommVersions` at construction (bc-agent-modules.ts)
-  // and cannot be changed without a restart. Minting a v2 invitation from an
-  // agent that was never actually built with v2 support produces an
-  // invitation this same agent can't process — check the agent's real
-  // capability, not just the flag, and fail safely back to v1 with a clear
-  // log if they've diverged.
-  const flagWantsV2 = isDidCommV2Enabled()
-  const agentSupportsV2 = agent.modules.didcomm.config.isSupported('v2')
-  if (flagWantsV2 && !agentSupportsV2) {
-    agent.config.logger.warn(
-      '[VRC] DIDComm v2 developer flag is on, but this agent was constructed without v2 support (restart required to apply the toggle) — minting a v1 invitation instead'
-    )
-  }
-  const didCommVersion = flagWantsV2 && agentSupportsV2 ? ('v2' as const) : ('v1' as const)
+  const { canMintV2Invitation } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+  const mint = await canMintV2Invitation(agent)
+  if (!mint.v2) agent.config.logger.info(`[VRC] minting a v1 invitation: ${mint.why}`)
+  const didCommVersion = mint.v2 ? ('v2' as const) : ('v1' as const)
   if (didCommVersion === 'v2')
     agent.config.logger.info('[VRC] DIDComm v2 enabled — creating an out-of-band/2.0 invitation')
   // A v2 invitation routes through the v2 mediator (or unmediated), never the

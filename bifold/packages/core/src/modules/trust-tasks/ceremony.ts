@@ -76,6 +76,8 @@ import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
 import { setupChatInbound } from '../chat/inbound'
 import { createDidCommV2Carriage } from './module/DidCommV2Carriage'
 import { createTspCarriage } from './module/TspCarriage'
+import { advertiseTspCarriage, peerReadsTsp, recordPeerReadsTsp } from './module/contactTspCapability'
+import { findV2MediationRecord, isV2MediationEnabled } from './v2Routing'
 import { hasJcsProof, verifySharedConnectVrc } from './module/sharedConnectCredential'
 import { isSharedConnectEnabled } from './module/sharedConnectFlag'
 import { WITNESS_VERIFIED_TAG } from '../vrc/utils/witnessCredentialUtils'
@@ -90,37 +92,72 @@ import { TrustTasksService, respondWith, rejectWith, extendedCode } from './serv
 const LOG_PREFIX = '[TrustTasks:Ceremony]'
 
 /**
- * Dev/test-only carriage selection — no auto-negotiation yet (the ladder
- * TSP > DIDComm v2 > REST from the parent plan's §4.2 is separate follow-on
- * work). Defaults to false so production behavior is unchanged; e2e and
- * tests opt in explicitly via {@link setTspCarriageEnabled}. See
- * docs/plans/openvtc-integration-plan/2026-09-02-bam.md for why a
- * wallet-to-wallet TSP carriage doesn't need to wait on ecosystem interop.
+ * Wallet-to-wallet TSP carriage: whether this phone may send a Trust Task document as a TSP envelope. On as shipped;
+ * the wallet app applies its own setting at start-up. It decides only what THIS phone may send: a send uses TSP only to
+ * a contact that has said it reads TSP envelopes (contactTspCapability.ts), and the binding otherwise. The envelope's
+ * handler is registered whatever this says (setupTrustTasksInbound). See
+ * docs/plans/openvtc-integration-plan/2026-09-02-bam.md for why a wallet-to-wallet TSP carriage doesn't need to wait
+ * on ecosystem interop.
  */
-let tspCarriageEnabled = false
+export const TSP_CARRIAGE_ON_BY_DEFAULT = true
+
+/** Set to true in a release to stop every TSP send, whatever was set: documents take the binding. Never turns it on. */
+export const TSP_SEND_REMOTE_OFF: { off: boolean } = { off: false }
+
+let tspCarriageEnabled = TSP_CARRIAGE_ON_BY_DEFAULT
 
 export function setTspCarriageEnabled(enabled: boolean): void {
   tspCarriageEnabled = enabled
 }
 
 export function isTspCarriageEnabled(): boolean {
-  return tspCarriageEnabled
+  return tspCarriageEnabled && !TSP_SEND_REMOTE_OFF.off
 }
 
 /**
- * Developer-flagged DIDComm v2 (docs/plans/openvtc-integration-plan/didcomm_v2_subtask.md
- * V2 step C11/C12): when on, the agent enables `didcommVersions: ['v1','v2']`
- * and new relationship invitations are Out-of-Band 2.0 on did:peer:2. It does
- * NOT decide the carriage — `selectCarriage` does, per connection (below).
+ * DIDComm v2 (docs/plans/openvtc-integration-plan/didcomm_v2_subtask.md V2 step C11/C12): when on, the agent enables
+ * `didcommVersions: ['v1','v2']` (the wallet's bc-agent-modules.ts), so it accepts v2 invitations and connections. On
+ * as shipped; the wallet app applies its own setting at start-up. Minting a v2 invitation needs more than this: the v2
+ * mailbox too ({@link canMintV2Invitation}). It does NOT decide the carriage — `selectCarriage` does, per connection.
  */
-let didCommV2Enabled = false
+export const DIDCOMM_V2_ON_BY_DEFAULT = true
+
+/**
+ * Set to true in a release to stop minting out-of-band/2.0 invitations, whatever was set: new invitations are v1. It
+ * never takes v2 out of the agent's didcommVersions, which would strand the v2 connections a phone already has.
+ */
+export const DIDCOMM_V2_MINT_REMOTE_OFF: { off: boolean } = { off: false }
+
+let didCommV2Enabled = DIDCOMM_V2_ON_BY_DEFAULT
 
 export function setDidCommV2Enabled(enabled: boolean): void {
   didCommV2Enabled = enabled
 }
 
+/**
+ * Whether this phone uses DIDComm v2 for what it starts (today: new invitations), with the release kill folded in, as
+ * {@link isTspCarriageEnabled} folds its own. Accepting v2 is the agent's didcommVersions, fixed when the wallet builds
+ * the agent, and no kill takes it away.
+ */
 export function isDidCommV2Enabled(): boolean {
-  return didCommV2Enabled
+  return didCommV2Enabled && !DIDCOMM_V2_MINT_REMOTE_OFF.off
+}
+
+/**
+ * Whether a new invitation from this agent may be out-of-band/2.0, and if not, why (for the log). All of: v2 on, the
+ * agent built with v2 (its didcommVersions is fixed at construction), the v2 mailbox switch on with a granted v2
+ * record to route through, and no release kill. A v2 invitation without a v2 mailbox would name an endpoint no peer
+ * can deliver to: a phone holds outbound transports only, and the v1 default cannot route a did:peer:2
+ * (tsp-reference/ref-17 finding 1).
+ */
+export async function canMintV2Invitation(agent: Agent): Promise<{ v2: boolean; why: string }> {
+  if (DIDCOMM_V2_MINT_REMOTE_OFF.off) return { v2: false, why: 'v2 invitations are turned off in this release' }
+  if (!isDidCommV2Enabled()) return { v2: false, why: 'DIDComm v2 is off' }
+  if (!agent.modules.didcomm.config.isSupported('v2'))
+    return { v2: false, why: 'this agent was constructed without v2 support (restart required to apply the toggle)' }
+  if (!isV2MediationEnabled()) return { v2: false, why: 'the v2 mailbox is off' }
+  if (!(await findV2MediationRecord(agent))) return { v2: false, why: 'no v2 mailbox is provisioned' }
+  return { v2: true, why: 'v2 on, with a v2 mailbox' }
 }
 
 export type TrustTaskCarriageKind = 'didcomm-v1' | 'didcomm-v2' | 'tsp'
@@ -143,7 +180,7 @@ export type TrustTaskCarriageKind = 'didcomm-v1' | 'didcomm-v2' | 'tsp'
  * parent plan's §4.2 DID-document resolver (`TSPTransport`) is not built.
  */
 export async function selectCarriage(agent: Agent, connectionId: string): Promise<TrustTaskCarriageKind> {
-  if (tspCarriageEnabled) return 'tsp'
+  if (isTspCarriageEnabled() && (await peerReadsTsp(agent, connectionId))) return 'tsp'
   const connection = await agent.modules.didcomm.connections.getById(connectionId)
   return connection.didcommVersion === 'v2' ? 'didcomm-v2' : 'didcomm-v1'
 }
@@ -810,13 +847,19 @@ export function setupTrustTasksInbound(agent: Agent): void {
   // Registered first so the v1 registration stays the latest one (fakes that
   // keep only the last registered handler keep exercising the v1 path).
   createDidCommV2Carriage(agent).onDocument(handleInboundDocument)
+  // The TSP envelope's handler is always registered, like the v2 binding's: what this phone may SEND is a setting, but
+  // a contact that has learnt we read TSP may send it whatever ours says. The protocol is advertised with it, so a
+  // contact's Discover Features query learns this phone reads TSP (contactTspCapability.ts), and an envelope that
+  // arrives is itself the contact's yes. Registered before v1, again so the v1 registration stays the latest one.
+  createTspCarriage(agent).onDocument(async (document, context) => {
+    if (context.connectionId) await recordPeerReadsTsp(agent, context.connectionId)
+    await handleInboundDocument(document, context)
+  })
+  advertiseTspCarriage(agent)
   createDidCommV1Carriage(agent).onDocument(handleInboundDocument)
-  if (tspCarriageEnabled) {
-    createTspCarriage(agent).onDocument(handleInboundDocument)
-  }
 
   agent.config.logger.info(
-    `${LOG_PREFIX} inbound carriage handlers registered (binding didcomm-v1/0.2 + didcomm/0.2${tspCarriageEnabled ? ' + TSP envelope' : ''})`
+    `${LOG_PREFIX} inbound carriage handlers registered (binding didcomm-v1/0.2 + didcomm/0.2 + TSP envelope)`
   )
 }
 

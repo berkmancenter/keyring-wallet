@@ -5,10 +5,12 @@
  * cannot see the chat registration at all. This one collects every
  * registration, so deleting the setupChatInbound call fails here.
  */
-import { DidCommMessageHandlerRegistry, DidCommProblemReportMessage } from '@credo-ts/didcomm'
+import { DidCommFeatureRegistry, DidCommMessageHandlerRegistry, DidCommProblemReportMessage } from '@credo-ts/didcomm'
 import { EventEmitter, InjectionSymbols } from '@credo-ts/core'
 
-import { setupTrustTasksInbound } from '../ceremony'
+import { setTspCarriageEnabled, setupTrustTasksInbound } from '../ceremony'
+import { TSP_ENVELOPE_PROTOCOL_URI } from '../module/contactTspCapability'
+import { TspEnvelopeMessage } from '../messages/TspEnvelopeMessage'
 import { ChatCapabilityMessage } from '../../chat/messages/ChatCapabilityMessage'
 import { ChatEventMessage } from '../../chat/messages/ChatEventMessage'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
@@ -40,6 +42,8 @@ function makeCollectingAgent() {
   }
   singletons.set(InjectionSymbols.StorageService, { save: jest.fn(), findByQuery: jest.fn(async () => []) })
   singletons.set(EventEmitter, { emit: jest.fn() })
+  const features = new DidCommFeatureRegistry()
+  singletons.set(DidCommFeatureRegistry, features)
   singletons.set(DidCommMessageHandlerRegistry, {
     registerMessageHandler: (handler: { supportedMessages: unknown[] }) => {
       registered.push(handler)
@@ -50,7 +54,7 @@ function makeCollectingAgent() {
     config: { logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() } },
     dependencyManager: { container, resolve: container.resolve },
   }
-  return { agent: agent as never, registered }
+  return { agent: agent as never, registered, features }
 }
 
 describe('setupTrustTasksInbound wiring', () => {
@@ -83,6 +87,26 @@ describe('setupTrustTasksInbound wiring', () => {
     const v1Index = registered.findIndex((handler) => handler.supportedMessages.includes(TrustTaskMessage))
     expect(chatIndex).toBeGreaterThanOrEqual(0)
     expect(chatIndex).toBeLessThan(v1Index)
+    expect(registered[registered.length - 1].supportedMessages).toContain(TrustTaskMessage)
+  })
+})
+
+describe('setupTrustTasksInbound registers the TSP envelope whatever the send setting', () => {
+  afterEach(() => setTspCarriageEnabled(true))
+
+  // Before TSP was on by default, the handler was registered only with the setting on: a phone with it off had no
+  // handler for an envelope, which is why a send now waits for the contact's yes (contactTspCapability.ts).
+  test.each([true, false])('send setting %s: the envelope handler is registered and its protocol advertised', (on) => {
+    setTspCarriageEnabled(on)
+    const { agent, registered, features } = makeCollectingAgent()
+    setupTrustTasksInbound(agent)
+    expect(registered.flatMap((handler) => handler.supportedMessages)).toContain(TspEnvelopeMessage)
+    expect(features.query({ featureType: 'protocol', match: TSP_ENVELOPE_PROTOCOL_URI } as never)).toHaveLength(1)
+  })
+
+  test('the v1 binding is still the last handler registered (fakes that keep only the last one keep testing v1)', () => {
+    const { agent, registered } = makeCollectingAgent()
+    setupTrustTasksInbound(agent)
     expect(registered[registered.length - 1].supportedMessages).toContain(TrustTaskMessage)
   })
 })

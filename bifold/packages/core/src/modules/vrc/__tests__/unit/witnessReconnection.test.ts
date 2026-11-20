@@ -3,7 +3,12 @@
  */
 
 import { Agent } from '@credo-ts/core'
-import { DidCommConnectionRecord, DidCommDidExchangeState, DidCommOutOfBandRecord, DidCommOutOfBandRole } from '@credo-ts/didcomm'
+import {
+  DidCommConnectionRecord,
+  DidCommDidExchangeState,
+  DidCommOutOfBandRecord,
+  DidCommOutOfBandRole,
+} from '@credo-ts/didcomm'
 import {
   checkExistingConnectionStatus,
   cleanupStaleRecords,
@@ -19,7 +24,11 @@ const createMockAgent = () => {
           parseInvitation: jest.fn(),
           findAllByQuery: jest.fn(),
           deleteById: jest.fn(),
-          receiveInvitationFromUrl: jest.fn(),
+          receiveInvitation: jest.fn(),
+        },
+        mediationRecipient: {
+          getMediators: jest.fn(async () => []),
+          getRouting: jest.fn(async (options: unknown) => ({ options })),
         },
         connections: {
           findAllByQuery: jest.fn(),
@@ -40,7 +49,7 @@ describe('witnessReconnection', () => {
     })
 
     it('should return exists: false when invitation cannot be parsed', async () => {
-      (mockAgent.modules.didcomm.oob.parseInvitation as jest.Mock).mockResolvedValue(null)
+      ;(mockAgent.modules.didcomm.oob.parseInvitation as jest.Mock).mockResolvedValue(null)
 
       const result = await checkExistingConnectionStatus(mockAgent, 'invalid-url')
 
@@ -164,7 +173,7 @@ describe('witnessReconnection', () => {
     })
 
     it('should handle parse invitation failure gracefully', async () => {
-      (mockAgent.modules.didcomm.oob.parseInvitation as jest.Mock).mockResolvedValue(null)
+      ;(mockAgent.modules.didcomm.oob.parseInvitation as jest.Mock).mockResolvedValue(null)
 
       await expect(cleanupStaleRecords(mockAgent, 'test-url')).resolves.not.toThrow()
     })
@@ -190,10 +199,12 @@ describe('witnessReconnection', () => {
       ;(mockAgent.modules.didcomm.oob.findAllByQuery as jest.Mock).mockResolvedValue([])
 
       // Connection succeeds
-      ;(mockAgent.modules.didcomm.oob.receiveInvitationFromUrl as jest.Mock).mockResolvedValue({
+      ;(mockAgent.modules.didcomm.oob.receiveInvitation as jest.Mock).mockResolvedValue({
         connectionRecord: mockConnectionRecord,
       })
-      ;(mockAgent.modules.didcomm.connections.returnWhenIsConnected as jest.Mock).mockResolvedValue(mockCompletedConnection)
+      ;(mockAgent.modules.didcomm.connections.returnWhenIsConnected as jest.Mock).mockResolvedValue(
+        mockCompletedConnection
+      )
 
       const result = await handleWitnessReconnection(mockAgent, 'test-url')
 
@@ -225,7 +236,7 @@ describe('witnessReconnection', () => {
         strategy: 'reused',
       })
       // Should not attempt new connection
-      expect(mockAgent.modules.didcomm.oob.receiveInvitationFromUrl).not.toHaveBeenCalled()
+      expect(mockAgent.modules.didcomm.oob.receiveInvitation).not.toHaveBeenCalled()
     })
 
     it('should cleanup and reconnect when stale connection exists', async () => {
@@ -255,10 +266,12 @@ describe('witnessReconnection', () => {
       ;(mockAgent.modules.didcomm.oob.deleteById as jest.Mock).mockResolvedValue(undefined)
 
       // New connection succeeds
-      ;(mockAgent.modules.didcomm.oob.receiveInvitationFromUrl as jest.Mock).mockResolvedValue({
+      ;(mockAgent.modules.didcomm.oob.receiveInvitation as jest.Mock).mockResolvedValue({
         connectionRecord: mockNewConnection,
       })
-      ;(mockAgent.modules.didcomm.connections.returnWhenIsConnected as jest.Mock).mockResolvedValue(mockCompletedConnection)
+      ;(mockAgent.modules.didcomm.connections.returnWhenIsConnected as jest.Mock).mockResolvedValue(
+        mockCompletedConnection
+      )
 
       const result = await handleWitnessReconnection(mockAgent, 'test-url')
 
@@ -303,7 +316,7 @@ describe('witnessReconnection', () => {
       ;(mockAgent.modules.didcomm.oob.findAllByQuery as jest.Mock).mockResolvedValue([])
 
       // Connection fails on both attempts
-      ;(mockAgent.modules.didcomm.oob.receiveInvitationFromUrl as jest.Mock).mockRejectedValue(new Error('Network timeout'))
+      ;(mockAgent.modules.didcomm.oob.receiveInvitation as jest.Mock).mockRejectedValue(new Error('Network timeout'))
 
       const result = await handleWitnessReconnection(mockAgent, 'test-url')
 
@@ -311,9 +324,9 @@ describe('witnessReconnection', () => {
       expect(result.strategy).toBe('failed')
       expect(result.error).toBeDefined()
       // Should have tried twice (initial + 1 default retry)
-      expect(mockAgent.modules.didcomm.oob.receiveInvitationFromUrl).toHaveBeenCalledTimes(2)
-      // Should have checked twice (once before each attempt)
-      expect(mockAgent.modules.didcomm.oob.parseInvitation).toHaveBeenCalledTimes(2)
+      expect(mockAgent.modules.didcomm.oob.receiveInvitation).toHaveBeenCalledTimes(2)
+      // Parsed twice per attempt: the check before it, and the attempt itself (for the invitation's routing)
+      expect(mockAgent.modules.didcomm.oob.parseInvitation).toHaveBeenCalledTimes(4)
     })
 
     it('should respect maxRetries when connection fails', async () => {
@@ -324,16 +337,16 @@ describe('witnessReconnection', () => {
       ;(mockAgent.modules.didcomm.oob.findAllByQuery as jest.Mock).mockResolvedValue([])
 
       // All connection attempts fail
-      ;(mockAgent.modules.didcomm.oob.receiveInvitationFromUrl as jest.Mock).mockRejectedValue(new Error('Network timeout'))
+      ;(mockAgent.modules.didcomm.oob.receiveInvitation as jest.Mock).mockRejectedValue(new Error('Network timeout'))
 
       const result = await handleWitnessReconnection(mockAgent, 'test-url', 2)
 
       expect(result.success).toBe(false)
       expect(result.strategy).toBe('failed')
       // Should have tried 3 times (initial + 2 retries)
-      expect(mockAgent.modules.didcomm.oob.receiveInvitationFromUrl).toHaveBeenCalledTimes(3)
-      // Should have checked 3 times (once before each attempt)
-      expect(mockAgent.modules.didcomm.oob.parseInvitation).toHaveBeenCalledTimes(3)
+      expect(mockAgent.modules.didcomm.oob.receiveInvitation).toHaveBeenCalledTimes(3)
+      // Parsed twice per attempt: the check before it, and the attempt itself (for the invitation's routing)
+      expect(mockAgent.modules.didcomm.oob.parseInvitation).toHaveBeenCalledTimes(6)
     })
 
     it('should return failure when connection record is not created', async () => {
@@ -344,7 +357,7 @@ describe('witnessReconnection', () => {
       ;(mockAgent.modules.didcomm.oob.findAllByQuery as jest.Mock).mockResolvedValue([])
 
       // Connection returns null
-      ;(mockAgent.modules.didcomm.oob.receiveInvitationFromUrl as jest.Mock).mockResolvedValue({
+      ;(mockAgent.modules.didcomm.oob.receiveInvitation as jest.Mock).mockResolvedValue({
         connectionRecord: null,
       })
 
@@ -356,5 +369,29 @@ describe('witnessReconnection', () => {
         strategy: 'failed',
       })
     })
+  })
+})
+
+describe('witnessReconnection: the invitation is accepted with the routing its version needs', () => {
+  const connected = { id: 'connection-1', state: DidCommDidExchangeState.Completed } as DidCommConnectionRecord
+
+  it.each([
+    ['a v1 invitation (CONTROL)', { id: 'inv-v1' }, {}],
+    [
+      'a v2 invitation',
+      { id: 'inv-v2', v2Invitation: { from: 'did:peer:2.witness' } },
+      { routing: { options: { useDefaultMediator: false } } },
+    ],
+  ])('%s', async (_name, invitation, expectedConfig) => {
+    const agent = createMockAgent()
+    ;(agent.modules.didcomm.oob.parseInvitation as jest.Mock).mockResolvedValue(invitation)
+    ;(agent.modules.didcomm.oob.findAllByQuery as jest.Mock).mockResolvedValue([])
+    ;(agent.modules.didcomm.oob.receiveInvitation as jest.Mock).mockResolvedValue({ connectionRecord: connected })
+    ;(agent.modules.didcomm.connections.returnWhenIsConnected as jest.Mock).mockResolvedValue(connected)
+
+    const result = await handleWitnessReconnection(agent, 'test-url')
+
+    expect(result.success).toBe(true)
+    expect(agent.modules.didcomm.oob.receiveInvitation).toHaveBeenCalledWith(invitation, expectedConfig)
   })
 })

@@ -26,7 +26,15 @@ const SRC = join(__dirname, '..', '..', '..')
  * Remote offs that are not a SEDI/KERI feature's, so they need not answer the umbrella. Kept by hand on purpose, and
  * short: a new remote off is a SEDI/KERI switch until someone says here that it is not.
  */
-const NOT_SEDI_KERI = new Set(['SEDI_KERI_REMOTE_OFF', 'SHARED_CONNECT_REMOTE_OFF'])
+const NOT_SEDI_KERI = new Set([
+  'SEDI_KERI_REMOTE_OFF',
+  'SHARED_CONNECT_REMOTE_OFF',
+  // DIDComm transport, not SEDI/KERI features, so the umbrella does not turn them off. Both ship on (Alberto,
+  // 2026-11-20), and each kill's "beats what it ships as" row is where it lives: tspCarriage.test.ts for
+  // TSP_SEND_REMOTE_OFF, createRelationshipInvitationDidCommV2Gate.test.ts for DIDCOMM_V2_MINT_REMOTE_OFF.
+  'TSP_SEND_REMOTE_OFF',
+  'DIDCOMM_V2_MINT_REMOTE_OFF',
+])
 
 /**
  * The switches that ship on, by their own kill's name. Kept by hand on purpose: a switch whose default moves to on
