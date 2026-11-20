@@ -799,6 +799,48 @@ describe('the offer sheet', () => {
     expect(respond).not.toHaveBeenCalled()
   })
 
+  // The put-off was kept by contact, so one Not now hid every later offer from that person until a restart (the fault
+  // ConfirmItsYouModal had, IN-704, 11-20).
+  test('Not now puts off that one offer: a new offer from the same contact shows its sheet (control: the same offer arriving again stays hidden)', async () => {
+    linked('did:webvh:jordans-agent.example')
+    const first = { ...offerFrom(), request: { payload: { challenge: 'a'.repeat(43) } } }
+    approverRole.roleOfferPromptStore.set(first)
+    const tree = await show(<ApproverOfferModal />)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id(ApproverOfferIds.notNow)))
+    })
+    expect(tree.queryByTestId(id(ApproverOfferIds.sheet))).toBeNull()
+
+    // The same offer delivered a second time (pickup is at least once) is still the one put off.
+    await act(async () => {
+      approverRole.roleOfferPromptStore.set({ ...first, receivedAt: new Date(Date.now() + 1000).toISOString() })
+      approverRole.approverRoleEvents.emit('offer', { connectionId: 'c-sam' })
+    })
+    expect(tree.queryByTestId(id(ApproverOfferIds.sheet))).toBeNull()
+
+    // A re-offer from the same contact, on the same connection: its own challenge, so its own sheet.
+    await act(async () => {
+      approverRole.roleOfferPromptStore.set({ ...offerFrom(), request: { payload: { challenge: 'b'.repeat(43) } } })
+      approverRole.approverRoleEvents.emit('offer', { connectionId: 'c-sam' })
+    })
+    expect(tree.getByTestId(id(ApproverOfferIds.sheet))).toBeTruthy()
+  })
+
+  test('an offer with no readable challenge is put off by when it arrived, so a later one still shows', async () => {
+    linked('did:webvh:jordans-agent.example')
+    approverRole.roleOfferPromptStore.set({ ...offerFrom(), request: {}, receivedAt: '2026-11-20T01:00:00.000Z' })
+    const tree = await show(<ApproverOfferModal />)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id(ApproverOfferIds.notNow)))
+    })
+    expect(tree.queryByTestId(id(ApproverOfferIds.sheet))).toBeNull()
+    await act(async () => {
+      approverRole.roleOfferPromptStore.set({ ...offerFrom(), request: {}, receivedAt: '2026-11-20T01:05:00.000Z' })
+      approverRole.approverRoleEvents.emit('offer', { connectionId: 'c-sam' })
+    })
+    expect(tree.getByTestId(id(ApproverOfferIds.sheet))).toBeTruthy()
+  })
+
   test('an offer on screen goes when the switch is turned off', async () => {
     linked('did:webvh:jordans-agent.example')
     approverRole.roleOfferPromptStore.set(offerFrom())

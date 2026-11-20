@@ -5,7 +5,8 @@
  * Accept asks for Face ID first (an owner act, as Approve on a request is): not confirmed, nothing is sent and the offer
  * stays. Then it names the DID this phone approves as, its manager DID on its own linked agent (`vtaAgent.approverDid`), so a yes
  * needs this phone linked; without that only No and Not now are offered, and it says why. No sends a signed no.
- * Not now sends nothing and hides the offer until the app starts again (it is kept, and comes back then).
+ * Not now sends nothing and hides that one offer until the app starts again (it is kept, and comes back then). A
+ * later offer from the same contact (a re-offer with other actions, say) is a new question and shows its own sheet.
  *
  * After a yes, if this phone holds a state Guardian card and its person was never asked about this contact, the same
  * sheet asks once: "Also send your Guardian card to <asker>?" (guardianEvidence.ts). Send keeps the answer and sends
@@ -56,13 +57,27 @@ export const ApproverOfferIds = {
   cardDont: 'ApproverOfferCardDont',
 } as const
 
-/** Offers put off with Not now, by connection, until the app starts again. */
+/**
+ * Offers put off with Not now, until the app starts again: each one by itself ({@link putOffKey}), never the contact.
+ * Kept by contact, one Not now hid the sheet for every later offer from that person until a restart (the same fault
+ * as ConfirmItsYouModal's, IN-704, 11-20).
+ */
 const putOff = new Set<string>()
+
+/**
+ * What names one offer: its contact and the challenge only it carries (approverRoleSpec, required; fresh for every
+ * offer and re-offer, approverRole.ts). Its arrival time when no challenge can be read, so two offers are never taken
+ * for one: a defensive path, since such an offer could not be answered either (the answer carries the challenge back).
+ */
+const putOffKey = (prompt: RoleOfferPrompt) => {
+  const challenge = (prompt.request?.payload as { challenge?: unknown } | undefined)?.challenge
+  return `${prompt.connectionId} ${typeof challenge === 'string' && challenge ? challenge : prompt.receivedAt}`
+}
 
 /** Tests only. */
 export const resetPutOff = () => putOff.clear()
 
-const firstShown = () => roleOfferPromptStore.list().find((prompt) => prompt.open && !putOff.has(prompt.connectionId))
+const firstShown = () => roleOfferPromptStore.list().find((prompt) => prompt.open && !putOff.has(putOffKey(prompt)))
 
 const ApproverOfferModal: React.FC = () => {
   const { agent } = useAgent()
@@ -160,7 +175,7 @@ const ApproverOfferModal: React.FC = () => {
 
   const notNow = useCallback(() => {
     if (!prompt) return
-    putOff.add(prompt.connectionId)
+    putOff.add(putOffKey(prompt))
     setFailed(false)
     setPrompt(firstShown())
   }, [prompt])
