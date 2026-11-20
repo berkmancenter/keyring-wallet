@@ -119,11 +119,23 @@ export {
   findV2MediationRecord,
   getRoutingForV2,
   routingForInvitation,
+  acceptConfigForInvitation,
   provisionV2Mediation,
   startV2MessagePickup,
   setV2MediationEnabled,
   isV2MediationEnabled,
 } from './v2Routing'
+export {
+  openWalletMailbox,
+  closeWalletMailbox,
+  walletMailboxOf,
+  mintContactDid,
+  mailboxNamedBy,
+  takeMailboxMessage,
+  WalletMailboxOutboundTransport,
+  WALLET_MAILBOX_RECORD_TYPE,
+} from './module/walletMailbox'
+export type { WalletMailbox, MailboxSession, OpenWalletMailboxDeps } from './module/walletMailbox'
 export {
   advertiseTspCarriage,
   askPeerReadsTsp,

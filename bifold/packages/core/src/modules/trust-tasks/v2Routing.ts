@@ -21,6 +21,8 @@ import type { Agent } from '@credo-ts/core'
 import type { DidCommMediationRecord, DidCommRouting } from '@credo-ts/didcomm'
 import { DidCommMediationState, DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
 
+import { mintContactDid, walletMailboxOf } from './module/walletMailbox'
+
 const LOG_PREFIX = '[TrustTasks:V2Mediation]'
 
 /**
@@ -70,6 +72,23 @@ export async function routingForInvitation(
   invitation: { v2Invitation?: unknown } | null | undefined
 ): Promise<DidCommRouting | undefined> {
   return invitation?.v2Invitation ? getRoutingForV2(agent) : undefined
+}
+
+/**
+ * How to accept an invitation. For an out-of-band/2.0 invitation with this phone's mailbox open (walletMailbox.ts),
+ * answer from a fresh contact DID that names the mailbox (`ourDid`), so the peer's replies reach this phone through
+ * it; without a mailbox, {@link routingForInvitation}'s routing, as before. A v1 invitation: nothing, so Credo routes
+ * through the default mediator. Spread into `receiveInvitation`'s config.
+ */
+export async function acceptConfigForInvitation(
+  agent: Agent,
+  invitation: { v2Invitation?: unknown } | null | undefined
+): Promise<{ routing?: DidCommRouting; ourDid?: string }> {
+  if (!invitation?.v2Invitation) return {}
+  const mailbox = walletMailboxOf(agent)
+  if (mailbox) return { ourDid: await mintContactDid(agent, mailbox) }
+  const routing = await getRoutingForV2(agent)
+  return routing ? { routing } : {}
 }
 
 /**

@@ -17,7 +17,7 @@ import {
 } from '@credo-ts/didcomm'
 
 import { createVrcLogger } from '../vrc-logging'
-import { routingForInvitation } from '../../trust-tasks/v2Routing'
+import { acceptConfigForInvitation } from '../../trust-tasks/v2Routing'
 
 /**
  * Connection status after checking
@@ -217,14 +217,12 @@ export async function handleWitnessReconnection(
       try {
         logger.info(`Connection attempt ${attempt}/${maxRetries + 1}`)
 
-        // Parsed first so a v2 invitation gets v2 routing (routingForInvitation): the default mediator cannot route it.
-        // Always a config object: this Credo's receiveInvitation destructures it, so none at all throws.
+        // Parsed first so a v2 invitation is answered from this phone's mailbox, or with v2 routing
+        // (acceptConfigForInvitation): the default mediator cannot route it. Always a config object: this Credo's
+        // receiveInvitation destructures it, so none at all throws.
         const invitation = await agent.modules.didcomm.oob.parseInvitation(invitationUrl)
-        const routing = await routingForInvitation(agent, invitation)
-        const { connectionRecord } = await agent.modules.didcomm.oob.receiveInvitation(
-          invitation,
-          routing ? { routing } : {}
-        )
+        const accept = await acceptConfigForInvitation(agent, invitation)
+        const { connectionRecord } = await agent.modules.didcomm.oob.receiveInvitation(invitation, accept)
 
         if (!connectionRecord) {
           return {

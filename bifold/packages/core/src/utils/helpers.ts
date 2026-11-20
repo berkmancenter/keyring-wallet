@@ -55,7 +55,7 @@ import {
 import { ChildFn } from '../types/tour'
 
 import { BifoldAgent } from './agent'
-import { getRoutingForV2 } from '../modules/trust-tasks/v2Routing'
+import { acceptConfigForInvitation } from '../modules/trust-tasks/v2Routing'
 import {
   createAnonCredsProofRequest,
   filterInvalidProofRequestMatches,
@@ -1158,14 +1158,15 @@ export const connectFromInvitation = async (
     }
   }
 
-  // An out-of-band/2.0 invitation needs explicit routing: the v2 mediator when
-  // provisioned, else unmediated — a v1 default mediator cannot route a
-  // did:peer:2 (trust-tasks/v2Routing.ts). v1 invitations keep Credo's default.
-  const routing = invitation.v2Invitation && agent ? await getRoutingForV2(agent) : undefined
+  // An out-of-band/2.0 invitation is answered from a contact DID that names this
+  // phone's mailbox, or with explicit v2 routing without one — a v1 default
+  // mediator cannot route a did:peer:2 (trust-tasks/v2Routing.ts,
+  // acceptConfigForInvitation). v1 invitations keep Credo's default.
+  const accept = agent ? await acceptConfigForInvitation(agent, invitation) : {}
   const record = await agent?.modules.didcomm.oob.receiveInvitation(invitation, {
     reuseConnection,
     label: walletLabel || OOB_INVITATION_LABEL,
-    routing,
+    ...accept,
   })
   return record?.outOfBandRecord as DidCommOutOfBandRecord
 }

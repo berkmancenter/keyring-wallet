@@ -409,13 +409,27 @@ export interface VtiClientIdentity {
  * keeps its old service; only new mints carry this one.
  */
 export async function createVtiClientDid(agent: Agent, mediator: VtiMediatorEndpoints): Promise<string> {
+  return createPeerDidNamingUri(agent, mediator.did, mediator.wsEndpoint)
+}
+
+/**
+ * A `did:peer:2` on one fresh Ed25519 key in Askar (X25519 keyAgreement derived), with one DIDComm v2 service whose
+ * `uri` is `uri` — a mediator's DID for {@link createVtiClientDid}, a phone's mailbox DID for a wallet contact
+ * (walletMailbox.ts). `builderEndpoint` only feeds the document builder; its service is replaced before the DID is
+ * encoded, since the DID string is the document.
+ */
+export async function createPeerDidNamingUri(
+  agent: Agent,
+  uri: string,
+  builderEndpoint = 'https://example.invalid'
+): Promise<string> {
   const key = await agent.kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' } })
   const publicJwk = Kms.PublicJwk.fromPublicJwk(key.publicJwk) as Kms.PublicJwk<Kms.Ed25519PublicJwk>
   const { didDocument, keys } = createPeerDidDocumentFromServices(
     [
       {
         id: 'vti',
-        serviceEndpoint: mediator.wsEndpoint,
+        serviceEndpoint: builderEndpoint,
         recipientKeys: [publicJwk],
         routingKeys: [],
       },
@@ -427,7 +441,7 @@ export async function createVtiClientDid(agent: Agent, mediator: VtiMediatorEndp
   didDocument.service = [
     new NewDidCommV2Service({
       id: '#didcomm',
-      serviceEndpoint: new NewDidCommV2ServiceEndpoint({ uri: mediator.did, accept: ['didcomm/v2'] }),
+      serviceEndpoint: new NewDidCommV2ServiceEndpoint({ uri, accept: ['didcomm/v2'] }),
     }),
   ]
   const created = await agent.dids.create({

@@ -13,6 +13,7 @@ import {
   DidCommOutOfBandRole,
 } from '@credo-ts/didcomm'
 import type {
+  CreateOutOfBandInvitationConfig,
   DidCommConnectionStateChangedEvent as ConnectionStateChangedEvent,
   DidCommCredentialStateChangedEvent as CredentialStateChangedEvent,
 } from '@credo-ts/didcomm'
@@ -2824,22 +2825,31 @@ export const createRelationshipInvitation = async (
   const didCommVersion = mint.v2 ? ('v2' as const) : ('v1' as const)
   if (didCommVersion === 'v2')
     agent.config.logger.info('[VRC] DIDComm v2 enabled — creating an out-of-band/2.0 invitation')
-  // A v2 invitation routes through the v2 mediator (or unmediated), never the
-  // v1 default — see trust-tasks/v2Routing.ts. Left undefined for v1 so Credo
-  // keeps using the default mediator exactly as before.
+  // A v2 invitation through this phone's mailbox is minted on a fresh contact DID that names the mailbox
+  // (trust-tasks/module/walletMailbox.ts): Credo's v2 create reads it as `ourDid`, which its public config type does
+  // not declare, so the config is a typed variable rather than a literal. Through v2 mediation it routes through that
+  // record, never the v1 default (trust-tasks/v2Routing.ts). Left undefined for v1 so Credo keeps using the default
+  // mediator exactly as before.
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
   const { getRoutingForV2 } = require('../trust-tasks/v2Routing') as typeof import('../trust-tasks/v2Routing')
-  const routing = didCommVersion === 'v2' ? await getRoutingForV2(agent) : undefined
-  const record = await agent.modules.didcomm.oob.createInvitation({
+  const { mintContactDid, walletMailboxOf } =
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    require('../trust-tasks/module/walletMailbox') as typeof import('../trust-tasks/module/walletMailbox')
+  const mailbox = mint.via === 'mailbox' ? walletMailboxOf(agent) : undefined
+  const ourDid = mailbox ? await mintContactDid(agent, mailbox) : undefined
+  const routing = didCommVersion === 'v2' && !ourDid ? await getRoutingForV2(agent) : undefined
+  const invitationConfig: CreateOutOfBandInvitationConfig & { ourDid?: string } = {
     didCommVersion,
     routing,
+    ...(ourDid ? { ourDid } : {}),
     label: walletName,
     goalCode,
     goal:
       mode === 'bidirectional'
         ? 'Establish connection and exchange relationship credentials'
         : 'Establish connection and issue relationship credential',
-  })
+  }
+  const record = await agent.modules.didcomm.oob.createInvitation(invitationConfig)
 
   if (!record) {
     throw new Error('Could not create relationship invitation')
