@@ -70,7 +70,7 @@ export interface OpenWalletMailboxDeps {
 
 /** The open mailbox, per agent. */
 const openMailboxes = new WeakMap<Agent, WalletMailbox>()
-const opening = new WeakMap<Agent, Promise<WalletMailbox>>()
+const opening = new WeakMap<Agent, { mediatorDid: string; run: Promise<WalletMailbox> }>()
 const transports = new WeakMap<Agent, WalletMailboxOutboundTransport>()
 
 /** The open mailbox for this agent, if any. */
@@ -109,7 +109,12 @@ export async function openWalletMailbox(
   const current = openMailboxes.get(agent)
   if (current?.mediatorDid === mediatorDid) return current
   const inFlight = opening.get(agent)
-  if (inFlight) return inFlight
+  if (inFlight?.mediatorDid === mediatorDid) return inFlight.run
+  if (inFlight) {
+    // An open for another mediator is under way: let it finish (or fail), then open this one, which closes it.
+    await inFlight.run.catch(() => undefined)
+    return openWalletMailbox(agent, mediatorDid, deps)
+  }
   const run = (async () => {
     if (current) await closeWalletMailbox(agent)
     const mediator = await (deps.resolveMediator ?? resolveVtiMediator)(agent, mediatorDid)
@@ -133,7 +138,7 @@ export async function openWalletMailbox(
     agent.config.logger.info(`${LOG_PREFIX} mailbox ${didPrefix(did)} open at ${didPrefix(mediator.did)}`)
     return mailbox
   })()
-  opening.set(agent, run)
+  opening.set(agent, { mediatorDid, run })
   try {
     return await run
   } finally {
@@ -159,8 +164,13 @@ export async function mintContactDid(agent: Agent, mailbox: WalletMailbox): Prom
 /**
  * What the mailbox session delivers, already opened with the mailbox key. A sender's Credo wrapped the contact's
  * message in a forward for this mailbox, so this phone is the forward's last hop: the message inside goes to Credo's
- * receiver, which opens it with the contact key. Awaited, so the session acknowledges only what was taken. A
- * forward to a DID this phone did not create is dropped (said, and acknowledged: it can never be read here).
+ * receiver, which opens it with the contact key. Awaited, so the session acknowledges only what was taken.
+ *
+ * The check on `next` establishes that it is a DID this phone created: ANY created DID (a contact DID, a VTA client
+ * DID, a v1 peer DID), not only this mailbox's contact DIDs. That is what makes handing it on safe, since the
+ * receiver can open only what this phone holds keys for. Two forwards are dropped (said, and acknowledged: neither
+ * can ever be read as a contact's message): one whose `next` this phone did not create, and one whose `next` is the
+ * mailbox DID itself, since nothing is written to a mailbox except through a contact DID that names it.
  */
 export async function takeMailboxMessage(agent: Agent, plaintext: DidCommV2PlaintextMessage): Promise<void> {
   if (plaintext.type !== FORWARD) {
@@ -171,6 +181,10 @@ export async function takeMailboxMessage(agent: Agent, plaintext: DidCommV2Plain
   }
   const body = (plaintext.body ?? {}) as { next?: unknown }
   const next = typeof body.next === 'string' ? body.next : undefined
+  if (next && next === walletMailboxOf(agent)?.did) {
+    releaseWarn(`${LOG_PREFIX} a forward addressed to the mailbox DID itself; dropped`)
+    return
+  }
   if (!next || (await agent.dids.getCreatedDids({ did: next })).length === 0) {
     releaseWarn(`${LOG_PREFIX} a forward for ${next ? didPrefix(next) : 'no DID'}, not one of this phone's; dropped`)
     return
@@ -209,8 +223,16 @@ export async function mailboxNamedBy(agent: Agent, contactDid: string): Promise<
 /**
  * Credo picks a transport by the endpoint's scheme, and a v2 contact's endpoint is a DID. Credo hands this the
  * message already wrapped for the peer's mailbox, with the endpoint it reached by following contact → mailbox
- * (the mediator, for a mailbox contact): neither that nor the did:key the wrapping names is an account at the
- * mediator. The peer's own contact DID says which mailbox receives for it, so that is the forward's `next`.
+ * (the mediator, for a mailbox contact).
+ *
+ * The forward's `next` is a mailbox DID this phone resolved itself from the peer's contact DID document, and nothing
+ * else: the DID the contact names, provided that DID's own document names a DID in turn (the mediator it signs in
+ * at), which is what a mailbox is. Not Credo's endpoint and not the did:key the wrapping names: neither is where the
+ * peer receives, and forwarding to either strands the message. When the peer's documents do not lead to a mailbox,
+ * the send is refused, because where the peer receives cannot be established here.
+ *
+ * Every phone uses one mediator today, which is only why a peer on another one is rare. Such a peer is addressed the
+ * same way, by its own mailbox DID; reaching that mailbox's mediator is the mediator's routing, not this transport's.
  */
 export class WalletMailboxOutboundTransport implements DidCommOutboundTransport {
   public supportedSchemes = ['did']
@@ -228,20 +250,18 @@ export class WalletMailboxOutboundTransport implements DidCommOutboundTransport 
   async sendMessage(outboundPackage: DidCommOutboundPackage): Promise<void> {
     const mailbox = openMailboxes.get(this.agent)
     if (!mailbox) throw new Error(`${LOG_PREFIX} no mailbox is open to send through`)
-    const next = await this.nextFor(outboundPackage, mailbox)
+    const next = await this.peerMailbox(outboundPackage.connectionId)
     if (!next) throw new Error(`${LOG_PREFIX} no mailbox found for ${outboundPackage.endpoint ?? 'this message'}`)
     await mailbox.session.forward(next, outboundPackage.payload)
   }
 
-  private async nextFor(outboundPackage: DidCommOutboundPackage, mailbox: WalletMailbox): Promise<string | undefined> {
-    if (outboundPackage.connectionId) {
-      const connection = await this.agent.modules.didcomm.connections.findById(outboundPackage.connectionId)
-      if (connection?.theirDid) {
-        const named = await mailboxNamedBy(this.agent, connection.theirDid).catch(() => undefined)
-        if (named && named !== mailbox.mediatorDid) return named
-      }
-    }
-    const endpoint = outboundPackage.endpoint
-    return endpoint?.startsWith('did:') && endpoint !== mailbox.mediatorDid ? endpoint : undefined
+  private async peerMailbox(connectionId: string | undefined): Promise<string | undefined> {
+    if (!connectionId) return undefined
+    const connection = await this.agent.modules.didcomm.connections.findById(connectionId)
+    if (!connection?.theirDid) return undefined
+    const named = await mailboxNamedBy(this.agent, connection.theirDid).catch(() => undefined)
+    if (!named) return undefined
+    const signsInAt = await mailboxNamedBy(this.agent, named).catch(() => undefined)
+    return signsInAt ? named : undefined
   }
 }
