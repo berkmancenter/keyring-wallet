@@ -67,6 +67,13 @@
              flow. Another wallet on the phone may claim this scheme too, and
              the system then asks, or chooses, which app opens it. -->
         <data android:scheme="openid-credential-offer" />
+        <!-- An interaction link (web+interaction:https://…?iuv=1…, W3C VCALM):
+             what a community's page offers as "open in a wallet", so the
+             phone can hand it to Keyring. Keyring acts on one that is a
+             community's join code and opens Join; any other is answered in
+             words. Another wallet may claim this scheme too, and the system
+             then asks, or chooses, which app opens it. -->
+        <data android:scheme="web+interaction" />
       </intent-filter>
 
       <intent-filter android:autoVerify="true">
