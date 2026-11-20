@@ -10,17 +10,29 @@
 import { DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
 import Config from 'react-native-config'
 
-import { provisionV2MediationIfConfigured, restartPickupOnReturn } from './useBCAgentSetup'
+import {
+  applyDidCommSwitches,
+  provisionV2MediationIfConfigured,
+  restartPickupOnReturn,
+  v2MailboxOn,
+} from './useBCAgentSetup'
+import { initialState } from '../store'
 
 const mockFindV2MediationRecord = jest.fn()
 const mockProvisionV2Mediation = jest.fn()
 const mockStartV2MessagePickup = jest.fn()
+const mockSetTsp = jest.fn()
+const mockSetV2 = jest.fn()
+const mockSetV2Mailbox = jest.fn()
 
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
   findV2MediationRecord: (...args: unknown[]) => mockFindV2MediationRecord(...args),
   provisionV2Mediation: (...args: unknown[]) => mockProvisionV2Mediation(...args),
   startV2MessagePickup: (...args: unknown[]) => mockStartV2MessagePickup(...args),
+  setTspCarriageEnabled: (on: boolean) => mockSetTsp(on),
+  setDidCommV2Enabled: (on: boolean) => mockSetV2(on),
+  setV2MediationEnabled: (on: boolean) => mockSetV2Mailbox(on),
 }))
 
 jest.mock('react-native-config', () => ({ MEDIATOR_V2_URL: undefined }))
@@ -132,5 +144,38 @@ describe('restartPickupOnReturn', () => {
       'Could not restart message pickup on foreground: Error executing query. Invalid store handle'
     )
     expect(logger.info).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyDidCommSwitches: what bifold is told at every agent start', () => {
+  beforeEach(() => {
+    mockSetTsp.mockClear()
+    mockSetV2.mockClear()
+    mockSetV2Mailbox.mockClear()
+  })
+
+  test('as shipped (nothing saved): TSP on, DIDComm v2 on, the v2 mailbox off', () => {
+    applyDidCommSwitches(initialState.developer)
+    expect(mockSetTsp).toHaveBeenLastCalledWith(true)
+    expect(mockSetV2).toHaveBeenLastCalledWith(true)
+    expect(mockSetV2Mailbox).toHaveBeenLastCalledWith(false)
+  })
+
+  test('CONTROL: the opt-outs reach bifold as off', () => {
+    applyDidCommSwitches({ enableTspCarriage: false, enableDidCommV2: false, enableV2Mailbox: false })
+    expect(mockSetTsp).toHaveBeenLastCalledWith(false)
+    expect(mockSetV2).toHaveBeenLastCalledWith(false)
+    expect(mockSetV2Mailbox).toHaveBeenLastCalledWith(false)
+  })
+
+  test.each([
+    [true, true, true],
+    [true, false, false],
+    [false, true, false],
+    [false, false, false],
+  ])('v2 %s, mailbox switch %s → the v2 mailbox is used: %s (never without v2)', (v2, mailbox, expected) => {
+    expect(v2MailboxOn({ enableDidCommV2: v2, enableV2Mailbox: mailbox })).toBe(expected)
+    applyDidCommSwitches({ enableTspCarriage: true, enableDidCommV2: v2, enableV2Mailbox: mailbox })
+    expect(mockSetV2Mailbox).toHaveBeenLastCalledWith(expected)
   })
 })

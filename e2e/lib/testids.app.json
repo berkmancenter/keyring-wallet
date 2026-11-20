@@ -83,6 +83,7 @@
     "ToggleEnableTrustTestState": ["src/screens/Developer.tsx"],
     "ToggleEnableTrustedApprovers": ["src/screens/Developer.tsx"],
     "ToggleEnableTspCarriage": ["src/screens/Developer.tsx"],
+    "ToggleEnableV2Mailbox": ["src/screens/Developer.tsx"],
     "ToggleFeatureRooms": ["src/screens/Developer.tsx"],
     "ToggleRemoteLoggingSwitch": ["src/screens/Developer.tsx"],
     "ToggleUseShareableLink": ["src/screens/Developer.tsx"],

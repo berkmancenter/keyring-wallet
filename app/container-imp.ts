@@ -391,6 +391,7 @@ export class AppContainer implements Container {
         enableAppToAppPersonFlow,
         enableTspCarriage,
         enableDidCommV2,
+        enableV2Mailbox,
         enableLivePickup,
         enableSharedConnect,
         enableSharedConnectInvite,
@@ -421,8 +422,12 @@ export class AppContainer implements Container {
         loadState<RemoteDebuggingState>(BCLocalStorageKeys.RemoteDebugging, (val) => (remoteDebugging = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableProxy, (val) => (enableProxy = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableAppToAppPersonFlow, (val) => (enableAppToAppPersonFlow = val)),
-        loadState<boolean>(BCLocalStorageKeys.EnableTspCarriage, (val) => (enableTspCarriage = val)),
-        loadState<boolean>(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
+        // On by default now, so read with loadSwitch: loadState skips a saved false, and an opt-out is a false. Their
+        // keys are new; the values saved under 'EnableTspCarriage' / 'EnableDidCommV2' while these were opt-in are left
+        // and ignored (they cannot tell "turned off" from "never turned on").
+        loadSwitch(BCLocalStorageKeys.EnableTspCarriage, (val) => (enableTspCarriage = val)),
+        loadSwitch(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
+        loadSwitch(BCLocalStorageKeys.EnableV2Mailbox, (val) => (enableV2Mailbox = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableLivePickup, (val) => (enableLivePickup = val)),
         loadSwitch(BCLocalStorageKeys.EnableSharedConnect, (val) => (enableSharedConnect = val)),
         // A saved "on" outlives any default, so bifold's isSharedConnectInviteEnabled() (with its remote off) is this
@@ -476,6 +481,7 @@ export class AppContainer implements Container {
           enableAppToAppPersonFlow,
           enableTspCarriage,
           enableDidCommV2,
+          enableV2Mailbox,
           enableLivePickup,
           enableSharedConnect,
           enableSharedConnectInvite,

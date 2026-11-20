@@ -18,6 +18,7 @@ import {
   type Container,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
+  setV2MediationEnabled,
   findV2MediationRecord,
   provisionV2Mediation,
   startV2MessagePickup,
@@ -160,6 +161,28 @@ export const restartPickupOnReturn = async (
  * Exported (only) for the de-dup regression test — see
  * useBCAgentSetup.test.ts. Not otherwise part of this module's public API.
  */
+/** The saved DIDComm switches (store.tsx Developer): what bifold is told at every agent start. */
+export interface DidCommSwitches {
+  enableTspCarriage?: boolean
+  enableDidCommV2?: boolean
+  enableV2Mailbox?: boolean
+}
+
+/** The v2 mailbox is used only with DIDComm v2 accepted: its own switch (off as shipped) AND v2 on. */
+export const v2MailboxOn = (switches: DidCommSwitches): boolean =>
+  !!switches.enableDidCommV2 && !!switches.enableV2Mailbox
+
+/**
+ * Tell bifold the saved switches, before the agent's pickup or inbound handlers start: configureMessagePickup runs the
+ * Pickup 4.0 loop only with the v2 mailbox on (startV2MessagePickup), and setupTrustTasksInbound reads the carriage
+ * setting. TSP and v2 are on as shipped; the v2 mailbox is off.
+ */
+export const applyDidCommSwitches = (switches: DidCommSwitches): void => {
+  setTspCarriageEnabled(!!switches.enableTspCarriage)
+  setDidCommV2Enabled(!!switches.enableDidCommV2)
+  setV2MediationEnabled(v2MailboxOn(switches))
+}
+
 export const provisionV2MediationIfConfigured = async (agent: Agent, enabled: boolean): Promise<void> => {
   const invitationUrl = Config.MEDIATOR_V2_URL
   if (!enabled || !invitationUrl) {
@@ -261,6 +284,7 @@ const useBCAgentSetup = () => {
           indyNetworks: ledgers,
           mediatorInvitationUrl: mediatorUrl,
           enableDidCommV2: !!store.developer.enableDidCommV2,
+          enableV2Mailbox: v2MailboxOn(store.developer),
           txnCache: {
             capacity: 1000,
             expiryOffsetMs: 1000 * 60 * 60 * 24 * 7,
@@ -278,7 +302,7 @@ const useBCAgentSetup = () => {
 
       return newAgent
     },
-    [logger, store.developer.enableDidCommV2]
+    [logger, store.developer]
   )
 
   const migrateIfRequired = useCallback(
@@ -362,6 +386,12 @@ const useBCAgentSetup = () => {
         dispatch({ type: DispatchAction.RESET_MEDIATORS })
       }
       const mediatorUrl = mediator.url
+      const didcommSwitches = {
+        enableTspCarriage: store.developer.enableTspCarriage,
+        enableDidCommV2: store.developer.enableDidCommV2,
+        enableV2Mailbox: store.developer.enableV2Mailbox,
+      }
+      applyDidCommSwitches(didcommSwitches)
       logger.info('Checking for existing agent...')
       if (agentInstanceRef.current) {
         const restartedAgent = await restartExistingAgent(agentInstanceRef.current)
@@ -411,7 +441,7 @@ const useBCAgentSetup = () => {
 
       logger.info(`configuring message pickup for ${mediatorUrl}`)
       await configureMessagePickup(newAgent)
-      await provisionV2MediationIfConfigured(newAgent, !!store.developer.enableDidCommV2)
+      await provisionV2MediationIfConfigured(newAgent, v2MailboxOn(didcommSwitches))
 
       logger.info('Warming up cache...')
       await warmUpCache(newAgent, cachedLedgers)
@@ -422,14 +452,8 @@ const useBCAgentSetup = () => {
       logger.info('Setting up VRC connection handler...')
       setupVrcConnectionHandler(newAgent)
 
-      // Dev/test-only carriage selection (docs/plans/openvtc-integration-plan
-      // §5.4's TSP scope correction) — must be set before setupTrustTasksInbound
-      // registers the inbound handler(s), since that registration only happens
-      // once per agent. Toggling Developer > Enable TSP envelope carriage takes
-      // effect on outbound sends immediately, but needs a restart for inbound.
-      setTspCarriageEnabled(!!store.developer.enableTspCarriage)
-      setDidCommV2Enabled(!!store.developer.enableDidCommV2)
-
+      // The carriage switches were applied at the top (applyDidCommSwitches). The TSP envelope's handler is
+      // registered whatever they say; what a send uses follows the setting and the contact's own answer.
       logger.info('Setting up Trust Tasks inbound handler (binding 0.2)...')
       setupTrustTasksInbound(newAgent)
 
@@ -452,6 +476,7 @@ const useBCAgentSetup = () => {
       dispatch,
       store.developer.enableTspCarriage,
       store.developer.enableDidCommV2,
+      store.developer.enableV2Mailbox,
       logger,
       indyLedgers,
       createNewAgent,

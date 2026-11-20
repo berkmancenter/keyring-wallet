@@ -26,8 +26,12 @@ export interface Developer {
   remoteDebugging: RemoteDebuggingState
   enableProxy: boolean
   enableAppToAppPersonFlow: boolean
+  /** Wallet-to-wallet TSP carriage, to contacts that read it (bifold contactTspCapability.ts). On unless opted out. */
   enableTspCarriage: boolean
+  /** Accept DIDComm v2 (the agent's didcommVersions ['v1','v2']). On unless opted out. */
   enableDidCommV2: boolean
+  /** The v2 mailbox (Coordinate Mediation 2.0 + its Pickup 4.0 loop), needed to mint v2 invitations. Off by default. */
+  enableV2Mailbox: boolean
   /** Mediator pickup over a live WebSocket instead of polling (utils/livePickup.ts). */
   enableLivePickup: boolean
   /** Connecting from a code someone shared (shared-connect, keyring-wallet #853): bifold's setSharedConnectEnabled. */
@@ -81,6 +85,7 @@ enum DeveloperDispatchAction {
   TOGGLE_APP_TO_APP_PERSON_FLOW = 'developer/toggleAppToAppPersonFlow',
   TOGGLE_TSP_CARRIAGE = 'developer/toggleTspCarriage',
   TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
+  TOGGLE_V2_MAILBOX = 'developer/toggleV2Mailbox',
   TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
   TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
   TOGGLE_SHARED_CONNECT_INVITE = 'developer/toggleSharedConnectInvite',
@@ -148,8 +153,11 @@ const developerState: Developer = {
   environment: iasEnvironments[0],
   remoteDebugging: remoteDebuggingState,
   enableAppToAppPersonFlow: false,
-  enableTspCarriage: false,
-  enableDidCommV2: false,
+  // On for everyone. The saved opt-outs live under new keys (below), so a value saved while these were opt-in
+  // switches, off by default, is never read: it cannot tell "turned off" from "never turned on".
+  enableTspCarriage: true,
+  enableDidCommV2: true,
+  enableV2Mailbox: false,
   // Off unless the build says otherwise: LIVE_MESSAGE_PICKUP=true in app/.env
   // turns it on for a review build with no code change. A value saved from
   // Developer options wins over this at startup (container-imp.ts).
@@ -184,8 +192,11 @@ export enum BCLocalStorageKeys {
   RemoteDebugging = 'RemoteDebugging',
   EnableProxy = 'EnableProxy',
   EnableAppToAppPersonFlow = 'EnableAppToAppPersonFlow',
-  EnableTspCarriage = 'EnableTspCarriage',
-  EnableDidCommV2 = 'EnableDidCommV2',
+  // New keys for switches that are now on by default. The old 'EnableTspCarriage' and 'EnableDidCommV2' values a phone
+  // saved while they were opt-in are left where they are and ignored (container-imp.ts).
+  EnableTspCarriage = 'TspCarriageOnByDefault',
+  EnableDidCommV2 = 'DidCommV2OnByDefault',
+  EnableV2Mailbox = 'EnableV2Mailbox',
   EnableLivePickup = 'EnableLivePickup',
   EnableSharedConnect = 'EnableSharedConnect',
   EnableSharedConnectInvite = 'EnableSharedConnectInvite',
@@ -272,6 +283,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableDidCommV2 }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableDidCommV2, developer.enableDidCommV2)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_V2_MAILBOX: {
+      const enableV2Mailbox: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableV2Mailbox }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableV2Mailbox, developer.enableV2Mailbox)
 
       return { ...state, developer }
     }
