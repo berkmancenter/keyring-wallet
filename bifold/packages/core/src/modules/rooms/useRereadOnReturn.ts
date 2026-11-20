@@ -10,6 +10,10 @@
  *   then said so, and couldn't be tapped, for as long as the member stayed on the screen (a run on 277, 3 min 50 s).
  * - When the offers poll reads an offer this list doesn't show, it reads once for those offers: a list open when an
  *   offer arrives is otherwise behind the badge and the notice. A read that still doesn't show them doesn't ask again.
+ *   A read whose offers FAILED is not such a read: it said nothing about them. It is made once more, after
+ *   {@link OFFERS_REREAD_RETRY_MS}. Nothing else would: the retries above follow the rooms, which list on their own
+ *   and may have answered, and the offers still unshown are the same ones, so nothing here would change to ask again.
+ *   The offer then stayed off the open list until the screen was left and opened again (IN-704-7).
  *
  * A screen under the one in view does neither: coming back into view reads anyway.
  *
@@ -24,13 +28,17 @@ import type { MyRooms } from './useMyRooms'
 /** After a read that failed: read again after each of these in turn, then wait as usual. As the rows' retries. */
 export const REREAD_RETRY_MS = [15_000, 30_000, 60_000] as const
 
+/** How long after the offers of that one read failed they are read once more. As the first of {@link REREAD_RETRY_MS}. */
+export const OFFERS_REREAD_RETRY_MS = 15_000
+
 export function useRereadOnReturn({
   reload,
   reread,
   failed,
   failures,
   offersNotShown,
-}: Pick<MyRooms, 'reload' | 'reread' | 'failed' | 'failures' | 'offersNotShown'>): void {
+  offersFailed,
+}: Pick<MyRooms, 'reload' | 'reread' | 'failed' | 'failures' | 'offersNotShown' | 'offersFailed'>): void {
   const focused = useIsFocused()
   const wasFocused = useRef(focused)
   useEffect(() => {
@@ -64,4 +72,16 @@ export function useRereadOnReturn({
   useEffect(() => {
     if (offersNotShown && wasFocused.current) reread()
   }, [offersNotShown, reread])
+
+  // The offers of that read failed: once more for the same offers, in view and with the app open, and no third time.
+  const retriedFor = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!offersFailed || !offersNotShown || !focused || retriedFor.current === offersNotShown) return
+    const timer = setTimeout(() => {
+      if (AppState.currentState !== 'active') return
+      retriedFor.current = offersNotShown
+      reread()
+    }, OFFERS_REREAD_RETRY_MS)
+    return () => clearTimeout(timer)
+  }, [offersFailed, offersNotShown, focused, reread])
 }
