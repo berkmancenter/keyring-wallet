@@ -340,6 +340,47 @@ describe('the request sheet on the asked phone', () => {
     expect(tree.queryByTestId(id(ConfirmItsYouModalIds.sheet))).toBeNull()
   })
 
+  // IN-704 (11-20): the put-off was kept by contact, so one Not now hid every later request from that person until a
+  // restart, while the asker's phone showed each one as sent.
+  test('Not now puts off that one request: a new request from the same contact shows its sheet (control: the same request arriving again stays hidden)', async () => {
+    jest.spyOn(confirmItsYou, 'restoreConfirmPrompts').mockResolvedValue(undefined)
+    const first = prompt({ note: 'the first', request: { payload: { challenge: 'a'.repeat(43) } } })
+    confirmItsYou.confirmPromptStore.set(first)
+    const tree = await show(<ConfirmItsYouModal />)
+    await press(tree, ConfirmItsYouModalIds.notNow)
+    expect(tree.queryByTestId(id(ConfirmItsYouModalIds.sheet))).toBeNull()
+
+    // The same request delivered a second time (pickup is at least once) is still the one put off.
+    await act(async () => {
+      confirmItsYou.confirmPromptStore.set({ ...first, receivedAt: new Date(Date.now() + 1000).toISOString() })
+      confirmItsYou.confirmEvents.emit('prompt', { connectionId: CONN })
+    })
+    expect(tree.queryByTestId(id(ConfirmItsYouModalIds.sheet))).toBeNull()
+
+    // A new request from the same contact, on the same connection: its own challenge, so its own sheet.
+    await act(async () => {
+      confirmItsYou.confirmPromptStore.set(
+        prompt({ note: 'the second', request: { payload: { challenge: 'b'.repeat(43) } } })
+      )
+      confirmItsYou.confirmEvents.emit('prompt', { connectionId: CONN })
+    })
+    expect(tree.getByTestId(id(ConfirmItsYouModalIds.sheet))).toBeTruthy()
+    expect(tree.getByText('the second')).toBeTruthy()
+  })
+
+  test('a request with no readable challenge is put off by when it arrived, so a later one still shows', async () => {
+    jest.spyOn(confirmItsYou, 'restoreConfirmPrompts').mockResolvedValue(undefined)
+    confirmItsYou.confirmPromptStore.set(prompt({ request: {}, receivedAt: '2026-11-20T01:00:00.000Z' }))
+    const tree = await show(<ConfirmItsYouModal />)
+    await press(tree, ConfirmItsYouModalIds.notNow)
+    expect(tree.queryByTestId(id(ConfirmItsYouModalIds.sheet))).toBeNull()
+    await act(async () => {
+      confirmItsYou.confirmPromptStore.set(prompt({ request: {}, receivedAt: '2026-11-20T01:05:00.000Z' }))
+      confirmItsYou.confirmEvents.emit('prompt', { connectionId: CONN })
+    })
+    expect(tree.getByTestId(id(ConfirmItsYouModalIds.sheet))).toBeTruthy()
+  })
+
   test('a request past its time is not shown (control: one in time is)', async () => {
     jest.spyOn(confirmItsYou, 'restoreConfirmPrompts').mockResolvedValue(undefined)
     confirmItsYou.confirmPromptStore.set(prompt({ expiresAt: new Date(Date.now() - 1000).toISOString() }))

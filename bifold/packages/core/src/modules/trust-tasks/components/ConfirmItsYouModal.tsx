@@ -5,8 +5,9 @@
  *
  * The note is shown exactly as the asker typed it, as plain text. "Confirm" and "No, that wasn't me" both ask for
  * the phone's own lock first (Face ID, fingerprint, or the phone's PIN or passcode): not confirmed, nothing is sent and
- * the request stays. Once sent, the sheet says what was sent and when. Not now sends nothing and hides the request
- * until the app starts again (it is kept, and comes back then while it is still open).
+ * the request stays. Once sent, the sheet says what was sent and when. Not now sends nothing and hides that one
+ * request until the app starts again (it is kept, and comes back then while it is still open). A later request from
+ * the same contact is a new question and shows its own sheet.
  *
  * When the request's time runs out with the sheet up, the sheet stays and says "This request has expired", with no
  * way left to answer, until Close (the same when an answer is tried just after the time ran out). Local only: nothing
@@ -58,8 +59,21 @@ export const ConfirmItsYouModalIds = {
   done: 'ConfirmItsYouDone',
 } as const
 
-/** Requests put off with Not now, by connection, until the app starts again. */
+/**
+ * Requests put off with Not now, until the app starts again: each one by itself ({@link putOffKey}), never the contact.
+ * Kept by contact, one Not now hid the sheet for every later request from that person until a restart, while the
+ * asker's phone showed each as sent (IN-704, 11-20).
+ */
 const putOff = new Set<string>()
+
+/**
+ * What names one request: its contact and the challenge only it carries (confirmItsYouSpec, required). Its arrival
+ * time when no challenge can be read, so two requests are never taken for one.
+ */
+const putOffKey = (prompt: ConfirmPrompt) => {
+  const challenge = (prompt.request?.payload as { challenge?: unknown } | undefined)?.challenge
+  return `${prompt.connectionId} ${typeof challenge === 'string' && challenge ? challenge : prompt.receivedAt}`
+}
 
 /** Tests only. */
 export const resetConfirmPutOff = () => putOff.clear()
@@ -75,7 +89,7 @@ export const setConfirmOwnerCheckForTests = (check: ConfirmTheOwner | null) => {
 }
 const ownerCheck: ConfirmTheOwner = (reason) => (ownerCheckForTests ?? confirmOwner)(reason)
 
-const firstShown = () => confirmPromptStore.list().find((prompt) => !putOff.has(prompt.connectionId))
+const firstShown = () => confirmPromptStore.list().find((prompt) => !putOff.has(putOffKey(prompt)))
 
 /**
  * The same rule as confirmItsYou.ts's pastDue. The negation is deliberate: an unreadable or missing expiresAt parses
@@ -191,7 +205,7 @@ const ConfirmItsYouModal: React.FC = () => {
 
   const notNow = useCallback(() => {
     if (!prompt) return
-    putOff.add(prompt.connectionId)
+    putOff.add(putOffKey(prompt))
     setSaid(null)
     setPrompt(firstShown())
   }, [prompt])
