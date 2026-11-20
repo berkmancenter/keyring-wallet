@@ -154,7 +154,8 @@ const developerState: Developer = {
   remoteDebugging: remoteDebuggingState,
   enableAppToAppPersonFlow: false,
   // On for everyone. The saved opt-outs live under new keys (below), so a value saved while these were opt-in
-  // switches, off by default, is never read: it cannot tell "turned off" from "never turned on".
+  // switches, off by default, is never read: a false saved against an unfinished experiment is not an opt-out of what
+  // now ships.
   enableTspCarriage: true,
   enableDidCommV2: true,
   enableV2Mailbox: false,

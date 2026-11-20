@@ -284,7 +284,10 @@ const useBCAgentSetup = () => {
           indyNetworks: ledgers,
           mediatorInvitationUrl: mediatorUrl,
           enableDidCommV2: !!store.developer.enableDidCommV2,
-          enableV2Mailbox: v2MailboxOn(store.developer),
+          enableV2Mailbox: v2MailboxOn({
+            enableDidCommV2: store.developer.enableDidCommV2,
+            enableV2Mailbox: store.developer.enableV2Mailbox,
+          }),
           txnCache: {
             capacity: 1000,
             expiryOffsetMs: 1000 * 60 * 60 * 24 * 7,
@@ -302,7 +305,7 @@ const useBCAgentSetup = () => {
 
       return newAgent
     },
-    [logger, store.developer]
+    [logger, store.developer.enableDidCommV2, store.developer.enableV2Mailbox]
   )
 
   const migrateIfRequired = useCallback(

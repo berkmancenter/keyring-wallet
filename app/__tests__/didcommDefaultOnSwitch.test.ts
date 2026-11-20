@@ -72,7 +72,8 @@ describe('DIDComm v2 and TSP carriage on by default, the v2 mailbox off', () => 
   })
 
   it('on load, a "false" saved while these were opt-in switches (the old keys) does not beat the new default', async () => {
-    // The trap Confirm it's you hit on 11-18: a saved false cannot tell "turned off" from "never turned on".
+    // The trap Confirm it's you hit on 11-18: a false saved against the opt-in experiment is not an opt-out of the
+    // default that now ships.
     saved.set('EnableTspCarriage', false)
     saved.set('EnableDidCommV2', false)
     expect(await load()).toEqual(AS_SHIPPED)

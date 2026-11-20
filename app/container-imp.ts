@@ -424,7 +424,7 @@ export class AppContainer implements Container {
         loadState<boolean>(BCLocalStorageKeys.EnableAppToAppPersonFlow, (val) => (enableAppToAppPersonFlow = val)),
         // On by default now, so read with loadSwitch: loadState skips a saved false, and an opt-out is a false. Their
         // keys are new; the values saved under 'EnableTspCarriage' / 'EnableDidCommV2' while these were opt-in are left
-        // and ignored (they cannot tell "turned off" from "never turned on").
+        // and ignored: a false saved against an opt-in experiment is not an opt-out of the default that now ships.
         loadSwitch(BCLocalStorageKeys.EnableTspCarriage, (val) => (enableTspCarriage = val)),
         loadSwitch(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
         loadSwitch(BCLocalStorageKeys.EnableV2Mailbox, (val) => (enableV2Mailbox = val)),
