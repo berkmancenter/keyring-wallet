@@ -1,8 +1,16 @@
 /**
- * The "Confirm it's you" switch: a Developer setting turns it on, off by default; a toggle saves it under its own key;
- * on load the saved choice wins. Turning it off for everyone is bifold's CONFIRM_ITS_YOU_REMOTE_OFF (or the
- * SEDI_KERI_REMOTE_OFF umbrella), and either must beat a saved "on". So these rows use bifold's real switch, not a
- * mock, and read it the way every screen does, through isConfirmItsYouEnabled().
+ * "Confirm it's you" is part of the app, with no setting (Alberto, 2026-11-18: "not behind developer options anymore",
+ * and it cannot be turned off). It was a Developer switch: off by default, saved under its own key, and applied to
+ * bifold's switch at start-up.
+ *
+ * So the app no longer has a say: at start-up it neither reads the old key nor sets bifold's switch, whatever a phone
+ * saved while it was a demo. A phone that saved "off" comes out as bifold ships it, like one that saved nothing.
+ * Turning it off for everyone is bifold's CONFIRM_ITS_YOU_REMOTE_OFF (or the SEDI_KERI_REMOTE_OFF umbrella), and those
+ * are now the only way it goes off. So these rows use bifold's real switch, not a mock, and read it the way every
+ * screen does, through isConfirmItsYouEnabled().
+ *
+ * Deliberately not asserted: that bifold's switch starts on. That is bifold's (its sediKeriSwitches.test.ts), and it
+ * depends on the bifold this app is pinned to; what is held here is that the app leaves it alone.
  */
 import {
   CONFIRM_ITS_YOU_REMOTE_OFF,
@@ -15,7 +23,7 @@ import {
 import path from 'path'
 
 import { composeContainers } from '../container-compose'
-import { BCDispatchAction, BCLocalStorageKeys, initialState, reducer } from '../src/store'
+import { BCDispatchAction, BCLocalStorageKeys, initialState } from '../src/store'
 
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
@@ -41,9 +49,13 @@ for (const from of [__dirname, bifoldCoreDir]) {
   i18n.addResourceBundle ??= jest.fn()
 }
 
-const saved = new Map<string, unknown>()
+/** The key the Developer switch saved under. No longer in BCLocalStorageKeys: named here as phones still hold it. */
+const OLD_KEY = 'EnableConfirmItsYou'
 
-/** Run the app container's state loader once; what it stored, and what bifold's switch now reads. */
+const saved = new Map<string, unknown>()
+let read: jest.SpyInstance
+
+/** Run the app container's state loader once; the state it made, and what bifold's switch now reads. */
 const load = async () => {
   const { app } = composeContainers(
     ((key: string) => key) as never,
@@ -52,8 +64,7 @@ const load = async () => {
   )
   const dispatch = jest.fn()
   await app.resolve(TOKENS.LOAD_STATE)(dispatch)
-  const state = dispatch.mock.calls[0][0].payload[0]
-  return { stored: state.developer.enableConfirmItsYou, on: isConfirmItsYouEnabled() }
+  return { developer: dispatch.mock.calls[0][0].payload[0].developer, on: isConfirmItsYouEnabled() }
 }
 
 const kills = () => {
@@ -61,64 +72,60 @@ const kills = () => {
   SEDI_KERI_REMOTE_OFF.off = false
 }
 
-const DEFAULT = initialState.developer.enableConfirmItsYou
-
 beforeEach(() => {
   saved.clear()
   kills()
-  setConfirmItsYouEnabled(false)
-  jest
+  read = jest
     .spyOn(PersistentStorage.prototype, 'getValueForKey')
     .mockImplementation(async (key: string) => saved.get(key) as never)
 })
 
 afterEach(() => {
   jest.restoreAllMocks()
-  initialState.developer.enableConfirmItsYou = DEFAULT
   kills()
   setConfirmItsYouEnabled(false)
 })
 
-describe('the "Confirm it\'s you" switch', () => {
-  it('is off by default', () => {
-    expect(initialState.developer.enableConfirmItsYou).toBe(false)
+describe('"Confirm it\'s you" has no setting in the app', () => {
+  it('the app keeps no state, no saved key and no action for it', () => {
+    expect(Object.keys(initialState.developer)).not.toContain('enableConfirmItsYou')
+    expect(Object.values(BCLocalStorageKeys)).not.toContain(OLD_KEY)
+    expect(Object.keys(BCDispatchAction).filter((name) => /CONFIRM_ITS_YOU/.test(name))).toEqual([])
   })
 
-  it('the Developer toggle sets it and saves it, under its own key (and nothing else)', () => {
-    const save = jest.spyOn(PersistentStorage, 'storeValueForKey').mockImplementation(async () => undefined)
-    const on = reducer(initialState, { type: BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU, payload: [true] })
-    expect(on.developer.enableConfirmItsYou).toBe(true)
-    expect(on.developer.enableTrustedApprovers).toBe(initialState.developer.enableTrustedApprovers)
-    expect(save).toHaveBeenCalledWith(BCLocalStorageKeys.EnableConfirmItsYou, true)
-    expect(save).toHaveBeenCalledTimes(1)
-    const off = reducer(on, { type: BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU, payload: [false] })
-    expect(off.developer.enableConfirmItsYou).toBe(false)
-    expect(save).toHaveBeenLastCalledWith(BCLocalStorageKeys.EnableConfirmItsYou, false)
+  it.each([
+    ['nothing saved', undefined],
+    ['"off" saved while it was a Developer switch', false],
+    ['"on" saved while it was a Developer switch', true],
+  ])('on load with %s, the old key is not read and the state carries nothing for it', async (_, was) => {
+    if (was !== undefined) saved.set(OLD_KEY, was)
+    const { developer } = await load()
+    expect(read.mock.calls.map(([key]) => key)).not.toContain(OLD_KEY)
+    expect(Object.keys(developer)).not.toContain('enableConfirmItsYou')
+    // Control: the loader did read its other switches, so "not read" is not "nothing was read".
+    expect(read.mock.calls.map(([key]) => key)).toContain(BCLocalStorageKeys.EnableTrustedApprovers)
   })
 
-  it('on load, with nothing saved, it is off (even if bifold was left on)', async () => {
+  it.each([
+    ['nothing saved', undefined],
+    ['"off" saved', false],
+    ['"on" saved', true],
+  ])("on load with %s, bifold's switch is left as it was: on stays on, off stays off", async (_, was) => {
+    if (was !== undefined) saved.set(OLD_KEY, was)
     setConfirmItsYouEnabled(true)
-    expect(await load()).toEqual({ stored: false, on: false })
-  })
-
-  it('on load, a saved "on" turns it on (control for the remote offs below)', async () => {
-    saved.set(BCLocalStorageKeys.EnableConfirmItsYou, true)
-    expect(await load()).toEqual({ stored: true, on: true })
+    expect((await load()).on).toBe(true)
+    setConfirmItsYouEnabled(false)
+    expect((await load()).on).toBe(false)
   })
 
   it.each([
     ['its own remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)],
     ['the SEDI/KERI umbrella', () => (SEDI_KERI_REMOTE_OFF.off = true)],
-  ])('on load, %s beats a saved "on": the choice is kept, and it reads off', async (_, off) => {
-    saved.set(BCLocalStorageKeys.EnableConfirmItsYou, true)
-    off()
-    expect(await load()).toEqual({ stored: true, on: false })
-  })
-
-  it('on load, a saved "off" wins over a default that is on', async () => {
-    initialState.developer.enableConfirmItsYou = true
-    saved.set(BCLocalStorageKeys.EnableConfirmItsYou, false)
+  ])('%s still turns it off after a load, whatever was saved (control: without it, on)', async (_, off) => {
+    saved.set(OLD_KEY, true)
     setConfirmItsYouEnabled(true)
-    expect(await load()).toEqual({ stored: false, on: false })
+    expect((await load()).on).toBe(true)
+    off()
+    expect((await load()).on).toBe(false)
   })
 })

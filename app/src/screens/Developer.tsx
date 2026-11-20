@@ -30,8 +30,6 @@ import {
   setUpSediDemoAsWard,
   turnOffSediDemo,
   SEDI_KERI_REMOTE_OFF,
-  CONFIRM_ITS_YOU_REMOTE_OFF,
-  setConfirmItsYouEnabled,
   setDemoStateHost,
   sediDemoHiddenByKill,
   EnforcementCheckCard,
@@ -135,7 +133,6 @@ const Developer: React.FC = () => {
   )
   const [enableTrustTestState, setEnableTrustTestState] = useState(!!store.developer.enableTrustTestState)
   const [enableStateCard, setEnableStateCard] = useState(!!store.developer.enableStateCard)
-  const [enableConfirmItsYou, setEnableConfirmItsYou] = useState(!!store.developer.enableConfirmItsYou)
   const [demoStateHostText, setDemoStateHostText] = useState(store.developer.demoStateHost ?? '')
   // Which demo switch is on: one side per phone, or neither. Saved, and handed to bifold at start-up (container-imp).
   const [sediDemoSide, setSediDemoSideShown] = useState<SediDemoSide | ''>(store.developer.sediDemoSide ?? '')
@@ -517,17 +514,6 @@ const Developer: React.FC = () => {
     // Read live: an arriving Guardian card and Who approves read it at each check, no restart.
     setStateVerifiedApproversEnabled(next)
     setEnableStateVerifiedApprovers(next)
-  }
-
-  const toggleEnableConfirmItsYouSwitch = () => {
-    const next = !enableConfirmItsYou
-    dispatch({
-      type: BCDispatchAction.TOGGLE_CONFIRM_ITS_YOU,
-      payload: [next],
-    })
-    // Read live: the contact page and an arriving request read it from the next render, no restart.
-    setConfirmItsYouEnabled(next)
-    setEnableConfirmItsYou(next)
   }
 
   const toggleEnableTrustTestStateSwitch = () => {
@@ -1323,23 +1309,6 @@ const Developer: React.FC = () => {
           <>
             <View style={styles.sectionSeparator}></View>
             <SectionHeader icon={'slideshow'} title={t('Developer.Demos')} />
-            {/* Hidden while its own remote off (or, above, the umbrella) is set: a saved "on" can't bring it back. */}
-            {!CONFIRM_ITS_YOU_REMOTE_OFF.off && (
-              <SectionRow
-                title={t('Developer.EnableConfirmItsYou')}
-                accessibilityLabel={t('Developer.EnableConfirmItsYou')}
-                testID={testIdWithKey('ToggleEnableConfirmItsYou')}
-                onPress={toggleEnableConfirmItsYouSwitch}
-              >
-                <Switch
-                  trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-                  thumbColor={enableConfirmItsYou ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-                  ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-                  onValueChange={toggleEnableConfirmItsYouSwitch}
-                  value={enableConfirmItsYou}
-                />
-              </SectionRow>
-            )}
             <View style={{ paddingHorizontal: 25, paddingVertical: 12 }}>
               <Text style={TextTheme.normal}>{t('Developer.SediDemoIntro')}</Text>
             </View>

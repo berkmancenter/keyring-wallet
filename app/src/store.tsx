@@ -60,11 +60,6 @@ export interface Developer {
   /** Developer "Demo state host": where a demo state root's did:webs is fetched while testing; '' for none. */
   demoStateHost: string
   /**
-   * "Confirm it's you": ask a contact to confirm, with their phone's lock, that it's really them.
-   * bifold's setConfirmItsYouEnabled; CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
-   */
-  enableConfirmItsYou: boolean
-  /**
    * Developer › Demos: which side of the SEDI demo this phone takes ('' for neither). bifold's setSediDemoSide at
    * start-up, so the codes screen shows this side's code after a restart.
    */
@@ -93,7 +88,6 @@ enum DeveloperDispatchAction {
   TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
   TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
   TOGGLE_STATE_CARD = 'developer/toggleStateCard',
-  TOGGLE_CONFIRM_ITS_YOU = 'developer/toggleConfirmItsYou',
   SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
   SET_SEDI_DEMO_SIDE = 'developer/setSediDemoSide',
 }
@@ -176,8 +170,6 @@ const developerState: Developer = {
   // Off by default: STATE_CARD_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on"; changing this default cannot.
   enableStateCard: false,
   demoStateHost: '',
-  // Off by default, as above: CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
-  enableConfirmItsYou: false,
   sediDemoSide: '',
 }
 
@@ -201,7 +193,9 @@ export enum BCLocalStorageKeys {
   EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
   EnableTrustTestState = 'EnableTrustTestState',
   EnableStateCard = 'EnableStateCard',
-  EnableConfirmItsYou = 'EnableConfirmItsYou',
+  // 'EnableConfirmItsYou' was here: the Developer switch for "Confirm it's you" while it was a demo. It is part of the
+  // app now, with no setting (Alberto, 2026-11-18), so the key is no longer read or written. A phone that saved it
+  // keeps the value; it is left and ignored, never migrated: a saved "off" cannot be told from one never touched.
   DemoStateHost = 'DemoStateHost',
   SediDemoSide = 'SediDemoSide',
 }
@@ -346,14 +340,6 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableStateCard }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableStateCard, developer.enableStateCard)
-
-      return { ...state, developer }
-    }
-    case DeveloperDispatchAction.TOGGLE_CONFIRM_ITS_YOU: {
-      const enableConfirmItsYou: boolean = (action?.payload || []).pop() || false
-      const developer = { ...state.developer, enableConfirmItsYou }
-
-      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableConfirmItsYou, developer.enableConfirmItsYou)
 
       return { ...state, developer }
     }
