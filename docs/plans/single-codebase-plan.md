@@ -162,11 +162,12 @@ git push origin <clone>/main:refs/heads/history/bifold   # 4,341 commits, paths 
 In the fold branch (its own worktree), under D1's squash shape:
 
 ```sh
-git rm --cached bifold && rm -rf bifold            # drop the gitlink
-git rm .gitmodules
+git rm --cached bifold && rm -rf bifold && git rm .gitmodules
+git commit -S -s -m "chore: drop the bifold gitlink"            # commit first: git merge refuses a dirty index
 git fetch origin history/bifold
 git merge --allow-unrelated-histories --no-commit origin/history/bifold   # brings the tree in
-git commit -S -m "chore: fold keyring-bifold a5bfcf3b2 into this repository (history on history/bifold)"
+git commit -S -s -m "chore: fold keyring-bifold a5bfcf3b2 into this repository (history on history/bifold)"
+git rev-parse HEAD:bifold    # must equal the bifold tree at a5bfcf3b2 (ffe2645d…); the rehearsal's first try silently skipped the merge
 ```
 
 This commit opens the Phase 1 PR, whose base is `feat/one-codebase`. The integration branch is unprotected, so the Phase 1 PR may merge into it with a merge commit, keeping `history/bifold` as an ancestor there. The final PR from `feat/one-codebase` to `main` is squash-merged as today (`--match-head-commit`), so what lands on `main` is one signed commit whose tree equals the integration branch's tip; the integration branch is kept (not deleted at merge) so the phase commits and the merge parent to `history/bifold` stay reachable for the optional `refs/replace/` graft. That squash commit's message names the bifold sha, the `history/bifold` ref, the integration branch and the graft recipe.
@@ -416,6 +417,10 @@ Thirteen drafts and seven ready PRs are open in `keyring-bifold` on 2026-11-20 (
 - After Phase 2, every future worktree saves 1 GB (no `bifold/node_modules`) and one install.
 
 ---
+
+## 11a. Timeline, as an estimate
+
+The product owner wants a store build every Friday. Counting from the plan's acceptance on 2026-11-21 and with the lanes on hold except the v2 lane: Phase 0 completes over the weekend; the Phase 1 PR is expected around 2026-11-24 and the Phase 2 PR around 2026-11-27, because Phase 2 waits on an install slot, on the OTA lane's cut-tool rework and on the gate lane's nightly on the folded tree; Phase 3 and the full §6.1 ladder take the week of 2026-11-30. **The one PR to `main` is not expected before Friday 2026-11-27.** So that Friday's store build (280's successor) comes from today's structure, or is skipped, which is the product owner's call that week; the first store build from the folded tree, **281**, is targeted for Friday 2026-12-04. If 11-27 ships from today's structure, its number is 281 and the folded build becomes 282; §6.3's rule is then read with those numbers. This is an estimate, not a commitment, and the coordinator puts the Friday question to the product owner each week.
 
 ## 12. Decisions
 
