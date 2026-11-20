@@ -32,7 +32,6 @@ import {
   setStateCardEnabled,
   setDemoStateHost,
   setSediDemoSide,
-  setConfirmItsYouEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -400,7 +399,6 @@ export class AppContainer implements Container {
         enableTrustTestState,
         enableStateCard,
         demoStateHost,
-        enableConfirmItsYou,
         sediDemoSide,
       } = initialState.developer
       let witness = initialState.witness
@@ -439,8 +437,9 @@ export class AppContainer implements Container {
         loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
         // As above: isStateCardEnabled() (with STATE_CARD_REMOTE_OFF and SEDI_KERI_REMOTE_OFF) is the only kill path.
         loadSwitch(BCLocalStorageKeys.EnableStateCard, (val) => (enableStateCard = val)),
-        // As above: bifold's isConfirmItsYouEnabled() (with its remote off and the umbrella) is the only kill path.
-        loadSwitch(BCLocalStorageKeys.EnableConfirmItsYou, (val) => (enableConfirmItsYou = val)),
+        // "Confirm it's you" is not loaded here any more: it is part of the app, with no setting, and bifold's own
+        // switch decides it (on as shipped; CONFIRM_ITS_YOU_REMOTE_OFF or SEDI_KERI_REMOTE_OFF turns it off). The
+        // value a phone saved while it was a Developer switch is left where it is and ignored.
         // The saved Demo state host goes to bifold, which refuses a value that is not a bare public hostname and applies
         // it only to demo roots and only while both switches hold: the saved text never redirects on its own.
         (async () => {
@@ -485,7 +484,6 @@ export class AppContainer implements Container {
           enableTrustTestState,
           enableStateCard,
           demoStateHost,
-          enableConfirmItsYou,
           sediDemoSide,
         },
         witness: { ...initialState.witness, ...witness },
@@ -506,8 +504,6 @@ export class AppContainer implements Container {
       setDemoStateHost(state.developer.demoStateHost || null)
       // Before the codes screen first opens: it shows only this side's code (both with no side).
       setSediDemoSide(state.developer.sediDemoSide || null)
-      // Before an arriving "Confirm it's you" request is read: it is dropped while off.
-      setConfirmItsYouEnabled(state.developer.enableConfirmItsYou)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {
