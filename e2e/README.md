@@ -131,6 +131,42 @@ content changing. Fix: `(cd bifold && yarn install)` then
 `yarn workspace @bifold/core run build`. Do **not** run bifold's root
 `yarn build` (see the root `CLAUDE.md`).
 
+## Running several checkouts at once
+
+Several checkouts (or worktrees) can run on one machine, each with its own Metro,
+mediator and Appium, if no two share a port. Give checkout *N* (0 for the first)
+an offset of `10 × N` from the defaults:
+
+| What | Default | Checkout *N* | How to set it |
+| --- | --- | --- | --- |
+| Metro | 8081 | 8081 + 10N | `yarn demo --metro-port <n>` (or `yarn start --port <n>`) |
+| Local mediator | 3010 | 3010 + 10N | `yarn demo --port <n>`, or `yarn mediator --port <n> --endpoint http://10.0.2.2:<n>` (`http://localhost:<n>` for an iOS simulator) |
+| Witness server | 9002 / 9003 | +10N each | `WITNESS_PORT`, `WITNESS_WEB_PORT` |
+| Appium | 4723 | 4723 + 10N | `APPIUM_PORT` |
+| WebDriverAgent (iOS simulator, real device) | 8100 / 8123 | 8100 + 10N | `WDA_LOCAL_PORT` |
+| UiAutomator2 server (Android) | 8200 | 8200 + 10N | `ANDROID_SYSTEM_PORT` |
+
+Keep the values in a gitignored file per checkout (for example `ports.local.env`,
+listed in `.git/info/exclude`) and `source` it in each shell, so the numbers live
+in one place. Runners that already pick their own WDA ports
+(`E2E_WDA_PORT_BASE`, `WDA_LOCAL_PORT` in `run-vti-invite.js` and
+`run-vta-link.js`) take the same variables.
+
+Two things the ports do not fix:
+
+- **One device, one app.** Every checkout builds the same application id
+  (`asml.bkc.harvard.wallet`), so installing from two of them onto one emulator or
+  phone replaces the app and its data. Give each checkout its own emulator or
+  device (`adb -s <serial>`), or build all but one as the `.pushtest` variant and
+  run it with `E2E_APP_ID=asml.bkc.harvard.wallet.pushtest`.
+- **`app/.env` is baked in at build time** (see the section above). A checkout
+  whose `app/.env` was copied from another points at that checkout's mediator
+  until you rebuild after its own `yarn mediator` run rewrites it.
+
+Another service on the host may already hold a port in the table (9003 has been
+seen). If a run reports an address in use, check with `ss -ltn` and move that
+checkout's value.
+
 ## Keeping an AVD's state across a restart
 
 An emulator booted with `-no-snapshot-save` **discards that session's disk
