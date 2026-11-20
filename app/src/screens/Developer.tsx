@@ -12,6 +12,7 @@ import {
   clearTestContacts,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
+  setV2MediationEnabled,
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
   setTrustedApproversEnabled,
@@ -122,6 +123,7 @@ const Developer: React.FC = () => {
   const [enableAppToAppPersonFlow, setEnableAppToAppPersonFlow] = useState(!!store.developer.enableAppToAppPersonFlow)
   const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
+  const [enableV2Mailbox, setEnableV2Mailbox] = useState(!!store.developer.enableV2Mailbox)
   const [enableLivePickup, setEnableLivePickup] = useState(!!store.developer.enableLivePickup)
   const [enableSharedConnect, setEnableSharedConnect] = useState(!!store.developer.enableSharedConnect)
   const [enableSharedConnectInvite, setEnableSharedConnectInvite] = useState(
@@ -466,10 +468,24 @@ const Developer: React.FC = () => {
       payload: [next],
     })
     // The agent's `didcommVersions` is fixed at construction, so a restart is
-    // needed for the agent to accept and produce v2 envelopes; new
-    // relationship invitations read the flag live (isDidCommV2Enabled).
+    // needed for the agent to accept and produce v2 envelopes. New invitations
+    // are v2 only with the v2 mailbox too (bifold canMintV2Invitation).
     setDidCommV2Enabled(next)
+    setV2MediationEnabled(next && enableV2Mailbox)
     setEnableDidCommV2(next)
+  }
+
+  const toggleEnableV2MailboxSwitch = () => {
+    const next = !enableV2Mailbox
+    dispatch({
+      type: BCDispatchAction.TOGGLE_V2_MAILBOX,
+      payload: [next],
+    })
+    // Provisioning and the Pickup 4.0 loop start at the next agent start
+    // (useBCAgentSetup); minting reads the switch live, and mints v2 only once a
+    // v2 mailbox is provisioned.
+    setV2MediationEnabled(next && enableDidCommV2)
+    setEnableV2Mailbox(next)
   }
 
   const toggleEnableSharedConnectSwitch = () => {
@@ -1129,6 +1145,23 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableDidCommV2Switch}
             value={enableDidCommV2}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableV2Mailbox')}
+          accessibilityLabel={t('Developer.EnableV2Mailbox')}
+          testID={testIdWithKey('ToggleEnableV2Mailbox')}
+          showRowSeparator
+          // The row toggles too: iOS hides the Switch behind the accessible row
+          // from automation (same fix as the DIDComm v2 row, 2026-09-14).
+          onPress={toggleEnableV2MailboxSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableV2Mailbox ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableV2MailboxSwitch}
+            value={enableV2Mailbox}
           />
         </SectionRow>
         <SectionRow
