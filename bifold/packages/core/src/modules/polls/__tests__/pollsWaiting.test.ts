@@ -1,11 +1,14 @@
 /**
  * The polls waiting for the member: which ones count, how Not now hides one and brings it back once at a random time
  * before its close, what is kept (never the question), and when the check asks: on opening, on coming back to the
- * foreground and hourly, never in the background and never on a screen's focus.
+ * foreground and hourly, never in the background and never on a screen's focus; and that a community left takes its
+ * cards with it at once, even from a check under way.
  */
 import type { Agent } from '@credo-ts/core'
 import { act, renderHook } from '@testing-library/react-native'
-import { AppState } from 'react-native'
+import { AppState, DeviceEventEmitter } from 'react-native'
+
+import { ROOMS_LEFT_EVENT } from '../../rooms/useMyRooms'
 
 import {
   POLLS_CHECK_MS,
@@ -43,8 +46,8 @@ const listed = (electionId: string, over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-const waitingOn = (electionId: string, closesIn = 100 * HOUR): PollWaiting => ({
-  communityDid: A,
+const waitingOn = (electionId: string, closesIn = 100 * HOUR, communityDid = A): PollWaiting => ({
+  communityDid,
   electionId,
   votingClosesAt: iso(NOW + closesIn),
 })
@@ -194,6 +197,27 @@ describe('voted since the last check', () => {
   })
 })
 
+describe('a community left', () => {
+  const C = 'did:webvh:QmCommunityC:vtc.example.org'
+  const shown = () => {
+    const { result } = renderHook(() => usePollsWaiting())
+    act(() => publishPollsWaiting([waitingOn('a1'), waitingOn('b1', 100 * HOUR, B), waitingOn('a2')]))
+    return result
+  }
+
+  test('its cards leave the stack as soon as the leave is done; another community’s stay', () => {
+    const result = shown()
+    act(() => void DeviceEventEmitter.emit(ROOMS_LEFT_EVENT, A))
+    expect(result.current.map((p) => p.electionId)).toEqual(['b1'])
+  })
+
+  test('leaving a community with no cards leaves every card where it was (control)', () => {
+    const result = shown()
+    act(() => void DeviceEventEmitter.emit(ROOMS_LEFT_EVENT, C))
+    expect(result.current.map((p) => p.electionId)).toEqual(['a1', 'b1', 'a2'])
+  })
+})
+
 // ---- when the check asks ----
 
 const mockAgent = { current: undefined as Agent | undefined }
@@ -272,6 +296,38 @@ describe('when the check asks', () => {
       await flush()
     })
     expect(mockService.readPolls).toHaveBeenCalledTimes(2)
+  })
+
+  // The check read the memberships, then the leave was done while each community was still being asked. What the
+  // stack shows once A has answered (B still asked), then once both have.
+  const checkAcrossALeave = async (leave: boolean) => {
+    const answers: Array<() => void> = []
+    mockService.readPolls.mockImplementation(
+      (community: string) =>
+        new Promise((resolve) => answers.push(() => resolve([listed(community === A ? 'inA' : 'inB')])))
+    )
+    const { result } = renderHook(() => usePollsWaiting())
+    mount()
+    await act(flush)
+    expect(answers).toHaveLength(2)
+    if (leave) act(() => void DeviceEventEmitter.emit(ROOMS_LEFT_EVENT, A))
+    const seen: string[][] = []
+    for (const answer of answers) {
+      await act(async () => {
+        answer()
+        await flush()
+      })
+      seen.push(result.current.map((p) => p.electionId))
+    }
+    return seen
+  }
+
+  test('a check under way when a community is left shows none of that community, not even for a moment', async () => {
+    expect(await checkAcrossALeave(true)).toEqual([[], ['inB']])
+  })
+
+  test('the same check with no leave shows each community as it answers (control)', async () => {
+    expect(await checkAcrossALeave(false)).toEqual([['inA'], ['inA', 'inB']])
   })
 
   test('nothing is asked without a linked agent (control for the opening check)', async () => {

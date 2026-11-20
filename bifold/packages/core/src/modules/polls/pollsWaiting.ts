@@ -15,14 +15,18 @@
  * never prompts a vote at a moment that could be paired with the ticket. Hidden again after that, it stays hidden until
  * the poll closes. The record is rewritten, never deleted: a poll that has closed falls out of it on the next write.
  *
+ * **A community left.** Its cards leave the stack as soon as the leave is done (`ROOMS_LEFT_EVENT`), not at the next
+ * check, and a check already under way shows none of what it read there.
+ *
  * @module polls/pollsWaiting
  */
 import type { Agent } from '@credo-ts/core'
 import { useAgent } from '@bifold/react-hooks'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { AppState } from 'react-native'
+import { AppState, DeviceEventEmitter } from 'react-native'
 
 import { createKeyLock } from '../../utils/keyLock'
+import { ROOMS_LEFT_EVENT } from '../rooms/useMyRooms'
 import { GenericRecordsCommunityStore, isCurrentMembership } from '../trust-tasks/module/VtiCommunityStore'
 import { vtaAgent } from '../trust-tasks/module/vtaAgent'
 
@@ -77,6 +81,29 @@ export function resetPollsWaiting(): void {
   waiting.items = undefined
   waiting.listeners.forEach((listener) => listener())
 }
+
+// ---- a community left ----
+
+/** One set per check under way: the communities left since that check began, whose cards it must not put back. */
+const leftDuringChecks = new Set<Set<string>>()
+
+/**
+ * The phone has left this community (roomsLeave, once the leave is done): its cards leave the stack now. A check
+ * already under way read the memberships before the leave, so it is told too and shows none of this community. In
+ * memory only: nothing kept on this phone changes. A phone with several agents can hold a second identity's membership
+ * in the same community, which the leave keeps (VtiCommunityStore.forgetCommunity, by identity): its cards go too,
+ * and the next check, which reads the memberships, puts them back.
+ */
+export function dropLeftCommunity(communityDid: string): void {
+  leftDuringChecks.forEach((left) => left.add(communityDid))
+  const items = waiting.items
+  if (items?.some((p) => p.communityDid === communityDid)) publish(items.filter((p) => p.communityDid !== communityDid))
+}
+// A check that starts after the leave needs no telling because of an order kept elsewhere: the event comes only once the
+// leave is done (afterLeavingCommunity, after vtiJoin's leaveCommunity has deleted the membership), so that check's
+// memberCommunities no longer finds the community. An event sent before the membership is gone (say, early, for a
+// faster screen) would let such a check put the cards back, and no row here would fail.
+DeviceEventEmitter.addListener(ROOMS_LEFT_EVENT, dropLeftCommunity)
 
 // ---- what the member hid ----
 
@@ -275,18 +302,23 @@ export function usePollsWaitingCheck(): void {
     const check = async () => {
       if (Date.now() - lastCheck < POLLS_CHECK_FLOOR_MS) return
       lastCheck = Date.now()
+      const left = new Set<string>()
+      leftDuringChecks.add(left)
       try {
         const [communities, hidden] = await Promise.all([
           memberCommunities(agent as Agent),
           loadHiddenPolls(agent as Agent),
         ])
         // Each community's cards as it answers (POLLS_CHECK_PARALLEL): the others keep what the stack shows until theirs do.
+        const stillIn = () => communities.filter((c) => !left.has(c))
         const found = await findPollsWaiting(service, communities, hidden, Date.now(), (answered) => {
-          if (live && isPollsCheckParallelOn()) publish(mergeAnswered(waiting.items ?? NONE, communities, answered))
+          if (live && isPollsCheckParallelOn()) publish(mergeAnswered(waiting.items ?? NONE, stillIn(), answered))
         })
-        if (live) publish(found)
+        if (live) publish(found.filter((p) => !left.has(p.communityDid)))
       } catch {
         // The stack keeps what the last check found.
+      } finally {
+        leftDuringChecks.delete(left)
       }
     }
     void check()
