@@ -115,7 +115,9 @@ Deployed limits: `queued_send_messages_per_peer = 50`, receive 200 soft / 1000 h
 (`mediator.toml:117-136`). A phone offline for days must not lose mail silently. What the mediator does at the hard
 cap, refuse the message or drop it, is not yet read (the parent's M3b row and E10 leave it open), so M3 defines it and
 tests it: S5b pushes a phone past the hard cap and checks that the sender is told, with a user-visible error, rather
-than the message vanishing. The values are set from the soak (S5), not guessed.
+than the message vanishing. Until the soak (S5) runs, which is after the first tester build, the limits are upstream's
+defaults as the deploy package's `mailbox.toml` marks them (`PENDING S5`): a deliberate starting point, not a measured
+one. S5 sets them.
 
 ### 3.5 Wake
 
@@ -179,16 +181,19 @@ explicit lines until testers are meant to reach it from those builds. Testers fi
 | **S5b** | Refusal at the hard cap (§3.4, the parent's M3b and E10) | A phone held offline past the hard cap: the mediator's behaviour is recorded, and the sender's phone shows a user-visible error for the refused message; control: below the cap, the message is delivered and no error shows |
 | **S6** | Wake (D-M3-2) | The three "done when" checks of §3.5 pass against the real gateway path, with a control |
 | **S6b** | Mailbox contacts with no mailbox open (app) | With the switch off or no mailbox mediator configured, a contact made through the mailbox shows as "waiting for the new message service" (the parent's M4 wording), and a send to it is refused on screen rather than lost; the contact's history and record stay. Control: with the mailbox open, the same contact sends and receives. Needed because only the mailbox's own transport carries a send to such a contact, and it is registered only when a mailbox opens |
-| **S7** | Tester build: `MAILBOX_MEDIATOR_DID` set in the store build (§3.7); needs S6b in that build | Two testers' phones with the switch on connect, chat and exchange a VRC both ways through the mailbox; one stays offline and is woken; one turns the switch off and sees S6b's waiting state |
+| **S7** | Tester build: `MAILBOX_MEDIATOR_DID` set in the store build (§3.7). The first tester build goes without S6b (decided 2026-11-21); a later one carries it | Two testers' phones with the switch on connect, chat and exchange a VRC both ways through the mailbox; one stays offline and is woken. With S6b in the build: one turns the switch off and sees S6b's waiting state. Without it: the mailbox host stays up while any tester holds a mailbox contact, and a send to such a contact with the switch off fails where the sender sees it (1:1 chat returns the text to the field with a toast; the VRC exchange's path is cited in the wiring change) |
 | **S8** | M3d: transport order and large frames (the parent's M3d row) | The mailbox mediator's service order is recorded; if WebSocket is first or alone, ten queued 256 KiB photos (about 6 MB) arrive on an Android phone and an iPhone, or a batch cap is in place and the frame it allows arrives. Gates M4, not S7 |
 
 Rollback at any step before S7: stop the mailbox VM; no build points at it.
 
 After S7, rollback has M4's shape, not M3's, because testers' phones hold contacts made through the mailbox. Turning
 the switch off, or blanking the secret in the next build, stops new mailbox contacts: new invitations are v1 again.
-It does not move the existing ones. A contact made through the mailbox can be reached only through it, so with no
-mailbox open those contacts show S6b's waiting state until the mailbox opens again or the pair is re-invited over
-v1; no message is lost silently. The mailbox host therefore stays up after S7 rollback while any tester holds such
+It does not move the existing ones. A contact made through the mailbox can be reached only through it. What holds
+before S6b exists (the first tester build): the mediator keeps the mail for 7 days and the host stays up, so nothing
+is lost at the mediator; on the phone there is no waiting state, a send to such a contact fails, and the sender sees
+the failure where the app already shows one (1:1 chat: the text returns to the field with a toast). Once S6b is in a
+build, those contacts show its waiting state until the mailbox opens again or the pair is re-invited over v1, and no
+message is lost silently. Either way the mailbox host stays up after S7 rollback while any tester holds such
 contacts, so mail already queued for them is still collected (it expires after the queue's 7 days, §3.4). Stopping
 the host after S7 is the product owner's word, once those contacts are re-invited.
 
@@ -214,3 +219,4 @@ refuse today; for now logs stay on the VM and a synthetic live-delivery probe is
   tester holds a mailbox contact; the `MAILBOX_MEDIATOR_DID` repository secret (the owner's word) after the identity
   exists; a store build (the owner's word).
 - M4: S8 and M3c (the witness accepting the mailbox mediator, a row after the first tester build).
+- S5 and S5b: after the first tester build (decided 2026-11-21); until then the limits are upstream's defaults (§3.4).
