@@ -23,8 +23,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: ./.github/workflows/actions/setup-node
       - uses: ruby/setup-ruby@v1
         with:
@@ -53,8 +51,6 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: ./.github/workflows/actions/setup-node
       - name: Build bifold packages
         working-directory: bifold
@@ -79,8 +75,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: ./.github/workflows/actions/setup-node
       - name: Build bifold packages
         working-directory: bifold

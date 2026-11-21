@@ -35,8 +35,8 @@ jobs:
             cd $APP_PATH
             GIT_SSH_COMMAND='ssh -i ~/.ssh/id_AdvancedIdentity_deploy_ed25519' git fetch origin
             GIT_SSH_COMMAND='ssh -i ~/.ssh/id_AdvancedIdentity_deploy_ed25519' git reset --hard origin/$BRANCH_NAME
-            git submodule sync --recursive
-            git submodule update --init --recursive --force
+            # bifold/ is part of the repository since the fold; a checkout that still has the submodule's own .git drops it once.
+            if [ -f bifold/.git ]; then rm -rf bifold; GIT_SSH_COMMAND='ssh -i ~/.ssh/id_AdvancedIdentity_deploy_ed25519' git reset --hard origin/$BRANCH_NAME; fi
             cd $APP_PATH/bifold/packages/witness-server
             echo "Restarting witness server..."
             docker compose down
