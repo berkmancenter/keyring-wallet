@@ -89,7 +89,13 @@ mediator_acl_mode = "explicit_deny"
 #                               forward (below);
 #   SEND_FORWARDED_CHANGE       the account may switch its own SEND_FORWARDED on
 #                               (measured in the lab at v0.53.0: the phone's
-#                               self-flag works);
+#                               self-flag works). LOAD-BEARING: this is what
+#                               makes the phone's self-grant possible. Without
+#                               it the mediator answers the phone's
+#                               account/update with
+#                               authorization.acl.not_self_manageable, the
+#                               mailbox opens receive-only, and EVERY send from
+#                               EVERY phone is refused;
 #   MODE_EXPLICIT_DENY          the account's own access list starts open.
 # ANON_RECEIVE: a phone's send is a routing/2.0 forward whose attachment is the
 # standard anoncrypt wrap for the recipient mailbox's key. Without ANON_RECEIVE
