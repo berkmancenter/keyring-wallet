@@ -2,7 +2,7 @@
 
 *Parent: the mediator migration plan, `docs/plans/mediator-migration-plan.md` on branch
 `docs/mediator-migration-plan` at `8a75531b` (not yet on `main`); this document owns its M3 row and the M3a/M3b
-extension rows. Reasoning and evidence: [`2026-11-21-al.md`](./2026-11-21-al.md). Related:
+extension rows, and M3d. Reasoning and evidence: [`2026-11-21-al.md`](./2026-11-21-al.md). Related:
 [`../openvtc-integration-plan/didcomm_v2_subtask.md`](../openvtc-integration-plan/didcomm_v2_subtask.md) §7.2 (the
 wallet mailbox design this hosts).*
 
@@ -22,10 +22,11 @@ over ATM, holds one Pickup 3.0 live socket, and receives every v2 contact's mail
 run by Keyring on its managed infrastructure, open to phones, with a wake path, monitoring and backups. The app side
 already exists and is off: it opens the mailbox only with the Developer "DIDComm v2 mailbox" switch on and
 `MAILBOX_MEDIATOR_DID` set, and that value is blank in every build (wallet #955). M3 ends when testers can turn the
-switch on against it.
+switch on against it (S7). M3d (transport order and large frames) is S8 here and gates M4, not S7.
 
 Not M3: v2 invitations on by default for everyone (the build after load is measured, which also drops the switch),
-and the Credo mediator's retirement.
+and the Credo mediator's retirement. M3c (an Affinidi-compatible local mediator for dev and CI, and the witness
+acceptance check) stays with the parent plan's M3c row; this document does not plan it.
 
 ## 2. What exists today (READ)
 
@@ -86,15 +87,24 @@ How an account comes to exist is decision **D-M3-1**:
   tool `mediator-account`, driven by a service the phone already talks to). Closed to strangers; needs that service
   and a path for the phone to ask.
 
+`global_acl_default` is a whole ACL string, not a list of grants: a `DENY_ALL` base, the grants, and a trailing
+`MODE_*` flag. The deployed one is `DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,MODE_EXPLICIT_DENY`
+(`mediator.toml:92`, under `mediator_acl_mode = "explicit_allow"` at `:91`). How an account's own `MODE_*` flag combines
+with `mediator_acl_mode` is read in source and measured in S2 with the rights, and the mailbox's string is written in
+that full form.
+
 Either way, the mailbox host's Caddy does not refuse public `/authenticate` (it is the phones' sign-in), and
-`cors_allow_origin` is set in the `[security]` table, since React Native sends an `Origin` header on the WebSocket
-upgrade (VTI-05).
+`cors_allow_origin` is set in the `[security]` table (VTI-06), since React Native sends an `Origin` header on the
+WebSocket upgrade (VTI-05). VTI-05's upstream resolution changed documentation and tests, not behaviour: a phone's
+`Origin` is still admitted only if the policy admits it, so the setting stays required.
 
 ### 3.4 Queue limits for phones
 
 Deployed limits: `queued_send_messages_per_peer = 50`, receive 200 soft / 1000 hard, expiry 7 days
-(`mediator.toml:117-136`). A phone offline for days must not lose mail silently: the hard cap refuses rather than
-drops, and the sender sees the refusal (parent plan, E10). The values are set from the soak (S5), not guessed.
+(`mediator.toml:117-136`). A phone offline for days must not lose mail silently. What the mediator does at the hard
+cap, refuse the message or drop it, is not yet read (the parent's M3b row and E10 leave it open), so M3 defines it and
+tests it: S5b pushes a phone past the hard cap and checks that the sender is told, with a user-visible error, rather
+than the message vanishing. The values are set from the soak (S5), not guessed.
 
 ### 3.5 Wake
 
@@ -126,8 +136,12 @@ gets none, and a phone with no registered handle causes nothing to be sent.
 
 ### 3.7 App wiring
 
-The store build's workflow (`staging.yaml`) writes `MAILBOX_MEDIATOR_DID` from a new repository secret holding the
-mailbox mediator's DID (a new secret is the product owner's word). OTA and test builds keep writing it empty by
+Today the store build's workflow (`staging.yaml`) writes no `MAILBOX_MEDIATOR_DID` line, so the value is absent
+there rather than emptied. It still writes the retired `MEDIATOR_V2_URL` from a repository secret of that name
+(`staging.yaml:372,391,958,973`), which the app no longer reads. S7 replaces those lines with `MAILBOX_MEDIATOR_DID`
+from a new repository secret holding the mailbox mediator's DID (a new secret is the product owner's word). The
+Coordinate Mediation 2.0 retirement's last step also removes the retired lines; whichever change lands first removes
+them, and the other finds them gone. OTA and test builds keep writing it empty by
 explicit lines until testers are meant to reach it from those builds. Testers first: the Developer switch gates it
 (wallet #955).
 
@@ -141,11 +155,21 @@ explicit lines until testers are meant to reach it from those builds. Testers fi
 | **S3** | Infra change for `kpush-mailbox` (§3.1, §3.6) | `deploy.sh plan` shows additive `kpush-*` only and `tf-plan-guard.sh` passes without override flags; reviewed; applied on the product owner's word |
 | **S4** | Image built and pushed (§3.2); mediator identity and the admin DID provisioned | `livez` and `readyz` answer on the mailbox host; a phone-shaped client signs in and holds a socket |
 | **S5** | Soak: 24 h of simulated phones (the lab harness against the real host) | Memory per message, sockets per phone (one by design), Redis memory and queue depths recorded; §3.4's limits set from them; no unbounded growth |
+| **S5b** | Refusal at the hard cap (§3.4, the parent's M3b and E10) | A phone held offline past the hard cap: the mediator's behaviour is recorded, and the sender's phone shows a user-visible error for the refused message; control: below the cap, the message is delivered and no error shows |
 | **S6** | Wake (D-M3-2) | The three "done when" checks of §3.5 pass against the real gateway path, with a control |
-| **S7** | Tester build: `MAILBOX_MEDIATOR_DID` set in the store build (§3.7) | Two testers' phones with the switch on connect, chat and exchange a VRC both ways through the mailbox; one stays offline and is woken |
+| **S6b** | Mailbox contacts with no mailbox open (app) | With the switch off or no mailbox mediator configured, a contact made through the mailbox shows as "waiting for the new message service" (the parent's M4 wording), and a send to it is refused on screen rather than lost; the contact's history and record stay. Control: with the mailbox open, the same contact sends and receives. Needed because only the mailbox's own transport carries a send to such a contact, and it is registered only when a mailbox opens |
+| **S7** | Tester build: `MAILBOX_MEDIATOR_DID` set in the store build (§3.7); needs S6b in that build | Two testers' phones with the switch on connect, chat and exchange a VRC both ways through the mailbox; one stays offline and is woken; one turns the switch off and sees S6b's waiting state |
+| **S8** | M3d: transport order and large frames (the parent's M3d row) | The mailbox mediator's service order is recorded; if WebSocket is first or alone, ten queued 256 KiB photos (about 6 MB) arrive on an Android phone and an iPhone, or a batch cap is in place and the frame it allows arrives. Gates M4, not S7 |
 
-Rollback at any step before S7: stop the mailbox VM; no build points at it. After S7: blank the secret in the next
-build; a tester's mailbox mail waits until then, and the switch off returns the phone to v1 invitations.
+Rollback at any step before S7: stop the mailbox VM; no build points at it.
+
+After S7, rollback has M4's shape, not M3's, because testers' phones hold contacts made through the mailbox. Turning
+the switch off, or blanking the secret in the next build, stops new mailbox contacts: new invitations are v1 again.
+It does not move the existing ones. A contact made through the mailbox can be reached only through it, so with no
+mailbox open those contacts show S6b's waiting state until the mailbox opens again or the pair is re-invited over
+v1; no message is lost silently. The mailbox host therefore stays up after S7 rollback while any tester holds such
+contacts, so mail already queued for them is still collected (it expires after the queue's 7 days, §3.4). Stopping
+the host after S7 is the product owner's word, once those contacts are re-invited.
 
 ## 5. Decisions for the product owner
 
@@ -163,5 +187,6 @@ build; a tester's mailbox mail waits until then, and the switch off returns the 
 ## 6. Blocked on
 
 - S3 onwards: D-M3-1, D-M3-2 and D-M3-4.
-- S7: the new repository secret, and a store build.
+- S7: S6b in a build, the new repository secret, and a store build.
+- M4: S8 (M3d), and the parent's M3c.
 - The parent plan's infrastructure blocker (its §6) is the parent's; whether it still stands is not re-checked here.
