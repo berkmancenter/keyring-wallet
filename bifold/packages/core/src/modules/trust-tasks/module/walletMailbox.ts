@@ -175,7 +175,15 @@ async function ensureMailboxForwarding(agent: Agent, mailbox: WalletMailbox): Pr
       did: mailboxAccountKey(mailbox.did),
       acl: { sendForwarded: true },
     })
-    const acl = (body.payload as { acl?: { sendForwarded?: unknown } } | undefined)?.acl
+    // The answer carries the account's realised view under `account` (upstream's bundle for messaging/account/update,
+    // responseSchema: Response { account REQUIRED } → Account { acl } → MediatorAcl { sendForwarded }, read at the
+    // pinned v0.53.0; the probe watching the mailbox measured the same). The flat fallback is defence against a
+    // non-conformant answer, not a second blessed shape: a conformant mediator cannot send one, since the response
+    // allows no other members.
+    const payload = body.payload as
+      | { account?: { acl?: { sendForwarded?: unknown } }; acl?: { sendForwarded?: unknown } }
+      | undefined
+    const acl = payload?.account?.acl ?? payload?.acl
     if (acl?.sendForwarded !== true) {
       releaseWarn(
         `${LOG_PREFIX} forwarding not confirmed on for ${didPrefix(mailbox.did)} at ${didPrefix(mailbox.mediatorDid)}: the answer is ${String(body.type ?? 'untyped')}`

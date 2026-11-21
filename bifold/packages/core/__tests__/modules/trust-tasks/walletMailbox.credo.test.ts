@@ -96,7 +96,11 @@ function hubSession(
       return { id: createHash('sha256').update(JSON.stringify(innerJwe)).digest('hex') }
     },
     // The hub confirms the account's forwarding right as the mediator does (walletMailbox.ts, v0.53.0's answer shape).
-    ask: async () => ({ type: 'ask', body: { payload: { acl: { sendForwarded: true } } } }) as never,
+    ask: async () =>
+      ({
+        type: 'ask',
+        body: { payload: { account: { did: 'x', accountType: 'standard', acl: { sendForwarded: true } } } },
+      }) as never,
   }
 }
 

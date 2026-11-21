@@ -102,11 +102,20 @@ function fakeAgent({ created = ['did:peer:2.mine'] }: { created?: string[] } = {
 }
 
 const ENVELOPE = 'https://trusttasks.org/binding/didcomm/0.1/envelope'
-/** The mediator's answers, as affinidi-messaging-mediator v0.53.0 gave them in the lab: the realised view, in `payload`. */
+/**
+ * The mediator's answers as v0.53.0 gives them (its bundles' responseSchema): account/update's realised view sits
+ * under `account`; wake/set's `wakeCapable` is flat; wake/request answers `{}`.
+ */
 const answerTo = (document: Record<string, unknown>) => {
   const type = String(document.type)
   if (type === MEDIATOR_ACCOUNT_UPDATE)
-    return { type: ENVELOPE, body: { type: `${type}#response`, payload: { did: 'x', acl: { sendForwarded: true } } } }
+    return {
+      type: ENVELOPE,
+      body: {
+        type: `${type}#response`,
+        payload: { account: { did: 'x', accountType: 'standard', acl: { sendForwarded: true } } },
+      },
+    }
   if (type === MEDIATOR_WAKE_SET)
     return { type: ENVELOPE, body: { type: `${type}#response`, payload: { wakeCapable: true } } }
   if (type === MEDIATOR_WAKE_REQUEST) return { type: ENVELOPE, body: { type: `${type}#response`, payload: {} } }
@@ -405,12 +414,39 @@ describe('the phone’s account at the mediator', () => {
     const s = session()
     s.ask.mockResolvedValue({
       type: ENVELOPE,
-      body: { type: `${MEDIATOR_ACCOUNT_UPDATE}#response`, payload: { acl: { sendForwarded: false } } },
+      body: {
+        type: `${MEDIATOR_ACCOUNT_UPDATE}#response`,
+        payload: { account: { did: 'x', accountType: 'standard', acl: { sendForwarded: false } } },
+      },
     } as never)
     await openWalletMailbox(agent, MEDIATOR, deps(s))
     expect(walletMailboxOf(agent)?.did).toBe(MAILBOX)
     expect(warned()).toEqual([expect.stringMatching(/forwarding not confirmed on/)])
     await closeWalletMailbox(agent)
+  })
+
+  test('a non-conformant flat answer with the right on is still read as on: the fallback is defence, not a second blessed shape', () => {
+    // v0.53.0's response allows no member but `account` (its bundle's responseSchema), so a flat `acl` can only come
+    // from a non-conformant mediator. Tolerated, since the alternative is the false "not confirmed" line this
+    // check exists to avoid; pinned here so a later cleanup does not read the fallback as decoration.
+    return (async () => {
+      const { agent } = fakeAgent()
+      const s = session()
+      s.ask.mockResolvedValueOnce({
+        type: ENVELOPE,
+        body: { type: `${MEDIATOR_ACCOUNT_UPDATE}#response`, payload: { acl: { sendForwarded: true } } },
+      } as never)
+      await openWalletMailbox(agent, MEDIATOR, deps(s))
+      expect(walletMailboxOf(agent)?.did).toBe(MAILBOX)
+      expect(warned()).toEqual([])
+      const infos = (agent as unknown as { config: { logger: { info: jest.Mock } } }).config.logger.info.mock.calls.map(
+        (c) => String(c[0])
+      )
+      expect(infos).toEqual(
+        expect.arrayContaining([expect.stringMatching(/forwarding on for mailbox-of-did:peer:2\.me…/)])
+      )
+      await closeWalletMailbox(agent)
+    })()
   })
 
   test('a wake handle given at open is left at the mediator with a signed wake/set, after the forwarding right', async () => {

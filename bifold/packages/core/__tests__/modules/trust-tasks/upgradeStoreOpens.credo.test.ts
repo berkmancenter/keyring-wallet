@@ -229,7 +229,11 @@ test('a v1-era store (GENERATED fixture, not a captured tester store) opens afte
       stop: async () => undefined,
       forwardForMailbox: async () => ({ id: 'unused' }),
       // The mediator confirming the account's forwarding right, as v0.53.0 answers (walletMailbox.ts).
-      ask: async () => ({ type: 'ask', body: { payload: { acl: { sendForwarded: true } } } }) as never,
+      ask: async () =>
+        ({
+          type: 'ask',
+          body: { payload: { account: { did: 'x', accountType: 'standard', acl: { sendForwarded: true } } } },
+        }) as never,
     }),
   })
 
