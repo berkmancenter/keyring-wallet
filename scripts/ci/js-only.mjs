@@ -217,14 +217,38 @@ export const digestOf = (inputs) =>
 export function judge({ walletRepo, bifoldRepo, base, head, bifoldBase, bifoldHead, env = {} }) {
   const reasons = [];
   const files = [];
+  const envReasons = () => {
+    if (!env.base || !env.head) reasons.push("no .env evidence for the base build or this one: cannot rule out baked config");
+    else if (env.base !== env.head) reasons.push(".env differs from the base build's (react-native-config bakes it into native code)");
+  };
   // Gitlink at both ends (before the fold): the pin's diff is read from the submodule's clone, as it always was, and
   // --bifold-base/--bifold-head may name the pins. Tree at both ends (since the fold): the wallet diff carries the
-  // bifold/… paths itself, there is no pin and no second repository. One of each: the range crosses the fold, and no
-  // bifold range can be read, so every bifold path is native and the fingerprints differ (nativeInputs).
+  // bifold/… paths itself, there is no pin and no second repository. One of each, or bifold absent at an end: the
+  // range crosses the fold, and the verdict is a full build before anything of bifold's is read, because nothing of
+  // it can be: once ./bifold is a tree there is no clone here for the gitlink side, and an absent side has nothing.
   const kindA = bifoldKind(walletRepo, base);
   const kindB = bifoldKind(walletRepo, head);
   const folded = kindA === "tree" && kindB === "tree";
-  const crossing = kindA !== kindB;
+  const FOLD = "the fold: the submodule became a tree";
+  if (kindA !== kindB || kindA === "absent") {
+    for (const p of changedPaths(walletRepo, base, head)) {
+      const bifold = p === "bifold" || p.startsWith("bifold/");
+      files.push({ repo: "wallet", path: p, ...(bifold ? { cls: "native", why: FOLD } : classifyWalletPath(p)) });
+    }
+    // The fold is one reason, not one per file under bifold/ (the whole tree arrives in that diff).
+    reasons.push(`${FOLD} between ${base} and ${head} (bifold is ${kindA} at the base, ${kindB} at the head): every bifold path is native`);
+    reasons.push("fingerprint: bifold:(layout) changed");
+    for (const f of files) if (f.cls === "native" && f.why !== FOLD) reasons.push(`${f.repo}:${f.path} — ${f.why}`);
+    envReasons();
+    const at = (commit) => { const o = objectAt(walletRepo, commit, "bifold"); return o === "absent" ? null : o; };
+    return {
+      verdict: VERDICT.FULL,
+      reasons,
+      base: { wallet: base, bifold: at(base), fingerprint: null },
+      head: { wallet: head, bifold: at(head), fingerprint: null },
+      files,
+    };
+  }
   if (folded && (bifoldBase || bifoldHead)) throw new Error("--bifold-base/--bifold-head name a pin, and bifold is a tree of this repository at both commits");
   const pinA = (!folded && bifoldBase) || bifoldPin(walletRepo, base);
   const pinB = (!folded && bifoldHead) || bifoldPin(walletRepo, head);
@@ -234,24 +258,17 @@ export function judge({ walletRepo, bifoldRepo, base, head, bifoldBase, bifoldHe
   const natives = new Set();
   for (const s of [sideA, sideB]) for (const p of bifoldPackages(s.repo, s.at, s.prefix)) if (p.markers.length) natives.add(p.name);
 
-  const FOLD = "the fold: the submodule became a tree";
-  for (const p of changedPaths(walletRepo, base, head)) {
-    const bifold = p === "bifold" || p.startsWith("bifold/");
-    files.push({ repo: "wallet", path: p, ...(crossing && bifold ? { cls: "native", why: FOLD } : classifyWalletPath(p, natives)) });
-  }
-  if (!folded && !crossing && pinA !== pinB) for (const p of changedPaths(bifoldRepo, pinA, pinB)) files.push({ repo: "bifold", path: p, ...classifyBifoldPath(p, natives) });
+  for (const p of changedPaths(walletRepo, base, head)) files.push({ repo: "wallet", path: p, ...classifyWalletPath(p, natives) });
+  if (!folded && pinA !== pinB) for (const p of changedPaths(bifoldRepo, pinA, pinB)) files.push({ repo: "bifold", path: p, ...classifyBifoldPath(p, natives) });
 
-  // The fold is one reason, not one per file under bifold/ (the whole tree arrives in that diff).
-  if (crossing) reasons.push(`${FOLD} between ${base} and ${head}: every bifold path is native`);
-  for (const f of files) if (f.cls === "native" && f.why !== FOLD) reasons.push(`${f.repo}:${f.path} — ${f.why}`);
+  for (const f of files) if (f.cls === "native") reasons.push(`${f.repo}:${f.path} — ${f.why}`);
 
   const a = nativeInputs(walletRepo, sideA, base);
   const b = nativeInputs(walletRepo, sideB, head);
   const fingerprintChanges = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k]).sort();
   for (const k of fingerprintChanges) reasons.push(`fingerprint: ${k} changed`);
 
-  if (!env.base || !env.head) reasons.push("no .env evidence for the base build or this one: cannot rule out baked config");
-  else if (env.base !== env.head) reasons.push(".env differs from the base build's (react-native-config bakes it into native code)");
+  envReasons();
 
   const verdict = reasons.length ? VERDICT.FULL : files.some((f) => f.cls === "js") ? VERDICT.JS_ONLY : VERDICT.NO_APP_CHANGE;
   return {

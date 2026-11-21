@@ -153,6 +153,8 @@ function foldRepos() {
   sh(wallet, "commit", "-qm", "pinned");
   const pinned = sh(wallet, "rev-parse", "HEAD");
   sh(wallet, "rm", "-q", "--cached", "bifold");
+  sh(wallet, "commit", "-qm", "dropped"); // the gitlink gone, nothing under bifold/ yet (Phase 2 leaves it so for good)
+  const dropped = sh(wallet, "rev-parse", "HEAD");
   for (const [f, t] of Object.entries(bifoldFiles)) write(wallet, `bifold/${f}`, t);
   sh(wallet, "add", "-A");
   sh(wallet, "commit", "-qm", "folded");
@@ -163,7 +165,7 @@ function foldRepos() {
   write(wallet, `bifold/${ATTESTATION}`, "// m2\n");
   sh(wallet, "commit", "-qam", "native");
   const native = sh(wallet, "rev-parse", "HEAD");
-  return { repos: { walletRepo: wallet, bifoldRepo: bifold }, pinned, folded, screen, native };
+  return { repos: { walletRepo: wallet, bifoldRepo: bifold }, top, pinned, dropped, folded, screen, native };
 }
 
 test("fold: a core screen change in the folded tree is JS-only, with no pin to follow", () => {
@@ -194,7 +196,37 @@ test("fold: a range crossing the fold is a full build, every bifold path native,
   assert.ok(bifold.length >= 2 && bifold.every((f) => f.cls === "native" && f.why === "the fold: the submodule became a tree"));
   assert.equal(r.reasons.filter((x) => x.startsWith("the fold:")).length, 1, "one reason for the fold, not one per file");
   assert.ok(r.reasons.includes("fingerprint: bifold:(layout) changed"), r.reasons.join("; "));
-  assert.notEqual(r.base.fingerprint, r.head.fingerprint);
+  // Nothing of bifold's is read across the fold, so no fingerprint is computed for either end; the layout reason above
+  // is what says they differ.
+  assert.deepEqual([r.base.fingerprint, r.head.fingerprint], [null, null]);
+});
+
+test("fold: a crossing range is judged with no bifold clone at all (./bifold is a tree, not a repository, after the fold)", () => {
+  const { repos, top, pinned, folded, screen } = foldRepos();
+  // What the folded checkout really offers: --bifold-repo defaults to ./bifold, which is a plain directory now.
+  const noClone = { walletRepo: repos.walletRepo, bifoldRepo: path.join(repos.walletRepo, "bifold") };
+  const r = judge({ ...noClone, base: pinned, head: screen, env });
+  assert.equal(r.verdict, VERDICT.FULL);
+  assert.ok(r.reasons.some((x) => x.startsWith("the fold:") && x.includes("commit at the base, tree at the head")), r.reasons.join("; "));
+  assert.ok(r.reasons.includes("fingerprint: bifold:(layout) changed"));
+  assert.ok(r.files.filter((f) => f.path.startsWith("bifold/")).every((f) => f.cls === "native"));
+  assert.deepEqual([r.base.fingerprint, r.head.fingerprint], [null, null]);
+  // A clone path that does not exist at all behaves the same (nothing of bifold's is read across the fold).
+  assert.equal(judge({ walletRepo: repos.walletRepo, bifoldRepo: path.join(top, "no-such-clone"), base: pinned, head: folded, env }).verdict, VERDICT.FULL);
+});
+
+test("fold: bifold absent at an end is a crossing too, never a throw (the drop commit now; Phase 2's tree later)", () => {
+  const { repos, pinned, dropped, folded } = foldRepos();
+  const noClone = { walletRepo: repos.walletRepo, bifoldRepo: path.join(repos.walletRepo, "bifold") };
+  for (const [base, head, kinds] of [[pinned, dropped, "commit at the base, absent at the head"], [dropped, folded, "absent at the base, tree at the head"]]) {
+    const r = judge({ ...noClone, base, head, env });
+    assert.equal(r.verdict, VERDICT.FULL, kinds);
+    assert.ok(r.reasons.some((x) => x.includes(kinds)), r.reasons.join("; "));
+  }
+  // Both ends absent: nothing of bifold's to read, nothing bifold-related to say; the wallet files decide.
+  const r = judge({ ...noClone, base: dropped, head: dropped, env });
+  assert.equal(r.verdict, VERDICT.FULL);
+  assert.ok(r.reasons.some((x) => x.includes("absent at the base, absent at the head")));
 });
 
 // ---- known history (the cases the rule was asked to prove)
