@@ -369,7 +369,9 @@ jobs:
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
-          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
+          # The wallet mailbox mediator's DID (deploy/keyring-messaging/mailbox). Empty until it is
+          # set: the mailbox stays closed, and the app runs on v1 only.
+          MAILBOX_MEDIATOR_DID: ${{ secrets.MAILBOX_MEDIATOR_DID }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
           # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
           VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
@@ -386,9 +388,8 @@ jobs:
           PUSH_FCM_PROJECT_ID: ${{ vars.PUSH_FCM_PROJECT_ID }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
-          # Optional: the DIDComm v2 mediator, used only when the developer
-          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
-          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
+          # The wallet mailbox mediator, opened only with the Developer switch on (testers first).
+          echo "MAILBOX_MEDIATOR_DID=${MAILBOX_MEDIATOR_DID}" >>.env
           # Optional: where "Report this problem" offers to email the report.
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
           # Where the app's VTI features point (repository variables). An unset
@@ -955,7 +956,9 @@ jobs:
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
-          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
+          # The wallet mailbox mediator's DID (deploy/keyring-messaging/mailbox). Empty until it is
+          # set: the mailbox stays closed, and the app runs on v1 only.
+          MAILBOX_MEDIATOR_DID: ${{ secrets.MAILBOX_MEDIATOR_DID }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
           # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
           VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
@@ -968,9 +971,8 @@ jobs:
           PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
-          # Optional: the DIDComm v2 mediator, used only when the developer
-          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
-          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
+          # The wallet mailbox mediator, opened only with the Developer switch on (testers first).
+          echo "MAILBOX_MEDIATOR_DID=${MAILBOX_MEDIATOR_DID}" >>.env
           # Optional: where "Report this problem" offers to email the report.
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
           # Where the app's VTI features point (repository variables). An unset
