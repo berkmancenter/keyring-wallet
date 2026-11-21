@@ -53,45 +53,56 @@ acceptance check) stays with the parent plan's M3c row; this document does not p
 
 ### 3.1 Placement: a separate instance
 
-The mailbox runs on its own VM, `kpush-mailbox`, with its own static IP, data disk, snapshot policy, Redis, Caddy and
-hostname, all additive `kpush-*` resources. Not the gateway's VM: opening sign-in to phones is a posture change for
-that mediator (today no stranger can hold a session), and phone mail on a 2 GB VM shared with the gateway puts the
-push path's memory at the mercy of the mailbox's queue. The gateway's mediator stays exactly as it is.
-
-*Conditional:* if the product owner prefers one VM, the same mediator config applies with Redis memory and disk sized
-for the mailbox load, alerts on queue depth and Redis restarts, and an off-VM Redis AOF backup (parent plan, M3a).
+The mailbox runs on its own VM, `kpush-mailbox` (D-M3-4, decided 2026-11-21), with its own static IP, data disk,
+snapshot policy, Redis, Caddy and hostname, all additive `kpush-*` resources in the push gateway's infrastructure
+repository. Not the gateway's VM: opening sign-in to phones is a posture change for that mediator (today no stranger
+can hold a session), and phone mail on a 2 GB VM shared with the gateway puts the push path's memory at the mercy of
+the mailbox's queue. The gateway's mediator stays exactly as it is. The hostname is the infrastructure reviewer's
+choice, from the servers already in use; the mediator's identity follows from it and never changes.
 
 ### 3.2 The image
 
-Built the way the gateway's is (CI artifact, pushed by an operator, pulled by commit tag), from the same
-`deploy/keyring-messaging/mediator/Dockerfile` with a different `MEDIATOR_COMMIT`:
+Built the way the gateway's is (an image pushed by an operator, pulled by commit tag), from the wallet repository's
+`deploy/keyring-messaging/mailbox/Dockerfile`:
 
-- **`c0a69f1e`**, which carries the Redis-resubscribe fix and is 20 commits after the deployed version, and is the
-  build the lab ran (§4). Later releases are in the mediator's own repository (`affinidi-tdk-rs` #949 moved it);
-  moving there is a separate pin decision.
-- Features `tsp,secrets-aws` as deployed, plus the outcome of decision **D-M3-3** (DIDComm v1).
+- **`affinidi/affinidi-messaging-mediator` v0.53.0** (`f6ed8159`), the mediator's own repository since it left
+  `affinidi-tdk-rs` (its #949, 2026-10-14; the `affinidi-tdk-rs` pin no longer holds the mediator). It carries the
+  Redis-resubscribe fix and the wake protocol (§3.5). Pinned in `scripts/openvtc/PINS.json`.
+- Features: upstream's defaults (DIDComm, TSP, Redis, jemalloc, VTA) plus `secrets-gcp`. No DIDComm v1 (D-M3-3,
+  decided 2026-11-21): the mailbox is v2-only, and the current v1 mediator keeps running for v1 phones.
 
 ### 3.3 Phone accounts and ACLs
 
-A phone signs in as its mailbox DID only; contact DIDs never sign in. What a phone's account needs: `LOCAL` (mail
-between accounts on this mediator), `SEND_MESSAGES`, `RECEIVE_MESSAGES`, `RECEIVE_FORWARDED`. Not `SEND_FORWARDED`
-(relaying onward to another mediator), so the mailbox is not an open relay. The exact minimal set is measured, not
-assumed (§4, S2): the lab ran `ALLOW_ALL`.
+A phone signs in as its mailbox DID only; contact DIDs never sign in. Sign-up is **open** (D-M3-1, decided
+2026-11-21, self-service): `mediator_acl_mode = "explicit_deny"`, and any DID that completes the sign-in challenge
+gets an account with the default ACL, in full:
 
-How an account comes to exist is decision **D-M3-1**:
+`DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,ANON_RECEIVE,SEND_FORWARDED_CHANGE,MODE_EXPLICIT_DENY`
 
-- **(a) Self-service:** `mediator_acl_mode = "explicit_deny"` with a `global_acl_default` granting the set above, so
-  any DID that completes the ATM challenge gets an account. Simplest; the mailbox host's public sign-in is open, and
-  abuse is bounded by per-account queue caps and the absence of `SEND_FORWARDED`.
-- **(b) Enrolled:** `explicit_allow` as today, and an account created for each phone by an enrolment step (the admin
-  tool `mediator-account`, driven by a service the phone already talks to). Closed to strangers; needs that service
-  and a path for the phone to ask.
+Six rights, measured in S2 on v0.53.0 (the deploy package's README, "Evidence"), two more than this plan first listed:
 
-`global_acl_default` is a whole ACL string, not a list of grants: a `DENY_ALL` base, the grants, and a trailing
-`MODE_*` flag. The deployed one is `DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,MODE_EXPLICIT_DENY`
-(`mediator.toml:92`, under `mediator_acl_mode = "explicit_allow"` at `:91`). How an account's own `MODE_*` flag combines
-with `mediator_acl_mode` is read in source and measured in S2 with the rights, and the mailbox's string is written in
-that full form.
+- `ANON_RECEIVE`: a phone's send is a routing/2.0 forward whose attachment is Credo's standard anoncrypt wrap for the
+  recipient mailbox's key; without it the recipient's account refuses the delivery ("recipient is not accepting
+  anonymous messages"). The forward's outer sender is still an authenticated, rate-limited account.
+- `SEND_FORWARDED_CHANGE`: the mediator admits a forward only from an account holding `SEND_FORWARDED`, so each phone
+  turns that right on for itself at open, with a signed `messaging/account/update` naming its account key (the sha256
+  of its DID), confirmed by the mediator's answer (bifold `walletMailbox.ts`). In the steady state every account
+  holds `SEND_FORWARDED`.
+
+So the default ACL is not what keeps the mailbox from being a relay. That rests on `external_forwarding = "false"`
+(a forward whose next hop has no account here is refused, S2 row B) and on the anonymous-envelope checks (an
+unauthenticated `POST /inbound` is refused, rows R1 and R2, even with `SEND_FORWARDED` in the default). `SEND_FORWARDED`
+stays out of the default for one reason: in the default it opens the unauthenticated `/inbound` to authcrypt
+forwards from any DID (the inter-mediator relay session). The other bounds on an open sign-up: per-DID rate limit
+20/s with burst 10 (60 requests in a burst: 10 admitted, 50 refused), the per-IP limit behind Caddy with
+`trust_xff_cidrs` naming Caddy (so phones are bucketed by their own address, S2 row D), queue caps and the 7-day
+expiry (§3.4), Trust Task proofs enforced, inter-mediator relay off. A cleanup of inactive accounts
+(`messaging/account/remove`) is a follow-up; testers' numbers do not need it.
+
+The **enrolled** model stays written down as the fallback: `mediator_acl_mode = "explicit_allow"`, with an enrolment
+service holding the mediator's admin account and adding each phone's (in that mode only an admin may add accounts).
+Switching from open to enrolled is a config change across a restart: existing accounts keep signing in and a new DID
+is refused at the challenge (S2 row E, with Redis append-only persistence).
 
 Either way, the mailbox host's Caddy does not refuse public `/authenticate` (it is the phones' sign-in), and
 `cors_allow_origin` is set in the `[security]` table (VTI-06), since React Native sends an `Origin` header on the
@@ -108,19 +119,29 @@ than the message vanishing. The values are set from the soak (S5), not guessed.
 
 ### 3.5 Wake
 
-The Affinidi mediator calls nobody when it stores for an absent recipient (READ at `55580615`; MEASURED: a local
-webhook sink saw 0 calls while a message waited for an offline wallet). The wake path is decision **D-M3-2**, from the
-parent plan's D2:
+The mediator's own wake protocol (D-M3-2, decided 2026-11-21): `affinidi-messaging-mediator` #276 (in v0.52+),
+`messaging/wake/set` and `messaging/wake/request`, ringing `push/wake/0.2` at a push gateway.
 
-- **W5, a Redis sidecar (lead):** subscribes to keyspace notifications for `RECEIVE_Q:*` on the mailbox's own Redis
-  (MEASURED: `RECEIVE_Q:xadd` fires when a message is stored for an offline wallet), checks the recipient is not
-  live (`GLOBAL_STREAMING`), and posts a wake to the gateway for the mailbox DID's push handle. The gateway already
-  takes mediator wakes (`POST /mediator-webhook/<secret>`, rate-capped per handle); it needs the mailbox DID → handle
-  mapping, registered by the phone with the gateway as it registers its other DIDs. Couples to Redis key names rather
-  than a contract, so every mediator upgrade re-runs the wake test.
-- **W4, a store decorator:** a wrapper binary around `MediatorBuilder` whose `MediatorStore` posts on an offline
-  store (the parent plan's §4.2 choke point). Robust and supported; ours to maintain.
-- **W1, an upstream hook:** asked of the mediator's maintainers; nothing to build here if it comes.
+- The phone leaves its push-gateway handle at the mediator with `wake/set` when its mailbox opens, or later when the
+  handle exists (bifold `walletMailbox.ts`, `setMailboxWakeHandle`); the mediator answers `wakeCapable` when it holds
+  the handle and can reach the gateway's DID.
+- After each mailbox send, the sender sends the recipient's mediator a signed `wake/request` naming the stored message
+  ids. The id is the sha256 of the inner JWE's exact bytes, so the forward carries it as a base64 attachment (a
+  `data.json` attachment is re-serialised by the mediator and its id is not the sender's). On the mailbox path only;
+  the VTA path keeps its attachment shape.
+- The mediator rings the gateway, once per message, only when the recipient has a handle, the message is stored,
+  undelivered and under ten minutes old, the request's sender is the message's sender, the recipient has no live
+  connection, and the limits allow (one per minute and ten per day per pair; coalesced over 15 s and 30 per hour per
+  recipient). The gateway rings only if the mailbox mediator's DID is on the handle's allowlist, which the phone's
+  linked agent sets from the phone's suggested triggers: the wallet adds the mailbox mediator's DID to them.
+
+Measured in the lab on v0.53.0 with a stand-in gateway (an account on the same mediator): one ring with the right
+payload and the mediator's signature, none for an online recipient, none without a handle (S2 rows W1-W4). The real
+gateway path, the push gateway at its pinned version and a phone's agent provisioning the allowlist, is S6.
+
+Not chosen: W1 (asking upstream for a store-time hook: upstream's protocol exists), W4 (a store decorator). The
+traffic monitor's `stored`-without-`delivered` signal (W5, a sidecar with an admin account) is a fallback for senders
+that do not send `wake/request`; it is not built for S7.
 
 Done when: an offline phone gets exactly one wake per waiting message burst (the gateway's 30 s cap), a live phone
 gets none, and a phone with no registered handle causes nothing to be sent.
@@ -149,7 +170,7 @@ explicit lines until testers are meant to reach it from those builds. Testers fi
 
 | Step | What | Done when |
 |---|---|---|
-| **S0** | Re-run the lab rows (two and three wallets, store-and-forward, wake gap, Discover Features) on a local build of the image of §3.2 | The rows pass on that commit, as they did on `c0a69f1e` (2026-11-20): this is the parent's M2 evidence for the mediator half |
+| **S0** | Re-run the lab rows (two and three wallets, store-and-forward, wake gap, Discover Features) on a local build of the image of §3.2 | Done 2026-11-21 on v0.53.0: the mailbox rows pass (12 of 12 with the S2 rows; the deploy package's README), as they did on `c0a69f1e` (2026-11-20) |
 | **S1** | Decisions D-M3-1..4 (§5) | Each recorded, with its reason, in a dated companion |
 | **S2** | Phone account rights, measured | The lab passes with the minimal set of §3.3 and fails a control with one right removed; the account model of D-M3-1 is exercised end to end |
 | **S3** | Infra change for `kpush-mailbox` (§3.1, §3.6) | `deploy.sh plan` shows additive `kpush-*` only and `tf-plan-guard.sh` passes without override flags; reviewed; applied on the product owner's word |
@@ -173,20 +194,23 @@ the host after S7 is the product owner's word, once those contacts are re-invite
 
 ## 5. Decisions for the product owner
 
-- **D-M3-1, account model:** self-service (a) or enrolled (b), §3.3.
-- **D-M3-2, wake:** W5 (sidecar), W4 (decorator) or W1 (wait for upstream), §3.5. W5 is the lead; it is a design only
-  once S6 passes on the real gateway path.
-- **D-M3-3, DIDComm v1 on the same mediator:** the mediator carries DIDComm v1 mediation (Coordinate Mediation 1.0 and
-  Pickup 2.0, `src/messages/v1_mediation.rs`) behind the `didcomm-v1` cargo feature and a configuration switch that
-  defaults to off. Turning it on would let one mediator serve v1 phones too, the path to retiring the Credo mediator.
-  It changes in this repository: the cargo features in `deploy/keyring-messaging/mediator/Dockerfile` and the switch in
-  that mediator's `mediator.toml`. Not needed for M3; measured in the lab (one row with the feature on) before it is
-  decided.
-- **D-M3-4, placement:** a separate instance (§3.1, recommended) or the gateway's VM with the conditions listed there.
+All four were taken on 2026-11-21 (the dated companion of that day has the reasons):
+
+- **D-M3-1, account model:** open sign-up (self-service, §3.3), with the limits there. The enrolled model is the
+  written fallback; an enrolment service and app attestation are not built.
+- **D-M3-2, wake:** the mediator's own wake protocol (§3.5). The monitor-feed sidecar is a fallback only.
+- **D-M3-3, DIDComm v1 on the same mediator:** no. The mailbox is v2-only and the current v1 mediator keeps running.
+- **D-M3-4, placement:** its own VM, `kpush-mailbox`, in the push gateway's infrastructure repository (§3.1).
+
+Still open: whether the mailbox VM's logs leave the VM (a project-level grant the infrastructure repository's rules
+refuse today; for now logs stay on the VM and a synthetic live-delivery probe is the interim watch, §3.6).
 
 ## 6. Blocked on
 
-- S3 onwards: D-M3-1, D-M3-2 and D-M3-4.
-- S7: S6b in a build, the new repository secret, and a store build.
-- M4: S8 (M3d), and the parent's M3c.
-- The parent plan's infrastructure blocker (its §6) is the parent's; whether it still stands is not re-checked here.
+- S3 and S4: the infrastructure reviewer's review, his hostname, and the owner's word for the apply, the image push,
+  DNS and the identity (the runbook in the infrastructure repository).
+- S6: the real gateway path, after S4.
+- S7: S6b being built or, as decided for the first tester build, skipped with the mailbox host kept up while any
+  tester holds a mailbox contact; the `MAILBOX_MEDIATOR_DID` repository secret (the owner's word) after the identity
+  exists; a store build (the owner's word).
+- M4: S8 and M3c (the witness accepting the mailbox mediator, a row after the first tester build).
