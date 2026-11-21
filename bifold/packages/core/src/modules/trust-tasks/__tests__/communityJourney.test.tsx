@@ -1,0 +1,314 @@
+/**
+ * One journey state per community, re-read when the community changes — the
+ * mechanism the journey screens stand on (a member offered "Apply to join", a
+ * finished step still pending, My Agent late to a new membership).
+ */
+import type { Agent } from '@credo-ts/core'
+import { act, render, waitFor } from '@testing-library/react-native'
+import React from 'react'
+import { DeviceEventEmitter, Text } from 'react-native'
+
+import {
+  COMMUNITY_CHANGED_EVENT,
+  VTI_PERSONA_DELIVERIES_EVENT,
+  changeOfHeldCredential,
+  emitCommunityChanged,
+  useCommunityChanged,
+} from '../module/communityChanged'
+import {
+  communityJourneys,
+  joinKnown,
+  useCommunityJourney,
+  type CommunityJourneyReaders,
+} from '../module/communityJourney'
+import { GenericRecordsCommunityStore, type VtiMembership } from '../module/VtiCommunityStore'
+import type { CommunityJoinState } from '../module/vtiJoin'
+import { GenericRecordsVettingStore } from '../module/vtiVetting'
+
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+
+const A = 'did:webvh:QmA:community-a.example'
+const B = 'did:webvh:QmB:community-b.example'
+const agent = {} as Agent
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 5)))
+
+/** A generic-records store in memory, enough for the two stores' writes. */
+const fakeRecordsAgent = () => {
+  const records: { content: Record<string, unknown>; tags: Record<string, string> }[] = []
+  const matches = (tags: Record<string, string>, q: Record<string, string>) =>
+    Object.entries(q).every(([k, v]) => tags[k] === v)
+  return {
+    records,
+    agent: {
+      genericRecords: {
+        findAllByQuery: jest.fn(async (q: Record<string, string>) => records.filter((r) => matches(r.tags, q))),
+        save: jest.fn(async (r: { content: Record<string, unknown>; tags: Record<string, string> }) => {
+          records.push(r)
+        }),
+        update: jest.fn(async () => undefined),
+        delete: jest.fn(async (r: unknown) => {
+          records.splice(records.indexOf(r as (typeof records)[number]), 1)
+        }),
+      },
+    } as unknown as Agent,
+  }
+}
+
+const listen = () => {
+  const heard: unknown[] = []
+  const sub = DeviceEventEmitter.addListener(COMMUNITY_CHANGED_EVENT, (e) => heard.push(e))
+  return { heard, stop: () => sub.remove() }
+}
+
+describe('the community-changed event', () => {
+  test('is announced after the write returns, not during it', async () => {
+    const { heard, stop } = listen()
+    emitCommunityChanged(A, 'membership')
+    expect(heard).toEqual([])
+    await waitFor(() => expect(heard).toEqual([{ communityDid: A, what: 'membership' }]))
+    stop()
+  })
+
+  test('a listener that throws never reaches the writer', async () => {
+    const sub = DeviceEventEmitter.addListener(COMMUNITY_CHANGED_EVENT, () => {
+      throw new Error('listener broke')
+    })
+    expect(() => emitCommunityChanged(A, 'membership')).not.toThrow()
+    await settle()
+    sub.remove()
+  })
+
+  test('says nothing without a community', async () => {
+    const { heard, stop } = listen()
+    emitCommunityChanged(undefined, 'membership')
+    await settle()
+    expect(heard).toEqual([])
+    stop()
+  })
+
+  test('a held credential names what it changes', () => {
+    expect(changeOfHeldCredential('vetter-grant')).toBe('grant')
+    expect(changeOfHeldCredential('role')).toBe('membership')
+    expect(changeOfHeldCredential('vetting-statement')).toBe('application')
+  })
+})
+
+describe('the stores announce their writes', () => {
+  test('a saved membership is announced once it is stored', async () => {
+    const { agent: recordsAgent, records } = fakeRecordsAgent()
+    const { heard, stop } = listen()
+    await new GenericRecordsCommunityStore(recordsAgent).saveMembership({ communityDid: A } as VtiMembership)
+    expect(records).toHaveLength(1)
+    await waitFor(() => expect(heard).toEqual([{ communityDid: A, what: 'membership' }]))
+    stop()
+  })
+
+  test('a vetter grant arriving is announced as the grant', async () => {
+    const { agent: recordsAgent } = fakeRecordsAgent()
+    const { heard, stop } = listen()
+    await new GenericRecordsCommunityStore(recordsAgent).saveHeldCredential({
+      kind: 'vetter-grant',
+      communityDid: A,
+      credential: { id: 'urn:grant:1' },
+      receivedAt: '2026-09-25T00:00:00Z',
+    } as never)
+    await waitFor(() => expect(heard).toEqual([{ communityDid: A, what: 'grant' }]))
+    stop()
+  })
+
+  test('a saved vetting application is announced', async () => {
+    const { agent: recordsAgent } = fakeRecordsAgent()
+    const { heard, stop } = listen()
+    await new GenericRecordsVettingStore(recordsAgent).saveApplication({ communityDid: A } as never)
+    await waitFor(() => expect(heard).toEqual([{ communityDid: A, what: 'application' }]))
+    stop()
+  })
+
+  test('a failed write announces nothing', async () => {
+    const { agent: recordsAgent } = fakeRecordsAgent()
+    ;(recordsAgent.genericRecords.save as jest.Mock).mockRejectedValueOnce(new Error('disk full'))
+    const { heard, stop } = listen()
+    await expect(
+      new GenericRecordsCommunityStore(recordsAgent).saveMembership({ communityDid: A } as VtiMembership)
+    ).rejects.toThrow('disk full')
+    await settle()
+    expect(heard).toEqual([])
+    stop()
+  })
+})
+
+describe('listening for changes', () => {
+  const Listener: React.FC<{ refresh: () => void; communityDid?: string }> = ({ refresh, communityDid }) => {
+    useCommunityChanged(refresh, communityDid)
+    return null
+  }
+
+  test("hears its own community and the inbox's deliveries, not another community", async () => {
+    const refresh = jest.fn()
+    render(<Listener refresh={refresh} communityDid={A} />)
+    emitCommunityChanged(B, 'membership')
+    await settle()
+    expect(refresh).not.toHaveBeenCalled()
+    emitCommunityChanged(A, 'membership')
+    // The emit and the coalesced refresh are two ticks: wait for them, not a fixed time.
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+    DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, { communityDid: A, kinds: ['membership'] })
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
+  })
+
+  test('changes that land together refresh once', async () => {
+    const refresh = jest.fn()
+    render(<Listener refresh={refresh} communityDid={A} />)
+    // A delivery: the store's own announcement, then the inbox's.
+    DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid: A, what: 'membership' })
+    DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, { communityDid: A, kinds: ['membership'] })
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+    await settle()
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  test('a change queued just before the screen hands in a new callback is not dropped', async () => {
+    const first = jest.fn()
+    const second = jest.fn()
+    const tree = render(<Listener refresh={first} communityDid={A} />)
+    DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid: A, what: 'membership' })
+    // Before the change's tick, the screen re-renders with a new refresh.
+    tree.rerender(<Listener refresh={second} communityDid={A} />)
+    await waitFor(() => expect(second).toHaveBeenCalledTimes(1))
+    expect(first).not.toHaveBeenCalled()
+  })
+
+  test('never refreshes after unmount', async () => {
+    const refresh = jest.fn()
+    const tree = render(<Listener refresh={refresh} communityDid={A} />)
+    DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid: A, what: 'membership' })
+    tree.unmount()
+    await settle()
+    expect(refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('the journey hook', () => {
+  // One store for every screen (Phase 2a): each test starts from no reading.
+  beforeEach(() => communityJourneys.forget())
+  const member: CommunityJoinState = { kind: 'member', membership: { communityDid: A } as VtiMembership }
+  const none: CommunityJoinState = { kind: 'none' }
+
+  const Journey: React.FC<{ readers: Partial<CommunityJourneyReaders>; poll?: boolean }> = ({ readers, poll }) => {
+    const { journey } = useCommunityJourney(agent, A, { readers, poll })
+    return <Text testID="join">{journey ? (joinKnown(journey)?.kind ?? 'unknown') : 'loading'}</Text>
+  }
+
+  const readersWith = (join: jest.Mock, askForCard: jest.Mock = jest.fn(async () => undefined)) => ({
+    join,
+    application: jest.fn(async () => undefined),
+    vetterGrant: jest.fn(async () => ({ state: 'none' as const })),
+    askForCard,
+  })
+
+  test('reads where the phone stands when it comes into view', async () => {
+    const join = jest.fn(async () => none)
+    const tree = render(<Journey readers={readersWith(join)} />)
+    await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+    expect(join).toHaveBeenCalledWith(agent, A, { poll: false })
+  })
+
+  test('a local write moves it on at once, without asking the community', async () => {
+    let stored: CommunityJoinState = none
+    const join = jest.fn(async () => stored)
+    const tree = render(<Journey readers={readersWith(join)} poll />)
+    await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+    expect(join).toHaveBeenLastCalledWith(agent, A, { poll: true })
+
+    stored = member
+    emitCommunityChanged(A, 'membership')
+    await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('member'))
+    expect(join).toHaveBeenLastCalledWith(agent, A, { poll: false })
+  })
+
+  test('a remount reads the finished step again, not the start', async () => {
+    const join = jest.fn(async () => member)
+    const first = render(<Journey readers={readersWith(join)} />)
+    await waitFor(() => expect(first.getByTestId('join')).toHaveTextContent('member'))
+    first.unmount()
+    const again = render(<Journey readers={readersWith(join)} />)
+    await waitFor(() => expect(again.getByTestId('join')).toHaveTextContent('member'))
+  })
+
+  test('an older reading finishing late does not put back an old state', async () => {
+    let release: (s: CommunityJoinState) => void = () => undefined
+    const slow = new Promise<CommunityJoinState>((resolve) => (release = resolve))
+    const join = jest.fn().mockReturnValueOnce(slow).mockResolvedValue(member)
+    const tree = render(<Journey readers={readersWith(join)} />)
+    emitCommunityChanged(A, 'membership')
+    await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('member'))
+    release(none)
+    await settle()
+    expect(tree.getByTestId('join')).toHaveTextContent('member')
+  })
+
+  // A stand-in is not an answer: a part that cannot be read is unknown, never "none" (7a on #489).
+  test('a part that cannot be read is unknown, not "none"', async () => {
+    const join = jest.fn(async () => {
+      throw new Error('store locked')
+    })
+    const tree = render(<Journey readers={readersWith(join)} />)
+    await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('unknown'))
+    expect(tree.getByTestId('join')).not.toHaveTextContent('none')
+  })
+
+  describe('Check now', () => {
+    const Checker: React.FC<{
+      readers: Partial<CommunityJourneyReaders>
+      onReady: (check: () => Promise<void>) => void
+    }> = ({ readers, onReady }) => {
+      const { journey, check } = useCommunityJourney(agent, A, { readers })
+      onReady(check)
+      return <Text testID="join">{journey ? (joinKnown(journey)?.kind ?? 'unknown') : 'loading'}</Text>
+    }
+
+    test('asks for an owed card first, then reads with a poll (3K8Y-BHKN: approved, no card, Check now did nothing)', async () => {
+      const order: string[] = []
+      const join = jest.fn(async (_a: Agent, _d: string, o: { poll: boolean }) => {
+        order.push(`join poll=${o.poll}`)
+        return none
+      })
+      const askForCard = jest.fn(async () => {
+        order.push('askForCard')
+        return { polled: true, resend: 'queued' }
+      })
+      let check: () => Promise<void> = async () => undefined
+      const tree = render(<Checker readers={readersWith(join, askForCard)} onReady={(c) => (check = c)} />)
+      await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+      order.length = 0
+      await act(async () => check())
+      expect(askForCard).toHaveBeenCalledWith(agent, A)
+      // Before anything is read: the store's local read, then the read with a poll, both come after it.
+      expect(order[0]).toBe('askForCard')
+      expect(order.slice(1)).toContain('join poll=true')
+    })
+
+    test('an ask that fails changes nothing: the read with a poll still runs', async () => {
+      const join = jest.fn(async () => none)
+      const askForCard = jest.fn(async () => {
+        throw new Error('the community did not answer')
+      })
+      let check: () => Promise<void> = async () => undefined
+      const tree = render(<Checker readers={readersWith(join, askForCard)} onReady={(c) => (check = c)} />)
+      await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+      join.mockClear()
+      await act(async () => check())
+      expect(join).toHaveBeenCalledWith(agent, A, { poll: true })
+    })
+
+    test("coming into view and a local change never ask for the card: only the person's Check now does", async () => {
+      const join = jest.fn(async () => none)
+      const askForCard = jest.fn(async () => undefined)
+      const tree = render(<Journey readers={readersWith(join, askForCard)} poll />)
+      await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+      emitCommunityChanged(A, 'membership')
+      await settle()
+      expect(askForCard).not.toHaveBeenCalled()
+    })
+  })
+})

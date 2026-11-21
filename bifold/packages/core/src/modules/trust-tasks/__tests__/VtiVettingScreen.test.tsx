@@ -1,0 +1,1356 @@
+/**
+ * Vetting — which agent the screen works with. Store builds name no VTA, so
+ * testers link their own; the screen must take the linked one, or it stops at
+ * "No agent is configured for this build" before a person can do anything.
+ */
+import { useNavigation } from '@react-navigation/native'
+import { render, act, fireEvent, within } from '@testing-library/react-native'
+import React from 'react'
+import { StyleSheet } from 'react-native'
+import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller'
+
+import { useAgent } from '@bifold/react-hooks'
+import { encodeTicketUri } from '@bifold/trust-tasks'
+
+import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { Screens } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
+import VtiVetting, { confirmedNameOf, requestRef, requestTestKey, whenShown } from '../screens/VtiVetting'
+import { communityJourneys } from '../module/communityJourney'
+import { setCurrentAgentDid } from '../module/currentAgent'
+import { vtaAgent } from '../module/vtaAgent'
+import * as hiddenVettingModule from '../module/hiddenVetting'
+import { vtiAgent } from '../module/vtiAgent'
+import { resolveVtaDid } from '../module/vtaLinkMachine'
+import * as grantState from '../module/vtiGrantState'
+import { VtiApplicant, VtiVetterDesk } from '../module/vtiVetting'
+import * as vtiJoinModule from '../module/vtiJoin'
+import { routeKeyringAgentLink } from '../module/vtiLinks'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
+import { readManifest, type VtiManifest } from '../module/joinManifest'
+
+import specExamples from './fixtures/join-0.3/manifest-response-examples.json'
+import testVtcCapture from './fixtures/join-0.3/test-vtc-hidden-vetting-2026-10-15.json'
+
+import { registerHiddenVetting } from '../screens/hiddenVettingSeam'
+import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVetterSeam'
+
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+// The desk's attest asks for a face or fingerprint first; here it is given.
+jest.mock('../../vrc/vrc-biometric', () => ({
+  requestBiometricConfirmationWithUI: jest.fn(async () => ({ success: true })),
+}))
+
+type Setter = { set(next: Record<string, unknown>): void }
+const mockUseAgent = useAgent as jest.Mock
+const setVta = (next: Record<string, unknown>) => (vtaAgent as unknown as Setter).set(next)
+
+const linkedVtaDid = 'did:webvh:example:linked-vta'
+// What a store build carries: a mediator and a community, no VTA.
+const storeConfig = { mediatorDid: 'did:peer:2:mediator', communityDid: 'did:webvh:example:community' }
+
+const linked = {
+  kind: 'linked',
+  vtaDid: linkedVtaDid,
+  label: 'alice',
+  linkedAt: '2026-09-22T00:00:00Z',
+  connection: { kind: 'online', since: 0 },
+}
+
+function fakeAgent() {
+  return {
+    agent: {
+      genericRecords: {
+        findAllByQuery: async () => [],
+        save: async () => undefined,
+        update: async () => undefined,
+        delete: async () => undefined,
+      },
+      dids: { resolveDidDocument: async () => Promise.reject(new Error('offline')) },
+      config: { logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } },
+    },
+  }
+}
+
+describe('requestRef', () => {
+  test('a request card time: the time today, the date with it on another day', () => {
+    const now = new Date('2026-09-25T18:59:00')
+    const today = whenShown(new Date('2026-09-25T16:21:00').toISOString(), now)
+    const earlier = whenShown(new Date('2026-09-24T16:21:00').toISOString(), now)
+    expect(today).not.toMatch(/Sep/)
+    expect(earlier).toMatch(/24 Sep/)
+    expect(earlier.endsWith(today)).toBe(true)
+  })
+
+  test('names a request by the tail of its document id', () => {
+    expect(requestRef('urn:uuid:0f8e2a4c-9b1d-4e7a-8c3f-5d6b7a9e1c2f')).toBe('7a9e1c2f')
+  })
+  test('two requests to the same vetter get different names, and one request keeps its name', () => {
+    const first = 'urn:uuid:0f8e2a4c-9b1d-4e7a-8c3f-5d6b7a9e1c2f'
+    const second = 'urn:uuid:3c1d9e7f-2a4b-4c6d-9e8f-1a2b3c4d5e6f'
+    expect(requestRef(first)).not.toBe(requestRef(second))
+    expect(requestRef(first)).toBe(requestRef(first))
+  })
+  test('the reference rides in the testID, after a fixed key a reader can match by prefix', () => {
+    expect(requestTestKey('urn:uuid:0f8e2a4c-9b1d-4e7a-8c3f-5d6b7a9e1c2f')).toBe('VettingRequestId.7a9e1c2f')
+  })
+})
+
+describe('resolveVtaDid', () => {
+  test('the linked agent wins over the one a build names', () => {
+    expect(resolveVtaDid(linked as never, 'did:webvh:example:built-in')).toBe(linkedVtaDid)
+  })
+  test('with no link, the build’s agent', () => {
+    expect(resolveVtaDid({ kind: 'notLinked' }, 'did:webvh:example:built-in')).toBe('did:webvh:example:built-in')
+  })
+  test('with neither, none', () => {
+    expect(resolveVtaDid({ kind: 'notLinked' })).toBeUndefined()
+  })
+})
+
+describe('Vetting — the agent it works with', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    mockUseAgent.mockReturnValue(fakeAgent())
+    setVta({ link: { kind: 'notLinked' } })
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  const renderVetting = async () => {
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    return tree
+  }
+
+  test('a linked agent and no build VTA: the first step, not "not configured"', async () => {
+    setVta({ link: linked })
+    const tree = await renderVetting()
+    expect(tree.queryByText('MyAgent.NotConfigured')).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('VettingCreateIdentityButton'))).toBeTruthy()
+  })
+
+  test('a linked agent and no community: says to join one, and offers Join', async () => {
+    setVta({ link: linked })
+    const navigate = useNavigation().navigate as jest.Mock
+    navigate.mockClear()
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={{}} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('VettingNeedsCommunity'))).toBeTruthy()
+    expect(tree.queryByText('MyAgent.NotConfigured')).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('VettingJoinCommunity'))))
+    expect(navigate).toHaveBeenCalledWith(Screens.VtiJoin)
+    expect(tree.getByTestId(testIdWithKey('VettingApplicantStep_noCommunity'))).toBeTruthy()
+  })
+
+  test('no linked agent and no build VTA: says so', async () => {
+    const tree = await renderVetting()
+    expect(tree.getByTestId(testIdWithKey('VettingNeedsAgent'))).toHaveTextContent('Join.NeedsAgent')
+  })
+})
+
+/**
+ * Admitted: the line says so, never "already" — which read as an error to an
+ * applicant admitted seconds before (Farm vetting run, 2026-09-23).
+ */
+const communityDid = storeConfig.communityDid
+const personaDid = 'did:webvh:example:persona'
+type Rec = { tags: Record<string, string>; content: Record<string, unknown> }
+const persona: Rec = {
+  tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: communityDid },
+  content: {
+    communityDid,
+    vtaDid: linkedVtaDid,
+    did: personaDid,
+    contextId: 'vta',
+    vtaKeyIds: { signing: 's', keyAgreement: 'k' },
+    kmsKeyIds: { signing: 'ks', keyAgreement: 'kk' },
+    createdAt: '2026-09-23T00:00:00Z',
+  },
+}
+const membership = (role: string): Rec => ({
+  tags: { recordType: 'keyring/vti-community', kind: 'membership', key: communityDid },
+  content: { communityDid, personaDid, role, vmc: {}, grantedAt: '2026-09-23T20:04:44Z', via: 'vetting' },
+})
+const withRecords = (records: Rec[]) => ({
+  agent: {
+    ...fakeAgent().agent,
+    genericRecords: {
+      findAllByQuery: async (query: Record<string, string>) =>
+        records.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v)).map((r) => ({ ...r, id: 'r' })),
+      save: async () => undefined,
+      update: async () => undefined,
+      delete: async () => undefined,
+    },
+  },
+})
+
+describe('Vetting — a member', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+  })
+  afterEach(() => jest.useRealTimers())
+
+  const renderAs = async (role: string) => {
+    mockUseAgent.mockReturnValue(withRecords([persona, membership(role)]))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+
+  test('a plain member: "You\'re a member of …", with no "already" and no "(member)"', async () => {
+    const tree = await renderAs('member')
+    const line = await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    expect(line).toHaveTextContent(/Vetting\.Member\b/)
+    expect(line).not.toHaveTextContent(/Already/i)
+  })
+
+  test('the page makes room for the keyboard: the scroll moves a focused field up with room below it', async () => {
+    // The ticket field, its "can't read this" line and "Use this link" were all
+    // behind the keyboard on both platforms (221 gate): the app draws under the
+    // system bars, so neither resizes the page by itself.
+    const tree = await renderAs('member')
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    const avoiding = tree.UNSAFE_getByType(KeyboardAvoidingView)
+    expect(avoiding.props.behavior).toBe('padding')
+    const scroll = within(avoiding).UNSAFE_getByType(KeyboardAwareScrollView)
+    expect(scroll.props.bottomOffset).toBeGreaterThanOrEqual(150)
+    expect(within(scroll).getByTestId(testIdWithKey('VettingAlreadyMember'))).toBeTruthy()
+  })
+
+  // Gate 235 persona shots, iOS: the last line sat under the tab bar, which draws over the page.
+  test('the page leaves room at its foot for the tab bar, so its last line scrolls clear of it', async () => {
+    const tree = await renderAs('member')
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    const scroll = tree.UNSAFE_getByType(KeyboardAwareScrollView)
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle).paddingBottom).toBeGreaterThanOrEqual(
+      TAB_BAR_CLEARANCE
+    )
+  })
+
+  test('the page names its step for a driver: a member is on "member"', async () => {
+    const tree = await renderAs('member')
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    expect(tree.getByTestId(testIdWithKey('VettingApplicantStep_member'))).toBeTruthy()
+  })
+
+  test("the applicant's side keeps the usual header and says whose side it is", async () => {
+    const setOptions = useNavigation().setOptions as jest.Mock
+    setOptions.mockClear()
+    const tree = await renderAs('member')
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    expect(setOptions).toHaveBeenLastCalledWith({ title: 'Screens.GettingVetted', headerVariant: undefined })
+  })
+
+  test('a role that says more than member is named', async () => {
+    const tree = await renderAs('vetter')
+    expect(await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))).toHaveTextContent('Vetting.MemberAs')
+  })
+})
+
+/**
+ * Whose membership the screen reads. On 277 a person left a community and scanned a vetter's ticket: the
+ * phone's reading said "member", from a record that was not theirs. Making the identity announced nothing, so
+ * the reading stayed, and the screen said "You're a member" to someone who had just left. My Agent read again
+ * and said the vetting was not finished, and the ticket had gone with the screen, so it took a second scan.
+ */
+describe('Vetting — a membership of another identity', () => {
+  const ticket = encodeTicketUri({
+    community: communityDid,
+    vetter: 'did:webvh:example:vetter',
+    presentation: { code: { code: 'ABCD-EFGH' } },
+  } as never)
+  const heldBy = (holder: string | undefined, grantedAt = '2026-09-23T20:04:44Z'): Rec => ({
+    ...membership('member'),
+    content: { ...membership('member').content, personaDid: holder, grantedAt },
+  })
+  const scan = async () => {
+    await act(async () => {
+      await routeKeyringAgentLink(ticket, {} as never, jest.fn())
+      jest.advanceTimersByTime(10)
+    })
+  }
+  const open = async (records: Rec[]) => {
+    mockUseAgent.mockReturnValue(withRecords(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-11-01T22:54:27Z'))
+    setVta({ link: linked })
+    setCurrentAgentDid(linkedVtaDid)
+    communityJourneys.forget()
+    jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
+  })
+  afterEach(() => {
+    setCurrentAgentDid(undefined)
+    communityJourneys.forget()
+    jest.restoreAllMocks()
+    jest.useRealTimers()
+  })
+
+  test('an identity made after the reading: one scan carries through, with no "You\'re a member"', async () => {
+    // The agent itself holds a membership here, and has no identity: the reading says "member".
+    const records = [heldBy(linkedVtaDid)]
+    const start = jest.spyOn(VtiApplicant.prototype, 'start').mockResolvedValue(undefined as never)
+    jest.spyOn(vtaAgent, 'client').mockReturnValue({
+      ensurePersona: async () => {
+        records.push(persona)
+        return persona.content
+      },
+    } as never)
+    const tree = await open(records)
+    await scan()
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_identity'))
+
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingCreateIdentityButton')))
+      jest.advanceTimersByTime(50)
+    })
+
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_name'))
+    expect(tree.queryByTestId(testIdWithKey('VettingAlreadyMember'))).toBeNull()
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingLegalNameInput')), 'Ada Lovelace')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingStartButton')))
+      jest.advanceTimersByTime(50)
+    })
+    expect(start).toHaveBeenCalledWith(expect.anything(), { 'name.legal': 'Ada Lovelace' }, { ticket })
+  })
+
+  test("this identity's own membership is a member", async () => {
+    const tree = await open([persona, membership('member')])
+    expect(await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))).toHaveTextContent(/Vetting\.Member\b/)
+  })
+
+  test('a membership kept from before identities were named is a member, and a ticket is not needed', async () => {
+    const tree = await open([persona, heldBy(undefined)])
+    expect(await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))).toHaveTextContent(/Vetting\.Member\b/)
+    await scan()
+    expect(await tree.findByText('Vetting.MemberTicketNotNeeded')).toBeTruthy()
+  })
+
+  test("a member who scans a ticket is told it isn't needed", async () => {
+    const tree = await open([persona, membership('member')])
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    expect(tree.queryByText('Vetting.MemberTicketNotNeeded')).toBeNull()
+
+    await scan()
+
+    expect(await tree.findByText('Vetting.MemberTicketNotNeeded')).toBeTruthy()
+    // The way on stays: this says why nothing more is asked, it doesn't replace the next step.
+    expect(tree.getByTestId(testIdWithKey('VettingGoToMyAgent'))).toBeTruthy()
+  })
+
+  test('someone admitted after scanning hears nothing about the ticket: it was what got them in', async () => {
+    const tree = await open([persona, heldBy(personaDid, '2026-11-01T22:56:23Z')])
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    await scan()
+    expect(tree.queryByText('Vetting.MemberTicketNotNeeded')).toBeNull()
+  })
+})
+
+/**
+ * One filled button per step: the next thing to do. Everything else on the
+ * step is outlined (IN-16, IN-18 and the desk with three filled buttons).
+ */
+describe('Vetting — one filled button per step', () => {
+  const application: Rec = {
+    tags: { recordType: 'keyring/vti-vetting', kind: 'application', key: communityDid },
+    content: {
+      communityDid,
+      joinDid: personaDid,
+      minStatements: 1,
+      requiredClaims: ['name.legal'],
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: 'salt',
+      claims: { 'name.legal': 'Ada Lovelace' },
+      requests: [],
+      startedAt: '2026-09-25T00:00:00Z',
+    },
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+    // The community's ways in, read before a vetter is asked (IN-264): named vetting, by default.
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  const renderWith = async (records: Rec[]) => {
+    mockUseAgent.mockReturnValue(withRecords(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+
+  /** The testIDs of the buttons drawn filled. */
+  const filled = (tree: Awaited<ReturnType<typeof renderWith>>) =>
+    Array.from(
+      new Set(
+        tree
+          .UNSAFE_queryAllByProps({ accessibilityRole: 'button' })
+          .filter((b) => typeof b.type === 'string' && b.props.testID)
+          .filter((b) => StyleSheet.flatten(b.props.style)?.backgroundColor !== undefined)
+          .map((b) => String(b.props.testID).replace(/^com\.ariesbifold:id\//, ''))
+      )
+    )
+
+  test('a member: a done card with one way on, and no "being vetted" banner', async () => {
+    const tree = await renderWith([persona, membership('member')])
+    await tree.findByTestId(testIdWithKey('VettingMemberDone'))
+    expect(tree.queryByTestId(testIdWithKey('VettingSeatBanner'))).toBeNull()
+    expect(filled(tree)).toEqual(['VettingGoToMyAgent'])
+
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingGoToMyAgent')))
+    // A linked phone's My Agent is the "Your agent" home, never the old panel,
+    // which told a person just admitted "You are being vetted" (225 gate).
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaAgent)
+    expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.MyAgent)
+  })
+
+  test('asking a vetter: Scan is the step until a link is pasted, then "Use this link" is', async () => {
+    const tree = await renderWith([persona, application])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    expect(filled(tree)).toEqual(['VettingScanTicketButton'])
+
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
+    expect(filled(tree)).toEqual(['VettingRequestButton'])
+  })
+
+  // TestFlight 236: a ticket scanned with the Camera app lived only in the
+  // screen, so leaving it after "Start my application" lost the ticket.
+  test('a ticket kept with the application is back in Step 2 when the screen opens again', async () => {
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    const kept = { ...application, content: { ...(application.content as object), pendingTicket: ticket } }
+    const tree = await renderWith([persona, kept])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    expect(tree.getByTestId(testIdWithKey('VettingTicketInput')).props.value).toBe(ticket)
+    expect(filled(tree)).toEqual(['VettingRequestButton'])
+  })
+
+  // TestFlight 236: a scan on Step 2 put the link in the field and waited for
+  // "Use this link"; a scan acts at once elsewhere in Keyring.
+  test('a ticket scanned from Step 2 asks the vetter at once; a pasted one still waits', async () => {
+    const ask = jest.spyOn(VtiApplicant.prototype, 'requestVetter').mockResolvedValue({} as never)
+    const tree = await renderWith([persona, application])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(ask).not.toHaveBeenCalled()
+
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), '')
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingScanTicketButton')))
+    await act(async () => {
+      await routeKeyringAgentLink(ticket, {} as never, jest.fn())
+      jest.advanceTimersByTime(10)
+    })
+    // With the manifest the screen just read: whether the way in is private is its answer.
+    expect(ask).toHaveBeenCalledWith({
+      link: ticket,
+      manifest: expect.objectContaining({ criteria: expect.any(Array) }),
+    })
+    ask.mockRestore()
+  })
+
+  // IN-264: someone part-way through named vetting on a community that now
+  // runs private vetting. Keyring does not ask the vetter (the community
+  // would refuse the statement), and says why, as Join does.
+  test('a community that runs private vetting: the vetter is not asked, and the screen says why', async () => {
+    const [hiddenExample] = specExamples.filter((e) => e.title.startsWith('A criterion whose vetting parameters'))
+    jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue(readManifest(hiddenExample.document.payload as Partial<VtiManifest>, '0.3'))
+    const ask = jest.spyOn(VtiApplicant.prototype, 'requestVetter').mockResolvedValue({} as never)
+    const tree = await renderWith([persona, application])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingRequestButton')))
+      jest.advanceTimersByTime(10)
+    })
+    expect(await tree.findByTestId(testIdWithKey('VettingError'))).toHaveTextContent('Join.Ways.PrivateVetting')
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  // 254: the same community, on a build that DOES carry the applicant module.
+  // Alberto pasted the ticket and landed on the named flow ("Your face") under
+  // the #405 refusal. Both are wrong once the module is here: the refusal must
+  // narrow, and the ticket belongs to the private flow.
+  // Alberto, 2026-10-15: one flow. With the module registered, the same
+  // paste asks the vetter in these same steps (the module makes it private),
+  // marked "Private vetting", with no handover and no refusal.
+  test('the same community, with the module registered: the ticket asks the vetter here, marked private', async () => {
+    const [hiddenExample] = specExamples.filter((e) => e.title.startsWith('A criterion whose vetting parameters'))
+    jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue(readManifest(hiddenExample.document.payload as Partial<VtiManifest>, '0.3'))
+    const ask = jest.spyOn(VtiApplicant.prototype, 'requestVetter').mockResolvedValue({} as never)
+    // The module's answer for an application under way: private (its checklist is the single answer).
+    const realChecklist = VtiApplicant.prototype.checklist
+    jest.spyOn(VtiApplicant.prototype, 'checklist').mockImplementation(async function (this: VtiApplicant) {
+      return { ...(await realChecklist.call(this)), mode: 'private' as const }
+    })
+    registerHiddenVetting({} as never)
+    try {
+      const tree = await renderWith([persona, application])
+      await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+      const ticket = encodeTicketUri({
+        community: communityDid,
+        vetter: 'did:webvh:example:vetter',
+        presentation: { code: { code: 'ABCD-EFGH' } },
+      } as never)
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+      navigation.navigate.mockClear()
+      fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('VettingRequestButton')))
+        jest.advanceTimersByTime(10)
+      })
+      // The private way in goes with the request, so the module can make a current private application.
+      expect(ask).toHaveBeenCalledWith({
+        link: ticket,
+        manifest: expect.objectContaining({
+          criteria: expect.arrayContaining([expect.objectContaining({ id: 'kernel-developer-private' })]),
+        }),
+      })
+      expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
+      expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
+      expect(tree.getByTestId(testIdWithKey('VettingPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)
+    } finally {
+      registerHiddenVetting(undefined)
+      ask.mockRestore()
+    }
+  })
+
+  test('a link for another community does not become the step', async () => {
+    const tree = await renderWith([persona, application])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    const other = encodeTicketUri({
+      community: 'did:webvh:example:another-community',
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), other)
+    expect(filled(tree)).toEqual(['VettingScanTicketButton'])
+  })
+})
+
+describe('Vetting — a failure is said in words, the raw text only under Details (225 gate)', () => {
+  // What the 225 gate's applicant saw on this screen, verbatim, plus a task URI.
+  const RAW =
+    'vtiAgent: sent vtc/join-requests/manifest; the community has not answered yet https://trusttasks.org/spec/vtc/join-requests/manifest/1.0'
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  test("the persona's session failing to connect shows a sentence, not the agent's message", async () => {
+    jest.spyOn(vtiAgent, 'connect').mockRejectedValue(new Error(RAW))
+    mockUseAgent.mockReturnValue(withRecords([persona, membership('member')]))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    const line = await tree.findByTestId(testIdWithKey('VettingError'))
+    expect(line).toHaveTextContent('Errors.SentNoAnswer')
+    expect(tree.queryByText(/vtiAgent:|trusttasks\.org/)).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingErrorDetailsToggle')))
+    expect(tree.getByTestId(testIdWithKey('VettingErrorDetail'))).toHaveTextContent(RAW)
+  })
+})
+
+/**
+ * The desk's steps (vettingPrimary): it opens on a new ticket when nothing is
+ * in progress, moves to handing the ticket over once one is cut, and says
+ * "Statement issued" only right after this visit's attest. Before, a desk
+ * whose newest request was attested opened on "Step 5 of 5 · Statement
+ * issued" on every later visit, and "New ticket" stayed the filled button
+ * after the ticket was cut.
+ */
+describe('Vetting — the desk', () => {
+  const grant: Rec = {
+    tags: { recordType: 'keyring/vti-community', kind: 'credential', key: 'urn:uuid:grant' },
+    content: {
+      kind: 'vetter-grant',
+      communityDid,
+      subjectDid: personaDid,
+      credential: { id: 'urn:uuid:grant', issuer: communityDid },
+      receivedAt: '2026-09-23T00:00:00Z',
+    },
+  }
+  const deskRequest = (status: string, extra: Record<string, unknown> = {}): Rec => ({
+    tags: { recordType: 'keyring/vti-vetting', kind: 'desk', key: 'r1' },
+    content: {
+      requestId: 'r1',
+      applicantDid: 'did:key:z6MkApplicant',
+      communityDid,
+      status,
+      receivedAt: '2026-09-25T09:00:00Z',
+      ...extra,
+    },
+  })
+  /** A store that keeps what the screen saves, so a ticket cut is there on the next read. */
+  const keeping = (records: Rec[]) => ({
+    agent: {
+      ...fakeAgent().agent,
+      genericRecords: {
+        findAllByQuery: async (query: Record<string, string>) =>
+          records.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v)),
+        save: async (r: Rec) => {
+          records.push({ tags: r.tags, content: r.content })
+        },
+        update: async () => undefined,
+        delete: async (r: Rec) => {
+          records.splice(records.indexOf(r), 1)
+        },
+      },
+    },
+  })
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+    jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+    // A live grant: the fixture's credential is not one the chooser can check.
+    jest.spyOn(grantState, 'pickOwnVetterGrant').mockImplementation(async (_agent, grants) => ({
+      held: grants[0],
+      state: { state: 'active', statusChecked: true },
+    }))
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  const renderDesk = async (records: Rec[]) => {
+    mockUseAgent.mockReturnValue(keeping(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+
+  const filled = (tree: Awaited<ReturnType<typeof renderDesk>>) =>
+    Array.from(
+      new Set(
+        tree
+          .UNSAFE_queryAllByProps({ accessibilityRole: 'button' })
+          .filter((b) => typeof b.type === 'string' && b.props.testID)
+          .filter((b) => StyleSheet.flatten(b.props.style)?.backgroundColor !== undefined)
+          .map((b) => String(b.props.testID).replace(/^com\.ariesbifold:id\//, ''))
+      )
+    )
+
+  test("the vetter's desk asks for its own header: another title and the gradient's far end changed", async () => {
+    const setOptions = useNavigation().setOptions as jest.Mock
+    setOptions.mockClear()
+    const tree = await renderDesk([persona, grant])
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))
+    expect(setOptions).toHaveBeenLastCalledWith({ title: 'Screens.VetterDesk', headerVariant: 'vetter' })
+  })
+
+  test('a finished request says the name the vetter confirmed (IN-127)', async () => {
+    const tree = await renderDesk([
+      persona,
+      grant,
+      deskRequest('attested', { card: { claims: [{ type: 'name.legal', value: 'Alice Example' }] } }),
+    ])
+    await tree.findByTestId(testIdWithKey('VettingDeskFinishedToggle'))
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle')))
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedName'))).toHaveTextContent(/Vetting\.FinishedName/)
+    expect(confirmedNameOf({ card: { claims: [{ type: 'name.legal', value: ' Alice Example ' }] } })).toBe(
+      'Alice Example'
+    )
+    expect(confirmedNameOf({})).toBeUndefined()
+  })
+
+  // 240: a vetter for two communities saw one desk's requests on the other.
+  test("a desk lists its own community's requests, not another desk's", async () => {
+    const elsewhere: Rec = {
+      tags: { recordType: 'keyring/vti-vetting', kind: 'desk', key: 'r2' },
+      content: {
+        requestId: 'r2',
+        applicantDid: 'did:key:z6MkElsewhere',
+        communityDid: 'did:webvh:QmOther:vtc.other.example',
+        status: 'attested',
+        receivedAt: '2026-09-26T09:00:00Z',
+      },
+    }
+    const tree = await renderDesk([persona, grant, deskRequest('attested'), elsewhere])
+    expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle')))
+    expect(tree.getAllByTestId(testIdWithKey('VettingDeskFinishedRequest'))).toHaveLength(1)
+  })
+
+  test('only a finished request on the desk: it opens on a new ticket, the finished one folded away', async () => {
+    const tree = await renderDesk([persona, grant, deskRequest('attested')])
+    expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('VettingVetterStep_done'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('VettingVetSomeoneElse'))).toBeNull()
+    expect(filled(tree)).toEqual(['VettingNewTicketButton'])
+
+    // Folded: the count, and nothing else until it is opened.
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle'))).toHaveTextContent(/Vetting\.FinishedRequests/)
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskClearButton'))).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle')))
+    expect(tree.getAllByTestId(testIdWithKey('VettingDeskFinishedRequest'))).toHaveLength(1)
+    // Who it was: their identity's word, the DID behind a toggle (IN-127).
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedIdentity'))).toHaveTextContent(
+      /Vetting\.FinishedIdentity/
+    )
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedApplicantToggle'))).toBeTruthy()
+
+    // Clearing them still works, from inside.
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskClearButton')))
+    })
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskFinishedToggle'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+  })
+
+  test('a ticket just cut: handing it over is the step, and the raw link waits under Details', async () => {
+    const tree = await renderDesk([persona, grant])
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))
+    expect(filled(tree)).toEqual(['VettingNewTicketButton'])
+
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingNewTicketButton')))
+    })
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_share'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VettingTicketCode'))).toBeTruthy()
+    expect(filled(tree)).toEqual(['VettingCopyTicketLink'])
+
+    // The link is one tap away, not on the page.
+    expect(tree.queryByTestId(testIdWithKey('VettingTicketLink'))).toBeNull()
+    expect(tree.queryByText(/^vetting-ticket:/)).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingTicketLinkDetailsToggle')))
+    expect(tree.getByTestId(testIdWithKey('VettingTicketLink'))).toHaveTextContent(/^vetting-ticket:/)
+
+    // Still the step on the next read of the store.
+    await act(async () => {
+      jest.advanceTimersByTime(3100)
+    })
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_share'))).toBeTruthy()
+  })
+
+  test('an open ticket from an earlier visit is not the step: the desk opens on a new ticket', async () => {
+    const earlier: Rec = {
+      tags: { recordType: 'keyring/vti-vetting', kind: 'ticket', key: 'vt-earlier' },
+      content: {
+        ticketId: 'vt-earlier',
+        code: 'ABCD-EFGH',
+        secret: 's',
+        communityDid,
+        usesLeft: 1,
+        expiresAt: '2099-01-01T00:00:00Z',
+        createdAt: '2026-09-25T00:00:00Z',
+      },
+    }
+    const tree = await renderDesk([persona, grant, earlier])
+    expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+    expect(filled(tree)).toEqual(['VettingNewTicketButton'])
+  })
+
+  // One flow: a private request comes to the same desk, marked "Private
+  // vetting", and the same Attest sends the private attestation. No
+  // relationship question: the desk sends `none`, as the named flow does.
+  test('a private request: marked, no relationship question, and the same Attest', async () => {
+    const records = [
+      persona,
+      grant,
+      deskRequest('cardReceived', {
+        // As the desk stores a private request: the applicant's PCS identifier
+        // from the request's hidden-vetting ext, and nothing else marks it.
+        // (An earlier fixture said `hidden: true`, a member the module never
+        // writes, and hid that the screen never saw a real private request.)
+        hiddenApplicantId: 'z3ApplicantPcsKey',
+        matchConfirmedAt: '2026-09-25T09:01:00Z',
+        session: {
+          documentId: 'urn:uuid:session',
+          challenge: 'c',
+          domain: communityDid,
+          requiredClaims: ['name.legal'],
+          method: 'inPerson',
+          expiresAt: '2099-01-01T00:00:00Z',
+          matchCode: 'PBWW-HACW',
+        },
+        card: { claims: [{ type: 'name.legal', value: 'Gate Applicant' }] },
+      }),
+    ]
+    const attest = jest.spyOn(VtiVetterDesk.prototype, 'attest').mockImplementation(async () => {
+      records[2].content.status = 'attested'
+      return undefined as never
+    })
+    const tree = await renderDesk(records)
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    expect(tree.getByTestId(testIdWithKey('VettingDeskPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)
+    expect(tree.queryByTestId(testIdWithKey('VettingRelationship'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).not.toBeDisabled()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingAttestButton')))
+    })
+    expect(attest).toHaveBeenCalledWith('r1', expect.not.objectContaining({ declaredRelationship: expect.anything() }))
+  })
+
+  test('a record carrying only `hidden: true` is not a private request: the screen and the desk read one member', async () => {
+    const records = [
+      persona,
+      grant,
+      deskRequest('cardReceived', {
+        hidden: true,
+        matchConfirmedAt: '2026-09-25T09:01:00Z',
+        session: {
+          documentId: 'urn:uuid:session',
+          challenge: 'c',
+          domain: communityDid,
+          requiredClaims: ['name.legal'],
+          method: 'inPerson',
+          expiresAt: '2099-01-01T00:00:00Z',
+          matchCode: 'PBWW-HACW',
+        },
+        card: { claims: [{ type: 'name.legal', value: 'Gate Applicant' }] },
+      }),
+    ]
+    const tree = await renderDesk(records)
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskPrivate'))).toBeNull()
+  })
+
+  // The quiet token line: read once when the desk opens, from the agent
+  // (vta/pcs/vetter/show), never on a poll. A date only when one is known.
+  describe('where a way is private: how many people the vetter can vouch for now', () => {
+    const testVtc = readManifest(testVtcCapture.manifest03.payload as Partial<VtiManifest>, '0.3')
+    afterEach(() => registerHiddenVetter(undefined))
+
+    test('enrolled, with a next draw known: the count and the date, asked once', async () => {
+      jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+      const standing = jest.fn(async () => ({ enrolled: true, tokens: 2, nextDrawAt: '2026-10-18T12:00:00Z' }))
+      registerHiddenVetter({ standing } as unknown as HiddenVetterSeam)
+      const tree = await renderDesk([persona, grant])
+      const line = await tree.findByTestId(testIdWithKey('VettingVouchTokens'))
+      expect(line).toHaveTextContent(/Vetting\.Vouch\.Tokens/)
+      expect(line).toHaveTextContent(/Vetting\.Vouch\.NextDraw/)
+      await act(async () => {
+        jest.advanceTimersByTime(10000)
+      })
+      expect(standing).toHaveBeenCalledTimes(1)
+    })
+
+    test('no next draw known (a new phone): the count only, no invented date', async () => {
+      jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+      registerHiddenVetter({
+        standing: jest.fn(async () => ({ enrolled: true, tokens: 1 })),
+      } as unknown as HiddenVetterSeam)
+      const tree = await renderDesk([persona, grant])
+      const line = await tree.findByTestId(testIdWithKey('VettingVouchTokens'))
+      expect(line).not.toHaveTextContent(/NextDraw/)
+    })
+
+    test('enrolled by an earlier build under another identity: said plainly, no token count, no vouching privately', async () => {
+      jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+      registerHiddenVetter({
+        standing: jest.fn(async () => ({ enrolled: false, tokens: 0, stuck: 'memberMismatch' })),
+      } as unknown as HiddenVetterSeam)
+      const tree = await renderDesk([persona, grant])
+      expect(await tree.findByTestId(testIdWithKey('VettingVouchStuck'))).toHaveTextContent(
+        /Vetting\.Vouch\.MemberMismatch/
+      )
+      expect(tree.queryByTestId(testIdWithKey('VettingVouchTokens'))).toBeNull()
+    })
+
+    test('never enrolled: no line, and no error', async () => {
+      jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+      registerHiddenVetter({
+        standing: jest.fn(async () => {
+          throw Object.assign(new Error('nf'), { code: 'vta/pcs/vetter/show:notFound' })
+        }),
+      } as unknown as HiddenVetterSeam)
+      const tree = await renderDesk([persona, grant])
+      await act(async () => {
+        jest.advanceTimersByTime(100)
+      })
+      expect(tree.queryByTestId(testIdWithKey('VettingVouchTokens'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
+    })
+  })
+
+  test('a named request: no mark, no relationship question, attests as before', async () => {
+    const records = [
+      persona,
+      grant,
+      deskRequest('cardReceived', {
+        matchConfirmedAt: '2026-09-25T09:01:00Z',
+        session: {
+          documentId: 'urn:uuid:session',
+          challenge: 'c',
+          domain: communityDid,
+          requiredClaims: ['name.legal'],
+          method: 'inPerson',
+          expiresAt: '2099-01-01T00:00:00Z',
+          matchCode: 'PBWW-HACW',
+        },
+        card: { claims: [{ type: 'name.legal', value: 'Gate Applicant' }] },
+      }),
+    ]
+    const tree = await renderDesk(records)
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskPrivate'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('VettingRelationship'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).not.toBeDisabled()
+  })
+
+  test('attested here: "Statement issued", then Vet someone else goes back to a new ticket', async () => {
+    const records = [
+      persona,
+      grant,
+      deskRequest('cardReceived', {
+        matchConfirmedAt: '2026-09-25T09:01:00Z',
+        session: {
+          documentId: 'urn:uuid:session',
+          challenge: 'c',
+          domain: communityDid,
+          requiredClaims: ['name.legal'],
+          method: 'inPerson',
+          expiresAt: '2099-01-01T00:00:00Z',
+          matchCode: 'PBWW-HACW',
+        },
+        card: { claims: [{ type: 'name.legal', value: 'Gate Applicant' }] },
+      }),
+    ]
+    jest.spyOn(VtiVetterDesk.prototype, 'attest').mockImplementation(async () => {
+      records[2].content.status = 'attested'
+      return undefined as never
+    })
+    const tree = await renderDesk(records)
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    // IN-120: whom the statement will be about, as the community sees them,
+    // behind words and with Copy, beside the card being checked.
+    expect(tree.getByTestId(testIdWithKey('VettingCheckApplicantToggle'))).toHaveTextContent(/Vetting\.TheirIdentity$/)
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingCheckApplicantToggle')))
+    expect(tree.getByTestId(testIdWithKey('VettingCheckApplicantDid'))).toHaveTextContent('did:key:z6MkApplicant')
+    expect(tree.getByTestId(testIdWithKey('VettingCheckApplicantHint'))).toHaveTextContent('Vetting.TheirIdentityHint')
+    expect(tree.getByTestId(testIdWithKey('VettingCheckApplicantCopy'))).toBeTruthy()
+    // Its label wraps on a phone: inset from the button's edges, centred on each line.
+    const attest = tree.getByTestId(testIdWithKey('VettingAttestButton'))
+    expect(StyleSheet.flatten(attest.props.style)).toMatchObject({ paddingHorizontal: 16 })
+    expect(StyleSheet.flatten(within(attest).getByText('Vetting.Attest').props.style)).toMatchObject({
+      flexShrink: 1,
+      textAlign: 'center',
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingAttestButton')))
+    })
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_done'))).toBeTruthy()
+    expect(filled(tree)).toEqual(['VettingVetSomeoneElse'])
+
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingVetSomeoneElse')))
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle'))).toBeTruthy()
+  })
+})
+
+// One flow (Alberto, 2026-10-15): an applicant in a community whose way in is
+// private stays on this screen, in these steps, with the one mark that says so.
+describe('Vetting — opened with a ticket for a community that runs private vetting', () => {
+  const testVtc = readManifest(testVtcCapture.manifest03.payload as Partial<VtiManifest>, '0.3')
+  beforeEach(() => {
+    setVta({ link: linked })
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+    jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+  })
+  afterEach(() => {
+    registerHiddenVetting(undefined)
+    jest.restoreAllMocks()
+  })
+
+  const openAsApplicant = async () => {
+    mockUseAgent.mockReturnValue(withRecords([persona]))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    for (let i = 0; i < 5; i++) await act(async () => undefined)
+    return tree
+  }
+
+  test('with the module: no handover; the same steps, marked "Private vetting", with what it means', async () => {
+    registerHiddenVetting({} as never)
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const tree = await openAsApplicant()
+    expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
+    expect(tree.getByTestId(testIdWithKey('VettingPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)
+    expect(tree.getByTestId(testIdWithKey('VettingPrivateExplain'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
+  })
+
+  test('without it: no mark, as #405 left it', async () => {
+    const tree = await openAsApplicant()
+    expect(tree.queryByTestId(testIdWithKey('VettingPrivate'))).toBeNull()
+  })
+})
+
+// 262: the vetter attested privately and the applicant's agent took it ("it
+// reports 1 held"), but the screen stayed on "The vetter is checking your
+// document" — the request was never moved on. Driven here through the real
+// inbound path: the applicant the screen runs, receiving the attestation as
+// vtiAgent delivers it, with no status set by hand.
+describe('Vetting — a private attestation arriving moves the applicant on to Apply', () => {
+  const vetterDid = 'did:webvh:example:vetter-zq51'
+  const SESSION = 'urn:uuid:session-zq51'
+  const testVtc = readManifest(testVtcCapture.manifest03.payload as Partial<VtiManifest>, '0.3')
+  const application = (): Rec => ({
+    tags: { recordType: 'keyring/vti-vetting', kind: 'application', key: communityDid },
+    content: {
+      communityDid,
+      joinDid: personaDid,
+      minStatements: 1,
+      requiredClaims: ['name.legal'],
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: 'salt',
+      claims: { 'name.legal': 'Ada Lovelace' },
+      startedAt: '2026-10-16T23:00:00Z',
+      requests: [
+        {
+          vetterDid,
+          requestDocumentId: 'urn:uuid:request-zq51',
+          status: 'cardSent',
+          cardSentAt: '2026-10-16T23:58:00Z',
+          matchConfirmedAt: '2026-10-16T23:57:00Z',
+          session: {
+            documentId: SESSION,
+            challenge: 'c',
+            domain: communityDid,
+            requiredClaims: ['name.legal'],
+            method: 'inPerson',
+            expiresAt: '2099-01-01T00:00:00Z',
+            matchCode: 'PBWW-HACW',
+          },
+        },
+      ],
+    },
+  })
+  /** A store that keeps what the applicant writes, so the next read sees it. */
+  const keeping = (records: Rec[]) => ({
+    agent: {
+      ...fakeAgent().agent,
+      genericRecords: {
+        findAllByQuery: async (query: Record<string, string>) =>
+          records.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v)),
+        save: async (r: Rec) => void records.push({ tags: r.tags, content: r.content }),
+        update: async () => undefined,
+        delete: async () => undefined,
+      },
+    },
+  })
+  const hiddenRecord = (held: number) =>
+    ({
+      community: communityDid,
+      joinDid: personaDid,
+      applicationId: 'app-1',
+      id: 'zApplicantPcsKey',
+      requirementsDigest: 'zQmDigest',
+      parameters: {},
+      held,
+      minimum: 1,
+    }) as never
+  const handlers: ((m: unknown) => Promise<void> | void)[] = []
+
+  beforeEach(() => {
+    handlers.length = 0
+    setVta({ link: linked })
+    registerHiddenVetting({} as never)
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+    jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+    jest.spyOn(vtiAgent, 'onInbound').mockImplementation(((h: (m: unknown) => Promise<void>) => {
+      handlers.push(h)
+      return () => undefined
+    }) as never)
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(linkedVtaDid as never)
+    jest.spyOn(vtaAgent, 'connect').mockResolvedValue(undefined as never)
+    jest.spyOn(vtaAgent, 'client').mockReturnValue({} as never)
+  })
+  afterEach(() => {
+    registerHiddenVetting(undefined)
+    jest.restoreAllMocks()
+  })
+
+  test('cardSent ("checking") until the agent takes it; then Apply, with no statement id', async () => {
+    let held = 0
+    jest.spyOn(hiddenVettingModule, 'loadHiddenVettingRecord').mockImplementation(async () => hiddenRecord(held))
+    const take = jest.spyOn(hiddenVettingModule, 'takeHiddenAttestation').mockImplementation(async () => {
+      held = 1
+      return hiddenRecord(1)
+    })
+    const records = [persona, application()]
+    mockUseAgent.mockReturnValue(keeping(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    expect(await tree.findByTestId(testIdWithKey('VettingApplicantStep_checking'))).toBeTruthy()
+    expect(handlers.length).toBeGreaterThan(0)
+
+    // As vtiAgent hands an inbound message to every listener.
+    const attestation = {
+      id: 'urn:uuid:att-zq51',
+      type: 'https://trusttasks.org/spec/vetting/attestation/0.1',
+      from: vetterDid,
+      to: [personaDid],
+      thid: SESSION,
+      body: {
+        suite: 'ps-ddh-bls12381',
+        attestation: 'zBbsywyzdGiuJ3aCc147SQheEgDJFJHkgNKctAcZPqHkJqPcYTwKcWQV6wYqPnB1e9N',
+        meta: {
+          community: communityDid,
+          requirementsDigest: 'zQmDigest',
+          method: 'inPerson',
+          claimsVerified: ['name.legal'],
+          livenessConfirmed: true,
+          declaredRelationship: 'none',
+          identityCommitment: 'zQmPRccGTPKwUUB8nUdSGuK7oN8Ht7c6iEDsLqdK7LNsxKz',
+          cardDigestMultibase: 'zQmRnZq46vDQnAzSuEnWz3zvfQoigbe23KtSp6S1Vm1UXuL',
+          validFrom: '2026-10-16',
+          validUntil: '2027-01-18',
+          tokenLabel: 'token/2026-10',
+          tokenSerial: 'zBKHjA2kQWBpQPgwiHBG1DrzCykjsvdMfnKBYrhiM4STW',
+        },
+        token: {
+          label: 'token/2026-10',
+          serial: 'zBKHjA2kQWBpQPgwiHBG1DrzCykjsvdMfnKBYrhiM4STW',
+          shown: 'z26q5oFrp6i2aTKLp6Y6jsLESJMoNfZQwk8VKXc37c24bJPj5fwBoUEsqv51ADbnUNM',
+        },
+      },
+    }
+    await act(async () => {
+      for (const h of handlers) await h(attestation)
+    })
+    expect(take).toHaveBeenCalled()
+    expect(await tree.findByTestId(testIdWithKey('VettingApplicantStep_apply'))).toBeTruthy()
+    const stored = (
+      records.find((r) => r.tags.kind === 'application')?.content.requests as Record<string, unknown>[]
+    )[0]
+    expect(stored.status).toBe('attested')
+    expect(stored.statementId).toBeUndefined()
+  })
+})
+
+describe('Vetting — row V (Alberto, 11-17): a vetting under way has a way out', () => {
+  const VETTER = 'did:webvh:example:vetter'
+  const applicationWith = (requests: Record<string, unknown>[], over: Record<string, unknown> = {}): Rec => ({
+    tags: { recordType: 'keyring/vti-vetting', kind: 'application', key: communityDid },
+    content: {
+      communityDid,
+      joinDid: personaDid,
+      minStatements: 1,
+      requiredClaims: ['name.legal'],
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: 'salt',
+      claims: { 'name.legal': 'Ada Lovelace' },
+      requests,
+      startedAt: '2026-11-17T01:50:00Z',
+      ...over,
+    },
+  })
+  const waiting = applicationWith([
+    { vetterDid: VETTER, requestDocumentId: 'req-1', status: 'sent', sentAt: '2026-11-17T01:58:00Z' },
+  ])
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  const renderWith = async (records: Rec[]) => {
+    mockUseAgent.mockReturnValue(withRecords(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+  const id = (key: string) => testIdWithKey(key)
+
+  test('step 3, waiting: Use a new ticket stops waiting for that vetter (V2); before, there was nothing to press', async () => {
+    const stop = jest.spyOn(VtiApplicant.prototype, 'stopWaiting').mockResolvedValue(undefined)
+    const tree = await renderWith([persona, waiting])
+    await tree.findByTestId(id('VettingApplicantStep_waiting'))
+    expect(tree.getByTestId(id('VettingWaitingWays'))).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('VettingUseNewTicket')))
+    })
+    expect(stop).toHaveBeenCalledWith(VETTER)
+  })
+
+  test('after stopping: the ticket box, and a line to tell the vetter (V3); control: codes that differed keep their own line', async () => {
+    const stopped = await renderWith([
+      persona,
+      applicationWith([
+        { vetterDid: VETTER, requestDocumentId: 'req-1', status: 'declined', stoppedAt: '2026-11-17T02:10:00Z' },
+      ]),
+    ])
+    await stopped.findByTestId(id('VettingApplicantStep_ticket'))
+    expect(stopped.getByTestId(id('VettingStoppedWaiting'))).toBeTruthy()
+    expect(stopped.queryByTestId(id('VettingSessionEnded'))).toBeNull()
+    expect(stopped.getByText('Vetting.Status.stopped')).toBeTruthy()
+    stopped.unmount()
+
+    const differed = await renderWith([
+      persona,
+      applicationWith([{ vetterDid: VETTER, requestDocumentId: 'req-1', status: 'declined' }]),
+    ])
+    await differed.findByTestId(id('VettingApplicantStep_ticket'))
+    expect(differed.getByTestId(id('VettingSessionEnded'))).toBeTruthy()
+    expect(differed.queryByTestId(id('VettingStoppedWaiting'))).toBeNull()
+  })
+
+  test('Stop this vetting asks first (V4); Keep it changes nothing, Stop forgets it and goes back', async () => {
+    const stop = jest.spyOn(vtiJoinModule, 'stopVetting').mockResolvedValue('stopped')
+    const tree = await renderWith([persona, waiting])
+    await tree.findByTestId(id('VettingApplicantStep_waiting'))
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('VettingStopVetting')))
+    })
+    expect(tree.getByTestId(id('StopVettingSheet'))).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('StopVettingSheetKeep')))
+    })
+    expect(tree.queryByTestId(id('StopVettingSheet'))).toBeNull()
+    expect(stop).not.toHaveBeenCalled()
+
+    const navigation = useNavigation() as unknown as { goBack: jest.Mock }
+    navigation.goBack.mockClear()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('VettingStopVetting')))
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('StopVettingSheetStop')))
+    })
+    expect(stop).toHaveBeenCalledWith(expect.anything(), communityDid)
+    expect(navigation.goBack).toHaveBeenCalled()
+  })
+
+  test('control: once the application went to the community, there is no Stop this vetting', async () => {
+    const tree = await renderWith([
+      persona,
+      applicationWith([{ vetterDid: VETTER, requestDocumentId: 'req-1', status: 'sent' }], {
+        submission: { requestId: 'j-1', sentAt: '2026-11-17T02:00:00Z' },
+      }),
+    ])
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    expect(tree.queryByTestId(id('VettingStopVetting'))).toBeNull()
+  })
+
+  test.each([
+    ['its agent is gone (a resting sign-in)', 'VtiSignInResting', true],
+    ['its sign-in was let go', 'VtiSignInTimedOut', true],
+    ['control: any other failure', 'Error', false],
+  ])(
+    "the vetting's own identity can't sign in, %s: say so, with Try again, Start over and Stop (V6)",
+    async (_l, name, shown) => {
+      const e = Object.assign(new Error('no'), { name })
+      jest.spyOn(vtiAgent, 'connect').mockRejectedValue(e)
+      const tree = await renderWith([persona, waiting])
+      await tree.findByTestId(id('VettingApplicantStep_waiting'))
+      await act(async () => {
+        jest.advanceTimersByTime(50)
+      })
+      if (shown) {
+        expect(tree.getByTestId(id('VettingCantSignIn'))).toBeTruthy()
+        expect(tree.getByTestId(id('VettingTryAgain'))).toBeTruthy()
+        expect(tree.getByTestId(id('VettingStartOver'))).toBeTruthy()
+      } else expect(tree.queryByTestId(id('VettingCantSignIn'))).toBeNull()
+    }
+  )
+})

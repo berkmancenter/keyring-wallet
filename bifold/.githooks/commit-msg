@@ -1,0 +1,14 @@
+#!/bin/sh
+# Enforces the DCO Signed-off-by trailer required by CONTRIBUTING.md.
+# Wired up via `git config core.hooksPath .githooks` (see CONTRIBUTING.md).
+
+msg_file="$1"
+
+last_line=$(grep -v '^#' "$msg_file" | grep -v '^[[:space:]]*$' | tail -n 1)
+
+if ! printf '%s\n' "$last_line" | grep -qE '^Signed-off-by: .+ <.+@.+>$'; then
+  echo "error: commit message is missing a DCO Signed-off-by trailer." >&2
+  echo "       Amend with: git commit -s --amend --no-edit" >&2
+  echo "       See CONTRIBUTING.md for details." >&2
+  exit 1
+fi

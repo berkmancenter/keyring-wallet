@@ -1,0 +1,272 @@
+/**
+ * The Join card for a 0.3 community: each way in, in the community's order,
+ * with what it needs and what follows. The screen renders keys here; the
+ * sentences are checked in joinWays.test.ts.
+ */
+import { fireEvent, render } from '@testing-library/react-native'
+import React from 'react'
+
+import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { testIdWithKey } from '../../../utils/testable'
+import type { JoinAsks, JoinWay } from '../module/joinManifest'
+import { joinCard } from '../screens/joinWays'
+import { JoinWaysCard } from '../screens/JoinWaysCard'
+
+const way = (over: Partial<JoinWay> & Pick<JoinWay, 'id'>): JoinWay => ({
+  admission: 'automatic',
+  requires: { invitation: false },
+  requiresNothing: false,
+  usable: true,
+  meets: 'yes',
+  digest: `digest-${over.id}`,
+  ...over,
+})
+const review = way({ id: 'review', admission: 'review', requiresNothing: true })
+const defaults: JoinAsks = {
+  wire: '0.3',
+  accepting: true,
+  ways: [
+    way({ id: 'invited', requires: { invitation: true }, meets: 'no' }),
+    way({
+      id: 'member-credential',
+      requires: { invitation: false, credentials: { issuers: 'recognised', types: ['MembershipCredential'] } },
+      meets: 'unknown',
+    }),
+    review,
+  ],
+  suggested: review,
+  outcomeIfMet: 'reviewed',
+}
+
+const show = (offer: JoinAsks) => {
+  const card = joinCard(offer)
+  if (card.mode !== 'ways') throw new Error('expected ways')
+  return render(
+    <BasicAppContext>
+      <JoinWaysCard card={card} community="Acme" />
+    </BasicAppContext>
+  )
+}
+const id = (key: string) => testIdWithKey(key)
+/** The card with the ways Keyring can't use yet opened, as "See them" does. */
+const showAll = (offer: JoinAsks) => {
+  const tree = show(offer)
+  const toggle = tree.queryByTestId(testIdWithKey('JoinWaysOthersToggle'))
+  if (toggle) fireEvent.press(toggle)
+  return tree
+}
+
+// Alberto, 238: only the ways this person can use, each with what it needs
+// and what follows; the ones Keyring can't use yet are one quiet line, the
+// ways themselves behind "See them". No "more than one way in", no "You can
+// use this one now": the list and its buttons say so.
+test('the three defaults: the ways this phone can use, and one line for the rest', () => {
+  const tree = show(defaults)
+  expect(tree.queryByTestId(id('JoinWaysSeveral'))).toBeNull()
+  expect(tree.queryByTestId(id('JoinWaySuggested'))).toBeNull()
+  expect(tree.getByTestId(id('JoinWay_invited'))).toHaveTextContent(/Join\.Ways\.NeedsInvitation/)
+  expect(tree.getByTestId(id('JoinWayFollows_invited'))).toHaveTextContent('Join.Ways.FollowsAutomatic')
+  // A way that asks nothing is named by what the person does (276.10, option B).
+  expect(tree.getByTestId(id('JoinWay_review'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
+  expect(tree.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
+  // The credential way: Keyring can't present one yet, so it is behind the line.
+  expect(tree.queryByTestId(id('JoinWay_member-credential'))).toBeNull()
+  expect(tree.getByTestId(id('JoinWaysOthers'))).toHaveTextContent('Join.Ways.OthersNotYet')
+  fireEvent.press(tree.getByTestId(id('JoinWaysOthersToggle')))
+  expect(tree.getByTestId(id('JoinWay_member-credential'))).toHaveTextContent(/Join\.Ways\.NeedsCredentialRecognised/)
+  // Nothing is missing when there is a way to use.
+  expect(tree.queryByTestId(id('JoinWaysMissing'))).toBeNull()
+})
+
+test('a review way never shows the admitted line', () => {
+  const tree = show(defaults)
+  expect(tree.getByTestId(id('JoinWay_review'))).not.toHaveTextContent(/FollowsAutomatic/)
+})
+
+test('one way only: no "more than one way" lead', () => {
+  const tree = show({ wire: '0.3', accepting: true, ways: [review], suggested: review, outcomeIfMet: 'reviewed' })
+  expect(tree.queryByTestId(id('JoinWaysSeveral'))).toBeNull()
+})
+
+test('nothing this phone can meet: says what is missing', () => {
+  const tree = showAll({ wire: '0.3', accepting: true, ways: defaults.ways.slice(0, 2) })
+  const missing = tree.getByTestId(id('JoinWaysMissing'))
+  expect(missing).toHaveTextContent(/Join\.Ways\.MissingInvitation/)
+  // The credential way says on its own row that Keyring cannot present one yet.
+  expect(tree.getByTestId(id('JoinWay_member-credential'))).toHaveTextContent(/Join\.Ways\.CredentialNotYet/)
+  expect(tree.queryByTestId(id('JoinWaySuggested'))).toBeNull()
+})
+
+test('vetting keeps today’s lines: statements, and the legal name', () => {
+  const vetted = way({
+    id: 'vetted-member',
+    requires: { invitation: false, vetting: { statements: 2, claims: ['name.legal'], methods: [] } },
+  })
+  const tree = show({ wire: '0.3', accepting: true, ways: [vetted], suggested: vetted, outcomeIfMet: 'joined' })
+  expect(tree.getByTestId(id('JoinWay_vetted-member'))).toHaveTextContent(/Join\.AsksStatements/)
+  expect(tree.getByTestId(id('JoinWay_vetted-member'))).toHaveTextContent(/Join\.AsksLegalName/)
+})
+
+test('a way this app cannot use says so, and is not the one to use', () => {
+  const odd = way({ id: 'odd', usable: false, unusableBecause: 'admissionUnknown', meets: 'no' })
+  const tree = showAll({
+    wire: '0.3',
+    accepting: true,
+    ways: [odd, review],
+    suggested: review,
+    outcomeIfMet: 'reviewed',
+  })
+  expect(tree.getByTestId(id('JoinWayCannotUse_odd'))).toHaveTextContent('Join.Ways.CannotUseUnreadable')
+  // A usable way beside it: no "nothing is wrong on your side".
+  expect(tree.queryByTestId(id('JoinWaysNoneUsable'))).toBeNull()
+})
+
+test("why a way can't be used is said plainly; the reader's fault waits behind Details", () => {
+  const odd = way({
+    id: 'invited-member',
+    usable: false,
+    unusableBecause: 'issuersMissing',
+    unusableDetail: 'query without credentialIssuers',
+    meets: 'no',
+  })
+  const tree = showAll({
+    wire: '0.3',
+    accepting: true,
+    ways: [odd, review],
+    suggested: review,
+    outcomeIfMet: 'reviewed',
+  })
+  expect(tree.getByTestId(id('JoinWayCannotUse_invited-member'))).toHaveTextContent('Join.Ways.CannotUseIncomplete')
+  expect(tree.getByTestId(id('JoinWay_invited-member'))).not.toHaveTextContent(/issuersMissing/)
+  expect(tree.queryByTestId(id('JoinWayDetail_invited-member'))).toBeNull()
+  fireEvent.press(tree.getByTestId(id('JoinWayDetailsToggle_invited-member')))
+  expect(tree.getByTestId(id('JoinWayDetail_invited-member'))).toHaveTextContent(
+    'issuersMissing: query without credentialIssuers'
+  )
+  fireEvent.press(tree.getByTestId(id('JoinWayDetailsToggle_invited-member')))
+  expect(tree.queryByTestId(id('JoinWayDetail_invited-member'))).toBeNull()
+})
+
+test('when no way can be used, the person is told nothing is wrong on their side', () => {
+  const invited = way({ id: 'invited-member', usable: false, unusableBecause: 'issuersMissing', meets: 'no' })
+  const vetted = way({ id: 'vetted-member', usable: false, unusableBecause: 'issuersMissing', meets: 'no' })
+  const tree = showAll({ wire: '0.3', accepting: true, ways: [invited, vetted] })
+  expect(tree.getByTestId(id('JoinWaysNoneUsable'))).toHaveTextContent('Join.Ways.NoneUsable')
+  expect(tree.getByTestId(id('JoinWayCannotUse_invited-member'))).toHaveTextContent('Join.Ways.CannotUseIncomplete')
+  expect(tree.getByTestId(id('JoinWayCannotUse_vetted-member'))).toHaveTextContent('Join.Ways.CannotUseIncomplete')
+})
+
+test('a way with no reason given keeps the plain line and offers no Details', () => {
+  const odd = way({ id: 'odd', usable: false, meets: 'no' })
+  const tree = showAll({
+    wire: '0.3',
+    accepting: true,
+    ways: [odd, review],
+    suggested: review,
+    outcomeIfMet: 'reviewed',
+  })
+  expect(tree.getByTestId(id('JoinWayCannotUse_odd'))).toHaveTextContent('Join.Ways.CannotUse')
+  expect(tree.queryByTestId(id('JoinWayDetailsToggle_odd'))).toBeNull()
+})
+
+test('a vetting way the person can start says so on its own row, beside a review way the phone meets', () => {
+  const vetted = way({
+    id: 'vetted-member',
+    meets: 'no',
+    requires: { invitation: false, vetting: { statements: 1, claims: ['name.legal'], methods: [] } },
+  })
+  const tree = show({
+    wire: '0.3',
+    accepting: true,
+    ways: [vetted, review],
+    suggested: review,
+    outcomeIfMet: 'reviewed',
+  })
+  expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toHaveTextContent('Join.AsksNext')
+  // Named by its step; one vetter is what "You'll meet a vetter" says, so the statements line goes, the legal name stays.
+  const row = tree.getByTestId(id('JoinWay_vetted-member'))
+  expect(row).toHaveTextContent(/^Join\.Ways\.ButtonVetting/)
+  expect(row).not.toHaveTextContent(/AsksStatements/)
+  expect(row).toHaveTextContent(/Join\.AsksLegalName/)
+  expect(tree.getByTestId(id('JoinWay_review'))).toBeTruthy()
+  expect(tree.queryByTestId(id('JoinWayStart_review'))).toBeNull()
+})
+
+// IN-264: private vetting is this app's limit. The card says so, and not
+// "nothing is wrong on your side … the community needs to update".
+describe('a way that runs private vetting', () => {
+  const hiddenVetting = way({
+    id: 'vetted-member',
+    meets: 'no',
+    requires: { invitation: false, vetting: { statements: 2, claims: [], methods: [] } },
+    usable: false,
+    unusableBecause: 'vettingPrivate',
+    unusableDetail: 'org.openvtc.hidden-vetting',
+  })
+
+  it('the card says private vetting is not supported yet, and offers no vetting', () => {
+    const tree = showAll({ wire: '0.3', accepting: true, ways: [hiddenVetting] })
+    expect(tree.getByTestId(id('JoinWaysVettingNotSupported'))).toHaveTextContent('Join.Ways.PrivateVetting')
+    expect(tree.queryByTestId(id('JoinWaysNoneUsable'))).toBeNull()
+    expect(tree.queryByTestId(id('JoinWayStart_vetted-member'))).toBeNull()
+    expect(tree.getByTestId(id('JoinWayCannotUse_vetted-member'))).toHaveTextContent(
+      'Join.Ways.CannotUsePrivateVetting'
+    )
+  })
+})
+
+// 276.10, option B: each way a choice of its own, named by what the person does or what it needs first.
+describe('each way as a choice', () => {
+  it('an invitation way is named by the invitation; an automatic way that asks nothing by "Join"', () => {
+    const open = way({ id: 'open', requiresNothing: true })
+    const tree = show({
+      wire: '0.3',
+      accepting: true,
+      ways: [defaults.ways[0], open],
+      suggested: open,
+      outcomeIfMet: 'joined',
+    })
+    expect(tree.getByTestId(id('JoinWay_invited'))).toHaveTextContent(/^Join\.Ways\.NeedsInvitation/)
+    expect(tree.getByTestId(id('JoinWay_open'))).toHaveTextContent(/^Join\.Ways\.ButtonJoin/)
+  })
+
+  it('a vetting way with more than one vetter keeps the statements line, even when it can be started', () => {
+    const vetted = way({
+      id: 'vetted-member',
+      meets: 'no',
+      requires: { invitation: false, vetting: { statements: 3, claims: [], methods: [] } },
+    })
+    const tree = show({
+      wire: '0.3',
+      accepting: true,
+      ways: [vetted, review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
+    })
+    expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toBeTruthy()
+    expect(tree.getByTestId(id('JoinWay_vetted-member'))).toHaveTextContent(/Join\.AsksStatements/)
+  })
+
+  it('read only, under where the person stands: the statements line, and no "You\'ll meet a vetter"', () => {
+    const vetted = way({
+      id: 'vetted-member',
+      meets: 'no',
+      requires: { invitation: false, vetting: { statements: 1, claims: [], methods: [] } },
+    })
+    const card = joinCard({
+      wire: '0.3',
+      accepting: true,
+      ways: [vetted, review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
+    })
+    if (card.mode !== 'ways') throw new Error('expected ways')
+    const tree = render(
+      <BasicAppContext>
+        <JoinWaysCard card={card} community="Acme" readOnly />
+      </BasicAppContext>
+    )
+    expect(tree.queryByTestId(id('JoinWayStart_vetted-member'))).toBeNull()
+    expect(tree.getByTestId(id('JoinWay_vetted-member'))).toHaveTextContent(/Join\.AsksStatements/)
+  })
+})

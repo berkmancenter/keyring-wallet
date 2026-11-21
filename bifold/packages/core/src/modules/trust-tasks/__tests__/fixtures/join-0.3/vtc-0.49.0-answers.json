@@ -1,0 +1,76 @@
+{
+  "note": "Answers of a real vtc-service 0.49.0 (VTI 8b902ecc) community over POST /v1/trust-tasks, read 2026-10-02T13:38Z; the community's DID replaced, nothing else changed. `unsupportedVersion` is what it answered a manifest/0.3 request (HTTP 422).",
+  "manifest02": {
+    "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.2#response",
+    "payload": {
+      "branding": {
+        "displayName": "Keyring Lab Community"
+      },
+      "communityDid": "did:webvh:QmVtcScid:vtc.example.org",
+      "criteria": [
+        {
+          "description": "An invitation from a community admin",
+          "id": "invited-member",
+          "presentationDefinition": {
+            "credentials": [
+              {
+                "format": "ldp_vc",
+                "id": "invite",
+                "meta": {
+                  "type_values": ["InvitationCredential"]
+                }
+              }
+            ]
+          },
+          "requirementsDigest": "zQmYFibuDZo3mv9bde3Sv6uJPbtxAiUh3jBnxq7cztCz3fM"
+        },
+        {
+          "description": "One vetter must confirm who you are",
+          "id": "vetted-member",
+          "presentationDefinition": {
+            "credentials": [
+              {
+                "format": "ldp_vc",
+                "id": "vetting",
+                "meta": {
+                  "type_values": ["StatementCredential"]
+                }
+              }
+            ]
+          },
+          "requirementsDigest": "zQmTJLwAUt6KtpfTFj4t1ypHubDMP2YUYFvJBPA9owPeRhg",
+          "vetting": {
+            "acceptedMethods": ["inPerson", "video"],
+            "eligibleVetters": {
+              "role": "vetter"
+            },
+            "independence": {
+              "requireConsistentIdentityCommitment": true
+            },
+            "maxStatementAge": "P120D",
+            "minStatements": 1,
+            "requiredClaims": ["name.legal"],
+            "statementType": "https://registry.trustoverip.org/dtg/vsc/vetted/1",
+            "version": "0.1"
+          }
+        }
+      ]
+    }
+  },
+  "unsupportedVersion": {
+    "status": 422,
+    "type": "https://trusttasks.org/spec/trust-task-error/0.5",
+    "payload": {
+      "code": "unsupportedVersion",
+      "details": {
+        "requestedType": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3",
+        "servedVersions": [
+          "https://trusttasks.org/spec/vtc/join-requests/manifest/0.1",
+          "https://trusttasks.org/spec/vtc/join-requests/manifest/0.2"
+        ]
+      },
+      "message": "unsupported version: https://trusttasks.org/spec/vtc/join-requests/manifest/0.3 — this VTC serves https://trusttasks.org/spec/vtc/join-requests/manifest/0.1, https://trusttasks.org/spec/vtc/join-requests/manifest/0.2",
+      "retryable": false
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "note": "per-event blinds a holder may show a verifier. The registry salts are TEST values; in real use a salt is never disclosed",
+  "creds": {
+    "unit": {
+      "issued": {
+        "uuid": "aGJLiJ6wJQ0B2EGrkVTDyjBx54q_NMlfMpMVAGgOqnM2",
+        "blid": "EKAXykJkxq564A-ETdfcgguOnwmtn2GyUuFiAluVY-Nt"
+      }
+    },
+    "agent": {
+      "issued": {
+        "uuid": "aJT77rUUh_XiZUiiytMGq0-gMmYQiIvcgoepFMmew4Gc",
+        "blid": "EL9ZJRZoDtpH4jA7AWIEeHxaGetCrqltnUo8D13ihRt4"
+      }
+    },
+    "G-ok": {
+      "issued": {
+        "uuid": "aDZFmpmFBptz86NtnbGgakVj45SqGM9fTAUEN001bziZ",
+        "blid": "EHGus3DcxXk39i5exPxGriyIjTsUEmH7OFpn34vxvjqk"
+      }
+    },
+    "G-revoked": {
+      "issued": {
+        "uuid": "aDZFmpmFBptz86NtnbGgakVj45SqGM9fTAUEN001bziZ",
+        "blid": "EE3zbHL2tkcgCkkuqxheOyAG5J_gOZ0DFRUZofjp9hPM"
+      },
+      "revoked": {
+        "uuid": "aD0lz_8pQNv7SPkStQaS6C6dXYD78R375wqf-j_9jdvN",
+        "blid": "ELWt-MeHvOoKXJgQrAm6BzoHsfk40IykV_4n86NuT0Dl"
+      }
+    },
+    "G-otherward": {
+      "issued": {
+        "uuid": "aDZFmpmFBptz86NtnbGgakVj45SqGM9fTAUEN001bziZ",
+        "blid": "ENHWiLo6imutXo-nxBp1NktIjRDMx7l0CPZ5_dy2PBlp"
+      }
+    },
+    "G-nontrans-issuee": {
+      "issued": {
+        "uuid": "aDZFmpmFBptz86NtnbGgakVj45SqGM9fTAUEN001bziZ",
+        "blid": "EODGFaIhmq7IruL4n1G3y-BINn0cM4_8G4r1477G6kdX"
+      }
+    },
+    "G-nontrans-ed25519-issuee": {
+      "issued": {
+        "uuid": "aDZFmpmFBptz86NtnbGgakVj45SqGM9fTAUEN001bziZ",
+        "blid": "EKnxsAEzRFA5xwT7PjsDc7X9sAszzx-_jJZRBIlU2vUN"
+      }
+    },
+    "mal-unit": {
+      "issued": {
+        "uuid": "aA8kchbJngx14wVmdxuioZaEF1dyXwHNVc4jfFOqAHDQ",
+        "blid": "EK99zFzWi2Y97TytHJ1CXzqKY6UwKiPiPS8suEuViX86"
+      }
+    },
+    "mal-agent": {
+      "issued": {
+        "uuid": "aCFrA23ZfBpdRxaN6M6YmE4oEM2IDlruaXdrvykMxVW0",
+        "blid": "EBtsUt3LT7zB6ulmm7679qxKG-TZEQqNn_cbeVT8ooWd"
+      }
+    },
+    "G-untrusted": {
+      "issued": {
+        "uuid": "aITuUu9Nhnbv1qDPB-IxU1uhn576tWBpPbz4NVTqIBGe",
+        "blid": "EN33Hx2il2dDTr1ujIe7Z1gq_K2TKJjIQqvvc_-3fsoN"
+      }
+    },
+    "S2-social": {
+      "issued": {
+        "uuid": "aHzNKpA57997_GZtCWEHRqdyFnn6UpqpI9TYXSjdwyWm",
+        "blid": "EJ0RwByf7WsZXGQs969CyLeRNCswYZ5aDuS042mPuofh"
+      }
+    }
+  },
+  "testSalts": {
+    "roy": "0AAFyryD7qTrrUxJYPKVy32G",
+    "deb": "0AClN8XR36eynJk8iFIAbrrF",
+    "sue": "0ACQ4jgBWMQ5SezpqjHG5gIR",
+    "jordan": "0ABNkvOKFbTu_bQhJXZ5wHk4",
+    "sam": "0ADczUvWyXoEop6GdnNN4aaW",
+    "other-ward": "0ABfbfNWwpHYNFHn3aUIei2_",
+    "verifier": "0ADA8GlC8gKCTdFjGn76b8k0",
+    "mal-root": "0AB-IG46QrV7hx5_VxpgDZ7y",
+    "mal-org": "0ABurvdCkPQTNgldAHpI-zPP",
+    "mal-agent": "0ACBmB2UpndpNbWuxc3arEtu",
+    "jordan-nt": "0ABNbcuoKjDLhSWLRhIuu1rv",
+    "jordan-nt-ed": "0ACuIRPk5PXk-bc3OZGMSrxP"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/pcs/applications/create/0.1",
+  "title": "VTA PCS — Applications — Create — payload",
+  "description": "An applicant's client asks its VTA to start a hidden-vetting application: the VTA derives a fresh PCS key for it, keeps the key, and returns the PCS identifier vetters attest to.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contextId",
+    "community",
+    "joinDid",
+    "parameters"
+  ],
+  "properties": {
+    "contextId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The context the engine belongs to. Its key is derived from this context's base."
+    },
+    "community": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The community's DID: the helper whose parameters the engine runs under."
+    },
+    "joinDid": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The DID the applicant joins the community as. Bound into the proof, so the proof cannot be carried to another join."
+    },
+    "parameters": {
+      "$ref": "../../../../_shared/0.4/pcs-engine.schema.json#/$defs/CommunityParameters",
+      "description": "The community's published hidden-vetting parameters, copied verbatim from its join manifest."
+    },
+    "ext": {
+      "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA PCS — Applications — Create — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "application"
+      ],
+      "properties": {
+        "application": {
+          "$ref": "../../../../_shared/0.4/pcs-engine.schema.json#/$defs/ApplicationSummary"
+        },
+        "ext": {
+          "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

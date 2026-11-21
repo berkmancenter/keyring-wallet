@@ -1,0 +1,163 @@
+name: Targeted jest
+# A few jest files of one package, on any branch, started by hand. For checking a change before its PR is up, or for
+# running a mutant loop off a laptop. It is a check for that branch only: nothing gates on it, and it replaces none of
+# a PR's required checks (quality.yaml) or the full suite (full-tests.yaml).
+#
+#   gh workflow run targeted-jest.yaml -R berkmancenter/keyring-bifold --ref <branch> \
+#     -f tests="src/modules/rooms/__tests__/useRoomRows.test.tsx src/modules/rooms/__tests__/roomWatches.test.ts"
+#
+# `tests` are paths (or path patterns) inside the package, separated by spaces. `pattern` narrows them to the tests whose
+# name matches it (jest's -t). The whole jest output is kept as the run's `jest-log` artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: The package to run in
+        default: packages/core
+        required: true
+        type: string
+      tests:
+        description: Test paths inside the package, separated by spaces
+        required: true
+        type: string
+      pattern:
+        description: Only the tests whose name matches this (jest -t); optional
+        required: false
+        type: string
+
+# Reads the branch and nothing else: no token here can write to the repository.
+permissions:
+  contents: read
+
+jobs:
+  jest:
+    runs-on: ubuntu-22.04
+    name: Targeted jest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      # What was typed is read as data, never as part of a command: it reaches the shell through the environment, the
+      # package must be one of the repository's own, and a test path cannot be an option.
+      - name: Check what was asked
+        env:
+          PACKAGE: ${{ inputs.package }}
+          TESTS: ${{ inputs.tests }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$PACKAGE" | grep -Eq '^packages/[a-z0-9][a-z0-9-]*$'; then
+            echo "::error::package must be packages/<name>"
+            exit 1
+          fi
+          if [ ! -f "$PACKAGE/package.json" ]; then
+            echo "::error::$PACKAGE is not a package of this repository"
+            exit 1
+          fi
+          set -f
+          count=0
+          for path in $TESTS; do
+            case "$path" in
+              -*) echo "::error::a test path cannot start with '-': use the pattern input for jest's -t"; exit 1 ;;
+            esac
+            count=$((count + 1))
+          done
+          if [ "$count" -eq 0 ]; then
+            echo "::error::no test path was given"
+            exit 1
+          fi
+          echo "Running $count path(s) in $PACKAGE"
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+
+      - name: Setup NodeJS
+        uses: ./.github/actions/setup-node
+
+      # The same key as quality.yaml's Testing job and the full suite, read only: a run by hand never adds an entry to
+      # a store that is at its size limit.
+      - name: Restore dependencies
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            samples/*/node_modules
+            .yarn/cache
+            .yarn/install-state.gz
+          key: deps-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', '.yarnrc.yml', '.yarn/patches/**', 'package.json', 'packages/*/package.json', 'samples/*/package.json', '.github/actions/setup-node/action.yaml') }}
+
+      - name: Install dependencies
+        run: |
+          yarn install --immutable
+
+      - name: Build Workspace
+        run: |
+          yarn build
+
+      # Jest's transform cache, under this workflow's own name: nothing else reads or writes `jest-targeted-v1-`, so no
+      # required check ever depends on what a run started by hand produced. Every run restores the newest entry; only
+      # a run on main saves one, at most once a UTC day (a key is never saved twice). A branch run never writes.
+      # The entry holds the transforms of whatever that day's run on main loaded, so it is as warm as that run was
+      # wide: files it did not load, and files a branch changed, are transformed again.
+      - name: Date jest's cache
+        id: jest-cache
+        if: inputs.package == 'packages/core'
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore jest's cache
+        id: jest-restore
+        if: inputs.package == 'packages/core'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: packages/core/.jest/cache
+          key: jest-targeted-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ steps.jest-cache.outputs.day }}
+          restore-keys: |
+            jest-targeted-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-
+
+      - name: Run jest
+        env:
+          PACKAGE: ${{ inputs.package }}
+          TESTS: ${{ inputs.tests }}
+          PATTERN: ${{ inputs.pattern }}
+          TZ: GMT
+        run: |
+          set -euo pipefail
+          # Split on spaces into separate paths, with no globbing: each is one argument to jest, whatever it holds.
+          set -f
+          args=()
+          for path in $TESTS; do args+=("$path"); done
+          if [ -n "$PATTERN" ]; then args+=(-t "$PATTERN"); fi
+          cd "$PACKAGE"
+          yarn jest --maxWorkers=2 "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/jest.log"
+
+      # Only on main, only when the tests passed, and only if today's entry is not there yet.
+      - name: Save jest's cache
+        if: success() && inputs.package == 'packages/core' && github.ref == 'refs/heads/main' && steps.jest-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: packages/core/.jest/cache
+          key: jest-targeted-v1-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ steps.jest-cache.outputs.day }}
+
+      - name: Say what ran
+        if: always()
+        run: |
+          {
+            echo '### Targeted jest'
+            echo '```'
+            grep -E '^(Tests|Test Suites|Snapshots|Time):' "$RUNNER_TEMP/jest.log" || echo 'jest printed no totals'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: jest-log
+          path: ${{ runner.temp }}/jest.log
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,0 +1,312 @@
+/**
+ * Trust Tasks module — the wallet's seam onto the Trust Tasks framework
+ * (documents, §7.2 consumption, binding-0.2 carriage, outcome-evidence
+ * retention). See the reference evidence in `tsp-reference/` (rungs
+ * ref-06v1c, ref-06w4, ref-06x) and the plan's Phase D gate.
+ *
+ * @module trust-tasks
+ */
+
+import { registerHiddenVettingModules } from './hiddenVettingModules'
+
+export {
+  TrustTaskMessage,
+  TRUST_TASK_ATTACHMENT_ID,
+  TRUST_TASK_ENVELOPE_TYPE,
+  TRUST_TASK_BINDING_URI,
+  isTransportRepresentable,
+} from './messages/TrustTaskMessage'
+export {
+  TrustTaskEnvelopeV2Message,
+  TRUST_TASK_V2_BINDING_URI,
+  TRUST_TASK_V2_ENVELOPE_TYPE,
+} from './messages/TrustTaskEnvelopeV2Message'
+export { TrustTaskDocumentRecord } from './services/TrustTaskDocumentRecord'
+export type { TrustTaskDocumentRole, TrustTaskDocumentRecordTags } from './services/TrustTaskDocumentRecord'
+export { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
+export { TrustTasksService, respondWith, refuse, extendedCode } from './services/TrustTasksService'
+export type { ConsumeOptions, TrustTaskSpecPolicy } from './services/TrustTasksService'
+export { TrustTasksModule } from './module/TrustTasksModule'
+export { trustTaskPayloadValidator } from './validator'
+export {
+  setupTrustTasksInbound,
+  maybeOpenRelationshipExchange,
+  resumeInterruptedExchanges,
+  sendTrustTaskDocument,
+  getTrustTasksService,
+  isDeterministicProposer,
+  setTspCarriageEnabled,
+  isTspCarriageEnabled,
+  setDidCommV2Enabled,
+  isDidCommV2Enabled,
+  canMintV2Invitation,
+  DIDCOMM_V2_ON_BY_DEFAULT,
+  DIDCOMM_V2_MINT_REMOTE_OFF,
+  TSP_CARRIAGE_ON_BY_DEFAULT,
+  TSP_SEND_REMOTE_OFF,
+  selectCarriage,
+  TRUST_TASKS_MIN_RCE_VERSION,
+} from './ceremony'
+export {
+  setSharedConnectEnabled,
+  isSharedConnectEnabled,
+  setSharedConnectLabelEnabled,
+  isSharedConnectLabelEnabled,
+  setSharedConnectInviteEnabled,
+  isSharedConnectInviteEnabled,
+} from './module/sharedConnectFlag'
+export {
+  setTrustedApproversEnabled,
+  isTrustedApproversEnabled,
+  TRUSTED_APPROVERS_REMOTE_OFF,
+} from './module/trustedApproversFlag'
+export {
+  setStateVerifiedApproversEnabled,
+  isStateVerifiedApproversEnabled,
+  STATE_VERIFIED_APPROVERS_REMOTE_OFF,
+} from './module/stateVerifiedApproversFlag'
+export { setTrustTestStateEnabled, isTrustTestStateEnabled } from './module/trustTestStateFlag'
+export {
+  holdK0TestGuardianCard,
+  holdK0RevokedOmittedCard,
+  holdK0RevokedTestCard,
+  becomeK0TestWard,
+  setUpSediDemo,
+  setUpSediDemoAsGuardian,
+  setUpSediDemoAsWard,
+  setUpSediDemoAsPerson,
+  turnOffSediDemo,
+  sediDemoHiddenByKill,
+  type TestStateActionResult,
+  type SediDemoSetupResult,
+  type SediDemoSideResult,
+  type SediDemoHiddenFeature,
+} from './developerTestState'
+export { SEDI_KERI_REMOTE_OFF } from './module/sediKeriRemoteOff'
+export { setSediDemoSide, sediDemoSide, type SediDemoSide } from './module/sediDemoSide'
+export { setConfirmItsYouEnabled, isConfirmItsYouEnabled, CONFIRM_ITS_YOU_REMOTE_OFF } from './module/confirmItsYouFlag'
+export { setDemoStateHost, demoStateHost, demoStateHostProblem } from '../sedi/webs/demoStateHost'
+
+// 228 writer: DTG Credentials v1 shapes are written only when this is on (default off).
+export {
+  DTG_V1_WRITING_RELEASE_DEFAULT,
+  getDtgV1WritingMode,
+  isDtgV1WritingEnabled,
+  setDtgV1WritingEnabled,
+  setDtgV1WritingMode,
+  type DtgV1WritingMode,
+} from './module/dtgV1Writing'
+
+// R5 — the open type→handler registry and its render/approve-deny scaffold.
+// See docs/plans/reference-app-sdk-packaging.md and its 2026-09-01-al.md /
+// 2026-09-06-agent.md companions.
+export { TrustTaskRegistry, trustTaskRegistry } from './registry'
+export type {
+  TrustTaskRegistration,
+  TrustTaskOrchestration,
+  TrustTaskDocumentHandler,
+  InboundContext,
+} from './registry'
+export { registerTrustTask } from './registerTrustTask'
+export type { RegisterTrustTaskOptions } from './registerTrustTask'
+export { createApprovalRequestHandler, respondToPendingTrustTask } from './genericApproval'
+export type { CreateApprovalRequestHandlerOptions } from './genericApproval'
+export { trustTaskPromptStore } from './trustTaskPromptStore'
+export type { PendingTrustTaskPrompt } from './trustTaskPromptStore'
+export { trustTaskDisplayRegistry } from './display/trustTaskDisplayRegistry'
+export { registerTrustTaskDisplay } from './display/register'
+export {
+  findV2MediationRecord,
+  getRoutingForV2,
+  routingForInvitation,
+  acceptConfigForInvitation,
+  provisionV2Mediation,
+  startV2MessagePickup,
+  setV2MediationEnabled,
+  isV2MediationEnabled,
+} from './v2Routing'
+export {
+  openWalletMailbox,
+  closeWalletMailbox,
+  walletMailboxOf,
+  mintContactDid,
+  mailboxNamedBy,
+  takeMailboxMessage,
+  WalletMailboxOutboundTransport,
+  WALLET_MAILBOX_RECORD_TYPE,
+} from './module/walletMailbox'
+export type { WalletMailbox, MailboxSession, OpenWalletMailboxDeps } from './module/walletMailbox'
+export {
+  advertiseTspCarriage,
+  askPeerReadsTsp,
+  peerReadsTsp,
+  recordPeerReadsTsp,
+  TSP_ENVELOPE_PROTOCOL_URI,
+} from './module/contactTspCapability'
+export {
+  VtiMediatorSession,
+  VtiMediatorOutboundTransport,
+  resolveVtiMediator,
+  vtiClientIdentityFromPersona,
+  vtiClientIdentityFromDid,
+  createVtiClientDid,
+} from './module/VtiMediatorTransport'
+export type { VtiMediatorEndpoints, VtiClientIdentity } from './module/VtiMediatorTransport'
+export { vtiAgent, VtiRefusal, isUnsupportedJoinVersion } from './module/vtiAgent'
+export { criterionDigest, joinAsks, readManifest } from './module/joinManifest'
+export type {
+  JoinAdmission,
+  JoinAsks,
+  JoinCredentialIssuers,
+  JoinHolds,
+  JoinWay,
+  JoinWayFault,
+} from './module/joinManifest'
+export { JOIN_WIRES, type JoinWire } from './module/joinWire'
+export { bareDid, classifyDid, classifyDidDocument } from './module/classifyDid'
+export type { ClassifiableDidDocument, DidKind, DidResolverAgent } from './module/classifyDid'
+export { VtaClient, VTA_TASK, resolveVtaMediator, ManagerKeyUnresolved, setVtaSwapTestHook } from './module/VtaClient'
+export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook, VtaAclEntry } from './module/VtaClient'
+// The seam itself lives in screens/, which owns the contract; importing the
+// adapter is what registers the module, so it is re-exported for its side
+// effect as much as its symbol.
+export { registerHiddenVettingModules } from './hiddenVettingModules'
+export { registerHiddenVetting, hiddenVettingSeam } from './screens/hiddenVettingSeam'
+export { EnforcementCheckCard, EnforcementCheckIds } from './screens/approver/EnforcementCheckCard'
+export type {
+  HiddenVettingSeam,
+  HiddenVettingCheck,
+  HiddenVettingRefusal,
+  HiddenVettingProgress,
+  HiddenVettingVerdict,
+} from './screens/hiddenVettingSeam'
+export {
+  registerHiddenVetter,
+  hiddenVetterSeam,
+  DECLARED_RELATIONSHIPS,
+  VOUCH_METHODS,
+} from './screens/hiddenVetterSeam'
+export type {
+  HiddenVetterSeam,
+  HiddenVetterStanding,
+  HiddenVetterRequest,
+  HiddenVetterStatement,
+  DeclaredRelationship,
+  VouchMethod,
+} from './screens/hiddenVetterSeam'
+// 32's community half, exported here because index.ts has one owner.
+export {
+  PCS_CHALLENGE_TYPE,
+  PCS_CHALLENGE_NOT_HIDDEN,
+  readPcsChallenge,
+  pcsChallengeRequest,
+} from './module/pcsChallenge'
+export type { PcsChallenge } from './module/pcsChallenge'
+export { readHiddenAttestation, HIDDEN_VETTING_NS, hiddenApplicantIdOf } from './module/vtiVetting'
+export type { HiddenAttestMeta } from './module/vtiVetting'
+
+export {
+  hiddenVettingUsable,
+  hiddenProgress,
+  startHiddenApplication,
+  refreshHiddenApplication,
+  takeHiddenAttestation,
+  hiddenSubmissionExtensions,
+  forgetHiddenApplication,
+  loadHiddenVettingRecord,
+  NOT_ENOUGH_YET,
+  HIDDEN_VETTING_SUITE,
+} from './module/hiddenVetting'
+export type {
+  HiddenVettingRecord as StoredHiddenVettingRecord,
+  HiddenProgress,
+  HiddenVettingBlock,
+  HiddenVettingUsable,
+} from './module/hiddenVetting'
+export type { PublishedConfig, HiddenAttestation, PcsApplication } from './module/pcsVtaPayloads'
+export { GenericRecordsIdentityStore } from './module/VtiIdentityStore'
+export type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './module/VtiIdentityStore'
+export { importVtaKey, decodeMultibaseKey } from './module/vtaKeys'
+export type { VtaExportedKey } from './module/vtaKeys'
+export type { VtiAgentState, VtiAgentStatus, VtiCriterion, VtiManifest, VtiVerdict } from './module/vtiAgent'
+export {
+  GenericRecordsCommunityStore,
+  type VtiCommunityStore,
+  type VtiInvitation,
+  type VtiMembership,
+} from './module/VtiCommunityStore'
+export {
+  isVtiInvitationLink,
+  buildVtiInvitationLink,
+  parseVtiInvitationLink,
+  describeInvitation,
+} from './module/vtiInvitation'
+export {
+  joinCommunity,
+  ensurePersonaFor,
+  membershipFromVerdict,
+  type VtiJoinStep,
+  type VtiJoinDeps,
+  type VtiJoinResult,
+} from './module/vtiJoin'
+
+export { vtaAgent, type VtaAgentState, type VtiApproval, type VtaDevice } from './module/vtaAgent'
+export {
+  DeviceActionRefused,
+  DeviceCannotOwn,
+  OwnerCheckNotConfigured,
+  OwnerNotConfirmed,
+  deviceRefusalOf,
+} from './module/vtaOwner'
+export type {
+  ConfirmOwner,
+  DeviceCanOwn,
+  DeviceRefusalReason,
+  OwnerConfirmation,
+  OwnerNotConfirmedReason,
+} from './module/vtaOwner'
+export type { VtaConsentRequest } from './module/VtaClient'
+export {
+  receiveIssue,
+  classifyCredential,
+  credentialsOfIssue,
+  CREDENTIAL_EXCHANGE_ISSUE,
+  type VtiReceivedCredential,
+  type VtiCredentialKind,
+} from './module/vtiInbox'
+export type { VtiHeldCredential } from './module/VtiCommunityStore'
+export {
+  VtiVetterDesk,
+  VtiApplicant,
+  GenericRecordsVettingStore,
+  VETTING,
+  identityCommitment,
+  type VtiVettingStore,
+  type VettingTicket,
+  type VettingDeskRequest,
+  type VettingVetterProfile,
+  type VettingApplication,
+  type VettingApplicationRequest,
+  type VettingMethod,
+} from './module/vtiVetting'
+export {
+  setPeerLegCarriage,
+  getPeerLegCarriage,
+  createVtiVidResolver,
+  tspIdentityFromPersona,
+  tspSessionForPersona,
+  packTrustTaskForPeer,
+  unpackTrustTaskFromPeer,
+  plaintextFromTrustTask,
+  GenericRecordsTspPeerRevisionStore,
+  MemoryTspPeerRevisionStore,
+  type PeerLegCarriage,
+  type PeerRevisionRecord,
+  type TspPeerRevisionStore,
+  type TspSessionIdentity,
+} from './module/vtiTsp'
+
+// Registered here for any consumer that does evaluate this index, and from
+// the app's startup as well, because the package root defers this module
+// wholly. `hiddenVettingModules` explains why it must be a call.
+registerHiddenVettingModules()

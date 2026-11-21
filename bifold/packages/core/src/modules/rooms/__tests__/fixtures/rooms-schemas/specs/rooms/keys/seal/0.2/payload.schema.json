@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/keys/seal/0.2",
+  "title": "Rooms Keys Seal — payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "roomId",
+    "key",
+    "version",
+    "plaintext"
+  ],
+  "properties": {
+    "roomId": {
+      "type": "string",
+      "description": "The room to seal for. The recipient MUST hold group state for it."
+    },
+    "key": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "The record key this will be stored under. Bound into the associated data, so a record sealed for one key does not open under another. On a sealed tier keys MUST be opaque — a descriptive key defeats the encryption beside it, and structured naming belongs inside the sealed body."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The version the writer INTENDS the record to take, bound into the associated data before the host assigns it. A caller that lets the host assign a different one will find the record does not open, which is the correct failure: accepting whatever came back would mean the binding commits to nothing. The shape that works is a create-only write (`expectedVersion: 0`) or a read of the current version before a rewrite."
+    },
+    "plaintext": {
+      "type": "string",
+      "description": "The record body to seal, base64url: a SealedRecordBody. Without `signAsPrincipal`, already signed by its author. With it, the same object without `proof`, which the recipient signs as its `author` before sealing. Sealed whole rather than field by field: splitting it would let a host learn the shape of the material from ciphertext lengths.",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 1
+    },
+    "signAsPrincipal": {
+      "type": "boolean",
+      "description": "True asks the recipient to sign the body as its `author` — a member of this room the caller acts as — before sealing it. Only the principal's own client may set it; an agent under an attenuated chain signs its own body and never sets it. Absent means false: the recipient seals exactly the bytes it was given."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1. MUST NOT carry record content."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Rooms Keys Seal — response payload",
+      "description": "Success response to rooms/keys/seal. Type https://trusttasks.org/spec/rooms/keys/seal/0.2#response. The sealed record, ready to hand to a host with rooms/records/put.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sealed"
+      ],
+      "properties": {
+        "sealed": {
+          "$ref": "../../../_shared/0.1/room.schema.json#/$defs/SealedRecord"
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}
