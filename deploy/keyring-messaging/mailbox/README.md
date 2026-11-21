@@ -169,4 +169,10 @@ authenticated and gated by `SEND_FORWARDED`); `trust_task_verification = "enforc
 signed and accepted under it); `enable_inter_mediator_relay = "false"` (the lab ran closed).
 
 Not measured here: the real push-gateway path (the stand-in gateway was an account on the same mediator), TLS and
-the did:webvh identity, the soak (S5), refusal at the hard cap (S5b), mail from a contact on another mediator.
+the did:webvh identity, the soak (S5), refusal at the hard cap (S5b), mail from a contact on another mediator. Nor
+this directory's `Dockerfile`, compose file and `setup-identity.sh`: a pull request touching
+`deploy/keyring-messaging/**` runs the repository's "Mediator image" checks, but those build and boot the gateway's
+mediator from `../mediator/` at its own commit, not this package, so their green says nothing about it. A check that
+builds and boots this package is owed; until then the first run of its Dockerfile is the operator's, on the runbook's
+first deploy. Every key in `mailbox.toml` was checked by hand against upstream's config schema at v0.53.0, which no
+check automates: the mediator accepts an unknown key in silence (VTI-06).
