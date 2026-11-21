@@ -26,6 +26,7 @@ import {
 } from '@credo-ts/didcomm'
 import { agentDependencies } from '@credo-ts/node'
 import { askarNodeJS as askar } from '@openwallet-foundation/askar-nodejs'
+import { createHash } from 'crypto'
 import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -89,9 +90,10 @@ function hubSession(
     stop: async () => {
       accounts.delete(identity.did)
     },
-    // As a network would: delivered after this send returns.
-    forward: async (next, innerJwe) => {
+    // As a network would: delivered after this send returns, with the id the mediator would store the bytes under.
+    forwardForMailbox: async (next: string, innerJwe: unknown) => {
       setImmediate(() => void deliver(next, innerJwe).catch(() => undefined))
+      return { id: createHash('sha256').update(JSON.stringify(innerJwe)).digest('hex') }
     },
     // The hub confirms the account's forwarding right as the mediator does (walletMailbox.ts, v0.53.0's answer shape).
     ask: async () => ({ type: 'ask', body: { payload: { acl: { sendForwarded: true } } } }) as never,

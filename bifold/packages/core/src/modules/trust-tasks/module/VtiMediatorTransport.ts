@@ -1498,6 +1498,33 @@ export class VtiMediatorSession {
     return true
   }
 
+  /**
+   * A forward for the mailbox path: `innerJwe` attached as its exact bytes, base64, so the id the mediator stores
+   * the message under is known to the sender. The mediator ids a stored message by the sha256 of the bytes it
+   * stores; a `data.base64` attachment is stored as decoded, while a `data.json` one is re-serialised by the mediator
+   * first, so its id is of bytes the sender never produced (measured both ways on affinidi-messaging-mediator
+   * v0.53.0, deploy/keyring-messaging/mailbox/README.md row W4). `messaging/wake/request` names that id.
+   *
+   * Mailbox path only: `next` is a mailbox at this very mediator, so no second hop (`forward`'s TSP-only route) is
+   * read. The VTA path keeps `forward` and its `data.json` shape, since that mediator's version is not ours to assume.
+   */
+  async forwardForMailbox(next: string, innerJwe: unknown): Promise<{ id: string }> {
+    const bytes = utf8ToBytes(typeof innerJwe === 'string' ? innerJwe : JSON.stringify(innerJwe))
+    const id = bytesToHex(sha256(bytes))
+    await this.send({
+      id: uuid(),
+      typ: PLAIN,
+      type: FORWARD,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + FORWARD_EXPIRY_SECS,
+      body: { next },
+      attachments: [{ id: utils.uuid(), data: { base64: TypedArrayEncoder.toBase64Url(bytes) } }],
+    })
+    return { id }
+  }
+
   /** Each peer's `peerMediatorRoute`, read once per session; a peer that could not be read is read again next time. */
   private readonly tspOnlyRoutes = new Map<string, VtiMediatorEndpoints | null>()
   /** A peer's route being read now: sends that start meanwhile wait for this read (peerRouteSwitch.ts). */

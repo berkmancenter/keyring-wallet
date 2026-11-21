@@ -49,6 +49,7 @@ const FORWARD = 'https://didcomm.org/routing/2.0/forward'
 /** The mediator's own management tasks (trust-tasks-rs `messaging/*`), as affinidi-messaging-mediator v0.53.0 serves them. */
 export const MEDIATOR_ACCOUNT_UPDATE = 'https://trusttasks.org/spec/messaging/account/update/0.1'
 export const MEDIATOR_WAKE_SET = 'https://trusttasks.org/spec/messaging/wake/set/0.1'
+export const MEDIATOR_WAKE_REQUEST = 'https://trusttasks.org/spec/messaging/wake/request/0.1'
 
 /**
  * The key the mediator holds an account under: the sha256 of its DID, in hex (upstream `did_identity::did_hash`).
@@ -67,7 +68,11 @@ export interface MailboxWakeHandle {
 export interface MailboxSession {
   start(): Promise<void>
   stop(): Promise<void>
-  forward(next: string, innerJwe: unknown): Promise<void>
+  /**
+   * A routing/2.0 forward of `innerJwe` to the mailbox `next`, attached as the exact bytes the mediator stores and ids
+   * the message by; resolves with that id (the sha256 of the bytes, hex), which `messaging/wake/request` names.
+   */
+  forwardForMailbox(next: string, innerJwe: unknown): Promise<{ id: string }>
   /** A signed Trust Task document to the mediator itself; resolves with its answer, rejects with its refusal. */
   ask(document: Record<string, unknown>): Promise<DidCommV2PlaintextMessage>
 }
@@ -186,6 +191,28 @@ async function ensureMailboxForwarding(agent: Agent, mailbox: WalletMailbox): Pr
       `${LOG_PREFIX} forwarding not set for ${didPrefix(mailbox.did)} at ${didPrefix(mailbox.mediatorDid)}: ${(error as Error).message}`
     )
     return false
+  }
+}
+
+/**
+ * Ask the recipient's mediator to ring the recipient for the message just forwarded (`messaging/wake/request`,
+ * naming the recipient's mailbox and the stored id). The mediator answers `{}` whatever it decides, and rings the
+ * recipient's push gateway only when the recipient is offline with a handle, the message is still stored and fresh,
+ * this sender is its sender, and the limits allow (one per minute per pair, coalesced per recipient). Asked once per
+ * forward. A caller may forward the same logical message more than once (announceRelationshipDid tries its first
+ * contact three times, 2 s and 4 s apart; a person's "try again" sends anew), but each is a new basic message with its
+ * own bytes and so its own stored id, which keeps to the spec's rule of one request per message; the extra wakes
+ * then meet the per-pair limit, and their refusals are expected, said at info level. Best effort throughout: a
+ * refusal or an old mediator is said at info level, since the message itself is already on its way and the phone
+ * collects it when the app next opens.
+ */
+async function requestMailboxWake(agent: Agent, mailbox: WalletMailbox, addressee: string, id: string): Promise<void> {
+  try {
+    await askMediator(agent, mailbox, MEDIATOR_WAKE_REQUEST, { addressee, msgIds: [id], urgency: 'interactive' })
+  } catch (error) {
+    agent.config.logger.info(
+      `${LOG_PREFIX} no wake asked for ${didPrefix(addressee)} at ${didPrefix(mailbox.mediatorDid)}: ${(error as Error).message}`
+    )
   }
 }
 
@@ -389,7 +416,11 @@ export class WalletMailboxOutboundTransport implements DidCommOutboundTransport 
       throw new Error(
         `${LOG_PREFIX} no mailbox found: the peer's documents lead to no mailbox (connection ${outboundPackage.connectionId ?? 'none'})`
       )
-    await mailbox.session.forward(next, outboundPackage.payload)
+    const { id } = await mailbox.session.forwardForMailbox(next, outboundPackage.payload)
+    // The message is on its way once the forward is sent. The wake is asked after it and NOT awaited: it catches its
+    // own failures, nothing downstream needs its answer, and a mediator that ignores an unknown task would otherwise
+    // hold every send for the ask's whole timeout while the message was already stored.
+    void requestMailboxWake(this.agent, mailbox, next, id)
   }
 
   private async peerMailbox(connectionId: string | undefined): Promise<string | undefined> {
