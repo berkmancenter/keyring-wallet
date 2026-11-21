@@ -20,6 +20,8 @@ Dependency patches live in two places: `.yarn/patches/` (applied via `patch:` pr
 
 ## Commands
 
+How development works (plan → stacked PRs → CI → review → release) is in `docs/DEVELOPMENT.md`; the test tiers, their commands and every CI workflow with its required checks are in `docs/TESTING.md`.
+
 Node `>=20.19.2 <21`, Yarn 4.9.2 via corepack. Install from the repo root: `yarn install`.
 
 From the repo root:
