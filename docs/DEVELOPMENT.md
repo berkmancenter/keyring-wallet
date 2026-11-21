@@ -55,7 +55,10 @@ A plan is implemented as a stack of PRs, one per step, in the plan's order,
 each based on the previous PR's branch, each linking the plan section it
 implements and its place in the stack. Before opening each PR, lint, format,
 typecheck, the relevant build and its tests must pass locally; if they fail,
-the PR is not opened. The PR template
+the PR is not opened. (A PR that changes only plans and their assets is
+exempt from the app checks and runs the plan checker instead; see
+[`plans/CLAUDE.md`](./plans/CLAUDE.md), "A plan-only PR runs no app tests
+locally".) The PR template
 ([`../.github/pull_request_template.md`](../.github/pull_request_template.md))
 carries the stack fields (`Stack: n of m. Base: <branch> (#N), at <sha8>`, the
 plan section) and that checklist. Code Quality and Commit Requirements run on

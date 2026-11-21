@@ -43,7 +43,7 @@ Notes:
 | Hook | Repo | Runs |
 |---|---|---|
 | `pre-commit` | wallet (`.husky/pre-commit`) | `scripts/check-commit-signing.sh`, `yarn pre-commit-lint` (lint-staged), `yarn typecheck` |
-| `pre-push` | wallet | `yarn test` |
+| `pre-push` | wallet | `yarn test` (a plan-only PR is pushed with `--no-verify`; see "Before opening a PR") |
 | `commit-msg` | wallet | `yarn commitlint` |
 | `prepare-commit-msg` | wallet | lefthook's `prepare-commit-msg` |
 | `pre-commit` | bifold (`bifold/.githooks/`) | checks commit signing is configured |
@@ -53,6 +53,14 @@ The commit rules themselves (conventional commits, signing, `Signed-off-by:`)
 are in the root [`../CLAUDE.md`](../CLAUDE.md), "Commit conventions".
 
 ## Before opening a PR
+
+A PR that changes only plans and their assets (Markdown and `mockups/` files
+under `docs/`) does not run the app checks locally: run the plan structure
+checker instead, push with `git push --no-verify` (the `pre-push` hook runs the
+whole app suite), and let CI be the check. Anything else in the PR, including a
+script or a workflow, makes it a normal PR. The rule and its limits are in
+[`plans/CLAUDE.md`](./plans/CLAUDE.md), "A plan-only PR runs no app tests
+locally".
 
 Plans are implemented as stacked PRs, and each PR in a stack is opened only
 after lint, format, typecheck, the relevant build and its tests pass locally

@@ -494,6 +494,17 @@ plan one step at a time, in the order the plan was written.
   `main`, so on a mid-stack PR a red check must be fixed before review rather
   than being enforced; see [`../TESTING.md`](../TESTING.md), "Before opening a
   PR".
+- **A plan-only PR runs no app tests locally.** A PR whose changed files are all
+  plans and their assets (Markdown, and the `mockups/` SVG, PNG and manifest,
+  under `docs/`) skips the lint, prettier, typecheck, build and jest steps
+  above: nothing they check has changed. Run the structure checker
+  (`node --experimental-strip-types scripts/plans/check-plans.ts`) and, if a
+  mockup changed, regenerate and commit its sheet. CI is the check for the
+  rest: Code Quality still runs on the PR. The `pre-push` hook runs the whole
+  `yarn test` regardless, so push such a PR with `git push --no-verify`; that
+  skips only the push hook, and the commit hooks and signing still apply. A PR
+  that also changes anything outside `docs/` (a script, a workflow, app or
+  bifold code) is not plan-only and follows the checks above.
 - **Heavy operations follow the shared-machine rules** in `/srv/dev/CLAUDE.md`
   ("Heavy operations", "Disk space in /var/tmp"): check memory and CPU first,
   run `vartmp-tidy check`, and prefix builds, tests and typechecks with

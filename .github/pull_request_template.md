@@ -19,7 +19,9 @@ Above / below: <#PR above>, <#PR below>
 
 ## Before opening
 
-<!-- Tick what you ran, and note any result that is not a plain pass. Commands: docs/TESTING.md. -->
+<!-- Tick what you ran, and note any result that is not a plain pass. Commands: docs/TESTING.md.
+     A PR that changes only plans and their assets runs the plan checker instead of the app checks
+     (docs/plans/CLAUDE.md, "A plan-only PR runs no app tests locally"); say so here. -->
 
 - [ ] `yarn lint`, `yarn prettier`, `yarn typecheck` (root)
 - [ ] The build this change could break (native build for `app/ios`, `app/android`, native modules or patches)
