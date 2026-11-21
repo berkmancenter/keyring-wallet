@@ -322,6 +322,14 @@ diff <(git -C <bifold clone> ls-tree -r "$tip" | awk '{print $3, $4}' | sort) \
 # any other "<" line is a bifold merge not yet replayed (§7.1)
 ```
 
+And the wallet side, after the last merge of `main` into the integration branch (§7.1: wallet-side changes reach the fold by that merge, never by replay; its one expected conflict is the `bifold` path, main's gitlink bump against the fold's deletion, resolved by keeping the deletion once `git rev-parse <fold head>:bifold` equals the bumped pin's `^{tree}`):
+
+```sh
+git diff origin/main feat/one-codebase --stat -- . ':!bifold' ':!.gitmodules'
+# expected: only the fold's own wiring files (install script, workflows, scripts, docs, CLAUDE.md, .gitignore); an app/
+# file here means a wallet change on main that the merge lost
+```
+
 **Then the one PR to `main`.** A PR opened straight from `feat/one-codebase` would list its 4,341 unsigned history commits, and the required check "DCO sign-off and commit signature" fails on the first of them before any squash happens. So the PR to `main` is opened from a **one-commit branch** whose tree is the integration tip's:
 
 ```sh
