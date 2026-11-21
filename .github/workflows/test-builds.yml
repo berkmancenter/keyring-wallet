@@ -238,7 +238,7 @@ jobs:
           PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
-          echo "MEDIATOR_V2_URL=" >> .env
+          echo "MAILBOX_MEDIATOR_DID=" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
           # The test build's short clocks (see the top of this file), unless this
@@ -380,7 +380,7 @@ jobs:
           PUSH_FCM_PROJECT_ID: ${{ vars.PUSH_FCM_PROJECT_ID || 'hls-asml-identity-ba68' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
-          echo "MEDIATOR_V2_URL=" >> .env
+          echo "MAILBOX_MEDIATOR_DID=" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
           # The test build's short clocks (see the top of this file), unless this

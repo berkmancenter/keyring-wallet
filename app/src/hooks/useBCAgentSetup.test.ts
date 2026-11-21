@@ -64,7 +64,7 @@ describe('openWalletMailboxIfConfigured: testers first, and never in the way of 
     await openWalletMailboxIfConfigured(agent as never, false)
     expect(mockOpenWalletMailbox).not.toHaveBeenCalled()
     expect(agent.config.logger.info).toHaveBeenCalledWith(
-      '[WalletMailbox] not opening: switch=off, MAILBOX_MEDIATOR_DID=unset',
+      '[WalletMailbox] not opening: switch=off, MAILBOX_MEDIATOR_DID=unset'
     )
   })
 
@@ -93,7 +93,7 @@ describe('openWalletMailboxIfConfigured: testers first, and never in the way of 
     const agent = fakeAgent()
     await expect(openWalletMailboxIfConfigured(agent as never, true)).resolves.toBeUndefined()
     expect(agent.config.logger.warn).toHaveBeenCalledWith(
-      '[WalletMailbox] could not open, continuing on v1 only: mediator unreachable',
+      '[WalletMailbox] could not open, continuing on v1 only: mediator unreachable'
     )
   })
 })
@@ -105,7 +105,7 @@ describe('the retired Coordinate Mediation 2.0 entry points are gone from start-
     'useBCAgentSetup.ts names %s nowhere',
     (name) => {
       expect(source).not.toContain(name)
-    },
+    }
   )
 
   it('CONTROL: the check reads the real module (it names what replaced them)', () => {
@@ -152,7 +152,7 @@ describe('restartPickupOnReturn', () => {
     await expect(restartPickupOnReturn(agent, logger)).resolves.toBeUndefined()
     expect(calls).toEqual(['stop'])
     expect(logger.warn).toHaveBeenCalledWith(
-      'Could not restart message pickup on foreground: Error executing query. Invalid store handle',
+      'Could not restart message pickup on foreground: Error executing query. Invalid store handle'
     )
     expect(logger.info).not.toHaveBeenCalled()
   })

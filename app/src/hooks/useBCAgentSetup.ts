@@ -118,7 +118,7 @@ export const configureMessagePickup = async (agent: Agent): Promise<void> => {
     // receiving messages on one wallet and deaf on another.
     await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
       undefined,
-      DidCommMediatorPickupStrategy.PickUpV2,
+      DidCommMediatorPickupStrategy.PickUpV2
     )
   }
 }
@@ -131,7 +131,7 @@ export const configureMessagePickup = async (agent: Agent): Promise<void> => {
  */
 export const restartPickupOnReturn = async (
   agent: Agent,
-  logger: { info(message: string): void; warn(message: string): void },
+  logger: { info(message: string): void; warn(message: string): void }
 ): Promise<void> => {
   try {
     await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
@@ -174,7 +174,9 @@ export const openWalletMailboxIfConfigured = async (agent: Agent, enabled: boole
   const mediatorDid = Config.MAILBOX_MEDIATOR_DID
   if (!enabled || !mediatorDid) {
     agent.config.logger.info(
-      `[WalletMailbox] not opening: switch=${enabled ? 'on' : 'off'}, MAILBOX_MEDIATOR_DID=${mediatorDid ? 'set' : 'unset'}`,
+      `[WalletMailbox] not opening: switch=${enabled ? 'on' : 'off'}, MAILBOX_MEDIATOR_DID=${
+        mediatorDid ? 'set' : 'unset'
+      }`
     )
     return
   }
@@ -230,7 +232,7 @@ const useBCAgentSetup = () => {
 
       return agent
     },
-    [logger],
+    [logger]
   )
 
   const createNewAgent = useCallback(
@@ -275,7 +277,7 @@ const useBCAgentSetup = () => {
 
       return newAgent
     },
-    [logger, store.developer.enableDidCommV2, store.developer.enableV2Mailbox],
+    [logger, store.developer.enableDidCommV2, store.developer.enableV2Mailbox]
   )
 
   const migrateIfRequired = useCallback(
@@ -288,7 +290,7 @@ const useBCAgentSetup = () => {
         })
       }
     },
-    [store.migration.didMigrateToAskar, dispatch],
+    [store.migration.didMigrateToAskar, dispatch]
   )
 
   const warmUpCache = useCallback(
@@ -338,7 +340,7 @@ const useBCAgentSetup = () => {
         await pool.pool.submitRequest(schemaRequest)
       })
     },
-    [credDefs, schemas],
+    [credDefs, schemas]
   )
 
   const initializeAgentOnce = useCallback(
@@ -350,11 +352,11 @@ const useBCAgentSetup = () => {
       const mediator = chooseMediator(
         store.preferences.selectedMediator,
         Config.MEDIATOR_URL,
-        store.preferences.availableMediators,
+        store.preferences.availableMediators
       )
       if (mediator.replaced) {
         logger.warn(
-          `Stored mediator can't be used (${mediator.replaced}); using this build's mediator and resetting the stored one`,
+          `Stored mediator can't be used (${mediator.replaced}); using this build's mediator and resetting the stored one`
         )
         dispatch({ type: DispatchAction.RESET_MEDIATORS })
       }
@@ -458,7 +460,7 @@ const useBCAgentSetup = () => {
       warmUpCache,
       restartExistingAgent,
       container,
-    ],
+    ]
   )
 
   // One agent start at a time. Resetting a stored mediator that can't be used
