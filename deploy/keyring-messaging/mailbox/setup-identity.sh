@@ -21,6 +21,12 @@
 # and every phone's mailbox names the old one.
 set -eu
 cd "$(dirname "$0")"
+# The DID log's directory is made here, by this user, before any container runs:
+# docker-compose.yml bind-mounts ./did into the mediator, and a bind mount whose
+# host directory does not exist yet is created by Docker as root, which this
+# script then cannot write into (the first CI run of this file found that).
+# World-readable: the mediator (uid 10001) reads the log from it.
+mkdir -p did && chmod 0755 did
 
 host=$(sed -n 's/^MAILBOX_HOSTNAME=//p' .env 2>/dev/null | tail -n 1)
 if [ -z "$host" ]; then
@@ -80,8 +86,8 @@ install -m 0600 "$work/admin-monitor.json" "$out/admin-monitor.json"
 install -m 0600 "$work/did.jsonl" "$out/did.jsonl"
 [ -s "$work/did-web.json" ] && install -m 0600 "$work/did-web.json" "$out/did-web.json"
 chmod 0700 "$out"
-# For a local run of this stack: the DID log where docker-compose.yml mounts it.
-mkdir -p did && cp "$work/did.jsonl" did/did.jsonl && chmod 0644 did/did.jsonl
+# The DID log where docker-compose.yml mounts it (did/ was made above, before umask 077).
+cp "$work/did.jsonl" did/did.jsonl && chmod 0644 did/did.jsonl
 
 echo
 echo "Mailbox identity created in $out/. Push the two secret files, keep did.jsonl"

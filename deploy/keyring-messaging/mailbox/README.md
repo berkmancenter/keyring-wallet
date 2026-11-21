@@ -172,6 +172,11 @@ Two doors that do not exist in this build, for the record: the Aries v1 anonymou
 unauthenticated relay door ever opened, upstream gives that session `DENY_ALL,SEND_MESSAGES,SEND_FORWARDED` only
 (`jwt_auth.rs`, `relay_anonymous_acls`), never an inbox or the self-management rights.
 
+On how a row is read: a row that asserts a FIELD has to read the field. Row A2 above passed by matching the whole
+answer as text, which proved the right was on but not where the answer says so; the probe that watches the mailbox
+(the plan's interim watch) later read the field and found the realised view nested under `account`
+(`payload.account.acl.sendForwarded`), which the app's check had assumed flat. Rows W1 and W4 read their fields.
+
 Findings applied to `mailbox.toml`: `ANON_RECEIVE` in the default (without it A3 was refused, "recipient is not
 accepting anonymous messages": Credo's inner forward layer is anoncrypt, while the forward's outer sender stays
 authenticated and gated by `SEND_FORWARDED`); `trust_task_verification = "enforce"` (every row's Trust Task is
