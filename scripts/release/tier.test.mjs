@@ -207,6 +207,70 @@ test('range mode: an unreadable bifold range is store; only a..b is accepted', (
   }
 });
 
+// The fold: bifold/ stops being a submodule and becomes a tree of this repository at the same paths. Its wiring is the
+// only thing that changes here; every path rule above is unchanged, and the recorded cut ranges (companion §2.6 of
+// docs/plans/single-codebase-plan) grade byte-identically because a gitlink at both ends still takes the pin walk.
+function foldedRepos() {
+  const top = mkdtempSync(path.join(tmpdir(), 'tier-fold-'));
+  const wallet = path.join(top, 'wallet'), bifold = path.join(top, 'bifold');
+  const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  // `add -A` would drop a gitlink whose directory is not on disk, so the gitlink-era commit stages by name.
+  const commit = (dir, m, all = true) => { if (all) git(dir, 'add', '-A'); git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
+  const put = (dir, f, body) => { mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); writeFileSync(path.join(dir, f), body); };
+  for (const d of [wallet, bifold]) { mkdirSync(d); git(d, 'init', '-q'); }
+  put(bifold, 'packages/core/src/x.ts', 'a\n');
+  const b1 = commit(bifold, 'b1');
+  put(wallet, 'app/src/a.ts', 'a\n');
+  git(wallet, 'add', 'app/src/a.ts');
+  git(wallet, 'update-index', '--add', '--cacheinfo', `160000,${b1},bifold`);
+  const gitlink = commit(wallet, 'gitlink era', false);
+  // The fold commit: the gitlink goes, the same files come in as a tree under bifold/.
+  git(wallet, 'rm', '-q', '--cached', 'bifold');
+  put(wallet, 'bifold/packages/core/src/x.ts', 'a\n');
+  const fold = commit(wallet, 'fold');
+  put(wallet, 'bifold/packages/core/src/screens/Home.tsx', 'screen\n');
+  const screen = commit(wallet, 'a screen after the fold');
+  put(wallet, 'bifold/packages/core/src/modules/trust-tasks/module/VtiMediatorTransport.ts', 'line\nawait store.deleteById(id)\n');
+  const vti = commit(wallet, 'vti after the fold');
+  return { wallet, bifold, gitlink, fold, screen, vti, done: () => rmSync(top, { recursive: true, force: true }) };
+}
+
+test('fold: a tree at both ends reads the wallet diff alone, without a bifold clone or BIFOLD_GIT', () => {
+  const r = foldedRepos();
+  const noClone = path.join(r.wallet, 'no-such-clone');
+  try {
+    const files = changedFiles(`${r.fold}..${r.screen}`, { repo: r.wallet, bifold: noClone });
+    assert.deepEqual(files, ['bifold/packages/core/src/screens/Home.tsx']);
+    assert.equal(verdict(files, { added: addedLines(`${r.fold}..${r.screen}`, { repo: r.wallet, bifold: noClone }) }).tier, 'ota');
+    // The content flags read the bifold/ lines from the same diff: the VTI line is strict, the storage delete holds.
+    const more = changedFiles(`${r.screen}..${r.vti}`, { repo: r.wallet, bifold: noClone });
+    const added = addedLines(`${r.screen}..${r.vti}`, { repo: r.wallet, bifold: noClone });
+    assert.ok(added['bifold/packages/core/src/modules/trust-tasks/module/VtiMediatorTransport.ts'].some((l) => /deleteById/.test(l)));
+    const v = verdict(more, { added });
+    assert.equal(v.tier, 'store');
+    assert.deepEqual(v.held, ['deletes stored records']);
+    assert.deepEqual(v.flags.map((f) => f.flag).sort(), ['VTI protocol line', 'deletes stored records']);
+  } finally {
+    r.done();
+  }
+});
+
+test('fold: a range that crosses the fold grades store, with the crossing named', () => {
+  const r = foldedRepos();
+  try {
+    const files = changedFiles(`${r.gitlink}..${r.screen}`, { repo: r.wallet, bifold: r.bifold });
+    assert.ok(files.includes('bifold/packages/core/src/screens/Home.tsx'));
+    assert.ok(!files.includes('bifold'));
+    assert.ok(files.some((f) => /^bifold@.*crosses the fold/.test(f)));
+    assert.equal(classify(files).tier, 'store');
+    // The pin's diff is not read across the fold (one end has no pin), and the wallet side still gives its lines.
+    const added = addedLines(`${r.gitlink}..${r.screen}`, { repo: r.wallet, bifold: r.bifold });
+    assert.ok(Object.keys(added).includes('bifold/packages/core/src/screens/Home.tsx'));
+  } finally {
+    r.done();
+  }
+});
+
 test('flags: the current policy (changing one must change this test)', () => {
   assert.deepEqual(FLAGS.map((f) => [f.flag, f.policy]), [['deletes stored records', 'store'], ['sign-in / key handling', 'strict'], ['VTI protocol line', 'strict']]);
 });
