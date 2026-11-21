@@ -1,6 +1,6 @@
 # One codebase: folding bifold into keyring-wallet
 
-**Status:** Proposed 2026-11-20, top priority alongside the DIDComm v2 migration, which runs in parallel (§7). Phase 0 is under way; nothing is merged.
+**Status:** Accepted 2026-11-20 (the product owner's decisions were given that evening), top priority alongside the DIDComm v2 migration, which runs in parallel (§7). Phase 0 is under way; nothing is merged.
 **Reviewers:** the product owner and a second maintainer.
 **Scope:** move the `keyring-bifold` framework into this repository with its history, in two moves, so a change to the app and its framework is one commit and one pull request.
 **Companions:** [`single-codebase-plan/`](single-codebase-plan/): the measurements, positions and decisions behind this plan ([`2026-11-20-al.md`](single-codebase-plan/2026-11-20-al.md)) and the review of it ([`2026-11-20-bam.md`](single-codebase-plan/2026-11-20-bam.md)); review index in this plan's §14.
