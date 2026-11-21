@@ -18,10 +18,7 @@ import {
   type Container,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
-  setV2MediationEnabled,
-  findV2MediationRecord,
-  provisionV2Mediation,
-  startV2MessagePickup,
+  openWalletMailbox,
 } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
 import {
@@ -124,12 +121,6 @@ export const configureMessagePickup = async (agent: Agent): Promise<void> => {
       DidCommMediatorPickupStrategy.PickUpV2
     )
   }
-
-  // Second loop, Pickup 4.0 against the v2 mediator when one is provisioned
-  // (didcomm_v2_subtask.md V2 step 4). AFTER the v1 start: that start stops
-  // every running loop (the anti-stacking guard in the credo patch), the v4
-  // start does not, so this order leaves exactly one loop per mediator.
-  await startV2MessagePickup(agent)
 }
 
 /**
@@ -151,16 +142,6 @@ export const restartPickupOnReturn = async (
   }
 }
 
-/**
- * Provision Coordinate Mediation 2.0 with the mediator named by
- * MEDIATOR_V2_URL (a second deployment beside the v1 mediator — §7.1 of the
- * subtask plan; the production v1 mediator is never upgraded in place).
- * Idempotent, and a failure is logged rather than fatal: the wallet keeps
- * working over v1, and v2 invitations fall back to unmediated routing.
- *
- * Exported (only) for the de-dup regression test — see
- * useBCAgentSetup.test.ts. Not otherwise part of this module's public API.
- */
 /** The saved DIDComm switches (store.tsx Developer): what bifold is told at every agent start. */
 export interface DidCommSwitches {
   enableTspCarriage?: boolean
@@ -173,45 +154,36 @@ export const v2MailboxOn = (switches: DidCommSwitches): boolean =>
   !!switches.enableDidCommV2 && !!switches.enableV2Mailbox
 
 /**
- * Tell bifold the saved switches, before the agent's pickup or inbound handlers start: configureMessagePickup runs the
- * Pickup 4.0 loop only with the v2 mailbox on (startV2MessagePickup), and setupTrustTasksInbound reads the carriage
- * setting. TSP and v2 are on as shipped; the v2 mailbox is off.
+ * Tell bifold the saved switches, before the agent's inbound handlers start: setupTrustTasksInbound reads the carriage
+ * setting. TSP and v2 are on as shipped. The v2 mailbox switch is not bifold's to know: it decides only whether this
+ * app opens the wallet mailbox (openWalletMailboxIfConfigured).
  */
 export const applyDidCommSwitches = (switches: DidCommSwitches): void => {
   setTspCarriageEnabled(!!switches.enableTspCarriage)
   setDidCommV2Enabled(!!switches.enableDidCommV2)
-  setV2MediationEnabled(v2MailboxOn(switches))
 }
 
-export const provisionV2MediationIfConfigured = async (agent: Agent, enabled: boolean): Promise<void> => {
-  const invitationUrl = Config.MEDIATOR_V2_URL
-  if (!enabled || !invitationUrl) {
-    // Logged so a device run shows WHY v2 mediation did not start: the flag
-    // (persisted developer setting) or the build (MEDIATOR_V2_URL in .env).
+/**
+ * Open the wallet mailbox (bifold walletMailbox.ts): one mailbox DID per phone at an Affinidi mediator, through which
+ * this phone mints and answers DIDComm v2 invitations. Testers first: only with the Developer "DIDComm v2 mailbox"
+ * switch on (off as shipped) and a mediator named by MAILBOX_MEDIATOR_DID, which is blank until Keyring's own
+ * Affinidi mediator is deployed. Without both, nothing opens and the phone mints v1 invitations. Never throws: a
+ * mediator that cannot be reached is one warning, and the phone carries on over v1.
+ */
+export const openWalletMailboxIfConfigured = async (agent: Agent, enabled: boolean): Promise<void> => {
+  const mediatorDid = Config.MAILBOX_MEDIATOR_DID
+  if (!enabled || !mediatorDid) {
     agent.config.logger.info(
-      `[TrustTasks:V2Mediation] not provisioning: flag=${enabled ? 'on' : 'off'}, MEDIATOR_V2_URL=${
-        invitationUrl ? 'set' : 'unset'
+      `[WalletMailbox] not opening: switch=${enabled ? 'on' : 'off'}, MAILBOX_MEDIATOR_DID=${
+        mediatorDid ? 'set' : 'unset'
       }`
     )
     return
   }
   try {
-    // configureMessagePickup (called before this, unconditionally) already
-    // started the v4 loop when a v2 mediation record pre-existed from a
-    // previous launch. Only start it here for a record THIS call newly
-    // provisions — startV2MessagePickup's PickUpV4 start has no anti-stacking
-    // guard (unlike the patched v1/v2 start), so calling it again on an
-    // already-provisioned record subscribed a second polling loop on every
-    // launch after the first.
-    const alreadyProvisioned = !!(await findV2MediationRecord(agent))
-    await provisionV2Mediation(agent, invitationUrl)
-    if (!alreadyProvisioned) {
-      await startV2MessagePickup(agent)
-    }
+    await openWalletMailbox(agent, mediatorDid)
   } catch (error) {
-    agent.config.logger.warn(
-      `[TrustTasks:V2Mediation] provisioning failed, continuing on v1 only: ${(error as Error).message}`
-    )
+    agent.config.logger.warn(`[WalletMailbox] could not open, continuing on v1 only: ${(error as Error).message}`)
   }
 }
 
@@ -444,7 +416,8 @@ const useBCAgentSetup = () => {
 
       logger.info(`configuring message pickup for ${mediatorUrl}`)
       await configureMessagePickup(newAgent)
-      await provisionV2MediationIfConfigured(newAgent, v2MailboxOn(didcommSwitches))
+      // Not awaited: an unreachable mailbox mediator must never hold up start-up (a sign-in is several round trips).
+      void openWalletMailboxIfConfigured(newAgent, v2MailboxOn(didcommSwitches))
 
       logger.info('Warming up cache...')
       await warmUpCache(newAgent, cachedLedgers)
