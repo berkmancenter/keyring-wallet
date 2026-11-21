@@ -18,6 +18,10 @@ import {
 import { initialState } from '../store'
 
 const mockOpenWalletMailbox = jest.fn()
+const mockAgentAddress = jest.fn<string | undefined, []>(() => undefined)
+const mockKeptHandle = jest.fn(
+  async (_agentDid: string) => undefined as { handle: { gateway: string; handle: string } } | undefined
+)
 const mockSetTsp = jest.fn()
 const mockSetV2 = jest.fn()
 // The retired entry points, mocked so a call to any of them would be seen.
@@ -30,6 +34,7 @@ const mockRetired = {
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
   openWalletMailbox: (...args: unknown[]) => mockOpenWalletMailbox(...args),
+  vtaAgent: { agentAddress: () => mockAgentAddress() },
   setTspCarriageEnabled: (on: boolean) => mockSetTsp(on),
   setDidCommV2Enabled: (on: boolean) => mockSetV2(on),
   provisionV2Mediation: (...args: unknown[]) => mockRetired.provisionV2Mediation(...args),
@@ -38,6 +43,7 @@ jest.mock('@bifold/core', () => ({
 }))
 
 jest.mock('react-native-config', () => ({ MAILBOX_MEDIATOR_DID: undefined }))
+jest.mock('@/push/pushDefaults', () => ({ appWakeHandles: { get: (agentDid: string) => mockKeptHandle(agentDid) } }))
 
 // The mocked Config, typed so a case can set the DID. Cast once into a name:
 // assigning through `(Config as ...)` at the start of a line needs a leading
@@ -84,7 +90,33 @@ describe('openWalletMailboxIfConfigured: testers first, and never in the way of 
     mockOpenWalletMailbox.mockResolvedValueOnce({ did: 'did:peer:2.mailbox', mediatorDid: MEDIATOR })
     const agent = fakeAgent()
     await openWalletMailboxIfConfigured(agent as never, true)
-    expect(mockOpenWalletMailbox).toHaveBeenCalledWith(agent, MEDIATOR)
+    expect(mockOpenWalletMailbox).toHaveBeenCalledWith(agent, MEDIATOR, { wakeHandle: expect.any(Function) })
+  })
+
+  it('the mailbox is given this phone’s push handle for its linked agent, so the mailbox’s mediator can ring it', async () => {
+    mockedConfig.MAILBOX_MEDIATOR_DID = MEDIATOR
+    mockOpenWalletMailbox.mockResolvedValueOnce({ did: 'did:peer:2.mailbox', mediatorDid: MEDIATOR })
+    mockAgentAddress.mockReturnValue('did:webvh:QmAgent:host.example:agent')
+    mockKeptHandle.mockResolvedValueOnce({ handle: { gateway: 'did:web:gateway.example', handle: 'wh_7' } })
+    await openWalletMailboxIfConfigured(fakeAgent() as never, true)
+    const deps = mockOpenWalletMailbox.mock.calls[0][2] as { wakeHandle: () => Promise<unknown> }
+    await expect(deps.wakeHandle()).resolves.toEqual({ gateway: 'did:web:gateway.example', handle: 'wh_7' })
+    expect(mockKeptHandle).toHaveBeenCalledWith('did:webvh:QmAgent:host.example:agent')
+  })
+
+  it('CONTROL: no linked agent, or no handle kept for it: the mailbox is given none', async () => {
+    mockedConfig.MAILBOX_MEDIATOR_DID = MEDIATOR
+    mockOpenWalletMailbox.mockResolvedValue({ did: 'did:peer:2.mailbox', mediatorDid: MEDIATOR })
+    mockAgentAddress.mockReturnValue(undefined)
+    await openWalletMailboxIfConfigured(fakeAgent() as never, true)
+    const noAgent = mockOpenWalletMailbox.mock.calls[0][2] as { wakeHandle: () => Promise<unknown> }
+    await expect(noAgent.wakeHandle()).resolves.toBeUndefined()
+    expect(mockKeptHandle).not.toHaveBeenCalled()
+    mockAgentAddress.mockReturnValue('did:webvh:QmAgent:host.example:agent')
+    mockKeptHandle.mockResolvedValueOnce(undefined)
+    await openWalletMailboxIfConfigured(fakeAgent() as never, true)
+    const noHandle = mockOpenWalletMailbox.mock.calls[1][2] as { wakeHandle: () => Promise<unknown> }
+    await expect(noHandle.wakeHandle()).resolves.toBeUndefined()
   })
 
   it('a mediator that cannot be reached is one warning; the phone carries on over v1', async () => {
