@@ -1,33 +1,31 @@
 # One codebase: folding bifold into keyring-wallet
 
-**Status:** Accepted 2026-11-21, top priority alongside the DIDComm v2 migration, which runs in parallel (§8). Phase 0 is under way; nothing is merged.
+**Status:** Proposed 2026-11-20, top priority alongside the DIDComm v2 migration, which runs in parallel (§7). Phase 0 is under way; nothing is merged.
 **Reviewers:** the product owner and a second maintainer.
-**Reasoning:** [`single-codebase-plan/2026-11-20-al.md`](single-codebase-plan/2026-11-20-al.md): the measurements this plan rests on, the positions it rejects, the decisions taken and the rehearsal record.
-**Related plans:** [`release-cadence-and-testing-strategy.md`](release-cadence-and-testing-strategy.md) (OTA tiers and the gate), [`versioning-and-releases-plan.md`](versioning-and-releases-plan.md), [`mediator-migration-plan.md`](mediator-migration-plan.md) and [`openvtc-integration-plan/didcomm_v2_subtask.md`](openvtc-integration-plan/didcomm_v2_subtask.md) (the parallel workstream), [`reference-app-sdk-packaging.md`](reference-app-sdk-packaging.md) (superseded in part, §9). `UPGRADE_PROGRESS.md` §2 records the "branch swap" bifold strategy this plan ends.
+**Scope:** move the `keyring-bifold` framework into this repository with its history, in two moves, so a change to the app and its framework is one commit and one pull request.
+**Companions:** [`single-codebase-plan/`](single-codebase-plan/): the measurements, positions and decisions behind this plan ([`2026-11-20-al.md`](single-codebase-plan/2026-11-20-al.md)) and the review of it ([`2026-11-20-bam.md`](single-codebase-plan/2026-11-20-bam.md)); review index in this plan's §14.
+**Related plans:** listed in §14.
 
----
+## Overview
+<!-- plan-part: human -->
 
-## 1. For a reader new to the codebase
+> **Human part: for people deciding and reviewing.** What this is, what a person
+> sees, how we'll know it works, and what is needed from whom. It adds nothing: the
+> numbered precision part below is authoritative, and if the two disagree, the
+> precision part wins and this part is the bug.
 
-Keyring today is two Git repositories that pretend to be one.
+Keyring is built from two Git repositories that behave like one. `keyring-wallet` holds the app: its screens, theme, release scripts and CI. `keyring-bifold` holds the framework underneath it: fifteen packages, among them the wallet core (190,000 lines), the Trust Tasks module, the witness server and two native modules. It began as a fork of OpenWallet Foundation's Bifold. (§2)
 
-- **keyring-wallet** holds the app: its screens, theme, release scripts and CI.
-- **keyring-bifold** holds the framework the app is built on: fifteen packages, among them the wallet core (190,000 lines), the Trust Tasks module, the witness server and two native modules. It began as a fork of OpenWallet Foundation's Bifold.
+The wallet repository does not contain the framework. It holds a **pointer** to one exact framework commit (a Git submodule), so every framework change needs a second pull request that moves the pointer. That has happened about thirty times since 2026-10-25, roughly once a day. Every release note, OTA cut and test run names two commits instead of one, and the code that keeps the two in step (install scripts, path rewrites, duplicate dependency trees, a 1 GB second `node_modules`) is some of the most fragile we have. (§2)
 
-The wallet repository does not contain the framework. It contains a **pointer** to one exact commit of it (a Git submodule). Every time the framework changes, somebody has to open a second pull request in the wallet that moves the pointer. Since 2026-10-25 that has happened about thirty times, roughly once a day. Every release note, every OTA cut and every test run has to name two commits instead of one, and the tooling that keeps the two in step (install scripts, path rewrites, duplicate dependency trees, a 1 GB second `node_modules`) is some of the most fragile code we have.
+This plan moves the framework's files and full history into the wallet repository, so there is **one repository, one commit and one pull request** per change. Nothing about what the app does changes. The screens, theme, navigation, agent, notifications and over-the-air (OTA) updates keep working as they do now, because the code is not rewritten; only where it lives and how it is wired changes. (§1, §5.4)
 
-This plan moves the framework's files and their full history into the wallet repository, so there is **one repository, one commit, one pull request** per change. Nothing about what the app does changes. The screens, the theme, navigation, the agent, notifications and over-the-air updates all keep working exactly as they do now, because the code itself is not rewritten; only where it lives and how it is wired together changes.
+It happens in two moves, so each can be checked on its own. Each is a pull request stacked on the previous one on a single integration branch, and `main` changes once, at the end. (§3, §4)
 
-It happens in two moves so that each one can be checked on its own, each a pull request stacked on the previous one on a single integration branch, and `main` changes once at the end:
-
-1. **Same paths, one repository.** The pointer becomes a real folder with the same contents and the same history. Nothing else moves. If this step breaks something, the cause can only be the install wiring.
+1. **Same paths, one repository.** The pointer becomes a real folder with the same contents and the same history. If this step breaks something, the cause can only be the install wiring.
 2. **One dependency tree.** The packages join the wallet's own workspace, the second install and its 1 GB of duplicates go away, and the paths lose their `bifold/` prefix.
 
-A third phase folds the framework's CI jobs and conventions into the wallet's. Optional later work (renaming the packages from `@bifold/*` to `@keyring/*`, or merging the core package into the app) is listed but not decided.
-
-One rule of this repository shapes how the first move lands: every commit on `main` must be cryptographically signed. The framework's 4,341 historical commits are not, and cannot be made so after the fact. So the fold arrives on `main` as one signed commit, and the framework's full history is kept beside it in the same repository on a separate branch, where `git blame` and `git log` can still reach it.
-
-The other thing that needs care is **over-the-air updates**. A phone on store build 279 or 280 only accepts a JavaScript update whose "native fingerprint" matches the build it has. The fold may change that fingerprint even though no native code changes, so the fold is treated as a store-build boundary (§6.3).
+A third phase folds the framework's CI jobs and conventions into the wallet's. Renaming the packages from `@bifold/*` to `@keyring/*` is listed as optional later work and is not decided. Merging the core package into the app is dropped (§4, Phase 4). (§4)
 
 ```mermaid
 flowchart LR
@@ -46,21 +44,64 @@ flowchart LR
   today ==> after
 ```
 
+The left side is today's shape, with the pointer that every framework change has to move; the right side is the target. (§2, §3)
+
+One rule of this repository shapes how the first move lands: every commit on `main` must be cryptographically signed, and the framework's 4,341 historical commits are not and cannot be made so. The fold therefore arrives on `main` as one signed commit, and the framework's full history sits beside it in the same repository on a separate branch, where `git blame` and `git log` can still reach it. (§3, D1)
+
+Over-the-air updates need care. A phone on store build 279 or 280 accepts a JavaScript update only if its "native fingerprint" matches the build it has, and the fold may change that fingerprint even though no native code changes. The fold is therefore a store-build boundary: the 279 and 280 OTA lines are retired when the first folded store build is published. (§5.3)
+
+This plan does not rename or rewrite any module, does not change what ships, and does not keep syncing with upstream Bifold as shared Git history; the `keyring-bifold` repository is archived, not deleted. (§1, §8)
+
+**How we'll know it works**
+
+| Claim | Proved by | Runs where | Status |
+|---|---|---|---|
+| The fold builds and the app behaves as before | Lint, types and formatting; app and package jest (core's 491 suites are the contract); the `scripts/*` tests (§5.1, rungs 1 to 3) | CI | Not run |
+| The store configuration builds on both platforms | iOS simulator app and Android APK from `test-builds.yml` (§5.1, rung 4) | CI | Not run |
+| The app works end to end on the folded tree | `e2e:smoke`, `e2e:vrc` and the other suites in rung 5 | Mac mini, emulator and simulator | Not run |
+| Hardware attestation still works | `e2e:vrc:devices` and the witnessed iOS TSP run on two phones (rung 6; simulators cannot prove it) | Physical phones, attended | Not run |
+| The release gate and OTA delivery work on the folded tree | `gate.sh` nightly (rung 7); a throwaway OTA to a Release APK in `gate-ota.yml` (rung 8) | Mac mini; CI | Not run |
+| The product owner's phone works with the folded build | A hands-on install (rung 9) | Attended | Not run |
+| Release grading is unchanged by the fold | `tier.mjs` grades the ten recorded ranges byte-identically, before and after the path rewrite (§4, Phases 1 and 2) | CI and `tier.test.mjs` | Fixtures recorded; not yet compared |
+| `main` can accept the fold | The signed squash and the one-commit PR, rehearsed on a throwaway repository with a copy of the ruleset (§4, Phase 0) | Throwaway GitHub repository | Rehearsed at bifold `a5bfcf3b2`; redone at the real cut |
+| A bifold change merged during the fold replays cleanly | `git am` replay of bifold #1163 and #1164, identical by `git patch-id` (§4, Phase 0; §7.1) | Throwaway repository | Not run |
+| The native fingerprint after the fold is known | `fingerprint-report.mjs --diff` against the Phase 0 record (§5.3) | CI | Not run |
+
+**Where it stands:** Phase 0 is under way; nothing is merged. The one PR to `main` needs the product owner's explicit word, and removal of the stale worktrees that the install needs room for needs his word as well (§4, §11).
+
+**Open decisions**
+
+| Question | Recommendation | Who decides | By when, or what it blocks |
+|---|---|---|---|
+| Does the Friday 2026-11-27 store build ship from today's structure, or is it skipped? | None yet, because it depends on whether the folded tree is ready that week (§12) | Product owner | That week |
+| Should "merge `packages/core` into `app/`" stay in Phase 4? | No: drop it, because core is a separate boundary that the container seam, hot reload, `remote-logs` and the SDK direction use (§4, Phase 4; §3, D6) | Product owner | Not stated; blocks nothing before Phase 4 |
+| Rename `@bifold/*` to `@keyring/*`? | None yet; it stays out of Phases 1 to 3 (§3, D3) | Product owner | Phase 4, not scheduled |
+| Run the optional fingerprint experiment in Phase 0? | Yes if a Mac slot is free; it changes no decision already taken (§4, Phase 0) | Product owner | Phase 0 |
+| Push the graft ref after the merge so blame reaches the old history? | Yes, under the same word that covers `history/bifold` (§3, D1) | Product owner | After the merge to `main` |
+
+**Not doing:** rewriting, re-architecting or renaming any module in Phases 1 to 3; changing what ships; continuing the upstream sync as shared Git history; deleting `keyring-bifold` or rewriting its history; publishing `@bifold/*` to npm; changing the OTA server, signing keys, channels or `hot-updater`. (§1, §9)
+
 ---
 
-## 2. Goal and non-goals
+<!-- plan-part: precision -->
+
+> **Precision part: for implementers and agents.** Complete, exact and normative:
+> implement from this part. Sections are numbered, and a bare `§n` means this
+> plan's section n.
+
+## 1. Goal and non-goals
 
 **Goal.** One Git repository, `keyring-wallet`, contains everything that today lives in `keyring-wallet` and `keyring-bifold`, with the framework's history preserved, and a change to the app and its framework is one commit on one branch, reviewed in one pull request, tested by one CI run, and released by the existing release and OTA pipeline.
 
 **Non-goals.**
-- Rewriting, re-architecting or renaming any module. Phases 1 and 2 move files and wiring only. Screens, theme, navigation, the agent container, Trust Tasks, VRC, notifications and OTA keep their code unchanged (§6.4).
+- Rewriting, re-architecting or renaming any module. Phases 1 and 2 move files and wiring only. Screens, theme, navigation, the agent container, Trust Tasks, VRC, notifications and OTA keep their code unchanged (§5.4).
 - Changing what ships. The first store build from the folded tree is the same app.
-- Continuing the upstream "branch swap" sync with `openwallet-foundation/bifold-wallet` as shared Git history. Upstream changes are ported as patches from here on (§9).
-- Rewriting or deleting the `keyring-bifold` repository's history. It is archived, not removed (§7).
+- Continuing the upstream "branch swap" sync with `openwallet-foundation/bifold-wallet` as shared Git history. Upstream changes are ported as patches from here on (§8).
+- Rewriting or deleting the `keyring-bifold` repository's history. It is archived, not removed (§6).
 
 ---
 
-## 3. Today
+## 2. Today
 
 Measured on 2026-11-20 at wallet `main` 969963df4, bifold gitlink a5bfcf3b2 (bifold `main` tip that day). Details and counts in the companion.
 
@@ -98,7 +139,7 @@ What is *not* a cost: the code itself is sound, its tests are the contract (491 
 
 ---
 
-## 4. Target
+## 3. Target
 
 ```mermaid
 flowchart TB
@@ -120,32 +161,34 @@ flowchart TB
 
 Design positions, each a standing rule for the implementer:
 
-- **D1. History is preserved in this repository, and `main` stays signed-only.** Every commit on wallet `main` must be cryptographically signed and verified by GitHub: the repository ruleset "Main" on `main` carries `required_signatures`, `non_fast_forward`, `deletion` and four required status checks ("DCO sign-off and commit signature" from `commit-checks.yml`, "Lint+Format+Types", "Testing", "Workflow files"); `commit-checks.yml` lists **every commit in the pull request** and fails on the first one that is unsigned or lacks a sign-off (root `CLAUDE.md`, "Commit conventions"). `git filter-repo` rewrites every bifold sha and so strips every signature, and the upstream OpenWallet-era commits were never signed. A merge that brings 4,341 unsigned commits onto `main` is refused. So the fold lands on `main` as **one signed squash commit**, and the full bifold history (fork point with upstream `dbfa53ef`) is kept reachable **inside the wallet repository** on an unprotected ref, `history/bifold`, pushed once from the filter-repo'd clone. `git log history/bifold -- bifold/packages/core/src/…` and `git blame history/bifold -- <file>` work in every clone; `git log --follow` from `main` does not cross the squash. A `refs/replace/` graft (`git replace --graft <fold-squash> <fold-squash>^ <integration tip>`) stitches them for anyone who fetches `refs/replace/*`; it is optional and never required by tooling. This shape was chosen over two alternatives that remain available: changing branch protection for one history-preserving merge (rejected because it needs a protection change for a one-time event), and a squash with the history left only in the archived `keyring-bifold` repository (rejected because every new clone would need to fetch a read-only archive to get blame). A plain history merge is not an option: protection refuses it.
+- **D1. History is preserved in this repository, and `main` stays signed-only.** Every commit on wallet `main` must be cryptographically signed and verified by GitHub: the repository ruleset "Main" on `main` carries `required_signatures`, `non_fast_forward`, `deletion` and four required status checks ("DCO sign-off and commit signature" from `commit-checks.yml`, "Lint+Format+Types", "Testing", "Workflow files"); `commit-checks.yml` lists **every commit in the pull request** and fails on the first one that is unsigned or lacks a sign-off (root `CLAUDE.md`, "Commit conventions"). `git filter-repo` rewrites every bifold sha and so strips every signature, and the upstream OpenWallet-era commits were never signed. A merge that brings 4,341 unsigned commits onto `main` is refused. So the fold lands on `main` as **one signed squash commit**, and the full bifold history (fork point with upstream `dbfa53ef`) is kept reachable **inside the wallet repository** on an unprotected ref, `history/bifold`, pushed once from the filter-repo'd clone. `git log history/bifold -- bifold/packages/core/src/…` and `git blame history/bifold -- <file>` work in every clone; `git log --follow` from `main` does not cross the squash. A `refs/replace/` graft (`git replace --graft <fold-squash> <fold-squash>^ <integration tip>`) stitches them for anyone who fetches `refs/replace/*`; it is optional and never required by tooling. The graft ref is pushed once after the merge to `main` (`git push origin refs/replace/<fold-squash>`), a second small push under the same word that covers `history/bifold`; a clone then runs `git fetch origin 'refs/replace/*:refs/replace/*'`. This shape was chosen over two alternatives that remain available: changing branch protection for one history-preserving merge (rejected because it needs a protection change for a one-time event), and a squash with the history left only in the archived `keyring-bifold` repository (rejected because every new clone would need to fetch a read-only archive to get blame). A plain history merge is not an option: protection refuses it.
 - **D2. Two moves, as stacked PRs into one integration branch, then one PR to `main`.** The integration branch is `feat/one-codebase`, cut from `main`. Phase 1 (same paths), Phase 2 (the move and one install) and Phase 3 (CI and conventions) are each a PR whose base is the previous one's head, reviewed one at a time with GitHub's stacked pull requests, and merged into the integration branch. `main` changes once, by one PR from `feat/one-codebase`, squash-merged as one signed commit (D1), on the product owner's explicit word; the standing merge rules do not apply to it. `main` is therefore never between phases: an OTA cut, a nightly or anyone rebasing onto `main` never meets a half-folded tree. The per-phase separation still holds inside the stack: a failure in Phase 1 can only be install wiring; a failure in Phase 2 can only be paths or hoisting. The integration branch is kept after the merge (not deleted), so the phase boundaries stay reachable even though `main` holds one commit. If GitHub's stacked pull requests are not available to the organisation, the same stack is three ordinary PRs whose bases are retargeted by hand as each merges.
-- **D3. The packages keep their names.** `@bifold/core` stays `@bifold/core` through Phase 3. The app has about 100 import sites and core has thousands; renaming is a separate, mechanical PR (§5, Phase 4).
+- **D3. The packages keep their names.** `@bifold/core` stays `@bifold/core` through Phase 3. The app has about 100 import sites and core has thousands; renaming is a separate, mechanical PR (§4, Phase 4).
 - **D4. React Native packages are bundled from source.** Their `main` and `types` point at `src/index.ts`, as `react-native-locality-peripheral` already does in release builds. Metro and `tsc` already read source in development (`BIFOLD_SOURCE_PACKAGES`, `tsconfig` paths); making it the only mode removes the install-time build, the stale `lib/typescript` declarations, and one whole class of "works in dev, breaks in release" bugs. The Node services keep their own `build`.
-- **D5. Old release lines keep the old structure.** `release/253` (store 279), `release/254` (store 280), every `hotfix/*-ota-*` and `test/ota-*` branch, and the bifold commits they pin stay exactly as they are and stay buildable (§7). The fold lands on `main` once, from the integration branch.
+- **D5. Old release lines keep the old structure.** `release/253` (store 279), `release/254` (store 280), every `hotfix/*-ota-*` and `test/ota-*` branch, and the bifold commits they pin stay exactly as they are and stay buildable (§6). The fold lands on `main` once, from the integration branch.
 - **D6. Nothing moves between `app/` and `packages/core`.** The question of what belongs in the app and what in the framework is real, but it is a different plan. Mixing it in would make the fold's diff unreviewable and would break D2's "only wiring can have failed" property.
-- **D7. The cut.** Both cuts are taken at the moment Phase 1 starts: the wallet cut is wallet `main`'s tip then, and the bifold cut is bifold `main`'s tip then (969963df4 and 87805b240 when this was written; both are expected to move before Phase 1, the wallet with the v2 retirement's store-tier change and its pin bump). DIDComm v2 merges that land before Phase 1 starts are simply part of the fold; the replay rule in §8.1 applies only to merges after the cut. The tier fixtures in Phase 0 include `staging-v0.2.0-280..<wallet cut>`, so the range that carries a store-tier change is graded before and after the fold like the OTA ranges.
+- **D7. The cut.** Both cuts are taken at the moment Phase 1 starts: the wallet cut is wallet `main`'s tip then, and the bifold cut is bifold `main`'s tip then (969963df4 and 87805b240 when this was written; both are expected to move before Phase 1, the wallet with the v2 retirement's store-tier change and its pin bump). DIDComm v2 merges that land before Phase 1 starts are simply part of the fold; the replay rule in §7.1 applies only to merges after the cut. The tier fixtures in Phase 0 include `staging-v0.2.0-280..<wallet cut>`, so the range that carries a store-tier change is graded before and after the fold like the OTA ranges.
 - **D8. One commit convention.** After the fold the whole repository uses the wallet's: conventional commit messages checked by commitlint, every commit signed and verified, and the configured identity's `Signed-off-by:` as the last line (what `git commit -s` writes), with nothing after it. There is no separate DCO rule for `packages/`; `CONTRIBUTING.md` records the change of posture for the files that came from bifold.
 - **D9. The Node services stay in the one workspace.** `witness-server`, `mediator-server`, `vrc-reference` and `vrc-shared` join the root workspace like every other package. They move to a `services/` tree with their own install only if hoisting their dependencies (`@credo-ts/node`, askar-nodejs, express) is shown to pollute the mobile tree.
 
 ---
 
-## 5. Phases
+## 4. Phases
 
-Each phase ends with its acceptance criteria met on a Test build and on CI, and is one PR in the stack on `feat/one-codebase` (D2). Phases 1 and 2 are the fold; 3 is cleanup; 4 is optional. When Phase 3's PR has merged into the integration branch and the whole ladder in §6.1 has passed on its tip, one PR takes `feat/one-codebase` to `main`.
+Each phase ends with its acceptance criteria met on a Test build and on CI, and is one PR in the stack on `feat/one-codebase` (D2). Phases 1 and 2 are the fold; 3 is cleanup; 4 is optional. When Phase 3's PR has merged into the integration branch and the whole ladder in §5.1 has passed on its tip, one PR takes `feat/one-codebase` to `main`.
 
 ### Phase 0. Freeze and prepare
 
-- All other work on the framework is paused except the DIDComm v2 migration (done 2026-11-20). Bifold `main` is frozen to everything but that workstream, and each of its merges after the cut is replayed into the fold branch (§8).
+- All other work on the framework is paused except the DIDComm v2 migration (done 2026-11-20). Bifold `main` is frozen to everything but that workstream, and each of its merges after the cut is replayed into the fold branch (§7).
 - Record the cut: wallet `main` sha, bifold sha, the current native fingerprint of both platforms from a `test-builds.yml` run of that sha (`scripts/ota/record-fingerprint.sh`), and the sizes of the release JS bundles.
-- Store **280 against 279**, read from the staging runs' `ota-fingerprint` artifacts: iOS fingerprints **differ** (one source, `AppDelegate.mm`, #950); Android fingerprints are **identical**. 280 phones never take 279.x bundles regardless, because a store build stamps a build-time `MIN_BUNDLE_ID` (280's is later than 279.8). So a kept 280 line needs its own OTA line from `staging-v0.2.0-280`, and the Android floor rule in §6.3 applies.
-- Record `tier.mjs`'s grades for the last real OTA cut ranges (`hotfix/279-ota-1..8`, `-90`, 279→280) and for `staging-v0.2.0-280..<wallet cut>`, as the fixture for Phase 1's "byte-identical grades" criterion. *Done 2026-11-21 for the first ten: all nine 279 cuts grade `ota-strict`, 279→280 grades `store`; the 280→cut range is graded when the cut is taken.*
-- Rehearse D1's mechanics on a throwaway GitHub repository carrying a copy of the "Main" ruleset and `commit-checks.yml`: push the filter-repo'd history to `history/bifold`; open a PR straight from the integration branch and watch the commit check fail (the negative case); open the PR from the one-commit `fold/*` branch (§5, Phase 3), watch it pass, squash-merge it, and confirm `main` holds one GitHub-verified commit whose `bifold/` tree is the bifold cut's. *Done 2026-11-21 at a5bfcf3b2, all four outcomes as predicted (companion §3a); redone at the real cut, which takes a second.*
+- Store **280 against 279**, read from the staging runs' `ota-fingerprint` artifacts: iOS fingerprints **differ** (one source, `AppDelegate.mm`, #950); Android fingerprints are **identical**. 280 phones never take 279.x bundles regardless, because a store build stamps a build-time `MIN_BUNDLE_ID` (280's is later than 279.8). So a kept 280 line needs its own OTA line from `staging-v0.2.0-280`, and the Android floor rule in §5.3 applies.
+- Record `tier.mjs`'s grades for the last real OTA cut ranges (`hotfix/279-ota-1..8`, `-90`, 279→280) and for `staging-v0.2.0-280..<wallet cut>`, as the fixture for Phase 1's "byte-identical grades" criterion. *Recorded in the [companion](single-codebase-plan/2026-11-20-al.md) §2.6 for the first ten: all nine 279 cuts grade `ota-strict`, 279→280 grades `store`; the 280→cut range is graded when the cut is taken.*
+- Rehearse D1's mechanics on a throwaway GitHub repository carrying a copy of the "Main" ruleset and `commit-checks.yml`: push the filter-repo'd history to `history/bifold`; open a PR straight from the integration branch and watch the commit check fail (the negative case); open the PR from the one-commit `fold/*` branch (this plan's §4, Phase 3), watch it pass, squash-merge it, and confirm `main` holds one GitHub-verified commit whose `bifold/` tree is the bifold cut's. *Recorded in the [companion](single-codebase-plan/2026-11-20-al.md) §3a at a5bfcf3b2, all four outcomes as predicted; redone at the real cut, which takes a second.*
+- Rehearse the replay recipe of §7.1 on the same throwaway repository, whose `bifold/` tree is a5bfcf3b2's. The first two bifold merges after that sha are #1163 (`bdac5e5a0`, wallet-to-wallet DIDComm v2 through one mailbox per phone) and #1164 (`87805b240`), each a single-parent commit. In the bifold clone run `git format-patch -1 <sha> -o <dir>` for each; apply #1163 with the Phase 1 form (`git am -p2 --directory=bifold/packages`); then `git mv bifold/packages packages`, commit, and apply #1164 with the Phase 2 form (`git am -p2 --directory=packages`). *Acceptance:* both apply with no `--3way` and no hand edit; `git patch-id --stable` of each replayed commit equals the original's; every file the two patches touch has the same content as in bifold at `87805b240` (`git show 87805b240:<path>` against the folded path); and the back-port direction works in the same session: one wallet commit that edits a file under `bifold/packages/core` applies to a bifold checkout with `git am -p2`, and the same edit after the move with a plain `git am` (§5.3). The commands and their output go in the companion.
+- **Optional experiment: does the path change alone move the fingerprint?** On a scratch branch from the wallet cut, not `feat/one-codebase`, copy `bifold/packages/react-native-attestation` and `bifold/packages/react-native-locality-peripheral` to `packages/` in the working tree (a plain copy; no other change), point the four matching `extraSources` entries in `app/hot-updater.config.ts` at the copies, and record each platform with `scripts/ota/record-fingerprint.sh <ios|android> <out>` (iOS needs `pod install` first; do Android first). Then `node scripts/ota/fingerprint-report.mjs --diff <phase0>/fingerprint.json <out>/fingerprint.json`. Check in `fingerprint.json`'s source list that the new paths appear and the old ones do not. *Result:* identical means the path change alone does not move the fingerprint, so §5.3's store-build boundary is needed only if Phase 2's other changes move it; different, with the sources named, confirms the boundary for the path change. It is optional and changes no decision: retiring the 279/280 lines is already decided (§5.3). Record the outcome in the companion; the scratch branch is not carried forward.
 - Make disk room (§11). The fold worktree needs an install (about 12 GB); do it after the nightly finishes, or after the product owner names the stale worktrees to remove.
 
-*Done when:* the cut shas, both fold fingerprints, 280-vs-279, and the ten tier grades are recorded in the companion; the rehearsal passed; and the fold branch `feat/one-codebase` exists at the wallet cut sha in its own worktree.
+*Done when:* the cut shas, both fold fingerprints, 280-vs-279, and the ten tier grades are recorded in the companion; the rehearsal and the replay rehearsal passed and are recorded; and the fold branch `feat/one-codebase` exists at the wallet cut sha in its own worktree.
 
 ### Phase 1. Same paths, one repository
 
@@ -182,18 +225,23 @@ Then, as a second commit on the fold branch, the minimum wiring change:
 - `scripts/release/tier.mjs`: the `bifold@` "pin moved" rule and the submodule-range read (`pinAt`, `bifoldDirOf`) become dead; replace with a plain `git diff --name-only` of the range. Path regexes are unchanged in this phase, and **its grades must stay byte-identical**: the standing rule that lets a plain `ota`-graded fix ship over the air depends on them. The known name-rule defect (an in-memory `.delete()` graded `store`) is not fixed here; it stays its own PR.
 - `packages/core`'s testids generator (`bifold/packages/core/scripts/gen-testids.mjs`, run by `yarn testids` in core) and manifest (`bifold/packages/core/testids.json`) stay where they are in this phase. `quality.yml`'s testids step runs `node bifold/packages/core/scripts/gen-testids.mjs --check` and `e2e/scripts/check-testids.mjs` against the tree instead of the pin, and both must report the manifest unchanged.
 - `app/scripts/ota-deploy.mjs` (`HEAD:bifold`), `e2e/scripts/sync-testids.sh` (`rev-parse :bifold`), `scripts/ota/post-release.mjs` (fetches bifold history for the changed-screens list), `scripts/ota/ota-carried-check.sh` (follows the pin): each reads the tree directly.
+- The gate's change detection reads the gitlink and hard-codes bifold roots: `e2e/gate/changed.mjs` (`rev-parse <rev>:bifold`, `git -C bifold diff <pinA> <pinB>` through `BIFOLD_GIT`, the manifest root `bifold/packages/core/`), `e2e/gate/linkTrigger.mjs` (the same range read), `e2e/gate/repro.mjs` (`bifold/packages/core/…` path rules and the manifest root), their three `.test.mjs` files (fixtures with `bifold/packages/…` paths and a `--pin` argument), `e2e/gate/run-summary.mjs` (an ancestry check through `BIFOLD_GIT` or `./bifold/.git`) and `e2e/gate/ci/ota-ctl.sh` (`BIFOLD_GIT="$PWD/../bifold"`). After the fold `bifold` is a tree and `git -C bifold` resolves to the wallet repository itself, so they read pins and ranges that no longer mean what the code assumes, and their fixture tests, which never run against a folded tree, still pass. Each reads the wallet range only (the `bifold/…` paths arrive in the same diff), the pin and `BIFOLD_GIT` reads are removed, and each test file gains a case whose range crosses the fold commit. The `bifold=` field the gate scripts carry from the build manifest (`CAND_BIFOLD` in `gate.sh`, `lib.sh`, `legs/*`, `gate-ci.yml`) keeps working while the manifest names one; Phase 2 drops it.
+- `scripts/ci/js-only.mjs` and its test classify the pin: `classifyWalletPath('bifold')` returns `none` ("submodule pin, judged file by file"), `objectAt(repo, commit, 'bifold')` reads the gitlink and `--bifold-repo` names the second repository; its own comment says an unrecognised path is `native`. After the fold nothing is a pin, and every path under `bifold/` falls to the default unless a rule names it. Rules and tests for `bifold/packages/*/src/**` (`js`) and `bifold/packages/*/{ios,android}/**` and the native modules (`native`) replace the pin rule, and Phase 2 repeats them for `packages/`. `scripts/ci/js-swap.sh` prints `git -C $REPO/bifold rev-parse HEAD` in its `heads` line (the wallet's own HEAD after the fold; use `git rev-parse HEAD:bifold` or drop it); its two library builds stay until Phase 2 (§4, Phase 2).
+- Workflow steps that read the pin or the submodule's own repository, beyond `submodules: true`: `test-builds.yml` runs `git -C bifold rev-parse --short=8 HEAD` (artifact names; it prints the wallet's HEAD after the fold, so use `git rev-parse --short=8 HEAD:bifold` until Phase 2 drops the field), hashes `bifold/packages/react-native-attestation/{ios,android}` for its `native` id, and triggers on the path `bifold` (a gitlink path that never changes again; replace it with `bifold/packages/react-native-*/**` and `bifold/packages/*/package.json`); `staging.yaml` fetches `$OLD_PIN` and `$NEW_PIN` into `bifold` for the release notes (the notes then read one range); `post-release.yml` runs `git -C bifold fetch`; `brake-watchdog.yml` runs `git submodule update --init --depth 1 bifold` and builds bifold.
 - `CLAUDE.md`: the submodule paragraph, the `Signed-off-by` rule (D8) and the "four entries for a new package" rule.
+- `bifold/.githooks/{commit-msg,pre-commit}` and `core.hooksPath`: `ensure-bifold-ready.js` no longer sets the hooks path; the root `.husky` hooks are the only ones, and the files under `bifold/.githooks` go with the other bifold root files in Phase 2.
 - `bifold/.github/workflows/*`: deleted with a note in the commit (GitHub reads only the root `.github/`, so they are inert, but they mislead). Their jobs are ported in Phase 3.
 
 *Done when:*
 - `yarn install` from a fresh clone works without any `git submodule` command, and `node scripts/verify-bifold-linking.js` passes.
 - `yarn lint`, `yarn typecheck`, `yarn test` (app) and `cd bifold/packages/core && yarn test` are green locally and in CI.
 - `test-builds.yml` produces an iOS simulator app and an Android APK; `e2e:smoke` and `e2e:vrc` pass against them.
-- The native fingerprint of both platforms equals the Phase 0 record (§6.3).
+- The native fingerprint of both platforms equals the Phase 0 record (§5.3).
 - `tier.mjs` grades the ten Phase 0 fixture ranges byte-identically (`tier.test.mjs` gains them as fixtures).
 - The testids manifest check and `e2e/lib/testids.json` sync both pass with the manifest unchanged.
+- `node e2e/gate/changed.mjs` and `e2e/gate/linkTrigger.mjs`, given a range that crosses the fold commit and with `BIFOLD_GIT` unset, list the files that range changes (including a `bifold/packages/core/src/…` file), and their tests include that range; `scripts/ci/js-only.mjs` classifies the same files and a `bifold/packages/react-native-attestation/ios/…` file as `js` and `native` respectively; `test-builds.yml` runs a step that names no `git -C bifold`.
 - `git log origin/history/bifold -- bifold/packages/core/src/modules/vrc/vrc-manager.ts` shows bifold history from any clone; with the graft fetched, `git log --follow` from `main` crosses the fold.
-- Every open bifold PR's patch still applies with `git am` unchanged (the paths did not move).
+- Every open bifold PR's patch applies with the Phase 1 form of §7.1 (`git am -p2 --directory=bifold/packages`): bifold's patches name `a/packages/core/…`, and the fold adds one path prefix.
 - The Phase 1 PR merges into `feat/one-codebase` on review clearance; it does not touch `main`.
 
 ### Phase 2. One dependency tree, paths without the prefix
@@ -207,7 +255,7 @@ git mv bifold/eslint-rules eslint-rules            # require-testid rule, used b
 git mv bifold/__mocks__ packages/__mocks__          # shared jest mocks
 # bifold/tsconfig-base.json is merged into the root tsconfig-base.json (the app already extends one)
 # bifold/{README,CONTRIBUTING,PATCH_NOTES,CODE_OF_CONDUCT,CONTRIBUTORS,HISTORICAL_CONTRIBUTORS}.md → docs/bifold-origin/
-# bifold/{package.json,yarn.lock,package-lock.json,noop,samples,docs/images,scripts} → removed; they are in history
+# bifold/{package.json,yarn.lock,package-lock.json,noop,samples,docs/images,scripts,.githooks} → removed; they are in history
 ```
 
 Bifold's shared root files (`eslint-rules/`, `__mocks__/`) go to the repository root, since more than one package uses them. Upstream Bifold leftovers (`samples/`, `docs/images`, the unused `package-lock.json`, the upstream workflows) are dropped here rather than kept for a later cleanup; they remain in `history/bifold`.
@@ -221,30 +269,34 @@ Bifold's shared root files (`eslint-rules/`, `__mocks__/`) go to the repository 
 - `app/metro.config.js`: `watchFolders` = repo root; `packageDirs`/`BIFOLD_SOURCE_PACKAGES` removed (a workspace package resolves through the root `node_modules` symlink, and its `main` is source). The `singletonPrefixes` list stays: it guards against the few nested copies that remain under `@credo-ts/*` (class-transformer, askar-shared).
 - `app/tsconfig.json`: drop the three `@bifold/*` path redirects; `@openvtc/trust-tasks` paths move to `node_modules/…`.
 - `app/jest.config.js`: drop every `moduleNameMapper` line whose comment cites the second `node_modules`; keep `class-transformer`, `@openvtc/*` (ESM exports map), file/style mocks, `react-i18next`, and the expo mocks (now `<rootDir>/../packages/core/__mocks__/…`). `app/jestSetup.js:54`'s path to `refreshOrchestrator` updates.
-- `app/hot-updater.config.ts`: `extraSources` paths `../bifold/packages/…` → `../packages/…`. **This is the fingerprint risk** (§6.3).
+- `app/hot-updater.config.ts`: `extraSources` paths `../bifold/packages/…` → `../packages/…`. **This is the fingerprint risk** (§5.3).
 - `scripts/release/tier.mjs`: every `bifold\/packages\/` becomes `packages\/`; the `bifold/` dotfile and lockfile rules go; `tier.test.mjs` fixtures follow.
 - `e2e/scripts/sync-testids.sh`: reads `packages/core/testids.json`. `quality.yml`'s testids check follows.
 - `.github/workflows/*`: no `cd bifold`; one `yarn install --immutable`; `test-builds.yml` artifact names drop the bifold sha (and every consumer of that name: `scripts/ci/download-artifact.mjs`, gate scripts, `post-release.mjs`, `strict-proof.mjs`).
 - `.github/workflows/staging-witness.yaml` and the hosts it deploys to: `bifold/packages/witness-server` → `packages/witness-server` on the server checkout.
 - `deploy/*`, `scripts/openvtc/*`, `e2e/gate/*`, `docs/*`: path mentions (67 plan files mention `bifold/packages`; those are history and stay, with one note at the top of `docs/plans/README.md`).
+- Paths and build assumptions beyond the files above: `e2e/lib/verifier.js` imports `../../bifold/node_modules/{@credo-ts/*,@openwallet-foundation/askar-nodejs}` and `../../bifold/packages/trust-tasks/build/index.js`; `e2e/lib/witness.js` and `scripts/mediator-lifecycle.js` start `bifold/packages/{witness,mediator}-server`; `scripts/quickstart.sh` tests for `bifold/packages`; `scripts/openvtc/card-verify/check-keyring-card.sh` and `gen-approvals-fixtures.sh` default to `$ROOT/bifold` (`BIFOLD_DIR`); `e2e/scripts/build-testflight-{android,sim}.sh` and `scripts/ci/js-swap.sh` build `trust-tasks` (and `js-swap.sh` builds `core` with `bob build`) before bundling; `.github/workflows/staging.yaml` checks `bifold/packages/react-native-attestation/…` files directly, runs `find bifold/node_modules` and `rm -rf bifold/packages/*/{lib,build}` and builds in `bifold`; `brake-watchdog.yml` and `gate-ota.yml` build in `bifold`; `app/eslint.config.mjs` ignores `'bifold/**/*'`. Comment-only mentions (`app/.env.sample`, `app/declarations.d.ts`, `e2e/run-plain-build-smoke.js`, `e2e/lib/flows.js`) follow the paths. `scripts/verify-bifold-linking.js` checks the `portal:` wiring that no longer exists; it is rewritten to check workspace links or retired, with its uses in Phase 1's criteria and `gate-ota.yml`. `app/container-compose.ts` and `app/container-imp.ts` need no path change: they import `@bifold/core`, `@bifold/verifier` and `@bifold/oca/build/legacy` (covered above).
+- **Node consumers of packages that D4 moves to `src/index.ts`.** `witness-server` depends on `@bifold/{credo-tsp-adapter,dtg-vocab,trust-tasks,vrc-contexts,vrc-shared}`, `vrc-reference` on the same family, and `e2e/lib/verifier.js` and the two `build-testflight-*.sh` scripts load or build `trust-tasks`' `build/`; `trust-tasks` is neutral between React Native and Node (§2). A plain Node process cannot import `src/index.ts`, so Phase 2 settles it per package: a package a Node consumer loads keeps a `build` and a `main` that points at it, with Metro's `resolverMainFields` (or an `exports` condition) choosing `src` for the bundle, and the rest move to `src/index.ts`. *Acceptance:* each Node service's `yarn build` and `yarn test`, `e2e/lib/verifier.js` and `scripts/mediator-lifecycle.js` run from the folded tree, and the release bundle names each package once (the hoisting check above).
+- **Inter-package ranges.** `@bifold/remote-logs` depends on `@bifold/core` `3.0.16`, and `core` on `@bifold/oca`, `react-hooks`, `react-native-attestation` and `verifier` at `3.0.16`, not `workspace:*`; they resolve to the workspace package only while the versions match. Phase 2 sets them to `workspace:*`. *Acceptance:* `yarn why @bifold/core` and `yarn why @bifold/oca` list the workspace path only.
 
 *Done when:*
 - Everything in Phase 1's list, on the new paths.
 - `du -sh node_modules app/node_modules` shows no `bifold/node_modules`, and `find . -name yarn.lock -not -path '*/node_modules/*'` finds one file.
 - `yarn workspaces list` shows `app` and every package; `yarn test` at the root runs the app's and each package's `test` script (a root script using `yarn workspaces foreach --topological run test`).
-- Release bundle sizes for both platforms are within 0.5 % of the Phase 0 record, and the e2e suites in §6.1 pass on Test builds.
-- The native fingerprint equals the Phase 0 record **or** the §6.3 rule is in force and recorded.
+- Release bundle sizes for both platforms are within 0.5 % of the Phase 0 record, and the e2e suites in §5.1 pass on Test builds.
+- The native fingerprint equals the Phase 0 record **or** the §5.3 rule is in force and recorded.
 - `tier.mjs` grades the ten fixture ranges identically after the path rewrite (the fixtures' paths are rewritten `bifold/packages/` → `packages/`, nothing else).
 - `node packages/core/scripts/gen-testids.mjs --check` and `e2e/scripts/sync-testids.sh` (now reading `packages/core/testids.json`) pass with the manifest unchanged.
-- **The OTA cut tooling works on the folded tree** (§6.3): a rehearsal cut on a `test/ota-*` branch from the integration branch grades, builds and publishes to the throwaway channel in `gate-ota.yml`. A Phase 2 exit criterion, because the first post-fold OTA cannot wait for Phase 3.
+- **The OTA cut tooling works on the folded tree** (§5.3): a rehearsal cut on a `test/ota-*` branch from the integration branch grades, builds and publishes to the throwaway channel in `gate-ota.yml`. A Phase 2 exit criterion, because the first post-fold OTA cannot wait for Phase 3.
 - **The nightly gate runs on the folded tree**: the gate's scripts and `gate-ci.yml`, `gate-ota.yml`, `gate-smoke.yml` read paths, not the pin, and one nightly passes from the Mac mini. Until it passes, the nightly stays on `release/253` or `release/254`.
 - `git log origin/history/bifold -- bifold/packages/core/src/modules/vrc/vrc-manager.ts` still reaches bifold history; the Phase 2 move is an ordinary rename, so `git log --follow` crosses it back to the Phase 1 merge.
+- `git grep -n 'bifold' scripts .github e2e deploy app` lists only intentional hits: `@bifold/*` package names and imports, `AriesBifold` project names, and "bifold" as the framework's name in prose and identifiers (`bifoldContainer`). `git grep -nE '(^|[^@a-zA-Z])bifold/|:bifold|-C bifold|BIFOLD_GIT|CAND_BIFOLD|submodule' scripts .github e2e deploy app` returns nothing except lines recorded as deliberate in the companion (for example a note on the archived repository). On the Phase 1 tree the same grep is the work list for Phase 2; every hit named in Phase 1 and Phase 2 above is in it.
 - The Phase 2 PR merges into `feat/one-codebase` on review clearance; it does not touch `main`.
 
 ### Phase 3. One CI, one convention, cleanup
 
-- Port bifold's CI, read at bifold `origin/main` on 2026-11-21 (the ten workflows there, by job name):
-  - `quality.yaml`: "Linting and formatter" (lint and prettier on changed files, the testids extractor test, `gen-testids.mjs --check`), "Testing part 1/4" to "4/4" (core's jest in four parts), "Testing" (the gate that joins them), "Testing scope · <scope>" (the scoped-subset logic, which **does not** carry over: §6.1), and "Type check (ratchet)". Into the wallet's `quality.yml` as jobs; the wallet's own "Lint+Format+Types" and "Testing" absorb or sit beside them, and the ruleset's required checks are renamed to match.
+- Port bifold's CI, read at bifold `origin/main` on 2026-11-20 (the ten workflows there, by job name):
+  - `quality.yaml`: "Linting and formatter" (lint and prettier on changed files, the testids extractor test, `gen-testids.mjs --check`), "Testing part 1/4" to "4/4" (core's jest in four parts), "Testing" (the gate that joins them), "Testing scope · <scope>" (the scoped-subset logic, which **does not** carry over: §5.1), and "Type check (ratchet)". Into the wallet's `quality.yml` as jobs; the wallet's own "Lint+Format+Types" and "Testing" absorb or sit beside them, and the ruleset's required checks are renamed to match.
   - `full-tests.yaml` ("Jest part (N)", "Full suite"; push to main, schedule, dispatch): the unscoped run that review waits on. Becomes the wallet PR's Testing job (every PR, full suite) plus the scheduled run.
   - `targeted-jest.yaml` ("Targeted jest", dispatch): ported as is.
   - `vti-conformance.yaml` ("VTI SDK accepts Keyring's card and statement"): ported as a job; it already checks out the wallet to build `card-verify`, now it runs in place.
@@ -255,8 +307,8 @@ Bifold's shared root files (`eslint-rules/`, `__mocks__/`) go to the repository 
 - `deps-cache.yml`: one cache key.
 - Repository secrets and variables: bifold's `quality.yaml` references `secrets.CODECOV_TOKEN`, but the only repository secret listed on `keyring-bifold` is `ROADMAP_TOKEN` and the wallet lists no codecov secret either, so the token is an organisation or environment secret, or unset; check which before asking the product owner for anything. Neither repository has a `dependabot.yml`; dependabot's bifold PRs were GitHub defaults and simply stop.
 - Commit conventions: one `commitlint` config (D8). `commit-checks.yml` (GitHub signature verification) is unchanged.
-- `keyring-bifold` stays writable for OTA cuts on the 279/280 lines until the first folded store build is published (§6.3), then is archived (read-only). Its open PRs: ready ones merge before the cut if reviewed; drafts older than 30 days close with a pointer to this plan; anything else is re-landed by its author with the `git am` recipe in §8.1. Dependabot PRs are closed.
-- `UPGRADE_PROGRESS.md` §2 and §4, `README.md`, `CONTRIBUTING.md`, `RELEASE.md`, `CLAUDE.md`, `e2e/README.md`: say the new shape. The `openvtc-workspace` and `vti-lab-and-field` skills get one correction each.
+- `keyring-bifold` stays writable for OTA cuts on the 279/280 lines until the first folded store build is published (§5.3), then is archived (read-only), with its README and description pointing to this repository and this plan. Its open PRs: ready ones merge before the cut if reviewed; drafts older than 30 days close with a pointer to this plan; anything else is re-landed by its author with the `git am` recipe in §7.1. Dependabot PRs are closed.
+- `UPGRADE_PROGRESS.md` §2 and §4, `README.md`, `CONTRIBUTING.md`, `RELEASE.md`, `CLAUDE.md`, `e2e/README.md`: say the new shape. `CLAUDE.md` also gains the blame-graft step as one line, `git fetch origin 'refs/replace/*:refs/replace/*'`, which stitches `git blame` and `git log --follow` across the fold in a clone that fetches it (the graft ref is pushed once after the merge; D1). The `openvtc-workspace` and `vti-lab-and-field` skills get one correction each.
 - Remaining tooling that assumes a gitlink (the OTA cut tools and the gate scripts are Phase 2 exit criteria): the roadmap comparison script's repository mapping, the roadmap sync's card source, the board's "pin" vocabulary. Each owner fixes their own.
 
 *Done when:* a PR that changes a file in `packages/core` and a file in `app/` gets one CI run that lints, type-checks and tests both, and the gate's nightly run (`gate.sh`) passes on the integration branch's tip from the Mac mini.
@@ -269,21 +321,21 @@ sha=$(git commit-tree -S -p origin/main -m "$(cat fold-message.txt)" "$tip^{tree
 git branch fold/one-codebase "$sha" && git push -u origin fold/one-codebase
 ```
 
-Review clears it by `git rev-parse fold/one-codebase^{tree}` = `git rev-parse feat/one-codebase^{tree}` plus the three stacked PRs' clearances, which the PR description lists. It merges by squash (`--match-head-commit`) on the product owner's word, after the full §6.1 ladder on that tree. The commit message names the bifold sha, `history/bifold`, `feat/one-codebase` and the graft recipe.
+Review clears it by `git rev-parse fold/one-codebase^{tree}` = `git rev-parse feat/one-codebase^{tree}` plus the three stacked PRs' clearances, which the PR description lists. It merges by squash (`--match-head-commit`) on the product owner's word, after the full §5.1 ladder on that tree. The commit message names the bifold sha, `history/bifold`, `feat/one-codebase` and the graft recipe.
 
 ### Phase 4. Optional, each its own plan
 
 Listed so they are not forgotten; none is decided.
 
 - Rename `@bifold/*` → `@keyring/*` (mechanical; ~100 app import sites, thousands in core; one `sed`, one PR).
-- Merge `packages/core` and `app/` into one package, or move `app/src/keyring-theme` and screens the framework does not need out of core. Depends on the SDK packaging plan's outcome.
+- Merging `packages/core` into `app/` is dropped from Phase 4 (decided 2026-11-20, BAM, on the 2026-11-08 evaluation's evidence). Evidence (measured 2026-11-08): the app uses core only through its public API, with no import into `src/` internals; the seam is the tsyringe container (`app/container-compose.ts`, `app/src/demo-profiles/starter/StarterContainer.ts`) that demo profiles build on; `@bifold/remote-logs` depends on `@bifold/core` (`src/logger.ts`), so core inside the app would make it depend on the app; the `trust-tasks` and `vrc-contexts` suites run under core's jest setup; core's `src` is about 285,000 lines against the app's 20,000. Folding would move about 1,450 files and rewrite every import to save one `portal:` resolution, one `BIFOLD_SOURCE_PACKAGES` entry and one `packageDirs` entry, all of which Phase 2 already removes (D6). Moving `app/src/keyring-theme` and screens the framework does not need out of core is a separate question and stays optional; it depends on the SDK packaging plan's outcome.
 - Move the Node services to `services/` with their own install, if their dependencies prove to pollute the mobile tree (D9).
 
 ---
 
-## 6. What must keep working, and how we prove it
+## 5. What must keep working, and how we prove it
 
-### 6.1 The test ladder (run at the end of Phase 1 and again after Phase 2)
+### 5.1 The test ladder (run at the end of Phase 1 and again after Phase 2)
 
 | Rung | What | Where |
 |---|---|---|
@@ -297,29 +349,29 @@ Listed so they are not forgotten; none is decided.
 | 8 | `gate-ota.yml`: a throwaway OTA served to a Release APK built from the folded tree | CI |
 | 9 | A hands-on install on the product owner's phone | attended |
 
-Rungs 1 to 4 gate each PR; 5 to 9 gate the store build (§6.3).
+Rungs 1 to 4 gate each PR; 5 to 9 gate the store build (§5.3).
 
 **The gate's shape changes with the fold.** Today a bifold PR runs a scoped subset of core's suites, only a push to bifold `main` runs the full suite, and a wallet `main` push runs no jest at all. Once core lives in the wallet, the wallet PR's Testing job runs the full suite (app and every package), split into parts as bifold's CI does today. Whoever ports the workflows must not carry the old scoping rule across.
 
 **Review shape.** Pure moves and edits are separate commits (Phase 1: the history merge, then one wiring commit; Phase 2: commit A moves, commit B wires). A move is cleared by hashing both sides per file (`git show <base>:<old> | shasum` against `git show <head>:<new> | shasum`), so a move that also edits must name its edits in the PR description.
 
-### 6.2 CI and bundling
+### 5.2 CI and bundling
 
 - Metro: the only behaviour change is that `watchFolders` is the repo root and `@bifold/*` resolve to source in every mode (D4). Hermes bytecode, the RN CLI bundle command and `hot-updater`'s `bare()` build are untouched.
 - Node: `engines` stay `>=20.19.2 <21`, Yarn 4.9.2 via corepack. The Node services' builds (`tsc` to `dist/`) are untouched, and their Docker contexts move one directory up.
 - Native: `react-native-attestation` and `react-native-locality-peripheral` autolink through the `node_modules/@bifold/*` symlink exactly as the `portal:` symlink does today; `pod install` and Gradle see the same podspec and `build.gradle`. No native source changes.
 - Patches: `patch:` protocol patches live in one `.yarn/patches`; `app/patches` (patch-package) is unchanged.
 
-### 6.3 OTA deployments and the transition
+### 5.3 OTA deployments and the transition
 
 A phone accepts an OTA bundle only when its native fingerprint matches (`updateStrategy: 'fingerprint'`). `hot-updater` hashes the files `extraSources` lists, by content and by path. Moving `../bifold/packages/react-native-attestation/ios` to `../packages/react-native-attestation/ios` may change the hash even though no byte of native code changed.
 
 Rule: **the fold is a store-build boundary.**
 
 - Store builds 279 (`release/253`) and 280 (`release/254`) and their OTA lines `hotfix/279-ota-N`, `hotfix/280-ota-N` stay on the old structure. A fix for those users is cut as today: a bifold commit on the bifold repository (still writable until then), a pin bump on the hotfix branch, `tier.mjs` as it is on that branch. The current cut tools serve those lines only.
-- The first store build from the folded tree is **281** (or the next number after any Friday build shipped from today's structure in the meantime, §11a). Its fingerprint is whatever Phase 2 produces; `ota-fingerprint.yml` records it, and every later OTA targets it and its successors.
-- **The 279/280 OTA lines are retired when the first folded store build is published**, and active users are asked to update: the user base is small and the product owner has chosen this over keeping two toolchains alive. Until then, a fix needed on both sides is made on `main` and back-ported with `git format-patch` + `git am -p3 --directory=bifold/packages` (Phase 1 paths) or `-p2 --directory=packages` (Phase 2 paths) onto the bifold repository. The back-port recipe is kept after retirement but is expected never to be used.
-- **A post-fold OTA cut is a different thing from today's.** Today a cut is a gitlink-only commit on `hotfix/279-ota-N`, built on the previous cut, and `tier.mjs --range` reads the submodule's own range. From the first folded store build on, a cut is a cherry-pick of real file changes onto its `hotfix/<build>-ota-N` branch, so `tier.mjs` grades a cherry-picked range on a hotfix branch (the base is the last store tag, the tip the cut, as its `a..b` rule already says), and the OTA cut tooling is reworked **before the first post-fold OTA**. That rework is a Phase 2 exit criterion (§5), rehearsed through `gate-ota.yml` on a `test/ota-*` branch. What reads the gitlink today:
+- The first store build from the folded tree is **281** (or the next number after any Friday build shipped from today's structure in the meantime, §12). Its fingerprint is whatever Phase 2 produces; `ota-fingerprint.yml` records it, and every later OTA targets it and its successors.
+- **The 279/280 OTA lines are retired when the first folded store build is published**, and active users are asked to update: the user base is small and the product owner has chosen this over keeping two toolchains alive. Until then, a fix needed on both sides is made on `main` and back-ported onto the bifold repository with `git format-patch -1 <sha> -- <packages path>` from the wallet and `git am`: with Phase 1 paths the patch reads `a/bifold/packages/core/…`, so `git am -p2` and no `--directory`; with Phase 2 paths it reads `a/packages/core/…`, so a plain `git am` (`-p2 --directory=packages` is equivalent). The pathspec keeps hunks outside `packages/` (the app, CI) out of a patch the bifold repository cannot take. The back-port recipe is kept after retirement but is expected never to be used.
+- **A post-fold OTA cut is a different thing from today's.** Today a cut is a gitlink-only commit on `hotfix/279-ota-N`, built on the previous cut, and `tier.mjs --range` reads the submodule's own range. From the first folded store build on, a cut is a cherry-pick of real file changes onto its `hotfix/<build>-ota-N` branch, so `tier.mjs` grades a cherry-picked range on a hotfix branch (the base is the last store tag, the tip the cut, as its `a..b` rule already says), and the OTA cut tooling is reworked **before the first post-fold OTA**. That rework is a Phase 2 exit criterion (§4), rehearsed through `gate-ota.yml` on a `test/ota-*` branch. What reads the gitlink today:
   - the cut scripts: the gitlink `update-index`, displacement against the bifold pin, switch reads at `<pin>:packages/core/…`, the bifold signature API, the testids copy into `e2e/lib/testids.json`, and the script that waits for a bifold sha;
   - `scripts/release/tier.mjs` (`BIFOLD_GIT`, 37 references; without the submodule expansion a gitlink grades a false `store`);
   - `ota-publish.yml` and `ota-fingerprint.yml` (`submodules: true`, "Build bifold packages");
@@ -331,24 +383,27 @@ Check, in Phase 0 and at the end of each phase: `node scripts/ota/fingerprint-re
 
 `tier.mjs` after Phase 2 grades `packages/<rn-package>/src/**` as `ota` and `packages/{react-native-attestation,react-native-locality-peripheral}/**` and `packages/*/{ios,android}/**` as `store`, as it does for the `bifold/` paths today. The `none` rule for `witness-server|mediator-server|vrc-reference|vrc-shared` keeps the Node services out of the tier.
 
-### 6.4 Screens, theme, layout, navigation, notifications
+### 5.4 Screens, theme, layout, navigation, notifications
 
-No file under `app/src`, `packages/core/src` or any other `src/` changes in Phases 1 to 3, apart from import paths that name a file by its `bifold/` location (there are two: `app/jestSetup.js:54` and `app/__mocks__/@bifold/remote-logs.ts`'s neighbours, both test-only). The theme (`app/src/keyring-theme`), navigation (`@react-navigation/*` versions resolve from the one tree), push (`app/src/push`, `@react-native-firebase/messaging`, the gateway in `deploy/keyring-messaging`), and the VtiMediatorTransport family are therefore unchanged by construction. The proof is rungs 5 and 9 of §6.1, and the bundle-size check: a hoisting change that silently swapped a dependency version would show as a size change and as an e2e failure.
+No file under `app/src`, `packages/core/src` or any other `src/` changes in Phases 1 to 3, apart from import paths that name a file by its `bifold/` location (there are two: `app/jestSetup.js:54` and `app/__mocks__/@bifold/remote-logs.ts`'s neighbours, both test-only). The theme (`app/src/keyring-theme`), navigation (`@react-navigation/*` versions resolve from the one tree), push (`app/src/push`, `@react-native-firebase/messaging`, the gateway in `deploy/keyring-messaging`), and the VtiMediatorTransport family are therefore unchanged by construction. The proof is rungs 5 and 9 of §5.1, and the bundle-size check: a hoisting change that silently swapped a dependency version would show as a size change and as an e2e failure.
 
 One real risk here: **duplicate versions resolving differently after hoisting.** Today the app's `jest.config.js` pins ~40 packages to the app's copy because the bifold tree had a second copy. After Phase 2 there is one tree, but `yarn` may hoist a different version of, say, `react-native-gesture-handler` if `packages/core`'s range and `app`'s range disagree. Mitigation: before merging Phase 2, `yarn why` on every package that `app/jest.config.js` pinned, and `yarn dedupe`; align ranges in `packages/*/package.json` to the app's exact versions where they differ. Measured on 2026-11-20, only `react` differs for real (app `19.1.0`, core `~19.1.4`; the root resolution pins `19.1.0`); the companion lists the rest.
 
-### 6.5 Tests migrate with their packages
+### 5.5 Tests migrate with their packages
 
 Each package's jest config, mocks and `__tests__` move with it (`git mv`). `packages/core/jest.config.js` keeps its `moduleNameMapper` for `@bifold/oca` → `../oca/src`, now one directory shallower; its `class-transformer` and `askar-shared` singleton mappings point at the root `node_modules` with one fewer `..`. The app's jest run and core's jest run stay separate projects (different `setupFiles`), both run by the root `yarn test`.
 
 ---
 
-## 7. The old repository and the old release lines
+## 6. The old repository and the old release lines
 
 - Branches that survive every cleanup: wallet `ota/f35e8f1d-1`, `feat/web-interaction-scheme`, `feat/v2-accept-tsp-default`, `fix/wallet-folder-excluded-on-first-launch`; bifold `feat/join-link-vcalm-oob`, `feat/message-cache-on-for-279-2`, `test/ota-279-2`, `test/ota-279-3`, `feat/polls-vote-behind`; and every `hotfix/*`, `release/*`, `ota/*` and `test/ota-*` ref in both repositories.
 - `keyring-bifold` stays writable for the 279/280 OTA lines until the first folded store build is published, then is archived (read-only). Its history is never rewritten: 116 `hotfix/*`, `test/ota-*` and `release/*` refs in the wallet point at bifold shas that must stay fetchable while their bundles are served.
 - The wallet's old branches keep their gitlinks. Checking out `release/254` still needs `git submodule update --init`, as it does today. Nothing in this plan edits an old branch.
 - Local clones and worktrees of the old shape: after the merge to `main`, a `git pull` leaves a stale `bifold/` directory that is now a tracked folder in a modified state. The recipe is `git submodule deinit -f bifold; rm -rf .git/modules/bifold; git checkout main`, once per clone.
+- **The shared tree on this machine.** `brendan` and `dev` share the checkouts under `/srv/dev`, in group `devshare`, and every worktree of a clone shares one `.git/modules/bifold`. `rm -rf .git/modules/bifold` fails on a directory the other user created, and it removes the submodule's objects for every worktree of that clone, including worktrees of `release/253`, `release/254` and `hotfix/*`, which still need it (D5); do it only in a clone with no such worktree. Run the repair in `/srv/dev/CLAUDE.md` ("File permissions": `chgrp -R devshare`, `chmod -R g+rwX`, setgid on directories) on what the other user left first, use `umask 002`, and let each user run the recipe in the clone they own; check beforehand with `find <clone> ! -user "$(id -un)"`. No `sudo`.
+- **Tags and cross-repository references.** The 11 tags in `keyring-bifold` (among them `build-260-bifold`) and the bifold shas that old pins, gate evidence and `docs/` cite stay in the archived repository; `history/bifold` carries `main` only, not tags, and nothing rewrites those citations. Twelve of bifold's last 4,000 commits say `Refs berkmancenter/keyring-wallet#N` (for example #853); after the fold those point into the same repository, which is correct. Bifold's own `(#NNNN)` suffixes (up to #1164) were numbers in `keyring-bifold`; on GitHub, in the history on `history/bifold`, they link to this repository's issue or PR of the same number, so they are wrong links now and wrong targets once wallet numbers reach them. The fold commit message and `docs/bifold-origin/` say so once; no tooling reads those numbers.
+- **Clone size.** `history/bifold` adds 4,341 commits to every full clone (bifold's packs are 152 MB; the 2026-11-08 estimate of the growth was about 131 MB). CI's `actions/checkout` (depth 1) is unaffected. A clone that does not want the history uses `git clone --single-branch` or a fetch refspec that leaves out `refs/heads/history/*`.
 
 ```mermaid
 gitGraph
@@ -369,13 +424,13 @@ gitGraph
 
 ---
 
-## 8. The parallel DIDComm v2 workstream
+## 7. The parallel DIDComm v2 workstream
 
 The DIDComm v2 migration (the Affinidi mediator as the wallet-to-wallet mailbox, the VRC exchange, TSP, the witness, and every direction already covered by the existing proofs) proceeds **at the same time, in its own worktrees, with neither stream waiting on the other.** The caution in `mediator-migration-plan.md`'s staged order (M1 before M2 before M4) is relaxed: the user base is small and active users can upgrade, so there are no backwards-compatibility steps for old builds, only tests that prove the new path. The proof obligations are not relaxed.
 
-The fold also runs in its own worktree on the integration branch, so that neither stream interrupts the other; the consolidation is §8.1's cut-over step, at the one merge to `main`.
+The fold also runs in its own worktree on the integration branch, so that neither stream interrupts the other; the consolidation is §7.1's cut-over step, at the one merge to `main`.
 
-### 8.1 How the two streams meet
+### 7.1 How the two streams meet
 
 ```mermaid
 sequenceDiagram
@@ -384,7 +439,7 @@ sequenceDiagram
   participant F as integration branch feat/one-codebase
   participant M as wallet main
   V2->>BF: merges a core PR (as today)
-  BF-->>F: replay same day: git format-patch | git am -p3 --directory=bifold/packages
+  BF-->>F: replay same day: git format-patch | git am -p2 --directory=bifold/packages
   V2->>M: merges a wallet-side PR (as today)
   M-->>F: ordinary merge of main into the integration branch
   F->>M: one PR, after Phase 3: squash, one signed commit
@@ -392,27 +447,27 @@ sequenceDiagram
 ```
 
 Rules:
-- Until the integration branch merges to `main`, the v2 work proceeds as today: bifold PRs into bifold `main`, wallet PRs into wallet `main`. The integration branch replays every bifold merge the same day (`git format-patch <last-replayed>..main` in the bifold clone; `git am -p3 --directory=bifold/packages` during Phase 1, `-p2 --directory=packages` after the Phase 2 move; `-p` strips `a/packages/` or `a/bifold/packages/`; check with `git apply --check` first). The replay log lives in the companion.
+- Until the integration branch merges to `main`, the v2 work proceeds as today: bifold PRs into bifold `main`, wallet PRs into wallet `main`. The integration branch replays every bifold merge the same day (`git format-patch <last-replayed>..main` in the bifold clone; `git am -p2 --directory=bifold/packages` during Phase 1, equivalently `-p1 --directory=bifold`, and `git am -p2 --directory=packages` after the Phase 2 move, where a plain `git am` is equivalent). Bifold's patches name `a/packages/core/…`; `-p<n>` strips the first n path components and `--directory` is then prefixed, so the Phase 1 form strips `a/packages/` and writes `bifold/packages/…`, and the Phase 2 form strips `a/packages/` and writes `packages/…`. Do not use `-p3` (it strips `core/` as well) or `--directory=packages` without `-p2` (it writes `packages/packages/…`). Check with `git apply --check` and the same flags first. The replay log lives in the companion.
 - When the integration branch merges to `main`, the v2 work rebases once onto `main` and from then on edits `packages/core` directly. The old worktree is removed after that rebase is proven by its own tests.
 - Neither stream's PRs are reviewed as a condition of the other's. The integration branch never carries v2 behaviour changes of its own; a replayed patch is identical to the bifold commit by `git patch-id`.
-- Expect **deletions**, not only additions, in `trust-tasks/`: the v2 work builds wallet-to-wallet on the existing `VtiMediatorSession` family and retires `v2Routing`'s Coordinate Mediation 2.0 path and the `pickUpNow 'v4'` branch (the Affinidi mediator has no CM 2.0). `git am` handles deletions; a replay that conflicts with a Phase 2 rename is resolved by replaying before the move or by `-p2 --directory=packages` after it, never by hand-merging content.
+- Expect **deletions**, not only additions, in `trust-tasks/`: the v2 work builds wallet-to-wallet on the existing `VtiMediatorSession` family and retires `v2Routing`'s Coordinate Mediation 2.0 path and the `pickUpNow 'v4'` branch (the Affinidi mediator has no CM 2.0). `git am` handles deletions; a replay that conflicts with a Phase 2 rename is resolved by replaying before the move or with the Phase 2 form after it, never by hand-merging content.
 - The v2 stream's e2e suites (`e2e:vrc:didcomm-v2*`, `:tsp`, the Affinidi mailbox leg from `mediator-migration-plan.md` M2) are also the fold's rung 5, so one Test build from the folded tree proves both.
 
-### 8.2 Open bifold PRs at the cut
+### 7.2 Open bifold PRs at the cut
 
 Twenty PRs were open in `keyring-bifold` on 2026-11-20 (list in the companion). Ready ones merge before the cut if reviewed; drafts older than 30 days close with a pointer to this plan; anything else is re-landed by its author against the folded wallet with the `git am` recipe above. Dependabot PRs are closed.
 
 ---
 
-## 9. What this ends, and what replaces it
+## 8. What this ends, and what replaces it
 
-- **The "branch swap" upstream strategy** (`UPGRADE_PROGRESS.md` §2): bifold as a same-repo fork with shared history, so upstream commits could be cherry-picked. After the fold, an upstream `bifold-wallet` change is ported with `git format-patch` from the upstream clone and `git am --directory=packages` here; the fork point `dbfa53ef` is recorded in the companion for `git range-diff`. Upstream has moved to React 19 / RN 0.81 / expo 54 and we have followed; the remaining delta is ours (VRC, Trust Tasks, witness, attestation), so the shared-history benefit is now small. The SDK packaging plan's assumption of publishable `@bifold/*` packages from a separate repository is superseded in that respect.
+- **The "branch swap" upstream strategy** (`UPGRADE_PROGRESS.md` §2): bifold as a same-repo fork with shared history, so upstream commits could be cherry-picked. After the fold, an upstream `bifold-wallet` change is ported with `git format-patch` from the upstream clone and `git am -p2 --directory=packages` here (upstream's paths are `a/packages/core/…`; `--directory=packages` alone would write `packages/packages/…`); the fork point `dbfa53ef` is recorded in the companion for `git range-diff`. Upstream has moved to React 19 / RN 0.81 / expo 54 and we have followed; the remaining delta is ours (VRC, Trust Tasks, witness, attestation), so the shared-history benefit is now small. The SDK packaging plan's assumption of publishable `@bifold/*` packages from a separate repository is superseded in that respect.
 - **Two commit conventions**: one (D8).
 - **The pin-bump PR**: gone. The release notes, `tier.mjs --range`, the testids resync and the Test build names each read one sha.
 
 ---
 
-## 10. Out of scope, recorded so they are not re-proposed by accident
+## 9. Out of scope, recorded so they are not re-proposed by accident
 
 - Renaming `@bifold/*` (Phase 4).
 - Splitting `app/` from `packages/core` differently (Phase 4, needs its own plan).
@@ -420,10 +475,10 @@ Twenty PRs were open in `keyring-bifold` on 2026-11-20 (list in the companion). 
 - Changing the OTA server, signing keys, channels or `hot-updater` version.
 - Any change to the Node services' behaviour or deployment other than their path on the host.
 
-## 10a. Rollback
+## 10. Rollback
 
 - **Before the merge to `main`:** nothing to roll back; `main` is untouched and the integration branch can be abandoned.
-- **After the merge to `main`:** `main` holds one squash commit, so `git revert <fold-squash>` restores the submodule shape in one signed commit (the gitlink, `.gitmodules`, the `portal:` resolutions and both install scripts come back as they were; `bifold/` disappears from the tree). `history/bifold` and the integration branch stay, and the revert is itself revertible. Clones that ran the one-line recipe in §7 need `git submodule update --init` again. A revert is the response to a defect found in the first days after the merge that cannot be fixed forward within a day; a defect found after the first folded store build is fixed forward, because reverting then would re-split a tree that phones already run.
+- **After the merge to `main`:** `main` holds one squash commit, so `git revert <fold-squash>` restores the submodule shape in one signed commit (the gitlink, `.gitmodules`, the `portal:` resolutions and both install scripts come back as they were; `bifold/` disappears from the tree). `history/bifold` and the integration branch stay, and the revert is itself revertible. Clones that ran the one-line recipe in §6 need `git submodule update --init` again. A revert is the response to a defect found in the first days after the merge that cannot be fixed forward within a day; a defect found after the first folded store build is fixed forward, because reverting then would re-split a tree that phones already run.
 - **Of a single stacked PR inside the integration branch:** an ordinary revert on the integration branch, before the final PR is opened.
 
 ---
@@ -433,7 +488,32 @@ Twenty PRs were open in `keyring-bifold` on 2026-11-20 (list in the companion). 
 - MacBook: about 25 GB free; the nightly needs 14 GB free at 06:00Z and its legs usually end late morning UTC. A fold worktree with its install needs about 12 GB, so the install waits for the nightly to finish, or for stale worktrees to be removed. About 170 worktrees exist across `~/keyring-worktrees`, `~/.keyring-gate`, `~/.keyring-fleet/gate` and `~/Documents`; removal needs the product owner's word per the standing rules.
 - Mac mini: about 13 GB free; used for rungs 5 and 7. The fold worktree's install may live there instead if the MacBook cannot make room.
 - After Phase 2, every future worktree saves 1 GB (no `bifold/node_modules`) and one install.
+- **The first install of the folded tree is a heavy operation** on the shared host, so `/srv/dev/CLAUDE.md` ("Heavy operations") applies: check `free -h`, the load average against `nproc` and `vartmp-tidy check` first, wait a bounded interval and re-check if the machine is under strain, run it as `nice -n 10 yarn install` with `umask 002`, and point `TMPDIR` at `/var/tmp/<name>`. The macOS machines above follow their own limits.
 
-## 11a. Timeline, as an estimate
+## 12. Timeline, as an estimate
 
-The product owner wants a store build every Friday. Counting from the plan's acceptance on 2026-11-21: Phase 0 completes over the weekend; the Phase 1 PR is expected around 2026-11-24 and the Phase 2 PR around 2026-11-27, because Phase 2 waits on an install slot, on the OTA cut-tool rework and on the nightly passing on the folded tree; Phase 3 and the full §6.1 ladder take the week of 2026-11-30. **The one PR to `main` is not expected before Friday 2026-11-27.** So that Friday's store build comes from today's structure, or is skipped, which is the product owner's call that week; the first store build from the folded tree is targeted for Friday 2026-12-04. If 11-27 ships from today's structure, its number is 281 and the folded build becomes 282; §6.3's rule is then read with those numbers. This is an estimate, not a commitment.
+The product owner wants a store build every Friday. Counting from 2026-11-20, when the product owner took the decisions in the companion: Phase 0 completes over the weekend; the Phase 1 PR is expected around 2026-11-24 and the Phase 2 PR around 2026-11-27, because Phase 2 waits on an install slot, on the OTA cut-tool rework and on the nightly passing on the folded tree; Phase 3 and the full §5.1 ladder take the week of 2026-11-30. **The one PR to `main` is not expected before Friday 2026-11-27.** So that Friday's store build comes from today's structure, or is skipped, which is the product owner's call that week; the first store build from the folded tree is targeted for Friday 2026-12-04. If 11-27 ships from today's structure, its number is 281 and the folded build becomes 282; §5.3's rule is then read with those numbers. This is an estimate, not a commitment.
+
+## 13. Blocked, and open decisions
+
+Blocked, and on whom:
+- The one PR to `main` waits on the product owner's explicit word (D2). The stacked phase PRs merge on review clearance.
+- The fold worktree's install waits on the nightly to finish, or on the product owner naming stale worktrees to remove (§11).
+- The throwaway rehearsal repository's deletion needs a `gh` scope the Mac's token lacks, so it is the product owner's click (companion §3a).
+- Conditional: GitHub's stacked pull requests may not be available to the organisation; the same stack is then three PRs retargeted by hand (D2).
+
+Open decisions, recommendation first:
+- **Friday 2026-11-27's store build: ship from today's structure, or skip.** No recommendation: it depends on whether the folded tree is ready that week (§12). Product owner, that week.
+- **Whether Phase 4 keeps "merge `packages/core` into `app/`".** Recommendation: no, drop it (Phase 4 gives the evidence). Cost of keeping it listed: a later reader re-proposes a large, low-value change. Product owner; blocks nothing before Phase 4.
+- **Rename `@bifold/*` to `@keyring/*`.** No recommendation yet; it stays out of Phases 1 to 3 (D3), and the diff is one `sed` and one PR. Product owner; Phase 4.
+- **The optional Phase 0 fingerprint experiment.** Recommendation: run it if a Mac slot is free, because it shows whether the path change alone needs the store-build boundary, at the cost of one scratch branch; skipping it loses no decision already taken (§4, Phase 0). Product owner; Phase 0.
+- **Pushing the graft ref after the merge.** Recommendation: yes, under the same word as `history/bifold`, so blame reaches the old history from a clone that fetches it; cost: one more ref on the remote that tooling never needs (D1). Product owner; after the merge to `main`.
+
+## 14. Companions and related plans
+
+Related plans: [`release-cadence-and-testing-strategy.md`](release-cadence-and-testing-strategy.md) (OTA tiers and the gate), [`versioning-and-releases-plan.md`](versioning-and-releases-plan.md), [`mediator-migration-plan.md`](mediator-migration-plan.md) and [`openvtc-integration-plan/didcomm_v2_subtask.md`](openvtc-integration-plan/didcomm_v2_subtask.md) (the parallel workstream, this plan's §7), and [`reference-app-sdk-packaging.md`](reference-app-sdk-packaging.md) (superseded in part, this plan's §8). `UPGRADE_PROGRESS.md` §2 records the "branch swap" bifold strategy this plan ends.
+
+| Rev | Companion |
+|---|---|
+| 2026-11-20, AL | [`2026-11-20-al.md`](single-codebase-plan/2026-11-20-al.md): the measurements this plan rests on, the positions it rejects, the decisions taken and the rehearsal record |
+| 2026-11-20, BAM | [`2026-11-20-bam.md`](single-codebase-plan/2026-11-20-bam.md): review of the plan: structure, the `git am` recipes, dates, the missed `bifold` references, and coverage against the 2026-11-08 evaluation |
