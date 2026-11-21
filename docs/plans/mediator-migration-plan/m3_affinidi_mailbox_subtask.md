@@ -184,6 +184,18 @@ explicit lines until testers are meant to reach it from those builds. Testers fi
 | **S7** | Tester build: `MAILBOX_MEDIATOR_DID` set in the store build (§3.7). The first tester build goes without S6b (decided 2026-11-21); a later one carries it | Two testers' phones with the switch on connect, chat and exchange a VRC both ways through the mailbox; one stays offline and is woken. With S6b in the build: one turns the switch off and sees S6b's waiting state. Without it: the mailbox host stays up while any tester holds a mailbox contact, and a send to such a contact with the switch off fails where the sender sees it (1:1 chat returns the text to the field with a toast; the VRC exchange's path is cited in the wiring change) |
 | **S8** | M3d: transport order and large frames (the parent's M3d row) | The mailbox mediator's service order is recorded; if WebSocket is first or alone, ten queued 256 KiB photos (about 6 MB) arrive on an Android phone and an iPhone, or a batch cap is in place and the frame it allows arrives. Gates M4, not S7 |
 
+Known limits of the first tester build, recorded 2026-11-21 after tracing what a failed mailbox send shows:
+
+- When the invitee's first message fails to send (its mailbox refused or closed), the inviter's phone receives
+  nothing: in a v2 exchange that message is what creates the inviter's connection. The inviter's QR screen stays at
+  "waiting for a scan", which is the true state, and nothing on the inviter's side can say more. The invitee's phone
+  is where the failure shows: at once ("The exchange didn't complete") once bifold #1171 is in the build's pin, which
+  the pin-bump change states; before that, nothing or a waiting card. Either way the pair re-scans.
+- The exchange's error dialog (`vrcFlowStore.setError`) is reached only by the legacy RCE v1-3 path; mailbox pairs
+  (RCE v4+) never show it. Their failures show through the overlay's "didn't complete" state.
+- The proposer's signed issue document is retained before it is sent, so a later trigger after a failed send
+  returns "already issued" and nothing is issued twice; the tester re-invites rather than retries.
+
 Rollback at any step before S7: stop the mailbox VM; no build points at it.
 
 After S7, rollback has M4's shape, not M3's, because testers' phones hold contacts made through the mailbox. Turning
