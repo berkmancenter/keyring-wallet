@@ -49,6 +49,18 @@
         "crates/messaging/affinidi-tsp/"
       ]
     },
+    "affinidi-messaging-mediator": {
+      "url": "https://github.com/affinidi/affinidi-messaging-mediator.git",
+      "sha": "36b2f421",
+      "commitDate": "2026-11-20",
+      "pinnedOn": "2026-11-21",
+      "why": "The mediator's own repository since affinidi-tdk-rs #949. Read for the wallet mailbox's mediator (M3): the account and ACL rules, the traffic monitor as a wake signal, and the source of any request to its maintainers.",
+      "watch": [
+        "crates/affinidi-messaging-mediator/src/monitor.rs",
+        "crates/affinidi-messaging-mediator/src/messages/protocols/routing.rs",
+        "crates/affinidi-messaging-mediator/src/handlers/authenticate/"
+      ]
+    },
     "openvtc": {
       "url": "https://github.com/OpenVTC/openvtc.git",
       "sha": "2a4fa2b",
