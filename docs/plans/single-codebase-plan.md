@@ -92,7 +92,7 @@ What the submodule costs today, in the order it hurts:
 | Every release artifact names two commits | `test-builds.yml` artifact names, `ota-deploy.mjs`, `tier.mjs --range` reading the submodule's own range |
 | Shared submodule config that can break every worktree at once | `.git/modules/bifold/config` `core.worktree` incident, 2026-11-14 (memory `bifold-shared-core-worktree-breaks-all-lanes`) |
 | Two commit conventions | bifold needs a `Signed-off-by:` trailer last; the wallet does not |
-| Two CI systems | bifold: quality (lint, testids check, coverage), VTI conformance, publish, commit checks; wallet: 17 workflows, 9 of which also build bifold |
+| Two CI systems | bifold: ten workflows (quality with four jest parts and a type-check ratchet, full-tests, targeted-jest, VTI conformance, commit checks, publish, and four housekeeping ones) and two rulesets; wallet: 17 workflows, 9 of which also build bifold |
 
 What is *not* a cost: the code itself is sound, its tests are the contract (491 test files in core alone), and the native modules link correctly. The fold keeps all of it.
 
@@ -240,10 +240,17 @@ git mv bifold/__mocks__ packages/__mocks__          # shared jest mocks; or into
 
 ### Phase 3. One CI, one convention, cleanup
 
-- Port the bifold `quality.yaml` jobs into the wallet's `quality.yml` as a matrix: per-package `test`, the testids extractor test and manifest check (`packages/core/scripts/gen-testids.mjs --check`), core's lint with `eslint-rules/require-testid`, and the `tsc` ratchet. Port `vti-conformance.yaml` as a job (it already checks out the wallet to build `card-verify`; now it runs in place). Drop `publish.yaml` (no npm publishing), `repolinter`, `scorecard`, `maintenance` (Q8).
+- Port bifold's CI, read at bifold `origin/main` on 2026-11-21 (the ten workflows there, by job name):
+  - `quality.yaml`: "Linting and formatter" (lint and prettier on changed files, the testids extractor test, `gen-testids.mjs --check`), "Testing part 1/4" to "4/4" (core's jest in four parts), "Testing" (the gate that joins them), "Testing scope · <scope>" (the scoped-subset logic, which **does not** carry over: §6.1), and "Type check (ratchet)". Into the wallet's `quality.yml` as jobs; the wallet's own "Lint+Format+Types" and "Testing" absorb or sit beside them, and the ruleset's required checks are renamed to match.
+  - `full-tests.yaml` ("Jest part (N)", "Full suite"; push to main, schedule, dispatch): the unscoped run the review lane waits on. Becomes the wallet PR's Testing job (every PR, full suite) plus the scheduled run.
+  - `targeted-jest.yaml` ("Targeted jest", dispatch): ported as is; the lanes use it.
+  - `vti-conformance.yaml` ("VTI SDK accepts Keyring's card and statement"): ported as a job; it already checks out the wallet to build `card-verify`, now it runs in place.
+  - `commit-checks.yaml`: the wallet has the same job; one copy.
+  - Dropped (Q8): `publish.yaml` ("Release", changesets), `repolinter.yaml`, `scorecard.yaml`, `maintenance.yaml` ("Issue and PR"), `roadmap-pr-status.yaml` (the wallet has its own).
+  - The "SEDI/KERI switch guard" is a jest test, not a job: `packages/core/src/modules/trust-tasks/__tests__/sediKeriSwitches.test.ts`; it moves with core and runs in the parts.
+- Rulesets. Bifold `main`'s ruleset "Main" (15135301) requires "DCO sign-off and commit signature", "Linting and formatter", "Testing", "Type check (ratchet)"; after the port, the wallet's "Main" ruleset requires the wallet's equivalents (its current four plus "Type check (ratchet)" or its merged successor). Bifold's second ruleset, **"OTA pins" (26328150), protects `refs/heads/ota/*` from deletion and force-push**; the same ruleset is created on the wallet for its `ota/*` branches, and the one on the archived repository stays.
 - `deps-cache.yml`: one cache key.
-- Repository secrets and variables bifold's workflows used: `CODECOV_TOKEN` (coverage upload, kept per Q8) is added to the wallet repository by the product owner; nothing else (`GITHUB_TOKEN` is automatic). Neither repository has a `dependabot.yml`; dependabot's bifold PRs were GitHub defaults and simply stop.
-- The coordinator named further bifold-side jobs to port ("four core jest parts", a "tsc ratchet", a "SEDI/KERI switch guard"); none appears under those names in either repository's workflows as of 2026-11-21, so the coordinator names the actual jobs or scripts before Phase 3 ports them, and this list is corrected then.
+- Repository secrets and variables: bifold's `quality.yaml` references `secrets.CODECOV_TOKEN`, but the only repository secret listed on `keyring-bifold` is `ROADMAP_TOKEN` and the wallet lists no codecov secret either, so the token is an organisation or environment secret, or unset; check which at Phase 3 before asking the product owner for anything. Neither repository has a `dependabot.yml`; dependabot's bifold PRs were GitHub defaults and simply stop.
 - Commit conventions: one `commitlint` config; decide the DCO rule (Q7). `commit-checks.yml` (GitHub signature verification) is unchanged.
 - Archive `keyring-bifold` on GitHub (read-only). Its open PRs are closed with a pointer, or re-landed per the product owner's list (§8.2).
 - `UPGRADE_PROGRESS.md` §2 and §4, `README.md`, `CONTRIBUTING.md`, `RELEASE.md`, `CLAUDE.md`, `e2e/README.md`: say the new shape. The `openvtc-workspace` and `vti-lab-and-field` skills and the memory notes that cite `bifold/packages` get one correction each.
