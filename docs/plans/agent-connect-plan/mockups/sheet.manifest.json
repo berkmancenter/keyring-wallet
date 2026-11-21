@@ -1,0 +1,25 @@
+{
+  "regenerate": "node --experimental-strip-types scripts/plans/mockup-kit/kit.ts sheet docs/plans/agent-connect-plan/mockups",
+  "layout": 1,
+  "tokens": "0e768796902f",
+  "columns": 3,
+  "width": 1968,
+  "height": 3480,
+  "sheet": {
+    "file": "sheet.png",
+    "sha256": "47021a322ecf43b7b4b2623d236d59ccfe39d96dad275208db4781f0aba727ab"
+  },
+  "svgs": {
+    "01-connect-name.svg": "c26fed0dd87654d369c99999f9964c778d22e02f6d45de2ac6db3e997afa6a0e",
+    "02-connect-scan.svg": "d11f03a17261a9fc73ff0d9ada66e7cf5134386177dc5f112b1628c9005c4149",
+    "03-connect-number.svg": "ecba88d37fa76406bc7af42b5f302630e0e299d9e2a3b96de0147820e6edaf5b",
+    "04-connect-wrong-number.svg": "37c064111cfc15b06c24fd273b12e85ce9f2a991407d517369fadb3674b363a6",
+    "05-agent-list.svg": "23c785e9221c84539c0ad0d3d52b35a5334b26c946ed6ba567c210422ad6264f",
+    "06-agent-sheet.svg": "c5a22735a06b4b1c04beb8a9200dd14a36d051449361a849670b987ff0686077",
+    "07-answers-others-confirm.svg": "d1fb73e1975f8e30d1ce7354f1bba49598d4d754408978bb5617a2a391657ce9",
+    "08-room-members-agents.svg": "3fb1bf483406b52137a563a4f897d0f4ef4fa61a5de9fc4d9fbe35bc38410fff",
+    "09-room-add-agent.svg": "3867e63b879e0433ce0805b57476913cdfe3f5d74f6107bc7c1481f964fc7662",
+    "10-revoke.svg": "d4a1365126d2375a3240cb5f3a77cc7fc3049758a8f66aaa81be14aa279516a0",
+    "11-pairing-expired.svg": "ccbafd195586fed80c59ea7571c7b4e6621be87f398b1b85c69bb65e3f91876b"
+  }
+}
