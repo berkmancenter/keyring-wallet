@@ -128,3 +128,40 @@ self-flag) and the per-DID rate limit carry values measured in the lab at
 v0.53.0.
 
 ## Evidence
+
+Lab, 2026-11-21, `affinidi-messaging-mediator` v0.53.0 (`f6ed8159`), built from the pinned clone with
+`cargo build --release --locked -p affinidi-messaging-mediator` (default features: didcomm, tsp, redis-backend,
+jemalloc, vta) and `mediator-setup` from the same commit. One local instance with its own Redis (append-only on),
+`mediator_acl_mode = "explicit_deny"` and this directory's values for the default ACL, external forwarding and the
+per-DID limit (`evidence/mediator-config-changes-f6ed8159.diff` is the whole difference from what `mediator-setup`
+wrote). Deviations from the deployment: a did:peer identity naming `http://127.0.0.1` (the deployment's is on its
+hostname), file secrets, no TLS, no proxy except where row D says so. Clients: Node, Credo 0.7.1-pr-2704 for
+envelopes, the mailbox design of bifold `walletMailbox.ts` (one mailbox DID per phone, pairwise contact DIDs, every
+send a routing/2.0 forward over the sender's own session). The harness is `evidence/wallet-s2.mjs` and
+`evidence/rate-probe.mjs`; outputs are beside them, with lab DIDs shortened.
+
+| Row | Result |
+|---|---|
+| A0 open sign-up | four fresh DIDs sign in with no admin step, one socket each |
+| A1 CONTROL, before the flag | a mailbox send is refused, `e.p.authorization.send_forwarded` |
+| A2 the phone sets its own flag | each phone sets `SEND_FORWARDED` on its own account with a signed `messaging/account/update` (`did` = the sha256 hex of its DID, the mediator's account key); the answer shows `sendForwarded: true` |
+| A3 sends | two pairs connect over v2 OOB and deliver both ways through the mailbox |
+| A4 CONTROL | an account that never set its flag is still refused |
+| B `external_forwarding = "false"` | a forward whose next hop has no account here is refused, `e.p.delivery.refused` ("next hop has no account on this mediator" in the mediator's log); A3 is the control |
+| C per-DID limit, 20/s burst 10 | 60 authenticated requests in one burst from one DID: 10 × 200, 50 × 429 |
+| D per-IP limit behind a proxy | `trust_xff_cidrs` = the proxy's address, limit 5/s burst 5: 40 requests with a rotating `X-Forwarded-For` are 40 buckets (no 429); 40 with the same address, 35 × 429. CONTROL, nothing trusted: the rotating addresses are one bucket, 35 × 429 |
+| E open → enrolled | restarted with `mediator_acl_mode = "explicit_allow"` (Redis AOF on): an existing account signs in again; a new DID is refused at the challenge, 403 `authentication.blocked` |
+| F what the store holds | every Redis key dumped and searched: 0 occurrences of any contact DID; the positive control (the stored frame's `did:key` recipient) found once; mailbox DIDs 13 times (accounts, sessions, handles), by design |
+| R1, R2 unauthenticated `POST /inbound` | an anoncrypt forward whose next hop is a phone's mailbox, and an anoncrypt message addressed straight to a mailbox DID: both 401 "Missing credentials". CONTROL with `SEND_FORWARDED` added to the default (implicit relay on): still refused, 400 `w.m.message.anonymous` (the relay path needs an authcrypt inner) and 403 "Anonymous direct delivery is not allowed by this mediator" |
+| W1 `wake/set` | `wakeCapable: true` |
+| W2 CONTROL | recipient online: a send plus `wake/request` rings nothing |
+| W3 CONTROL | recipient offline with no handle: nothing |
+| W4 wake | recipient offline with a handle: ONE `push/wake/0.2` reaches the (stand-in) gateway, payload `{handle, mediator, urgency: "interactive", v: 1}`, issued and signed by the mediator (proof purpose authentication); no second ring. The sender's id (sha256 of the inner JWE's bytes, attached as `data.base64`) equals the mediator's stored id; attached as `data.json` it does not, since the mediator re-serialises it |
+
+Findings applied to `mailbox.toml`: `ANON_RECEIVE` in the default (without it A3 was refused, "recipient is not
+accepting anonymous messages": Credo's inner forward layer is anoncrypt, while the forward's outer sender stays
+authenticated and gated by `SEND_FORWARDED`); `trust_task_verification = "enforce"` (every row's Trust Task is
+signed and accepted under it); `enable_inter_mediator_relay = "false"` (the lab ran closed).
+
+Not measured here: the real push-gateway path (the stand-in gateway was an account on the same mediator), TLS and
+the did:webvh identity, the soak (S5), refusal at the hard cap (S5b), mail from a contact on another mediator.

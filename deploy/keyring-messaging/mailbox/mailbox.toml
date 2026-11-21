@@ -126,18 +126,19 @@ block_anonymous_outer_envelope = "true"
 force_session_did_match = "true"
 # Admin messages only directly, never relayed in from another mediator.
 block_remote_admin_msgs = "true"
-# Upstream's default: a Trust Task whose proof fails is logged and counted,
-# not refused. PENDING S2: move to "enforce" once the phone's client is shown
-# to sign every Trust Task it sends (account, ACL and wake management).
-trust_task_verification = "warn"
+# A Trust Task whose proof fails is refused. Measured (README, Evidence): the
+# lab ran with "enforce", and every task the phone sends (account/update,
+# wake/set, wake/request) is signed, eddsa-jcs-2022 with proof purpose
+# authentication, and accepted.
+trust_task_verification = "enforce"
 # Only the bound sign-in statement (SDK 0.45.16+); no grace for older clients.
 tsp_auth_accept_unbound_until = ""
-# Accept anonymous /inbound forwards relayed by other mediators: mail for a
-# phone from a contact on another mediator arrives that way. Explicit, rather
-# than through SEND_FORWARDED in the default (deprecated upstream).
-# PENDING S2: confirm contacts on other mediators reach a phone with it, and
-# that nothing is relayed onward (external_forwarding below is off).
-enable_inter_mediator_relay = "true"
+# Closed: no anonymous /inbound from other mediators. The lab ran closed
+# (README, Evidence: an unauthenticated POST to /inbound gets 401), and every
+# contact made through the mailbox is a phone on this mediator. Mail from a
+# contact on ANOTHER mediator needs this on; that is a later row, measured
+# before it is turned on, with external_forwarding (below) staying off.
+enable_inter_mediator_relay = "false"
 
 [streaming]
 # Live delivery over the phone's WebSocket (Pickup live mode).
