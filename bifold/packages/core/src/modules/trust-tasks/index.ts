@@ -132,10 +132,12 @@ export {
   mintContactDid,
   mailboxNamedBy,
   takeMailboxMessage,
+  setMailboxWakeHandle,
+  mailboxAccountKey,
   WalletMailboxOutboundTransport,
   WALLET_MAILBOX_RECORD_TYPE,
 } from './module/walletMailbox'
-export type { WalletMailbox, MailboxSession, OpenWalletMailboxDeps } from './module/walletMailbox'
+export type { WalletMailbox, MailboxSession, OpenWalletMailboxDeps, MailboxWakeHandle } from './module/walletMailbox'
 export {
   advertiseTspCarriage,
   askPeerReadsTsp,
