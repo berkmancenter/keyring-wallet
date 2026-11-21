@@ -19,15 +19,18 @@
 
 Keyring is a mobile wallet for iOS and Android. You keep your identity and your
 credentials on your phone. You meet people and record those relationships as
-signed credentials. You join communities, chat, and share in community rooms,
-through an agent that you control.
+signed credentials. You manage your own verifiable trust agent (VTA), and through
+it join and interact with verifiable trust communities (VTCs): you chat and share
+in community rooms.
 
 Keyring was built at the [Applied Social Media Lab](https://asml.cyber.harvard.edu/)
 of Harvard's [Berkman Klein Center for Internet & Society](https://cyber.harvard.edu/),
 and its development continues at the [Applied Technology Lab](https://www.appliedtechnologylab.org)
 at the Harvard John A. Paulson School of Engineering and Applied Sciences (SEAS).
-It is one of the first mobile wallets for the
-[OpenVTC](https://github.com/OpenVTC) / First Person Project ecosystem.
+It is built as a reference mobile app for the
+[OpenVTC](https://github.com/OpenVTC) / First Person Project ecosystem, and builds
+on the Trust over IP [Decentralized Trust Graph (DTG)](https://github.com/trustoverip/dtgwg-cred-spec)
+specifications.
 
 > **Beta.** Keyring is in active development and is not ready for production use.
 > Testers get new builds every few days, and data or behaviour may change between
