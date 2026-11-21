@@ -527,6 +527,29 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         // however far the bar had got: a decline read as "Relationship
         // confirmed", and stayed (UI-smoothness plan, Phase 0).
         const ended = vrcFlowStore.flowEndedWith(connectionId)
+        if (ended === 'error') {
+          // The flow failed on this phone: a send the mailbox or the network refused, a delivery that could not
+          // start. Said at once, with the words the stall timeout uses, instead of the overlay vanishing or the
+          // "waiting for the other phone" card standing in for a message that never left (2026-11-21). Dismiss
+          // clears it, as it clears the timeout.
+          if (timeoutId) clearTimeout(timeoutId)
+          if (completionTimerRef.current) {
+            clearTimeout(completionTimerRef.current)
+            completionTimerRef.current = null
+          }
+          setConfirmed(false)
+          setWaitingOnPeer(false)
+          waitDismissedAtRef.current = null
+          setProgressComplete(false)
+          setInProgress(true)
+          setTimedOut(true)
+          setStatusKey('Chat.Flow.DidNotComplete')
+          progressStartedRef.current = false
+          maxFractionRef.current = 0
+          flowStartedAtRef.current = null
+          rcardGraceExpiredRef.current = false
+          return
+        }
         if (progressStartedRef.current && !ended) {
           // Success beat: snap the bar to 100%, then hold briefly with the
           // confirmation (Chat renders the wording + a way through to

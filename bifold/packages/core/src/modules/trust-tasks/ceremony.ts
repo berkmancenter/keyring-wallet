@@ -519,9 +519,12 @@ export function deliverAfterAcceptance(agent: Agent, connectionId: string, excha
   // FIRE AND FORGET — the caller runs inside credo's inbound message processing, and the delivery may await the
   // witness ceremony, whose responses arrive through that same processing: awaiting here deadlocks the ceremony
   // against its own transport (the challenge sits queued behind this very handler until timeout).
-  void deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId).catch((e: Error) =>
+  void deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId).catch((e: Error) => {
     agent.config.logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
-  )
+    // Said on screen at once (the overlay reads `ended`), not left "preparing" until the stall timeout: a send the
+    // mailbox refused is a failure this phone knows about now. Only while the status is still this delivery's.
+    if (vrcFlowStore.getStatus(connectionId) === 'preparing-offer') vrcFlowStore.clearFlow(connectionId, 'error')
+  })
   if (!upgrade) {
     void issueRCardForAcceptedExchange(agent, connectionId).catch((e: Error) =>
       agent.config.logger.warn(`${LOG_PREFIX} R-Card issuance after acceptance failed: ${e.message}`)

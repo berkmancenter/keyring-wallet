@@ -291,3 +291,92 @@ describe('Chat screen draft and over-the-air updates', () => {
     expect(hasOtaApplyBlockers()).toBe(false)
   })
 })
+
+describe('Chat screen when the exchange fails on this phone', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.useFakeTimers()
+    vrcFlowStore.clearFlow('1')
+    // @ts-expect-error useConnectionById will be replaced with a mock which will have this method
+    useConnectionById.mockReturnValue(connection)
+    // @ts-expect-error useBasicMessagesByConnectionId will be replaced with a mock which will have this method
+    useBasicMessagesByConnectionId.mockReturnValue(testBasicMessages)
+    jest.spyOn(network, 'useNetwork').mockImplementation(() => ({
+      silentAssertConnectedNetwork: () => true,
+      assertNetworkConnected: () => true,
+      assertInternetReachable: jest.fn(),
+      assertMediatorReachable: jest.fn(),
+      displayNetInfoModal: jest.fn(),
+      hideNetInfoModal: jest.fn(),
+    }))
+  })
+
+  afterEach(() => {
+    vrcFlowStore.clearFlow('1')
+    jest.useRealTimers()
+  })
+
+  const rendered = () =>
+    render(
+      <BasicAppContext>
+        <Chat navigation={navigationContext} route={props as any} />
+      </BasicAppContext>
+    )
+
+  test('a first contact whose send failed: "didn’t complete" at once, never "sent N min ago", and it can be dismissed', () => {
+    const tree = rendered()
+    act(() => {
+      vrcFlowStore.setStatus('1', 'connecting', false)
+    })
+    expect(tree.getByText('Chat.Flow.Connecting')).toBeTruthy()
+    // The send failed on this phone (a mailbox send refused): the flow ends as an error.
+    act(() => {
+      vrcFlowStore.clearFlow('1', 'error')
+    })
+    expect(tree.getByText('Chat.Flow.DidNotComplete')).toBeTruthy()
+    expect(tree.queryByText('LateStep.WaitingSince')).toBeNull()
+    // Not after the stall timeout either: the waiting card never appears for a flow that has ended.
+    act(() => {
+      jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
+    })
+    expect(tree.queryByText('LateStep.WaitingSince')).toBeNull()
+    expect(tree.getByText('Chat.Flow.DidNotComplete')).toBeTruthy()
+    fireEvent.press(tree.getByText('Global.Dismiss'))
+    expect(tree.queryByText('Chat.Flow.DidNotComplete')).toBeNull()
+  })
+
+  test('a delivery that failed after the acceptance: "didn’t complete" at once, not after the stall timeout', () => {
+    const tree = rendered()
+    act(() => {
+      vrcFlowStore.setStatus('1', 'preparing-offer', false)
+    })
+    expect(tree.getByText('Chat.Flow.PreparingOffer')).toBeTruthy()
+    act(() => {
+      vrcFlowStore.clearFlow('1', 'error')
+    })
+    expect(tree.getByText('Chat.Flow.DidNotComplete')).toBeTruthy()
+  })
+
+  test('CONTROL: a flow stood down without an error (declined, cancelled) still shows nothing', () => {
+    const tree = rendered()
+    act(() => {
+      vrcFlowStore.setStatus('1', 'preparing-offer', false)
+    })
+    act(() => {
+      vrcFlowStore.clearFlow('1', 'declined')
+    })
+    expect(tree.queryByText('Chat.Flow.DidNotComplete')).toBeNull()
+    expect(tree.queryByText('Chat.Flow.PreparingOffer')).toBeNull()
+  })
+
+  test('CONTROL: a flow stood down with no reason after its work started is read as completed, not as an error', () => {
+    const tree = rendered()
+    act(() => {
+      vrcFlowStore.setStatus('1', 'preparing-offer', false)
+    })
+    act(() => {
+      vrcFlowStore.clearFlow('1')
+    })
+    expect(tree.queryByText('Chat.Flow.DidNotComplete')).toBeNull()
+  })
+})

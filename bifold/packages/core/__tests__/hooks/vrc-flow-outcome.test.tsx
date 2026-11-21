@@ -46,7 +46,6 @@ describe('a flow that ends without completing', () => {
     ['this phone declined', 'declined'],
     ['the other person declined', 'declined'],
     ['the request was withdrawn', 'cancelled'],
-    ['the issuance failed', 'error'],
   ])('%s: never confirmed, in any frame, and the overlay clears', (_, ended) => {
     const { result, confirmedSeen } = overlay()
     act(() => vrcFlowStore.setStatus(CONN, 'proposed'))
@@ -56,6 +55,22 @@ describe('a flow that ends without completing', () => {
     expect(confirmedSeen).not.toContain(true)
     expect(result.current.inProgress).toBe(false)
     expect(result.current.progressComplete).toBe(false)
+  })
+
+  // A failure is not a stand-down: it used to sit in the row above and clear like a decline, so a send the mailbox
+  // refused vanished with no word (bifold #1171, 2026-11-21). Never confirmed still holds; what moves is that the
+  // overlay stays, saying so.
+  it('the issuance failed: never confirmed, in any frame, and the overlay stays to say it did not complete', () => {
+    const { result, confirmedSeen } = overlay()
+    act(() => vrcFlowStore.setStatus(CONN, 'proposed'))
+    act(() => vrcFlowStore.setStatus(CONN, 'preparing-offer'))
+    expect(result.current.inProgress).toBe(true)
+    act(() => vrcFlowStore.clearFlow(CONN, 'error'))
+    expect(confirmedSeen).not.toContain(true)
+    expect(result.current.inProgress).toBe(true)
+    expect(result.current.progressComplete).toBe(false)
+    // The did-not-complete state is the timeout's, shown at once; Chat.test.tsx pins its wording on screen.
+    expect(result.current.timedOut).toBe(true)
   })
 
   // fd's #469: a waiting dialog the person dismissed keeps the flow and its bar; a decline then read as confirmed.
