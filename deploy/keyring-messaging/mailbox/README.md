@@ -44,6 +44,10 @@ share an upstream project and nothing else:
   (including sign-in and the WebSocket upgrade), `/mediator/v1/metrics` refused.
 - `setup-identity.sh` and `setup-recipe.toml`: make the mailbox's identity.
 - `.env.example`: the settings compose reads.
+- `docker-compose.ci.yml`: CI only, never used on the VM. Laid over
+  `docker-compose.yml` by the repository's "Mailbox mediator image" check so
+  the mediator boots on a runner with no GCP and no Caddy (its header says
+  exactly what differs).
 
 ## The hostname comes first
 
@@ -174,10 +178,13 @@ authenticated and gated by `SEND_FORWARDED`); `trust_task_verification = "enforc
 signed and accepted under it); `enable_inter_mediator_relay = "false"` (the lab ran closed).
 
 Not measured here: the real push-gateway path (the stand-in gateway was an account on the same mediator), TLS and
-the did:webvh identity, the soak (S5), refusal at the hard cap (S5b), mail from a contact on another mediator. Nor
-this directory's `Dockerfile`, compose file and `setup-identity.sh`: a pull request touching
-`deploy/keyring-messaging/**` runs the repository's "Mediator image" checks, but those build and boot the gateway's
-mediator from `../mediator/` at its own commit, not this package, so their green says nothing about it. A check that
-builds and boots this package is owed; until then the first run of its Dockerfile is the operator's, on the runbook's
-first deploy. Every key in `mailbox.toml` was checked by hand against upstream's config schema at v0.53.0, which no
-check automates: the mediator accepts an unknown key in silence (VTI-06).
+the did:webvh identity, the soak (S5), refusal at the hard cap (S5b), mail from a contact on another mediator. This
+directory's `Dockerfile`, compose file and `setup-identity.sh` are exercised by the repository's "Mailbox mediator
+image" check (`.github/workflows/push-gateway-image.yml`, job `mailbox`), which runs on every pull request touching
+`deploy/keyring-messaging/**`, on amd64 and arm64: it builds the image at the pinned commit, creates an identity with
+`setup-identity.sh` on a throwaway hostname, boots the mediator with Redis on the file secrets backend
+(`docker-compose.ci.yml`: CI has no Secret Manager and no Caddy) and probes `livez`, `readyz` (`"status":"ready"`,
+the text the uptime check matches) and an unauthenticated `POST /inbound` (401, rows R1 and R2). The sibling
+"Mediator image" checks build the gateway's mediator from `../mediator/` and say nothing about this package. Every
+key in `mailbox.toml` was checked by hand against upstream's config schema at v0.53.0, which no check automates: the
+mediator accepts an unknown key in silence (VTI-06).
