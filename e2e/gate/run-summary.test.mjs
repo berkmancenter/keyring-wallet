@@ -110,6 +110,49 @@ test('ancestry that cannot be told is "possibly regressed", which does not chang
   }
 });
 
+/**
+ * A wallet repo across the fold-in: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone), fold has
+ * bifold/ as a tree, after changes a file under it.
+ */
+function foldRepo() {
+  const top = mkdtempSync(path.join(tmpdir(), 'fold-w-')), clone = mkdtempSync(path.join(tmpdir(), 'fold-b-'));
+  const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  const commit = (dir, m) => { git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
+  const put = (dir, rel, body) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), body); };
+  git(clone, 'init', '-q'); put(clone, 'packages/core/src/x.ts', '1'); git(clone, 'add', '-A');
+  const pin1 = commit(clone, 'b1'); put(clone, 'packages/core/src/x.ts', '2'); git(clone, 'add', '-A'); const pin2 = commit(clone, 'b2');
+  git(top, 'init', '-q'); put(top, 'app/src/a.ts', 'a'); git(top, 'add', 'app');
+  git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin1},bifold`); const gl1 = commit(top, 'gitlink pin1');
+  git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin2},bifold`); const gl2 = commit(top, 'gitlink pin2');
+  git(top, 'rm', '-q', '--cached', 'bifold'); put(top, 'bifold/packages/core/src/x.ts', '2'); put(top, 'bifold/packages/core/testids.json', '{}'); git(top, 'add', 'bifold'); const fold = commit(top, 'fold');
+  put(top, 'bifold/packages/core/src/x.ts', '3'); git(top, 'add', 'bifold'); const after = commit(top, 'change x');
+  return { top, clone, pin1, pin2, gl1, gl2, fold, after, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
+}
+
+test('with no bifold repo at hand, the wallet decides ancestry once its commit carries bifold/ as a tree; a gitlink commit still cannot tell', () => {
+  const r = foldRepo();
+  const run = (pin, bifold) => ({ older: { meta: `kind=gate\npin=${pin.older}\nbifold=${bifold.older}\nstarted=2026-10-10T09:00:00Z\n`, legs: [['waiting', 0, passed]] },
+    newer: { meta: `kind=gate\npin=${pin.newer}\nbifold=${bifold.newer}\nstarted=2026-10-11T09:00:00Z\n`, legs: [['waiting', 0, tracked]] } });
+  // Folded: bifold= still written (as the folded tree's or any id), no clone anywhere: the wallet ancestry answers.
+  const folded = runs(run({ older: r.fold, newer: r.after }, { older: 'f0ld0001', newer: 'f0ld0002' }));
+  // Before the fold, the same with the gitlink commits and no clone: unknown, so possibly regressed and no verdict change.
+  const gitlinks = runs(run({ older: r.gl1, newer: r.gl2 }, { older: r.pin1, newer: r.pin2 }));
+  try {
+    const s = summarize(path.join(folded.root, 'newer'), { wallet: r.top, bifold: null });
+    assert.deepEqual(s.legs[0].regressions, [{ row: 'in-257-dots', passedIn: 'older' }]);
+    assert.equal(s.overall, 'fail');
+    const g = summarize(path.join(gitlinks.root, 'newer'), { wallet: r.top, bifold: null });
+    assert.equal(g.legs[0].regressions, undefined);
+    assert.equal(g.legs[0].possiblyRegressed[0].row, 'in-257-dots');
+    assert.equal(g.overall, 'pass');
+    // Control: with the clone at hand the gitlink pins are read there, and the regression shows as before.
+    const c = summarize(path.join(gitlinks.root, 'newer'), { wallet: r.top, bifold: r.clone });
+    assert.deepEqual(c.legs[0].regressions, [{ row: 'in-257-dots', passedIn: 'older' }]);
+  } finally {
+    folded.done(); gitlinks.done(); r.done();
+  }
+});
+
 test('earlier means earlier by started=, not by the folder name (MMDD has no year)', () => {
   const g = gitRepo();
   const r = runs({

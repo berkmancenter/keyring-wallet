@@ -8,7 +8,9 @@
 // answer is "use the full gate" (exit 2). Exit 0 with a selection; 1 when nothing changed maps to any leg.
 //
 //   changed.mjs --files a,b,…            paths from the wallet root (bifold/packages/core/src/…, app/src/…)
-//   changed.mjs --range <a>..<b>          the wallet range, plus the bifold submodule's own range when its pin moved
+//   changed.mjs --range <a>..<b>          the wallet range; bifold/ is folded into this repository, so its paths arrive
+//                                         in the same diff (a range from before the fold still reads the submodule's
+//                                         own range at its pins; one crossing the fold reads as "all of bifold/ moved")
 //   [--json]
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -50,6 +52,9 @@ export function idsOwnedBy(changed, owners) {
     const os = [owners.get(f), sibling !== f ? owners.get(sibling) : undefined].filter(Boolean);
     if (os.length) { for (const o of os) { o.keys.forEach((k) => keys.add(k)); o.stems.forEach((s) => stems.add(s)); } mapped.push(f); }
     else if (/^(bifold\/packages\/core\/src|app\/src)\/.*\.(tsx?|jsx?)$/.test(f) && !/\.(test|spec)\.[tj]sx?$/.test(f) && !/\/__tests__\//.test(f)) unmapped.push(f);
+    // A bare `bifold` is changedFiles' mark for a range crossing the fold-in: what moved under bifold/ cannot be told,
+    // so it is unmapped (the full gate), never dropped as a path that owns nothing.
+    else if (f === 'bifold') unmapped.push(f);
   }
   return { keys, stems, mapped, unmapped };
 }
@@ -243,28 +248,50 @@ export function select(changed, { manifests, legsDir, root = e2eDir, top = repo,
   return { legs, ...owned };
 }
 
-/** The files a wallet range changes, plus bifold's own range as bifold/… when its pin moved (linkTrigger.mjs too). */
-export function changedFiles(range) {
-  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8' }).trim();
-  const files = git('diff', '--name-only', range).split('\n').filter(Boolean);
-  const [a, b] = range.split('..');
-  const pin = (rev) => { try { return git('rev-parse', `${rev}:bifold`); } catch { return ''; } };
-  const pa = pin(a), pb = pin(b);
-  if (pa && pb && pa !== pb) {
-    // A worktree's bifold/ is empty: BIFOLD_GIT names a bifold clone that has the pins (as pathExists reads it).
-    const bifold = process.env.BIFOLD_GIT || path.join(repo, 'bifold');
-    const inner = execFileSync('git', ['-C', bifold, 'diff', '--name-only', `${pa}..${pb}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-    files.push(...inner.map((f) => `bifold/${f}`));
-  }
-  return files.filter((f) => f !== 'bifold');
+/**
+ * What `<rev>:bifold` is in the wallet repo: 'commit' (the gitlink, before the fold-in), 'tree' (folded in), null
+ * (absent, or no such rev). Read from the tree entry (ls-tree), not `cat-file -t`: a gitlink's commit is not in this
+ * repository's objects, so cat-file cannot type it.
+ */
+export function bifoldKind(rev, top = repo) {
+  try { return execFileSync('git', ['-C', top, 'ls-tree', rev, '--', 'bifold'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/)[1] || null; } catch { return null; }
 }
 
-/** Does the path exist in the wallet tree, or in the bifold clone (BIFOLD_GIT, else ./bifold)? null when unknowable. */
+/**
+ * The files a wallet range changes (linkTrigger.mjs too). Both ends folded (bifold/ a tree): the diff already names
+ * bifold/… paths. Both ends gitlinks: plus bifold's own range as bifold/… when its pin moved. One of each, or bifold/
+ * absent at one end: the fold itself is in the range, and what moved under bifold/ cannot be told, so the list carries
+ * a bare `bifold` (the gitlink path) and the callers take it as "all of bifold/ changed" (idsOwnedBy: unmapped, the
+ * full gate; linkTrigger: run the link legs). Never silently empty.
+ */
+export function changedFiles(range, top = repo) {
+  const git = (...a) => execFileSync('git', ['-C', top, ...a], { encoding: 'utf8' }).trim();
+  const files = git('diff', '--name-only', range).split('\n').filter(Boolean).filter((f) => f !== 'bifold');
+  const [a, b] = range.split('..');
+  const ka = bifoldKind(a, top), kb = bifoldKind(b, top);
+  if (ka !== kb) return [...files, 'bifold'];
+  if (ka === 'commit') {
+    const pin = (rev) => { try { return git('rev-parse', `${rev}:bifold`); } catch { return ''; } };
+    const pa = pin(a), pb = pin(b);
+    if (pa && pb && pa !== pb) {
+      // A worktree's bifold/ is empty: BIFOLD_GIT names a bifold clone that has the pins (as pathExists reads it).
+      const bifold = process.env.BIFOLD_GIT || path.join(top, 'bifold');
+      const inner = execFileSync('git', ['-C', bifold, 'diff', '--name-only', `${pa}..${pb}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+      files.push(...inner.map((f) => `bifold/${f}`));
+    }
+  }
+  return files;
+}
+
+/**
+ * Does the path exist in the wallet tree (HEAD's tree too: a folded bifold/ is part of it), or, while HEAD still
+ * carries the gitlink, in the bifold clone (BIFOLD_GIT, else ./bifold)? null when unknowable.
+ */
 export function pathExists(f, top = repo) {
   if (fs.existsSync(path.join(top, f))) return true;
   const git = (dir, ...a) => { try { execFileSync('git', ['-C', dir, ...a], { stdio: 'ignore' }); return true; } catch { return false; } };
   if (git(top, 'cat-file', '-e', `HEAD:${f}`)) return true;
-  if (f.startsWith('bifold/')) {
+  if (f.startsWith('bifold/') && bifoldKind('HEAD', top) !== 'tree') {
     const dir = process.env.BIFOLD_GIT || path.join(top, 'bifold');
     let pin = '';
     try { pin = execFileSync('git', ['-C', top, 'rev-parse', 'HEAD:bifold'], { encoding: 'utf8' }).trim(); } catch { /* no pin */ }
@@ -288,18 +315,23 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     else console.log(`no such file in the wallet or bifold tree: ${missing.join(', ')}`);
     process.exitCode = 2;
   }
-  // The manifest is bifold's at one pin; a file that gained testIDs since reads as unmapped. Compared by its ids (the
-  // manifest carries no commit id): the change's pin's manifest against the synced copy.
+  // The manifest is bifold's at one commit; a file that gained testIDs since reads as unmapped. Compared by its ids (the
+  // manifest carries no commit id): the change's manifest against the synced copy. Folded (bifold/ a tree in the
+  // wallet ref), the manifest is in the wallet ref itself; a gitlink's is in the clone at the pin.
   let warning = '';
   try {
     const ref = arg('--range') ? arg('--range').split('..')[1] : 'HEAD';
-    const pin = execFileSync('git', ['-C', repo, 'rev-parse', `${ref}:bifold`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    const upstream = JSON.parse(execFileSync('git', ['-C', path.join(repo, 'bifold'), 'show', `${pin}:packages/core/testids.json`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 }));
+    const o = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 };
+    const folded = bifoldKind(ref) === 'tree';
+    const at = execFileSync('git', ['-C', repo, 'rev-parse', folded ? ref : `${ref}:bifold`], o).trim();
+    const upstream = JSON.parse(folded
+      ? execFileSync('git', ['-C', repo, 'show', `${ref}:bifold/packages/core/testids.json`], o)
+      : execFileSync('git', ['-C', path.join(repo, 'bifold'), 'show', `${at}:packages/core/testids.json`], o));
     const { added } = manifestDrift(manifests[0]?.json, upstream);
-    if (added.length) warning = `testids manifest lacks ${added.length} id(s) bifold ${pin.slice(0, 8)} has, so files owning them read as unmapped (sync: e2e/scripts/sync-testids.sh)`;
+    if (added.length) warning = `testids manifest lacks ${added.length} id(s) ${folded ? 'wallet' : 'bifold'} ${at.slice(0, 8)} has, so files owning them read as unmapped (sync: e2e/scripts/sync-testids.sh)`;
   } catch {
     // Said, not swallowed: a comparison that cannot run here must not read like one that found nothing.
-    warning = 'testids manifest not compared with the pin (no pin, or its manifest not readable here: submodule not checked out, or that commit not fetched), so files owning newer ids may read as unmapped';
+    warning = 'testids manifest not compared with the change (no bifold/ at that ref, or its manifest not readable here: a pre-fold pin whose submodule is not checked out or not fetched), so files owning newer ids may read as unmapped';
   }
   if (warning) console.error(`warning: ${warning}`);
   if (missing.length) process.exit();
