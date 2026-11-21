@@ -1,7 +1,7 @@
 name: Post-release smoke
 
 # The owner's pipeline (10-29): a release follows the merge, and the released commit is tested after it.
-# After every "OTA publish (ring 0)" run that published (a dry run, promote, withdraw or device test publishes
+# After every "OTA release" run that published (a dry run, promote, withdraw or device test publishes
 # nothing and this stops at once), scripts/ota/post-release.mjs:
 #   - dispatches Test builds on the released branch and waits for the run built from the released commit,
 #   - dispatches gate-smoke.yml on that run (both platforms) and waits for it,
@@ -16,7 +16,10 @@ run-name: Post-release · ${{ github.event.workflow_run.display_title }}
 
 on:
   workflow_run:
-    # By name, both: ota-publish.yml is being renamed to "OTA release", and this must follow it across the rename.
+    # By name. ota-publish.yml is "OTA release" on main, but a release is published from the release/* or
+    # hotfix/* branch it fixes, and the run takes its name from that branch's copy: release/244-250 and the
+    # hotfix branches cut from them still name it "OTA publish (ring 0)". Keep the old name while a store build
+    # from those branches can still receive an update, or a publish from one runs no smoke and no brake.
     workflows: ["OTA publish (ring 0)", "OTA release"]
     types: [completed]
 

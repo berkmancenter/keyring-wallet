@@ -28,6 +28,9 @@ protocol we use to agree on them.
 | [community-polls-plan.md](./community-polls-plan.md) | A member votes in a community's polls and elections from the phone, with blind tickets, as a voter only. Companion: [research](./community-polls-plan/2026-11-02-al.md). | Proposed |
 | [rooms-chat-plan.md](./rooms-chat-plan.md) | A room's conversation on the shared record format (trust-tasks-tf #1027): replies, reactions, withdrawn messages and edits. Reader-safe first, then reading rules, display, batch reads and writing, each with what it waits on. | Accepted, building |
 | [relationship-over-tsp-plan.md](./relationship-over-tsp-plan.md) | The peer-to-peer relationship ceremony without a prior DIDComm connection: a shared-connect trigger link carries the inviter's peer DID, the scanner proposes, five documents follow with a proof on each, over the TSP binding with DIDComm v2 allowed. Work packages, the minimal one-way demo for the 7-10 November 2026 Interop Builder Weekend, cuts, risks. Companion: [notes](./relationship-over-tsp-plan/2026-11-05-bam.md). | **Draft** for review by Alberto Leon; not to merge before his review. Nothing built |
+| [rcard-profile-picture-plan.md](./rcard-profile-picture-plan.md) | A per-holder profile picture on the R-Card: a vCard `PHOTO` (base64 JPEG data URI, capped at 256×256 px) in the R-Card's jCard payload, shown in the VRC contact list and contact details. Companion: [`2026-09-18-bam.md`](./rcard-profile-picture-plan/2026-09-18-bam.md) (the crop moved into the app's own center-crop) | No status line in the plan. `processRCardPhoto` exists in bifold (`packages/core/src/modules/vrc/utils/rcardPhoto.ts`), so at least part is built; not checked against the plan's steps |
+| [reference-app-sdk-packaging.md](./reference-app-sdk-packaging.md) | Whether and how to package this repo as a reference app plus SDK, so developers can stand up small demo apps on the same Keyring/Credo/VRC/Trust Task infrastructure. Sibling of the OpenVTC plan | Exploratory working notes, not a commitment; not yet in the plan + companion structure. Companions record R1–R5 as built |
+| [release-cadence-and-testing-strategy/](./release-cadence-and-testing-strategy/) | Release cadence and the release gate's test strategy. **No parent plan file in the repo:** `release-cadence-and-testing-strategy.md` is a local export that was never committed. The folder holds [`gate_efficiency_subtask.md`](./release-cadence-and-testing-strategy/gate_efficiency_subtask.md) (what the gate is for, and how it gets cheaper) and its dated companions | Subtask design approved by the project lead on 2026-10-14 (per the subtask); the subtask's own phases name what each waits on |
 
 ## Why documents instead of only pull-request threads
 
@@ -49,17 +52,35 @@ invisible to an agent reading the codebase. So:
    They live in the plan's companion folder, named `YYYY-MM-DD-initials.md` —
    one file per author per working session. Authoring conventions (what goes in
    the plan vs. a dated companion, citation rules) are in
-   [`CLAUDE.md`](./CLAUDE.md).
+   [`CLAUDE.md`](./CLAUDE.md). Every plan and companion has two parts: a short
+   human `## Overview` (or `## Summary` in a companion) and a numbered precision
+   section for implementers, each opened by a marker
+   (`<!-- plan-part: human -->`, `<!-- plan-part: precision -->`) and a banner
+   saying who it is for; the precision part is authoritative.
+   [`CLAUDE.md`](./CLAUDE.md) gives the structure, the order of work and the
+   mockup kit, and [`PLAN_TEMPLATE.md`](./PLAN_TEMPLATE.md) a skeleton.
 3. **A proposal gets a response with evidence**, not opinions: claim → verdict
    → citation (file path, commit, or a runnable check).
-4. **Agreed items merge into the living plan**, which bumps its revision line
-   and names the proposal it absorbed. Rejected items are recorded *with their
+4. **Agreed items merge into the living plan** in the present tense, with no
+   revision marker; the companion records which of its items were absorbed (and
+   the plan's review index links it). Rejected items are recorded *with their
    reasoning* so they don't come back around.
 5. **Claims about upstream get verified against the pinned clones before
    adoption.** This is the load-bearing rule. The upstream repositories change
    daily; several claims in the first review round were accurate when written
    and stale a week later. `scripts/openvtc/` exists to make that verification
    reproducible for everyone.
+6. **A plan is done when the last PR of its stack merges** and two things are
+   recorded: the plan's status line (and its row in the table above) says
+   `Implemented` with the merged PRs, and a dated companion lists every
+   deviation from the plan, or says there were none. Until then it is
+   "Accepted, building". Details: [`CLAUDE.md`](./CLAUDE.md), "When the plan is
+   done".
+7. **Structure is checked mechanically** for plans in the two-part format:
+   `node --experimental-strip-types scripts/plans/check-plans.ts` locally, and
+   the Plan structure workflow on PRs touching `docs/plans/`. Legacy plans are
+   skipped until they migrate ([`CLAUDE.md`](./CLAUDE.md), "Checking a plan's
+   structure").
 
 ## Working on this workstream
 

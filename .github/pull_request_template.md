@@ -1,30 +1,41 @@
 ## What is in this PR?
 
-<!-- What is the goal of this PR? What steps are involved in achieving that goal? -->
+<!-- The goal, and the steps taken to reach it. -->
 
 ## Changes in the codebase
 
-<!-- This is technical. Here is where you can be more focused on the engineering side of your solution. Include information about the functionality they are adding or modifying, as well as any refactoring or improvement of existing code. -->
+<!-- The engineering side: what is added or changed, and any refactoring. -->
 
 -
 
-## Documentation and automated testing
+## Stack
 
-Confirm you did the following as appropriate:
-- [ ] document any breaking changes in your commit messages?
-- [ ] document your changes as comments in the code? Use TSDoc format where appropriate.
-- [ ] update the README and docs to be clear and easy to use for end users and developers?
-- [ ] add and/or update automated tests?
-- [ ] update team documentation of any new or changed environment variables?
+<!-- Delete this section for a PR that is not part of a plan's stack (a hot fix, a small change).
+     Format: docs/plans/CLAUDE.md, "Implementing a plan: stacked PRs". -->
+
+Stack: <n> of <m>. Base: <branch> (#<PR below>), at <sha8>.
+Plan section: <docs/plans/…-plan.md §N, at a commit permalink if the plan may move>
+Above / below: <#PR above>, <#PR below>
+
+## Before opening
+
+<!-- Tick what you ran, and note any result that is not a plain pass. Commands: docs/TESTING.md.
+     A PR that changes only plans and their assets runs the plan checker instead of the app checks
+     (docs/plans/CLAUDE.md, "A plan-only PR runs no app tests locally"); say so here. -->
+
+- [ ] `yarn lint`, `yarn prettier`, `yarn typecheck` (root)
+- [ ] The build this change could break (native build for `app/ios`, `app/android`, native modules or patches)
+- [ ] Tests for what changed (`yarn test`, or the package's own `yarn test` under `bifold/packages/*`)
+- [ ] Every commit is signed and has a `Signed-off-by:` trailer (root `CLAUDE.md`, "Commit conventions")
+- [ ] Docs, comments and environment-variable notes updated as needed; breaking changes noted in the commit messages
+- [ ] A PR that adds or substantively changes a plan under `docs/plans/` links the dated companion recording its completeness and correctness check: <link>
 
 ## Testing this PR
 
-<!-- Give your reviewer some context and specific recommendations with easy to follow steps how to test your work. -->
+<!-- Steps a reviewer can follow to see it work. -->
 
 - [ ]
 
-
-
 ## Additional information
 
-<!-- Provide any additional information that might be useful to the reviewer in evaluating this pull request. This could include performance considerations,design choices, etc. -->
+<!-- Anything else useful for review: performance, design choices, follow-ups. -->
