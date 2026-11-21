@@ -324,6 +324,7 @@ export {
   closeWalletMailbox,
   walletMailboxOf,
   mintContactDid,
+  setMailboxWakeHandle,
   provisionV2Mediation,
   startV2MessagePickup,
   setV2MediationEnabled,

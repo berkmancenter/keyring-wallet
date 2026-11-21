@@ -1,4 +1,5 @@
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { createHash } from 'crypto'
 
 import { VtiMediatorSession, type VtiClientIdentity, type VtiMediatorEndpoints } from '../module/VtiMediatorTransport'
 
@@ -23,6 +24,7 @@ const agent = {
 } as never
 const ENVELOPE = 'https://trusttasks.org/binding/didcomm/0.1/envelope'
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
+const FORWARD = 'https://didcomm.org/routing/2.0/forward'
 const document = { id: 'urn:uuid:d-1', type: 'https://trusttasks.org/spec/messaging/account/update/0.1', payload: {} }
 
 function sessionAsking() {
@@ -103,6 +105,45 @@ describe('asking the mediator', () => {
     })
     await expect(session.ask(document)).rejects.toThrow('socket is not open')
     expect(session['asks'].size).toBe(0)
+    await session.stop()
+  })
+})
+
+describe('a forward for the mailbox path', () => {
+  const sha256hex = (s: string) => createHash('sha256').update(s).digest('hex')
+  const attached = (sent: DidCommV2PlaintextMessage) =>
+    (sent as unknown as { attachments: { data: { base64?: string; json?: unknown } }[] }).attachments[0].data
+
+  test('the inner JWE goes as its exact bytes, base64, and the stored id is their sha256', async () => {
+    const { session, sent } = sessionAsking()
+    const inner = {
+      protected: 'eyJ0eXAiOiJ4In0',
+      recipients: [{ header: { kid: 'did:key:z6LSmailbox#z6LSmailbox' } }],
+      iv: 'i',
+      ciphertext: 'c',
+      tag: 't',
+    }
+    const { id } = await session.forwardForMailbox('did:peer:2.peer-mailbox', inner)
+    const bytes = JSON.stringify(inner)
+    expect(id).toBe(sha256hex(bytes))
+    expect(sent[0]).toMatchObject({
+      type: FORWARD,
+      from: identity.did,
+      to: [mediator.did],
+      body: { next: 'did:peer:2.peer-mailbox' },
+    })
+    expect(attached(sent[0]).json).toBeUndefined()
+    expect(Buffer.from(attached(sent[0]).base64 as string, 'base64url').toString('utf8')).toBe(bytes)
+    await session.stop()
+  })
+
+  test('CONTROL: a string inner is attached as given, never re-serialised, so its id is of the string', async () => {
+    const { session, sent } = sessionAsking()
+    const given = '{"protected": "x",  "ciphertext":"c"}'
+    const { id } = await session.forwardForMailbox('did:peer:2.peer-mailbox', given)
+    expect(Buffer.from(attached(sent[0]).base64 as string, 'base64url').toString('utf8')).toBe(given)
+    expect(id).toBe(sha256hex(given))
+    expect(id).not.toBe(sha256hex(JSON.stringify(JSON.parse(given))))
     await session.stop()
   })
 })

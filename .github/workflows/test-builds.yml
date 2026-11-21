@@ -53,7 +53,9 @@ on:
       - "yarn.lock"
       - "app/patches/**"
       - ".yarn/patches/**"
-      # The bifold native modules and dependency manifests (bifold/ is part of this repository since the fold).
+      # The bifold native modules and dependency manifests (bifold/ is part of this repository since the fold). The
+      # react-native-* glob is an assumption shared with scripts/release/tier.mjs's "native module package" rule: a
+      # native package named otherwise is added to both together.
       - "bifold/packages/react-native-*/**"
       - "bifold/packages/*/package.json"
       - "bifold/package.json"

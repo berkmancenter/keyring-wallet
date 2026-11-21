@@ -1527,6 +1527,11 @@ async function announceRelationshipDid(
     logger.info(`✓ RelationshipDid set and sent: ${relationshipDid} | Connection: ${connectionRecord.id}`)
   } else {
     logger.error(`✗ RelationshipDid stored locally but failed to send after ${maxRetries} attempts`)
+    // Nothing left this phone, so the flow ends here, as an error the overlay says at once. Left "connecting", the
+    // chat would show "Sent N min ago… this continues when they open it" for a message that was never sent, and the
+    // exchange would wait forever (a mailbox send refused, 2026-11-21).
+    if (vrcFlowStore.getStatus(connectionRecord.id) === 'connecting')
+      vrcFlowStore.clearFlow(connectionRecord.id, 'error')
   }
 
   logger.debug(`RelationshipDid stored for counterparty: ${counterpartyConnectionDid}`)

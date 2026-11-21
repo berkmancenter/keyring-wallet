@@ -11,6 +11,7 @@ import {
   closeWalletMailbox,
   mailboxAccountKey,
   MEDIATOR_ACCOUNT_UPDATE,
+  MEDIATOR_WAKE_REQUEST,
   MEDIATOR_WAKE_SET,
   openWalletMailbox,
   setMailboxWakeHandle,
@@ -101,13 +102,23 @@ function fakeAgent({ created = ['did:peer:2.mine'] }: { created?: string[] } = {
 }
 
 const ENVELOPE = 'https://trusttasks.org/binding/didcomm/0.1/envelope'
-/** The mediator's answers, as affinidi-messaging-mediator v0.53.0 gave them in the lab: the realised view, in `payload`. */
+/**
+ * The mediator's answers as v0.53.0 gives them (its bundles' responseSchema): account/update's realised view sits
+ * under `account`; wake/set's `wakeCapable` is flat; wake/request answers `{}`.
+ */
 const answerTo = (document: Record<string, unknown>) => {
   const type = String(document.type)
   if (type === MEDIATOR_ACCOUNT_UPDATE)
-    return { type: ENVELOPE, body: { type: `${type}#response`, payload: { did: 'x', acl: { sendForwarded: true } } } }
+    return {
+      type: ENVELOPE,
+      body: {
+        type: `${type}#response`,
+        payload: { account: { did: 'x', accountType: 'standard', acl: { sendForwarded: true } } },
+      },
+    }
   if (type === MEDIATOR_WAKE_SET)
     return { type: ENVELOPE, body: { type: `${type}#response`, payload: { wakeCapable: true } } }
+  if (type === MEDIATOR_WAKE_REQUEST) return { type: ENVELOPE, body: { type: `${type}#response`, payload: {} } }
   return { type: ENVELOPE, body: {} }
 }
 
@@ -121,7 +132,7 @@ const forward = (next: string, data: Record<string, unknown>) => ({
 const session = () => ({
   start: jest.fn(async () => undefined),
   stop: jest.fn(async () => undefined),
-  forward: jest.fn(async () => undefined),
+  forwardForMailbox: jest.fn(async () => ({ id: 'id-of-the-inner-bytes' })),
   ask: jest.fn(async (document: Record<string, unknown>) => answerTo(document) as never),
 })
 
@@ -213,7 +224,7 @@ describe('the forward’s next is a mailbox DID resolved from the peer’s own c
       endpoint: MEDIATOR,
       connectionId: 'c-mailbox',
     })
-    expect(s.forward).toHaveBeenCalledWith(PEER_MAILBOX, { p: 1 })
+    expect(s.forwardForMailbox).toHaveBeenCalledWith(PEER_MAILBOX, { p: 1 })
     expect(registerOutboundTransport).toHaveBeenCalledTimes(1)
     await closeWalletMailbox(agent)
   })
@@ -226,7 +237,7 @@ describe('the forward’s next is a mailbox DID resolved from the peer’s own c
       endpoint: OTHER_MEDIATOR,
       connectionId: 'c-cross',
     })
-    expect(s.forward).toHaveBeenCalledWith(OTHER_MAILBOX, { p: 2 })
+    expect(s.forwardForMailbox).toHaveBeenCalledWith(OTHER_MAILBOX, { p: 2 })
     await closeWalletMailbox(agent)
   })
 
@@ -237,7 +248,7 @@ describe('the forward’s next is a mailbox DID resolved from the peer’s own c
     await expect(
       transport.sendMessage({ payload: {} as never, endpoint: OTHER_MEDIATOR, connectionId: 'c-plain' })
     ).rejects.toThrow('no mailbox found')
-    expect(s.forward).not.toHaveBeenCalled()
+    expect(s.forwardForMailbox).not.toHaveBeenCalled()
     await closeWalletMailbox(agent)
   })
 
@@ -248,7 +259,7 @@ describe('the forward’s next is a mailbox DID resolved from the peer’s own c
     await expect(
       transport.sendMessage({ payload: {} as never, endpoint: MEDIATOR, connectionId: 'c-direct' })
     ).rejects.toThrow('no mailbox found')
-    expect(s.forward).not.toHaveBeenCalled()
+    expect(s.forwardForMailbox).not.toHaveBeenCalled()
     await closeWalletMailbox(agent)
   })
 
@@ -259,7 +270,7 @@ describe('the forward’s next is a mailbox DID resolved from the peer’s own c
     await expect(transport.sendMessage({ payload: {} as never, endpoint: PEER_MAILBOX })).rejects.toThrow(
       'no mailbox found'
     )
-    expect(s.forward).not.toHaveBeenCalled()
+    expect(s.forwardForMailbox).not.toHaveBeenCalled()
     await closeWalletMailbox(agent)
   })
 
@@ -403,12 +414,39 @@ describe('the phone’s account at the mediator', () => {
     const s = session()
     s.ask.mockResolvedValue({
       type: ENVELOPE,
-      body: { type: `${MEDIATOR_ACCOUNT_UPDATE}#response`, payload: { acl: { sendForwarded: false } } },
+      body: {
+        type: `${MEDIATOR_ACCOUNT_UPDATE}#response`,
+        payload: { account: { did: 'x', accountType: 'standard', acl: { sendForwarded: false } } },
+      },
     } as never)
     await openWalletMailbox(agent, MEDIATOR, deps(s))
     expect(walletMailboxOf(agent)?.did).toBe(MAILBOX)
     expect(warned()).toEqual([expect.stringMatching(/forwarding not confirmed on/)])
     await closeWalletMailbox(agent)
+  })
+
+  test('a non-conformant flat answer with the right on is still read as on: the fallback is defence, not a second blessed shape', () => {
+    // v0.53.0's response allows no member but `account` (its bundle's responseSchema), so a flat `acl` can only come
+    // from a non-conformant mediator. Tolerated, since the alternative is the false "not confirmed" line this
+    // check exists to avoid; pinned here so a later cleanup does not read the fallback as decoration.
+    return (async () => {
+      const { agent } = fakeAgent()
+      const s = session()
+      s.ask.mockResolvedValueOnce({
+        type: ENVELOPE,
+        body: { type: `${MEDIATOR_ACCOUNT_UPDATE}#response`, payload: { acl: { sendForwarded: true } } },
+      } as never)
+      await openWalletMailbox(agent, MEDIATOR, deps(s))
+      expect(walletMailboxOf(agent)?.did).toBe(MAILBOX)
+      expect(warned()).toEqual([])
+      const infos = (agent as unknown as { config: { logger: { info: jest.Mock } } }).config.logger.info.mock.calls.map(
+        (c) => String(c[0])
+      )
+      expect(infos).toEqual(
+        expect.arrayContaining([expect.stringMatching(/forwarding on for mailbox-of-did:peer:2\.me…/)])
+      )
+      await closeWalletMailbox(agent)
+    })()
   })
 
   test('a wake handle given at open is left at the mediator with a signed wake/set, after the forwarding right', async () => {
@@ -452,5 +490,71 @@ describe('the phone’s account at the mediator', () => {
     await expect(setMailboxWakeHandle(agent, { gateway: 'did:web:gateway.example', handle: 'wh_3' })).resolves.toBe(
       false
     )
+  })
+})
+
+describe('after a mailbox send, the recipient’s mediator is asked for a wake', () => {
+  const MAILBOX = `mailbox-of-${MEDIATOR}`
+  const deps = (s: ReturnType<typeof session>) => ({
+    resolveMediator: async (_a: unknown, did: string) => ({ did, wsEndpoint: 'wss://m.example/ws' }) as never,
+    makeSession: () => s,
+  })
+  const send = (agent: never, connectionId = 'c-mailbox') =>
+    new WalletMailboxOutboundTransport(agent).sendMessage({
+      payload: { p: 1 } as never,
+      endpoint: MEDIATOR,
+      connectionId,
+    })
+
+  test('the stored id the session returned is named in a signed wake/request for the recipient’s mailbox', async () => {
+    const { agent } = fakeAgent()
+    const s = await opened(agent)
+    // The open asks for the forwarding right itself (every open, since #1169); only the send's asks are measured.
+    s.ask.mockClear()
+    await send(agent)
+    expect(s.forwardForMailbox).toHaveBeenCalledWith(PEER_MAILBOX, { p: 1 })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(s.ask).toHaveBeenCalledTimes(1)
+    const [document] = s.ask.mock.calls[0] as [Record<string, unknown>]
+    expect(document).toMatchObject({
+      type: MEDIATOR_WAKE_REQUEST,
+      issuer: MAILBOX,
+      recipient: MEDIATOR,
+      payload: { addressee: PEER_MAILBOX, msgIds: ['id-of-the-inner-bytes'], urgency: 'interactive' },
+      proof: { proofPurpose: 'authentication' },
+    })
+    await closeWalletMailbox(agent)
+  })
+
+  test('CONTROL: the wake is asked after the forward, once, and its refusal does not fail the send', async () => {
+    const { agent } = fakeAgent()
+    const s = session()
+    await openWalletMailbox(agent, MEDIATOR, deps(s))
+    s.ask.mockClear()
+    const order: string[] = []
+    s.forwardForMailbox.mockImplementation(async () => {
+      order.push('forward')
+      return { id: 'x' }
+    })
+    s.ask.mockImplementation(async () => {
+      order.push('wake')
+      throw new Error('[TrustTasks:VtiMediatorTransport] m.example refused: protocol.trust_task.unsupported')
+    })
+    await expect(send(agent)).resolves.toBeUndefined()
+    // The wake is not awaited by the send: let it run before looking.
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(order).toEqual(['forward', 'wake'])
+    await closeWalletMailbox(agent)
+  })
+
+  test('CONTROL: a send refused before the forward (no mailbox for the peer) asks for nothing', async () => {
+    const { agent } = fakeAgent()
+    const s = await opened(agent)
+    // The open asks for the forwarding right itself (every open, since #1169); only the send's asks are measured.
+    s.ask.mockClear()
+    await expect(send(agent, 'c-plain')).rejects.toThrow(/no mailbox found/)
+    expect(s.forwardForMailbox).not.toHaveBeenCalled()
+    expect(s.ask).not.toHaveBeenCalled()
+    await closeWalletMailbox(agent)
   })
 })

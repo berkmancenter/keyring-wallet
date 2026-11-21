@@ -565,7 +565,9 @@ export const FOLDED_MANIFEST = 'bifold/packages/core/testids.json'
 /**
  * bifold's packages/core/testids.json as the wallet carries it. Since the fold that is the file bifold/packages/core/
  * testids.json of this tree (`:bifold` is a tree), read from the working tree: the file sync-testids.sh copies, and in
- * CI the same bytes as HEAD's. Before the fold (`:bifold` is a gitlink) it is the manifest at the submodule commit the
+ * CI the same bytes as HEAD's. That is a deliberate difference between the two eras: the folded branch reads the
+ * WORKING TREE (an uncommitted regeneration is checked as what sync-testids.sh will copy), where the pre-fold branch
+ * deliberately read the PIN and never the submodule's working tree. Before the fold (`:bifold` is a gitlink) it is the manifest at the submodule commit the
  * wallet pins, not the submodule's working tree, which can sit anywhere locally; the gitlink is the index's, as
  * sync-testids.sh reads it, so a staged, uncommitted pin bump is checked against the pin being made. `{ skipped }` when
  * it cannot be read here. `folded` says which it was, for the message.
