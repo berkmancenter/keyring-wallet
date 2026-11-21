@@ -17,14 +17,16 @@ name: Framework VTI conformance
 
 on:
   pull_request:
-    branches: [main, feat/one-codebase]
+    branches: [main, feat/one-codebase, 'fold/**']
     paths:
       - 'bifold/packages/core/src/modules/trust-tasks/**'
       - 'bifold/packages/trust-tasks/**'
       - 'scripts/openvtc/**'
       - '.github/workflows/framework-vti-conformance.yml'
   push:
-    branches: [main]
+    # fold/2-framework-ci: TEMPORARY, so the port runs once on its own branch as the proof (a dispatch needs the
+    # workflow on the default branch); removed before the PR merges.
+    branches: [main, fold/2-framework-ci]
     paths:
       - 'bifold/packages/core/src/modules/trust-tasks/**'
       - 'bifold/packages/trust-tasks/**'

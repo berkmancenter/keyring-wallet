@@ -10,7 +10,9 @@ name: Framework full suite
 
 on:
   push:
-    branches: [main]
+    # fold/2-framework-ci: TEMPORARY, so the full suite runs once on its own branch as the proof (a dispatch needs
+    # the workflow on the default branch); removed before the PR merges.
+    branches: [main, fold/2-framework-ci]
     paths:
       - "bifold/**"
       - ".github/workflows/framework-full.yml"
