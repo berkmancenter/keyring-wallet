@@ -217,6 +217,7 @@ git mv bifold/__mocks__ packages/__mocks__          # shared jest mocks; or into
 - `app/metro.config.js`: `watchFolders` = repo root; `packageDirs`/`BIFOLD_SOURCE_PACKAGES` removed (a workspace package resolves through the root `node_modules` symlink, and its `main` is source). The `singletonPrefixes` list stays: it guards against the few nested copies that remain under `@credo-ts/*` (class-transformer, askar-shared).
 - `app/tsconfig.json`: drop the three `@bifold/*` path redirects; `@openvtc/trust-tasks` paths move to `node_modules/…`.
 - `app/jest.config.js`: drop every `moduleNameMapper` line whose comment cites the second `node_modules`; keep `class-transformer`, `@openvtc/*` (ESM exports map), file/style mocks, `react-i18next`, and the expo mocks (now `<rootDir>/../packages/core/__mocks__/…`). `app/jestSetup.js:54` path to `refreshOrchestrator` updates.
+- **One copy of each shared runtime.** Today `app/package.json` and `packages/core/package.json` both set `installConfig.hoistingLimits: "workspaces"`, which nests each workspace's dependencies under its own `node_modules`; with core inside the root workspace that would put a second `react`, `react-native` and every native module under `packages/core/node_modules`, next to the app's copies (today there are three `react` directories on disk). Phase 2 removes `hoistingLimits` from the React Native packages so their dependencies hoist to the root, and keeps the app's only if Metro's existing singleton list (`singletonPrefixes` in `metro.config.js`) is shown to cover every native-backed and React package; the simpler outcome, one root `node_modules` for everything, is preferred. *Acceptance:* `find . -path '*/node_modules/react/package.json' -not -path '*/node_modules/*/node_modules/*'` finds exactly one file outside `node_modules` nesting under `@credo-ts/*`, the same for `react-native` and for each of `@bifold/react-native-attestation`'s and `locality-peripheral`'s peers, and a release bundle's module list (`react-native bundle --verbose`, or the Metro `--sourcemap-output` module table) names each of them once.
 - `app/hot-updater.config.ts`: `extraSources` paths `../bifold/packages/…` → `../packages/…`. **This is the fingerprint risk** (§6.3).
 - `scripts/release/tier.mjs`: every `bifold\/packages\/` becomes `packages\/`; the `bifold/` dotfile and lockfile rules go; `tier.test.mjs` fixtures follow.
 - `e2e/scripts/sync-testids.sh`: reads `packages/core/testids.json`. `quality.yml` testids check follows.
@@ -241,6 +242,8 @@ git mv bifold/__mocks__ packages/__mocks__          # shared jest mocks; or into
 
 - Port the bifold `quality.yaml` jobs into the wallet's `quality.yml` as a matrix: per-package `test`, the testids extractor test and manifest check (`packages/core/scripts/gen-testids.mjs --check`), core's lint with `eslint-rules/require-testid`, and the `tsc` ratchet. Port `vti-conformance.yaml` as a job (it already checks out the wallet to build `card-verify`; now it runs in place). Drop `publish.yaml` (no npm publishing), `repolinter`, `scorecard`, `maintenance` (Q8).
 - `deps-cache.yml`: one cache key.
+- Repository secrets and variables bifold's workflows used: `CODECOV_TOKEN` (coverage upload, kept per Q8) is added to the wallet repository by the product owner; nothing else (`GITHUB_TOKEN` is automatic). Neither repository has a `dependabot.yml`; dependabot's bifold PRs were GitHub defaults and simply stop.
+- The coordinator named further bifold-side jobs to port ("four core jest parts", a "tsc ratchet", a "SEDI/KERI switch guard"); none appears under those names in either repository's workflows as of 2026-11-21, so the coordinator names the actual jobs or scripts before Phase 3 ports them, and this list is corrected then.
 - Commit conventions: one `commitlint` config; decide the DCO rule (Q7). `commit-checks.yml` (GitHub signature verification) is unchanged.
 - Archive `keyring-bifold` on GitHub (read-only). Its open PRs are closed with a pointer, or re-landed per the product owner's list (§8.2).
 - `UPGRADE_PROGRESS.md` §2 and §4, `README.md`, `CONTRIBUTING.md`, `RELEASE.md`, `CLAUDE.md`, `e2e/README.md`: say the new shape. The `openvtc-workspace` and `vti-lab-and-field` skills and the memory notes that cite `bifold/packages` get one correction each.
@@ -409,6 +412,12 @@ Thirteen drafts and seven ready PRs are open in `keyring-bifold` on 2026-11-20 (
 - Any change to the Node services' behaviour or deployment other than their path on the host.
 
 ---
+
+## 10a. Rollback
+
+- **Before the merge to `main`:** nothing to roll back; `main` is untouched and the integration branch can be abandoned.
+- **After the merge to `main`:** `main` holds one squash commit, so `git revert <fold-squash>` restores the submodule shape in one signed commit (the gitlink, `.gitmodules`, the `portal:` resolutions and both install scripts come back as they were; `bifold/` disappears from the tree). `history/bifold` and the integration branch stay, and the revert is itself revertible. Clones that ran the one-line recipe in §7 need `git submodule update --init` again. A revert is the response to a defect found in the first days after the merge that cannot be fixed forward within a day; a defect found after store build 281 (or whichever number the folded tree ships as, §11a) is fixed forward, because reverting then would re-split a tree that phones already run.
+- **Of a single stacked PR inside the integration branch:** an ordinary revert on the integration branch, before the final PR is opened.
 
 ## 11. Disk and machines
 
