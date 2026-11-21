@@ -1,0 +1,44 @@
+name: Plan structure
+
+# Checks plans under docs/plans/ written in the two-part format (docs/plans/CLAUDE.md, "Checking a plan's
+# structure"); legacy plans are skipped. Not a required check: it is path-filtered, and a required path-filtered
+# check would block every PR that does not touch plans.
+on:
+  pull_request:
+    # Any base branch, as Code Quality: a plan edit in a stacked PR is checked where it is reviewed.
+    types: [opened, synchronize, reopened, edited]
+    paths:
+      - docs/plans/**
+      - scripts/plans/**
+      - .github/workflows/plans.yml
+      # The mockup kit's tokens are read from the app theme and bifold components: a theme change re-runs
+      # the token test and flags mockups, and contact sheets, drawn with the old values.
+      - app/src/keyring-theme/**
+      - bifold
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    name: Plan structure
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The token test reads bifold component sources (scripts/plans/mockup-kit/tokens.ts).
+          submodules: true
+
+      # Node 22 runs the TypeScript checker with --experimental-strip-types; no install needed.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Checker and mockup-kit tests
+        run: node --experimental-strip-types --no-warnings --test scripts/plans/check-plans.test.ts scripts/plans/mockup-kit/tokens.test.ts scripts/plans/mockup-kit/kit.test.ts
+
+      # Also fails a mockups/sheet.png whose sheet.manifest.json no longer matches its SVGs or the token
+      # fingerprint. A hash compare, so no browser here; the author regenerates the sheet locally with
+      # `kit.ts sheet docs/plans/<plan>/mockups` and commits it.
+      - name: Check plans
+        run: node --experimental-strip-types --no-warnings scripts/plans/check-plans.ts
