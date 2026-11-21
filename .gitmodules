@@ -1,4 +1,0 @@
-[submodule "bifold"]
-	path = bifold
-	url = https://github.com/berkmancenter/keyring-bifold.git
-	branch = feat/trust-tasks-integration
