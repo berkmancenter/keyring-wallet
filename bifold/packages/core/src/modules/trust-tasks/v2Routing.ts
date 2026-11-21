@@ -1,36 +1,33 @@
 /**
- * DIDComm v2 mediation for the wallet (didcomm_v2_subtask.md V2 step 4 /
- * §7.1): a SECOND mediation record beside the v1 one, never a replacement.
+ * How the wallet routes DIDComm v2 invitations it accepts (acceptConfigForInvitation), and what is left of its
+ * Coordinate Mediation 2.0 client.
  *
- * Why two records: Coordinate Mediation 1.0 and 2.0 are different protocols
- * on different connections, and Credo keeps ONE default mediator. Every v1
- * invitation and every existing contact keeps routing through the v1 default
- * (the production mediator, never upgraded in place — §7.1), while v2
- * invitations name the v2 record explicitly via `getRouting({ mediatorId })`.
- * tsp-reference/ref-17 proved the two records and their two pickup loops
- * coexist on one agent (part 3, "carol").
+ * Wallet-to-wallet v2 goes through the wallet mailbox (module/walletMailbox.ts, didcomm_v2_subtask.md §7.2): the
+ * Affinidi mediator has no Coordinate Mediation 2.0 by design, so the second-mediation-record design that used to
+ * live here (a v2 record beside the v1 one, its own Pickup 4.0 loop) has nothing to talk to there. Its entry points
+ * are retired in three steps, each green on its own: this one keeps provisionV2Mediation, startV2MessagePickup and
+ * setV2MediationEnabled as wrappers with unchanged signatures, so the pinned wallet compiles; the wallet then stops
+ * calling them; and a last bifold change removes them once the wallet pin in force no longer does.
  *
- * The provisioning order matters and is encoded here rather than left to a
- * caller: `provision()` makes the newest grant the default mediator, so the
- * previous (v1) default is restored right after, and a v2 invitation is
- * accepted with `useDefaultMediator: false` routing because the v1 default
- * cannot route a did:peer:2 (ref-17 part 3, "carol probe").
+ * What stays: findV2MediationRecord (the wallet's already-provisioned guard reads it), getRoutingForV2 (unmediated
+ * routing for a v2 invitation accepted without an open mailbox: the v1 default mediator cannot route a did:peer:2,
+ * tsp-reference/ref-17 finding 1), routingForInvitation and acceptConfigForInvitation.
  */
 
 import type { Agent } from '@credo-ts/core'
 import type { DidCommMediationRecord, DidCommRouting } from '@credo-ts/didcomm'
-import { DidCommMediationState, DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
+import { DidCommMediationState } from '@credo-ts/didcomm'
 
 import { mintContactDid, walletMailboxOf } from './module/walletMailbox'
 
 const LOG_PREFIX = '[TrustTasks:V2Mediation]'
 
 /**
- * The v2 mailbox switch: whether this phone uses Coordinate Mediation 2.0 at all (provisions it, runs its Pickup 4.0
- * loop, and mints out-of-band/2.0 invitations through it). OFF by default, and independent of accepting DIDComm v2:
- * a phone accepts v2 by default, but a v2 invitation it mints must name a mailbox a peer can deliver to, and a phone
- * has outbound transports only (tsp-reference/ref-17). Without a v2 mailbox the phone mints v1. The wallet app sets
- * it at start-up from its saved setting.
+ * The v2 mailbox switch, as the wallet app sets it at start-up from its saved setting. Nothing in this package reads
+ * it any more: minting v2 depends on an open wallet mailbox (canMintV2Invitation), and the Coordinate Mediation 2.0
+ * provisioning and Pickup 4.0 loop it used to gate are retired (provisionV2Mediation, startV2MessagePickup). Kept,
+ * with its signature, so the pinned wallet compiles; step 3 of the retirement removes it once the wallet pin in force
+ * no longer calls it.
  */
 let v2MediationEnabled = false
 
@@ -92,59 +89,36 @@ export async function acceptConfigForInvitation(
 }
 
 /**
- * Provision Coordinate Mediation 2.0 with the mediator whose out-of-band/2.0
- * invitation is `invitationUrl`, once: an existing granted v2 record is
- * returned untouched, so this is safe on every agent start. The v1 default
- * mediator stays the default.
+ * RETIRED (step 1 of 3): Coordinate Mediation 2.0 provisioning with the mediator whose out-of-band/2.0 invitation is
+ * `invitationUrl`. See the body for what the caller sees.
  */
 export async function provisionV2Mediation(
   agent: Agent,
   invitationUrl: string,
   label = 'Keyring'
 ): Promise<DidCommMediationRecord> {
-  const existing = await findV2MediationRecord(agent)
-  if (existing) return existing
-
-  const recipient = agent.modules.didcomm.mediationRecipient
-  const previousDefault = await recipient.findDefaultMediator()
-
-  const invitation = await agent.modules.didcomm.oob.parseInvitation(invitationUrl)
-  if (!invitation.v2Invitation) throw new Error(`${LOG_PREFIX} MEDIATOR_V2_URL is not an out-of-band/2.0 invitation`)
-
-  agent.config.logger.info(
-    `${LOG_PREFIX} accepting the v2 mediator invitation ${invitation.v2Invitation.from.slice(0, 40)}…`
-  )
-  const { connectionRecord } = await agent.modules.didcomm.oob.receiveInvitation(invitation, {
-    label,
-    routing: await recipient.getRouting({ useDefaultMediator: false }),
-  })
-  if (!connectionRecord) throw new Error(`${LOG_PREFIX} the v2 mediator invitation produced no connection`)
-
-  const record = await recipient.provision(connectionRecord)
-  if (previousDefault && previousDefault.id !== record.id) {
-    // provision() made the v2 grant the default; the v1 mediator keeps that role.
-    await recipient.setDefaultMediator(previousDefault)
-  }
-  agent.config.logger.info(
-    `${LOG_PREFIX} Coordinate Mediation 2.0 granted (record ${record.id}, routing DID ${record.routingDid?.slice(0, 40)}…); default mediator ${previousDefault ? 'unchanged (v1)' : 'is now v2'}`
-  )
-  return record
+  // RETIRED (step 1 of 3). Coordinate Mediation 2.0 has nothing to talk to on the Affinidi mediator, which the wallet
+  // uses for v2 (no Coordinate Mediation by design, upstream issue #755); the wallet mailbox replaces it
+  // (module/walletMailbox.ts). What the caller sees: this throws, and the wallet's only caller
+  // (provisionV2MediationIfConfigured) logs "provisioning failed, continuing on v1 only: <this message>" and carries on.
+  // It is reached only with MEDIATOR_V2_URL set, which no store, OTA or test build carries. Kept, with its signature,
+  // so the pinned wallet compiles: step 2 (the wallet) stops calling it, and step 3 removes it once the wallet pin in
+  // force no longer calls it.
+  void agent
+  void invitationUrl
+  void label
+  throw new Error(`${LOG_PREFIX} Coordinate Mediation 2.0 is retired in this build; the wallet mailbox replaces it`)
 }
 
 /**
- * Start the Pickup 4.0 polling loop for the v2 mediator, if provisioned.
- * Call AFTER the v1 loop is started: the patched v1/v2 pickup start stops
- * every running loop first (the anti-stacking guard), the v4 start does not.
+ * RETIRED (step 1 of 3): the Pickup 4.0 loop for a Coordinate Mediation 2.0 record. What the caller sees: `false`, its
+ * meaning since it was written ("no loop started"), and nothing else happens; both wallet call sites discard it. No
+ * phone holds such a record: provisioning needed MEDIATOR_V2_URL, which no store, OTA or test build carries. Kept, with
+ * its signature, so the pinned wallet compiles; step 2 (the wallet) stops calling it, and step 3 removes it once the
+ * wallet pin in force no longer calls it. Collection for v2 contacts is the wallet mailbox's session
+ * (module/walletMailbox.ts).
  */
 export async function startV2MessagePickup(agent: Agent): Promise<boolean> {
-  // Off, no second loop runs, even on a phone that provisioned a v2 record while the switch was on. That strands what
-  // reaches its v2 connections: their mail waits uncollected in the v2 mailbox until the switch is on again. Accepted
-  // (Alberto, 2026-11-20: no Pickup 4.0 loop for anyone with the switch off); only a phone that turned the switch on
-  // has such connections, and no store build ships a v2 mailbox.
-  if (!v2MediationEnabled) return false
-  const record = await findV2MediationRecord(agent)
-  if (!record) return false
-  await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(record, DidCommMediatorPickupStrategy.PickUpV4)
-  agent.config.logger.info(`${LOG_PREFIX} Pickup 4.0 polling started for mediation record ${record.id}`)
-  return true
+  void agent
+  return false
 }

@@ -70,6 +70,12 @@ export interface OpenWalletMailboxDeps {
 
 /** The open mailbox, per agent. */
 const openMailboxes = new WeakMap<Agent, WalletMailbox>()
+/**
+ * Every mailbox DID this phone keeps (one per mediator it has opened one at), read once when a mailbox opens.
+ * Held here so the inbound check is a set lookup: takeMailboxMessage runs once per message with the session's
+ * acknowledgement waiting behind it, and these change only when a mailbox is minted.
+ */
+const keptMailboxDids = new WeakMap<Agent, Set<string>>()
 const opening = new WeakMap<Agent, { mediatorDid: string; run: Promise<WalletMailbox> }>()
 const transports = new WeakMap<Agent, WalletMailboxOutboundTransport>()
 
@@ -119,6 +125,9 @@ export async function openWalletMailbox(
     if (current) await closeWalletMailbox(agent)
     const mediator = await (deps.resolveMediator ?? resolveVtiMediator)(agent, mediatorDid)
     const did = await mailboxDidFor(agent, mediator)
+    const kept = await agent.genericRecords.findAllByQuery({ type: WALLET_MAILBOX_RECORD_TYPE })
+    const keptDids = kept.map((record) => record.content?.did).filter((d): d is string => typeof d === 'string')
+    keptMailboxDids.set(agent, new Set([did, ...keptDids]))
     const identity = await vtiClientIdentityFromDid(agent, did)
     const onMessage = (plaintext: DidCommV2PlaintextMessage) => takeMailboxMessage(agent, plaintext)
     const session = deps.makeSession
@@ -169,8 +178,9 @@ export async function mintContactDid(agent: Agent, mailbox: WalletMailbox): Prom
  * The check on `next` establishes that it is a DID this phone created: ANY created DID (a contact DID, a VTA client
  * DID, a v1 peer DID), not only this mailbox's contact DIDs. That is what makes handing it on safe, since the
  * receiver can open only what this phone holds keys for. Two forwards are dropped (said, and acknowledged: neither
- * can ever be read as a contact's message): one whose `next` this phone did not create, and one whose `next` is the
- * mailbox DID itself, since nothing is written to a mailbox except through a contact DID that names it.
+ * can ever be read as a contact's message): one whose `next` this phone did not create, and one whose `next` is a
+ * mailbox DID of this phone's itself (any of them, one per mediator), since nothing is written to a mailbox except
+ * through a contact DID that names it.
  */
 export async function takeMailboxMessage(agent: Agent, plaintext: DidCommV2PlaintextMessage): Promise<void> {
   if (plaintext.type !== FORWARD) {
@@ -181,8 +191,8 @@ export async function takeMailboxMessage(agent: Agent, plaintext: DidCommV2Plain
   }
   const body = (plaintext.body ?? {}) as { next?: unknown }
   const next = typeof body.next === 'string' ? body.next : undefined
-  if (next && next === walletMailboxOf(agent)?.did) {
-    releaseWarn(`${LOG_PREFIX} a forward addressed to the mailbox DID itself; dropped`)
+  if (next && (keptMailboxDids.get(agent)?.has(next) || next === walletMailboxOf(agent)?.did)) {
+    releaseWarn(`${LOG_PREFIX} a forward addressed to one of this phone's mailbox DIDs itself; dropped`)
     return
   }
   if (!next || (await agent.dids.getCreatedDids({ did: next })).length === 0) {
@@ -251,7 +261,10 @@ export class WalletMailboxOutboundTransport implements DidCommOutboundTransport 
     const mailbox = openMailboxes.get(this.agent)
     if (!mailbox) throw new Error(`${LOG_PREFIX} no mailbox is open to send through`)
     const next = await this.peerMailbox(outboundPackage.connectionId)
-    if (!next) throw new Error(`${LOG_PREFIX} no mailbox found for ${outboundPackage.endpoint ?? 'this message'}`)
+    if (!next)
+      throw new Error(
+        `${LOG_PREFIX} no mailbox found: the peer's documents lead to no mailbox (connection ${outboundPackage.connectionId ?? 'none'})`
+      )
     await mailbox.session.forward(next, outboundPackage.payload)
   }
 

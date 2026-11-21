@@ -77,7 +77,6 @@ import { setupChatInbound } from '../chat/inbound'
 import { createDidCommV2Carriage } from './module/DidCommV2Carriage'
 import { createTspCarriage } from './module/TspCarriage'
 import { advertiseTspCarriage, peerReadsTsp, recordPeerReadsTsp } from './module/contactTspCapability'
-import { findV2MediationRecord, isV2MediationEnabled } from './v2Routing'
 import { walletMailboxOf } from './module/walletMailbox'
 import { hasJcsProof, verifySharedConnectVrc } from './module/sharedConnectCredential'
 import { isSharedConnectEnabled } from './module/sharedConnectFlag'
@@ -146,23 +145,19 @@ export function isDidCommV2Enabled(): boolean {
 
 /**
  * Whether a new invitation from this agent may be out-of-band/2.0, through what, and if not, why (for the log). All
- * of: v2 on, the agent built with v2 (its didcommVersions is fixed at construction), somewhere for a peer's reply to
- * land, and no release kill. Somewhere to land is this phone's mailbox (walletMailbox.ts: `via: 'mailbox'`, the
- * invitation minted on a contact DID that names it), or else the v2 mediation switch on with a granted v2 record
- * (`via: 'mediation'`). Neither, and a v2 invitation would name an endpoint no peer can deliver to: a phone holds
- * outbound transports only, and the v1 default cannot route a did:peer:2 (tsp-reference/ref-17 finding 1).
+ * of: v2 on, the agent built with v2 (its didcommVersions is fixed at construction), this phone's wallet mailbox open
+ * (walletMailbox.ts: `via: 'mailbox'`, the invitation minted on a contact DID that names it), and no release kill.
+ * Without an open mailbox a v2 invitation would name an endpoint no peer can deliver to: a phone holds outbound
+ * transports only, and the v1 default cannot route a did:peer:2 (tsp-reference/ref-17 finding 1). Coordinate
+ * Mediation 2.0 is not a route: the Affinidi mediator has none (v2Routing.ts).
  */
-export async function canMintV2Invitation(
-  agent: Agent
-): Promise<{ v2: boolean; why: string; via?: 'mailbox' | 'mediation' }> {
+export async function canMintV2Invitation(agent: Agent): Promise<{ v2: boolean; why: string; via?: 'mailbox' }> {
   if (DIDCOMM_V2_MINT_REMOTE_OFF.off) return { v2: false, why: 'v2 invitations are turned off in this release' }
   if (!isDidCommV2Enabled()) return { v2: false, why: 'DIDComm v2 is off' }
   if (!agent.modules.didcomm.config.isSupported('v2'))
     return { v2: false, why: 'this agent was constructed without v2 support (restart required to apply the toggle)' }
   if (walletMailboxOf(agent)) return { v2: true, why: "v2 on, through this phone's mailbox", via: 'mailbox' }
-  if (!isV2MediationEnabled()) return { v2: false, why: 'the v2 mailbox is off' }
-  if (!(await findV2MediationRecord(agent))) return { v2: false, why: 'no v2 mailbox is provisioned' }
-  return { v2: true, why: 'v2 on, with a v2 mailbox', via: 'mediation' }
+  return { v2: false, why: 'no wallet mailbox is open' }
 }
 
 export type TrustTaskCarriageKind = 'didcomm-v1' | 'didcomm-v2' | 'tsp'

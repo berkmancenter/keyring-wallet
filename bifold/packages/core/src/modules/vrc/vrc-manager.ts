@@ -2821,26 +2821,23 @@ export const createRelationshipInvitation = async (
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
   const { canMintV2Invitation } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
   const mint = await canMintV2Invitation(agent)
-  if (!mint.v2) agent.config.logger.info(`[VRC] minting a v1 invitation: ${mint.why}`)
-  const didCommVersion = mint.v2 ? ('v2' as const) : ('v1' as const)
-  if (didCommVersion === 'v2')
-    agent.config.logger.info('[VRC] DIDComm v2 enabled — creating an out-of-band/2.0 invitation')
-  // A v2 invitation through this phone's mailbox is minted on a fresh contact DID that names the mailbox
-  // (trust-tasks/module/walletMailbox.ts): Credo's v2 create reads it as `ourDid`, which its public config type does
-  // not declare, so the config is a typed variable rather than a literal. Through v2 mediation it routes through that
-  // record, never the v1 default (trust-tasks/v2Routing.ts). Left undefined for v1 so Credo keeps using the default
-  // mediator exactly as before.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  const { getRoutingForV2 } = require('../trust-tasks/v2Routing') as typeof import('../trust-tasks/v2Routing')
+  // A v2 invitation is minted through this phone's mailbox, on a fresh contact DID that names it
+  // (trust-tasks/module/walletMailbox.ts). Credo's v2 create reads it as `ourDid`, which its public config type does
+  // not declare, so the config is a typed variable rather than a literal. v2 only once that DID exists: a mailbox
+  // closed in between leaves nothing for a v2 invitation to name, and the invitation is v1. No routing for either:
+  // v1 keeps the default mediator exactly as before.
   const { mintContactDid, walletMailboxOf } =
     // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
     require('../trust-tasks/module/walletMailbox') as typeof import('../trust-tasks/module/walletMailbox')
-  const mailbox = mint.via === 'mailbox' ? walletMailboxOf(agent) : undefined
+  const mailbox = mint.v2 ? walletMailboxOf(agent) : undefined
   const ourDid = mailbox ? await mintContactDid(agent, mailbox) : undefined
-  const routing = didCommVersion === 'v2' && !ourDid ? await getRoutingForV2(agent) : undefined
+  const didCommVersion = ourDid ? ('v2' as const) : ('v1' as const)
+  if (didCommVersion === 'v1')
+    agent.config.logger.info(`[VRC] minting a v1 invitation: ${mint.v2 ? 'the mailbox closed' : mint.why}`)
+  else agent.config.logger.info("[VRC] creating an out-of-band/2.0 invitation through this phone's mailbox")
   const invitationConfig: CreateOutOfBandInvitationConfig & { ourDid?: string } = {
     didCommVersion,
-    routing,
+    routing: undefined,
     ...(ourDid ? { ourDid } : {}),
     label: walletName,
     goalCode,

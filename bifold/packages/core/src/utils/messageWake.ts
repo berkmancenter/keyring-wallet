@@ -368,10 +368,13 @@ export async function pickUpNow(agent: Agent, timeoutMs: number = MESSAGE_WAKE_W
   const didcomm = (agent.modules as { didcomm?: any }).didcomm
   const mediator = await didcomm?.mediationRecipient?.findDefaultMediator?.()
   if (!mediator || !didcomm?.messagePickup) return
+  // The default mediator is the v1 one, collected from over Pickup 2.0. A Coordinate Mediation 2.0 record is never the
+  // default (v2Routing.ts kept the v1 one in that role, and that provisioning is retired), so nothing here speaks
+  // Pickup 4.0. v2 contacts are collected by the wallet mailbox's own session, which a wake does not reach yet.
+  if (mediator.protocolVersion === 'v2') return
   await didcomm.messagePickup.pickupMessages({
     connectionId: mediator.connectionId,
-    // A DIDComm v2 mediator is collected from over Pickup 4.0 (v2Routing.ts).
-    protocolVersion: mediator.protocolVersion === 'v2' ? 'v4' : 'v2',
+    protocolVersion: 'v2',
     awaitCompletion: true,
     awaitCompletionTimeoutMs: timeoutMs,
   })

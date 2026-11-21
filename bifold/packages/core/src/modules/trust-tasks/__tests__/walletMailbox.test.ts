@@ -60,9 +60,12 @@ function fakeAgent({ created = ['did:peer:2.mine'] }: { created?: string[] } = {
     },
     // One kept mailbox DID per mediator, so an open never has to mint (minting needs a real KMS).
     genericRecords: {
-      findAllByQuery: jest.fn(async (q: { mediatorDid: string }) => [
-        { content: { did: `mailbox-of-${q.mediatorDid}` } },
-      ]),
+      // Asked for one mediator's: that mailbox. Asked for all of them (what an open reads once): one per mediator.
+      findAllByQuery: jest.fn(async (q: { mediatorDid?: string }) =>
+        q.mediatorDid
+          ? [{ content: { did: `mailbox-of-${q.mediatorDid}` } }]
+          : [{ content: { did: `mailbox-of-${MEDIATOR}` } }, { content: { did: `mailbox-of-${OTHER_MEDIATOR}` } }]
+      ),
       save: jest.fn(),
     },
     modules: {
@@ -136,6 +139,25 @@ describe('the mailbox takes a forward for a DID this phone created, and only tha
     await opened(agent)
     await takeMailboxMessage(agent, forward(`mailbox-of-${MEDIATOR}`, { json: { protected: 'x' } }) as never)
     expect(receiveMessage).not.toHaveBeenCalled()
+    await closeWalletMailbox(agent)
+  })
+
+  test('a forward addressed to a mailbox DID this phone keeps for another mediator is dropped too (read once at open)', async () => {
+    const { agent, receiveMessage } = fakeAgent({ created: [`mailbox-of-${OTHER_MEDIATOR}`] })
+    await opened(agent)
+    await takeMailboxMessage(agent, forward(`mailbox-of-${OTHER_MEDIATOR}`, { json: { protected: 'x' } }) as never)
+    expect(receiveMessage).not.toHaveBeenCalled()
+    await closeWalletMailbox(agent)
+  })
+
+  test('CONTROL: the kept mailboxes are read once at open, not per message', async () => {
+    const { agent } = fakeAgent({ created: ['did:peer:2.mine'] })
+    await opened(agent)
+    const reads = (agent as unknown as { genericRecords: { findAllByQuery: jest.Mock } }).genericRecords.findAllByQuery
+    const before = reads.mock.calls.length
+    for (let i = 0; i < 3; i++)
+      await takeMailboxMessage(agent, forward('did:peer:2.mine', { json: { protected: 'x' } }) as never)
+    expect(reads.mock.calls).toHaveLength(before)
     await closeWalletMailbox(agent)
   })
 

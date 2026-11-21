@@ -1,8 +1,8 @@
 /**
- * v2Routing: the second (Coordinate Mediation 2.0) mediation record beside
- * the v1 default — didcomm_v2_subtask.md V2 step 4 / §7.1.
+ * v2Routing: how a v2 invitation is accepted, and what is left of the Coordinate Mediation 2.0 client (retired:
+ * the Affinidi mediator has none; the wallet mailbox replaces it, didcomm_v2_subtask.md §7.2).
  */
-import { DidCommMediationState, DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
+import { DidCommMediationState } from '@credo-ts/didcomm'
 
 import {
   findV2MediationRecord,
@@ -61,65 +61,38 @@ describe('getRoutingForV2', () => {
   })
 })
 
-describe('provisionV2Mediation', () => {
-  it('is idempotent: an existing grant is returned without touching the mediator', async () => {
-    const { agent, recipient, oob } = fakeAgent([v1, v2])
-    expect(await provisionV2Mediation(agent, 'https://m/?_oob=x')).toBe(v2)
+describe('Coordinate Mediation 2.0 is retired (step 1 of 3): the wrappers say so, and touch nothing', () => {
+  afterEach(() => setV2MediationEnabled(false))
+
+  it('provisionV2Mediation throws the retirement, and neither parses, accepts nor provisions anything', async () => {
+    const { agent, recipient, oob } = fakeAgent([v1])
+    await expect(provisionV2Mediation(agent, 'https://m/?_oob=x')).rejects.toThrow(
+      'Coordinate Mediation 2.0 is retired in this build; the wallet mailbox replaces it'
+    )
+    expect(oob.parseInvitation).not.toHaveBeenCalled()
     expect(oob.receiveInvitation).not.toHaveBeenCalled()
     expect(recipient.provision).not.toHaveBeenCalled()
-  })
-
-  it('accepts the invitation unmediated, provisions, and restores the v1 default mediator', async () => {
-    const { agent, recipient, oob } = fakeAgent([v1])
-    expect(await provisionV2Mediation(agent, 'https://m/?_oob=x')).toBe(v2)
-
-    expect(recipient.getRouting).toHaveBeenCalledWith({ useDefaultMediator: false })
-    expect(oob.receiveInvitation).toHaveBeenCalledWith(
-      expect.objectContaining({ v2Invitation: expect.anything() }),
-      expect.objectContaining({ routing: { options: { useDefaultMediator: false } } })
-    )
-    expect(recipient.provision).toHaveBeenCalledWith({ id: 'c-med', didcommVersion: 'v2' })
-    // provision() made the v2 grant the default; the v1 mediator gets the role back.
-    expect(recipient.setDefaultMediator).toHaveBeenCalledWith(v1)
-  })
-
-  it('leaves the v2 grant as default when the wallet had no mediator before', async () => {
-    const { agent, recipient } = fakeAgent([], { defaultMediator: null })
-    await provisionV2Mediation(agent, 'https://m/?_oob=x')
     expect(recipient.setDefaultMediator).not.toHaveBeenCalled()
   })
 
-  it('refuses a v1 invitation in MEDIATOR_V2_URL', async () => {
-    const { agent } = fakeAgent([v1], { v2Invitation: false })
-    await expect(provisionV2Mediation(agent, 'https://m/?oob=x')).rejects.toThrow(/out-of-band\/2\.0/)
-  })
-})
-
-describe('startV2MessagePickup', () => {
-  afterEach(() => setV2MediationEnabled(false))
-
-  it('the v2 mailbox is off as shipped', () => {
-    jest.isolateModules(() => {
-      expect((require('../v2Routing') as typeof import('../v2Routing')).isV2MediationEnabled()).toBe(false)
-    })
-    expect(isV2MediationEnabled()).toBe(false)
-  })
-
-  it('with the v2 mailbox off, no Pickup 4.0 loop starts, even for a v2 record provisioned while it was on', async () => {
+  it('startV2MessagePickup returns false and starts nothing, even with the switch on and a granted v2 record', async () => {
+    setV2MediationEnabled(true)
     const { agent, recipient } = fakeAgent([v1, v2])
     expect(await startV2MessagePickup(agent)).toBe(false)
     expect(recipient.initiateMessagePickup).not.toHaveBeenCalled()
   })
 
-  it('CONTROL: with the v2 mailbox on, it starts Pickup 4.0 for the v2 record and reports whether it did', async () => {
+  it('setV2MediationEnabled still records the flag (the pinned wallet calls it), and it is off as shipped', () => {
+    jest.isolateModules(() => {
+      expect((require('../v2Routing') as typeof import('../v2Routing')).isV2MediationEnabled()).toBe(false)
+    })
     setV2MediationEnabled(true)
-    const { agent, recipient } = fakeAgent([v1, v2])
-    expect(await startV2MessagePickup(agent)).toBe(true)
-    expect(recipient.initiateMessagePickup).toHaveBeenCalledWith(v2, DidCommMediatorPickupStrategy.PickUpV4)
+    expect(isV2MediationEnabled()).toBe(true)
+  })
 
-    const none = fakeAgent([v1])
-    expect(await startV2MessagePickup(none.agent)).toBe(false)
-    expect(none.recipient.initiateMessagePickup).not.toHaveBeenCalled()
+  it('CONTROL: findV2MediationRecord, which the wallet’s already-provisioned guard reads, still finds a granted v2 record', async () => {
+    const { agent } = fakeAgent([v1, v2])
+    expect(await findV2MediationRecord(agent)).toBe(v2)
   })
 })
 
