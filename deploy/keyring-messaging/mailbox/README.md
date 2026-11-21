@@ -163,6 +163,11 @@ printed by the harness's frame handler while bob's agent is shutting down after 
 shutdown; packing its acknowledgement made an ephemeral key whose cleanup found the store closed). Every row had
 passed before it; it affects none.
 
+Two doors that do not exist in this build, for the record: the Aries v1 anonymous-forward path
+(`allow_unauthenticated_forwards`) is compiled out, since the image has no `didcomm-v1` feature; and were the
+unauthenticated relay door ever opened, upstream gives that session `DENY_ALL,SEND_MESSAGES,SEND_FORWARDED` only
+(`jwt_auth.rs`, `relay_anonymous_acls`), never an inbox or the self-management rights.
+
 Findings applied to `mailbox.toml`: `ANON_RECEIVE` in the default (without it A3 was refused, "recipient is not
 accepting anonymous messages": Credo's inner forward layer is anoncrypt, while the forward's outer sender stays
 authenticated and gated by `SEND_FORWARDED`); `trust_task_verification = "enforce"` (every row's Trust Task is
