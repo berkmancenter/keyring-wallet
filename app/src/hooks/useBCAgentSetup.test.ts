@@ -19,8 +19,8 @@ import { initialState } from '../store'
 
 const mockOpenWalletMailbox = jest.fn()
 const mockAgentAddress = jest.fn<string | undefined, []>(() => undefined)
-const mockKeptHandle = jest.fn(
-  async (_agentDid: string) => undefined as { handle: { gateway: string; handle: string } } | undefined
+const mockKeptHandle = jest.fn<Promise<{ handle: { gateway: string; handle: string } } | undefined>, [string]>(
+  async () => undefined
 )
 const mockSetTsp = jest.fn()
 const mockSetV2 = jest.fn()
