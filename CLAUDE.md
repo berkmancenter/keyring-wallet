@@ -83,6 +83,8 @@ The active one is **`docs/plans/openvtc-integration-plan.md`** — aligning Keyr
 
 `docs/plans/CLAUDE.md` covers how these documents are written — read it before editing one, and note that plans state current design in the present tense while reasoning and superseded positions live in the dated companions.
 
+Every plan and companion has two parts: a short human `## Overview` (with diagrams, mockups for UI work, and a test summary) and a numbered precision section with everything an implementer needs. The precision section is written and checked first; the overview is then written with the `technical-plan-humanizer` skill (`.claude/skills/technical-plan-humanizer/SKILL.md`). The order of work, the completeness checklist and the Mermaid/SVG convention are in `docs/plans/CLAUDE.md`; a skeleton is in `docs/plans/PLAN_TEMPLATE.md`. The parts are marked `<!-- plan-part: human -->` and `<!-- plan-part: precision -->`, each with a banner. **When implementing from a plan, read the human part for orientation only and implement from the precision part**; if they disagree, the precision part wins and the overview needs fixing (`docs/plans/CLAUDE.md`, "Reading a plan (for agents)"). Mockups are generated from the app's theme by `scripts/plans/mockup-kit`.
+
 ## OpenVTC/TSP upstream clones
 
 The OpenVTC integration work (see Planning documents above) reads real
