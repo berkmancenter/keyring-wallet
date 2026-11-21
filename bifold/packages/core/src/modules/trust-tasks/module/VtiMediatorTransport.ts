@@ -56,7 +56,7 @@ import {
 } from '@credo-ts/core'
 import type { DidCommV2EncryptedMessage, DidCommV2KeyAgreementJwk, DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didcomm'
-import { tsp } from '@bifold/trust-tasks'
+import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
 
 import { didPrefix } from './didPrefix'
 import { isProblemReport, problemReportWords } from './problemReportWords'
@@ -110,6 +110,9 @@ export const TOKEN_RENEW_MARGIN_SECS = 60
  * (229 lab gate: a vetter's attest waited on one for good).
  */
 export const REOPEN_BOUND_MS = 45000
+
+/** How long {@link VtiMediatorSession.ask} waits for the mediator's answer before it gives up. */
+export const ASK_TIMEOUT_MS = 15_000
 
 /** The `exp` (seconds) of a JWT access token, or undefined when it cannot be read. */
 export function accessTokenExpiry(token: string | undefined): number | undefined {
@@ -1099,6 +1102,11 @@ export class VtiMediatorSession {
           return
         }
         if (plaintext.from === this.mediator.did) {
+          // The mediator answering something this session asked it (`ask`): the frame threaded to the ask, and from
+          // the mediator (it names itself on every Trust Task answer and problem-report it sends, measured at
+          // v0.53.0). Taken by the asker, never handed on or acknowledged. One that arrives after the ask gave up
+          // is no longer waited for and falls through to the branch below: the mediator's own, dropped unsaid.
+          if (this.answeredAsk(plaintext)) return
           // The mediator's own problem-report, about something this transport
           // sent it: dropped unsaid, three reached a tester's report as a bare
           // type, each just after the socket closed (IN-617). Still not handed
@@ -1424,6 +1432,72 @@ export class VtiMediatorSession {
     })
   }
 
+  /** What waits for the mediator's answer to an `ask`, by the envelope id the answer is threaded to. */
+  private readonly asks = new Map<
+    string,
+    {
+      resolve: (answer: DidCommV2PlaintextMessage) => void
+      reject: (error: Error) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
+
+  /**
+   * Ask the mediator itself something: a Trust Task document, signed by the caller for the DID this session is
+   * signed in as, carried in the DIDComm binding envelope and authcrypted to the mediator over this socket. Resolves
+   * with the mediator's answer, the frame it threads to the envelope (`thid`); rejects with the mediator's
+   * problem-report words, when the socket cannot carry it, or after `timeoutMs`.
+   *
+   * The mailbox uses it for its account at the mediator (walletMailbox.ts): `messaging/account/update` to turn on
+   * its own forwarding right, `messaging/wake/set` to leave its push handle. Measured against
+   * affinidi-messaging-mediator v0.53.0 (deploy/keyring-messaging/mailbox/README.md, Evidence).
+   */
+  async ask(document: Record<string, unknown>, timeoutMs = ASK_TIMEOUT_MS): Promise<DidCommV2PlaintextMessage> {
+    const id = uuid()
+    const answer = new Promise<DidCommV2PlaintextMessage>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.asks.delete(id)
+        reject(new Error(`${LOG_PREFIX} ${this.where} did not answer within ${timeoutMs} ms`))
+      }, timeoutMs)
+      this.asks.set(id, { resolve, reject, timer })
+    })
+    try {
+      await this.send({
+        id,
+        typ: PLAIN,
+        type: TRUST_TASK_V2_ENVELOPE_TYPE,
+        from: this.identity.did,
+        to: [this.mediator.did],
+        created_time: nowSec(),
+        expires_time: nowSec() + FORWARD_EXPIRY_SECS,
+        body: document,
+      })
+    } catch (error) {
+      const waiting = this.asks.get(id)
+      if (waiting) {
+        clearTimeout(waiting.timer)
+        this.asks.delete(id)
+      }
+      throw error
+    }
+    return answer
+  }
+
+  /** If `plaintext` answers an `ask` (threaded to its id), settle that ask and say so. */
+  private answeredAsk(plaintext: DidCommV2PlaintextMessage): boolean {
+    const thid = (plaintext as { thid?: unknown }).thid
+    const waiting = typeof thid === 'string' ? this.asks.get(thid) : undefined
+    if (!waiting || typeof thid !== 'string') return false
+    clearTimeout(waiting.timer)
+    this.asks.delete(thid)
+    if (isProblemReport(plaintext)) {
+      waiting.reject(new Error(`${LOG_PREFIX} ${this.where} refused: ${problemReportWords(plaintext)}`))
+    } else {
+      waiting.resolve(plaintext)
+    }
+    return true
+  }
+
   /** Each peer's `peerMediatorRoute`, read once per session; a peer that could not be read is read again next time. */
   private readonly tspOnlyRoutes = new Map<string, VtiMediatorEndpoints | null>()
   /** A peer's route being read now: sends that start meanwhile wait for this read (peerRouteSwitch.ts). */
@@ -1508,6 +1582,11 @@ export class VtiMediatorSession {
     this.pollTimer = undefined
     if (this.aliveTimer) clearTimeout(this.aliveTimer)
     this.aliveTimer = undefined
+    for (const [id, waiting] of this.asks) {
+      clearTimeout(waiting.timer)
+      this.asks.delete(id)
+      waiting.reject(new Error(`${LOG_PREFIX} session stopped before ${this.where} answered`))
+    }
     this.socket?.close()
     this.socket = undefined
   }

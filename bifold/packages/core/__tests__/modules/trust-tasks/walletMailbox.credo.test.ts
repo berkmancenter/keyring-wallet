@@ -93,6 +93,8 @@ function hubSession(
     forward: async (next, innerJwe) => {
       setImmediate(() => void deliver(next, innerJwe).catch(() => undefined))
     },
+    // The hub confirms the account's forwarding right as the mediator does (walletMailbox.ts, v0.53.0's answer shape).
+    ask: async () => ({ type: 'ask', body: { payload: { acl: { sendForwarded: true } } } }) as never,
   }
 }
 

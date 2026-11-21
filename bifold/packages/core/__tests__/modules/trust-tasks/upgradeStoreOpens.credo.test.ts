@@ -224,7 +224,13 @@ test('a v1-era store (GENERATED fixture, not a captured tester store) opens afte
   const phone = await makeAgent('phone', ['v1', 'v2'], storeId)
   const mailbox = await openWalletMailbox(phone, 'did:peer:2.the-mailbox-mediator', {
     resolveMediator: async (_a, did) => ({ did, wsEndpoint: 'wss://mediator.example/ws' }) as never,
-    makeSession: () => ({ start: async () => undefined, stop: async () => undefined, forward: async () => undefined }),
+    makeSession: () => ({
+      start: async () => undefined,
+      stop: async () => undefined,
+      forward: async () => undefined,
+      // The mediator confirming the account's forwarding right, as v0.53.0 answers (walletMailbox.ts).
+      ask: async () => ({ type: 'ask', body: { payload: { acl: { sendForwarded: true } } } }) as never,
+    }),
   })
 
   const after = await snapshot(phone)
