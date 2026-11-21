@@ -333,7 +333,10 @@ function planCommand(args) {
   const base = args.base
   if (!base) throw new Error('plan needs --base <ref>')
   git('merge-base', base, 'HEAD') // throws on a checkout too shallow to diff
-  const changes = git('diff', '--name-status', '--no-renames', `${base}...HEAD`)
+  // --relative: the framework lives under bifold/ of the wallet repository since the fold, and this script runs with
+  // that directory as its root, so the paths come back relative to it (packages/core/…) and the diff is restricted to
+  // it. A wallet-only change leaves it empty, which is "no framework suite to run", not a failure.
+  const changes = git('diff', '--name-status', '--no-renames', '--relative', `${base}...HEAD`)
     .split('\n')
     .filter(Boolean)
     .map((line) => {
@@ -341,7 +344,8 @@ function planCommand(args) {
       return { status, path: p }
     })
   const listed = Number(process.env.PR_CHANGED_FILES || 0)
-  if (changes.length === 0 && listed > 0)
+  const whole = git('diff', '--name-only', '--no-renames', `${base}...HEAD`).split('\n').filter(Boolean)
+  if (whole.length === 0 && listed > 0)
     throw new Error(
       `the diff against ${base} is empty, but GitHub lists ${listed} changed files; refusing to select nothing`
     )
