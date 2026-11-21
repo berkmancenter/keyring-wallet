@@ -20,6 +20,14 @@ on:
         type: choice
         options: [all, internal]
         default: all
+      allow_no_mailbox:
+        description: >-
+          Build on purpose without the wallet mailbox (the repository secret
+          MAILBOX_MEDIATOR_DID empty or unset). Off, the build refuses to start
+          in that state, since the mailbox would ship switched off with nothing
+          saying so (decided 2026-11-21).
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -73,6 +81,16 @@ jobs:
     runs-on: ubuntu-22.04
     environment: internal
     steps:
+      - uses: actions/checkout@v4
+      - name: The wallet mailbox's address is set, or its absence is deliberate
+        # Before any build minutes: an empty MAILBOX_MEDIATOR_DID ships the mailbox switched off and nothing
+        # goes red (the app reads empty as "no mailbox"). The script reads the variable, never prints it.
+        # OTA and Test builds are not gated: they write it empty by design.
+        shell: bash
+        run: scripts/ci/mailbox-gate.sh
+        env:
+          MAILBOX_MEDIATOR_DID: ${{ secrets.MAILBOX_MEDIATOR_DID }}
+          ALLOW_NO_MAILBOX: ${{ inputs.allow_no_mailbox }}
       - name: Check required secrets
         shell: bash
         run: |
