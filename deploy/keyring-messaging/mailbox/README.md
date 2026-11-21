@@ -149,14 +149,19 @@ send a routing/2.0 forward over the sender's own session). The harness is `evide
 | A4 CONTROL | an account that never set its flag is still refused |
 | B `external_forwarding = "false"` | a forward whose next hop has no account here is refused, `e.p.delivery.refused` ("next hop has no account on this mediator" in the mediator's log); A3 is the control |
 | C per-DID limit, 20/s burst 10 | 60 authenticated requests in one burst from one DID: 10 × 200, 50 × 429 |
-| D per-IP limit behind a proxy | `trust_xff_cidrs` = the proxy's address, limit 5/s burst 5: 40 requests with a rotating `X-Forwarded-For` are 40 buckets (no 429); 40 with the same address, 35 × 429. CONTROL, nothing trusted: the rotating addresses are one bucket, 35 × 429 |
+| D per-IP limit behind a proxy | `trust_xff_cidrs` = the proxy's address, limit 5/s burst 5: 40 requests with a rotating `X-Forwarded-For` are 40 buckets (no 429); 40 with the same address, 35 × 429. CONTROL, nothing trusted: the rotating addresses are one bucket, 35 × 429. This proves the bucketing, not the shipped values (100/s, burst 50), which were not run and stay `PENDING S2` in `mailbox.toml` |
 | E open → enrolled | restarted with `mediator_acl_mode = "explicit_allow"` (Redis AOF on): an existing account signs in again; a new DID is refused at the challenge, 403 `authentication.blocked` |
 | F what the store holds | every Redis key dumped and searched: 0 occurrences of any contact DID; the positive control (the stored frame's `did:key` recipient) found once; mailbox DIDs 13 times (accounts, sessions, handles), by design |
-| R1, R2 unauthenticated `POST /inbound` | an anoncrypt forward whose next hop is a phone's mailbox, and an anoncrypt message addressed straight to a mailbox DID: both 401 "Missing credentials". CONTROL with `SEND_FORWARDED` added to the default (implicit relay on): still refused, 400 `w.m.message.anonymous` (the relay path needs an authcrypt inner) and 403 "Anonymous direct delivery is not allowed by this mediator" |
+| R1, R2 unauthenticated `POST /inbound` | an anoncrypt forward whose next hop is a phone's mailbox, and an anoncrypt message addressed straight to a mailbox DID: both 401 "Missing credentials". CONTROL with `SEND_FORWARDED` added to the default (implicit relay on): still refused, 400 `w.m.message.anonymous` (the relay path needs an authcrypt inner) and 403 "Anonymous direct delivery is not allowed by this mediator". The control's assertion was written expecting acceptance, so its output file reports `0 passed, 2 failed`: the refusal is the finding. It probed anoncrypt inners only; an authcrypt inner from a stranger, which that setting would admit, was not probed |
 | W1 `wake/set` | `wakeCapable: true` |
 | W2 CONTROL | recipient online: a send plus `wake/request` rings nothing |
 | W3 CONTROL | recipient offline with no handle: nothing |
 | W4 wake | recipient offline with a handle: ONE `push/wake/0.2` reaches the (stand-in) gateway, payload `{handle, mediator, urgency: "interactive", v: 1}`, issued and signed by the mediator (proof purpose authentication); no second ring. The sender's id (sha256 of the inner JWE's bytes, attached as `data.base64`) equals the mediator's stored id; attached as `data.json` it does not, since the mediator re-serialises it |
+
+One line in `run-s2-main-f6ed8159.txt` is the harness's, not the mediator's: `(bob frame: Error deleting key …)` is
+printed by the harness's frame handler while bob's agent is shutting down after the last row (a frame arrived during
+shutdown; packing its acknowledgement made an ephemeral key whose cleanup found the store closed). Every row had
+passed before it; it affects none.
 
 Findings applied to `mailbox.toml`: `ANON_RECEIVE` in the default (without it A3 was refused, "recipient is not
 accepting anonymous messages": Credo's inner forward layer is anoncrypt, while the forward's outer sender stays

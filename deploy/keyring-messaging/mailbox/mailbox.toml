@@ -95,12 +95,24 @@ mediator_acl_mode = "explicit_deny"
 # standard anoncrypt wrap for the recipient mailbox's key. Without ANON_RECEIVE
 # on the recipient's account the mediator refuses it with "recipient is not
 # accepting anonymous messages" (upstream routing.rs, the AnonReceive check on
-# the next hop; measured in the lab at v0.53.0). It opens no anonymous path
-# from the network: the forward's outer sender is still authenticated and gated
-# by SEND_FORWARDED, external forwarding is off, and SEND_FORWARDED is not in
-# this default.
-# Never put SEND_FORWARDED itself in the default: in the default it turns on
-# implicit anonymous relay for everyone.
+# the next hop; measured in the lab at v0.53.0). The forward's outer sender is
+# still an authenticated, rate-limited account.
+#
+# What bounds relaying here is NOT this default. Every working account holds
+# SEND_FORWARDED, since each phone switches its own on (README, rows A1-A4), so
+# in the steady state everyone has it. The bounds are:
+#   - external_forwarding = "false" ([processors.forwarding] below): nothing is
+#     relayed onward, whatever an account's ACL says (row B);
+#   - local_direct_delivery_allow_anon = "false" and the anoncrypt checks on
+#     /inbound: an unauthenticated sender is refused (rows R1, R2).
+# SEND_FORWARDED is still kept OUT of the default for one reason: in the
+# default it opens the unauthenticated /inbound to forwards whose inner
+# envelope is authcrypt by any DID (upstream jwt_auth.rs, the anonymous relay
+# session exists only when the default grants SEND_FORWARDED). The lab's
+# control with SEND_FORWARDED in the default (README, row R) probed ANONCRYPT
+# inners only and found them refused by the checks above; an AUTHCRYPT inner
+# from a stranger was not probed and is what that door would admit. Granting
+# the right per account, after sign-in, keeps that door shut.
 global_acl_default = "DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,ANON_RECEIVE,SEND_FORWARDED_CHANGE,MODE_EXPLICIT_DENY"
 # Mail addressed to a local account is delivered to it (the mailbox's job).
 local_direct_delivery_allowed = "true"
@@ -201,7 +213,14 @@ did_rate_limit_burst = "10"
 # The forwarding processor runs (it also delivers forwards to local accounts).
 enabled = "true"
 future_time_limit = "86400"
-# Never forward to external mediators or endpoints: the mailbox is not a relay.
+# THE SETTING THE MAILBOX'S POSTURE RESTS ON. Never forward to external
+# mediators or endpoints: the mailbox is not a relay. Every account here
+# holds SEND_FORWARDED (each phone switches its own on, [security] above), and
+# sign-up is open to any DID, so with this "true" the mailbox would relay for
+# anyone on the internet; the ACL would not stop it. Measured at v0.53.0: with
+# "false", a forward whose next hop has no account here is refused,
+# "next hop has no account on this mediator" (README, row B). Changing this
+# value is a posture change, reviewed as such.
 external_forwarding = "false"
 report_errors = "true"
 blocked_forwarding_dids = "[]"
