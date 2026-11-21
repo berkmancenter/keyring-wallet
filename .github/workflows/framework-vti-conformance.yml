@@ -24,9 +24,7 @@ on:
       - 'scripts/openvtc/**'
       - '.github/workflows/framework-vti-conformance.yml'
   push:
-    # fold/2-framework-ci: TEMPORARY, so the port runs once on its own branch as the proof (a dispatch needs the
-    # workflow on the default branch); removed before the PR merges.
-    branches: [main, fold/2-framework-ci]
+    branches: [main]
     paths:
       - 'bifold/packages/core/src/modules/trust-tasks/**'
       - 'bifold/packages/trust-tasks/**'
