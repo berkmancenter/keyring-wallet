@@ -1,0 +1,687 @@
+/* eslint-disable import/no-cycle */
+// First, for its effect: when this run began (runStart), before anything else is evaluated.
+import './utils/runStart'
+import type { OnboardingStyleSheet } from './screens/Onboarding'
+
+import AgentProvider from '@bifold/react-hooks'
+import { Agent } from '@credo-ts/core'
+
+import createApp from './App'
+import * as components from './components'
+import { ButtonImpl as Button, ButtonType, Button as IButton } from './components/buttons/Button'
+import IconButton, { ButtonLocation } from './components/buttons/IconButton'
+import BulletPoint from './components/inputs/BulletPoint'
+import CheckBoxRow from './components/inputs/CheckBoxRow'
+import LimitedTextInput from './components/inputs/LimitedTextInput'
+import NotificationListItem from './components/listItems/NotificationListItem'
+import ContentGradient from './components/misc/ContentGradient'
+import ErrorBoundaryWrapper from './components/misc/ErrorBoundary'
+import FauxHeader from './components/misc/FauxHeader'
+import InfoBox, { InfoBoxType } from './components/misc/InfoBox'
+import QRRenderer from './components/misc/QRRenderer'
+import QRScannerTorch from './components/misc/QRScannerTorch'
+import ScanCamera from './components/misc/ScanCamera'
+import SVGOverlay, { MaskType } from './components/misc/SVGOverlay'
+import DeveloperModal from './components/modals/DeveloperModal'
+import DismissiblePopupModal from './components/modals/DismissiblePopupModal'
+import ErrorModal from './components/modals/ErrorModal'
+import SafeAreaModal from './components/modals/SafeAreaModal'
+import Record from './components/record/Record'
+import InfoTextBox from './components/texts/InfoTextBox'
+import Link from './components/texts/Link'
+import Text from './components/texts/Text'
+import { ThemedText } from './components/texts/ThemedText'
+import { ToastType } from './components/toast/BaseToast'
+import toastConfig from './components/toast/ToastConfig'
+import { AttachTourStep } from './components/tour/AttachTourStep'
+import { contactOfferTourSteps } from './components/tour/ContactOfferTourSteps'
+import { credentialOfferTourSteps } from './components/tour/CredentialOfferTourSteps'
+import { credentialsTourSteps } from './components/tour/CredentialsTourSteps'
+import { homeTourSteps } from './components/tour/HomeTourSteps'
+import { proofRequestTourSteps } from './components/tour/ProofRequestTourSteps'
+import { contactsTourSteps } from './modules/vrc/components/ContactsTourSteps'
+import { TourBox } from './components/tour/TourBox'
+import { Banner, BannerMessage, BannerSection } from './components/views/Banner'
+import HomeFooterView from './components/views/HomeFooterView'
+import KeyboardView from './components/views/KeyboardView'
+import ScreenWrapper from './components/views/ScreenWrapper'
+import { attemptLockoutConfig, PINRules, tours, walletTimeout } from './constants'
+import { defaultConfig, defaultHistoryEventsLogger } from './container-impl'
+import * as contexts from './contexts'
+import { ActivityProvider, AutoLockTime, useActivity } from './contexts/activity'
+import { AuthProvider } from './contexts/auth'
+import NavContainer from './contexts/navigation'
+import { NetworkProvider } from './contexts/network'
+import { useTour } from './contexts/tour/tour-context'
+import { TourProvider } from './contexts/tour/tour-provider'
+import { useDeveloperMode } from './hooks/developer-mode'
+import usePreventScreenCapture from './hooks/screen-capture'
+import useBifoldAgentSetup from './hooks/useBifoldAgentSetup'
+import { OpenIDCredentialRecordProvider } from './modules/openid/context/OpenIDCredentialRecordProvider'
+import { RefreshOrchestrator } from './modules/openid/refresh/refreshOrchestrator'
+import { DefaultScreenLayoutOptions } from './navigators/defaultLayoutOptions'
+import { DefaultScreenOptionsDictionary, useDefaultStackOptions } from './navigators/defaultStackOptions'
+import AttemptLockout from './screens/AttemptLockout'
+import Biometry from './screens/Biometry'
+import Developer from './screens/Developer'
+import Onboarding from './screens/Onboarding'
+import OnboardingPages from './screens/OnboardingPages'
+import Preface from './screens/Preface'
+import RenameWallet from './screens/RenameWallet'
+import Scan from './screens/Scan'
+import Splash from './screens/Splash'
+import Terms from './screens/Terms'
+import UpdateAvailable from './screens/UpdateAvailable'
+import ExportWallet from './screens/ExportWallet'
+import ImportWallet from './screens/ImportWallet'
+import { AbstractBifoldLogger } from './services/AbstractBifoldLogger'
+import { AgentBridge } from './services/AgentBridge'
+import { bifoldLoggerInstance } from './services/bifoldLogger'
+import { confirmBiometricKeychainAccess, isBiometricsActive, loadLoginAttempt } from './services/keychain'
+import { BifoldLogger } from './services/logger'
+import { MockLogger } from './testing/MockLogger'
+import { DeepPartial, ThemeBuilder } from './theme-builder'
+import * as types from './types'
+import { CredentialListFooterProps } from './types/credential-list-footer'
+import { QrCodeScanError } from './types/error'
+
+export { animatedComponents } from './animated-components'
+export { EventTypes, LocalStorageKeys } from './constants'
+export { AnimatedComponentsProvider, useAnimatedComponents } from './contexts/animated-components'
+export { useAuth } from './contexts/auth'
+export { useNetwork } from './contexts/network'
+export { DispatchAction, reducer, default as Store } from './contexts/reducers/store'
+export { defaultState, mergeReducers, StoreContext, StoreProvider, useStore } from './contexts/store'
+export { ThemeProvider, useTheme } from './contexts/theme'
+export { openAppLink, useDeepLinks } from './hooks/deep-links'
+export { APPROVALS_LINK, MESSAGES_LINK } from './modules/trust-tasks/module/vtiLinks'
+export { roomsSwitchAvailable } from './modules/rooms/useRoomsService'
+export { useConnectionDisplayName } from './hooks/connections'
+export { useRCardCredential } from './modules/vrc/hooks/useRCardCredential'
+export { VrcNameCacheProvider, useVrcNameCache } from './modules/vrc/context/VrcNameCacheProvider'
+export { getContactCredentialDetailsForConnection } from './modules/vrc/utils/vrcNameHelper'
+export { initLanguages, initStoredLanguage, Locales, translationResources } from './localization'
+export * from './navigators'
+export { createStyles } from './screens/OnboardingPages'
+export * from './services/storage'
+export { bifoldTheme, ColorPalette, Assets as ImageAssets } from './theme'
+export * from './types/attestation'
+export * from './types/auto-credential'
+export { BifoldError } from './types/error'
+export { Screens, Stacks, TabStacks } from './types/navigators'
+export * from './types/version-check'
+export { createLinkSecretIfRequired, getAgentModules, useAppAgent } from './utils/agent'
+// The e2e clock switch (gate efficiency items 3 and 4): the rows an app's own Developer screen renders, and the clocks.
+export { E2EClockRows } from './components/misc/E2EClockRows'
+export {
+  e2eClocksSet,
+  effectiveDefaultAutoLockMinutes,
+  effectiveGrantPollWindowMs,
+  effectiveExpiresInMs,
+  shortClocks,
+  SHORT_AUTO_LOCK_MINUTES,
+  SHORT_GRANT_POLL_WINDOW_MS,
+} from './utils/e2eClocks'
+export { RetryingWebVhDidResolver } from './utils/RetryingWebVhDidResolver'
+export { WebsDidResolver } from './utils/WebsDidResolver'
+export {
+  hasOtaApplyBlockers,
+  notifyReturnLocked,
+  onReturnLocked,
+  otaApplyBlockerReasons,
+  registerOtaApplyBlocker,
+  resetOtaReturnLockedListenersForTests,
+} from './utils/otaApply'
+export { getCredentialIdentifiers, isValidAnonCredsCredential } from './utils/credential'
+export {
+  connectFromScanOrDeepLink,
+  createConnectionInvitation,
+  formatTime,
+  getConnectionName,
+  removeExistingInvitationsById,
+  useCredentialConnectionLabel,
+} from './utils/helpers'
+export { FileCache } from './utils/fileCache'
+export { removeWalletBackups, sweepStaleWalletBackups, WALLET_BACKUP_MAX_AGE_MS } from './utils/walletBackup'
+export { isProtocolMessage } from './utils/protocolMessage'
+export type { CacheDataFile } from './utils/fileCache'
+export { defaultMessagePickupLifecycle } from './utils/messagePickupLifecycle'
+export type { MessagePickupLifecycle } from './utils/messagePickupLifecycle'
+export { seedTestContacts, clearTestContacts } from './utils/seedTestCredentials'
+export {
+  DTG_CONTEXT,
+  RELATIONSHIP_CONTEXT,
+  REGISTRY_DTG_CONTEXT,
+  HARDWARE_EVIDENCE_CONTEXT,
+  CUSTOM_CONTEXTS,
+  DTG_CONTEXT_URL,
+  RELATIONSHIP_CONTEXT_URL,
+  RCARD_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+} from './modules/vrc'
+export {
+  DTG_CONTEXT_DOCUMENT,
+  RELATIONSHIP_CONTEXT_DOCUMENT,
+  RCARD_CONTEXT_DOCUMENT,
+  REGISTRY_DTG_CONTEXT_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
+} from './modules/vrc'
+export { getIndyLedgers, IndyLedger, readIndyLedgersFromFile, writeIndyLedgersToFile } from './utils/ledger'
+export { statusBarStyleForColor, StatusBarStyles } from './utils/luminance'
+export { migrateToAskar } from './utils/migration'
+export { buildFieldsFromAnonCredsCredential } from './utils/oca'
+export { parsedSchema } from './utils/schema'
+export { testIdForAccessabilityLabel, testIdWithKey } from './utils/testable'
+
+export { default as OpenIDCredentialDetails } from './modules/openid/screens/OpenIDCredentialDetails'
+export { default as CredentialDetails } from './screens/CredentialDetails'
+
+export type { AnimatedComponents } from './animated-components'
+export type { ReducerAction } from './contexts/reducers/store'
+export type { RenderProps, TourStep } from './contexts/tour/tour-context'
+export type {
+  IAssets,
+  IBrandColors,
+  IColorPalette,
+  IErrorColors,
+  IFontAttributes,
+  IGrayscaleColors,
+  IInlineInputMessage,
+  IInputAttributes,
+  IInputs,
+  INotificationColors,
+  ISemanticColors,
+  ISpacing,
+  ISVGAssets,
+  ITabTheme,
+  ITextTheme,
+  ITheme,
+  IGradientTheme,
+} from './theme'
+export type { GenericFn } from './types/fn'
+export { BasicMessageMetadata, CredentialMetadata } from './types/metadata'
+export type { basicMessageCustomMetadata, credentialCustomMetadata } from './types/metadata'
+export type { ContactStackParams, NotificationStackParams, OnboardingStackParams } from './types/navigators'
+export type { WalletSecret } from './types/security'
+export type {
+  LoginAttempt as LoginAttemptState,
+  Migration as MigrationState,
+  Onboarding as OnboardingState,
+  PersistentState,
+  Preferences as PreferencesState,
+  State,
+  Tours as ToursState,
+  VersionInfo,
+  WitnessSettings,
+} from './types/state'
+export type { BifoldAgent } from './utils/agent'
+export type { IndyLedgerConfig, IndyLedgerFileSystem, IndyLedgerJSON, IndyLedgersRecord } from './utils/ledger'
+export type { OnboardingStyleSheet }
+
+export type { InlineMessageProps } from './components/inputs/InlineErrorText'
+
+export { InlineErrorPosition } from './types/error'
+
+export {
+  RelationshipDidModule,
+  AttestationStorageModule,
+  RelationshipDidRepository,
+  RelationshipDidRecord,
+  getOrCreateRelationshipDid,
+  setRelationshipDidOnConnection,
+  setupVrcConnectionHandler,
+  migrateRCardTemplateProofs,
+  buildRCardCredential,
+  resolveContactDisplayInfo,
+  isReceivedRCard,
+  createRelationshipInvitation,
+  createVrcDocumentLoader,
+  DATA_INTEGRITY_PROOF_TYPE,
+  EDDSA_RDFC_2022_CRYPTOSUITE_NAME,
+  EddsaRdfc2022DataIntegritySuite,
+  DataIntegritySuiteModule,
+  runDataIntegritySelfTest,
+  initializeVrcModule,
+  registerVrcDisplayHandlers,
+  registerVrcWithContainer,
+  loadVrcLocalization,
+  getCredentialDisplayRegistry,
+} from './modules/vrc'
+export {
+  CHAT_PROFILE,
+  CHAT_EVENT_MESSAGE_TYPE,
+  CHAT_MIN_RCE_VERSION,
+  ChatEventMessage,
+  ChatEventRecord,
+  ChatEventRepository,
+  ChatModule,
+  chatMediaFolder,
+  counterpartySpeaksChat,
+  deleteChatMessages,
+  useClearChat,
+  currentTimer,
+  expiredIds,
+  setChatTimer,
+  timerOf,
+  TIMER_CHOICES,
+  getChatEventRepository,
+  isUlid,
+  parseChatEvent,
+  receiveChatEventMessage,
+  setupChatInbound,
+} from './modules/chat'
+export type {
+  ChatEvent,
+  ChatEventType,
+  ChatEventRole,
+  ChatInboundVerdict,
+  ChatTimer,
+  ChatEventKey,
+  ChatMessageIds,
+} from './modules/chat'
+export { EnforcementCheckCard, EnforcementCheckIds } from './modules/trust-tasks'
+export {
+  setupTrustTasksInbound,
+  setTspCarriageEnabled,
+  setSharedConnectEnabled,
+  setSharedConnectInviteEnabled,
+  setTrustedApproversEnabled,
+  isTrustedApproversEnabled,
+  TRUSTED_APPROVERS_REMOTE_OFF,
+  setStateVerifiedApproversEnabled,
+  isStateVerifiedApproversEnabled,
+  STATE_VERIFIED_APPROVERS_REMOTE_OFF,
+  setTrustTestStateEnabled,
+  isTrustTestStateEnabled,
+  holdK0TestGuardianCard,
+  holdK0RevokedOmittedCard,
+  holdK0RevokedTestCard,
+  becomeK0TestWard,
+  setUpSediDemo,
+  setUpSediDemoAsGuardian,
+  setUpSediDemoAsWard,
+  setUpSediDemoAsPerson,
+  turnOffSediDemo,
+  sediDemoHiddenByKill,
+  setSediDemoSide,
+  sediDemoSide,
+  SEDI_KERI_REMOTE_OFF,
+  setConfirmItsYouEnabled,
+  isConfirmItsYouEnabled,
+  CONFIRM_ITS_YOU_REMOTE_OFF,
+  setDemoStateHost,
+  demoStateHost,
+  demoStateHostProblem,
+  setDidCommV2Enabled,
+  setPeerLegCarriage,
+  getPeerLegCarriage,
+  findV2MediationRecord,
+  getRoutingForV2,
+  routingForInvitation,
+  acceptConfigForInvitation,
+  openWalletMailbox,
+  closeWalletMailbox,
+  walletMailboxOf,
+  mintContactDid,
+  provisionV2Mediation,
+  startV2MessagePickup,
+  setV2MediationEnabled,
+  isV2MediationEnabled,
+  isDidCommV2Enabled,
+  canMintV2Invitation,
+  DIDCOMM_V2_ON_BY_DEFAULT,
+  DIDCOMM_V2_MINT_REMOTE_OFF,
+  TSP_CARRIAGE_ON_BY_DEFAULT,
+  TSP_SEND_REMOTE_OFF,
+  advertiseTspCarriage,
+  askPeerReadsTsp,
+  peerReadsTsp,
+  recordPeerReadsTsp,
+  TSP_ENVELOPE_PROTOCOL_URI,
+  selectCarriage,
+  TRUST_TASKS_MIN_RCE_VERSION,
+  sendTrustTaskDocument,
+  getTrustTasksService,
+  TrustTaskDocumentRepository,
+  trustTaskRegistry,
+  registerTrustTask,
+  createApprovalRequestHandler,
+  respondToPendingTrustTask,
+  trustTaskPromptStore,
+  trustTaskDisplayRegistry,
+  registerTrustTaskDisplay,
+  VtiMediatorSession,
+  VtiMediatorOutboundTransport,
+  resolveVtiMediator,
+  vtiClientIdentityFromPersona,
+  vtiAgent,
+  VtiRefusal,
+  VtaClient,
+  VTA_TASK,
+  resolveVtaMediator,
+  ManagerKeyUnresolved,
+  setVtaSwapTestHook,
+  GenericRecordsIdentityStore,
+  importVtaKey,
+  decodeMultibaseKey,
+  vtiClientIdentityFromDid,
+  createVtiClientDid,
+  GenericRecordsCommunityStore,
+  GenericRecordsVettingStore,
+  hiddenApplicantIdOf,
+  registerHiddenVettingModules,
+  VtiVetterDesk,
+  VtiApplicant,
+  isVtiInvitationLink,
+  buildVtiInvitationLink,
+  parseVtiInvitationLink,
+  describeInvitation,
+  joinCommunity,
+  ensurePersonaFor,
+  membershipFromVerdict,
+  vtaAgent,
+} from './modules/trust-tasks'
+export { setStateCardEnabled, isStateCardEnabled, STATE_CARD_REMOTE_OFF } from './modules/sedi/holder/stateCardFlag'
+// The SEDI State roots' demo and test marks, for screens that show the "Demo" or "Test" label (Who approves, the
+// holder's state card).
+export {
+  isDemoStateRoot,
+  isTestStateRoot,
+  K0_TEST_ROOT,
+  K1_NAME,
+  K1_ROOT_AID,
+  K1_WEBS_HOST,
+  k1HostMode,
+  k1Root,
+  type K1WebsHost,
+  type StateRoot,
+} from './modules/sedi/guardian/stateRoots'
+// The phone's own KERI identifiers for a state office (K1), and receiving a Guardian card from one.
+export {
+  HOLDER_IDENTITY,
+  HolderSwitchedOff,
+  appendInteraction,
+  holderCodeOf,
+  holderKel,
+  holderSign,
+  type ControllerAgent,
+} from './modules/sedi/holder/controller'
+export { WARD_IDENTITY, becomeOwnWard, wardCodeOf } from './modules/sedi/identity/phoneIdentity'
+export { GUARDIAN_CARD_LINK, guardianCardUrlOf, isGuardianCardLink } from './modules/sedi/holder/guardianCardLink'
+export {
+  GUARDIAN_CARD_TYPE,
+  checkGuardianCard,
+  receiveGuardianCard,
+  type CardCheckFailure,
+  type ReceiveResult,
+} from './modules/sedi/holder/receiveGuardianCard'
+export type {
+  TrustTaskRegistration,
+  TrustTaskOrchestration,
+  TrustTaskDocumentHandler,
+  InboundContext as TrustTaskInboundContext,
+  RegisterTrustTaskOptions,
+  PendingTrustTaskPrompt,
+  VtiMediatorEndpoints,
+  VtiAgentState,
+  VtiAgentStatus,
+  VtiCriterion,
+  VtiManifest,
+  VtiVerdict,
+  VtaWhoAmI,
+  VtaContext,
+  VtaMintedDid,
+  VtiIdentityStore,
+  VtiManagerIdentity,
+  VtiPersona,
+  VtaExportedKey,
+  VtiClientIdentity,
+  VtiCommunityStore,
+  VtiInvitation,
+  VtiMembership,
+  VtiJoinStep,
+  VtiJoinDeps,
+  VtiJoinResult,
+  VtaAgentState,
+  VtiApproval,
+  VtaConsentRequest,
+  HiddenAttestMeta,
+} from './modules/trust-tasks'
+export type {
+  ITrustTaskDisplayHandler,
+  ITrustTaskDisplayRegistry,
+  TrustTaskDisplayResult,
+} from './types/trust-task-display'
+// The real rooms service, for the app to register once an agent exists (rooms/register.ts).
+export { registerRoomsService, AgentRoomsService, createAgentRoomsBackend } from './modules/rooms'
+export type { RoomsService, RoomsBackend } from './modules/rooms'
+export { default as TrustTaskApprovalCard, TrustTaskFields } from './screens/TrustTaskApprovalCard'
+export type { TrustTaskFieldsProps } from './screens/TrustTaskApprovalCard'
+export { default as TrustTaskApprovalModal } from './screens/TrustTaskApprovalModal'
+export type { TrustTaskApprovalModalProps } from './screens/TrustTaskApprovalModal'
+export type {
+  RelationshipDidRecordProps,
+  CustomTags,
+  DefaultRelationshipDidRecordTags,
+  VrcRegistrationOptions,
+  DataIntegritySelfTestResult,
+} from './modules/vrc'
+
+// VRC Biometric confirmation
+export {
+  requestBiometricConfirmationWithUI,
+  requestBiometricWithHardwareSigning,
+  sendBiometricStatusNotification,
+  BIOMETRIC_STATUS_MESSAGE_PREFIX,
+} from './modules/vrc/vrc-biometric'
+export type { BiometricConfirmationResult } from './modules/vrc/vrc-biometric'
+
+// VRC Hardware-Backed Signing
+export {
+  signVrcWithHardwareKey,
+  ensureHardwareSigningKey,
+  isHardwareSigningAvailable,
+  prepareHardwareKeyForSigning,
+} from './modules/vrc/vrc-hardware-signing'
+export type {
+  VrcHardwareSignature,
+  HardwareKeyGenerationResult,
+  HardwareSignatureResult,
+  HardwareKeyInfo,
+  HardwareSigningResult,
+} from './modules/vrc/vrc-hardware-signing'
+
+// Standalone hardware signing — Credo-free; also published as
+// `@bifold/core/hardware-signing`. See src/hardware-signing/index.ts.
+export {
+  createHardwareSigningService,
+  createInMemoryAttestationCache,
+  ensureHardwareKey,
+  signPayloadWithHardwareKey,
+  verifySignedPayload,
+  HardwareEvidenceBuilder,
+} from './hardware-signing'
+export type {
+  AttestationCache,
+  AttestationCacheEntry,
+  HardwareKeyHandle,
+  HardwareKeySignature,
+  HardwareSigningLogger,
+  HardwareSigningService,
+  HardwareSigningServiceOptions,
+  SignPayloadOutcome,
+  SignPayloadRequest,
+  SignedPayloadAttestation,
+} from './hardware-signing'
+
+// Biometric Confirmation UI Context and Modal
+export {
+  BiometricConfirmationProvider,
+  BiometricConfirmationContext,
+  useBiometricConfirmation,
+  requestBiometricConfirmationUI,
+} from './contexts/biometric-confirmation'
+export type {
+  BiometricConfirmationContextType,
+  BiometricConfirmationRequest,
+  BiometricConfirmationResponse,
+  BiometricConfirmationStatus,
+} from './contexts/biometric-confirmation'
+export { default as BiometricConfirmationModal } from './components/modals/BiometricConfirmationModal'
+
+// Witness Error Dialog (global component for handling VRC flow errors)
+export { default as WitnessErrorDialogContainer } from './modules/vrc/components/WitnessErrorDialogContainer'
+export { default as WitnessErrorDialog } from './modules/vrc/components/WitnessErrorDialog'
+export type { WitnessErrorDialogProps, WitnessErrorType } from './modules/vrc/components/WitnessErrorDialog'
+export { useWitnessErrorDialog } from './modules/vrc/hooks/useWitnessErrorDialog'
+export type { UseWitnessErrorDialogResult } from './modules/vrc/hooks/useWitnessErrorDialog'
+
+export * from './container-api'
+export { MainContainer } from './container-impl'
+export type { CredentialListFooterProps }
+
+export type { Config, HistoryEventsLoggerConfig, PushToggleOutcome } from './types/config'
+export type { ContactCardProps } from './types/contact-card'
+export type { ContactDetailsFooterProps } from './types/contact-details-footer'
+export type { ContactCredentialDetails, OnboardingTask, ScreenLayoutConfig } from './types/navigators'
+
+export { LockoutReason } from './contexts/auth'
+export type { OnboardingStackProps } from './navigators/OnboardingStack'
+export type { SplashProps } from './screens/Splash'
+export { BaseTourID } from './types/tour'
+
+export type { ScanCameraProps } from './components/misc/ScanCamera'
+export type { DismissiblePopupModalProps } from './components/modals/DismissiblePopupModal'
+export type { BannerSectionProps } from './components/views/Banner'
+export { OpenIDCredentialRefreshFlowType } from './modules/openid/refresh/types'
+export type { IRefreshOrchestrator } from './modules/openid/refresh/types'
+
+export {
+  AbstractBifoldLogger,
+  ActivityProvider,
+  Agent,
+  AgentBridge,
+  AgentProvider,
+  AttachTourStep,
+  AttemptLockout,
+  attemptLockoutConfig,
+  AuthProvider,
+  AutoLockTime,
+  Banner,
+  BannerSection,
+  BifoldLogger,
+  bifoldLoggerInstance,
+  Biometry,
+  BulletPoint,
+  Button,
+  ButtonLocation,
+  ButtonType,
+  CheckBoxRow,
+  components,
+  ContentGradient,
+  contexts,
+  createApp,
+  contactOfferTourSteps,
+  contactsTourSteps,
+  credentialOfferTourSteps,
+  credentialsTourSteps,
+  defaultConfig,
+  defaultHistoryEventsLogger,
+  DefaultScreenLayoutOptions,
+  DefaultScreenOptionsDictionary,
+  Developer,
+  DeveloperModal,
+  DismissiblePopupModal,
+  ErrorBoundaryWrapper,
+  ErrorModal,
+  ExportWallet,
+  FauxHeader,
+  ImportWallet,
+  HomeFooterView as HomeContentView,
+  homeTourSteps,
+  IconButton,
+  InfoBox,
+  InfoBoxType,
+  InfoTextBox,
+  isBiometricsActive,
+  confirmBiometricKeychainAccess,
+  KeyboardView,
+  LimitedTextInput,
+  Link,
+  loadLoginAttempt,
+  MaskType,
+  MockLogger,
+  NavContainer,
+  NetworkProvider,
+  NotificationListItem,
+  Onboarding,
+  OnboardingPages,
+  OpenIDCredentialRecordProvider,
+  PINRules,
+  Preface,
+  proofRequestTourSteps,
+  QrCodeScanError,
+  QRRenderer,
+  QRScannerTorch,
+  Record,
+  RefreshOrchestrator,
+  RenameWallet,
+  SafeAreaModal,
+  Scan,
+  ScanCamera,
+  ScreenWrapper,
+  Splash,
+  SVGOverlay,
+  Terms,
+  Text,
+  ThemeBuilder,
+  ThemedText,
+  toastConfig,
+  ToastType,
+  TourBox,
+  TourProvider,
+  tours,
+  types,
+  UpdateAvailable,
+  useActivity,
+  useBifoldAgentSetup,
+  useDefaultStackOptions,
+  useDeveloperMode,
+  usePreventScreenCapture,
+  useTour,
+  walletTimeout,
+}
+export type { BannerMessage, DeepPartial, IButton }
+
+// Reusable screens for embedding in consumer-side nav graphs that don't register
+// Bifold's ConnectionStack / ContactStack hierarchy verbatim.
+export { default as Connection } from './screens/Connection'
+export { default as CredentialOffer } from './screens/CredentialOffer'
+export { default as ProofRequest } from './screens/ProofRequest'
+
+// Loading view used by consumer-side connection-loading screens while a proof
+// or credential-offer notification is awaited.
+export { default as LoadingPlaceholder, LoadingPlaceholderWorkflowType } from './components/views/LoadingPlaceholder'
+
+// Hooks that let consumers detect when a notification (offer / proof) has
+// arrived for a freshly received out-of-band invitation.
+export { useConnectionByOutOfBandId, useOutOfBandByConnectionId, useOutOfBandById } from './hooks/connections'
+export { useNotifications } from './hooks/notifications'
+export type { NotificationItemType, NotificationReturnType, NotificationsInputProps } from './hooks/notifications'
+
+// URL classifiers consumer-side scan dispatchers use to recognize and reject
+// OpenID / mediator URIs before parsing them as DIDComm OOB invitations.
+export { isMediatorInvitation } from './utils/mediatorhelpers'
+export { isDidCommInvitation, isOpenIdCredentialOffer, isOpenIdPresentationRequest } from './utils/parsers'
+
+export { ownerChecks } from './modules/trust-tasks/module/ownerConfirm'
+export {
+  dropInMemoryKeys,
+  EphemeralKeyManagementService,
+} from './modules/trust-tasks/module/EphemeralKeyManagementService'
+export {
+  EPHEMERAL_KMS_BACKEND,
+  REQUIRED_DEFAULT_KMS_BACKEND,
+  REQUIRED_KMS_BACKENDS,
+} from './modules/trust-tasks/module/vtaKeys'

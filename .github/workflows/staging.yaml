@@ -58,8 +58,6 @@ jobs:
       app_version: ${{ steps.get_version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Extract version from package.json
         id: get_version
@@ -133,8 +131,6 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - uses: actions/setup-python@v5
         with:
@@ -171,20 +167,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           # Full history and tags, so the notes step can find the previous staging tag.
           fetch-depth: 0
 
-      - name: Verify bifold submodule commit
+      - name: Show the bifold tree
         run: |
-          echo "Bifold submodule status:"
-          git submodule status
-          echo ""
-          echo "Bifold commit details:"
-          cd bifold
-          git log -1 --oneline
-          git branch -a
-          cd ..
+          echo "bifold tree at this build: $(git rev-parse --short=8 HEAD:bifold)"
 
       - name: Free up disk space
         run: |
@@ -797,20 +785,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           # The release-notes step reads the range since the previous staging tag.
           fetch-depth: 0
 
-      - name: Verify bifold submodule commit
+      - name: Show the bifold tree
         run: |
-          echo "Bifold submodule status:"
-          git submodule status
-          echo ""
-          echo "Bifold commit details:"
-          cd bifold
-          git log -1 --oneline
-          git branch -a
-          cd ..
+          echo "bifold tree at this build: $(git rev-parse --short=8 HEAD:bifold)"
 
       - uses: actions/setup-python@v5
         with:
@@ -1160,8 +1140,9 @@ jobs:
           LINES=""
           if [ -n "${PREV_TAG:-}" ] && git rev-parse -q --verify "$PREV_TAG^{commit}" >/dev/null; then
             LINES=$(collect . "$PREV_TAG..HEAD")
-            OLD_PIN=$(git ls-tree "$PREV_TAG" bifold 2>/dev/null | awk '{print $3}')
-            NEW_PIN=$(git ls-tree HEAD bifold 2>/dev/null | awk '{print $3}')
+            # Only while bifold was a submodule at both ends: since the fold its commits are in the range above.
+            OLD_PIN=$(git ls-tree "$PREV_TAG" bifold 2>/dev/null | awk '$2 == "commit" {print $3}')
+            NEW_PIN=$(git ls-tree HEAD bifold 2>/dev/null | awk '$2 == "commit" {print $3}')
             if [ -n "${OLD_PIN:-}" ] && [ -n "${NEW_PIN:-}" ] && [ "$OLD_PIN" != "$NEW_PIN" ]; then
               git -C bifold fetch -q --no-tags origin "$OLD_PIN" "$NEW_PIN" 2>/dev/null || true
               if git -C bifold merge-base --is-ancestor "$OLD_PIN" "$NEW_PIN" 2>/dev/null; then

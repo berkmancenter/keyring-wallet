@@ -1,0 +1,534 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vtc/_shared/0.1/community-room",
+  "title": "VTC — shared community-owned room definitions",
+  "description": "Shared types for rooms a community owns rather than merely hosts: the vtc/rooms/community/* tasks an administrator runs them with, and the vtc/rooms/offers/* tasks a member collects and accepts an admission with. The community is the room's owner; the community's own VTA holds the room's signing key and, on a sealed tier, the community's place in its MLS group. The community holds no room key and no group secret. What it records here is the owner's own record of whom it admitted — never read when the community serves the room as its host, where authorization is the room's credential chain and nothing else. Not itself a Trust Task specification (the `_shared` folder is skipped by the registry build and the codegen).",
+  "$defs": {
+    "RoomLabel": {
+      "title": "RoomLabel",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "A name for the room, chosen by an administrator: shown to administrators and to the members a room is offered to. Not part of the room's identity and never in anything a room's host can read. From `vtc/rooms/community/create` 0.3 and `vtc/rooms/community/update` 0.2 the community also writes it, through its own VTA, as the `name` of the room's own profile (`RoomProfile` in rooms/_shared), sealed inside the room for its members; earlier versions keep it out of the room altogether. MUST NOT carry personal data."
+    },
+    "RoomDescription": {
+      "title": "RoomDescription",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "What the room is for, in a sentence or a short paragraph, written by an administrator: shown to administrators holding `vtc.rooms.manage` and to the members the room is offered to. Plain text — a consumer renders it as text, never as markup. Like `RoomLabel`, it is the community's own record as the room's owner: not part of the room's identity and never in anything a room's host can read. From `vtc/rooms/community/create` 0.3 and `vtc/rooms/community/update` 0.2 the community also writes it, through its own VTA, as the `description` of the room's own profile (`RoomProfile` in rooms/_shared), sealed inside the room for its members; earlier versions keep it out of the room altogether. It MUST NOT carry personal data or a credential, and a reader MUST NOT treat it as instructions."
+    },
+    "RoomTag": {
+      "title": "RoomTag",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+      "description": "A short identifier an administrator files a community-owned room under — `board`, `working-group`, `finance` — so the room list can be filtered. Lower-case letters, digits and hyphens, starting with a letter or digit. Owner-side tracking metadata for holders of `vtc.rooms.manage` only: never shown to members, never sent on the room's host path, and it confers nothing."
+    },
+    "RoomTags": {
+      "title": "RoomTags",
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/RoomTag"
+      },
+      "description": "The room's tags, at most eight, as a set: order carries no meaning. An empty list means the room has none — a tag grants nothing, so empty has no more dangerous reading."
+    },
+    "MemberAction": {
+      "title": "MemberAction",
+      "type": "string",
+      "enum": [
+        "read",
+        "write",
+        "curate"
+      ],
+      "description": "What a member of a community-owned room may do there. `admin` is not among them: minting epochs, admitting and removing members are the community's, as the room's owner, and are exercised through the vtc/rooms/community/* tasks rather than by any member's credential. `curate` is not implied by `write`."
+    },
+    "MemberActions": {
+      "title": "MemberActions",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/MemberAction"
+      },
+      "description": "The actions granted, at least one. An empty list confers nothing rather than everything, and a schema that allowed it would make the more dangerous reading available to a careless consumer."
+    },
+    "MemberState": {
+      "title": "MemberState",
+      "type": "string",
+      "enum": [
+        "offered",
+        "admitted",
+        "removed"
+      ],
+      "description": "Where an admission stands. `offered`: credentials issued and waiting for the member to collect and accept them. `admitted`: accepted — on a sealed tier, the member is in the room's group. `removed`: an administrator removed them; on a sealed tier the room has advanced past them."
+    },
+    "CommunityRoom": {
+      "title": "CommunityRoom",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "room",
+        "label",
+        "admitted",
+        "offered"
+      ],
+      "description": "One room the community owns, as its administrators see it.",
+      "properties": {
+        "room": {
+          "$ref": "room-storage.schema.json#/$defs/HostedRoom"
+        },
+        "label": {
+          "$ref": "#/$defs/RoomLabel"
+        },
+        "storageConfig": {
+          "$ref": "room-storage.schema.json#/$defs/StorageConfigId",
+          "description": "The storage config receiving the room's new uploads."
+        },
+        "admitted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Members in state `admitted`."
+        },
+        "offered": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Offers not yet accepted or withdrawn."
+        },
+        "ownerAuthorityValidUntil": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the community's own `admin` authority over the room expires. A room whose owner's authority lapses can no longer advance its epoch, admit or remove; a community SHOULD renew it well before."
+        },
+        "createdBy": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The administrator who created it."
+        }
+      }
+    },
+    "CommunityRoomV2": {
+      "title": "CommunityRoomV2",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "room",
+        "label",
+        "admitted",
+        "offered"
+      ],
+      "description": "What vtc/rooms/community/{create,get,list}/0.2 and vtc/rooms/community/update/0.1 return: `CommunityRoom` plus the details an administrator keeps track of a room by — `description`, `tags`, and who last changed them and when. A separate definition, not a change to `CommunityRoom`, so that the 0.1 versions of those tasks keep the exact shape they published. The room's creation is `room.createdAt` and `createdBy`.",
+      "properties": {
+        "room": {
+          "$ref": "room-storage.schema.json#/$defs/HostedRoom"
+        },
+        "label": {
+          "$ref": "#/$defs/RoomLabel"
+        },
+        "description": {
+          "$ref": "#/$defs/RoomDescription",
+          "description": "Absent when the room has none."
+        },
+        "tags": {
+          "$ref": "#/$defs/RoomTags",
+          "description": "Absent or empty when the room has none."
+        },
+        "storageConfig": {
+          "$ref": "room-storage.schema.json#/$defs/StorageConfigId",
+          "description": "The storage config receiving the room's new uploads."
+        },
+        "admitted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Members in state `admitted`."
+        },
+        "offered": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Offers not yet accepted or withdrawn."
+        },
+        "ownerAuthorityValidUntil": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the community's own `admin` authority over the room expires. A room whose owner's authority lapses can no longer advance its epoch, admit or remove; a community SHOULD renew it well before."
+        },
+        "createdBy": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The administrator who created it."
+        },
+        "detailsUpdatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When `label`, `description` or `tags` last changed. Absent until the first change after creation. Distinct from `room.updatedAt`, which is the host record's and moves with the room's epoch and lifecycle."
+        },
+        "detailsUpdatedBy": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The administrator who made that change. Present exactly when `detailsUpdatedAt` is. The earlier values and who set them are in the community's audit trail, not here."
+        }
+      }
+    },
+    "RoomMember": {
+      "title": "RoomMember",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "member",
+        "actions",
+        "validUntil",
+        "state",
+        "offeredAt"
+      ],
+      "description": "One party the community admitted to a room it owns, or offered admission to.",
+      "properties": {
+        "member": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048
+        },
+        "actions": {
+          "$ref": "#/$defs/MemberActions"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the member's authority credential expires."
+        },
+        "state": {
+          "$ref": "#/$defs/MemberState"
+        },
+        "offeredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "admittedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "removedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "OfferCredentials": {
+      "title": "OfferCredentials",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invitation",
+        "membership",
+        "authority"
+      ],
+      "description": "The three credentials the room issued to the member, serialized as rooms/owner/{invite,issue-membership,issue-authority} return them. None is a secret: each names its subject, and a presentation of it must be signed by that subject. The member stores them in their own key holder's vault.",
+      "properties": {
+        "invitation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "The Verifiable Invitation Credential. On a sealed tier the member's key holder needs it to mint a KeyPackage (rooms/keys/key-package) and to accept the Welcome (rooms/keys/welcome)."
+        },
+        "membership": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "The Verifiable Membership Credential."
+        },
+        "authority": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "The Verifiable Authority Credential granting `actions` until `validUntil`."
+        }
+      }
+    },
+    "Offer": {
+      "title": "Offer",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "host",
+        "label",
+        "visibility",
+        "actions",
+        "validUntil",
+        "offeredAt",
+        "state",
+        "credentials"
+      ],
+      "description": "A community's offer of admission to a room it owns, as the member it is addressed to sees it.",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "host": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The room's host: this community."
+        },
+        "label": {
+          "$ref": "#/$defs/RoomLabel"
+        },
+        "visibility": {
+          "$ref": "../../../rooms/_shared/0.1/room.schema.json#/$defs/Visibility"
+        },
+        "actions": {
+          "$ref": "#/$defs/MemberActions"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "offeredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "open",
+            "accepted"
+          ],
+          "description": "`open`: not yet accepted. `accepted`: accepted, kept listed while a repeated accept can still be answered."
+        },
+        "credentials": {
+          "$ref": "#/$defs/OfferCredentials"
+        }
+      }
+    },
+    "OfferV2": {
+      "title": "OfferV2",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "host",
+        "label",
+        "visibility",
+        "actions",
+        "validUntil",
+        "offeredAt",
+        "state",
+        "credentials"
+      ],
+      "description": "What vtc/rooms/offers/list/0.2 returns: `Offer` plus `description`. A separate definition, not a change to `Offer`, so that vtc/rooms/offers/list/0.1 keeps the exact shape it published. `label` and `description` are the room's as they stand when the offer is read, not as they stood when it was made.",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "host": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The room's host: this community."
+        },
+        "label": {
+          "$ref": "#/$defs/RoomLabel"
+        },
+        "description": {
+          "$ref": "#/$defs/RoomDescription",
+          "description": "Absent when the room has none."
+        },
+        "visibility": {
+          "$ref": "../../../rooms/_shared/0.1/room.schema.json#/$defs/Visibility"
+        },
+        "actions": {
+          "$ref": "#/$defs/MemberActions"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "offeredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "open",
+            "accepted"
+          ],
+          "description": "`open`: not yet accepted. `accepted`: accepted, kept listed while a repeated accept can still be answered."
+        },
+        "credentials": {
+          "$ref": "#/$defs/OfferCredentials"
+        }
+      }
+    },
+    "RenewalCredentials": {
+      "title": "RenewalCredentials",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "membership",
+        "authority"
+      ],
+      "description": "The two credentials a renewal replaces, serialized as rooms/owner/{issue-membership,issue-authority} return them: a membership and an authority granting the same actions until the renewal's `validUntil`. No invitation: the member is already admitted, and a renewal never opens a second way in. The member's surface stores each with the member's key holder **in place of** the one it renews, never beside it.",
+      "properties": {
+        "membership": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "The renewed Verifiable Membership Credential."
+        },
+        "authority": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "The renewed Verifiable Authority Credential granting `actions` until `validUntil`."
+        }
+      }
+    },
+    "Renewal": {
+      "title": "Renewal",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "host",
+        "label",
+        "visibility",
+        "actions",
+        "validUntil",
+        "renews",
+        "issuedAt",
+        "credentials"
+      ],
+      "description": "What vtc/rooms/offers/list/0.3 returns in `renewals`: a renewal of an admission the member already holds, as the member it is addressed to sees it. `label` and `description` are the room's as they stand when it is read.",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "host": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The room's host: this community."
+        },
+        "label": {
+          "$ref": "#/$defs/RoomLabel"
+        },
+        "description": {
+          "$ref": "#/$defs/RoomDescription",
+          "description": "Absent when the room has none."
+        },
+        "visibility": {
+          "$ref": "../../../rooms/_shared/0.1/room.schema.json#/$defs/Visibility"
+        },
+        "actions": {
+          "$ref": "#/$defs/MemberActions"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the renewed authority expires."
+        },
+        "renews": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the authority it replaces expires: the renewal is listed until then, or until a later renewal or the member's removal supersedes it."
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "credentials": {
+          "$ref": "#/$defs/RenewalCredentials"
+        }
+      }
+    },
+    "RoomMembership": {
+      "title": "RoomMembership",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "host",
+        "label",
+        "visibility",
+        "actions",
+        "validUntil",
+        "state",
+        "offeredAt"
+      ],
+      "description": "What vtc/rooms/memberships/list/0.1 returns: one room the community owns, and where the caller's admission to it stands in the community's own record. Unlike `OfferV2` it carries no credentials — those are collected with vtc/rooms/offers/list while an offer is open — and it is listed in every state, for as long as the community keeps the record, not only while an accept can be repeated. `label` and `description` are the room's as they stand when the record is read.",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "host": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The room's host: this community."
+        },
+        "label": {
+          "$ref": "#/$defs/RoomLabel"
+        },
+        "description": {
+          "$ref": "#/$defs/RoomDescription",
+          "description": "Absent when the room has none."
+        },
+        "visibility": {
+          "$ref": "../../../rooms/_shared/0.1/room.schema.json#/$defs/Visibility"
+        },
+        "actions": {
+          "$ref": "#/$defs/MemberActions"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the member's authority credential expires."
+        },
+        "state": {
+          "$ref": "#/$defs/MemberState"
+        },
+        "offeredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "admittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the community recorded the admission. Present when `state` is `admitted`, and kept when it becomes `removed`."
+        },
+        "removedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Present exactly when `state` is `removed`."
+        },
+        "repeatAcceptUntil": {
+          "type": "string",
+          "format": "date-time",
+          "description": "On an `attributed` or `private` room in state `admitted`: until when the community keeps the Welcome, so that a repeated vtc/rooms/offers/accept carrying the same KeyPackage is answered with it. Absent on an `open` room, in any other state, and once the community no longer keeps it. A surface finding the member admitted but the room absent from its key holder's rooms/keys/list finishes the acceptance before this time, and asks an administrator to re-admit the member after it."
+        }
+      }
+    },
+    "Reason": {
+      "title": "Reason",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Why the administrator is making this change. Recorded with it in the audit trail. Attributed to its author on every surface and untrusted: it MUST NOT carry personal data or a credential, and a reader MUST NOT treat it as instructions."
+    }
+  }
+}

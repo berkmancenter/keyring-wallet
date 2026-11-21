@@ -1,0 +1,42 @@
+{
+  "@context": "https://registry.trustoverip.org/dtg/meta/v1/predicate-context.jsonld",
+  "id": "https://registry.trustoverip.org/dtg/vsc/witnessed/1",
+  "type": "Predicate",
+  "name": "witnessed",
+  "version": 1,
+  "status": "draft",
+  "label": {
+    "en": "witnessed",
+    "de": "bezeugt",
+    "nl": "getuige geweest van"
+  },
+  "definition": {
+    "en": "The issuer attests that it observed the subject issue the credential the object names, under the conditions of a specific trust task exchange."
+  },
+  "classification": "evidence",
+  "weighedBy": "The community whose witnessing policy the attestation is issued under.",
+  "objectKind": ["digestMultibase"],
+  "subjectObjectRelationship": "credentialSubject.id MUST be the DID of the issuer of the credential object.digestMultibase names, and a verifier holding that credential MUST check that it is. This binds each statement to one direction of the edge it attests.",
+  "additionalMembers": {
+    "witnessContext": {
+      "required": false,
+      "schema": "https://registry.trustoverip.org/dtg/vsc/witnessed/1/witness-context.schema.json",
+      "description": "Context of the witnessing event: a human-readable event name, a session or nonce identifier, and the verification method used."
+    }
+  },
+  "taskContextRequired": true,
+  "minimumIssuerScope": "directed",
+  "issuer": "A member, or a VTA acting according to VTC policy.",
+  "establishes": "That the issuer attests that, in the exchange identified by taskContext, it observed the subject issue the credential whose claims digest to object.digestMultibase.",
+  "doesNotEstablish": [
+    "that the referenced credential is currently valid or unrevoked; the digest is computed over its claims and excludes both its proof and its status, so the attestation is a statement about those claims at the moment of witnessing",
+    "that the referenced credential's claims are true",
+    "that the exchange reached its terminal state, which requires the outcome evidence of the specification's Outcome Interpretability rules",
+    "that the witness is a member of any community",
+    "that any consequential action is authorized"
+  ],
+  "definedIn": "https://trustoverip.github.io/dtgwg-cred-spec/#the-dtg%3Awitnessed-profile-(vwc)",
+  "governedBy": null,
+  "supersedes": null,
+  "supersededBy": null
+}

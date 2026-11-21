@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/keys/browse/0.3",
+  "title": "Rooms Keys Browse — payload",
+  "description": "TODO: what the request payload of rooms/keys/browse carries. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "roomId",
+    "host"
+  ],
+  "properties": {
+    "roomId": {
+      "type": "string",
+      "description": "The room to list. The recipient MUST already hold group state for it."
+    },
+    "host": {
+      "type": "string",
+      "description": "The host to list from, as a DID. Named by the caller for the same reason it is on `rooms/keys/read`: nothing maps a room to its host."
+    },
+    "prefix": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Restrict to keys with this prefix. Passed through to the host. **Setting it makes the listing non-comparable against the room's `recordCount`** — see `verification.count`."
+    },
+    "sinceVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Return only records above this version. Passed through. Also makes the listing non-comparable against `recordCount`."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "Page size to ask the host for. A cap on what a page holds, never a cap on the result: a recipient MUST follow the host's cursor to the end unless the caller asked it to stop, because a listing read to its end is the only one whose length means anything."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.1/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "records",
+        "verification"
+      ],
+      "description": "Success response to rooms/keys/browse. Type https://trusttasks.org/spec/rooms/keys/browse/0.3#response.",
+      "properties": {
+        "roomId": {
+          "type": "string"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "../../../_shared/0.2/room.schema.json#/$defs/RecordMetadata"
+          },
+          "description": "Metadata, never bodies — the same projection the host serves, passed through. A member who wants a body asks for one record, which is also the only shape a trace can be produced for."
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "Whether the recipient followed the host's cursor to the end. `false` means a page bound was hit, and is what makes `verification.count` `notComparable` even on an unfiltered listing — a short listing and a truncated one are indistinguishable by length alone, which is exactly the confusion this member exists to prevent."
+        },
+        "verification": {
+          "$ref": "../../../_shared/0.2/room.schema.json#/$defs/ReadVerification",
+          "description": "What the recipient checked and what it found. REQUIRED for the same reason it is on `rooms/keys/read`."
+        },
+        "lastPrune": {
+          "$ref": "../../../_shared/0.2/room.schema.json#/$defs/RecordPrune",
+          "description": "The room's latest record prune, passed through from the host's listing (`rooms/records/list` 0.3) exactly as served, whenever the room's records have been pruned. A caller keeping its own copy of the room synchronised below `lastPrune.version` rebuilds it from a browse with no `sinceVersion`, as `rooms/records/list` 0.3 *After a prune* requires."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.1/framework.schema.json#/$defs/Ext"
+        }
+      },
+      "title": "Rooms Keys Browse — response payload"
+    }
+  }
+}

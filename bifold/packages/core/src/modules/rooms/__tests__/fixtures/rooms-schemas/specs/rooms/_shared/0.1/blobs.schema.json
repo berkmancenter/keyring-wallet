@@ -1,0 +1,376 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/_shared/0.1/blobs.schema.json",
+  "title": "Rooms — shared file and blob types",
+  "description": "Types shared by the tasks that put files into a data room: the rooms/blobs/* upload and download tasks, rooms/records/put 0.2, rooms/info, rooms/usage, rooms/keys/file-key, and the host-side vtc/rooms/* and vtc/storage/* tasks. A file is a record plus a blob. The record is an ordinary room record, whose sealed body carries the FileManifest. The blob is the file's ciphertext, held outside the record in whatever store the host uses, and named on the record by its BlobRef. Chunking reuses the node-neutral chunked-transfer vocabulary of vta/_shared/0.1/backup-transfer, so an implementation of backup/put-chunk moves a blob's chunks the same way. Not itself a Trust Task specification (the `_shared` folder is skipped by the registry build and the codegen).",
+  "$defs": {
+    "BlobRef": {
+      "title": "BlobRef",
+      "description": "The name of one blob: the digest of its BlobManifest, taken over the manifest's RFC 8785 (JCS) canonicalization. sha2-256 is RECOMMENDED and MUST be implemented. Content addressing over ciphertext, never plaintext, so a BlobRef says nothing about what the file contains, and two uploads of one file have different BlobRefs (a fresh `fileId` gives a different key, and so different ciphertext). Rooms cannot be correlated by the files they share. Compared as decoded multihash bytes, never as encoded strings. A BlobRef is defined over the manifest's JSON, as this schema states it and RFC 8785 canonicalizes it, never over any binding's generated type: two bindings that model the manifest as distinct types still compute the same BlobRef from the same JSON.",
+      "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/DigestMultibase"
+    },
+    "BlobManifest": {
+      "title": "BlobManifest",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size",
+        "chunks",
+        "digest"
+      ],
+      "description": "The ciphertext manifest of one blob, committed by the uploader before any byte moves. Its digest is the BlobRef. Every chunk is checked against `chunks.chunkDigests` on arrival and the reassembled blob against `digest`, so a host can neither accept nor serve bytes the uploader did not commit to. The manifest also appears, by its BlobRef, inside the sealed FileManifest the author signs; a reader who opens the record therefore knows which ciphertext its author meant, and a host cannot substitute a different blob under the same record.\n\nConsistency rules JSON Schema cannot state: `chunks.chunkCount` MUST equal ceil(size / chunks.chunkSize), and `chunks.chunkDigests` MUST have exactly `chunkCount` items. A party receiving a manifest violating either MUST refuse it.\n\nEach transfer chunk is exactly one sealed STREAM segment (see FileManifest): every chunk but the last is `chunkSize` bytes, and `chunkSize` is the plaintext segment size plus the 16-byte AEAD tag. The 262144-byte ceiling of ChunkSize therefore puts the largest plaintext segment at 262128 bytes, and the 4096-chunk ceiling of ChunkCount puts the largest blob at 1 GiB of ciphertext.",
+      "properties": {
+        "size": {
+          "$ref": "../../../vta/_shared/0.1/backup-transfer.schema.json#/$defs/ExpectedSizeBytes",
+          "description": "Ciphertext bytes, padding included. What the host stores, and what every limit and usage figure is stated in."
+        },
+        "chunks": {
+          "$ref": "../../../vta/_shared/0.1/backup-transfer.schema.json#/$defs/ChunkManifest"
+        },
+        "digest": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/DigestMultibase",
+          "description": "Digest of the whole ciphertext, over its bytes. Checked after reassembly, so a correct set of chunks in the wrong order is still caught."
+        }
+      }
+    },
+    "TransferId": {
+      "title": "TransferId",
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "Handle for one upload (begin → chunk → commit or abort) or one download (get → chunk). Host-generated and unguessable, which is what lets a reference to another party's transfer be answered as not-found without confirming that it exists. Bound at creation to the party that opened it: the subject the host authenticated for the opening request. Opaque: a producer quotes what it was given."
+    },
+    "ScopeLimits": {
+      "title": "ScopeLimits",
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Limits at one scope. Every member is optional: an absent member means the scope sets no limit of that kind, and the next wider scope's limit, or the host's ceiling, governs. All sizes are ciphertext bytes.",
+      "properties": {
+        "maxFiles": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The number of committed blobs the scope may hold. 0 refuses every upload at this scope."
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1073741824,
+          "description": "The largest single blob the scope accepts. Never above 1 GiB, the transfer ceiling (BlobManifest)."
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The total size of the committed and reserved blobs the scope may hold."
+        }
+      }
+    },
+    "RoomLimits": {
+      "title": "RoomLimits",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filesEnabled"
+      ],
+      "description": "How much a host is willing to store for one room, at the room and per member. A hosting decision, set by the host and never by anything in the room's credentials. An upload must fit every scope at once: the object against the smallest `maxFileBytes` that applies, and the member and the room with the file added.",
+      "properties": {
+        "filesEnabled": {
+          "type": "boolean",
+          "description": "False refuses every rooms/blobs/* upload for the room. Reads of blobs already stored continue."
+        },
+        "room": {
+          "$ref": "#/$defs/ScopeLimits",
+          "description": "Limits on the room as a whole."
+        },
+        "member": {
+          "$ref": "#/$defs/ScopeLimits",
+          "description": "Limits on each member's own uploads in this room, unless that member has an override. A member is the subject at the root of the authority chain they present, never the key that signed, so an agent acting on an attenuated chain spends its member's allowance. Not applied on a `private` room, where the host cannot tell members apart; the room and object limits still hold there."
+        }
+      }
+    },
+    "Usage": {
+      "title": "Usage",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "bytes",
+        "reservedBytes"
+      ],
+      "description": "What one scope holds now. Ciphertext bytes throughout.",
+      "properties": {
+        "files": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Committed blobs that are not orphaned."
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Their total size. A blob stops counting the moment it is orphaned (its last record dropped it or was retracted), not when the host finally deletes it, so a member who deletes a file has the room back at once."
+        },
+        "reservedBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bytes reserved by uploads begun and not yet committed, aborted or expired. Counted against `maxBytes`, so two concurrent uploads cannot both fit under a limit only one of them fits."
+        },
+        "reservedFiles": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Uploads begun and not yet committed, aborted or expired. Counted against `maxFiles`."
+        }
+      }
+    },
+    "LimitScope": {
+      "title": "LimitScope",
+      "type": "string",
+      "enum": [
+        "member",
+        "room",
+        "storage",
+        "host"
+      ],
+      "description": "Which scope a limit belongs to. `member`: one member's uploads in one room. `room`: the room. `storage`: the capacity of the storage the room is assigned to, which is the host's own business and not a limit a member or owner can act on. `host`: the host-wide ceiling. A single object has no scope of its own: its size is bounded by the smallest `maxFileBytes` the member, room and host scopes set."
+    },
+    "LimitExceeded": {
+      "title": "LimitExceeded",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "measure",
+        "limit",
+        "used",
+        "requested"
+      ],
+      "description": "The `details` of a refusal because an upload would not fit. Names the one limit that refused it and its numbers, so the uploader knows whether to delete their own files or ask the room's owner or the host for more. `scope` is the scope whose limit refused: for `maxFileBytes`, the scope the smallest applicable limit was set at; for a count or a total, the narrowest scope that would be exceeded. Where two scopes would refuse equally, the narrower is named: `member`, then `room`, `storage` and `host`.",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/LimitScope"
+        },
+        "measure": {
+          "type": "string",
+          "enum": [
+            "maxFiles",
+            "maxFileBytes",
+            "maxBytes"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "used": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current use at that scope, reservations included. 0 for `maxFileBytes`, which is not cumulative."
+        },
+        "requested": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "What this upload would add: its size for a byte measure, 1 for `maxFiles`."
+        }
+      }
+    },
+    "FileManifest": {
+      "title": "FileManifest",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fileId",
+        "name",
+        "size",
+        "digest",
+        "epoch",
+        "segmentSize",
+        "blobRef"
+      ],
+      "description": "Everything that describes a file. On an `attributed` or `private` room it is the `file` member of the sealed record body: sealed with the record, signed by the record's author, and never seen by the host. On an `open` room it is the `file` member of the record's `cleartext` (rooms/records/put/0.4), carrying its own `fileKey`, and the host reads it like the rest of the record. Defined here so that clients interoperate.\n\n**Byte encodings.** In every derivation below, `fileId` is its **32 decoded bytes**, never its base64url text; `roomId` is the **UTF-8 bytes** of the room identifier exactly as it appears on the wire; string constants are their ASCII bytes; `u8`, `u32be` and `u64be` are unsigned integers of that width, big-endian. Epochs are unsigned 64-bit on the wire. An implementation that holds epochs in a narrower type **MUST** refuse a value it cannot represent with `malformedRequest` (or, reading a manifest, refuse the file), and **MUST NOT** truncate it.\n\n**The file key.** `file_key = HKDF-SHA256(ikm = storage_key(epoch), salt = fileId, info = \"openvtc/room/file/v1\" || roomId || u64be(epoch))`, where `storage_key(epoch)` is the room's per-epoch storage key, the one records are sealed under. It is derived per file and never stored. It is bound to the room and the epoch, so a key released for one room cannot open a blob relocated from another, and releasing it exposes one file and nothing else.\n\n**The file key on an `open` room.** An open room has no group and so no storage key to derive from. There the uploader mints the file key itself — 32 bytes from a cryptographically secure random source, for this file only — and carries it in `fileKey`; a reader uses that key and derives nothing. Everything else below (padding, STREAM, the associated data, reading) is the same on every tier, with `epoch` the room's epoch when the file was written. `fileKey` **MUST** be present in an open room's manifest and **MUST** be absent from a sealed record body's, where the key is derived; a reader **MUST** refuse a file whose manifest breaks either rule. The key in the clear withholds nothing from the host or from anyone it serves the record to — the open tier withholds nothing from them — but it keeps the stored blob opaque to whoever holds only the storage, and keeps one blob format, and one reader, for every tier.\n\n**Padding.** With `padding: \"padme\"`, the plaintext of length `L = size` is extended with zero bytes to `padme(L)`: for `L < 2`, `padme(L) = L`; otherwise `E = floor(log2 L)`, `S = floor(log2 E) + 1`, `z = E − S`, `mask = 2^z − 1`, and `padme(L) = (L + mask) & ~mask`. The padded length is `padme(size)`; without padding it is `size`. Padding bytes **MUST** be zero.\n\n**The STREAM construction.** The padded plaintext is cut into `segmentSize`-byte segments, the last holding the remainder; an empty plaintext is one empty final segment. Segment `i` is sealed with ChaCha20-Poly1305 under `file_key`, with nonce `u32be(0) || u64be(i)` and associated data `\"openvtc/room/file/v1\" || roomId || fileId || u64be(epoch) || u64be(i) || u8(final)`, where `final` is 1 on the last segment and 0 on every other. A host that truncates, reorders or splices ciphertext produces an authentication failure, never a shorter or rearranged file. The nonces are counters, so a `file_key` MUST NOT seal two different files; a fresh random `fileId` is what guarantees it. Each sealed segment is one transfer chunk of the blob (BlobManifest), so `segmentSize + 16` is the blob's `chunks.chunkSize`, and an empty file is one 16-byte chunk.\n\n**Reading.** A reader opens the record, derives or obtains the file key, and **MUST**, before trusting a byte:\n- check that the blob's `chunks.chunkSize` equals `segmentSize + 16` and that `chunks.chunkCount` equals `max(1, ceil(paddedLength / segmentSize))`, and refuse the file otherwise;\n- decrypt every segment in order, refusing the file on any authentication failure or on a final flag anywhere but the last segment;\n- check that the decrypted length equals the padded length, that every padding byte is zero, and, after removing the padding, that the plaintext matches `digest`.\n\nA reader **MUST** refuse a file that fails any check, and **MUST NOT** present it with a warning instead. A reader that streams **MUST NOT** treat the plaintext as received — save it under its final name, render it, or hand it to another component — until the digest has verified; it writes to a temporary destination and discards that destination on a mismatch.\n\n**An image's size and preview.** `width`, `height` and `preview` are OPTIONAL and advisory: they let a reader lay out an image, and show something, before it fetches and decrypts the blob. A reader that fetches the file checks them against the bytes — the decoded image's dimensions, and that the file is an image at all — and on a mismatch uses the bytes and discards them; it MUST NOT treat any of them as evidence about the file. On `attributed` and `private` rooms they are inside the sealed, signed body like the rest of the manifest, so the host learns nothing from them; on an `open` room they are in the clear, as everything there is, and a writer carries them only with `rooms/records/put/0.5` or later. A writer uses them only once the room's profile lists them in `recordMembers` (`RoomProfile`), as with the other members a reader that predates them refuses.",
+      "properties": {
+        "fileId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "description": "32 random bytes, base64url without padding, minted by the uploader for this file and never reused. The salt of the file key."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The file's name as the uploader gave it. Sealed on `attributed` and `private` rooms, where the host never sees it; in the clear on `open` ones. Readers MUST treat it as untrusted text: strip path separators before using it as a local file name, and never interpret it as markup."
+        },
+        "mediaType": {
+          "type": "string",
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$",
+          "description": "IANA media type, without parameters. Advisory: a reader decides how to render from the bytes and its own policy, never from this alone."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Plaintext bytes, before padding. The decrypted length is `padme(size)` with `padme` padding and `size` without."
+        },
+        "digest": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/DigestMultibase",
+          "description": "Digest of the plaintext bytes. On `attributed` and `private` rooms it is signed, with the rest of the record body, by the record's author, so a reader that verifies it knows which member put exactly these bytes there. On an `open` room it is the writer's claim as the host stores it, like the rest of the record."
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The epoch whose storage key the file key derives from. Usually the record's own epoch; a record rewritten under a later epoch that keeps the same blob keeps the file's original epoch here. Unsigned 64-bit; see Byte encodings."
+        },
+        "segmentSize": {
+          "type": "integer",
+          "minimum": 16368,
+          "maximum": 262128,
+          "description": "Plaintext bytes per STREAM segment: the transfer chunk size less the 16-byte tag, so that one sealed segment is one chunk."
+        },
+        "padding": {
+          "type": "string",
+          "enum": [
+            "none",
+            "padme"
+          ],
+          "description": "Whether the plaintext was padded before sealing, so that ciphertext sizes do not fingerprint known documents. `padme`: zero bytes appended to reach `padme(size)`, the formula above. Absent means `none`. The padding is inside the final segments, and a reader checks it is zero and removes it by truncating to `size`."
+        },
+        "blobRef": {
+          "$ref": "#/$defs/BlobRef"
+        },
+        "fileKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "description": "The file key itself, 32 bytes base64url without padding: present on an `open` room only, where there is no storage key to derive it from. Minted by the uploader from a cryptographically secure random source for this one file and never reused. MUST be absent on `attributed` and `private` rooms, where the key is derived and never stored."
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576,
+          "description": "The image's width in pixels, as the uploader read it. Advisory. A writer sets `width` and `height` together or neither; a reader ignores one without the other. A reader checks it against the decoded image."
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576,
+          "description": "The image's height in pixels, as the uploader read it. Advisory. A writer sets `width` and `height` together or neither; a reader ignores one without the other. A reader checks it against the decoded image."
+        },
+        "preview": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mediaType",
+            "data"
+          ],
+          "description": "A small image standing in for the file until it is fetched: at most 8192 bytes before encoding, enough for a blurred thumbnail and small enough not to swell the record every listing reader opens. A reader renders it only as a raster image it decodes itself — never as SVG or any other type that can carry active content, never as a link, never fetching anything — and replaces it with the file once fetched. It is the uploader's rendering of the file, not a digest of it: a reader MUST NOT present it as the file's contents.",
+          "properties": {
+            "mediaType": {
+              "type": "string",
+              "enum": [
+                "image/jpeg",
+                "image/png",
+                "image/webp"
+              ],
+              "description": "The preview's own media type. Raster types only."
+            },
+            "data": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "minLength": 1,
+              "maxLength": 10923,
+              "description": "The preview's bytes, base64url without padding: at most 8192 bytes decoded."
+            }
+          }
+        }
+      }
+    },
+    "TransferMode": {
+      "title": "TransferMode",
+      "type": "string",
+      "enum": [
+        "direct",
+        "proxied"
+      ],
+      "description": "How a blob's bytes move. `proxied`: through the host, as chunk documents (rooms/blobs/upload/chunk, rooms/blobs/chunk). `direct`: straight between the member and the storage the room is assigned to, over time-limited URLs the host issues for one object and one method each; the host authorizes every object and verifies every upload, and never carries a byte. Which mode applies is the host's answer, from what the producer accepts, what the room's storage can do, and the room's tier."
+    },
+    "PartPlan": {
+      "title": "PartPlan",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "partSize",
+        "partCount",
+        "partDigests"
+      ],
+      "description": "How the uploader will cut a blob for direct transfer, committed before any byte moves: one storage object, written in `partCount` parts of `partSize` bytes (the last may be shorter), each with its digest. Independent of the chunk manifest, because storage imposes part sizes a chunk document cannot carry; the chunk manifest still describes the blob and readers still check it.\n\nConsistency rules JSON Schema cannot state: `partCount` MUST equal ceil(size / partSize) for the manifest's `size`, and `partDigests` MUST have exactly `partCount` items. Every digest MUST be sha2-256, because it is what the storage itself checks the part against.",
+      "properties": {
+        "partSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824,
+          "description": "Bytes per part. One part of the whole blob's size is a single-object write."
+        },
+        "partCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "partDigests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/DigestMultibase"
+          },
+          "description": "The sha2-256 digest of each part's ciphertext, in order."
+        }
+      }
+    },
+    "TransferTarget": {
+      "title": "TransferTarget",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "method",
+        "url",
+        "expiresAt"
+      ],
+      "description": "One time-limited URL at the room's storage, issued by the host for one object and one method. A bearer credential for its lifetime: whoever holds it may perform exactly that request. A host MUST bind it to one object, one method and — for a write — the part's exact length and checksum, so that storage itself refuses any other bytes, and MUST give it the shortest practical lifetime, never more than 5 minutes. No party logs it.",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1023,
+          "description": "The part this target writes, or 0 for a read of the whole object."
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "PUT",
+            "GET"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://",
+          "maxLength": 8192,
+          "description": "Where to send the request. HTTPS only."
+        },
+        "headers": {
+          "type": "object",
+          "maxProperties": 16,
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "propertyNames": {
+            "maxLength": 128
+          },
+          "description": "Headers the request MUST carry exactly as given — for a write, the part's length and checksum, which the URL's signature covers. A client adds nothing the storage would treat as signed."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the storage stops honouring the URL. A request begun after it is refused by the storage."
+        }
+      }
+    }
+  }
+}

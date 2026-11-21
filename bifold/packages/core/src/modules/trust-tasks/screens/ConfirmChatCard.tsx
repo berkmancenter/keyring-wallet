@@ -1,0 +1,658 @@
+/**
+ * "Confirm it's you", as a card in the chat with the contact (confirmItsYou.ts; mocks RstEUM32… frames A3–A9).
+ *
+ * The card is not a chat message: it mirrors the request's own state, read from the records Confirm it's you already
+ * keeps (this phone's asks, and the contact's prompt), so it is never in a chat export or backup, Clear chat leaves the
+ * request alone, and it follows the request's expiry, not the chat's disappearing-messages timer.
+ *
+ * Mine (this phone asked): waiting, with Cancel (here only: a late answer is then ignored); confirmed; not confirmed,
+ * a solid red card with what to do now; no answer, with Ask again (a new request); cancelled. An older request is one
+ * quiet line.
+ *
+ * Theirs (the contact asked this phone): Confirm or "No, that wasn't me", each behind the phone's own lock, exactly
+ * as the global sheet (ConfirmItsYouModal) answers it; both read the same prompt, so answering either clears both.
+ * It says when it was received, and while open how long is left. Once answered, what was sent; once past its time,
+ * "This request has expired" and nothing to press.
+ *
+ * Settled cards fold to one line (Alberto, 278.19). Mine (Alberto, 11-16, canvas row F: "slimmer and more simpler"):
+ * confirmed, not them, unanswered or cancelled is always a compact card of one or two lines (an icon, who, how and
+ * when), also when the answer arrives while the chat is open. A tap opens the record: the note, a one-line caveat for a
+ * yes, What to do now for "not them", Ask again for no answer. "Not them" stays red and says not to act on it on the
+ * compact card itself. Row H (Alberto, 11-17): the compact card ends in a round down-chevron, so it reads as one that
+ * opens; opened, an up-chevron in its corner folds it again. The contact's request answered or expired folds to one line once the chat is opened
+ * again; one answered here stays open while its row stays mounted, so the answer just given is seen in full.
+ *
+ * Shown only while the "Confirm it's you" switch is on and neither its own nor the SEDI/KERI remote off is set
+ * (isConfirmItsYouEnabled), read at every render: the card itself is gated, not only the list that holds it.
+ *
+ * @module trust-tasks/screens/ConfirmChatCard
+ */
+import { useAgent } from '@bifold/react-hooks'
+import React, { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Pressable, StyleSheet, View } from 'react-native'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
+
+import Button, { ButtonType } from '../../../components/buttons/Button'
+import { ThemedText } from '../../../components/texts/ThemedText'
+import { useTheme } from '../../../contexts/theme'
+import { testIdWithKey } from '../../../utils/testable'
+import {
+  answerConfirmRequest,
+  cancelConfirmRequest,
+  confirmStatusOf,
+  namedLock,
+  pastDue,
+  sendConfirmRequest,
+  type ConfirmAsk,
+  type ConfirmPrompt,
+  type ConfirmTheOwner,
+} from '../confirmItsYou'
+import type { ConfirmDecision } from '../confirmItsYouSpec'
+import { isConfirmItsYouEnabled } from '../module/confirmItsYouFlag'
+import { confirmOwner, ownerLockKind } from '../module/ownerConfirm'
+import { releaseWarn } from '../module/releaseLog'
+
+export const ConfirmChatCardIds = {
+  mine: 'ConfirmChatMine',
+  theirs: 'ConfirmChatTheirs',
+  earlier: 'ConfirmChatEarlier',
+  status: 'ConfirmChatStatus',
+  note: 'ConfirmChatNote',
+  cancel: 'ConfirmChatCancel',
+  askAgain: 'ConfirmChatAskAgain',
+  /** Row F: Ask again on the compact no-answer card, without opening it. */
+  askAgainLine: 'ConfirmChatAskAgainLine',
+  /** Row F: the compact card's wrapper; for "not them" it is the alert, as the whole card was before. */
+  compact: 'ConfirmChatCompact',
+  itsMe: 'ConfirmChatItsMe',
+  notMe: 'ConfirmChatNotMe',
+  said: 'ConfirmChatSaid',
+  steps: 'ConfirmChatSteps',
+  /** The newest request of mine, settled and folded (an older one is `earlier`). */
+  mineLine: 'ConfirmChatMineLine',
+  theirLine: 'ConfirmChatTheirLine',
+  hide: 'ConfirmChatHide',
+  /** Row H: the round down-chevron on a folded card of mine, which says it opens (Alberto, 11-17). */
+  foldOpen: 'ConfirmChatFoldOpen',
+  received: 'ConfirmChatReceived',
+  /** One per side: both cards can be in one chat at once (I asked them, they asked me). */
+  expiresMine: 'ConfirmChatExpiresMine',
+  expiresTheirs: 'ConfirmChatExpiresTheirs',
+} as const
+
+/** What one card shows: a request this phone sent, or the contact's request to this phone. */
+export type ConfirmChatEntry =
+  | { side: 'mine'; ask: ConfirmAsk; newest: boolean }
+  | { side: 'theirs'; prompt: ConfirmPrompt; answeredAt?: string }
+
+/** Where the contact's request stands on this phone. */
+export type TheirStatus = 'open' | 'answered' | 'expired'
+
+/** Answered once this phone answered; else open until its time is past (pastDue, the module's own), then expired. */
+export function theirStatusOf(
+  prompt: Pick<ConfirmPrompt, 'open' | 'expiresAt' | 'answered'>,
+  now = Date.now()
+): TheirStatus {
+  if (!prompt.open && prompt.answered) return 'answered'
+  return prompt.open && !pastDue(prompt.expiresAt, now) ? 'open' : 'expired'
+}
+
+/** The phone owner's check; replaceable in tests only (as ConfirmItsYouModal's is). */
+let ownerCheckForTests: ConfirmTheOwner | null = null
+/** Tests only. */
+export const setConfirmChatOwnerCheckForTests = (check: ConfirmTheOwner | null) => {
+  ownerCheckForTests = check
+}
+const ownerCheck: ConfirmTheOwner = (reason) => (ownerCheckForTests ?? confirmOwner)(reason)
+
+const timeOf = (iso: string | undefined) =>
+  iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+const minutesLeft = (expiresAt: string, now = Date.now()) =>
+  Math.max(1, Math.ceil((Date.parse(expiresAt) - now) / 60000))
+
+/**
+ * Settled: nothing left to do on it, so it folds to one line. Mine: answered, unanswered or cancelled, and any older
+ * request (a newer one replaced it). Theirs: answered or expired.
+ */
+export function settledEntry(entry: ConfirmChatEntry, now = Date.now()): boolean {
+  if (entry.side === 'mine') return !entry.newest || confirmStatusOf(entry.ask, now) !== 'waiting'
+  return theirStatusOf(entry.prompt, now) !== 'open'
+}
+
+interface Props {
+  entry: ConfirmChatEntry
+  connectionId: string
+  /** The contact's name, as the chat's header shows it. */
+  name: string
+  /** Called after this card changed the request (sent, cancelled, answered), so its list reads it again. */
+  onChanged?: () => void
+}
+
+const ConfirmChatCard: React.FC<Props> = ({ entry, connectionId, name, onChanged }) => {
+  const { t } = useTranslation()
+  const { agent } = useAgent()
+  const { ColorPalette } = useTheme()
+  const [busy, setBusy] = useState(false)
+  const [said, setSaid] = useState<string | undefined>()
+  const [sentNow, setSentNow] = useState<{ decision: ConfirmDecision; at: string; lock?: string } | undefined>()
+  // Read once, when the card is first drawn: one settled then starts folded; one that settles on screen stays open.
+  const [open, setOpen] = useState(() => !settledEntry(entry))
+  /** Mine: a settled card the person tapped open (row F). Settled and not tapped, it is the compact card. */
+  const [expanded, setExpanded] = useState(false)
+
+  const askAgain = useCallback(
+    async (note: string) => {
+      if (!agent || busy) return
+      setBusy(true)
+      setSaid(undefined)
+      try {
+        const result = await sendConfirmRequest(agent, connectionId, note)
+        if (result === 'noRelationship')
+          setSaid(t('ConfirmItsYou.NoRelationship', { name, interpolation: { escapeValue: false } }))
+        else if (result === 'badNote') setSaid(t('ConfirmItsYou.NoteNeeded'))
+        onChanged?.()
+      } catch (error) {
+        releaseWarn(`[VTI] confirm request not sent (${(error as Error)?.name ?? 'error'})`)
+        setSaid(t('ConfirmItsYou.NotSent', { name, interpolation: { escapeValue: false } }))
+      } finally {
+        setBusy(false)
+      }
+    },
+    [agent, busy, connectionId, name, onChanged, t]
+  )
+
+  const cancel = useCallback(
+    async (threadId: string) => {
+      if (!agent || busy) return
+      setBusy(true)
+      try {
+        await cancelConfirmRequest(agent, connectionId, threadId)
+        onChanged?.()
+      } catch (error) {
+        releaseWarn(`[VTI] confirm request not cancelled (${(error as Error)?.name ?? 'error'})`)
+      } finally {
+        setBusy(false)
+      }
+    },
+    [agent, busy, connectionId, onChanged]
+  )
+
+  const answer = useCallback(
+    async (decision: ConfirmDecision, asker: string) => {
+      if (!agent || busy) return
+      setBusy(true)
+      setSaid(undefined)
+      const words = { asker, interpolation: { escapeValue: false } }
+      try {
+        // Read at answer time, as the sheet does: an unknown kind is left out of the answer (namedLock).
+        const lockNow = await ownerLockKind()
+        const result = await answerConfirmRequest(
+          agent,
+          connectionId,
+          decision,
+          ownerCheck,
+          t(decision === 'itsMe' ? 'ConfirmItsYou.ItsMeReason' : 'ConfirmItsYou.NotMeReason', words),
+          lockNow
+        )
+        releaseWarn(`[VTI] confirm request answer (chat): ${result}`)
+        const named = namedLock(lockNow)
+        if (result === 'sent') {
+          setSentNow({ decision, at: new Date().toISOString(), ...(named ? { lock: named } : {}) })
+          onChanged?.()
+        } else if (result === 'unavailable') setSaid(t('ConfirmItsYou.NoLock'))
+        else if (result === 'failed') setSaid(t('ConfirmItsYou.Failed'))
+        else if (result === 'gone' || result === 'off') onChanged?.()
+        // 'cancelled': the person backed out at the lock prompt; the request simply stays.
+      } catch (error) {
+        releaseWarn(`[VTI] confirm answer not sent (${(error as Error)?.name ?? 'error'})`)
+        setSaid(t('ConfirmItsYou.Failed'))
+      } finally {
+        setBusy(false)
+      }
+    },
+    [agent, busy, connectionId, onChanged, t]
+  )
+
+  if (!isConfirmItsYouEnabled()) return null
+
+  const styles = StyleSheet.create({
+    card: {
+      backgroundColor: ColorPalette.grayscale.white,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      padding: 14,
+      gap: 8,
+      marginHorizontal: 12,
+      marginVertical: 8,
+    },
+    good: { borderWidth: 2, borderColor: ColorPalette.semantic.success },
+    late: { borderWidth: 2, borderColor: ColorPalette.notification.warnBorder },
+    quiet: { backgroundColor: ColorPalette.grayscale.veryLightGrey },
+    red: { backgroundColor: ColorPalette.semantic.error, borderColor: ColorPalette.semantic.error, borderWidth: 2 },
+    onRed: { color: ColorPalette.grayscale.white },
+    onRedBig: { color: ColorPalette.grayscale.white, fontSize: 22, lineHeight: 28, fontWeight: 'bold' },
+    quote: {
+      backgroundColor: ColorPalette.grayscale.white,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      borderRadius: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      gap: 2,
+    },
+    quoteText: { color: ColorPalette.grayscale.black },
+    headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
+    kind: { color: ColorPalette.brand.primary, fontWeight: 'bold' },
+    muted: { color: ColorPalette.grayscale.mediumGrey },
+    error: { color: ColorPalette.semantic.error },
+    line: { marginHorizontal: 12, marginVertical: 4, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
+    hide: { alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+    hideText: { color: ColorPalette.brand.primary, fontWeight: 'bold' },
+    // Row F: the compact settled card, mine.
+    compact: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      minHeight: 56,
+      marginHorizontal: 12,
+      marginVertical: 4,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      backgroundColor: ColorPalette.grayscale.white,
+    },
+    compactGood: { borderColor: ColorPalette.semantic.success },
+    compactRed: { backgroundColor: ColorPalette.semantic.error, borderColor: ColorPalette.semantic.error },
+    compactText: { flex: 1, gap: 1 },
+    askAgainLink: { color: ColorPalette.brand.primary, fontWeight: 'bold', textDecorationLine: 'underline' },
+    // Row H: a round chevron says a card of mine opens (down) or folds (up), in the same spot on both.
+    fold: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderColor: ColorPalette.grayscale.lightGrey,
+      backgroundColor: ColorPalette.grayscale.white,
+    },
+    foldGood: { borderColor: ColorPalette.semantic.success },
+    foldRed: { borderColor: ColorPalette.grayscale.white, backgroundColor: 'rgba(255,255,255,0.22)' },
+    // An opened card of mine: its fold button sits top right, so the text keeps clear of it.
+    foldCorner: { position: 'absolute', top: 8, right: 8 },
+    openMine: { paddingRight: 56 },
+  })
+
+  const n = { name, interpolation: { escapeValue: false } }
+  const said_ = said ? (
+    <ThemedText style={styles.error} testID={testIdWithKey(ConfirmChatCardIds.said)}>
+      {said}
+    </ThemedText>
+  ) : null
+  // The note exactly as it was written: plain text, never links or markup.
+  const quote = (label: string, note: string) => (
+    <View style={styles.quote}>
+      <ThemedText style={styles.muted}>{label}</ThemedText>
+      <ThemedText style={styles.quoteText} testID={testIdWithKey(ConfirmChatCardIds.note)}>
+        {note}
+      </ThemedText>
+    </View>
+  )
+  // One line for a settled card; a tap opens the whole card as the record.
+  const folded = (testID: string, text: React.ReactNode, style?: object) => (
+    <Pressable
+      style={styles.line}
+      onPress={() => setOpen(true)}
+      accessibilityRole="button"
+      accessibilityHint={t('ConfirmItsYou.ShowRecord')}
+      testID={testIdWithKey(testID)}
+    >
+      <ThemedText style={[styles.muted, style]}>{text}</ThemedText>
+    </Pressable>
+  )
+  // On an opened settled card: fold it back to its line.
+  const hide = (style?: object) => (
+    <Pressable
+      style={styles.hide}
+      onPress={() => setOpen(false)}
+      accessibilityRole="button"
+      hitSlop={8}
+      testID={testIdWithKey(ConfirmChatCardIds.hide)}
+    >
+      <ThemedText style={[styles.hideText, style]}>{t('ConfirmItsYou.HideRecord')}</ThemedText>
+    </Pressable>
+  )
+  /** The round chevron of row H: down on a folded card (it opens), up on an opened one (it folds). */
+  const foldLook = (tone: 'red' | 'good' | 'plain') => [
+    styles.fold,
+    tone === 'red' ? styles.foldRed : tone === 'good' ? styles.foldGood : undefined,
+  ]
+  const foldTint = (tone: 'red' | 'good' | 'plain') =>
+    tone === 'red'
+      ? ColorPalette.grayscale.white
+      : tone === 'good'
+        ? ColorPalette.semantic.success
+        : ColorPalette.brand.primary
+  // On a settled card of mine, tapped open: back to its compact card, from the up-chevron in its corner (row H).
+  const hideMine = (tone: 'red' | 'good' | 'plain') => (
+    <Pressable
+      style={[...foldLook(tone), styles.foldCorner]}
+      onPress={() => setExpanded(false)}
+      accessibilityRole="button"
+      accessibilityLabel={t('ConfirmItsYou.HideRecord')}
+      accessibilityState={{ expanded: true }}
+      hitSlop={8}
+      testID={testIdWithKey(ConfirmChatCardIds.hide)}
+    >
+      <Icon name="chevron-up" size={24} color={foldTint(tone)} />
+    </Pressable>
+  )
+  const kindLine = (who: string, style?: object) => (
+    <ThemedText style={[styles.kind, style]}>
+      {t('ConfirmItsYou.Title', { name: who, interpolation: { escapeValue: false } })}
+    </ThemedText>
+  )
+
+  if (entry.side === 'mine') {
+    const { ask, newest } = entry
+    const status = confirmStatusOf(ask)
+    const lock = namedLock(ask.confirmedWith)
+    const at = {
+      ...n,
+      time: timeOf(ask.respondedAt ?? ask.answeredAt),
+      sent: timeOf(ask.askedAt),
+      ...(lock ? { lock: t(`ConfirmItsYou.Lock.${lock}`) } : {}),
+    }
+    const settled = status !== 'waiting' || !newest
+    // How and when, for a card's second line: "Face ID · 02:24 PM", or "On their phone · 02:24 PM".
+    const how = t(lock ? 'ConfirmItsYou.CompactHow' : 'ConfirmItsYou.CompactOnPhone', at)
+    if (settled && !expanded) {
+      const red = status === 'notMe'
+      const [icon, title, sub] =
+        status === 'itsMe'
+          ? (['shield-check-outline', t('ConfirmItsYou.CompactConfirmed', n), how] as const)
+          : status === 'notMe'
+            ? (['alert', t('ConfirmItsYou.NotThemTitle', n), t('ConfirmItsYou.CompactNotThemSub', at)] as const)
+            : status === 'expired'
+              ? (['clock-outline', t('ConfirmItsYou.CompactNoAnswer', n), t('ConfirmItsYou.CompactSent', at)] as const)
+              : status === 'cancelled'
+                ? ([
+                    'minus-circle-outline',
+                    t('ConfirmItsYou.CancelledTitle'),
+                    t('ConfirmItsYou.CompactSent', at),
+                  ] as const)
+                : (['clock-outline', t('ConfirmItsYou.WaitingTitle', n), t('ConfirmItsYou.CompactSent', at)] as const)
+      const tint = red
+        ? ColorPalette.grayscale.white
+        : status === 'itsMe'
+          ? ColorPalette.semantic.success
+          : ColorPalette.grayscale.mediumGrey
+      return (
+        // "Not them" keeps the alert on the state seen first, and Android says it as it appears (ac, #1083).
+        <View
+          accessibilityRole={red ? 'alert' : undefined}
+          accessibilityLiveRegion={red ? 'assertive' : 'none'}
+          testID={testIdWithKey(ConfirmChatCardIds.compact)}
+        >
+          <Pressable
+            style={[styles.compact, red && styles.compactRed, status === 'itsMe' && styles.compactGood]}
+            onPress={() => setExpanded(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`${title}. ${sub}`}
+            accessibilityHint={t('ConfirmItsYou.ShowRecord')}
+            accessibilityState={{ expanded: false }}
+            testID={testIdWithKey(newest ? ConfirmChatCardIds.mineLine : ConfirmChatCardIds.earlier)}
+          >
+            <Icon name={icon} size={24} color={tint} />
+            <View style={styles.compactText}>
+              <ThemedText variant="bold" style={red ? styles.onRed : undefined}>
+                {title}
+              </ThemedText>
+              <ThemedText style={red ? styles.onRed : styles.muted}>
+                {sub}
+                {status === 'expired' && newest ? (
+                  <>
+                    {' · '}
+                    <ThemedText
+                      style={styles.askAgainLink}
+                      onPress={() => void askAgain(ask.note)}
+                      accessibilityRole="button"
+                      testID={testIdWithKey(ConfirmChatCardIds.askAgainLine)}
+                    >
+                      {t('ConfirmItsYou.AskAgain')}
+                    </ThemedText>
+                  </>
+                ) : null}
+              </ThemedText>
+            </View>
+            {/* Row H: a round down-chevron, so the card reads as one that opens (a faded › read as "another screen"). */}
+            <View
+              style={foldLook(red ? 'red' : status === 'itsMe' ? 'good' : 'plain')}
+              testID={testIdWithKey(ConfirmChatCardIds.foldOpen)}
+            >
+              <Icon
+                name="chevron-down"
+                size={24}
+                color={foldTint(red ? 'red' : status === 'itsMe' ? 'good' : 'plain')}
+              />
+            </View>
+          </Pressable>
+          {said_}
+        </View>
+      )
+    }
+    const mine = (style: object | undefined, body: React.ReactNode) => (
+      <View style={[styles.card, style, settled && styles.openMine]} testID={testIdWithKey(ConfirmChatCardIds.mine)}>
+        {body}
+        {settled ? hideMine(status === 'itsMe' ? 'good' : 'plain') : null}
+      </View>
+    )
+    switch (status) {
+      case 'waiting':
+        return mine(
+          undefined,
+          <>
+            {kindLine(name)}
+            <View style={styles.headRow}>
+              <ThemedText variant="bold" testID={testIdWithKey(ConfirmChatCardIds.status)}>
+                {t('ConfirmItsYou.WaitingTitle', n)}
+              </ThemedText>
+              <ThemedText style={styles.muted}>{t('ConfirmItsYou.SentAt', at)}</ThemedText>
+            </View>
+            <ThemedText variant="bold">{t('ConfirmItsYou.WaitingBody', n)}</ThemedText>
+            {quote(t('ConfirmItsYou.YouAsked'), ask.note)}
+            <ThemedText style={styles.muted} testID={testIdWithKey(ConfirmChatCardIds.expiresMine)}>
+              {t('ConfirmItsYou.ExpiresIn', { count: minutesLeft(ask.expiresAt) })}
+            </ThemedText>
+            <Button
+              title={t('ConfirmItsYou.CancelRequest')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => void cancel(ask.threadId)}
+              disabled={busy}
+              testID={testIdWithKey(ConfirmChatCardIds.cancel)}
+            />
+            <ThemedText style={styles.muted}>{t('ConfirmItsYou.CancelNote', n)}</ThemedText>
+          </>
+        )
+      case 'itsMe':
+        // Opened (F4): who, how and when; the note; the caveat in one line.
+        return mine(
+          styles.good,
+          <>
+            <ThemedText variant="bold" testID={testIdWithKey(ConfirmChatCardIds.status)}>
+              {t(lock ? 'ConfirmItsYou.ConfirmedTitle' : 'ConfirmItsYou.ConfirmedTitleOnPhone', at)}
+            </ThemedText>
+            {quote(t('ConfirmItsYou.YouAsked'), ask.note)}
+            <ThemedText style={styles.muted}>{t('ConfirmItsYou.CompactCaveat', n)}</ThemedText>
+          </>
+        )
+      case 'notMe':
+        // Opened (F5): the warning, how and when, the note, and What to do now.
+        return (
+          <View
+            style={[styles.card, styles.red, styles.openMine]}
+            accessibilityRole="alert"
+            testID={testIdWithKey(ConfirmChatCardIds.mine)}
+          >
+            <ThemedText style={styles.onRedBig} testID={testIdWithKey(ConfirmChatCardIds.status)}>
+              {t('ConfirmItsYou.NotThemTitle', n)}
+            </ThemedText>
+            <ThemedText style={styles.onRed} variant="bold">
+              {t('ConfirmItsYou.NotThemBody')}
+            </ThemedText>
+            <ThemedText style={styles.onRed}>{how}</ThemedText>
+            {quote(t('ConfirmItsYou.YouAsked'), ask.note)}
+            <View testID={testIdWithKey(ConfirmChatCardIds.steps)}>
+              <ThemedText style={styles.onRed} variant="bold">
+                {t('ConfirmItsYou.WhatToDo')}
+              </ThemedText>
+              <ThemedText style={styles.onRed}>• {t('ConfirmItsYou.StepHangUp')}</ThemedText>
+              <ThemedText style={styles.onRed}>• {t('ConfirmItsYou.StepCallBack', n)}</ThemedText>
+              <ThemedText style={styles.onRed}>• {t('ConfirmItsYou.StepNoCodes')}</ThemedText>
+            </View>
+            {hideMine('red')}
+          </View>
+        )
+      case 'expired':
+        return mine(
+          styles.late,
+          <>
+            <ThemedText variant="bold" testID={testIdWithKey(ConfirmChatCardIds.status)}>
+              {t('ConfirmItsYou.ExpiredTitle', n)}
+            </ThemedText>
+            <ThemedText>{t('ConfirmItsYou.ExpiredBody', n)}</ThemedText>
+            {quote(t('ConfirmItsYou.YouAsked'), ask.note)}
+            {said_}
+            {newest ? (
+              <Button
+                title={t('ConfirmItsYou.AskAgain')}
+                buttonType={ButtonType.Primary}
+                onPress={() => void askAgain(ask.note)}
+                disabled={busy}
+                testID={testIdWithKey(ConfirmChatCardIds.askAgain)}
+              />
+            ) : null}
+          </>
+        )
+      case 'cancelled':
+        return mine(
+          styles.quiet,
+          <>
+            <ThemedText variant="bold" testID={testIdWithKey(ConfirmChatCardIds.status)}>
+              {t('ConfirmItsYou.CancelledTitle')}
+            </ThemedText>
+            {quote(t('ConfirmItsYou.YouAsked'), ask.note)}
+          </>
+        )
+    }
+  }
+
+  // Theirs: the contact asked this phone.
+  const { prompt } = entry
+  const asker = prompt.asker || name
+  const words = { asker, interpolation: { escapeValue: false } }
+  const status: TheirStatus = sentNow ? 'answered' : theirStatusOf(prompt)
+  const received = { ...words, received: timeOf(prompt.receivedAt) }
+  if (!open) {
+    // The answer just given here first: until the reload lands, the record still reads open (no decision, no time),
+    // and folding then must never fall through to "you confirmed" after a "not me".
+    const decision = sentNow?.decision ?? prompt.answered
+    const time = timeOf(sentNow?.at ?? entry.answeredAt)
+    const key =
+      status === 'expired'
+        ? 'ConfirmItsYou.TheirLineExpired'
+        : decision === 'notMe'
+          ? time
+            ? 'ConfirmItsYou.TheirLineNotMe'
+            : 'ConfirmItsYou.YouToldNotMe'
+          : time
+            ? 'ConfirmItsYou.TheirLineItsMe'
+            : 'ConfirmItsYou.YouToldItsMe'
+    return folded(ConfirmChatCardIds.theirLine, t(key, { ...received, time }))
+  }
+  const theirs = (style: object | undefined, body: React.ReactNode) => (
+    <View style={[styles.card, style]} testID={testIdWithKey(ConfirmChatCardIds.theirs)}>
+      {kindLine(asker, status === 'expired' ? styles.muted : undefined)}
+      {prompt.receivedAt ? (
+        <ThemedText style={styles.muted} testID={testIdWithKey(ConfirmChatCardIds.received)}>
+          {t('ConfirmItsYou.ReceivedAt', received)}
+        </ThemedText>
+      ) : null}
+      {body}
+      {status !== 'open' ? hide() : null}
+    </View>
+  )
+
+  if (status === 'open')
+    return theirs(
+      undefined,
+      <>
+        <ThemedText variant="bold" testID={testIdWithKey(ConfirmChatCardIds.status)}>
+          {t('ConfirmItsYou.PromptTitle', words)}
+        </ThemedText>
+        {quote(t('ConfirmItsYou.TheirNote', words), prompt.note)}
+        <ThemedText>{t('ConfirmItsYou.AnswerOnlyForYou', words)}</ThemedText>
+        <ThemedText style={styles.muted} testID={testIdWithKey(ConfirmChatCardIds.expiresTheirs)}>
+          {t('ConfirmItsYou.ExpiresIn', { count: minutesLeft(prompt.expiresAt) })}
+        </ThemedText>
+        {said_}
+        <Button
+          title={t('ConfirmItsYou.ItsMe')}
+          buttonType={ButtonType.Primary}
+          onPress={() => void answer('itsMe', asker)}
+          disabled={busy}
+          testID={testIdWithKey(ConfirmChatCardIds.itsMe)}
+        />
+        <Button
+          title={t('ConfirmItsYou.NotMe')}
+          buttonType={ButtonType.Secondary}
+          onPress={() => void answer('notMe', asker)}
+          disabled={busy}
+          testID={testIdWithKey(ConfirmChatCardIds.notMe)}
+        />
+        <ThemedText style={styles.muted}>{t('ConfirmItsYou.PinInstead')}</ThemedText>
+      </>
+    )
+
+  if (status === 'answered') {
+    const decision = sentNow?.decision ?? prompt.answered
+    const when = sentNow?.at ?? entry.answeredAt
+    return theirs(
+      decision === 'itsMe' ? styles.good : undefined,
+      <>
+        <ThemedText variant="bold" testID={testIdWithKey(ConfirmChatCardIds.status)}>
+          {t(decision === 'itsMe' ? 'ConfirmItsYou.YouToldItsMe' : 'ConfirmItsYou.YouToldNotMe', words)}
+        </ThemedText>
+        {quote(t('ConfirmItsYou.TheirNote', words), prompt.note)}
+        {when ? (
+          <ThemedText>
+            {t(sentNow?.lock ? 'ConfirmItsYou.SentSigned' : 'ConfirmItsYou.SentSignedNoLock', {
+              ...words,
+              ...(sentNow?.lock ? { method: t(`ConfirmItsYou.Lock.${sentNow.lock}`) } : {}),
+              time: timeOf(when),
+            })}
+          </ThemedText>
+        ) : null}
+        <ThemedText style={styles.muted}>
+          {t(decision === 'itsMe' ? 'ConfirmItsYou.SentItsMeAfter' : 'ConfirmItsYou.SentNotMeAfter', words)}
+        </ThemedText>
+      </>
+    )
+  }
+
+  return theirs(
+    styles.quiet,
+    <>
+      <ThemedText variant="bold" testID={testIdWithKey(ConfirmChatCardIds.status)}>
+        {t('ConfirmItsYou.ExpiredPromptTitle')}
+      </ThemedText>
+      <ThemedText style={styles.muted}>{t('ConfirmItsYou.ExpiredPromptBody', words)}</ThemedText>
+    </>
+  )
+}
+
+export default ConfirmChatCard

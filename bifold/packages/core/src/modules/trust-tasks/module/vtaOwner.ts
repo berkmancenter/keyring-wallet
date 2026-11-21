@@ -1,0 +1,250 @@
+/**
+ * vtaOwner — what owning an agent from this phone needs beyond linking it
+ * (own_agent_subtask.md §2–§4): the owner checks the app plugs in, the errors
+ * the device screens word, and how the agent's refusals of an owner act read.
+ *
+ * An owner act is a change to who else may run the agent — adding a backup
+ * device (`acl/grant/0.1`) or removing one (`acl/revoke/0.1`). The phone's key
+ * is a software key in the wallet (plan §3, D1), so every owner act needs a
+ * fresh confirmation by the person at that moment, not only the app unlock.
+ * The confirmation itself (biometrics or passcode) belongs to the app; the
+ * controller only takes it through `configure()`, and refuses loudly when it
+ * was never given one, so nothing silently skips it.
+ *
+ * @module trust-tasks/module/vtaOwner
+ */
+
+import { consentPendingOf, refusedAsNotOnAcl } from './VtaClient'
+import { StepUpDeclined } from './stepUp'
+import { VtiRefusal } from './vtiAgent'
+
+/** Why the person did not confirm: cancelled is silent on screen; failed and unavailable are worded. */
+export type OwnerNotConfirmedReason = 'cancelled' | 'failed' | 'unavailable'
+
+/** The answer of the app's owner check. Owner acts go ahead only on `ok: true`. */
+export interface OwnerConfirmation {
+  ok: boolean
+  reason?: OwnerNotConfirmedReason
+}
+
+/** Ask the person to confirm an owner act, now (biometrics or passcode). `reason` is the prompt's text. */
+export type ConfirmOwner = (reason: string) => Promise<OwnerConfirmation>
+
+/** Whether this phone can hold an owner key at all: a screen lock or biometrics is set up. */
+export type DeviceCanOwn = () => Promise<boolean>
+
+/** The app never plugged in an owner check. A wiring fault, never shown as the person's doing. */
+export class OwnerCheckNotConfigured extends Error {
+  constructor(readonly check: 'confirmOwner' | 'deviceCanOwn') {
+    super(`owner check not configured: ${check}`)
+    this.name = 'OwnerCheckNotConfigured'
+  }
+}
+
+/** The person did not confirm an owner act; nothing was sent. */
+export class OwnerNotConfirmed extends Error {
+  constructor(
+    readonly reason: OwnerNotConfirmedReason,
+    readonly detail?: string
+  ) {
+    super(
+      reason === 'cancelled'
+        ? 'Cancelled.'
+        : reason === 'unavailable'
+          ? 'This phone cannot confirm it is you right now.'
+          : "Keyring couldn't confirm it's you."
+    )
+    this.name = 'OwnerNotConfirmed'
+  }
+}
+
+/** Creating an agent on a phone with no screen lock or biometrics: refused before any key is made. */
+export class DeviceCannotOwn extends Error {
+  constructor() {
+    super('To protect your agent, turn on a screen lock or biometrics first.')
+    this.name = 'DeviceCannotOwn'
+  }
+}
+
+/**
+ * Why a device action did not happen, for the screen to word.
+ *
+ * - `notLinked` — this phone has no agent to act on.
+ * - `notADid` — what was scanned or pasted is not a device code.
+ * - `thisPhone` — the device named is this phone (refused here, or by the agent,
+ *   which never lets a caller remove itself).
+ * - `alreadyAdded` — the agent already holds that device.
+ * - `notFound` — the agent holds no such device.
+ * - `notPermitted` — the agent will not let this phone do that (it is not the
+ *   agent's full owner).
+ * - `beyondOwnAccess` — this phone's own access to the agent is narrower (it
+ *   lapses, or covers fewer keys) than what it asked to give (VTI-ACL-053).
+ * - `accessRevoked` — the agent no longer knows this phone at all.
+ * - `stepUpRequired` — the agent asked for an extra check (a step-up) that
+ *   this phone could not answer.
+ * - `stepUpDeclined` — the person said no to the agent's extra check.
+ * - `notConfirmed` — the extra check could not confirm it was the person.
+ * - `awaitingApproval` — the agent holds the act for someone else's approval,
+ *   which did not come in time.
+ * - `notApproved` — the agent held the act for someone else's approval, and the
+ *   question ended without a yes: they said no, or it lapsed (VtaClient's consentNotGiven refusal).
+ *   Not the agent's refusal: it did what its rule says.
+ * - `notServed` — Keyring did not write an approval rule: the agent's answer
+ *   names no version of that task it dispatches (approvalRules NotServed).
+ * - `noAnswer` — the agent said nothing in time; the act may or may not have
+ *   happened, so the list is worth reading again.
+ * - `unreachable` — Keyring could not sign in to the agent.
+ * - `failed` — anything else; the agent's words are in `detail`.
+ */
+export type DeviceRefusalReason =
+  | 'notLinked'
+  | 'notADid'
+  | 'thisPhone'
+  | 'alreadyAdded'
+  | 'notFound'
+  | 'notPermitted'
+  | 'beyondOwnAccess'
+  | 'accessRevoked'
+  | 'stepUpRequired'
+  | 'stepUpDeclined'
+  | 'notConfirmed'
+  | 'awaitingApproval'
+  | 'notApproved'
+  | 'notServed'
+  | 'noAnswer'
+  | 'unreachable'
+  | 'failed'
+  /** The agent answered with a refusal Keyring has no words of its own for: said as a refusal, with its code. */
+  | 'refused'
+
+const PLAIN_WORDS: Record<DeviceRefusalReason, string> = {
+  notLinked: 'This phone has no agent yet.',
+  notADid: "That isn't a device code. Scan or paste the code the other phone shows.",
+  thisPhone: 'That is this phone.',
+  alreadyAdded: 'That device is already added.',
+  notFound: "Your agent doesn't have that device.",
+  notPermitted: "Your agent doesn't let this phone do that.",
+  beyondOwnAccess: "Your agent won't let this phone give more access than this phone has itself.",
+  accessRevoked: "Your agent doesn't accept this phone any more.",
+  stepUpRequired: "Your agent asked for an extra check this phone couldn't answer.",
+  stepUpDeclined: 'You declined the extra check, so your agent did not do this.',
+  notConfirmed: "Keyring couldn't confirm it's you.",
+  awaitingApproval: 'Your agent is waiting for someone else to approve this.',
+  notApproved:
+    "Your approver didn't approve this, so your agent didn't do it. They may have said no, or not answered in time.",
+  notServed: "Your agent doesn't support asking before this, so nothing changed.",
+  noAnswer: "Your agent didn't answer. Check the list before trying again.",
+  unreachable: "Keyring couldn't reach your agent. Check your connection and try again.",
+  failed: "Your agent couldn't do that.",
+  refused: 'Your agent refused this.',
+}
+
+/** A device action that did not happen. `message` is plain words; `detail` keeps the agent's own. */
+export class DeviceActionRefused extends Error {
+  constructor(
+    readonly reason: DeviceRefusalReason,
+    readonly detail?: string,
+    /** For `refused`: the agent's own code, said beside the words. */
+    readonly code?: string
+  ) {
+    super(PLAIN_WORDS[reason])
+    this.name = 'DeviceActionRefused'
+  }
+}
+
+/** A DID is what a device code is; anything else is refused before the owner is asked. */
+export function looksLikeDid(value: string): boolean {
+  return /^did:[a-z0-9]+:\S+$/.test(value)
+}
+
+/**
+ * The device code in whatever was pasted (IN-52): the other phone's Share
+ * sends a sentence with the code on its own line, and a paste can carry
+ * whitespace. One code, found once or written twice, is taken; none, or two
+ * different ones, is undefined — then the text is checked as it is, and a
+ * person hears "That isn't a device code".
+ */
+export function deviceCodeIn(text: string): string | undefined {
+  const found = new Set((text.match(/did:[a-z0-9]+:[^\s"'<>]+/g) ?? []).map((code) => code.replace(/[.,;:)\]]+$/, '')))
+  return found.size === 1 ? [...found][0] : undefined
+}
+
+/** `delete_acl`'s self-delete refusal (vta-service operations/acl.rs:792-796). */
+const SELF_DELETE = /cannot delete your own ACL entry/i
+/** Any of VTI-ACL-053's refusals: what the caller asked to write goes beyond its own entry (vta-service operations/acl.rs:340-403). */
+const OWN_ACCESS_BOUND = /VTI-ACL-053/
+/**
+ * VTI-ACL-107's refusal: an entry stating purposes beyond the writer's own (vta-service-v0.80.0, 71f64ab1b,
+ * operations/acl.rs `validate_purposes_within_caller`, "purposes outside your own … (VTI-ACL-107)"; added by afc06a431,
+ * VTI #2539, the breaking VTI-ACL-100 – 110 change). The 0.3 tasks answer it with the code `purposeOutsideDelegator`
+ * (acl_v0_3.rs), older ones as a forbidden with these words. It POST-DATES our VTI pin (vta-service-v0.79.0,
+ * f7b78e29d), which has none of it: only an agent at v0.80.0 or later refuses this way, so the pinned reference cannot
+ * exercise this branch. The agent bounds the grant either way: this only says why, in the same words as an expiry
+ * beyond this phone's own.
+ */
+const OWN_PURPOSES_BOUND = /VTI-ACL-107/
+/** VTI-ACL-053's refusal of a permanent entry from a caller whose own entry expires, with that expiry in epoch seconds (acl.rs:391-394). */
+const OWN_ENTRY_EXPIRES = /your entry expires at (\d+), so you cannot write a permanent one/
+
+/**
+ * When the agent refused a permanent entry because this phone's own entry
+ * expires (VTI-ACL-053), that expiry as RFC 3339; otherwise undefined.
+ */
+export function ownExpiryFromRefusal(error: unknown): string | undefined {
+  if (!(error instanceof VtiRefusal) || error.code !== 'permissionDenied') return undefined
+  const epoch = OWN_ENTRY_EXPIRES.exec(error.message)?.[1]
+  return epoch ? new Date(Number(epoch) * 1000).toISOString() : undefined
+}
+
+/** `create_acl`'s duplicate refusal (vta-service operations/acl.rs:391-395). */
+const ALREADY_EXISTS = /already exists/i
+/** Matches VtaClient's own "no answer in time". */
+const NO_ANSWER = /the VTA did not answer/
+const STEP_UP_REQUIRED = 'auth:step_up_required'
+
+/**
+ * Read a failed `acl/grant/0.1` or `acl/revoke/0.1` as a reason a screen can
+ * word. The VTA's codes, at ed672fff (vta-service trust_tasks/helpers.rs:114-155):
+ * a `Forbidden` is `permissionDenied` with the error's text as its message;
+ * `NotFound` and `Conflict` are `taskFailed` with `details.reason` `not_found` /
+ * `conflict` (vta-sdk protocols/mod.rs:113-118) and the text as the message.
+ * The policy gate's asks are `taskFailed` with the `auth:*` code as the
+ * message (trust_tasks/policy_gate.rs:213-233, step_up.rs:1300-1308).
+ */
+export function deviceRefusalOf(error: unknown): DeviceActionRefused {
+  if (error instanceof DeviceActionRefused) return error
+  const message = error instanceof Error ? error.message : String(error)
+  const refusal = (reason: DeviceRefusalReason) => new DeviceActionRefused(reason, message)
+  if (error instanceof StepUpDeclined) return refusal('stepUpDeclined')
+  if (error instanceof OwnerNotConfirmed) return refusal('notConfirmed')
+  // The two endings of one wait: still waiting, or the wait ended with no yes. Before the generic VtiRefusal cases,
+  // which would read the second as the agent's own refusal and show its code.
+  if (consentPendingOf(error)) return refusal('awaitingApproval')
+  // By its code, not its class: suites that stub VtaClient with a hand-written export list (and a second module
+  // instance of it) would defeat instanceof; VtiRefusal comes from vtiAgent, which they don't stub. Keep the code a
+  // literal here, never imported from VtaClient: from a stubbed VtaClient an imported guard is undefined (a crash), and
+  // an imported CONSENT_NOT_GIVEN is undefined too, so the check would silently never match and the refusal would read
+  // as the agent's own again. So this copy of the code is deliberate, and it is guarded: consentNotGiven.test.ts builds
+  // the error with VtaClient's factory and reads it here, so drift on either side fails that row.
+  if (error instanceof VtiRefusal && error.code === 'consentNotGiven') return refusal('notApproved')
+  // By name, as above by code: approvalRules is not imported here, so no stub of it can break this line.
+  if (error instanceof Error && error.name === 'NotServed') return refusal('notServed')
+  if (!(error instanceof VtiRefusal)) return refusal(NO_ANSWER.test(message) ? 'noAnswer' : 'failed')
+  const details = (error.details ?? {}) as { reason?: unknown }
+  if (message === STEP_UP_REQUIRED || details.reason === STEP_UP_REQUIRED) return refusal('stepUpRequired')
+  if (refusedAsNotOnAcl(error)) return refusal('accessRevoked')
+  if (SELF_DELETE.test(message)) return refusal('thisPhone')
+  if (details.reason === 'conflict' && ALREADY_EXISTS.test(message)) return refusal('alreadyAdded')
+  if (details.reason === 'not_found') return refusal('notFound')
+  if (error.code === 'permissionDenied' && OWN_ACCESS_BOUND.test(message)) return refusal('beyondOwnAccess')
+  if (
+    error.code === 'purposeOutsideDelegator' ||
+    (error.code === 'permissionDenied' && OWN_PURPOSES_BOUND.test(message))
+  )
+    return refusal('beyondOwnAccess')
+  if (error.code === 'permissionDenied') return refusal('notPermitted')
+  // A refusal that did arrive is never "didn't answer" (al-phone, 10-05: an
+  // add refused 422 four times read as silence): said as a refusal, with its
+  // code, and its own words kept for Details.
+  return new DeviceActionRefused('refused', message, error.code)
+}

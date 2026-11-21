@@ -559,19 +559,43 @@ export const manifestDrift = (synced, upstream) => {
   return { ok: !changed, added: added.sort(), removed: removed.sort(), changed }
 }
 
+/** The manifest's path in the folded tree (since the fold, bifold/ is a directory of this repository, not a submodule). */
+export const FOLDED_MANIFEST = 'bifold/packages/core/testids.json'
+
 /**
- * bifold's packages/core/testids.json at the submodule commit the wallet pins (the gitlink, not the submodule's working
- * tree, which can sit anywhere locally). `{ skipped }` when that commit cannot be read here. The gitlink is the index's,
- * as sync-testids.sh reads it: a staged, uncommitted pin bump is checked against the pin being made (in CI the index
- * and HEAD agree).
+ * bifold's packages/core/testids.json as the wallet carries it. Since the fold that is the file bifold/packages/core/
+ * testids.json of this tree (`:bifold` is a tree), read from the working tree: the file sync-testids.sh copies, and in
+ * CI the same bytes as HEAD's. Before the fold (`:bifold` is a gitlink) it is the manifest at the submodule commit the
+ * wallet pins, not the submodule's working tree, which can sit anywhere locally; the gitlink is the index's, as
+ * sync-testids.sh reads it, so a staged, uncommitted pin bump is checked against the pin being made. `{ skipped }` when
+ * it cannot be read here. `folded` says which it was, for the message.
  */
 export const pinnedManifest = (wallet = path.resolve(e2eDir, '..')) => {
   const git = (args) => execFileSync('git', args, { cwd: wallet, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
-  let sha
+  // The index's entries under bifold: one gitlink line (`160000 <pin> 0\tbifold`, the submodule) or the folded tree's
+  // files. Not `rev-parse :bifold` (a directory has no index entry) and not `cat-file -t` (a gitlink's commit is in the
+  // submodule's repository, not this one).
+  let entry
   try {
-    sha = git(['rev-parse', ':bifold']).trim()
+    entry = git(['ls-files', '-s', '--', 'bifold']).split('\n')[0]
   } catch {
-    return { skipped: 'no bifold submodule pinned here' }
+    entry = ''
+  }
+  if (!entry) return { skipped: 'no bifold here: neither a pinned submodule nor the folded bifold/ tree' }
+  const [mode, sha] = entry.split(/\s+/)
+  if (mode !== '160000') {
+    // The folded tree, named by its id at HEAD (a label for the message; the file read is the working tree's).
+    let tree
+    try {
+      tree = git(['rev-parse', 'HEAD:bifold']).trim()
+    } catch {
+      tree = 'working tree'
+    }
+    try {
+      return { sha: tree, folded: true, manifest: JSON.parse(fs.readFileSync(path.join(wallet, FOLDED_MANIFEST), 'utf8')) }
+    } catch {
+      return { sha: tree, folded: true, skipped: `${FOLDED_MANIFEST} is not readable here (not checked out, or not generated: bifold/packages/core/scripts/gen-testids.mjs)` }
+    }
   }
   try {
     return { sha, manifest: JSON.parse(git(['-C', 'bifold', 'show', `${sha}:packages/core/testids.json`])) }
@@ -580,11 +604,11 @@ export const pinnedManifest = (wallet = path.resolve(e2eDir, '..')) => {
   }
 }
 
-/** The drift lines for a person, ending in the command; empty when in step. */
-export const driftLines = (drift, sha) => {
+/** The drift lines for a person, ending in the command; empty when in step. `folded`: the tree, not a pinned submodule. */
+export const driftLines = (drift, sha, folded = false) => {
   if (drift.ok) return []
   const list = (ids) => ids.slice(0, 12).join(', ') + (ids.length > 12 ? `, … ${ids.length - 12} more` : '')
-  const lines = [`testids: e2e/lib/testids.json is out of step with bifold ${sha.slice(0, 8)} (the pinned submodule)`]
+  const lines = [folded ? `testids: e2e/lib/testids.json is out of step with ${FOLDED_MANIFEST} (bifold ${sha.slice(0, 8)}, the folded tree)` : `testids: e2e/lib/testids.json is out of step with bifold ${sha.slice(0, 8)} (the pinned submodule)`]
   if (drift.added.length) lines.push(`  ${drift.added.length} id(s) bifold has that the copy lacks: ${list(drift.added)}`)
   if (drift.removed.length) lines.push(`  ${drift.removed.length} id(s) the copy keeps that bifold dropped: ${list(drift.removed)}`)
   if (!drift.added.length && !drift.removed.length) lines.push('  the same ids, with other differences (their files, the derived list)')
@@ -595,7 +619,8 @@ export const driftLines = (drift, sha) => {
 const main = () => {
   const json = process.argv.includes('--json')
   const result = runCheck()
-  // The copy against bifold at the pin. CI checks the submodule out, so a skip there would hide drift: it fails.
+  // The copy against bifold's manifest (the folded tree's file, or the pin's before the fold). CI has it checked out,
+  // so a skip there would hide drift: it fails.
   const pinned = pinnedManifest()
   const drift = pinned.manifest ? manifestDrift(loadJson(path.join(e2eDir, 'lib', 'testids.json')), pinned.manifest) : undefined
   const driftOk = drift ? drift.ok : !process.env.CI
@@ -603,7 +628,7 @@ const main = () => {
     process.stdout.write(JSON.stringify({ ...result, drift: drift ?? { skipped: pinned.skipped } }, null, 2) + '\n')
     process.exit(result.ok && driftOk ? 0 : 1)
   }
-  if (drift) for (const line of driftLines(drift, pinned.sha)) console.error(line)
+  if (drift) for (const line of driftLines(drift, pinned.sha, pinned.folded)) console.error(line)
   else console.error(`testids drift: ${process.env.CI ? 'FAILED, not checked' : 'not checked'}: ${pinned.skipped}`)
   const { totals, known } = result
   for (const f of result.files) {

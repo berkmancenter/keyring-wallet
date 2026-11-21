@@ -1,0 +1,185 @@
+import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
+import { useCredentialByState } from '@bifold/react-hooks'
+import { DidCommCredentialExchangeRecord, DidCommCredentialRole, DidCommCredentialState } from '@credo-ts/didcomm'
+import { useNavigation } from '@react-navigation/native'
+import { act, cleanup, fireEvent, render } from '@testing-library/react-native'
+import React from 'react'
+
+import { StoreProvider, defaultState } from '../../src/contexts/store'
+import ListCredentials from '../../src/screens/ListCredentials'
+import { BasicAppContext } from '../helpers/app'
+import CredentialCardGen from '../../src/components/misc/CredentialCardGen'
+
+interface CredentialContextInterface {
+  loading: boolean
+  credentials: DidCommCredentialExchangeRecord[]
+}
+
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+jest.mock('react-native-localize', () => {})
+
+const credentialDefinitionId = 'xxxxxxxxxxxxxxxxxx:3:CL:11111:default'
+
+describe('CredentialList Screen', () => {
+  const testOpenVPCredentialRecord = new DidCommCredentialExchangeRecord({
+    role: DidCommCredentialRole.Holder,
+    threadId: '1',
+    state: DidCommCredentialState.Done,
+    createdAt: new Date('2020-01-01T00:00:00'),
+    protocolVersion: 'v1',
+  })
+  testOpenVPCredentialRecord.metadata.set(AnonCredsCredentialMetadataKey, {
+    schemaId: 'Ui6HA36FvN83cEtmYYHxrn:2:unverified_person:0.1.0',
+    credentialDefinitionId,
+  })
+  testOpenVPCredentialRecord.credentials.push({
+    credentialRecordType: 'anoncreds',
+    credentialRecordId: '',
+  })
+  const testCredential1 = new DidCommCredentialExchangeRecord({
+    role: DidCommCredentialRole.Holder,
+    threadId: '2',
+    state: DidCommCredentialState.Done,
+    createdAt: new Date('2020-01-01T00:01:00'),
+    protocolVersion: 'v1',
+  })
+  const testCredential2 = new DidCommCredentialExchangeRecord({
+    role: DidCommCredentialRole.Holder,
+    threadId: '3',
+    state: DidCommCredentialState.Done,
+    createdAt: new Date('2020-01-02T00:00:00'),
+    protocolVersion: 'v1',
+  })
+  const testCredentialRecords: CredentialContextInterface = {
+    loading: false,
+    credentials: [testOpenVPCredentialRecord, testCredential1, testCredential2],
+  }
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  describe('with a list of credentials', () => {
+    beforeEach(() => {
+      jest.clearAllMocks()
+
+      // @ts-expect-error useCredentialByState will be replaced with a mock which does have this method
+      useCredentialByState.mockImplementation((state) =>
+        testCredentialRecords.credentials.filter((c) => c.state === state),
+      )
+    })
+
+    /**
+     * Scenario: Holder selects a credential
+     * Given the holder is in the credential list screen
+     * When the holder taps on a credential
+     * Then the holder is taken to the credential detail screen of that credential
+     */
+    test('pressing on a credential in the list takes the holder to a credential detail screen', async () => {
+      const navigation = useNavigation()
+      const { findAllByText } = render(
+        <BasicAppContext>
+          <ListCredentials />
+        </BasicAppContext>,
+      )
+
+      const credentialItemInstances = await findAllByText('Person', { exact: false })
+
+      expect(credentialItemInstances).toHaveLength(1)
+
+      const credentialItemInstance = credentialItemInstances[0]
+
+      fireEvent(credentialItemInstance, 'press')
+
+      expect(navigation.navigate).toBeCalledWith('Credential Details', {
+        credentialId: testOpenVPCredentialRecord.id,
+      })
+    })
+  })
+
+  /**
+   * Scenario: Holder receives a new credential
+   * Given the holder receives a new credential
+   * When the holder has just completed the credential offer flow
+   * And the holder has accepted the credential offer
+   * Then the credentials are ordered to most recent to least recent (top to bottom)
+   */
+  // The empty Wallet sat under the header while Messages and Contacts centre
+  // theirs: the screen's root did not fill the tab, so the list (and its empty
+  // state) was only as tall as its content.
+  test('the list fills the tab, so an empty Wallet is centred like the other tabs', async () => {
+    const tree = render(
+      <BasicAppContext>
+        <ListCredentials />
+      </BasicAppContext>,
+    )
+    await act(async () => {
+      expect(tree.getByTestId('ListCredentialsRoot').props.style).toMatchObject({ flex: 1 })
+    })
+  })
+
+  test('credentials should display in descending order of issued date', async () => {
+    const tree = render(
+      <BasicAppContext>
+        <ListCredentials />
+      </BasicAppContext>,
+    )
+    await act(async () => {
+      const credentialCards = tree.UNSAFE_getAllByType(CredentialCardGen)
+
+      expect(credentialCards).toHaveLength(3)
+
+      const createdAtDates = credentialCards.map((instance) => instance.props.credential.createdAt)
+
+      expect(new Date(createdAtDates[0])).toEqual(new Date('2020-01-02T00:00:00'))
+      expect(new Date(createdAtDates[1])).toEqual(new Date('2020-01-01T00:01:00'))
+      expect(new Date(createdAtDates[2])).toEqual(new Date('2020-01-01T00:00:00'))
+    })
+  })
+
+  test('Hide list filters out specific credentials', async () => {
+    const tree = render(
+      <StoreProvider
+        initialState={{
+          ...defaultState,
+          preferences: {
+            ...defaultState.preferences,
+            developerModeEnabled: false,
+          },
+        }}
+      >
+        <BasicAppContext>
+          <ListCredentials />
+        </BasicAppContext>
+      </StoreProvider>,
+    )
+    await act(async () => {
+      const credentialCards = tree.UNSAFE_getAllByType(CredentialCardGen)
+
+      expect(credentialCards).toHaveLength(3)
+    })
+  })
+
+  test('Hide list does not filter out specific credentials when developer mode is enabled', async () => {
+    const tree = render(
+      <StoreProvider
+        initialState={{
+          ...defaultState,
+          preferences: {
+            ...defaultState.preferences,
+            developerModeEnabled: true,
+          },
+        }}
+      >
+        <BasicAppContext>
+          <ListCredentials />
+        </BasicAppContext>
+      </StoreProvider>,
+    )
+    await act(async () => {
+      const credentialCards = tree.UNSAFE_getAllByType(CredentialCardGen)
+
+      expect(credentialCards).toHaveLength(3)
+    })
+  })
+})

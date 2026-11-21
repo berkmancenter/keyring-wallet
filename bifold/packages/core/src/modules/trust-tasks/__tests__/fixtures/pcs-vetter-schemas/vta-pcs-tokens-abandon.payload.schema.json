@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/pcs/tokens/abandon/0.1",
+  "title": "VTA PCS — Tokens — Abandon — payload",
+  "description": "A vetter's client tells its VTA that the community refused a token draw, so the VTA stops holding it in flight.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contextId",
+    "community",
+    "draw"
+  ],
+  "properties": {
+    "contextId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The context the engine belongs to. Its key is derived from this context's base."
+    },
+    "community": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The community's DID: the helper whose parameters the engine runs under."
+    },
+    "draw": {
+      "$ref": "../../../../_shared/0.4/pcs-engine.schema.json#/$defs/TokenDraw"
+    },
+    "ext": {
+      "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA PCS — Tokens — Abandon — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vetter"
+      ],
+      "properties": {
+        "vetter": {
+          "$ref": "../../../../_shared/0.4/pcs-engine.schema.json#/$defs/VetterSummary"
+        },
+        "ext": {
+          "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

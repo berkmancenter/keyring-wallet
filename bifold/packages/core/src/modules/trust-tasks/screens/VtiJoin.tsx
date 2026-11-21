@@ -1,0 +1,1318 @@
+/**
+ * "I want to join a community" — Door 2 of the redesigned journey (UI/UX plan,
+ * "After You Link"). It starts from what the person wants and hides the
+ * technical steps:
+ *
+ *   Which community (from a scanned or pasted link, else the build's
+ *   suggestion) → what it asks for → your identity for it (one Face ID) →
+ *   the vetting screen, at the ticket.
+ *
+ * The same order as the OpenVTC TUI: the community, its requirements, the
+ * identity it will know you as, then the application. The identity is made
+ * before the ticket because the vetter's desk checks the ticket against it.
+ *
+ * @module trust-tasks/screens/VtiJoin
+ */
+
+import { useAgent } from '@bifold/react-hooks'
+import { useNavigation } from '@react-navigation/native'
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
+import { ActivityIndicator, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
+
+import Button, { ButtonType } from '../../../components/buttons/Button'
+import { ThemedText } from '../../../components/texts/ThemedText'
+import { useTheme } from '../../../contexts/theme'
+import { Screens } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
+import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
+import { joinAsks, type JoinAsks, type JoinHolds } from '../module/joinManifest'
+import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
+import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
+import { isUnsupportedJoinVersion, joinRequestRefusal, vtiAgent, type VtiManifest } from '../module/vtiAgent'
+import { communityTarget } from '../module/vtiCommunityLink'
+import { vtaAgent } from '../module/vtaAgent'
+import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
+import { joinKnown, readFailed, useCommunityJourney, type CommunityJourneyReaders } from '../module/communityJourney'
+import { askForCardIfOwed, ensurePersonaFor, joinCommunity, readJoinState, type CardAsk } from '../module/vtiJoin'
+import { cardAskKey } from './cardAskKey'
+import { joinSeed, keepJoinedProfile } from '../module/vtiJoinSeed'
+
+import { CardStatusNotice } from './cardStatusNotice'
+import { communityName, identityWord, unnamedCommunityLabel } from './communityName'
+import { openScanner } from './openScanner'
+import { plainError, type PlainError } from './plainError'
+import { claimWords, joinNeedWords } from './claimWords'
+import { DidDetails } from './DidDetails'
+import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
+import { JoinAs, useJoinAsChoice } from './JoinAs'
+import ApproverWaitNote from './ApproverWaitNote'
+import { readJoinHolds } from './joinHolds'
+import { joinCard, VETTING_NOT_SUPPORTED_KEY } from './joinWays'
+import { JoinWaysCard } from './JoinWaysCard'
+import { hiddenVettingSeam } from './hiddenVettingSeam'
+import { REFUSAL_KEY } from './PrivateVettingStart'
+import type { HiddenVettingRefusal } from './hiddenVettingSeam'
+import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
+import { useCommunity } from './useCommunity'
+import { agentHomeScreen } from './agentHome'
+import { useVtaDid } from './VtaStatus'
+
+export { identityWord } from './communityName'
+
+/**
+ * The identity's word as said aloud: its DID's own last path name whole
+ * ("bunker-noodle"), or, for a DID with none, the last characters, "…"
+ * marking them as cut (Alberto, 238).
+ */
+const wholeWord = (did: string): string => {
+  const word = identityWord(did)
+  return word.startsWith('…') && did.endsWith(`:${word.slice(1)}`) ? word.slice(1) : word
+}
+import { useTakingLong } from './useTakingLong'
+import { releaseWarn } from '../module/releaseLog'
+import { useRoomAboveTabBar } from './aboveTabBar'
+import { VtiJoinIds } from './VtiJoin.ids'
+
+type Step = 'which' | 'asks' | 'as'
+
+/** What a community asks for, in words, from its published criteria. */
+export interface Asks {
+  /**
+   * vetting: statements from its vetters. invitation: only an invitation
+   * admits. other: credentials the app cannot describe further (their
+   * descriptions are shown). open: nothing — a community cannot publish
+   * that yet (upstream KR-13), but the screen must not guess otherwise.
+   */
+  kind: 'vetting' | 'invitation' | 'other' | 'open'
+  /** Statements from its vetters the person needs, when it vets. */
+  statements?: number
+  /** Claims a vetter checks ("name.legal"). */
+  claims: string[]
+  /** The criteria's own descriptions, for `other`. */
+  descriptions: string[]
+  /** It admits only by invitation. */
+  invitationOnly: boolean
+  /**
+   * An invitation alone admits: a criterion is about an invitation and NO
+   * criterion vets. Upstream, any published vetting criterion makes vetting
+   * mandatory for every applicant — "neither an invitation nor a trusted
+   * credential bypasses" it (join.rego), and the applicant's digest cannot
+   * choose the invitation criterion instead — so a community that vets at all
+   * answers an invitation with request_more (keyring-test-vtc, 220). Where
+   * that is so, nothing may suggest the invitation is enough.
+   */
+  invitationAdmits: boolean
+}
+
+const INVITATION = /invit/i
+
+/** What a new identity holds towards a community: nothing yet. */
+const NOTHING_HELD: JoinHolds = {}
+
+export function asksFrom(manifest: VtiManifest): Asks {
+  const criteria = manifest.criteria
+  const invitationAdmits =
+    !criteria.some((c) => c.vetting) && criteria.some((c) => INVITATION.test(`${c.id ?? ''} ${c.description ?? ''}`))
+  const vetting = criteria.map((c) => c.vetting).find(Boolean)
+  if (vetting) {
+    return {
+      kind: 'vetting',
+      statements: vetting.minStatements ?? 1,
+      claims: vetting.requiredClaims ?? [],
+      descriptions: [],
+      invitationOnly: false,
+      invitationAdmits,
+    }
+  }
+  if (criteria.length === 0)
+    return { kind: 'open', claims: [], descriptions: [], invitationOnly: false, invitationAdmits: false }
+  // Invitation-only only when every criterion is about an invitation; any
+  // other criterion is something the person may be able to present.
+  if (criteria.every((c) => INVITATION.test(`${c.id ?? ''} ${c.description ?? ''}`))) {
+    return { kind: 'invitation', claims: [], descriptions: [], invitationOnly: true, invitationAdmits: true }
+  }
+  const descriptions = criteria
+    .filter((c) => !INVITATION.test(`${c.id ?? ''} ${c.description ?? ''}`))
+    .map((c) => c.description ?? c.id ?? '')
+    .filter(Boolean)
+  return { kind: 'other', claims: [], descriptions, invitationOnly: false, invitationAdmits }
+}
+
+export interface VtiJoinProps {
+  config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
+}
+
+const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
+  // The tab bar draws over the page: the last line scrolls clear of it.
+  const roomAboveTabBar = useRoomAboveTabBar()
+  const { t } = useTranslation()
+  const { agent } = useAgent()
+  const navigation = useNavigation()
+  const { ColorPalette } = useTheme()
+  const vtaDid = useVtaDid(config?.vtaDid)
+  const community = useCommunity(config?.communityDid)
+  const chosenByLink = useSyncExternalStore(communityTarget.subscribe, communityTarget.getViewing)
+  const chosenBefore = useSyncExternalStore(communityTarget.subscribe, communityTarget.getChosen)
+  const communityDid = community?.communityDid
+  // What to call it, and how much to claim for that name (see communityName).
+  const called = communityName(communityDid ?? '', community)
+  // The phone remembers a community it joined; the build merely suggests one.
+  const remembered = Boolean(communityDid && chosenBefore?.communityDid === communityDid)
+  // In a sentence, an unnamed community is said to be one — never its host,
+  // which communities share (communityName).
+  const name = called.name ?? unnamedCommunityLabel(communityDid ?? '', t)
+
+  // A community named by a link goes straight to what it asks; the build's
+  // suggestion is offered first, beside "a different community".
+  const [step, setStep] = useState<Step>(chosenByLink ? 'asks' : 'which')
+  const [asks, setAsks] = useState<Asks>()
+  // From manifest 0.3 the community states its ways in and what follows each
+  // (joinWays.ts); at 0.2 this reads as `legacy` and `asks` above is shown.
+  const [manifest, setManifest] = useState<VtiManifest>()
+  const [holds, setHolds] = useState<JoinHolds>({})
+  // The community answers no join version this app speaks.
+  const [unsupported, setUnsupported] = useState<string>()
+  // The community's directory statement could not be read: the join stops (manifest/0.4).
+  const [termsUnreadable, setTermsUnreadable] = useState<string>()
+  // A request was refused because the community changed what it asks meanwhile.
+  const [changed, setChanged] = useState(false)
+  const [reread, setReread] = useState(0)
+  // Where the person already stands with this community (220): the journey
+  // store's reading, shared with every journey screen and kept current at
+  // module level; "Check now" and coming into view ask the community while a
+  // request is open (poll). One source with "newest wins": this screen used to
+  // write its own copy from five places with no guard, and could go member →
+  // "Sent for review" → member (UI-smoothness plan, Phase 2b).
+  const joinReaders = useMemo<Partial<CommunityJourneyReaders>>(
+    () => ({
+      join: (a, did, { poll, local }) => readJoinState(a, did, { poll, local, mediatorDid: config?.mediatorDid }),
+    }),
+    [config?.mediatorDid]
+  )
+  const {
+    journey,
+    refresh: rereadStanding,
+    check: askStanding,
+  } = useCommunityJourney(agent, communityDid, { poll: true, readers: joinReaders })
+  // Unknown (not read yet, or its read failed) is not "none" (joinKnown).
+  const standing = joinKnown(journey)
+  const holding = useAgentsHoldingIdentity(communityDid)
+  const [checking, setChecking] = useState(false)
+  // "Join again" was chosen: the next identity for this community is a new one.
+  const [again, setAgain] = useState(false)
+  // Which community's manifest has been read (or failed to be): until then a
+  // missing name means "not known yet", not "none published".
+  const [nameRead, setNameRead] = useState<string>()
+  // Which community could not be read at all — for one the phone remembers, worth saying.
+  const [unreachable, setUnreachable] = useState<string>()
+  const [busy, setBusy] = useState(false)
+  const preparingLong = useTakingLong(busy)
+  const [error, setError] = useState<PlainError>()
+  const [errorOpen, setErrorOpen] = useState(false)
+  const joinAs = useJoinAsChoice(navigation)
+
+  useEffect(() => {
+    if (chosenByLink) setStep((s) => (s === 'which' ? 'asks' : s))
+  }, [chosenByLink])
+
+  // The community's own words: what it asks, and what it calls itself. Read as
+  // soon as there is a community, not only on "what it asks" — the suggestion
+  // card comes first, and a fresh phone showed a community that publishes a
+  // name as having none, because nothing had read it yet (Farm gate,
+  // 2026-09-23; the same shape as report #16).
+  useEffect(() => {
+    if (!communityDid) return
+    let live = true
+    setAsks(undefined)
+    setManifest(undefined)
+    setUnsupported(undefined)
+    setTermsUnreadable(undefined)
+    // No session needed: a community answers the join manifest over REST, which
+    // is how an applicant reads what is asked of them before any channel
+    // exists. Guarding this on `connected` is why a community's published name
+    // never reached this screen while the community screen had it (report #16).
+    vtiAgent
+      // With this screen's agent: a fresh phone has no session to lend one.
+      .fetchManifest(communityDid, agent)
+      // Reading the manifest also teaches the app what the community calls
+      // itself; vtiAgent does that for every fetch, so nothing is needed here.
+      .then(async (m) => {
+        const held = agent ? await readJoinHolds(agent, communityDid).catch(() => ({})) : {}
+        if (!live) return
+        setAsks(asksFrom(m))
+        setHolds(held)
+        setManifest(m)
+      })
+      .catch((e) => {
+        if (!live) return
+        // Reached, but it speaks no join version this app does: not "unreachable".
+        if (isUnsupportedJoinVersion(e)) setUnsupported(communityDid)
+        // Reached, but its directory statement cannot be shown: nothing is offered.
+        else if ((e as { code?: string })?.code === 'keyring/join/disclosureMalformed') setTermsUnreadable(communityDid)
+        else setUnreachable(communityDid)
+      })
+      .finally(() => live && setNameRead(communityDid))
+    return () => {
+      live = false
+    }
+  }, [communityDid, agent, reread])
+
+  // A different community starts from nothing; the same one keeps what it showed.
+  // (Its standing is the store's, per community: nothing to reset.)
+  useEffect(() => {
+    setAgain(false)
+    setChanged(false)
+    setPlainRequest(false)
+    setPrivateRefusal(undefined)
+  }, [communityDid])
+
+  // What the card shows at 0.3: each way, the one this phone meets, the button.
+  // After "Join again" the request goes out under a new identity, which holds
+  // nothing yet: what the earlier one gathered (statements, an invitation to
+  // it) does not meet a way for it. Read as held, a removed member was offered
+  // "Join", admitted straight away, for a request that carried nothing (IN-104).
+  const heldNow = again ? NOTHING_HELD : holds
+  const offer = useMemo<JoinAsks | undefined>(
+    () => (manifest ? joinAsks(manifest, heldNow) : undefined),
+    [manifest, heldNow]
+  )
+  // Private vetting is offered only in a build that carries it (hiddenVettingSeam).
+  const card = offer ? joinCard(offer, heldNow, { privateVettingAvailable: Boolean(hiddenVettingSeam()) }) : undefined
+  const ways = card?.mode === 'ways' ? card : undefined
+  // A request this screen sends itself: a way the phone meets that needs no
+  // invitation (those go through "I was invited"). Chosen by the button the
+  // person pressed, since a card can offer vetting and asking side by side.
+  const [plainRequest, setPlainRequest] = useState(false)
+  // A private way's agent check, asked on the "Meet a vetter" tap, and why it said no.
+  const [privateRefusal, setPrivateRefusal] = useState<HiddenVettingRefusal>()
+  const [privateChecking, setPrivateChecking] = useState(false)
+  const privateCheckingLong = useTakingLong(privateChecking)
+  // Why this person's agent can't carry the private way, said on screen and in the Release log by its kind alone:
+  // the tap has no other result to show, and no identity or community goes beside it.
+  const refusePrivate = useCallback((reason: HiddenVettingRefusal) => {
+    releaseWarn(`[Join] the private way in was not started: ${reason}`)
+    setPrivateRefusal(reason)
+  }, [])
+  /** What the identity step leads to: a plain request, or vetting (named or private, one flow). */
+  const chooseNext = useCallback((plain: boolean) => {
+    setPlainRequest(plain)
+  }, [])
+
+  // Coming into view reads it (asking the community while a request is open),
+  // and so does anything this phone stores about the community: the store does
+  // both (useCommunityJourney with poll, and its module-level watcher).
+
+  // The community answered where the request stands after the ask gave up
+  // waiting: ask again, which takes the answer already in hand (238: a
+  // request lost on the way left this on "Sent" with the answer received).
+  useEffect(() => {
+    if (!agent || !communityDid) return
+    const sub = DeviceEventEmitter.addListener(VTI_JOIN_STATUS_LATE_EVENT, (e?: { communityDid?: string }) => {
+      if (e?.communityDid !== communityDid) return
+      void askStanding().catch(() => undefined)
+    })
+    return () => sub.remove()
+  }, [agent, communityDid, askStanding])
+
+  const retryHolders = holding.retry
+  // What asking for an approved request's card came to, said under it (IN-617).
+  const [cardAsk, setCardAsk] = useState<CardAsk>()
+  const onCheckAgain = useCallback(async () => {
+    if (!agent || !communityDid) return
+    setChecking(true)
+    try {
+      retryHolders()
+      // Approved, and the card never came: ask the community to send it again
+      // first. Only here, on the person's own Check again. A failed ask changes
+      // nothing, and the status is read as before.
+      // Through a promise, so even a throw before the ask starts is caught.
+      const asked = await Promise.resolve()
+        .then(() => askForCardIfOwed(agent, communityDid, { mediatorDid: config?.mediatorDid }))
+        .catch(() => undefined)
+      if (asked?.resend) setCardAsk(asked)
+      // It polled the community already: read what it stored, without asking again.
+      await (asked?.polled ? rereadStanding() : askStanding())
+    } finally {
+      setChecking(false)
+    }
+  }, [agent, communityDid, askStanding, rereadStanding, retryHolders, config?.mediatorDid])
+
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
+    content: { flexGrow: 1, padding: 20, gap: 16 },
+    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    actions: { marginTop: 'auto', paddingTop: 4, gap: 12 },
+    errorDetail: { maxHeight: 160 },
+    muted: { color: ColorPalette.grayscale.mediumGrey },
+    error: { color: ColorPalette.semantic.error },
+    refusalBar: {
+      flexGrow: 0,
+      maxHeight: 160,
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderTopWidth: 1,
+      borderTopColor: ColorPalette.semantic.error,
+    },
+    refusalBarContent: { paddingHorizontal: 24, paddingVertical: 12 },
+  })
+
+  const onJoinAs = useCallback(async () => {
+    if (!agent || !vtaDid || !communityDid) return
+    setError(undefined)
+    setErrorOpen(false)
+    const confirmed = await requestBiometricConfirmationWithUI(agent, name, 'join', {
+      title: t('Join.ConfirmTitle'),
+      description: t('Join.ConfirmBody', { community: name, interpolation: { escapeValue: false } }),
+    })
+    if (!confirmed.success) return
+    setBusy(true)
+    try {
+      if (plainRequest) {
+        // The way the phone meets asks for nothing more: make the identity and
+        // send the request. What the community answers shows as where the
+        // person stands — admitted, or waiting for an administrator.
+        communityTarget.choose(communityDid)
+        if (joinAs.selected) {
+          joinSeed.set(communityDid, joinAs.selected.seed)
+          await keepJoinedProfile(agent, communityDid, joinAs.selected.id)
+        }
+        await joinCommunity(
+          {
+            agent,
+            identityStore: new GenericRecordsIdentityStore(agent),
+            communityStore: new GenericRecordsCommunityStore(agent),
+            vtaDid,
+            mediatorDid: config?.mediatorDid,
+            communityDid,
+            disclosureSeen: manifest?.directoryDisclosure?.statementDigest,
+          },
+          undefined,
+          { freshPersona: again }
+        )
+        setAgain(false)
+        await rereadStanding()
+        setStep('asks')
+        return
+      }
+      await ensurePersonaFor(
+        { agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid },
+        { fresh: again }
+      )
+      // Making the identity is what makes this the phone's community.
+      communityTarget.choose(communityDid)
+      // Seed by copy: the chosen profile fills the identity's name in once.
+      if (joinAs.selected) {
+        joinSeed.set(communityDid, joinAs.selected.seed)
+        await keepJoinedProfile(agent, communityDid, joinAs.selected.id)
+      }
+      // Private or named, the same vetting screen: the module decides from
+      // the way in which it is (Alberto, 2026-10-15).
+      const stack = navigation as unknown as { navigate: (name: string) => void }
+      stack.navigate(Screens.VtiVetting)
+    } catch (e) {
+      if (joinRequestRefusal(e) === 'criterionUnknown') {
+        // The community changed what it asks while the request went: read it
+        // again and show it, rather than leave the person on a dead step.
+        setChanged(true)
+        setReread((n) => n + 1)
+        setStep('asks')
+      } else if (plainRequest && e instanceof Error && e.name === 'VtiSentNoAnswer') {
+        // The request went; its answer did not come in time. Not a failure to
+        // fix with Continue: show where the request stands, asking the
+        // community now (its status task finds the request from the identity),
+        // and a late answer, if it comes, shows there too (7b's R5, 10-06:
+        // the screen sat on "hasn't answered yet" for four minutes).
+        setAgain(false)
+        await askStanding()
+        setStep('asks')
+      } else {
+        setError(plainError(e))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }, [
+    askStanding,
+    rereadStanding,
+    agent,
+    vtaDid,
+    communityDid,
+    name,
+    navigation,
+    t,
+    joinAs.selected,
+    again,
+    plainRequest,
+    config?.mediatorDid,
+    manifest?.directoryDisclosure?.statementDigest,
+  ])
+
+  // A link the agent ended (it no longer accepts this phone) still names the
+  // agent: whether it held an identity in THIS community decides what Join says.
+  const link = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().link)
+  const revokedAgent = link.kind === 'revoked' ? link.vtaDid : undefined
+  // Known per agent and community, and unknown until the lookup answers: the
+  // first paint said "Link your agent first" (the sentence IN-350 is about)
+  // until it did. Only a revoked link waits; any other decides at once.
+  const lookup = !vtaDid && revokedAgent && agent && communityDid ? `${revokedAgent}|${communityDid}` : undefined
+  const [heldFor, setHeldFor] = useState<{ key: string; held: boolean }>()
+  useEffect(() => {
+    if (!lookup || !agent || !communityDid || !revokedAgent) return
+    let live = true
+    new GenericRecordsIdentityStore(agent)
+      .getPersona(communityDid, revokedAgent)
+      .then((persona) => live && setHeldFor({ key: lookup, held: Boolean(persona) }))
+      .catch(() => live && setHeldFor({ key: lookup, held: false }))
+    return () => {
+      live = false
+    }
+  }, [lookup, agent, communityDid, revokedAgent])
+  const heldHereRefused: boolean | undefined = lookup ? (heldFor?.key === lookup ? heldFor.held : undefined) : false
+
+  if (!vtaDid && heldHereRefused === undefined) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <View style={styles.content} testID={testIdWithKey(VtiJoinIds.checkingAgent)}>
+          <ActivityIndicator color={ColorPalette.brand.primary} />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (!vtaDid && heldHereRefused) {
+    // The agent stopped accepting this phone, and this community is one it
+    // holds an identity in: say that, not "link your agent first" as if it had
+    // never been linked (IN-350). My Agent has the removed card and its way back.
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <View style={styles.content}>
+          <ThemedText testID={testIdWithKey(VtiJoinIds.agentRefused)}>
+            {t('VtaLink.PersonaAgentRefusedBody', { community: name, interpolation: { escapeValue: false } })}
+          </ThemedText>
+          <Button
+            title={t('VtaLink.PersonaAgentOpen')}
+            buttonType={ButtonType.Primary}
+            onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(agentHomeScreen())}
+            testID={testIdWithKey(VtiJoinIds.openMyAgent)}
+          />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (!vtaDid) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <View style={styles.content}>
+          <ThemedText testID={testIdWithKey(VtiJoinIds.needsAgent)}>{t('Join.NeedsAgent')}</ThemedText>
+          {/* The way to it, as "I was invited" offers: a community's code can
+              arrive before any agent is linked (the phone's camera, a link).
+              The community stays chosen for when the person comes back. */}
+          <Button
+            title={t('VtaLink.LinkYourAgent')}
+            buttonType={ButtonType.Primary}
+            onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtaLink)}
+            testID={testIdWithKey(VtiJoinIds.linkAgent)}
+          />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // A failure says what happened and what to do; the original text — module
+  // prefixes, task URIs and all — stays under Details, where it is worth
+  // something to whoever reads the report (report #17).
+  // It sits in the actions, above the button that failed, so it cannot fall
+  // below the fold (221).
+  const errorLine = error ? (
+    <View style={styles.card} testID={testIdWithKey(VtiJoinIds.errorCard)}>
+      <ThemedText style={styles.error} testID={testIdWithKey(VtiJoinIds.error)}>
+        {t(error.line)}
+      </ThemedText>
+      <Pressable
+        onPress={() => setErrorOpen((open) => !open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: errorOpen }}
+        testID={testIdWithKey(VtiJoinIds.errorDetailsToggle)}
+      >
+        <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
+      </Pressable>
+      {errorOpen ? (
+        <ScrollView style={styles.errorDetail}>
+          <ThemedText style={styles.muted} selectable testID={testIdWithKey(VtiJoinIds.errorDetail)}>
+            {error.detail}
+          </ThemedText>
+        </ScrollView>
+      ) : null}
+    </View>
+  ) : null
+
+  // What the community asks, as one sentence: the card's accessibility label.
+  const asksSentence = (() => {
+    if (asks?.invitationOnly) return t('Join.AsksInvitationOnly')
+    if (asks?.kind === 'open') return t('Join.AsksNothing')
+    if (asks?.kind === 'other') return [t('Join.AsksOther'), ...asks.descriptions].join(' ')
+    const claims = (asks ? asks.claims : ['name.legal']).map((c) =>
+      c === 'name.legal' ? t('Join.AsksLegalName') : claimWords(c, t)
+    )
+    return [t('Join.AsksStatements', { count: asks?.statements ?? 1 }), ...claims].join('. ')
+  })()
+
+  let body: React.ReactNode
+  let actions: React.ReactNode
+  // Whether "A different community" is already in the body (the ways card has it).
+  let differentInBody = false
+  const current: Step = !communityDid ? 'which' : step
+  const mayJoinAgain =
+    standing?.kind === 'rejected' ||
+    standing?.kind === 'withdrawn' ||
+    standing?.kind === 'left' ||
+    standing?.kind === 'removed'
+  // Where the person stands overrides the way in, except once "Join again" is
+  // chosen — and except when that standing is another agent's: with several
+  // agents, a membership or request held by an identity of another agent is
+  // not the current agent's, and Join offers that agent instead (#280 device
+  // check: on B it said "You're a member", which only A was).
+  const standingShown = Boolean(
+    communityDid &&
+      standing &&
+      standing.kind !== 'none' &&
+      current !== 'as' &&
+      !(again && mayJoinAgain) &&
+      holding.known &&
+      !holding.onlyOthers
+  )
+
+  switch (current) {
+    case 'which':
+      body = (
+        <>
+          <ThemedText variant="headingThree" accessibilityRole="header">
+            {t('Join.WhichTitle')}
+          </ThemedText>
+          <ThemedText>{t('Join.WhichBody')}</ThemedText>
+          {/* The build's suggestion, said to be one. It used to offer "Join
+              <hostname>", which read as the community's name when nothing had
+              named it at all (tester report #14). A name is shown only when
+              something actually gave one; otherwise the card says so and the
+              DID's handle stands as the identifier, not as a name; the full DID
+              waits behind Details. */}
+          {communityDid ? (
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.suggested)}>
+              <View style={styles.row}>
+                <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
+                {called.name || nameRead === communityDid ? (
+                  <ThemedText variant="bold" testID={testIdWithKey(VtiJoinIds.suggestedName)}>
+                    {called.name ?? t('Join.Unnamed')}
+                  </ThemedText>
+                ) : (
+                  // Not "unnamed" before the community has been asked: say it is being asked.
+                  <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.suggestedChecking)}>
+                    {t('Join.CheckingName')}
+                  </ThemedText>
+                )}
+              </View>
+              {/* Where this community came from, truthfully. It said "Suggested
+                  for this app" for a community the person had joined on an
+                  earlier build — telling them their software has an opinion it
+                  does not have, and sending two of us hunting a configuration
+                  leak that did not exist (report #23). */}
+              {standing?.kind === 'none' ? (
+                <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.suggestedSource)}>
+                  {remembered ? t('Join.Remembered') : t('Join.Suggested')}
+                </ThemedText>
+              ) : null}
+              {/* A community the phone joined on an earlier build may be gone
+                  (a lab that was only ever on someone's Mac). Say so beside
+                  "a different community" rather than forget a real choice. */}
+              {remembered && unreachable === communityDid ? (
+                <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.rememberedUnreachable)}>
+                  {t('Join.RememberedUnreachable')}
+                </ThemedText>
+              ) : null}
+              {called.name && called.claimed ? (
+                <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.nameClaimed)}>
+                  {t('Join.NameFromLink')}
+                </ThemedText>
+              ) : null}
+              <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.suggestedWhere)}>
+                {called.technical}
+              </ThemedText>
+              <DidDetails did={communityDid} testIdStem={VtiJoinIds.suggested} />
+            </View>
+          ) : null}
+        </>
+      )
+      actions = (
+        <>
+          {communityDid ? (
+            <Button
+              title={
+                called.name
+                  ? t('Join.JoinThis', { community: called.name, interpolation: { escapeValue: false } })
+                  : t('Join.JoinSuggested')
+              }
+              buttonType={ButtonType.Primary}
+              onPress={() => setStep('asks')}
+              testID={testIdWithKey(VtiJoinIds.thisCommunity)}
+            />
+          ) : null}
+          <Button
+            title={communityDid ? t('Join.Different') : t('Join.ScanLink')}
+            buttonType={communityDid ? ButtonType.Secondary : ButtonType.Primary}
+            onPress={() => openScanner(navigation)}
+            testID={testIdWithKey(VtiJoinIds.scanCommunity)}
+          />
+        </>
+      )
+      break
+
+    case 'asks': {
+      const named = { community: name, interpolation: { escapeValue: false } }
+      const different = (
+        <Button
+          title={t('Join.Different')}
+          buttonType={ButtonType.Tertiary}
+          onPress={() => openScanner(navigation)}
+          testID={testIdWithKey(VtiJoinIds.scanCommunity)}
+        />
+      )
+      const toInvited = () =>
+        (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)
+      const waysTitle = (
+        <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey(VtiJoinIds.waysTitle)}>
+          {t('Join.Ways.Title', named)}
+        </ThemedText>
+      )
+      // The community speaks no join version this app does: reached, but unreadable.
+      if (communityDid && unsupported === communityDid) {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.versionUnsupported)}>
+              <ThemedText>{t('Join.Ways.VersionUnsupported', named)}</ThemedText>
+            </View>
+          </>
+        )
+        actions = different
+        break
+      }
+      // Its directory statement cannot be shown, so nobody applies without seeing it.
+      if (communityDid && termsUnreadable === communityDid) {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.directoryUnreadable)}>
+              <ThemedText>{t('Errors.DirectoryUnreadable')}</ThemedText>
+            </View>
+          </>
+        )
+        actions = different
+        break
+      }
+      // Not before the community's manifest and this phone's standing are
+      // read: a member saw the ways in, with live Join buttons, and an asks
+      // card filled with defaults, until both came back (Phase 2b). A manifest
+      // that could not be read at all (nameRead) goes on to say so, as before.
+      // Nor before it is known whose identity holds that standing: another agent's read as this one's, then went.
+      if (communityDid && ((!manifest && nameRead !== communityDid) || standing === undefined || !holding.known)) {
+        // A standing that could not be read is said, with a way to read it
+        // again — not a spinner waiting on nothing.
+        const failed = (standing === undefined && readFailed(journey, 'join')) || holding.failed
+        body = (
+          <>
+            {waysTitle}
+            {failed ? (
+              <View style={styles.card} testID={testIdWithKey(VtiJoinIds.readFailed)}>
+                <ThemedText>{t('Join.StandingUnread')}</ThemedText>
+                <Button
+                  title={t('Join.CheckAgain')}
+                  buttonType={ButtonType.Secondary}
+                  onPress={() => void onCheckAgain()}
+                  disabled={checking}
+                  testID={testIdWithKey(VtiJoinIds.readAgain)}
+                />
+              </View>
+            ) : (
+              <View style={styles.card} testID={testIdWithKey(VtiJoinIds.reading)}>
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+              </View>
+            )}
+          </>
+        )
+        actions = different
+        break
+      }
+      // A 0.2 community whose vetting this version cannot do: said, and
+      // nothing offered — the legacy view would start named vetting (IN-264).
+      if (card?.mode === 'vettingNotSupported') {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.vettingNotSupported)}>
+              <ThemedText>{t(VETTING_NOT_SUPPORTED_KEY[card.vetting], named)}</ThemedText>
+            </View>
+            {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
+          </>
+        )
+        actions = different
+        break
+      }
+      // It publishes no way in: it accepts no applications at present.
+      if (card?.mode === 'notAccepting') {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.notAccepting)}>
+              <ThemedText>{t('Join.Ways.NotAccepting', named)}</ThemedText>
+            </View>
+            {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
+          </>
+        )
+        actions = different
+        break
+      }
+      // Manifest 0.3: its ways in, and what follows each (joinWays.ts).
+      if (ways) {
+        const suggestedWay = offer?.suggested
+        const mainButton =
+          ways.button === 'invited' ? (
+            <Button
+              title={t('VtaLink.IWasInvited')}
+              buttonType={ButtonType.Primary}
+              onPress={toInvited}
+              testID={testIdWithKey(VtiJoinIds.goInvited)}
+            />
+          ) : ways.button !== 'none' ? (
+            <Button
+              title={
+                // The agent is being asked, which can take as long as it takes to answer: said, not only dimmed.
+                privateChecking
+                  ? t('Join.Ways.PrivateVettingChecking')
+                  : ways.button === 'join'
+                    ? t('Join.Ways.ButtonJoin', named)
+                    : ways.button === 'ask'
+                      ? t('Join.Ways.ButtonAsk')
+                      : // Beside "Ask to join", the button names where it leads.
+                        ways.alsoAsk
+                        ? t('Join.Ways.ButtonVetting')
+                        : t('Join.Start')
+              }
+              buttonType={ButtonType.Primary}
+              disabled={privateChecking}
+              onPress={() => {
+                if (ways.button === 'start') {
+                  const privateRow = ways.rows.find((r) => r.canStartVetting && r.privateVetting)
+                  if (!privateRow) {
+                    chooseNext(false)
+                    setStep('as')
+                    return
+                  }
+                  // Whether this person's agent can carry it: asked on this tap,
+                  // never while the card draws (it may push a consent request).
+                  void (async () => {
+                    const seam = hiddenVettingSeam()
+                    const criterion = manifest?.criteria.find((c) => c.id === privateRow.id)
+                    if (!seam || !agent || !criterion) {
+                      refusePrivate('cannotTell')
+                      return
+                    }
+                    setPrivateChecking(true)
+                    setPrivateRefusal(undefined)
+                    try {
+                      const checked = await seam.check(agent, criterion)
+                      if (!checked.ok) {
+                        refusePrivate(checked.reason)
+                        return
+                      }
+                      chooseNext(false)
+                      setStep('as')
+                    } catch {
+                      refusePrivate('cannotTell')
+                    } finally {
+                      setPrivateChecking(false)
+                    }
+                  })()
+                } else if (suggestedWay?.requires.invitation) {
+                  // An invitation the phone holds is presented from "I was invited", where it is.
+                  toInvited()
+                } else {
+                  chooseNext(true)
+                  setStep('as')
+                }
+              }}
+              testID={testIdWithKey(VtiJoinIds.start)}
+            >
+              {privateChecking ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+            </Button>
+          ) : null
+        // The other door: the review way the phone meets as it stands.
+        const askButton = ways.alsoAsk ? (
+          <Button
+            title={t('Join.Ways.ButtonAsk')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => {
+              chooseNext(true)
+              setStep('as')
+            }}
+            testID={testIdWithKey(VtiJoinIds.ask)}
+          />
+        ) : null
+        // Two things to do: each button sits under the way it acts on, below
+        // what follows that way. Both under the list made a fixed area tall
+        // enough to cover the last way's lines on a phone — the line that says
+        // an administrator decides among them (the Farm run of 2026-10-02).
+        const vettingRow = ways.rows.find((row) => row.canStartVetting)?.id
+        // One thing to do sits under its way too, so no fixed button covers the
+        // last way's lines on a small phone (IN-104): "Start" under the vetting
+        // way, "Join" / "Ask to join" under the way the phone meets, "I was
+        // invited" under the invitation way. Below the list only when no way
+        // is its own (it then stays fixed, as before).
+        const mainRow =
+          ways.button === 'start'
+            ? vettingRow
+            : ways.button === 'join' || ways.button === 'ask'
+              ? ways.rows.find((row) => row.suggested)?.id
+              : ways.button === 'invited'
+                ? ways.rows.find((row) => row.needs.some((need) => need.kind === 'invitation'))?.id
+                : undefined
+        const buttonsInRows = !standingShown && (ways.alsoAsk || mainRow !== undefined)
+        // A community whose ways never ask a vetter: said, so nobody looks for
+        // vetting that is not there (IN-104).
+        const noVetting = !ways.rows.some((row) => row.needs.some((need) => need.kind === 'vetting'))
+        body = (
+          <>
+            {waysTitle}
+            {changed ? (
+              <ThemedText testID={testIdWithKey(VtiJoinIds.changed)}>{t('Join.Ways.Changed', named)}</ThemedText>
+            ) : null}
+            <JoinWaysCard
+              card={ways}
+              community={name}
+              readOnly={standingShown}
+              // Under where the person stands (a member, a request open, a
+              // removal) the ways are shown, not offered: their buttons sat in
+              // the rows, out of reach of the standing card that replaces the
+              // buttons below, and a removed member pressed "Meet a vetter"
+              // under the old identity without "Join again" (IN-104, path B).
+              rowAction={(row) =>
+                !buttonsInRows
+                  ? null
+                  : ways.alsoAsk
+                    ? row.id === vettingRow
+                      ? mainButton
+                      : row.suggested
+                        ? askButton
+                        : null
+                    : row.id === mainRow
+                      ? mainButton
+                      : null
+              }
+            />
+            {noVetting ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.noVetting)}>
+                {t('Join.Ways.NoVetting', named)}
+              </ThemedText>
+            ) : null}
+            {/* "You'll meet a vetter" is said under the vetting way itself (JoinWaysCard). */}
+            {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
+            {/* With the list, not under the buttons, so the fixed area stays short. */}
+            {different}
+          </>
+        )
+        actions = buttonsInRows ? (
+          errorLine
+        ) : (
+          <>
+            {errorLine}
+            {mainButton}
+          </>
+        )
+        differentInBody = true
+        break
+      }
+      body = (
+        <>
+          <ThemedText variant="headingThree" accessibilityRole="header">
+            {t('Join.AsksTitle', { community: name, interpolation: { escapeValue: false } })}
+          </ThemedText>
+          {/* The lines below are separate nodes, so the card says the whole
+              sentence itself — for a screen reader, and for the harness. */}
+          <View
+            style={styles.card}
+            testID={testIdWithKey(VtiJoinIds.asks)}
+            accessible
+            accessibilityLabel={asksSentence}
+          >
+            {asks?.invitationOnly ? (
+              <ThemedText>{t('Join.AsksInvitationOnly')}</ThemedText>
+            ) : asks?.kind === 'open' ? (
+              <ThemedText>{t('Join.AsksNothing')}</ThemedText>
+            ) : asks?.kind === 'other' ? (
+              <>
+                <ThemedText>{t('Join.AsksOther')}</ThemedText>
+                {asks.descriptions.map((d) => (
+                  <ThemedText key={d}>
+                    {'• '}
+                    {d}
+                  </ThemedText>
+                ))}
+              </>
+            ) : (
+              <>
+                <ThemedText>
+                  {'• '}
+                  {t('Join.AsksStatements', { count: asks?.statements ?? 1 })}
+                </ThemedText>
+                {(asks ? asks.claims : ['name.legal']).map((c) => (
+                  <ThemedText key={c}>
+                    {'• '}
+                    {c === 'name.legal' ? t('Join.AsksLegalName') : claimWords(c, t)}
+                  </ThemedText>
+                ))}
+              </>
+            )}
+          </View>
+          {asks?.kind === 'vetting' && !asks.invitationAdmits ? (
+            <ThemedText testID={testIdWithKey(VtiJoinIds.noInvitationBypass)}>
+              {t('Join.AsksNoInvitationBypass', { community: name, interpolation: { escapeValue: false } })}
+            </ThemedText>
+          ) : null}
+          {!asks || asks.kind === 'vetting' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
+          {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
+        </>
+      )
+      actions = (
+        <>
+          {asks?.invitationOnly ? (
+            <Button
+              title={t('VtaLink.IWasInvited')}
+              buttonType={ButtonType.Primary}
+              onPress={() =>
+                (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)
+              }
+              testID={testIdWithKey(VtiJoinIds.goInvited)}
+            />
+          ) : (
+            <Button
+              title={t('Join.Start')}
+              buttonType={ButtonType.Primary}
+              onPress={() => setStep('as')}
+              testID={testIdWithKey(VtiJoinIds.start)}
+            />
+          )}
+          {/* A community a link brought stays the one shown, so reopening Join
+              lands here, not on "which community?". Without this a person who
+              brought the wrong one had no way to another from Join (found on the
+              empty-config gate, 2026-09-23: a store build names none). */}
+          {different}
+        </>
+      )
+      break
+    }
+
+    case 'as':
+      body = (
+        <>
+          <ThemedText variant="headingThree" accessibilityRole="header">
+            {t('Join.AsTitle')}
+          </ThemedText>
+          <View testID={testIdWithKey(VtiJoinIds.makeIdentity)}>
+            <JoinAs
+              community={called.name}
+              options={joinAs.options}
+              selectedId={joinAs.selectedId}
+              onSelect={joinAs.setSelectedId}
+              onCreate={joinAs.createProfile}
+            />
+          </View>
+          {/* What its directory would show, before the request goes (manifest/0.4). */}
+          {manifest?.directoryDisclosure ? (
+            <DirectoryDisclosureCard disclosure={manifest.directoryDisclosure} community={name} />
+          ) : null}
+        </>
+      )
+      actions = (
+        <>
+          {errorLine}
+          <Button
+            title={busy ? t('Invited.Preparing') : t('Invited.Continue')}
+            buttonType={ButtonType.Primary}
+            onPress={() => void onJoinAs()}
+            disabled={busy}
+            testID={testIdWithKey(VtiJoinIds.asContinue)}
+          >
+            {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+          </Button>
+          {preparingLong ? (
+            <ThemedText style={{ textAlign: 'center' }} testID={testIdWithKey(VtiJoinIds.preparingSlow)}>
+              {t('Invited.PreparingSlow')}
+            </ThemedText>
+          ) : null}
+          {/* Joining mints this community's identity: an approver may hold it (mock frame 4). Hidden otherwise. */}
+          <ApproverWaitNote />
+        </>
+      )
+      break
+  }
+
+  const tp = (key: string, values: Record<string, unknown> = {}) =>
+    t(key, { community: name, ...values, interpolation: { escapeValue: false } }) as string
+  if (standingShown && communityDid && standing) {
+    const waiting = standing.kind === 'sent' || standing.kind === 'pending'
+    const withInvitation = waiting && standing.submission.withInvitation
+    // Turned down, withdrawn, left or removed: "Join again" sits in the card
+    // that says so, above the ways in, which are shown for reading only. Below
+    // them it was off the screen (240, Android).
+    const joinAgain = mayJoinAgain ? (
+      <Button
+        title={t('Join.JoinAgain')}
+        buttonType={ButtonType.Primary}
+        onPress={() => {
+          setAgain(true)
+          setStep('asks')
+        }}
+        testID={testIdWithKey(VtiJoinIds.again)}
+      />
+    ) : null
+    const standingCard = (
+      <View style={styles.card} testID={testIdWithKey(VtiJoinIds.standing)}>
+        {waiting ? (
+          <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey(VtiJoinIds.requestSent)}>
+            {t('Join.RequestSentTitle')}
+          </ThemedText>
+        ) : null}
+        {standing.kind === 'member' ? (
+          <Icon
+            name="check-circle"
+            size={40}
+            color={ColorPalette.semantic.success}
+            testID={testIdWithKey(VtiJoinIds.memberCheck)}
+          />
+        ) : null}
+        <ThemedText
+          variant={standing.kind === 'member' ? 'headingThree' : undefined}
+          accessibilityRole={standing.kind === 'member' ? 'header' : undefined}
+          testID={testIdWithKey(VtiJoinIds.standingText)}
+        >
+          {standing.kind === 'member'
+            ? tp('Join.StandingMember')
+            : standing.kind === 'removed'
+              ? tp('Join.StandingRemoved')
+              : standing.kind === 'sent'
+                ? tp('Join.StandingSent')
+                : standing.kind === 'pending'
+                  ? // From manifest 0.3 a request left open is one an administrator reviews.
+                    offer?.wire === '0.3'
+                    ? tp('Join.Ways.SentForReview')
+                    : tp('Join.StandingPending')
+                  : standing.kind === 'deferred'
+                    ? tp('Join.StandingDeferred')
+                    : standing.kind === 'rejected'
+                      ? tp('Join.StandingRejected')
+                      : standing.kind === 'withdrawn'
+                        ? tp('Join.StandingWithdrawn')
+                        : tp('Join.StandingLeft')}
+        </ThemedText>
+        {waiting ? (
+          <ThemedText testID={testIdWithKey(VtiJoinIds.willShow)}>{t('Join.WillShowWhenAccepted')}</ThemedText>
+        ) : null}
+        {standing.kind === 'pending' && cardAskKey(cardAsk) ? (
+          <ThemedText testID={testIdWithKey(VtiJoinIds.cardAsk)}>{tp(cardAskKey(cardAsk)!)}</ThemedText>
+        ) : null}
+        {/* The community sent a card whose status list could not be read: it is
+            not kept, and is tried again; said here rather than left silent
+            behind "not accepted" (IN-258). */}
+        {standing.kind !== 'member' ? <CardStatusNotice communityDid={communityDid} onKept={onCheckAgain} /> : null}
+        {withInvitation ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.standingInvitation)}>
+            {t('Join.StandingWithInvitation')}
+          </ThemedText>
+        ) : null}
+        {standing.kind === 'deferred'
+          ? standing.needs.map((need, i) => (
+              <ThemedText key={i} testID={testIdWithKey(VtiJoinIds.standingNeed)}>
+                {'• '}
+                {joinNeedWords(need, t)}
+              </ThemedText>
+            ))
+          : null}
+        {standing.kind === 'rejected' && standing.reason ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.standingReason)}>
+            {tp('Join.StandingReason', { reason: standing.reason })}
+          </ThemedText>
+        ) : null}
+        {/* While the request is open, the identity it was sent as, in a word
+            a person can say out loud: the applicant tells the operator "I'm
+            term-benefit", and the operator finds it among the join requests.
+            The whole DID, with Copy, behind its toggle (as on Your agent, #305). */}
+        {(standing.kind === 'sent' || standing.kind === 'pending' || standing.kind === 'deferred') &&
+        standing.submission.personaDid ? (
+          <View testID={testIdWithKey(VtiJoinIds.standingIdentity)}>
+            {/* "You asked to join as", then the word, a size up (Alberto, 238). */}
+            <ThemedText style={styles.muted}>{t('Join.AskedAs')}</ThemedText>
+            <ThemedText variant="headingFour" testID={testIdWithKey(VtiJoinIds.standingIdentityName)}>
+              {wholeWord(standing.submission.personaDid)}
+            </ThemedText>
+            <DidDetails
+              did={standing.submission.personaDid}
+              label={t('Join.SeeFullPersonaId')}
+              hint={tp('VtaLink.ShowIdentityCodeHint')}
+              copy
+              testIdStem={VtiJoinIds.standingIdentity}
+            />
+          </View>
+        ) : null}
+        {/* No promise of a new identity: asking again makes one, and the
+            vetting path was seen to carry on with the earlier one (IN-104).
+            A removal already says "You can ask to join again." itself. */}
+        {mayJoinAgain && standing.kind !== 'removed' ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.standingAgain)}>
+            {t('Join.StandingAgain')}
+          </ThemedText>
+        ) : null}
+        {joinAgain}
+      </View>
+    )
+    // Waiting, or a member: what the community asks is behind them, and
+    // said again it pushed "Check again" below the fold (Alberto, 238).
+    body =
+      waiting || standing.kind === 'member' ? (
+        standingCard
+      ) : (
+        <>
+          {standingCard}
+          {body}
+        </>
+      )
+    // "A different community" is always in reach, from the community a person
+    // is already in too: a member's card used to offer only "Open" (IN-102).
+    // The success state hid it once, and a member opening Join found no way to
+    // a second community (IN-142).
+    const different =
+      standing.kind === 'member' || current === 'which' || !differentInBody ? (
+        <Button
+          title={t('Join.Different')}
+          buttonType={ButtonType.Secondary}
+          onPress={() => openScanner(navigation)}
+          testID={testIdWithKey(VtiJoinIds.scanCommunity)}
+        />
+      ) : null
+    const go = (screen: string, params?: object) =>
+      (navigation as unknown as { navigate: (screen: string, params?: object) => void }).navigate(screen, params)
+    actions = (
+      <>
+        {standing.kind === 'member' ? (
+          // Done: back to Your agent, the new community's card picked out.
+          // View community takes Join's place, so back from it is Your agent,
+          // not this screen again (Alberto, 238).
+          <>
+            <Button
+              title={t('Global.Done')}
+              buttonType={ButtonType.Primary}
+              onPress={() => go(Screens.VtaAgent, { highlightCommunity: communityDid })}
+              testID={testIdWithKey(VtiJoinIds.done)}
+            />
+            <Button
+              title={t('Join.ViewCommunity')}
+              buttonType={ButtonType.Secondary}
+              onPress={() =>
+                (navigation as unknown as { replace: (screen: string, params?: object) => void }).replace(
+                  Screens.VtiCommunity,
+                  { communityDid }
+                )
+              }
+              testID={testIdWithKey(VtiJoinIds.openCommunity)}
+            />
+          </>
+        ) : standing.kind === 'sent' || standing.kind === 'pending' ? (
+          <Button
+            title={t('Join.CheckAgain')}
+            buttonType={ButtonType.Primary}
+            onPress={() => void onCheckAgain()}
+            disabled={checking}
+            testID={testIdWithKey(VtiJoinIds.checkAgain)}
+          >
+            {checking ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+          </Button>
+        ) : standing.kind === 'deferred' ? (
+          <Button
+            title={t('VtaLink.ContinueVetting')}
+            buttonType={ButtonType.Primary}
+            onPress={() => go(Screens.VtiVetting)}
+            testID={testIdWithKey(VtiJoinIds.continueVetting)}
+          />
+        ) : null}
+        {different}
+      </>
+    )
+  }
+
+  const whichCentred = step === 'which' && !standingShown
+
+  return (
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      {/* The buttons scroll with the page, after everything it says: held
+          below it, above the tab bar, they left only a band for the page,
+          and its last lines showed half-hidden behind them (239, iPhone). A
+          short page still keeps them at the bottom. */}
+      {/* "Which community?" is a few lines and one button: kept together and
+          centred, not the words at the top and the button at the foot with
+          the screen between them (238, iPhone). The tab bar sits below the
+          screen, so the centre is the screen's own. */}
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          whichCentred ? { justifyContent: 'center', paddingBottom: 20 } : { paddingBottom: 20 + roomAboveTabBar },
+        ]}
+        testID={testIdWithKey(VtiJoinIds.scroll)}
+      >
+        {/* The request this phone sent never reached the community (it says
+            it holds none): said, with the way to send it again (238). */}
+        {standing?.kind === 'none' && standing.lost && step !== 'as' ? (
+          <View style={styles.card} testID={testIdWithKey(VtiJoinIds.requestLost)}>
+            <ThemedText>{t('Join.RequestLost', { community: name, interpolation: { escapeValue: false } })}</ThemedText>
+            <Button
+              title={t('Join.SendAgain')}
+              buttonType={ButtonType.Primary}
+              onPress={() => {
+                chooseNext(true)
+                setStep('as')
+              }}
+              testID={testIdWithKey(VtiJoinIds.sendAgain)}
+            />
+          </View>
+        ) : null}
+        {body}
+        {actions ? (
+          <View
+            style={[styles.actions, whichCentred ? { marginTop: 8 } : undefined]}
+            testID={testIdWithKey(VtiJoinIds.actions)}
+          >
+            {actions}
+          </View>
+        ) : null}
+      </ScrollView>
+      {/* Pinned under the scroll: this page runs past the fold on a phone, and a refusal written after the ways sat
+          below it, so "Meet a vetter" looked like it did nothing (0.69 gate, hv, 2026-11-04). */}
+      {step === 'asks' && privateRefusal ? (
+        <ScrollView style={styles.refusalBar} contentContainerStyle={styles.refusalBarContent}>
+          <ThemedText style={styles.error} testID={testIdWithKey(VtiJoinIds.privateRefused)}>
+            {t(REFUSAL_KEY[privateRefusal], { community: name, interpolation: { escapeValue: false } })}
+          </ThemedText>
+        </ScrollView>
+      ) : step === 'asks' && privateCheckingLong ? (
+        <View style={styles.refusalBarContent}>
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.preparingSlow)}>
+            {t('Invited.PreparingSlow')}
+          </ThemedText>
+        </View>
+      ) : null}
+    </SafeAreaView>
+  )
+}
+
+export default VtiJoin

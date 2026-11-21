@@ -29,7 +29,8 @@ rm -rf "$OUT"/android/assets/* "$OUT"/ios/assets/* "$OUT"/android/js/*
 t0=$(date +%s); lap() { echo "  $1: $(( $(date +%s) - t0 ))s"; t0=$(date +%s); }
 sha() { shasum -a 256 "$1" | cut -c1-12; }
 hbcver() { xxd -s 8 -l 4 -p "$1"; }
-echo "heads wallet=$(git -C "$REPO" rev-parse --short HEAD) bifold=$(git -C "$REPO/bifold" rev-parse --short HEAD)"
+# bifold at this build: the folded tree's id (since the fold), the pin before it. Not `git -C bifold`: that is this repository.
+echo "heads wallet=$(git -C "$REPO" rev-parse --short HEAD) bifold=$(git -C "$REPO" rev-parse --short HEAD:bifold)"
 
 # The bifold packages the app bundles from lib/ (a stale lib/ is shipped silently).
 ( cd "$REPO/bifold/packages/trust-tasks" && yarn build ) > "$OUT/libs.log" 2>&1

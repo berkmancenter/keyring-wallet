@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vtc/_shared/0.1/ceremony",
+  "title": "VTC — shared ceremony definitions",
+  "description": "The decision a community returns from a ceremony step. Shared across ceremony families because the four outcomes are the same wherever a policy decides something about an applicant.",
+  "$defs": {
+    "VerdictEffect": {
+      "$anchor": "verdictEffect",
+      "title": "VerdictEffect",
+      "type": "string",
+      "enum": ["allow", "deny", "refer", "requestMore"],
+      "description": "What the policy decided.\n\n`allow` — admitted. `deny` — refused, terminally for this submission. `refer` — parked for a human or quorum decision; the applicant is neither in nor out. `requestMore` — the policy cannot decide yet and names what further evidence it needs.\n\nThe four are not reducible to a pending/decided pair. `refer` and `requestMore` are both 'not decided', but they place the next action with different parties: `refer` waits on the community, `requestMore` waits on the applicant. A consumer that cannot tell them apart cannot tell a user whether to wait or to act."
+    },
+    "VerdictWith": {
+      "$anchor": "verdictWith",
+      "title": "VerdictWith",
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The effect-dependent detail of a verdict.\n\nEvery member is optional at the schema level and which ones are meaningful depends on `effect`: `role` / `obligations` / `bundleRef` on `allow`, `code` / `reason` on `deny`, `queue` / `reason` on `refer`, `needs` / `presentationDefinition` on `requestMore`. The dependency is stated here rather than enforced by `if`/`then` per effect, so that the shape stays a single flat object a generated type can carry without a discriminated union per family — a deliberate trade of schema strictness for implementability, and the reason a consumer MUST branch on `effect` rather than on which members happen to be present.",
+      "properties": {
+        "role": { "type": "string", "minLength": 1, "description": "The granted local role. `allow` only." },
+        "obligations": { "type": "object", "description": "Conditions attached to the grant. `allow` only." },
+        "bundleRef": { "type": "object", "description": "Pointer to a sealed credential bundle, added by the community where issuance occurred rather than emitted by the policy. `allow` only." },
+        "code": { "type": "string", "minLength": 1, "description": "Stable refusal code, safe to branch on. `deny` only." },
+        "reason": { "type": ["string", "null"], "maxLength": 1024, "description": "Elaboration in prose, when the decider gave one. `deny` and `refer`." },
+        "queue": { "type": "string", "minLength": 1, "description": "Which review queue the decision was parked in, so an applicant can be told who now holds it. `refer` only." },
+        "needs": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "What further evidence is required, named so the applicant can act without a support conversation. `requestMore` only." },
+        "presentationDefinition": { "type": "object", "description": "A machine-readable statement of the same request, so a wallet can satisfy it without a human reading `needs`. `requestMore` only." }
+      }
+    },
+    "Verdict": {
+      "$anchor": "verdict",
+      "title": "Verdict",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect", "with"],
+      "description": "A ceremony decision: the effect, plus its effect-dependent detail.",
+      "properties": {
+        "effect": { "$ref": "#/$defs/VerdictEffect" },
+        "with": { "$ref": "#/$defs/VerdictWith" }
+      }
+    }
+  }
+}
