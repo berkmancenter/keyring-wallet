@@ -295,13 +295,12 @@ Bifold's shared root files (`eslint-rules/`, `__mocks__/`) go to the repository 
 
 ### Phase 3. One CI, one convention, cleanup
 
-- Port bifold's CI, read at bifold `origin/main` on 2026-11-20 (the ten workflows there, by job name):
-  - `quality.yaml`: "Linting and formatter" (lint and prettier on changed files, the testids extractor test, `gen-testids.mjs --check`), "Testing part 1/4" to "4/4" (core's jest in four parts), "Testing" (the gate that joins them), "Testing scope · <scope>" (the scoped-subset logic, which **does not** carry over: §5.1), and "Type check (ratchet)". Into the wallet's `quality.yml` as jobs; the wallet's own "Lint+Format+Types" and "Testing" absorb or sit beside them, and the ruleset's required checks are renamed to match.
-  - `full-tests.yaml` ("Jest part (N)", "Full suite"; push to main, schedule, dispatch): the unscoped run that review waits on. Becomes the wallet PR's Testing job (every PR, full suite) plus the scheduled run.
-  - `targeted-jest.yaml` ("Targeted jest", dispatch): ported as is.
-  - `vti-conformance.yaml` ("VTI SDK accepts Keyring's card and statement"): ported as a job; it already checks out the wallet to build `card-verify`, now it runs in place.
-  - `commit-checks.yaml`: the wallet has the same job; one copy.
-  - Dropped: `publish.yaml` ("Release", changesets; nothing consumes the packages), `repolinter.yaml`, `scorecard.yaml`, `maintenance.yaml` ("Issue and PR"), `roadmap-pr-status.yaml` (the wallet has its own). Coverage upload stays if its token exists (below).
+- Port bifold's CI, read at bifold `origin/main` on 2026-11-20 (the ten workflows there, by job name), as three wallet workflows that run with `bifold/` as the working directory and keep the framework's job names distinct from the wallet's own ("Lint+Format+Types", "Testing"):
+  - `framework.yml` ← `quality.yaml`: "Framework lint and format" (lint and prettier on the framework files a PR changes, the testids and emoji generators' checks, the test selector's tests, every other node test under `bifold/`), "Framework tests part 1/4" to "4/4" (the selected suites in four parts), "Framework tests" (the gate that joins them, the one the ruleset requires), "Framework tests scope · <scope>" and "Type check (ratchet)". Its `pull_request` filter names `main`, `feat/one-codebase` and `fold/**` (a `branches:` filter names the PR's **base**, so a PR stacked on another fold branch gets nothing otherwise; `quality.yml` carries the same three).
+  - `framework-full.yml` ← `full-tests.yaml`: "Framework jest part (core 1/4 … other packages)" and "Framework full suite", on a push to `main` that touches `bifold/`, nightly and on dispatch (a dispatch works only once the workflow is on the default branch).
+  - `framework-vti-conformance.yml` ← `vti-conformance.yaml`: "VTI SDK accepts Keyring's card and statement"; the prebuilt checkers are this repository's `scripts/openvtc`, so the step that cloned the wallet is gone.
+  - `bifold/scripts/ci/select-tests.mjs` diffs with `--relative`, so run from `bifold/` its paths come back relative to that directory as its rules expect, and a wallet-only change selects no framework suite rather than tripping the empty-diff guard.
+  - Not ported: `publish.yaml` ("Release", changesets; nothing consumes the packages), `repolinter.yaml`, `scorecard.yaml`, `maintenance.yaml`, `roadmap-pr-status.yaml` (hygiene of a repository being archived), `commit-checks.yaml` (the wallet's own covers every commit), `targeted-jest.yaml` (dispatch-only; `yarn jest <path>` in `bifold/packages/core` does the same), and the codecov upload (neither repository holds a `CODECOV_TOKEN`).
   - The "SEDI/KERI switch guard" is a jest test, not a job: `packages/core/src/modules/trust-tasks/__tests__/sediKeriSwitches.test.ts`; it moves with core and runs in the parts.
 - Rulesets. Bifold `main`'s ruleset "Main" requires "DCO sign-off and commit signature", "Linting and formatter", "Testing", "Type check (ratchet)"; after the port, the wallet's "Main" ruleset requires the wallet's equivalents (its current four plus "Type check (ratchet)" or its merged successor). Bifold's second ruleset, **"OTA pins", protects `refs/heads/ota/*` from deletion and force-push**; the same ruleset is created on the wallet for its `ota/*` branches, and the one on the archived repository stays.
 - `deps-cache.yml`: one cache key.
@@ -312,6 +311,16 @@ Bifold's shared root files (`eslint-rules/`, `__mocks__/`) go to the repository 
 - Remaining tooling that assumes a gitlink (the OTA cut tools and the gate scripts are Phase 2 exit criteria): the roadmap comparison script's repository mapping, the roadmap sync's card source, the board's "pin" vocabulary. Each owner fixes their own.
 
 *Done when:* a PR that changes a file in `packages/core` and a file in `app/` gets one CI run that lints, type-checks and tests both, and the gate's nightly run (`gate.sh`) passes on the integration branch's tip from the Mac mini.
+
+**Right before the one PR to `main` opens, the tree check**, and bifold merges freeze from that moment: the fold's `bifold/` subtree must equal bifold `main`'s tree except for the ten workflows the fold dropped. The form is mechanical (`gh pr view --json files` truncates above 3,000 files, so enumeration is by git):
+
+```sh
+tip=$(git -C <bifold clone> rev-parse origin/main)
+diff <(git -C <bifold clone> ls-tree -r "$tip" | awk '{print $3, $4}' | sort) \
+     <(git ls-tree -r <fold head>:bifold | awk '{print $3, $4}' | sort)
+# expected: exactly ten "<" lines, all .github/workflows/*.yaml; a ">" line is something the fold has and bifold lacks,
+# any other "<" line is a bifold merge not yet replayed (§7.1)
+```
 
 **Then the one PR to `main`.** A PR opened straight from `feat/one-codebase` would list its 4,341 unsigned history commits, and the required check "DCO sign-off and commit signature" fails on the first of them before any squash happens. So the PR to `main` is opened from a **one-commit branch** whose tree is the integration tip's:
 
