@@ -1,0 +1,236 @@
+# The phones' wallet mailbox (Affinidi messaging mediator v0.53.0).
+#
+# Key names are upstream's, from its annotated template at v0.53.0
+# (crates/affinidi-messaging-mediator/conf/mediator.toml). Every setting with
+# an "Env:" line there can be overridden by that environment variable, and
+# docker-compose.yml sets the deployment-specific ones from .env:
+#
+#   MEDIATOR_DID              did://<MAILBOX_MEDIATOR_DID>
+#   ADMIN_DID                 did://<MAILBOX_ADMIN_DID>
+#   MEDIATOR_SECRETS_BACKEND  gcp_secrets://<GCP_PROJECT>/<MAILBOX_SECRET_PREFIX>
+#   LOCAL_ENDPOINTS           https://<MAILBOX_HOSTNAME>
+#   CORS_ALLOW_ORIGIN         https://<MAILBOX_HOSTNAME>
+#
+# Values still being measured in the lab are marked "PENDING S2" (sign-in,
+# relay and the per-IP limit) or "PENDING S5" (the soak), after the steps of the
+# M3 mailbox plan. A PENDING value is a deliberate starting point, not a
+# measured one.
+#
+# How it differs from ../mediator/mediator.toml (the push gateway's mediator):
+# that one is CLOSED (explicit_allow, login only from inside its Docker
+# network). This one is OPEN to sign-up: any DID that completes the sign-in
+# challenge gets an account with global_acl_default below. What bounds it is
+# that default (no relaying onward), the per-DID and per-IP rate limits, and
+# the queue limits.
+
+# info: the operational default; nothing here needs debug in production.
+log_level = "info"
+# JSON lines, for a log collector reading the container logs.
+log_json = "true"
+
+# The mailbox's own DID. Empty here on purpose: it is set from MEDIATOR_DID
+# (docker-compose.yml, from .env). The identity is a did:webvh on
+# MAILBOX_HOSTNAME, made by setup-identity.sh AFTER the hostname is chosen;
+# its did:web form is served from the same host (see did_web_self_hosted).
+mediator_did = ""
+
+[secrets]
+# No backend in this file on purpose: MEDIATOR_SECRETS_BACKEND sets it
+# (gcp_secrets://<project>/<prefix>), and with neither the mediator refuses to
+# start. The mediator then reads one Secret Manager secret,
+# <prefix>mediator_secrets_bundle, holding its operating keys, its JWT signing
+# key and its admin credential (upstream docs/secrets-backend.md, "One secret
+# per deployment"). Needs the secrets-gcp cargo feature (Dockerfile).
+# backend = "gcp_secrets://<project>/kpush-mailbox-"
+
+[server]
+# All interfaces inside the container; only Caddy is published to the host.
+listen_address = "0.0.0.0:7037"
+# Upstream's prefix: the DID document names https://<host>/mediator/v1.
+api_prefix = "/mediator/v1/"
+# Set from ADMIN_DID (the admin did:key setup-identity.sh prints).
+admin_did = ""
+# Caddy is the only reverse proxy, at a fixed address on the compose network
+# (docker-compose.yml, networks.edge). Its X-Forwarded-For is trusted only from
+# there, so each phone is charged to its own address for the per-IP limit, and
+# a client elsewhere cannot pick its own key. Keep in step with caddy's
+# ipv4_address. A catch-all range is refused at startup
+# (mediator-config validate.rs, check_trust_xff_cidrs).
+trust_xff_cidrs = ["172.31.253.2/32"]
+# The mailbox serves its own DID: the did:webvh log as /.well-known/did.jsonl
+# and, from its last entry, the did:web document as /.well-known/did.json
+# (upstream src/common/config/mod.rs, split_self_hosted_did_source). The file
+# is public; the VM writes it from instance metadata.
+did_web_self_hosted = "file:///etc/keyring-mailbox/did/did.jsonl"
+# Set from LOCAL_ENDPOINTS (https://<MAILBOX_HOSTNAME>), so a forward whose next
+# hop is this mailbox is delivered locally, not sent to itself.
+# local_endpoints = []
+
+[database]
+# functions_file unset: the Redis stored-function library built into the binary.
+# Redis on the compose network's internal store network.
+database_url = "redis://redis:6379/"
+# Upstream's default.
+database_timeout = "2"
+# A single Redis, not a cluster.
+cluster_mode = "false"
+
+[security]
+# OPEN sign-up: any DID may authenticate and is auto-registered with
+# global_acl_default. Account model (a) of the M3 plan (self-service).
+mediator_acl_mode = "explicit_deny"
+# What every self-registered phone account gets:
+#   DENY_ALL                    the base: nothing not listed;
+#   LOCAL                       mail between accounts on this mailbox;
+#   SEND_MESSAGES               send through the mailbox;
+#   RECEIVE_MESSAGES            an inbox, and live pickup;
+#   RECEIVE_FORWARDED           accept mail relayed in from other mediators;
+#   ANON_RECEIVE                accept the anoncrypt-wrapped message inside a
+#                               forward (below);
+#   SEND_FORWARDED_CHANGE       the account may switch its own SEND_FORWARDED on
+#                               (measured in the lab at v0.53.0: the phone's
+#                               self-flag works);
+#   MODE_EXPLICIT_DENY          the account's own access list starts open.
+# ANON_RECEIVE: a phone's send is a routing/2.0 forward whose attachment is the
+# standard anoncrypt wrap for the recipient mailbox's key. Without ANON_RECEIVE
+# on the recipient's account the mediator refuses it with "recipient is not
+# accepting anonymous messages" (upstream routing.rs, the AnonReceive check on
+# the next hop; measured in the lab at v0.53.0). It opens no anonymous path
+# from the network: the forward's outer sender is still authenticated and gated
+# by SEND_FORWARDED, external forwarding is off, and SEND_FORWARDED is not in
+# this default.
+# Never put SEND_FORWARDED itself in the default: in the default it turns on
+# implicit anonymous relay for everyone.
+global_acl_default = "DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,ANON_RECEIVE,SEND_FORWARDED_CHANGE,MODE_EXPLICIT_DENY"
+# Mail addressed to a local account is delivered to it (the mailbox's job).
+local_direct_delivery_allowed = "true"
+# But not anonymous mail: a sender must be authenticated.
+local_direct_delivery_allow_anon = "false"
+# TLS ends at Caddy.
+use_ssl = "false"
+# Upstream's session lifetimes: 15 min access, about a day of refresh.
+jwt_access_expiry = "900"
+jwt_refresh_expiry = "86400"
+# React Native's WebSocket sends an Origin derived from the URL it connects
+# to, so a phone's upgrade carries Origin: https://<MAILBOX_HOSTNAME> and is
+# refused unless admitted here (upstream docs/cors-and-origin.md). The value
+# below is a placeholder that admits nobody; CORS_ALLOW_ORIGIN
+# (docker-compose.yml) replaces it with https://<MAILBOX_HOSTNAME>. A client
+# sending no Origin is admitted either way (the JWT is the gate).
+# PENDING S2: confirm the origin a phone presents from the mailbox's refusal
+# log on both platforms before narrowing or widening it.
+cors_allow_origin = "https://mailbox-hostname.invalid"
+# Every message to the mailbox must be signed by its sender.
+block_anonymous_outer_envelope = "true"
+# And signed by the DID the session belongs to.
+force_session_did_match = "true"
+# Admin messages only directly, never relayed in from another mediator.
+block_remote_admin_msgs = "true"
+# Upstream's default: a Trust Task whose proof fails is logged and counted,
+# not refused. PENDING S2: move to "enforce" once the phone's client is shown
+# to sign every Trust Task it sends (account, ACL and wake management).
+trust_task_verification = "warn"
+# Only the bound sign-in statement (SDK 0.45.16+); no grace for older clients.
+tsp_auth_accept_unbound_until = ""
+# Accept anonymous /inbound forwards relayed by other mediators: mail for a
+# phone from a contact on another mediator arrives that way. Explicit, rather
+# than through SEND_FORWARDED in the default (deprecated upstream).
+# PENDING S2: confirm contacts on other mediators reach a phone with it, and
+# that nothing is relayed onward (external_forwarding below is off).
+enable_inter_mediator_relay = "true"
+
+[streaming]
+# Live delivery over the phone's WebSocket (Pickup live mode).
+enabled = "true"
+# One instance; the container's hostname names it.
+uuid = "hostname://"
+
+[did_resolver]
+# Upstream's defaults: local resolver, 1000 DIDs for 5 minutes, 5 s per lookup.
+cache_capacity = "1000"
+cache_ttl = "300"
+network_timeout = "5000"
+network_limit = "100"
+
+[limits]
+# Queue and size limits as the push gateway's mediator has them
+# (../mediator/mediator.toml), which are upstream's defaults.
+# PENDING S5: set from the soak (memory per message, queue depths).
+attachments_max_count = "20"
+crypto_operations_per_message = "1000"
+deleted_messages = "100"
+forward_task_queue = "50000"
+http_size = "10485760"
+listed_messages = "100"
+local_max_acl = "1000"
+# Mail waits 7 days for a phone that is offline.
+message_expiry_seconds = "604800"
+# Collected-but-unacknowledged mail keeps the full 7 days (upstream's default):
+# a phone that collected and crashed before acknowledging still gets it again.
+delivered_expiry_seconds = "0"
+# Each sender gets a turn on pickup (upstream's default).
+pickup_round_robin = "true"
+message_size = "1048576"
+# One sender may queue at most 50 messages for one phone.
+queued_send_messages_per_peer = "50"
+queued_send_messages_soft = "2000"
+queued_send_messages_hard = "10000"
+# A phone's inbox: 200 by default, at most 1000 if the account raises it.
+queued_receive_messages_soft = "200"
+queued_receive_messages_hard = "1000"
+to_keys_per_recipient = "100"
+to_recipients = "100"
+ws_size = "10485760"
+access_list_limit = "1000"
+oob_invite_ttl = "86400"
+# Per-IP limit, upstream's default values written out. Behind Caddy each
+# phone is charged to its own address (trust_xff_cidrs above).
+# PENDING S2: phones behind one carrier NAT share an address; raise only if
+# the lab or the soak shows 429s from that.
+rate_limit_per_ip = "100"
+rate_limit_burst = "50"
+# Per-DID limit, ON (upstream's default is off): one signed-in DID cannot
+# flood the mailbox from many addresses. Measured in the lab at v0.53.0: with
+# these values a 60-request burst from one DID gets 10 answered and 50 refused
+# with 429, and a phone's normal traffic stays well under the rate.
+did_rate_limit_per_second = "20"
+did_rate_limit_burst = "10"
+
+[processors.forwarding]
+# The forwarding processor runs (it also delivers forwards to local accounts).
+enabled = "true"
+future_time_limit = "86400"
+# Never forward to external mediators or endpoints: the mailbox is not a relay.
+external_forwarding = "false"
+report_errors = "true"
+blocked_forwarding_dids = "[]"
+rate_window_seconds = "300"
+ws_threshold_msgs_per_10s = "1"
+ws_idle_timeout_seconds = "60"
+batch_size = "50"
+max_retries = "5"
+initial_backoff_ms = "1000"
+max_backoff_ms = "60000"
+consumer_group = "forwarding"
+max_hops = "10"
+# Upstream's default, and what other mediators in this ecosystem run.
+relay_mode = "blind"
+relay_trusted_mediators = ""
+
+[processors.message_expiry_cleanup]
+# Expired mail is removed.
+enabled = "true"
+
+[processors.wake]
+# A sender with mail queued for an offline phone may ask the mailbox to ring
+# that phone's own push gateway handle (messaging/wake/request). Upstream's
+# defaults, written out.
+enabled = "true"
+pair_per_minute = "1"
+pair_per_day = "10"
+addressee_coalesce_seconds = "15"
+addressee_per_hour = "30"
+
+[processors.session_expiry_cleanup]
+# A no-op on Redis (it expires sessions itself); upstream keeps it on.
+enabled = "true"
