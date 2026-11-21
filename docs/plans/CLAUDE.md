@@ -467,15 +467,20 @@ Write the summary last, with the humanizer skill, as for a plan.
 
 ## Implementing a plan: stacked PRs
 
-A plan is implemented as a **stack of PRs**, so a person can review the whole
-plan one step at a time, in the order the plan was written.
+A plan is a feature, and it is implemented on one **feature branch**
+(`feat/<plan-name>`, cut from `main`) as a **stack of PRs**, so a person can
+review the whole plan one step at a time, in the order the plan was written,
+and `main` takes the feature in one merge. This applies once the one-codebase
+fold has landed on `main` (see [`../DEVELOPMENT.md`](../DEVELOPMENT.md), "When
+this applies").
 
 - **One PR per step.** Each PR implements one reviewable step of the plan's
   steps section (§7 in [`PLAN_TEMPLATE.md`](./PLAN_TEMPLATE.md)), in the plan's
   order. Keep it small; a step too big to review splits into sub-steps, and the
   plan says so.
-- **Each PR is based on the previous PR's branch**; the first is based on
-  `main`. A PR's diff is then its own step only.
+- **Each PR is based on the previous PR's branch**; the first is based on the
+  feature branch. A PR's diff is then its own step only. When every step has
+  merged into the feature branch, one PR merges the feature branch into `main`.
 - **The description says where it sits.** It links the plan section it
   implements (path and `§`, at a commit permalink when the plan may move), and
   gives its place in the stack: `Stack: 2 of 5. Base: <branch> (#N), at <sha8>.`,
@@ -483,9 +488,12 @@ plan one step at a time, in the order the plan was written.
   stacked PRs in this repo (e.g. #931).
 - **Checks before opening each PR, and no PR if any fail.** Run, as the change
   needs: `yarn lint`, `yarn prettier` and `yarn typecheck` at the root; the
-  tests for what changed (`yarn test`, or the package's own `yarn test` under
-  `bifold/packages/*`); and the build the change could break (a native build
-  when it touches `app/ios`, `app/android`, native modules or patches). The
+  tests related to the files the PR changes, not the whole suite (for example
+  `cd app && TZ=GMT yarn jest --findRelatedTests <changed files>`, or the
+  changed test files under `bifold/packages/*`); and the build the change could
+  break (a native build when it touches `app/ios`, `app/android`, native
+  modules or patches). Tests stay minimal: they cover what the PR changes. CI
+  runs the broad suites. The
   tiers and exact commands are in [`../TESTING.md`](../TESTING.md). Put what
   you ran, and its result, in the PR description (the PR template,
   `.github/pull_request_template.md`, has the stack fields and this
@@ -505,42 +513,46 @@ plan one step at a time, in the order the plan was written.
   skips only the push hook, and the commit hooks and signing still apply. A PR
   that also changes anything outside `docs/` (a script, a workflow, app or
   bifold code) is not plan-only and follows the checks above.
-- **Heavy operations follow the shared-machine rules** in `/srv/dev/CLAUDE.md`
-  ("Heavy operations", "Disk space in /var/tmp"): check memory and CPU first,
-  run `vartmp-tidy check`, and prefix builds, tests and typechecks with
-  `nice -n 10`.
+- **Heavy operations follow the rules of the machine they run on.** On a shared
+  machine, run one heavy suite or build at a time with few workers, and send
+  broad runs to CI.
 - **Commits** follow the root `CLAUDE.md` "Commit conventions" (conventional
-  commits, signed, `Signed-off-by:`). A step that changes `bifold/packages/*`
-  is a paired PR in `keyring-bifold`, with its own sign-off rules there and the
-  order in [`release-flow-plan.md`](./release-flow-plan.md) §5 (bifold merges
-  first; the wallet PR bumps the pin).
-- **Hot fixes are exempt.** A hot fix goes straight to its own PR against
-  the branch it fixes (`main`, or a `hotfix/*` branch), without a plan or a
-  stack.
+  commits, signed, `Signed-off-by:`). After the fold, `bifold/` is part of
+  this repository, so a step that changes `bifold/packages/*` is one PR here,
+  with no paired PR and no pin to bump.
+- **Hot fixes and quick fixes are exempt.** A hot fix, a quick fix or a small
+  ask from the Keyring feedback channel goes straight to its own PR against the
+  branch it fixes (`main`, or a `hotfix/*` branch), without a plan or a stack,
+  ships over the air when `tier.mjs` allows, and needs only minimal tests with a
+  control (see [`../DEVELOPMENT.md`](../DEVELOPMENT.md), "Hot fixes and quick
+  fixes").
 
-**When a lower PR merges.** The repos do not delete branches on merge, so
-GitHub does not retarget the PR above it; do it by hand. Merge bottom-up.
-After PR 1 merges into `main`:
+**When a lower PR merges.** Merge bottom-up into the feature branch. The repos
+do not delete branches on merge, so GitHub does not retarget the PR above it;
+do it by hand, without rewriting history. After PR 1 merges into the feature
+branch:
 
 ```sh
 git fetch origin
-git rebase --onto origin/main <PR-1 branch tip before merge> <PR-2 branch>
-git push --force-with-lease origin <PR-2 branch>
-gh pr edit <PR-2> --base main
+gh pr edit <PR-2> --base <feature branch>
+git switch <PR-2 branch>
+git merge -S --signoff origin/<feature branch>   # a signed merge commit with sign-off
+git push origin <PR-2 branch>              # a fast-forward; no force-push
 ```
 
-`--onto` drops PR 1's commits, which are already on `main` (they arrive with new
-hashes when PR 1 was squash-merged, and a plain rebase would replay them). Then
-update PR 2's `Base:` line, and do the same for each PR above it, each onto its
-new base. The alternative also used here, merging each PR into a long-lived
-feature branch and that branch into `main` once (the `feat/sedi-state-office`
-stack), needs no retargeting but leaves one large final merge; use it only when
-the steps cannot reach `main` one at a time.
+Then update PR 2's `Base:` line, and do the same for each PR above it. The
+squash merge of each PR keeps the feature branch's history one commit per
+step. Force-pushes need the product owner's word every time, so the default
+path never needs one; `git rebase --onto` with `--force-with-lease` is for when
+that word has been given.
+
+When every step has merged, open the feature branch's PR into `main` and merge
+it once, after its required checks pass and it has been reviewed.
 
 ### When the plan is done
 
-A plan is done when the last PR of its stack
-merges, and that PR (or one straight after it) does two things:
+A plan is done when its feature branch has merged into `main`, and that PR
+(or one straight after it) does two things:
 
 - updates the plan's `**Status:**` line, and its row in
   [`README.md`](./README.md), to `Implemented`, naming the merged PRs; and

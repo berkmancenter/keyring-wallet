@@ -25,7 +25,7 @@ Above / below: <#PR above>, <#PR below>
 
 - [ ] `yarn lint`, `yarn prettier`, `yarn typecheck` (root)
 - [ ] The build this change could break (native build for `app/ios`, `app/android`, native modules or patches)
-- [ ] Tests for what changed (`yarn test`, or the package's own `yarn test` under `bifold/packages/*`)
+- [ ] Tests related to what changed, not the whole suite (`cd app && TZ=GMT yarn jest --findRelatedTests <files>`, or the changed tests under `bifold/packages/*`); a hot or quick fix: the minimal tests that prove it, with a control
 - [ ] Every commit is signed and has a `Signed-off-by:` trailer (root `CLAUDE.md`, "Commit conventions")
 - [ ] Docs, comments and environment-variable notes updated as needed; breaking changes noted in the commit messages
 - [ ] A PR that adds or substantively changes a plan under `docs/plans/` links the dated companion recording its completeness and correctness check: <link>

@@ -33,17 +33,20 @@ Notes:
 
 - Each bifold package's gate is its own `test` script. Do not substitute an
   ad-hoc `tsc --noEmit` in a package directory (root `CLAUDE.md`, "Commands").
-- On a shared machine, the heavy-operation rules in `/srv/dev/CLAUDE.md` apply
-  to test suites, typechecks and builds: check memory and CPU, run
-  `vartmp-tidy check`, prefix with `nice -n 10`. [`RELEASE_GATE.md`](./RELEASE_GATE.md)
+- On a shared machine, run one heavy suite, typecheck or build at a time, with
+  few workers, and send broad runs to CI. [`RELEASE_GATE.md`](./RELEASE_GATE.md)
   §4 adds: one jest suite at a time, `--maxWorkers=2`.
+- After the one-codebase fold, the bifold package suites, lint and type check
+  run from this repository's own workflows instead of `keyring-bifold`'s; the
+  rows above that name bifold's workflows are updated in the change that moves
+  them.
 
 ## Git hooks
 
 | Hook | Repo | Runs |
 |---|---|---|
 | `pre-commit` | wallet (`.husky/pre-commit`) | `scripts/check-commit-signing.sh`, `yarn pre-commit-lint` (lint-staged), `yarn typecheck` |
-| `pre-push` | wallet | `yarn test` (a plan-only PR is pushed with `--no-verify`; see "Before opening a PR") |
+| `pre-push` | wallet | `yarn test` (a plan-only PR is pushed with `--no-verify`; see "Before opening a PR"). Planned under the v1 review: narrow it to the tests related to the push |
 | `commit-msg` | wallet | `yarn commitlint` |
 | `prepare-commit-msg` | wallet | lefthook's `prepare-commit-msg` |
 | `pre-commit` | bifold (`bifold/.githooks/`) | checks commit signing is configured |
@@ -62,8 +65,10 @@ script or a workflow, makes it a normal PR. The rule and its limits are in
 [`plans/CLAUDE.md`](./plans/CLAUDE.md), "A plan-only PR runs no app tests
 locally".
 
-Plans are implemented as stacked PRs, and each PR in a stack is opened only
-after lint, format, typecheck, the relevant build and its tests pass locally
+Plans are implemented as stacked PRs into a feature branch, and each PR in a
+stack is opened only after lint, format, typecheck, a native build if it
+touches native code, and the tests related to the files it changes pass
+locally
 ([`plans/CLAUDE.md`](./plans/CLAUDE.md), "Implementing a plan: stacked PRs").
 The PR template ([`../.github/pull_request_template.md`](../.github/pull_request_template.md))
 has the stack fields and this checklist.

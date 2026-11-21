@@ -70,7 +70,7 @@ invisible to an agent reading the codebase. So:
    daily; several claims in the first review round were accurate when written
    and stale a week later. `scripts/openvtc/` exists to make that verification
    reproducible for everyone.
-6. **A plan is done when the last PR of its stack merges** and two things are
+6. **A plan is done when its feature branch merges into `main`** and two things are
    recorded: the plan's status line (and its row in the table above) says
    `Implemented` with the merged PRs, and a dated companion lists every
    deviation from the plan, or says there were none. Until then it is
