@@ -1,0 +1,221 @@
+name: Framework VTI conformance
+
+# Ported from the former keyring-bifold repository's vti-conformance.yaml at the fold
+# (docs/plans/single-codebase-plan.md, Phase 3). The checkers it used to fetch from the
+# wallet repository are this repository's scripts/openvtc, so nothing is cloned.
+
+# Upstream's own code judges what Keyring produces, on every PR that touches
+# vetting or Trust Tasks. The pinned VTI SDK (vta-sdk verify_card,
+# verify_statement + check_against_card) runs on a Vetting Card made by the
+# shipping sendCard and on the statement Keyring's vetter makes over it,
+# both really signed by a did:key. The other direction (Keyring's functions
+# on upstream-computed values) is vtiConformanceVectors.test.ts, which the
+# ordinary test job runs.
+#
+# The VTI pin and the checker are the wallet's: scripts/openvtc/PINS.json and
+# scripts/openvtc/card-verify on keyring-wallet main.
+
+on:
+  pull_request:
+    branches: [main, feat/one-codebase]
+    paths:
+      - 'bifold/packages/core/src/modules/trust-tasks/**'
+      - 'bifold/packages/trust-tasks/**'
+      - 'scripts/openvtc/**'
+      - '.github/workflows/framework-vti-conformance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'bifold/packages/core/src/modules/trust-tasks/**'
+      - 'bifold/packages/trust-tasks/**'
+      - 'scripts/openvtc/**'
+      - '.github/workflows/framework-vti-conformance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: bifold
+
+jobs:
+  upstream-judges-keyring:
+    # The checker is BUILT ONCE PER PIN, not per run: since the VTI pin moved to
+    # vta-service-v0.79.0 (wallet #901), one dependency (trust-tasks-rs 0.37.2)
+    # needs more than 14 GB of memory to compile, and five cold builds on GitHub's
+    # standard Linux runners were killed (exit 143) whatever the profile, job
+    # count or image (11-11; the memory samples are in bifold #1029's history).
+    # So the wallet builds card-verify and card-verify-v047 once for macOS
+    # (scripts/openvtc/card-verify-dist/build.sh), publishes them as a release
+    # asset, and records each sha256 in scripts/openvtc/card-verify-dist/DIST.json.
+    # This job runs on macOS so it can run those binaries, downloads them, checks
+    # each sha256 and that DIST.json was built at the pins in PINS.json, and then
+    # judges exactly as before: upstream's own code still judges Keyring's output.
+    runs-on: macos-15
+    timeout-minutes: 60
+    name: VTI SDK accepts Keyring's card and statement
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build Workspace
+        run: yarn build
+
+      - name: Fetch the prebuilt checkers at the VTI pins
+        run: |
+          d="$GITHUB_WORKSPACE/scripts/openvtc"
+          dist="$d/card-verify-dist/DIST.json"
+          if [ ! -f "$dist" ]; then
+            echo "::error::$dist is missing: build the checkers with scripts/openvtc/card-verify-dist/build.sh and publish them"
+            exit 1
+          fi
+          node - "$d/PINS.json" "$dist" <<'NODE'
+          const [pinsPath, distPath] = process.argv.slice(2)
+          const pins = require(pinsPath).repos
+          const dist = require(distPath)
+          const want = { 'card-verify': pins['verifiable-trust-infrastructure'].sha, 'card-verify-v047': pins['verifiable-trust-infrastructure-v047'].sha }
+          let bad = false
+          for (const [name, sha] of Object.entries(want)) {
+            const a = dist.checkers && dist.checkers[name]
+            if (!a || a.vtiPin !== sha) {
+              console.log(`::error::${name} in DIST.json was built at VTI ${a && a.vtiPin}, but PINS.json pins ${sha}: rebuild with scripts/openvtc/card-verify-dist/build.sh after a pin bump`)
+              bad = true
+            }
+          }
+          process.exit(bad ? 1 : 0)
+          NODE
+          # The binary must have been built from the checker sources on the wallet's
+          # main at these pins: recompute their digest (digest.mjs) and compare.
+          for name in card-verify card-verify-v047; do
+            if [ "$name" = card-verify ]; then pin="$(node -e "process.stdout.write(require('$d/PINS.json').repos['verifiable-trust-infrastructure'].sha)")"; else pin="$(node -e "process.stdout.write(require('$d/PINS.json').repos['verifiable-trust-infrastructure-v047'].sha)")"; fi
+            have="$(node "$d/card-verify-dist/digest.mjs" "$d/$name" "$pin")"
+            want="$(node -e "process.stdout.write(require('$dist').checkers['$name'].sourceDigest)")"
+            if [ "$have" != "$want" ]; then
+              echo "::error::$name's sources or pin changed since its binary was built (digest $have, DIST.json $want): rebuild with scripts/openvtc/card-verify-dist/build.sh"
+              exit 1
+            fi
+          done
+          for name in card-verify card-verify-v047; do
+            url="$(node -e "process.stdout.write(require('$dist').checkers['$name'].url)")"
+            sum="$(node -e "process.stdout.write(require('$dist').checkers['$name'].sha256)")"
+            out="$d/$name/target/release/$name"
+            mkdir -p "$(dirname "$out")"
+            target="$(node -e "process.stdout.write(require('$dist').checkers['$name'].target)")"
+            minos="$(node -e "process.stdout.write(require('$dist').checkers['$name'].minMacOS)")"
+            if [ "$target" != aarch64-apple-darwin ] || [ "$(uname -m)" != arm64 ]; then
+              echo "::error::$name is built for $target, but this runner is $(uname -m): run the job on an Apple-silicon macOS runner"
+              exit 1
+            fi
+            if [ "$(printf '%s\n%s\n' "$minos" "$(sw_vers -productVersion)" | sort -V | head -1)" != "$minos" ]; then
+              echo "::error::$name needs macOS $minos or later, but this runner is macOS $(sw_vers -productVersion)"
+              exit 1
+            fi
+            if ! curl -fsSL --retry 3 -o "$out" "$url"; then
+              echo "::error::$name could not be downloaded from $url: nothing has been judged. Publish it with scripts/openvtc/card-verify-dist/build.sh --publish"
+              exit 1
+            fi
+            echo "$sum  $out" | shasum -a 256 -c -
+            chmod +x "$out"
+            # Prove the download executes on this runner: with no arguments each
+            # checker prints its usage line (and exits 2, so the exit code proves nothing).
+            if ! "$out" 2>&1 | grep -q "^usage: $name "; then
+              echo "::error::$name did not print its usage line (\"usage: $name ...\"): it may not run on this runner, or its usage line in main.rs changed"
+              exit 1
+            fi
+            echo "$name: $url ($sum)"
+          done
+
+      - name: Keyring makes a card and a statement
+        working-directory: bifold/packages/core
+        run: CARD_OUT="$RUNNER_TEMP/conformance" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
+
+      # The same documents with every clock read on a whole second: each
+      # timestamp is one toISOString() writes as `.000Z`, which vta-sdk
+      # re-serialises without the fraction before checking a proof. Signed
+      # as-is, those were refused about once in a thousand documents, at
+      # random; this run makes that case happen every time.
+      - name: Keyring makes them again on a whole second
+        working-directory: bifold/packages/core
+        run: CONFORMANCE_WHOLE_SECOND=1 CARD_OUT="$RUNNER_TEMP/conformance-whole-second" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
+
+      - name: VTI SDK judges them
+        # Each proof must be for the purpose vta-sdk signs its type for
+        # (purpose_for_document_type): card-verify checks it with upstream's own function.
+        env:
+          CARD_VERIFY_EXPECT_PURPOSE: '1'
+        run: |
+          bin="$GITHUB_WORKSPACE/scripts/openvtc/card-verify/target/release/card-verify"
+          # The checker at the main pin is a DTG Credentials v1 build (vta-sdk
+          # 0.55 on): it refuses the endorsement-shaped statement and takes only
+          # a role VAC as the vetter's grant. One that is not cannot judge below.
+          if [ "$("$bin" shape 2>/dev/null)" != v1 ]; then
+            echo "::error::card-verify at the main pin is not a DTG Credentials v1 build (\`card-verify shape\` did not print v1)"
+            exit 1
+          fi
+          for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
+            echo "== $out"
+            "$bin" "$out/card.json" "$out/expect.json"
+            # The vetted/1 statement against its card and the session it cites,
+            # and the presentation whose grant is a role VAC.
+            "$bin" verify-statement "$out/statement-v1.json" "$out/card.json" "$out/session.json" "$out/expect.json"
+            "$bin" verify-eligibility "$out/eligibility-v1.json" "$out/expect.json" eligibilityV1
+            "$bin" verify-task "$out/task-applicant.json" "$(node -e "process.stdout.write(require('$out/signers.json').applicant)")"
+            "$bin" verify-task "$out/task-vetter.json" "$(node -e "process.stdout.write(require('$out/signers.json').vetter)")"
+          done
+
+      # 228 writer: the vetted/1 statement Keyring's vetter writes with
+      # setDtgV1WritingEnabled(true) (cardConformance writes statement-v1.json and
+      # the session document it cites), judged by VTI 0.47's own SDK as an openvtc
+      # applicant on 0.47 judges it: verify_statement, check_against_card,
+      # check_against_session. The step above judges the same statement at the
+      # main pin.
+      - name: VTI 0.47 SDK judges the vetted/1 statement (flag on)
+        run: |
+          bin="$GITHUB_WORKSPACE/scripts/openvtc/card-verify-v047/target/release/card-verify-v047"
+          for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
+            echo "== $out"
+            "$bin" verify-statement "$out/statement-v1.json" "$out/card.json" "$out/session.json" "$out/expect.json"
+          done
+
+      # Every Trust Task document Keyring signs — to a peer, a community, its
+      # VTA — made by the shipping code (cardConformance.test.ts writes each to
+      # tasks/<name>.json and lists it in tasks.json with its expected signer).
+      # verify-task runs vta-sdk verify_trust_task_proof_with, what a VTA or a
+      # VTC runs on each task it receives. The test itself holds issuer ==
+      # signer and the type until card-verify checks them.
+      - name: VTI SDK judges every Trust Task Keyring signs
+        # Each proof must be for the purpose vta-sdk signs its type for
+        # (purpose_for_document_type): card-verify checks it with upstream's own function.
+        env:
+          CARD_VERIFY_EXPECT_PURPOSE: '1'
+        run: |
+          bin="$GITHUB_WORKSPACE/scripts/openvtc/card-verify/target/release/card-verify"
+          for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
+            node -e "for (const t of require('$out/tasks.json')) console.log(t.file + '\t' + t.signer)" > "$RUNNER_TEMP/tasks.tsv"
+            count=0
+            while IFS=$'\t' read -r file signer; do
+              echo "$out/$file"
+              "$bin" verify-task "$out/$file" "$signer"
+              count=$((count + 1))
+            done < "$RUNNER_TEMP/tasks.tsv"
+            echo "vta-sdk verified $count Trust Task documents"
+            # A list that came out short means a producer was dropped, not passed.
+            test "$count" -ge 23
+          done
+
+      # What was refused, byte for byte: every document both runs wrote.
+      - name: Keep the documents upstream refused
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: conformance-documents
+          path: |
+            ${{ runner.temp }}/conformance
+            ${{ runner.temp }}/conformance-whole-second
+          retention-days: 14
