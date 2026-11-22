@@ -16,6 +16,9 @@
 # --bifold adds bifold branches beyond those the wallet branches pin. Branches are read from the remote, fetched first.
 # For tests: --no-fetch, --remote '' (local branches), --bifold-dir <dir>, --replacements <file>.
 set -uo pipefail
+# The fold's graft (refs/replace/* on the commit that folded bifold in) is honoured by git by default where present;
+# this script walks history (merge-base, rev-list), so it reads the real objects, as CI does.
+export GIT_NO_REPLACE_OBJECTS=1
 
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(git -C "$here" rev-parse --show-toplevel)

@@ -1,7 +1,7 @@
 // node --test e2e/gate/run-summary.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -307,4 +307,29 @@ test('the gate pins each core journey to its verdict row', async () => {
   const { readFileSync } = await import('node:fs');
   const gateSh = readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'gate.sh'), 'utf8');
   assert.equal(gateSh.match(/^CORE_JOURNEYS="([^"]*)"/m)[1], PINNED_CORE.slice('core='.length).trim());
+});
+
+// The fold's graft: a refs/replace/* ref gives the squash a second parent where the ref is present (this Mac's shared
+// .git), and none in CI. isAncestor must answer from the real history, or a run on this Mac could call a build that
+// never saw a fix an ancestor of one that did.
+import { isAncestor } from './run-summary.mjs';
+test('isAncestor ignores a replace ref: a grafted parent does not become an ancestor', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'run-summary-graft-'));
+  try {
+    const env = { ...process.env }; delete env.GIT_NO_REPLACE_OBJECTS; // plain git here must honour the graft
+    const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', env }).trim();
+    const commit = (m) => { writeFileSync(path.join(dir, m), m); git('add', '-A'); git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', m); return git('rev-parse', 'HEAD'); };
+    git('init', '-q');
+    const a = commit('a');
+    const b = commit('b');
+    git('checkout', '-q', '--orphan', 'other');
+    git('rm', '-rqf', '.'); // the orphan starts with the old index staged
+    const c = commit('c'); // unrelated history
+    git('replace', '--graft', b, a, c); // with the graft, c is an ancestor of b; the real b has one parent
+    assert.equal(spawnSync('git', ['-C', dir, 'merge-base', '--is-ancestor', c, b], { env }).status, 0, 'plain git honours the graft: c reads as an ancestor');
+    assert.equal(isAncestor(dir, c, b), false, 'the tool reads the real history');
+    assert.equal(isAncestor(dir, a, b), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
