@@ -209,7 +209,7 @@ keyring-wallet/
 │   ├── src/
 │   ├── android/          # Android project
 │   └── ios/              # iOS project (workspace AriesBifold.xcworkspace)
-├── bifold/               # Git submodule: berkmancenter/keyring-bifold
+├── bifold/               # the framework (was the keyring-bifold submodule; folded in 2026-11)
 │   └── packages/
 │       ├── core/                       # UI, navigation, and the modules below
 │       │   └── src/modules/            #   vrc, trust-tasks, chat, rooms, directory, ...
@@ -231,9 +231,10 @@ keyring-wallet/
 └── docs/                 # Guides, design notes and plans
 ```
 
-`app/` is the only Yarn workspace. `@bifold/*` packages resolve to the submodule
+`app/` is the only Yarn workspace. `@bifold/*` packages resolve to `bifold/packages/*`
 through `portal:` links, so changes under `bifold/packages/` show up in the app
-without a build step during development.
+without a build step during development. `bifold/` is part of this repository
+(it was a git submodule until 2026-11; its history is on the `history/bifold` ref).
 
 ## Getting started
 
@@ -254,12 +255,12 @@ without a build step during development.
 ### Install
 
 ```sh
-git clone --recurse-submodules https://github.com/berkmancenter/keyring-wallet.git
+git clone https://github.com/berkmancenter/keyring-wallet.git
 cd keyring-wallet
 yarn install
 ```
 
-`yarn install` also prepares the `bifold/` submodule.
+`yarn install` also installs and builds the framework under `bifold/`.
 
 ### The quick way: run a demo
 
@@ -394,14 +395,12 @@ We welcome issues and pull requests. Please read
   [Conventional Commits](https://www.conventionalcommits.org/) with a lower-case
   type: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`,
   `revert`. commitlint checks this.
-- **Signed commits.** Every commit on `main`, in both repositories, must be
-  signed (GPG or SSH) and verified by GitHub.
-- **DCO sign-off.** Add a `Signed-off-by:` line with `git commit -s`. In the
-  `bifold/` submodule it must be the last line of the message, and it names the
-  commit's own author.
-- **Framework changes** go to
-  [keyring-bifold](https://github.com/berkmancenter/keyring-bifold) as their own
-  pull request; the app then moves its submodule pin.
+- **Signed commits.** Every commit on `main` must be signed (GPG or SSH) and
+  verified by GitHub.
+- **DCO sign-off.** Add a `Signed-off-by:` line with `git commit -s`; it is the
+  message's last line, and it names the commit's own author.
+- **Framework changes** are ordinary pull requests here, under `bifold/packages/…`;
+  the `keyring-bifold` repository is read-only history.
 
 ## License
 

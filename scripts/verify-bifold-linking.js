@@ -20,7 +20,7 @@ function log(message, type = 'info') {
   console.log(`${prefix} ${message}`);
 }
 
-function checkSubmoduleInitialized() {
+function checkBifoldPresent() {
   // bifold/ is a directory of this repository since the fold (no submodule); its absence is a broken checkout.
   log('Checking that bifold/ is present...');
   if (!fs.existsSync(BIFOLD_DIR)) {
@@ -179,7 +179,7 @@ function checkPackageResolution() {
 function main() {
   console.log('🔍 Verifying bifold linking and accessibility...\n');
 
-  checkSubmoduleInitialized();
+  checkBifoldPresent();
   checkBifoldPackagesBuilt();
   checkWorkspaceLinking();
   checkCriticalFileAccessible();
