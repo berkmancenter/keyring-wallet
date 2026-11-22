@@ -64,9 +64,11 @@ export const RULES = [
   ['store', 'native build file', /(^|\/)(Podfile(\.lock)?|[^/]+\.podspec|[^/]+\.gradle(\.kts)?|gradle\.properties|Info\.plist|AndroidManifest\.xml|[^/]+\.entitlements|CMakeLists\.txt)$/],
   ['store', 'Xcode project', /\.(xcodeproj|xcworkspace)\//],
   // Codegen TurboModule specs live in their src (codegenConfig jsSrcsDir "src"): the whole package is native. The
-  // names here and test-builds.yml's `bifold/packages/react-native-*/**` trigger rest on the same assumption: a native
-  // package named otherwise is added to both together.
-  ['store', 'native module package (codegen specs included)', /^bifold\/packages\/(react-native-attestation|react-native-locality-peripheral)\/(?!__tests__\/|README)/],
+  // shape here is test-builds.yml's `bifold/packages/react-native-*/**` trigger, on purpose: a named allowlist let a
+  // third react-native-* package's specs fall through to the JS-bundle rule below and grade ota (review of the fold,
+  // 2026-11-21). WARNING: a native package named otherwise still needs both places, and only the workflow fails safe;
+  // tier.test.mjs reads the workflow's glob and fails when the two diverge.
+  ['store', 'native module package (codegen specs included)', /^bifold\/packages\/react-native-[^/]+\/(?!__tests__\/|README)/],
   ['store', 'font (linked into the binary: react-native.config assets)', /\.(ttf|otf|woff2?)$/i],
   ['store', 'build-time config (react-native-config, app config, babel/metro)', /^app\/(\.env(?!\.sample$)(\.[^/]*)?|app\.json|app\.config\.[cm]?[jt]s|(react-native|babel|metro)\.config\.[cm]?[jt]s)$/],
   ['store', 'install config at the root', /^(\.yarnrc\.yml|\.env(\.[^/]*)?|\.npmrc)$/],
