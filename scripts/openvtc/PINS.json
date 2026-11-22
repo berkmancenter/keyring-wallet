@@ -49,6 +49,18 @@
         "crates/messaging/affinidi-tsp/"
       ]
     },
+    "affinidi-messaging-mediator": {
+      "url": "https://github.com/affinidi/affinidi-messaging-mediator.git",
+      "sha": "f6ed815",
+      "commitDate": "2026-11-15",
+      "pinnedOn": "2026-11-21",
+      "why": "The mediator's own repository since affinidi-tdk-rs #949. Pinned at v0.53.0's commit, the version the wallet mailbox runs (deploy/keyring-messaging/mailbox/Dockerfile pins the same commit in full), so what is read here is what was deployed and measured: the account and ACL rules, the config schema, the wake protocol. v0.53.0 is a tag on a release branch, not on main; upstream-watching reads main through sync-external.mjs, not this pin.",
+      "watch": [
+        "crates/affinidi-messaging-mediator/src/monitor.rs",
+        "crates/affinidi-messaging-mediator/src/messages/protocols/routing.rs",
+        "crates/affinidi-messaging-mediator/src/handlers/authenticate/"
+      ]
+    },
     "openvtc": {
       "url": "https://github.com/OpenVTC/openvtc.git",
       "sha": "2a4fa2b",
