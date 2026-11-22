@@ -28,6 +28,8 @@ permissions:
 
 defaults:
   run:
+    # bifold/scripts/ci/select-tests.mjs diffs --relative to its root, so this default is what makes its selection the
+    # framework's files: move it and the selection silently becomes empty (no framework test runs), the quiet failure.
     working-directory: bifold
 
 jobs:
