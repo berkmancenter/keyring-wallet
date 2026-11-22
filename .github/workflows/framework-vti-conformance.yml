@@ -17,7 +17,7 @@ name: Framework VTI conformance
 
 on:
   pull_request:
-    branches: [main, feat/one-codebase, 'fold/**']
+    # Any base branch, as Code Quality: a stacked PR into a feature branch gets the conformance check too.
     paths:
       - 'bifold/packages/core/src/modules/trust-tasks/**'
       - 'bifold/packages/trust-tasks/**'

@@ -4,10 +4,10 @@ The path a change takes, from an idea to testers' phones, for people and agents
 alike. Each step links to the document that owns its rules; this page only puts
 them in order.
 
-**When this applies.** This workflow takes effect when the one-codebase fold
-([`plans/single-codebase-plan.md`](./plans/single-codebase-plan.md)) has landed
-on `main`, folding `keyring-bifold` into this repository. Until then the process
-in place before it still applies, including paired PRs in `keyring-bifold`.
+**When this applies.** This workflow is in effect since the one-codebase fold
+([`plans/single-codebase-plan.md`](./plans/single-codebase-plan.md)) landed on
+`main` on 2026-11-22, folding `keyring-bifold` into this repository at
+`bifold/`. There are no paired PRs and no submodule pin.
 
 **Version 1.** This is a first version. We measure it as we use it and cut any
 step that costs more than it catches; see
@@ -94,9 +94,9 @@ status line says so and a dated companion records any deviations from it
 
 Conventional commits, cryptographically signed, with a `Signed-off-by:`
 trailer. Owned by the root [`../CLAUDE.md`](../CLAUDE.md), "Commit
-conventions". After the fold, `bifold/` is part of this repository, so a change
-to `bifold/packages/*` goes in the same PR as the rest of the change; there is
-no paired PR and no pin to bump.
+conventions". `bifold/` is part of this repository, so a change to
+`bifold/packages/*` goes in the same PR as the rest of the change; there is no
+paired PR and no pin to bump.
 
 ## 4. CI
 
@@ -140,7 +140,7 @@ and no stack: one PR against the branch it fixes.
 
 ## Measuring this workflow
 
-This is version 1. Once the fold has landed, and again after the first few
+This is version 1. Now that the fold has landed, and again after the first few
 features have gone through it, we check:
 
 - how long a stacked PR takes from opening to green, locally and in CI;

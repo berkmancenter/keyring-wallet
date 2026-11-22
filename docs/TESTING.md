@@ -27,7 +27,7 @@ commands to re-check them; the rest changes only when a workflow file does.
 | Post-release smoke | A released OTA bundle, rebuilt and smoked after release; withdraws it on a red smoke | Not run locally | Post-release smoke and Brake watchdog, after each OTA release |
 | Device-only (hardware attestation, BLE, background) | Secure Enclave / StrongBox attestation, BLE locality | `yarn e2e:vrc:devices`, `yarn e2e:vrc:witnessed:devices`, `yarn e2e:vrc:witnessed:locality:devices` (attended, physical phones) | Never. Emulators and simulators fall back silently to a plain exchange, so only these runs prove attestation |
 | VTI conformance | Upstream's VTI SDK accepts Keyring's Vetting Card and statement | `scripts/openvtc/card-verify/check-keyring-card.sh` (wallet root; `external/` at the pins first: `node scripts/openvtc/setup-external.mjs`). The first run needs `CARD_VERIFY_BUILD=1`, a cargo build of `card-verify` against the pinned VTI that needs more than 14 GB of memory (heavy: follow the shared-machine rules). It checks the card and the vetted/1 statement; CI also runs the 0.47 statement (`card-verify-v047`) and the Trust Task documents, which have no local wrapper. Not run for this page (**unverified** here) | bifold VTI conformance (PR and push, path-filtered; downloads prebuilt Apple-silicon checkers, so it cannot be reused on Linux) |
-| Plan structure | Plans in the two-part format: Overview, part markers and banners, numbered precision section, `§` references, Mermaid blocks, mockup paths and their theme-token fingerprints; each linked mockups folder's contact sheet (`sheet.png`) embedded and current with its SVGs and the tokens (a hash compare against `sheet.manifest.json`; regenerate with `kit.ts sheet`); the mockup kit's tokens against the app theme | `node --experimental-strip-types scripts/plans/check-plans.ts` (Node 22.6+, or `bun scripts/plans/check-plans.ts`); tests: `node --experimental-strip-types --test scripts/plans/check-plans.test.ts scripts/plans/mockup-kit/*.test.ts`. Rules: [`plans/CLAUDE.md`](./plans/CLAUDE.md), "Checking a plan's structure" | Plan structure (PR touching `docs/plans/**`, `scripts/plans/**`, the app theme or the bifold pin, any base) |
+| Plan structure | Plans in the two-part format: Overview, part markers and banners, numbered precision section, `§` references, Mermaid blocks, mockup paths and their theme-token fingerprints; each linked mockups folder's contact sheet (`sheet.png`) embedded and current with its SVGs and the tokens (a hash compare against `sheet.manifest.json`; regenerate with `kit.ts sheet`); the mockup kit's tokens against the app theme | `node --experimental-strip-types scripts/plans/check-plans.ts` (Node 22.6+, or `bun scripts/plans/check-plans.ts`); tests: `node --experimental-strip-types --test scripts/plans/check-plans.test.ts scripts/plans/mockup-kit/*.test.ts`. Rules: [`plans/CLAUDE.md`](./plans/CLAUDE.md), "Checking a plan's structure" | Plan structure (PR touching `docs/plans/**`, `scripts/plans/**`, the app theme or the framework sources the mockup kit reads, any base) |
 
 Notes:
 
@@ -36,10 +36,10 @@ Notes:
 - On a shared machine, run one heavy suite, typecheck or build at a time, with
   few workers, and send broad runs to CI. [`RELEASE_GATE.md`](./RELEASE_GATE.md)
   §4 adds: one jest suite at a time, `--maxWorkers=2`.
-- After the one-codebase fold, the bifold package suites, lint and type check
-  run from this repository's own workflows instead of `keyring-bifold`'s; the
-  rows above that name bifold's workflows are updated in the change that moves
-  them.
+- Since the one-codebase fold (2026-11-22), the framework's package suites,
+  lint and type check run from this repository's own `framework*.yml`
+  workflows, with `bifold/` as the working directory ("CI: the framework",
+  below); `keyring-bifold`'s own workflows are retired.
 
 ## Git hooks
 
@@ -49,11 +49,11 @@ Notes:
 | `pre-push` | wallet | `yarn test` (a plan-only PR is pushed with `--no-verify`; see "Before opening a PR"). Planned under the v1 review: narrow it to the tests related to the push |
 | `commit-msg` | wallet | `yarn commitlint` |
 | `prepare-commit-msg` | wallet | lefthook's `prepare-commit-msg` |
-| `pre-commit` | bifold (`bifold/.githooks/`) | checks commit signing is configured |
-| `commit-msg` | bifold | the last line must be a `Signed-off-by:` trailer |
 
-The commit rules themselves (conventional commits, signing, `Signed-off-by:`)
-are in the root [`../CLAUDE.md`](../CLAUDE.md), "Commit conventions".
+The wallet's hooks are the only ones since the fold: `bifold/.githooks/` is no
+longer installed as a hooks path, and its files go with the plan's Phase 2. The
+commit rules themselves (conventional commits, signing, `Signed-off-by:`) are in
+the root [`../CLAUDE.md`](../CLAUDE.md), "Commit conventions".
 
 ## Before opening a PR
 
@@ -73,8 +73,9 @@ locally
 The PR template ([`../.github/pull_request_template.md`](../.github/pull_request_template.md))
 has the stack fields and this checklist.
 
-Code Quality and Commit Requirements run on PRs against **any** base branch, so
-a PR in the middle of a stack gets the same checks as one into `main`. Only the
+Code Quality, Commit Requirements, Framework quality, Plan structure and
+Framework VTI conformance run on PRs against **any** base branch, so a PR in
+the middle of a stack gets the same checks as one into `main`. Only the
 `main` ruleset makes them blocking, so on a mid-stack PR a red check is a
 signal to fix before review, not a merge block. They run again on the retarget
 to `main` (the `edited` event). The path-filtered, non-required workflows (Gate
@@ -89,8 +90,8 @@ device paths a stack's last PR also reaches, and they do not listen for
 |---|---|---|---|
 | Code Quality (`quality.yml`) · Workflow files, Lint+Format+Types, Testing | PR against any base branch, so mid-stack PRs too (opened, synchronize, reopened, labeled, edited) | Workflow files: actionlint, no private files (`*.local-al*`, `*.private.*`), only test builds set `E2E_CLOCKS`. Lint+Format+Types: `yarn prettier`, `yarn lint`, `yarn typecheck` in `app/`, e2e parse-check, testID check, every `*.test.mjs`/`*.test.sh` under `e2e/` and `scripts/`. Testing: `yarn test`, `node --test scripts/ota/` | none |
 | Commit Requirements (`commit-checks.yml`) · DCO sign-off and commit signature | PR against any base branch (incl. edited) | Every commit in the PR is signed off and cryptographically signed | none |
-| Plan structure (`plans.yml`) · Plan structure | PR against any base touching `docs/plans/**`, `scripts/plans/**`, `app/src/keyring-theme/**`, the bifold pin or the workflow | The plan checker's and mockup kit's tests (the kit's token test reads the app theme and bifold sources, so the job checks out submodules), then the checker over `docs/plans/` (two-part-format files only), which also fails a contact sheet that is stale against its SVGs or the theme tokens | none |
-| Test builds (`test-builds.yml`) · heads, ios-simulator, android-apk | PR (any base) touching native, dependency, patch, bifold-pin or build-config paths; push to `main` except docs/md/e2e/`tsp-reference`/`scripts/openvtc`/`scripts/roadmap`; manual (`clocks`, `platform`) | Store-configuration simulator app and test APK, uploaded as artifacts for the gate. Builds skipped for PRs from forks | `MEDIATOR_URL`; env `test-builds` |
+| Plan structure (`plans.yml`) · Plan structure | PR against any base touching `docs/plans/**`, `scripts/plans/**`, `app/src/keyring-theme/**`, the framework theme, strings and components the mockup kit reads, or the workflow | The plan checker's and mockup kit's tests (the kit's token test reads the app theme and framework sources under `bifold/`), then the checker over `docs/plans/` (two-part-format files only), which also fails a contact sheet that is stale against its SVGs or the theme tokens | none |
+| Test builds (`test-builds.yml`) · heads, ios-simulator, android-apk | PR (any base) touching native, dependency, patch, framework native-module or build-config paths; push to `main` except docs/md/e2e/`tsp-reference`/`scripts/openvtc`/`scripts/roadmap`; manual (`clocks`, `platform`) | Store-configuration simulator app and test APK, uploaded as artifacts for the gate. Builds skipped for PRs from forks | `MEDIATOR_URL`; env `test-builds` |
 | Gate smoke (CI runners) (`gate-smoke.yml`) · Which build, iOS smoke, Android smoke | After Test builds completes green on a push to `main` (`workflow_run`); PR touching its own files; manual (`platform`, `run-id`, `wallet-sha`) | The gate's plain-launch smoke rows and the welcome slides on hosted macOS and KVM Android runners; Farm rows SKIP | none |
 | Gate OTA (CI runners) (`gate-ota.yml`) | PR into `main` or `spike/ota-hot-updater` touching OTA paths; manual | Throwaway update server behind a tunnel, OTA-enabled Release APK, emulator: apply, crash rollback, withdraw | `MEDIATOR_URL`; env `test-builds` |
 | Gate (CI runners) (`gate-ci.yml`) · plan, pnm, leg | Manual (`legs`, `run-id`) | The release gate's Android Farm legs, one at a time, on hosted runners | `GATE_CI_ENV`, `GATE_CI_PNM_HOME_B64`; env `gate-ci` |
@@ -122,23 +123,24 @@ Observations:
   registered and has push runs, but the file is not on `main`: it lives on
   another branch (which one is **unverified**) and is not covered here.
 
-## CI: keyring-bifold (`bifold/.github/workflows/`)
+## CI: the framework (`.github/workflows/framework*.yml`)
+
+The framework's jobs, ported from `keyring-bifold`'s workflows in the fold.
+Each runs with `bifold/` as its working directory, which keeps its own
+`yarn install` and build until the plan's Phase 2.
 
 | Workflow (file) · jobs | Trigger | What it checks or does | Secrets |
 |---|---|---|---|
-| Code Quality (`quality.yaml`) · Linting and formatter | PR into `main`; push to `main` | `yarn build`; on a PR, Prettier and ESLint on **changed files only** (on push, repo-wide and non-blocking, "known debt"); testID manifest, emoji data and test-selector checks; other node tests | none |
-| Code Quality · Testing part 1–4, Testing | PR | Jest in four parts on the tests **selected** for the change (a subset or the full suite); Testing passes only when every part passed | none |
-| Code Quality · Testing scope | PR | Repeats Testing's verdict with what it ran in the job name | none |
-| Code Quality · Type check (ratchet) | PR; push | `tsc` over `@bifold/core` including tests, against `packages/core/tsc-baseline.txt`; no new errors, baseline only shrinks | none |
-| Commit Requirements (`commit-checks.yaml`) · DCO sign-off and commit signature | PR into `main` | Sign-off and signature on every commit | none |
-| Full test suite (`full-tests.yaml`) · Jest part (n), Full suite | Push to `main`; nightly (07:23 UTC); manual | Every package's jest, sharded, with coverage | `CODECOV_TOKEN` |
-| VTI conformance (`vti-conformance.yaml`) | PR and push to `main` touching `packages/core/src/modules/trust-tasks/**` or `packages/trust-tasks/**`; manual | Upstream's pinned VTI SDK verifies a Vetting Card and statement made by Keyring's shipping code (macOS runner) | none |
-| Targeted jest (`targeted-jest.yaml`) | Manual (`package`, `tests`, `pattern`) | Named tests in one package | none |
-| Roadmap card status (`roadmap-pr-status.yaml`) | `pull_request_target`, non-draft | Moves roadmap cards | `ROADMAP_TOKEN` |
-| Backlog Maintenance (`maintenance.yaml`) | Daily (12:00 UTC); manual | Prunes stale issues and PRs | `GITHUB_TOKEN` |
-| OpenSSF Scorecard (`scorecard.yaml`) | Weekly (Fri 07:00 UTC) | Supply-chain scorecard | none |
-| Update Release PR or Publish (`publish.yaml`) | Push to `main`, path-filtered; manual | Changesets release; the job only runs in `openwallet-foundation/bifold-wallet`, so it is a no-op in our fork | `GITHUB_TOKEN` |
-| Repolinter (`repolinter.yaml`) | Manual | Repository lint | none |
+| Framework quality (`framework.yml`) · Framework lint and format | PR against any base (opened, synchronize, reopened, labeled, edited); push to `main` touching `bifold/**` | `yarn build`; on a PR, Prettier and ESLint on the **changed framework files only** (on push, repo-wide and non-blocking, "known debt"); testID manifest, emoji data and test-selector checks; other node tests | none |
+| Framework quality · Framework tests part 1–4, Framework tests | PR, any base | Jest in four parts on the tests **selected** for the change (`bifold/scripts/ci/select-tests.mjs`: none, a subset or the full suite); Framework tests passes only when every part passed | none |
+| Framework quality · Framework tests scope | PR, any base | Repeats Framework tests' verdict with what it ran in the job name | none |
+| Framework quality · Type check (ratchet) | PR, any base; push to `main` touching `bifold/**` | `tsc` over `@bifold/core` including tests, against `bifold/packages/core/tsc-baseline.txt`; no new errors, baseline only shrinks | none |
+| Framework full suite (`framework-full.yml`) · Framework jest part (n), Framework full suite | Push to `main` touching `bifold/**`; nightly (07:23 UTC); manual | Every framework package's jest, sharded | none |
+| Framework VTI conformance (`framework-vti-conformance.yml`) · VTI SDK accepts Keyring's card and statement | PR (any base) and push to `main` touching `bifold/packages/core/src/modules/trust-tasks/**`, `bifold/packages/trust-tasks/**` or `scripts/openvtc/**`; manual | Upstream's pinned VTI SDK verifies a Vetting Card and statement made by Keyring's shipping code | none |
+
+`keyring-bifold`'s Commit Requirements is covered by this repository's own;
+its targeted-jest, maintenance, scorecard, publish and repolinter workflows were
+not ported. The repository is archived after store build 282.
 
 ## Volatile facts (re-check before relying on them)
 
@@ -147,27 +149,25 @@ to the workflow files. Re-check with the command given before acting on it.
 
 ### Required checks
 
-Read from `gh api repos/berkmancenter/<repo>/rules/branches/main` on
-2026-11-20. Neither repo uses classic branch protection; both use a repository
-ruleset on `main`.
+Read from the wallet's ruleset on 2026-11-22, after the fold. The wallet uses a
+repository ruleset on `main`, not classic branch protection.
 
 | Repo | Ruleset | Required |
 |---|---|---|
-| `berkmancenter/keyring-wallet` | 15135312 | Signed commits; no force-push; no deletion. Status checks: **DCO sign-off and commit signature**, **Workflow files**, **Lint+Format+Types**, **Testing**. Not strict (a PR need not be up to date with `main`). No required-review rule |
-| `berkmancenter/keyring-bifold` | 15135301 | Signed commits; no force-push; no deletion. Status checks: **DCO sign-off and commit signature**, **Linting and formatter**, **Testing**, **Type check (ratchet)**. Not strict. No required-review rule |
+| `berkmancenter/keyring-wallet` | 15135312 | Signed commits; no force-push; no deletion. Status checks: **DCO sign-off and commit signature**, **Workflow files**, **Lint+Format+Types**, **Testing**, **Framework tests**, **Type check (ratchet)** (the last two added on 2026-11-22, after the fold). Not strict (a PR need not be up to date with `main`). No required-review rule |
 
-Bifold's `quality.yaml` comments, at the pinned `a5bfcf3b2`, that Type check
-(ratchet) is "not a required check yet"; the ruleset requires it.
-No other workflow in either repo is required (Test builds says why in its file:
-a path-filtered required check would block unrelated PRs). Organisation
-rulesets could not be listed (needs the `admin:org` scope), but the
-`rules/branches/main` endpoint returns every rule that applies, and showed only
-the repository rulesets.
+`keyring-bifold` (ruleset 15135301) is frozen since the fold and archived after
+store build 282; its rules no longer gate anything that ships from `main`.
+No other workflow is required (Test builds says why in its file: a
+path-filtered required check would block unrelated PRs; Framework tests is not
+path-filtered, and reports "no jest suite" and passes on a PR that touches no
+framework file). Organisation rulesets could not be listed (needs the
+`admin:org` scope), but the `rules/branches/main` endpoint returns every rule
+that applies, and showed only the repository ruleset.
 
 Re-check: `gh api repos/berkmancenter/keyring-wallet/rules/branches/main`
-and `gh api repos/berkmancenter/keyring-bifold/rules/branches/main` (look for
-`required_status_checks`). The required check names are job `name:` values:
-renaming one of those jobs needs the ruleset changed with it.
+(look for `required_status_checks`). The required check names are job `name:`
+values: renaming one of those jobs needs the ruleset changed with it.
 
 ### Runtimes
 

@@ -517,9 +517,9 @@ this applies").
   machine, run one heavy suite or build at a time with few workers, and send
   broad runs to CI.
 - **Commits** follow the root `CLAUDE.md` "Commit conventions" (conventional
-  commits, signed, `Signed-off-by:`). After the fold, `bifold/` is part of
-  this repository, so a step that changes `bifold/packages/*` is one PR here,
-  with no paired PR and no pin to bump.
+  commits, signed, `Signed-off-by:`). `bifold/` is part of this repository
+  since the one-codebase fold, so a step that changes `bifold/packages/*` is one
+  PR here, with no paired PR and no pin to bump.
 - **Hot fixes and quick fixes are exempt.** A hot fix, a quick fix or a small
   ask from the Keyring feedback channel goes straight to its own PR against the
   branch it fixes (`main`, or a `hotfix/*` branch), without a plan or a stack,
