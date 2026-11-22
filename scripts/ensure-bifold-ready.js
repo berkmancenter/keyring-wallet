@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 
 /**
- * Ensures bifold submodule is initialized and built before yarn install.
+ * Installs and builds the bifold packages (bifold/) before the root yarn install.
  * This script runs as part of the preinstall lifecycle hook.
+ *
+ * bifold/ is part of this repository (it was a git submodule until the fold; its
+ * history is on the history/bifold ref). It still has its own yarn install and
+ * build here, so the root's `portal:` resolutions keep resolving to built
+ * packages; one dependency tree is the next step of docs/plans/single-codebase-plan.md.
  */
 
 const { execSync } = require('child_process');
@@ -32,30 +37,19 @@ function exec(command, options = {}) {
   }
 }
 
-function ensureSubmoduleInitialized() {
-  if (!fs.existsSync(BIFOLD_DIR)) {
-    log('Bifold directory not found. Initializing submodule...');
-    exec('git submodule update --init --recursive', {
-      ignoreErrors: false,
-    });
-    log('Submodule initialized successfully');
-  } else {
-    log('Bifold directory exists, skipping submodule initialization');
-  }
-}
-
 function buildBifoldPackages() {
   if (!fs.existsSync(BIFOLD_PACKAGES_DIR)) {
-    log('WARNING: bifold/packages directory not found. Skipping build.');
-    return;
+    // Not a submodule any more: an absent bifold/packages is a broken checkout, not an uninitialised one.
+    log('ERROR: bifold/packages not found; this checkout is incomplete');
+    process.exit(1);
   }
 
   const bifoldNodeModules = path.join(BIFOLD_DIR, 'node_modules');
   const bifoldYarnLock = path.join(BIFOLD_DIR, 'yarn.lock');
-  
+
   // Check if dependencies are already installed
   const needsInstall = !fs.existsSync(bifoldNodeModules) || !fs.existsSync(bifoldYarnLock);
-  
+
   if (needsInstall) {
     log('Installing bifold dependencies...');
     // Don't use --immutable for bifold, as it may have lockfile updates
@@ -63,7 +57,7 @@ function buildBifoldPackages() {
       cwd: BIFOLD_DIR,
       ignoreErrors: true,
     });
-    
+
     if (!installSuccess) {
       log('WARNING: bifold yarn install failed, but continuing...');
       log('This may be due to existing node_modules. Attempting build anyway...');
@@ -78,16 +72,16 @@ function buildBifoldPackages() {
     cwd: BIFOLD_DIR,
     ignoreErrors: true,
   });
-  
+
   if (!buildSuccess) {
     log('WARNING: Some bifold packages may have failed to build');
     log('Checking if critical packages are built...');
-    
+
     // Check if at least core is built (most critical)
     const coreLibPath = path.join(BIFOLD_DIR, 'packages', 'core', 'lib');
     const coreBuildPath = path.join(BIFOLD_DIR, 'packages', 'core', 'build');
     const coreBuilt = fs.existsSync(coreLibPath) || fs.existsSync(coreBuildPath);
-    
+
     if (!coreBuilt) {
       log('ERROR: @bifold/core is not built, which is required');
       process.exit(1);
@@ -99,21 +93,10 @@ function buildBifoldPackages() {
   }
 }
 
-function configureBifoldHooks() {
-  // bifold has its own git directory (it's a submodule), so core.hooksPath
-  // must be set here rather than inherited from the parent repo. .githooks
-  // enforces DCO sign-off and signed commits — see bifold/CONTRIBUTING.
-  exec('git config core.hooksPath .githooks', {
-    cwd: BIFOLD_DIR,
-    ignoreErrors: true,
-  });
-}
-
 function main() {
   try {
     log('Starting bifold preparation...');
-    ensureSubmoduleInitialized();
-    configureBifoldHooks();
+    // No submodule init and no core.hooksPath for bifold/: it shares this repository and the root .husky hooks.
     buildBifoldPackages();
     log('Bifold preparation complete');
   } catch (error) {
@@ -123,4 +106,3 @@ function main() {
 }
 
 main();
-

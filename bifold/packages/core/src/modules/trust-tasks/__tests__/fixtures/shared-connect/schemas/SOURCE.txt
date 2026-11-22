@@ -1,0 +1,13 @@
+Copied unchanged from trustoverip/dtgwg-trust-tasks-tf origin/main 6b0243b22 (fetched 2026-11-05):
+specs/_framework/0.2/framework.schema.json, specs/_framework/0.3/framework.schema.json,
+specs/_framework/0.5/trust-task.schema.json, specs/vrc/relationships/{propose,issue}/0.1/payload.schema.json.
+
+Deliberately AHEAD of the repository's pin: keyring-wallet scripts/openvtc/PINS.json pins dtgwg-trust-tasks-tf
+at 7b6bb488 (trust-tasks-v0.27.7, 2026-10-05). The shared-connect flow exists only in trust-tasks #1034 and
+dtgwg-vti-spec#86 as revised on 2026-11-05, and the `ceremony` envelope rules these rungs check (step a string,
+definition requiring definitionDigest, the member closed) are the 0.5 framework at 6b0243b22. So a rung that
+fails here measures Keyring against the spec as of 6b0243b22, not against the pin. When the pin advances
+(tools/sync-external.mjs --advance, with the reference ladder re-run), re-copy these files from the new pin and
+update this note; until then the two may disagree. Never edit a schema here by hand.
+
+Used by the shared-connect rungs (packages/core/__tests__/modules/trust-tasks/sharedConnectSpecRungs.test.ts).

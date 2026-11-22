@@ -1,9 +1,11 @@
 // node --test e2e/gate/repro.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathExists } from './changed.mjs';
 import { plan, queueLine, rowSkeleton, slugOf, unitSkeleton, unitTestPath } from './repro.mjs';
 
 test('a slug from the report id and the first words of what the tester saw', () => {
@@ -76,5 +78,44 @@ test('plan: logic owning no testID -> a unit test, every unmapped file listed; a
     assert.deepEqual(t.missing, ['bifold/packages/core/src/screens/Typo.tsx']);
   } finally {
     f.done();
+  }
+});
+
+/**
+ * A wallet repo across the fold-in: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone), fold has
+ * bifold/ as a tree (x.ts, testids.json), after changes bifold/packages/core/src/x.ts.
+ */
+function foldRepo() {
+  const top = mkdtempSync(path.join(tmpdir(), 'fold-w-')), clone = mkdtempSync(path.join(tmpdir(), 'fold-b-'));
+  const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  const commit = (dir, m) => { git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
+  const put = (dir, rel, body) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), body); };
+  git(clone, 'init', '-q'); put(clone, 'packages/core/src/x.ts', '1'); put(clone, 'packages/core/testids.json', '{"keys":{},"stems":{}}'); git(clone, 'add', '-A');
+  const pin1 = commit(clone, 'b1'); put(clone, 'packages/core/src/x.ts', '2'); git(clone, 'add', '-A'); const pin2 = commit(clone, 'b2');
+  git(top, 'init', '-q'); put(top, 'app/src/a.ts', 'a'); git(top, 'add', 'app');
+  git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin1},bifold`); const gl1 = commit(top, 'gitlink pin1');
+  git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin2},bifold`); const gl2 = commit(top, 'gitlink pin2');
+  git(top, 'rm', '-q', '--cached', 'bifold'); put(top, 'bifold/packages/core/src/x.ts', '2'); put(top, 'bifold/packages/core/testids.json', '{"keys":{},"stems":{}}'); git(top, 'add', 'bifold'); const fold = commit(top, 'fold');
+  put(top, 'bifold/packages/core/src/x.ts', '3'); git(top, 'add', 'bifold'); const after = commit(top, 'change x');
+  return { top, clone, gl1, gl2, fold, after, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
+}
+
+test('plan on a folded repo whose bifold/ is not on disk: a file in HEAD’s tree is present (a unit test), a typo under bifold/ is missing', () => {
+  const f = fixture(), r = foldRepo();
+  const saved = process.env.BIFOLD_GIT;
+  try {
+    delete process.env.BIFOLD_GIT;
+    rmSync(path.join(r.top, 'bifold'), { recursive: true, force: true });
+    const opts = { ...f.opts, exists: (p) => pathExists(p, r.top) };
+    const p = plan({ files: ['bifold/packages/core/src/x.ts'] }, opts);
+    assert.equal(p.kind, 'unit');
+    assert.deepEqual(p.missing, []);
+    assert.equal(p.unitPath, 'bifold/packages/core/__tests__/<slug>.test.ts');
+    const t = plan({ files: ['bifold/packages/core/src/screens/Typo.tsx'] }, opts);
+    assert.equal(t.kind, 'none');
+    assert.deepEqual(t.missing, ['bifold/packages/core/src/screens/Typo.tsx']);
+  } finally {
+    if (saved === undefined) delete process.env.BIFOLD_GIT; else process.env.BIFOLD_GIT = saved;
+    f.done(); r.done();
   }
 });

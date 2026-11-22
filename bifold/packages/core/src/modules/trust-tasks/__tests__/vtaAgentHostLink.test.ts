@@ -1,0 +1,467 @@
+/**
+ * An agent host's automatic connection, through the controller: the person is
+ * asked first, the phone's did:key goes to the host, the phone waits while the
+ * host sets the agent up, then signs in and rotates like every link, and tells
+ * the host it connected. Every step moves the one state the screens read.
+ */
+import {
+  GRANT_CONNECT_DEADLINE_MS,
+  HOST_SIGN_IN_RETRY_MS,
+  HOST_SIGN_IN_TRIES,
+  VtaAgentController,
+} from '../module/vtaAgent'
+import { resumableFailure } from '../module/vtaLinkMachine'
+import { VtaClient } from '../module/VtaClient'
+import { AGENT_HOST_QR_LIFETIME_MS, type AgentHostOffer } from '../module/agentHostConnection'
+
+const mockClient = {
+  connect: jest.fn(async () => undefined),
+  disconnect: jest.fn(async () => undefined),
+  whoAmI: jest.fn(async (_timeoutMs?: number, _onSent?: () => void) => ({ roles: ['admin'] })),
+  rotateManagerKey: jest.fn(async () => 'did:peer:2.permanent'),
+  agentLabel: jest.fn(async (): Promise<{ label: string; source: string } | undefined> => undefined),
+  labelAclEntry: jest.fn(async () => undefined),
+  managerDid: 'did:peer:2.permanent',
+  isConnected: false,
+  holdPersonaKeys: jest.fn(async () => false),
+  task: jest.fn(async () => ({})),
+  dropQueued: jest.fn(),
+  listContexts: jest.fn(async (): Promise<{ id: string; name?: string; did?: string }[]> => []),
+}
+
+jest.mock('../module/VtaClient', () => ({
+  VTA_TASK: jest.requireActual('../module/VtaClient').VTA_TASK,
+  refusedAsNotOnAcl: jest.requireActual('../module/VtaClient').refusedAsNotOnAcl,
+  TspReplyBreaker: jest.requireActual('../module/VtaClient').TspReplyBreaker,
+  consentPendingOf: jest.requireActual('../module/VtaClient').consentPendingOf,
+  ManagerKeyUnresolved: jest.requireActual('../module/VtaClient').ManagerKeyUnresolved,
+  SwapDoneSignInFailed: jest.requireActual('../module/VtaClient').SwapDoneSignInFailed,
+  VtaClient: jest.fn(() => mockClient),
+  resolveVtaMediator: jest.fn(async () => ({ did: 'did:peer:2.mediator' })),
+}))
+jest.mock('../module/VtiMediatorTransport', () => ({
+  createVtiClientDid: jest.fn(async () => 'did:peer:2.temporary'),
+  createVtiTemporaryDidKey: jest.fn(async () => 'did:key:z6Mktemporary'),
+}))
+
+const VTA = 'did:webvh:QmXo:dids.ic3.dev:keyring-runner-vta'
+const CALLBACK = 'https://vtafarm-api.ic3.dev/api/v1/mobile-connections/callback/req.SECRET'
+const PROGRESS = 'https://vtafarm-api.ic3.dev/api/v1/mobile-connections/req'
+const COMPLETE = `${PROGRESS}/complete`
+const hostOffer: AgentHostOffer = { vtaDid: VTA, callbackUrl: CALLBACK, host: 'vtafarm-api.ic3.dev' }
+
+type Reply = { status: number; body?: unknown }
+function mockHost(routes: Record<string, Reply[]>) {
+  const calls: Array<{ url: string; method: string; body?: unknown }> = []
+  const fetch = jest.fn(async (url: string, init: RequestInit = {}) => {
+    calls.push({ url, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body as string) : undefined })
+    const queue = routes[url]
+    const next = queue.length > 1 ? queue.shift()! : queue[0]
+    return { status: next.status, ok: next.status < 300, json: async () => next.body } as unknown as Response
+  })
+  return { fetch: fetch as unknown as typeof globalThis.fetch, calls }
+}
+const accepted = {
+  connection: { request_id: 'req', status: 'provisioning', vta_did: VTA },
+  progress_token: 'TOKEN',
+  progress_url: PROGRESS,
+  completion_url: COMPLETE,
+  progress_expires_at: '2099-01-01T00:00:00Z',
+}
+const at = (status: string, extra: Record<string, unknown> = {}): Reply => ({
+  status: 200,
+  body: { connection: { request_id: 'req', status, vta_did: VTA, ...extra } },
+})
+
+function controller(
+  host: ReturnType<typeof mockHost>,
+  overrides: { canOwn?: boolean; sleep?: (ms: number) => Promise<void> } = {}
+) {
+  const saved: unknown[] = []
+  const managers: unknown[] = []
+  const vta = new VtaAgentController()
+  vta.configure({
+    now: () => 1_000,
+    fetch: host.fetch,
+    linkStore: () => ({
+      get: async () => undefined,
+      set: async (link) => void saved.push(link),
+      clear: async () => undefined,
+    }),
+    identityStore: () => ({ setManager: async (m: unknown) => void managers.push(m) }) as never,
+    deviceCanOwn: async () => overrides.canOwn ?? true,
+    agentHost: { sleep: overrides.sleep ?? (async () => undefined) },
+    hostSignInRetryMs: 1,
+  })
+  return { vta, saved, managers }
+}
+
+beforeEach(() => {
+  jest.clearAllMocks()
+  mockClient.connect.mockImplementation(async () => undefined)
+  mockClient.whoAmI.mockImplementation(async () => ({ roles: ['admin'] }))
+})
+
+describe('an agent host’s automatic connection', () => {
+  // IN-135: a code confirmed after it lapsed (the phone slept on the
+  // confirm screen) is said to have, before anything is sent or made.
+  it('a code confirmed after it lapsed is said to have, and nothing is sent', async () => {
+    const host = mockHost({})
+    let now = 1_000
+    const managers: unknown[] = []
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => now,
+      fetch: host.fetch,
+      linkStore: () => ({ get: async () => undefined, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async (m: unknown) => void managers.push(m) }) as never,
+      deviceCanOwn: async () => true,
+      agentHost: { sleep: async () => undefined },
+    })
+    vta.scanHostOffer(hostOffer)
+    now += AGENT_HOST_QR_LIFETIME_MS + 1
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link).toMatchObject({
+      kind: 'notLinked',
+      lastError: { reason: 'expired', hostReason: 'expired' },
+    })
+    expect(host.fetch).not.toHaveBeenCalled()
+    expect(managers).toEqual([])
+  })
+
+  it('asks first, naming the agent and the host’s site — and sends nothing yet', () => {
+    const host = mockHost({})
+    const { vta } = controller(host)
+    vta.scanHostOffer(hostOffer)
+    expect(vta.getState().link).toMatchObject({
+      kind: 'confirming',
+      via: 'host',
+      vtaDid: VTA,
+      label: 'dids.ic3.dev',
+      offerUrl: 'vtafarm-api.ic3.dev',
+    })
+    // The callback is a credential: it is not in the state the screens read.
+    expect(JSON.stringify(vta.getState())).not.toContain('SECRET')
+    expect(host.calls).toEqual([])
+  })
+
+  it('confirmed: sends the did:key, waits for the host, links, rotates, and reports connected', async () => {
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('provisioning'), at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta, saved, managers } = controller(host)
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    expect(host.calls[0]).toMatchObject({ url: CALLBACK, method: 'POST', body: { admin_did: 'did:key:z6Mktemporary' } })
+    expect(managers).toEqual([
+      expect.objectContaining({ vtaDid: VTA, did: 'did:key:z6Mktemporary', stage: 'temporary' }),
+    ])
+    expect(mockClient.rotateManagerKey).toHaveBeenCalled()
+    // Created from this phone: remembered as its own.
+    expect(saved).toEqual([expect.objectContaining({ vtaDid: VTA, owner: true })])
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(vta.getState().ownsAgent).toBe(true)
+    expect(host.calls.at(-1)).toMatchObject({ url: COMPLETE, method: 'POST', body: { status: 'connected' } })
+  })
+
+  it('shows "setting up" while the host provisions, with no code to compare', async () => {
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('provisioning'), at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta } = controller(host, { sleep: () => gate })
+    vta.scanHostOffer(hostOffer)
+    const done = vta.confirmOffer({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().link).toMatchObject({ kind: 'awaitingGrant', via: 'host', code: '' })
+    release()
+    await done
+    expect(vta.getState().link.kind).toBe('linked')
+  })
+
+  it('names each step as it happens: creating, connecting, then which sign-in try', async () => {
+    let tries = 0
+    mockClient.whoAmI.mockImplementation(async () => {
+      if (++tries < 3) throw new Error('not in ACL')
+      return { roles: ['admin'] }
+    })
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('provisioning'), at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta } = controller(host)
+    const stages: string[] = []
+    const off = vta.subscribe(() => {
+      const link = vta.getState().link
+      if (link.kind !== 'awaitingGrant' || !link.stage) return
+      const named = link.stage.attempt ? `${link.stage.step} ${link.stage.attempt}/${link.stage.of}` : link.stage.step
+      if (stages.at(-1) !== named) stages.push(named)
+    })
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    off?.()
+    expect(stages).toEqual(['creating', 'connecting', 'signingIn 2/24', 'signingIn 3/24'])
+    expect(vta.getState().link.kind).toBe('linked')
+  })
+
+  it('signs in again while the restarted agent does not know this phone yet', async () => {
+    let tries = 0
+    mockClient.whoAmI.mockImplementation(async () => {
+      if (++tries < 3) throw new Error('not in ACL')
+      return { roles: ['admin'] }
+    })
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta } = controller(host)
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link.kind).toBe('linked')
+  })
+
+  // IN-135: Keyring locked while the host worked. Its agent is shut down
+  // until the person unlocks, when a new one is handed over. Waiting for that
+  // spends no sign-in try, and the link goes on with the new agent.
+  it('a lock while signing in waits without spending tries, and links with the agent handed over on unlock', async () => {
+    const before = { isInitialized: true }
+    const after = { isInitialized: true }
+    let sleeps = 0
+    let whoAmIs = 0
+    mockClient.whoAmI.mockImplementation(async () => {
+      whoAmIs++
+      if (whoAmIs === 1) {
+        // The lock shuts the agent down mid-try.
+        before.isInitialized = false
+        throw new Error('the session closed')
+      }
+      return { roles: ['admin'] }
+    })
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta } = controller(host, {
+      sleep: async () => {
+        // Locked for longer than every try together would last; then unlocked.
+        if (++sleeps === 40) (vta as unknown as { agent: unknown }).agent = after
+      },
+    })
+    ;(vta as unknown as { agent: unknown }).agent = before
+    let lastTry = 1
+    const stop = vta.subscribe(() => {
+      const stage = (vta.getState().link as { stage?: { attempt?: number } }).stage
+      if (typeof stage?.attempt === 'number') lastTry = Math.max(lastTry, stage.attempt)
+    })
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer(before as never)
+    stop()
+    expect(vta.getState().link.kind).toBe('linked')
+    // Forty waits while locked, and only the second sign-in try.
+    expect(sleeps).toBeGreaterThanOrEqual(40)
+    expect(lastTry).toBe(2)
+    const clientAgents = (VtaClient as unknown as jest.Mock).mock.calls.map((c) => c[0])
+    expect(clientAgents).toContain(after)
+  })
+
+  // ce's review of #353: a lock between the sign-in and the link's last steps
+  // hands over another agent; the signed-in client belongs to the shut-down
+  // one, so the link signs in afresh with the agent in use.
+  it('a lock just after signing in: the link goes on with a fresh sign-in on the agent handed over', async () => {
+    const before = { isInitialized: true }
+    const after = { isInitialized: true }
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta } = controller(host)
+    ;(vta as unknown as { agent: unknown }).agent = before
+    let handedOver = false
+    mockClient.whoAmI.mockImplementation(async () => {
+      if (!handedOver) {
+        handedOver = true
+        // Signed in on `before`; Keyring locks and unlocks before the link is finished.
+        before.isInitialized = false
+        ;(vta as unknown as { agent: unknown }).agent = after
+      }
+      return { roles: ['admin'] }
+    })
+    // Each client says which agent it was made on, so the rotation's can be told.
+    ;(VtaClient as unknown as jest.Mock).mockImplementation((made: unknown) =>
+      Object.assign(Object.create(mockClient), { madeOn: made })
+    )
+    mockClient.rotateManagerKey.mockClear()
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer(before as never)
+    ;(VtaClient as unknown as jest.Mock).mockImplementation(() => mockClient)
+    expect(vta.getState().link.kind).toBe('linked')
+    // The key swap ran on a client made on the agent handed over, not on the shut-down one.
+    const rotatedOn = (mockClient.rotateManagerKey.mock.contexts as { madeOn?: unknown }[]).map((c) => c?.madeOn)
+    expect(rotatedOn).toContain(after)
+    expect(rotatedOn).not.toContain(before)
+  })
+
+  it.each([
+    [410, 'expired', 'expired'],
+    [409, 'taken', 'refused'],
+    [503, 'unavailable', 'unreachable'],
+  ])('a callback %i ends the attempt as %s, nothing remembered', async (status, hostReason, reason) => {
+    const host = mockHost({ [CALLBACK]: [{ status, body: {} }] })
+    const { vta, saved } = controller(host)
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason, hostReason } })
+    expect(saved).toEqual([])
+  })
+
+  // Alberto, 10-05: "block it". The portal offers "Connect with Keyring" for
+  // a community's own agent too (a full_stack stack); its DID says only VTARest.
+  it("a community's own agent the host set up is refused once signed in: nothing kept, the host told nothing", async () => {
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('provisioning'), at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    mockClient.listContexts.mockResolvedValueOnce([
+      { id: 'vta', name: 'Verifiable Trust Agent', did: VTA },
+      { id: 'keyring-lab-community', name: 'VTC', did: 'did:webvh:QmC:dids-keyring-test.ic3.dev:lab-vtc' },
+    ])
+    const { vta, saved } = controller(host)
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'communityAgent' } })
+    expect(saved).toEqual([])
+    expect(mockClient.rotateManagerKey).not.toHaveBeenCalled()
+    expect(host.calls.some((c) => c.url === COMPLETE)).toBe(false)
+  })
+
+  it('a host that could not set the agent up says so', async () => {
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('failed', { error: 'deployment failed' })],
+    })
+    const { vta } = controller(host)
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { hostReason: 'setupFailed' } })
+    expect(mockClient.connect).not.toHaveBeenCalled()
+  })
+
+  it('a phone with no screen lock is refused before anything is made or sent', async () => {
+    const host = mockHost({ [CALLBACK]: [{ status: 202, body: accepted }] })
+    const { vta, managers } = controller(host, { canOwn: false })
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { hostReason: 'needsScreenLock' } })
+    expect(host.calls).toEqual([])
+    expect(managers).toEqual([])
+  })
+
+  it('Stop while the host sets up ends it quietly: no error, no more calls, not linked', async () => {
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('provisioning')],
+    })
+    const { vta } = controller(host, { sleep: () => gate })
+    vta.scanHostOffer(hostOffer)
+    const done = vta.confirmOffer({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    vta.cancelLink()
+    const callsAtCancel = host.calls.length
+    release()
+    await done
+    expect(vta.getState().link).toEqual({ kind: 'notLinked' })
+    expect(host.calls).toHaveLength(callsAtCancel)
+  })
+
+  it('a completion report that fails leaves the phone linked', async () => {
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('awaiting_mobile')],
+      [COMPLETE]: [{ status: 410, body: {} }],
+    })
+    const { vta } = controller(host)
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link.kind).toBe('linked')
+  })
+
+  it('a scanned enrolment offer after a host offer replaces it', () => {
+    const { vta } = controller(mockHost({}))
+    vta.scanHostOffer(hostOffer)
+    vta.scanOffer({
+      v: 1,
+      t: 'vta-enrol',
+      vta: 'did:webvh:Qm:alice',
+      label: 'Lab',
+      url: 'http://p/o',
+      n: 'N',
+      exp: 2e9,
+    })
+    expect(vta.getState().link).not.toHaveProperty('via')
+  })
+})
+
+// link-try-again (gate efficiency item 13), on the real clocks with fake timers: an agent the host set up that never
+// answers this phone. Each sign-in try waits out its connect deadline, then pauses; after every try the link ends
+// "not linked" with a failure Try again can pick up. On a device that is about 14 minutes (the gate row polls up to
+// 18); here it is seconds.
+describe('an agent that never answers after the host set it up', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('keeps trying for every try, then ends not linked with Try again possible', async () => {
+    mockClient.connect.mockImplementation(() => new Promise<undefined>(() => undefined))
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      fetch: host.fetch,
+      linkStore: () => ({ get: async () => undefined, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined }) as never,
+      deviceCanOwn: async () => true,
+    })
+    const stages: string[] = []
+    const off = vta.subscribe(() => {
+      const link = vta.getState().link
+      if (link.kind !== 'awaitingGrant' || !link.stage) return
+      const named = link.stage.attempt ? `${link.stage.step} ${link.stage.attempt}/${link.stage.of}` : link.stage.step
+      if (stages.at(-1) !== named) stages.push(named)
+    })
+    vta.scanHostOffer(hostOffer)
+    const done = vta.confirmOffer({} as never)
+
+    const everyTryMs = HOST_SIGN_IN_TRIES * (GRANT_CONNECT_DEADLINE_MS + HOST_SIGN_IN_RETRY_MS)
+    expect(everyTryMs).toBe(14 * 60 * 1000)
+    // A minute short of every try: still trying, not given up.
+    await jest.advanceTimersByTimeAsync(everyTryMs - 60_000)
+    expect(vta.getState().link.kind).toBe('awaitingGrant')
+    // Past the last try (and the host's own first look): given up.
+    await jest.advanceTimersByTimeAsync(2 * 60_000)
+    await done
+    off?.()
+    expect(stages).toContain(`signingIn ${HOST_SIGN_IN_TRIES}/${HOST_SIGN_IN_TRIES}`)
+    expect(mockClient.connect).toHaveBeenCalledTimes(HOST_SIGN_IN_TRIES)
+    const link = vta.getState().link
+    expect(link).toMatchObject({ kind: 'notLinked', lastError: { vtaDid: VTA } })
+    // What VtaLink offers Try again for: the person's own retry may pick it up.
+    expect(resumableFailure(link.kind === 'notLinked' ? link.lastError : undefined, { manual: true })).toBe(VTA)
+  })
+})

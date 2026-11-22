@@ -1,0 +1,232 @@
+import { useAgent } from '@bifold/react-hooks'
+import Clipboard from '@react-native-clipboard/clipboard'
+import { StackScreenProps } from '@react-navigation/stack'
+import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { StyleSheet, View, TextInput, ScrollView, TouchableOpacity } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import Toast from 'react-native-toast-message'
+
+import Button, { ButtonType } from '../components/buttons/Button'
+import { hitSlop } from '../constants'
+import InfoBox, { InfoBoxType } from '../components/misc/InfoBox'
+import SafeAreaModal from '../components/modals/SafeAreaModal'
+import { TOKENS, useServices } from '../container-api'
+import { useStore } from '../contexts/store'
+import { useTheme } from '../contexts/theme'
+import { ConnectStackParams } from '../types/navigators'
+import { deviceCodeScan } from '../modules/trust-tasks/module/deviceCodeScan'
+import { KeyringLinkError, keyringLinkErrorText } from '../modules/trust-tasks/module/vtiLinks'
+import { connectFromScanOrDeepLink } from '../utils/helpers'
+import { findUsedInvitation, openUsedInvitation, usedInvitationToast } from '../utils/usedInvitation'
+import { testIdWithKey } from '../utils/testable'
+import { ThemedText } from '../components/texts/ThemedText'
+
+export type PasteProps = StackScreenProps<ConnectStackParams>
+
+const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
+  const { ColorPalette, TextTheme } = useTheme()
+  const [pastedContent, setPastedContent] = useState<string>('')
+  const [errorMessage, setErrorMessage] = useState<{ title: string; message: string } | undefined>()
+  // What the last Paste read, said in words: a paste that silently does nothing
+  // (an empty clipboard, or a link copied on another device that has not
+  // arrived yet) looked like a broken button.
+  const [pasteNote, setPasteNote] = useState<{ kind: 'read' | 'nothing'; text?: string } | undefined>()
+  const { t } = useTranslation()
+  const { agent } = useAgent()
+  const [store] = useStore()
+  const [logger, { enableImplicitInvitations, enableReuseConnections }] = useServices([
+    TOKENS.UTIL_LOGGER,
+    TOKENS.CONFIG,
+  ])
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: ColorPalette.brand.primaryBackground,
+    },
+    content: {
+      margin: 20,
+    },
+    description: {
+      marginBottom: 20,
+    },
+    textBox: {
+      ...TextTheme.normal,
+      textAlignVertical: 'top',
+      borderColor: ColorPalette.grayscale.darkGrey,
+      borderWidth: 1,
+      borderRadius: 5,
+      backgroundColor: ColorPalette.grayscale.lightGrey,
+    },
+    buttonContainer: {
+      margin: 20,
+    },
+  })
+
+  /** A short, one-line view of what was read, for the note and the error. */
+  const glimpse = (text: string): string => {
+    const one = text.replace(/\s+/g, ' ').trim()
+    return one.length > 48 ? `${one.slice(0, 48)}…` : one
+  }
+
+  const pasteFromClipboard = async () => {
+    const text = (await Clipboard.getString().catch(() => '')).trim()
+    if (!text) {
+      setPasteNote({ kind: 'nothing' })
+      return
+    }
+    setPastedContent(text)
+    setPasteNote({ kind: 'read', text: glimpse(text) })
+  }
+
+  const processPastedContent = async () => {
+    // "Scan its code" on the phone adding another one (#30): a device code
+    // pasted here goes back to that screen, as a scanned one does.
+    const forDevice = deviceCodeScan.claim(pastedContent)
+    if (forDevice?.taken) {
+      navigation?.getParent()?.goBack()
+      return
+    }
+    if (forDevice) {
+      setErrorMessage({ title: t('Scan.CodeNotUsable'), message: t('Scan.NotADeviceCode') })
+      return
+    }
+    try {
+      await connectFromScanOrDeepLink(
+        pastedContent,
+        agent,
+        logger,
+        navigation?.getParent(),
+        false, // isDeepLink
+        enableImplicitInvitations,
+        enableReuseConnections,
+        store.preferences.walletName
+      )
+    } catch (e: unknown) {
+      // Ours, and already in words — a used invitation code, an expired link —
+      // said as it is, as the scanner does, instead of "URL not recognized"
+      // for a link Keyring did recognize (keyring-bifold#139 gate).
+      if (e instanceof KeyringLinkError) {
+        setErrorMessage({ title: t('Scan.CodeNotUsable'), message: keyringLinkErrorText(e, (k) => t(k)) })
+        return
+      }
+      // An invitation taken before: open the contact it made, or say a new one is needed.
+      const used = await findUsedInvitation(agent, e)
+      if (used) {
+        if (openUsedInvitation(used, navigation?.getParent())) {
+          Toast.show(usedInvitationToast(used, t))
+          return
+        }
+        setErrorMessage({ title: t('Scan.InvitationAlreadyUsed'), message: t('Scan.InvitationAlreadyUsedAskNew') })
+        return
+      }
+      // Anything else: say what was read, so a clipboard that held something
+      // other than the link is plain to see.
+      setErrorMessage({
+        title: t('PasteUrl.ErrorInvalidUrl'),
+        message: t('PasteUrl.ErrorInvalidUrlRead', {
+          text: glimpse(pastedContent),
+          interpolation: { escapeValue: false },
+        }),
+      })
+    }
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView>
+        <SafeAreaModal visible={!!errorMessage} testID={testIdWithKey('ErrorModal')} animationType="fade" transparent>
+          <View
+            style={{
+              flex: 1,
+              paddingHorizontal: 10,
+              justifyContent: 'center',
+              alignItems: 'center',
+              backgroundColor: 'rgba(0,0,0,0.6)',
+            }}
+          >
+            <InfoBox
+              notificationType={InfoBoxType.Error}
+              title={errorMessage?.title ?? ''}
+              description={errorMessage?.message ?? ''}
+              onCallToActionPressed={() => setErrorMessage(undefined)}
+              onCallToActionLabel={t('Global.TryAgain')}
+            />
+          </View>
+        </SafeAreaModal>
+        <View style={styles.content}>
+          <ThemedText style={styles.description}>{t('PasteUrl.PasteUrlDescription')}</ThemedText>
+          <Button
+            title={t('PasteUrl.PasteFromClipboard')}
+            accessibilityLabel={t('PasteUrl.PasteFromClipboard')}
+            testID={testIdWithKey('PasteFromClipboard')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => void pasteFromClipboard()}
+          />
+          {pasteNote ? (
+            <ThemedText
+              style={{
+                marginVertical: 10,
+                color: pasteNote.kind === 'nothing' ? ColorPalette.semantic.error : undefined,
+              }}
+              testID={testIdWithKey(pasteNote.kind === 'nothing' ? 'PasteNothing' : 'PasteRead')}
+            >
+              {pasteNote.kind === 'nothing'
+                ? t('PasteUrl.NothingToPaste')
+                : t('PasteUrl.Read', { text: pasteNote.text, interpolation: { escapeValue: false } })}
+            </ThemedText>
+          ) : (
+            <View style={{ height: 10 }} />
+          )}
+          <TextInput
+            testID={testIdWithKey('PastedUrl')}
+            accessibilityLabel={t('PasteUrl.PasteUrlInput')}
+            style={styles.textBox}
+            numberOfLines={15}
+            multiline
+            value={pastedContent}
+            onChangeText={(text) => setPastedContent(text)}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            testID={testIdWithKey('ScanPastedUrlDisabled')}
+            accessibilityLabel={t('PasteUrl.ScanDisabled')}
+            accessibilityRole="button"
+            hitSlop={hitSlop}
+            disabled={pastedContent.length > 0}
+            onPress={() => {
+              setErrorMessage({
+                title: t('PasteUrl.ErrorTextboxEmpty'),
+                message: t('PasteUrl.ErrorTextboxEmptyDescription'),
+              })
+            }}
+          >
+            <Button
+              title={t('Global.Continue')}
+              accessibilityLabel={t('Global.Continue')}
+              testID={testIdWithKey('ScanPastedUrl')}
+              buttonType={ButtonType.Primary}
+              onPress={processPastedContent}
+              disabled={pastedContent.length === 0}
+            />
+          </TouchableOpacity>
+          <View style={{ marginTop: 15 }}>
+            <Button
+              title={t('PasteUrl.Clear')}
+              accessibilityLabel={t('PasteUrl.Clear')}
+              testID={testIdWithKey('ClearPastedUrl')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => {
+                setPastedContent('')
+                setPasteNote(undefined)
+              }}
+            />
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  )
+}
+
+export default PasteUrl

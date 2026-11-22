@@ -1,0 +1,248 @@
+import React, { useEffect, useState } from 'react'
+import { StackScreenProps } from '@react-navigation/stack'
+import { RootStackParams, Screens } from '../../../types/navigators'
+import { getCredentialForDisplay } from '../display'
+import CommonRemoveModal from '../../../components/modals/CommonRemoveModal'
+import { ModalUsage } from '../../../types/remove'
+import { DeviceEventEmitter, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useTranslation } from 'react-i18next'
+import { testIdWithKey } from '../../../utils/testable'
+import { useTheme } from '../../../contexts/theme'
+import { BifoldError } from '../../../types/error'
+import { EventTypes } from '../../../constants'
+import { useAgent } from '@bifold/react-hooks'
+import RecordRemove from '../../../components/record/RecordRemove'
+import { useOpenIDCredentials } from '../context/OpenIDCredentialRecordProvider'
+import { CredentialOverlay } from '@bifold/oca/build/legacy'
+import { OpenIDCredentialType, W3cCredentialDisplay } from '../types'
+import { TOKENS, useServices } from '../../../container-api'
+import { BrandingOverlay } from '@bifold/oca'
+import Record from '../../../components/record/Record'
+import { buildOverlayFromW3cCredential } from '../../../utils/oca'
+import CredentialDetailSecondaryHeader from '../../../components/views/CredentialDetailSecondaryHeader'
+import CredentialCardLogo from '../../../components/views/CredentialCardLogo'
+import CredentialDetailPrimaryHeader from '../../../components/views/CredentialDetailPrimaryHeader'
+import ScreenLayout from '../../../layout/ScreenLayout'
+import OpenIDCredentialCard from '../components/OpenIDCredentialCard'
+import { OpenIDCredentialRecord } from '../credentialRecord'
+import { credentialRegistry } from '../refresh/registry'
+import { communityCardOf, openCommunityFrom } from '../../trust-tasks/screens/CommunityCardDetails'
+import CommunityPassDetails from '../../trust-tasks/screens/CommunityPassDetails'
+
+export enum OpenIDCredScreenMode {
+  offer,
+  details,
+}
+
+type OpenIDCredentialDetailsProps = StackScreenProps<RootStackParams, Screens.OpenIDCredentialDetails>
+
+const paddingHorizontal = 24
+const paddingVertical = 16
+
+const OpenIDCredentialDetails: React.FC<OpenIDCredentialDetailsProps> = ({ navigation, route }) => {
+  const { credentialId, type } = route.params
+
+  const [credential, setCredential] = useState<OpenIDCredentialRecord | undefined>(undefined)
+  const [credentialDisplay, setCredentialDisplay] = useState<W3cCredentialDisplay>()
+  const { t, i18n } = useTranslation()
+  const { ColorPalette, TextTheme } = useTheme()
+  const { agent } = useAgent()
+  const { removeCredential, getW3CCredentialById, getSdJwtCredentialById, getMdocCredentialById } =
+    useOpenIDCredentials()
+  const [bundleResolver] = useServices([TOKENS.UTIL_OCA_RESOLVER])
+
+  const [isRemoveModalDisplayed, setIsRemoveModalDisplayed] = useState(false)
+  const [credentialRemoved, setCredentialRemoved] = useState(false)
+
+  const [overlay, setOverlay] = useState<CredentialOverlay<BrandingOverlay>>({
+    bundle: undefined,
+    presentationFields: [],
+    metaOverlay: undefined,
+    brandingOverlay: undefined,
+  })
+
+  const styles = StyleSheet.create({
+    container: {
+      backgroundColor: overlay.brandingOverlay?.primaryBackgroundColor,
+      display: 'flex',
+    },
+    cardContainer: {
+      paddingHorizontal: 10,
+      paddingVertical: 30,
+    },
+  })
+
+  useEffect(() => {
+    if (!agent) return
+
+    const fetchCredential = async () => {
+      if (credentialRemoved) return
+      try {
+        let record: OpenIDCredentialRecord | undefined
+
+        if (type === OpenIDCredentialType.SdJwtVc) {
+          record = await getSdJwtCredentialById(credentialId)
+        } else if (type === OpenIDCredentialType.Mdoc) {
+          record = await getMdocCredentialById(credentialId)
+        } else {
+          record = await getW3CCredentialById(credentialId)
+        }
+
+        setCredential(record)
+      } catch {
+        // credential not found for id, display an error
+        DeviceEventEmitter.emit(
+          EventTypes.ERROR_ADDED,
+          new BifoldError(t('Error.Title1033'), t('Error.Message1033'), t('CredentialDetails.CredentialNotFound'), 1035)
+        )
+      }
+    }
+    fetchCredential()
+  }, [
+    credentialId,
+    type,
+    getSdJwtCredentialById,
+    getMdocCredentialById,
+    getW3CCredentialById,
+    agent,
+    t,
+    credentialRemoved,
+  ])
+
+  useEffect(() => {
+    if (!credential) return
+
+    try {
+      const credDisplay = getCredentialForDisplay(credential)
+      setCredentialDisplay(credDisplay)
+    } catch {
+      DeviceEventEmitter.emit(
+        EventTypes.ERROR_ADDED,
+        new BifoldError(t('Error.Title1033'), t('Error.Message1033'), t('CredentialDetails.CredentialNotFound'), 1034)
+      )
+    }
+  }, [credential, t])
+
+  useEffect(() => {
+    if (!credentialDisplay || !bundleResolver || !i18n || !credentialDisplay.display) {
+      return
+    }
+
+    const resolveOverlay = async () => {
+      const resolvedOverlay = await buildOverlayFromW3cCredential({
+        credentialDisplay,
+        language: i18n.language,
+        resolver: bundleResolver,
+      })
+
+      setOverlay(resolvedOverlay)
+    }
+
+    resolveOverlay()
+  }, [credentialDisplay, bundleResolver, i18n])
+
+  const toggleDeclineModalVisible = () => {
+    if (credentialRemoved) {
+      return
+    }
+    setIsRemoveModalDisplayed(!isRemoveModalDisplayed)
+  }
+
+  const handleDeclineTouched = async () => {
+    setCredentialRemoved(true)
+    setIsRemoveModalDisplayed(false)
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    handleRemove()
+  }
+
+  const handleRemove = async () => {
+    if (!credential) return
+    try {
+      const notificationRegistry = credentialRegistry.getState()
+      notificationRegistry.removeCredentialFromRegistry(credential.id)
+      await removeCredential(credential, type)
+      navigation.pop()
+    } catch (err) {
+      const error = new BifoldError(t('Error.Title1025'), t('Error.Message1025'), (err as Error)?.message ?? err, 1025)
+      DeviceEventEmitter.emit(EventTypes.ERROR_ADDED, error)
+    }
+  }
+
+  //To be used only in specific cases where consistency with anoncreds needed
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const legacyHeader = () => {
+    if (!credentialDisplay) return null
+
+    return (
+      <View style={styles.container}>
+        <CredentialDetailSecondaryHeader overlay={overlay} />
+        <CredentialCardLogo overlay={overlay} />
+        <CredentialDetailPrimaryHeader overlay={overlay} />
+      </View>
+    )
+  }
+
+  const renderOpenIdCard = () => {
+    if (!credentialDisplay) return null
+    return <OpenIDCredentialCard credentialDisplay={credentialDisplay} credentialRecord={credential} />
+  }
+
+  const header = () => {
+    return <View style={styles.cardContainer}>{renderOpenIdCard()}</View>
+  }
+
+  const footer = () => {
+    if (!credentialDisplay) return null
+    return (
+      <View style={{ marginBottom: 50 }}>
+        <View
+          style={{
+            backgroundColor: ColorPalette.brand.secondaryBackground,
+            marginTop: paddingVertical,
+            paddingHorizontal,
+            paddingVertical,
+          }}
+        >
+          <Text testID={testIdWithKey('IssuerName')}>
+            <Text style={[TextTheme.title]}>{t('CredentialDetails.IssuedBy') + ' '}</Text>
+            <Text style={[TextTheme.normal]}>
+              {credentialDisplay.display.issuer.name || t('ContactDetails.AContact')}
+            </Text>
+          </Text>
+        </View>
+        {/* A community's card never reaches here: it has its own Details (CommunityPassDetails, above). */}
+        <RecordRemove onRemove={toggleDeclineModalVisible} />
+      </View>
+    )
+  }
+
+  // A community's card has its own Details: the same pass as in the Wallet, its fields in plain view (none is
+  // personal), and the way to the community. Every other credential keeps the generic ones below.
+  if (credentialDisplay && communityCardOf(credentialDisplay.credential)) {
+    return (
+      <ScreenLayout screen={Screens.OpenIDCredentialDetails}>
+        <ScrollView testID={testIdWithKey('CommunityCardDetailsScreen')}>
+          <CommunityPassDetails
+            card={credentialDisplay.credential as unknown as Record<string, unknown>}
+            record={credential}
+            onOpenCommunity={(did) => openCommunityFrom(navigation, did)}
+          />
+        </ScrollView>
+      </ScreenLayout>
+    )
+  }
+
+  return (
+    <ScreenLayout screen={Screens.OpenIDCredentialDetails}>
+      <Record fields={overlay.presentationFields || []} hideFieldValues header={header} footer={footer} />
+      <CommonRemoveModal
+        usage={ModalUsage.CredentialRemove}
+        visible={isRemoveModalDisplayed}
+        onSubmit={handleDeclineTouched}
+        onCancel={toggleDeclineModalVisible}
+      />
+    </ScreenLayout>
+  )
+}
+
+export default OpenIDCredentialDetails

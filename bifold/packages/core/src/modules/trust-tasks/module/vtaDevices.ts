@@ -1,0 +1,393 @@
+/**
+ * The devices that run a person's agent (#10: a new phone is a new device).
+ *
+ * A device is an admin row of the agent's access list. One that has claimed a
+ * device binding (`device/register`) also carries a name, a platform and when
+ * it was last seen, and the agent records a wipe on it. The binding hangs off
+ * the access-list entry, one per DID (vta-service `operations/device.rs`), so
+ * the list here is the access list's admins, each joined to its binding when
+ * it has one. The browser plugin, a computer on a `did:key`, and a phone from
+ * before registration existed are admins with no binding: they are still
+ * listed, from the access list alone.
+ *
+ * Removing one follows what the agent can do with it:
+ * - a registered device is **wiped** (`device/wipe`). The agent refuses it at
+ *   login from then on (vta-service `auth/backend.rs`), and it stays listed
+ *   with `wipedAt` set. The agent never learns that the wipe happened on the
+ *   device, since the device can no longer reach it, so the wipe stays pending.
+ * - a device with no binding is **revoked** (`acl/revoke`), which deletes its
+ *   entry; it leaves the list.
+ *
+ * Task versions are the ones `vta-sdk`'s own client sends (`client/
+ * agent_devices.rs`), and liveness uses openvtc's window (`openvtc-core
+ * devices.rs`: a heartbeat every 5 minutes, live within 15).
+ *
+ * @module trust-tasks/module/vtaDevices
+ */
+
+import { versionsFor } from './taskVersions'
+import { VtiRefusal } from './vtiAgent'
+
+/**
+ * The device tasks at 0.2: upstream deprecated 0.1 ("will be removed in a
+ * future release", vta-sdk trust_tasks.rs at VTI 2240aa7e). 0.2 is the same
+ * shape with camelCase enum values on the wire; of what this phone sends, only
+ * wipe's `scope` changes (`cacheAndKeys`). Agents accept 0.2 since VTI #303
+ * (2026-06). acl/list and acl/revoke are not deprecated.
+ */
+export const AGENT_DEVICE_TASK = {
+  register: 'https://trusttasks.org/spec/device/register/0.2',
+  heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
+  list: 'https://trusttasks.org/spec/device/list/0.2',
+  // 0.3 (trust-tasks-tf f27ea5387), asked first: from 0d3f268e (vta-service #2309) the agent serves only
+  // heartbeat/0.3 and list/0.3, while v0.60.0 to v0.66.0 serve 0.1 and 0.2. What this phone sends is the same in
+  // both; heartbeat's answer spells `serverTime` `respondedAt`, and list's `cursor`/`truncated` are `nextCursor`
+  // (neither is read here).
+  heartbeat03: 'https://trusttasks.org/spec/device/heartbeat/0.3',
+  list03: 'https://trusttasks.org/spec/device/list/0.3',
+  wipe: 'https://trusttasks.org/spec/device/wipe/0.2',
+  setWake: 'https://trusttasks.org/spec/device/set-wake/0.2',
+  aclList: 'https://trusttasks.org/spec/acl/list/0.1',
+  aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
+  // 0.2 asked first, 0.1 when the agent does not serve it (taskVersions.ts).
+  aclList02: 'https://trusttasks.org/spec/acl/list/0.2',
+  aclRevoke02: 'https://trusttasks.org/spec/acl/revoke/0.2',
+  // 0.3, asked first: vta-service v0.67.0 serves acl/list only at 0.3 (the same entries as 0.2), and acl/revoke
+  // only at 0.2; v0.60.0 to 0d3f268e only at 0.1.
+  aclList03: 'https://trusttasks.org/spec/acl/list/0.3',
+  // list 0.4 and revoke 0.3, asked first: from VTI main afc06a431 (2026-11-10) the agent serves only these, with 0.2's
+  // payloads (AclEntry 0.3 adds `purposes`, which neither sends).
+  aclList04: 'https://trusttasks.org/spec/acl/list/0.4',
+  aclRevoke03: 'https://trusttasks.org/spec/acl/revoke/0.3',
+} as const
+
+/** acl/revoke/0.2 and 0.3 need their narrowing said: a full removal is `{kind: "entry"}` (trust-tasks-tf acl/revoke). */
+const revokePayload = (uri: string, subject: string) =>
+  uri === AGENT_DEVICE_TASK.aclRevoke03 || uri === AGENT_DEVICE_TASK.aclRevoke02
+    ? { subject, revocation: { kind: 'entry' } }
+    : { subject }
+
+/** How often a running phone tells its agent it is still here. */
+export const HEARTBEAT_INTERVAL_MS = 5 * 60_000
+/** How recently a device must have been seen to count as live. */
+export const LIVENESS_WINDOW_MS = 15 * 60_000
+
+/** The heartbeat extension that corrects a device's own name (vta-sdk `EXT_DEVICE_NAME`). */
+const EXT_DEVICE_NAME = 'org.openvtc.device-name'
+
+/** What these calls need from the agent client: its task call and this phone's own DID. */
+export interface AgentDevicePort {
+  managerDid?: string
+  /** `timeoutMs` bounds the wait for the answer; the client's own default when absent. */
+  task<T = unknown>(type: string, payload: Record<string, unknown>, timeoutMs?: number): Promise<T>
+}
+
+export interface AgentDevice {
+  /** The device's access-list subject. */
+  did: string
+  source: 'registered' | 'aclOnly'
+  isThisPhone: boolean
+  /** The access list's label for the entry. */
+  label?: string
+  /** RFC 3339, when the agent added the entry. */
+  createdAt?: string
+  /** RFC 3339, when the entry lapses; absent when it never does. */
+  expiresAt?: string
+  deviceId?: string
+  displayName?: string
+  platform?: string
+  registeredAt?: string
+  lastSeenAt?: string
+  disabledAt?: string
+  wipedAt?: string
+  /** The agent refuses this device at login (disabled or wiped). */
+  accessRevoked: boolean
+  /** A wipe was recorded; the device has not been able to confirm it. */
+  wipePending: boolean
+  /** A Keyring phone: registered from iOS or Android. Undefined when unknown. */
+  kind?: 'keyring'
+  /** Its access-list role is not `admin`: it can use the agent for some tasks but not manage it (IN-200b). */
+  limitedAccess?: boolean
+}
+
+type Json = Record<string, unknown>
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined)
+
+/**
+ * The agent's device bindings (`device/list`), wiped and disabled ones included.
+ *
+ * @versionLadder device/list
+ */
+async function deviceBindings(port: AgentDevicePort): Promise<Json[]> {
+  // Wiped and disabled bindings are left out unless asked for, and a removed
+  // device must stay listed as removed rather than fall back to a bare ACL row.
+  const { answer } = await versionsFor(port.managerDid ?? port).ask(
+    'deviceList',
+    [AGENT_DEVICE_TASK.list03, AGENT_DEVICE_TASK.list],
+    (uri) => port.task<{ devices?: unknown }>(uri, { includeWiped: true, includeDisabled: true })
+  )
+  return (Array.isArray(answer?.devices) ? answer.devices : []) as Json[]
+}
+
+/** What a device binding says about its device; the access-list half is the caller's. */
+function bindingFields(b: Json): Partial<AgentDevice> & Pick<AgentDevice, 'accessRevoked' | 'wipePending'> {
+  const platform = str(b.platform)
+  const disabledAt = str(b.disabledAt)
+  const wipedAt = str(b.wipedAt)
+  return {
+    deviceId: str(b.deviceId),
+    displayName: str(b.displayName),
+    platform,
+    registeredAt: str(b.registeredAt),
+    lastSeenAt: str(b.lastSeenAt),
+    disabledAt,
+    wipedAt,
+    accessRevoked: Boolean(disabledAt || wipedAt),
+    wipePending: Boolean(wipedAt),
+    ...(platform === 'ios' || platform === 'android' ? { kind: 'keyring' as const } : {}),
+  }
+}
+
+/**
+ * Every key the agent's access list holds, each with its device binding when it
+ * has one. Not only admins (IN-200b): a computer or a browser plugin often
+ * holds a narrower role, and My devices said it lists them; those are marked
+ * `limitedAccess`.
+ *
+ * @versionLadder acl/list
+ */
+export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
+  const [aclAnswer, rows] = await Promise.all([
+    versionsFor(port.managerDid ?? port)
+      .ask(
+        'aclList',
+        [
+          AGENT_DEVICE_TASK.aclList04,
+          AGENT_DEVICE_TASK.aclList03,
+          AGENT_DEVICE_TASK.aclList02,
+          AGENT_DEVICE_TASK.aclList,
+        ],
+        (uri) => port.task<{ entries?: unknown }>(uri, {})
+      )
+      .then(({ answer }) => answer),
+    deviceBindings(port),
+  ])
+  const entries = (Array.isArray(aclAnswer?.entries) ? aclAnswer.entries : []) as Json[]
+  const bindingOf = new Map<string, Json>()
+  for (const row of rows) {
+    const did = str(row.consumerDid)
+    if (did) bindingOf.set(did, row)
+  }
+  const devices: AgentDevice[] = []
+  for (const entry of entries) {
+    const did = str(entry.subject)
+    if (!did) continue
+    const b = bindingOf.get(did)
+    devices.push({
+      did,
+      source: b ? 'registered' : 'aclOnly',
+      isThisPhone: did === port.managerDid,
+      label: str(entry.label),
+      createdAt: str(entry.createdAt),
+      expiresAt: str(entry.expiresAt),
+      ...(b ? bindingFields(b) : { accessRevoked: false, wipePending: false }),
+      limitedAccess: entry.role !== 'admin',
+    })
+  }
+  return devices
+}
+
+/**
+ * The registered devices alone, from `device/list`: what the presence loop needs (who was seen, who is
+ * disabled or wiped), without the access list. The agent client sends one task at a time, so an `acl/list`
+ * the agent never answers held every other ask behind it for its whole timeout, a rooms read among them
+ * (a tester's run, 10-29). The role is the access list's, so `limitedAccess` is left unknown here.
+ */
+export async function listRegisteredDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
+  return (await deviceBindings(port)).flatMap((b): AgentDevice[] => {
+    const did = str(b.consumerDid)
+    return did ? [{ did, source: 'registered', isThisPhone: did === port.managerDid, ...bindingFields(b) }] : []
+  })
+}
+
+/**
+ * Remove a device from the agent: revoke its access, after first wiping it
+ * when it is registered. Never this phone — the agent refuses a caller removing
+ * itself, and a person who wants to leave does so from the other device.
+ *
+ * Both, because neither is enough alone. A wipe marks the binding, but the
+ * agent checks that mark only when a caller signs in over REST
+ * (vta-service `auth/backend.rs` `device_access_gate`); its trust-task path
+ * resolves authority from the access list alone (`messaging/auth.rs`
+ * `auth_from_did`), so a wiped phone kept acting as an administrator over TSP
+ * on the lab (VTI 63d4c0ca). Revoking deletes the access-list entry, which
+ * both paths refuse. It deletes the binding too, so the device leaves the
+ * list; the removed phone learns it on its next call, from the refusal.
+ *
+ * A wipe the agent refuses does not stop the revoke: access is what matters.
+ * `mode` is `wiped` when both happened, `revoked` when only the revoke did.
+ *
+ * @versionLadder acl/revoke
+ */
+export async function removeAgentDevice(
+  port: AgentDevicePort,
+  device: AgentDevice
+): Promise<{ mode: 'wiped' | 'revoked' }> {
+  if (device.isThisPhone) throw new Error('refusing to remove this phone from its own agent')
+  let wiped = false
+  if (device.source === 'registered' && device.deviceId) {
+    wiped = await port
+      .task(AGENT_DEVICE_TASK.wipe, {
+        deviceId: device.deviceId,
+        scope: 'cacheAndKeys',
+        reason: 'Removed from the agent by its owner in Keyring',
+      })
+      .then(
+        () => true,
+        () => false
+      )
+  }
+  await versionsFor(port.managerDid ?? port).ask(
+    'aclRevoke',
+    [AGENT_DEVICE_TASK.aclRevoke03, AGENT_DEVICE_TASK.aclRevoke02, AGENT_DEVICE_TASK.aclRevoke],
+    (uri) => port.task(uri, revokePayload(uri, device.did))
+  )
+  return { mode: wiped ? 'wiped' : 'revoked' }
+}
+
+/**
+ * Claim this phone's device binding. The agent refuses a second claim for the
+ * same DID (`device/register:alreadyRegistered`), which means it is already
+ * registered; the answer says which, so a caller can correct the name on a
+ * heartbeat instead.
+ */
+export async function registerThisDevice(
+  port: AgentDevicePort,
+  opts: { displayName: string; platform: string }
+): Promise<'registered' | 'alreadyRegistered'> {
+  try {
+    await port.task(AGENT_DEVICE_TASK.register, {
+      consumerKind: { kind: 'companion', formFactor: 'mobile' },
+      displayName: opts.displayName,
+      platform: opts.platform,
+    })
+    return 'registered'
+  } catch (e) {
+    // Over a trust task the agent sends a conflict with a generic code and the
+    // reason in its words ("device/register:alreadyRegistered — …", vta-service
+    // operations/device.rs), so both are read.
+    if (e instanceof VtiRefusal && /alreadyRegistered/.test(`${e.code} ${e.message}`)) return 'alreadyRegistered'
+    throw e
+  }
+}
+
+/**
+ * Tell the agent this phone is still here, with `ext` when the beat carries one (the sign-in's UV key,
+ * oobSignInAgent enrolUvKey).
+ */
+export async function heartbeat(
+  port: AgentDevicePort,
+  ext?: Record<string, unknown>,
+  timeoutMs?: number
+): Promise<void> {
+  await sendHeartbeat(port, ext ? { ext } : {}, timeoutMs)
+}
+
+/**
+ * A heartbeat in the newest version the agent serves (0.3, else 0.2).
+ *
+ * @versionLadder device/heartbeat
+ */
+const sendHeartbeat = (port: AgentDevicePort, payload: Record<string, unknown>, timeoutMs?: number) =>
+  versionsFor(port.managerDid ?? port).ask(
+    'deviceHeartbeat',
+    [AGENT_DEVICE_TASK.heartbeat03, AGENT_DEVICE_TASK.heartbeat],
+    (uri) => (timeoutMs === undefined ? port.task(uri, payload) : port.task(uri, payload, timeoutMs))
+  )
+
+/** Rename this phone: a heartbeat carrying the corrected name, the only way a binding's name changes. */
+export async function renameThisDevice(port: AgentDevicePort, displayName: string): Promise<void> {
+  await sendHeartbeat(port, { ext: { [EXT_DEVICE_NAME]: { displayName } } })
+}
+
+/** A push gateway's opaque handle for this phone's push token (`push/register`'s answer). */
+export interface WakeHandle {
+  /** The gateway's DID. The agent wakes only a gateway named by a DID. */
+  gateway: string
+  handle: string
+}
+
+export type PushPlatform = 'apns' | 'fcm'
+
+/** The agent's answer to `device/set-wake`. */
+export interface WakeChannel {
+  pushCapable: boolean
+  /** Who may wake this phone; the agent owns this list and provisions it to the gateway. */
+  allowedTriggers?: string[]
+}
+
+/**
+ * Tell the agent how to wake this phone: the handle a push gateway gave for its
+ * push token (docs/plans/push-notifications-plan.md §4.4). The agent records
+ * it, computes who may wake the phone (itself, plus any suggested trigger it
+ * accepts) and provisions the gateway; that last step is best effort on the
+ * agent's side and never reported here (vta-service `trust_tasks/device.rs`,
+ * `provision_gateway`). The agent never sees the push token.
+ */
+export async function setThisDeviceWake(
+  port: AgentDevicePort,
+  wake: WakeHandle,
+  opts: { pushPlatform?: PushPlatform; suggestedTriggers?: string[] } = {}
+): Promise<WakeChannel> {
+  const payload: Record<string, unknown> = { wakeHandle: { gateway: wake.gateway, handle: wake.handle } }
+  if (opts.pushPlatform) payload.pushPlatform = opts.pushPlatform
+  if (opts.suggestedTriggers?.length) payload.suggestedTriggers = opts.suggestedTriggers
+  return toWakeChannel(await port.task(AGENT_DEVICE_TASK.setWake, payload))
+}
+
+/**
+ * Stop the agent waking this phone: `set-wake` with no handle clears the
+ * channel. Sent before this phone unlinks, since the gateway has no unregister
+ * and the agent's disable and wipe leave a wake channel in place (plan §8).
+ */
+export async function clearThisDeviceWake(port: AgentDevicePort): Promise<WakeChannel> {
+  return toWakeChannel(await port.task(AGENT_DEVICE_TASK.setWake, {}))
+}
+
+function toWakeChannel(answer: unknown): WakeChannel {
+  const a = (answer ?? {}) as { pushCapable?: unknown; triggerPolicy?: { allowedTriggers?: unknown } }
+  const triggers = a.triggerPolicy?.allowedTriggers
+  return {
+    pushCapable: a.pushCapable === true,
+    allowedTriggers: Array.isArray(triggers) ? triggers.filter((t): t is string => typeof t === 'string') : undefined,
+  }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * A short, dated name a person can tell apart ("iPhone · added 28 Sep"), not a
+ * model string. The screens may translate it; this is the stored default.
+ */
+export function defaultDeviceName(platform: string, addedAt: Date, _locale?: string): string {
+  const what = platform === 'ios' ? 'iPhone' : platform === 'android' ? 'Android phone' : 'Phone'
+  return `${what} · added ${addedAt.getDate()} ${MONTHS[addedAt.getMonth()]}`
+}
+
+/**
+ * Other devices acting as this agent right now: seen within the liveness window, still allowed in. The
+ * limited-access filter holds only for rows that carry the access list's role (`listAgentDevices`); on
+ * `listRegisteredDevices` rows the role is unknown, so a narrower key that beats passes it.
+ */
+export function liveSiblings(
+  devices: AgentDevice[],
+  now: Date = new Date(),
+  windowMs = LIVENESS_WINDOW_MS
+): AgentDevice[] {
+  return devices.filter((d) => {
+    // A key with limited access does not act as this agent.
+    if (d.isThisPhone || d.accessRevoked || d.limitedAccess || !d.lastSeenAt) return false
+    const seen = Date.parse(d.lastSeenAt)
+    return Number.isFinite(seen) && now.getTime() - seen <= windowMs
+  })
+}

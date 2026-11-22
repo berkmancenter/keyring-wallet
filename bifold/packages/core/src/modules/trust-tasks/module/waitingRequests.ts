@@ -1,0 +1,85 @@
+/**
+ * waitingRequests — the requests that wait for this phone's decision.
+ *
+ * A request the agent sent for consent waits while it is `pending` and its
+ * expiry has not passed, and so does one whose answer did not go through
+ * (`failed`): the agent still holds it undecided, so the person can answer
+ * again (al-phone, 10-05: a failed Approve left the list, and the badge with
+ * it). Decided and expired requests do not wait.
+ * This is the one count the app shows: the badge on the My Agent tab and the
+ * "something waits" banner on "Your agent" read it from here, so they agree,
+ * and neither needs the agent screen to have been opened.
+ *
+ * @module trust-tasks/module/waitingRequests
+ */
+import type { TFunction } from 'i18next'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+
+import { isTrustedApproversEnabled } from './trustedApproversFlag'
+import { vtaAgent, type VtiApproval } from './vtaAgent'
+
+const expiryOf = (approval: Pick<VtiApproval, 'expiresAt'>): number | undefined => {
+  const at = Date.parse(String(approval.expiresAt ?? ''))
+  return Number.isFinite(at) ? at : undefined
+}
+
+/**
+ * The requests the screens show and count. With the trusted-approvers switch
+ * off, none asked by someone else's agent (`forAgent`): one listed before the
+ * switch went off stays in memory until it expires, and must not be shown,
+ * counted or answered from a screen meanwhile. This phone's own are unaffected.
+ */
+export function shownApprovals<T extends Partial<Pick<VtiApproval, 'forAgent'>>>(approvals: T[]): T[] {
+  return isTrustedApproversEnabled() ? approvals : approvals.filter((approval) => !approval.forAgent)
+}
+
+/**
+ * The requests still waiting at `now`, of those shown ({@link shownApprovals}).
+ * A request whose expiry cannot be read is kept: better a request shown that
+ * the agent then refuses than one hidden.
+ */
+export function waitingRequests<
+  T extends Pick<VtiApproval, 'status' | 'expiresAt'> & Partial<Pick<VtiApproval, 'forAgent'>>,
+>(approvals: T[], now: number): T[] {
+  return shownApprovals(approvals).filter((approval) => {
+    if (approval.status !== 'pending' && approval.status !== 'failed') return false
+    const expiry = expiryOf(approval)
+    return expiry === undefined || expiry > now
+  })
+}
+
+/** When the next of these expires, if any has an expiry. */
+export function nextExpiry(waiting: Array<Pick<VtiApproval, 'expiresAt'>>): number | undefined {
+  const times = waiting.map(expiryOf).filter((at): at is number => at !== undefined)
+  return times.length ? Math.min(...times) : undefined
+}
+
+/** The longest a timer can be set for. */
+const MAX_TIMER_MS = 2 ** 31 - 1
+
+/**
+ * How many requests wait for this phone's decision, kept current: it drops
+ * when one is decided, and when one expires, with nothing else happening.
+ */
+export function useWaitingRequestsCount(clock: () => number = Date.now): number {
+  const approvals = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().approvals)
+  // Every linked agent's: the current one's, and what a look found at the others.
+  const others = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().otherRequests)
+  const [, look] = useState(0)
+  const all = others ? [...approvals, ...Object.values(others).flatMap((o) => o.approvals)] : approvals
+  const waiting = waitingRequests(all, clock())
+  const next = nextExpiry(waiting)
+  useEffect(() => {
+    if (next === undefined) return
+    const timer = setTimeout(() => look((n) => n + 1), Math.min(Math.max(next - clock(), 0) + 50, MAX_TIMER_MS))
+    return () => clearTimeout(timer)
+  }, [next, clock])
+  return waiting.length
+}
+
+/** The My Agent tab's badge and spoken label for a count of waiting requests. */
+export function myAgentTabBadge(count: number, t: TFunction): { badge: number | undefined; label: string } {
+  return count > 0
+    ? { badge: count, label: `${t('TabStack.MyAgent')}, ${t('TabStack.RequestsWaiting', { count })}` }
+    : { badge: undefined, label: t('TabStack.MyAgent') as string }
+}

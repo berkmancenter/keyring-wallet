@@ -1,0 +1,92 @@
+{
+  "badges": [
+    {
+      "badge": {
+        "badgeId": "bdg_W5k2N8xRb3Qz7TpL",
+        "kind": "community",
+        "name": "Workshop host",
+        "description": "Ran a workshop for the community.",
+        "criteria": "Hosted any workshop on the community calendar. A badge owner gives it after the session.",
+        "image": {
+          "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+          "mediaType": "image/png",
+          "size": 61440
+        },
+        "repeatable": true,
+        "requestable": true,
+        "listed": true,
+        "shareableOutside": true,
+        "groupId": "grp_Hs7Qm2Lk9Tn4Bv1X",
+        "state": "active",
+        "createdAt": "2026-09-01T09:00:02Z"
+      },
+      "count": 2,
+      "since": "2026-09-14T18:00:00Z",
+      "latestAt": "2026-10-19T18:30:00Z",
+      "pinned": true,
+      "hidden": false,
+      "position": 0,
+      "credentialId": "urn:uuid:5a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+      "credentialValidUntil": "2028-10-19T18:30:00Z"
+    },
+    {
+      "badge": {
+        "badgeId": "bdg_Kd0sCl4mpWh1sp3r",
+        "kind": "kudos",
+        "name": "Clamp whisperer",
+        "description": "Found the good clamps when nobody else could.",
+        "image": {
+          "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+          "mediaType": "image/png",
+          "size": 24576
+        },
+        "repeatable": true,
+        "listed": true,
+        "state": "active",
+        "createdAt": "2026-10-02T09:05:00Z",
+        "createdBy": "dir_Pr1yaN4t7Rj2Qw8K"
+      },
+      "count": 3,
+      "since": "2026-10-03T12:00:00Z",
+      "latestAt": "2026-11-01T16:20:00Z",
+      "pinned": false,
+      "hidden": true,
+      "position": 1
+    }
+  ],
+  "offers": [
+    {
+      "award": {
+        "awardId": "awd_H7q2Lm9Xc4Vt1Bz8",
+        "badgeId": "bdg_Yr1Ab0ardTn2Qx7V",
+        "entryId": "dir_Tm4sV3g4K9xQ2bLp",
+        "givenBy": "dir_B3nOk4f0rRq9Wz2X",
+        "note": "A year of Saturdays. Thank you.",
+        "state": "offered",
+        "offeredAt": "2026-11-05T20:00:00Z",
+        "expiresAt": "2026-12-05T20:00:00Z"
+      },
+      "badge": {
+        "badgeId": "bdg_Yr1Ab0ardTn2Qx7V",
+        "kind": "community",
+        "name": "One year aboard",
+        "description": "A year in the community.",
+        "image": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "mediaType": "image/png",
+          "size": 30720
+        },
+        "repeatable": false,
+        "listed": true,
+        "groupId": "grp_Yr1Ab0ardGr0upX2",
+        "state": "active",
+        "createdAt": "2026-09-01T09:10:00Z"
+      },
+      "givenBy": {
+        "displayName": "Ben"
+      }
+    }
+  ],
+  "visibility": "members",
+  "kudosTotal": 0
+}
