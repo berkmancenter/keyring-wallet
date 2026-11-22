@@ -2,8 +2,9 @@ name: Code Quality
 
 on:
   pull_request:
-    # feat/one-codebase: the integration branch of docs/plans/single-codebase-plan.md takes stacked PRs.
-    branches: [main, feat/one-codebase]
+    # feat/one-codebase: the integration branch of docs/plans/single-codebase-plan.md takes stacked PRs; fold/**: the
+    # PRs stacked on each other inside it (the filter names the PR's BASE branch).
+    branches: [main, feat/one-codebase, "fold/**"]
     types: [opened, synchronize, reopened, labeled, edited]
 
 jobs:

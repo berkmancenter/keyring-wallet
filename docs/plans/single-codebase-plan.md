@@ -322,7 +322,7 @@ diff <(git -C <bifold clone> ls-tree -r "$tip" | awk '{print $3, $4}' | sort) \
 # any other "<" line is a bifold merge not yet replayed (§7.1)
 ```
 
-And the wallet side, after the last merge of `main` into the integration branch (§7.1: wallet-side changes reach the fold by that merge, never by replay; its one expected conflict is the `bifold` path, main's gitlink bump against the fold's deletion, resolved by keeping the deletion once `git rev-parse <fold head>:bifold` equals the bumped pin's `^{tree}`):
+And the wallet side, after the last merge of `main` into the integration branch (§7.1: wallet-side changes reach the fold by that merge, never by replay). Its one expected conflict is the `bifold` path: main's gitlink bump against the fold's directory, which git reports as "directory in the way of bifold … moving it to `bifold~origin_main`" plus a modify/delete conflict on that moved entry. Resolution: `git rm --cached bifold~origin_main` (drop the gitlink), and prove that the directory already carries the bumped pin's content with the ls-tree comparison above against that pin (exactly the ten workflows; the plain tree ids differ by those ten files, so `rev-parse <fold>:bifold` is not expected to equal the pin's `^{tree}`). Rehearsed on 2026-11-21 against main 4cbf7e388 (pin 62a982c47): that one conflict, `staging.yaml` auto-merged, `.gitmodules` stayed deleted. Then:
 
 ```sh
 git diff origin/main feat/one-codebase --stat -- . ':!bifold' ':!.gitmodules'
