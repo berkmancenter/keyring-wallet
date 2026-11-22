@@ -90,7 +90,10 @@ export function legRecord({ name, exit, start, end }, log, meta, passedBefore = 
 
 // The fold's graft (a refs/replace/* ref on the squash that folded bifold in, docs/plans/single-codebase-plan.md D1) is
 // honoured by git by default where it is present, which gives main's history 4,344 extra ancestors on this Mac and none
-// in CI. An ancestry or range WALK must read the real objects, so every walker here sets GIT_NO_REPLACE_OBJECTS.
+// in CI. An ancestry or range WALK must read the real objects, so every walker here sets GIT_NO_REPLACE_OBJECTS. The
+// variable is existence-based: '1', '0' and '' all ignore replace refs; only unsetting it honours them. bifoldKind's
+// `ls-tree <sha>` below does not need it: a graft rewrites parents only, so the replacement carries the same tree as
+// the real commit (checked: both 9024ab43… for the fold); a replacement that edited content would silently mislead it.
 export const NO_REPLACE = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' };
 
 /** Is commit `a` an ancestor of (or equal to) `b` in the repo at `dir`? null when that can't be told. */
