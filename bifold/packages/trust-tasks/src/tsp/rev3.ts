@@ -1,0 +1,970 @@
+/**
+ * TSP **Rev 3** direct-mode messaging over the three ports (`./ports`) — the
+ * revision Keyring packs.
+ *
+ * Layout (spec Rev 3 §9.1–§9.2, as `@openvtc/vti-tsp-js` 0.3.0 packs it):
+ *
+ *   -E<count>                     one frame; the count covers everything below
+ *     YTSP-AAC                      version marker
+ *     <B> sender-VID
+ *     <B> receiver-VID
+ *     <F> enc ‖ ct                HPKE-Base ciphertext, AEAD tag inside ct
+ *   -C23 -K22 B0 sig(64)          indexed Ed25519 signature over the -E frame
+ *
+ * and the plaintext the ciphertext seals, the payload frame:
+ *
+ *   Direct  -Z<n> XSCS  sndr  pad  -A<n> <B body>
+ *   Nested  -Z<n> XHOP  sndr  -JAA        pad  <raw inner message>
+ *   Routed  -Z<n> XHOP  sndr  -J<n> hops  pad  <raw inner message>
+ *
+ * The framing is rebuilt here on the vendored package's own exported `cesr`
+ * table rather than imported from it, for the same reason the Rev 2 codec
+ * was: the package's `pack`/`unpack` take raw private keys, and its Rev 3
+ * field/payload codecs are internal modules its `exports` map does not reach.
+ * What is ours is the orchestration — local key material always comes from a
+ * port, a counterparty's public keys always from a {@link VidResolver} — and
+ * the tests in `@bifold/core` cross-check every byte against the package's
+ * own packer and unpacker and against the specification's Appendix A vectors.
+ *
+ * What Rev 3 changed, and where it lands here:
+ *
+ * - HPKE-**Base**: the sender's static key leaves the KEM. `packRev3` never
+ *   calls `keyAgreement.agree()`; it needs only a `SigningKey`. The receiver's
+ *   decap is one `agree(enc)` through its port (`hpke.openBase`).
+ * - `info` is the fixed code `YTSP-`; the AAD is the envelope *fields*
+ *   (version ‖ VID_sndr ‖ VID_rcvr) without the `-E` count code.
+ * - The `-E` count covers the ciphertext, so the frame is finalized after
+ *   sealing; past 4095 quadlets the count takes the six-byte long form
+ *   (`--E…`, leading byte `0xFB`), which an ingress classifier has to accept.
+ * - Ciphertext code `G` → `F`, and the field is `enc ‖ ct` (Rev 2 put `enc`
+ *   last).
+ * - The signature is indexed (`B0`) under length-based counts `-C23 -K22`.
+ * - Every payload layout carries the ESSR sender field and a padding field.
+ *   The sender field is always written with the sender's VID and always
+ *   checked against the envelope on read.
+ *
+ * @module trust-tasks/tsp/rev3
+ */
+
+import { cesr } from '@openvtc/vti-tsp-js'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { ed25519 } from '@noble/curves/ed25519.js'
+
+import * as hpke from './hpke'
+import type { TspIdentity, VidResolver } from './ports'
+import { encodeTspVersion, TSP_REV3, TSP_V1, type TspVersion } from './version'
+import {
+  bytesEqual,
+  decodeUtf8Strict,
+  utf8,
+  type ApplicationKind,
+  type PackedMessage,
+  type TspRevision,
+  type UnpackedMessage,
+} from './shared'
+
+const ENC_LEN = 32
+const TAG_LEN = 16
+const SIG_LEN = 64
+/** The `-K` group's content: the 2-byte indexed code plus 64 bytes of
+ *  signature, 66 bytes = 22 quadlets. */
+const SIG_GROUP_QUADLETS = 22
+/** The `-C` group holds the `-K` header plus its content — §9.5 made these
+ *  counts length-based, where Rev 2 repeated the same number twice. */
+const ATTACH_GROUP_QUADLETS = SIG_GROUP_QUADLETS + 1
+/** Only index 0 can be verified: a VID names one signing key here. */
+const SIG_INDEX = 0
+
+/**
+ * Test-only knobs that make a pack byte-reproducible against published
+ * vectors. **Never use outside tests.** A fixed HPKE ephemeral makes every
+ * message sealed with it to the same recipient share one (key, base_nonce)
+ * pair, which under ChaCha20-Poly1305 gives away both confidentiality and
+ * integrity.
+ */
+export interface UnsafeDeterministicPack {
+  /** RFC 9180 §7.1.3 `DeriveKeyPair` input for the HPKE-Base ephemeral — the
+   *  `ikmE` the specification's Appendix A prints. */
+  __unsafeIkmE: Uint8Array
+  /** Write the NULL VID `4BAA` in the ESSR sender field instead of the
+   *  sender's VID — §9.2 permits it under HPKE-Base and the published vectors
+   *  use it; this codec's own stance is to always write the VID. */
+  nullPayloadSender?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Envelope
+// ---------------------------------------------------------------------------
+
+export interface DecodedEnvelopeRev3 {
+  /** MAJOR as carried: 0 for Rev 3, 1 for TSP 1.0, which share this layout. */
+  major: number
+  sender: string
+  /** Empty string is the NULL VID `4BAA` — "no receiver named". */
+  receiver: string
+  /** Byte range of the encoded envelope fields — the HPKE-Base AAD. */
+  aad: { begin: number; end: number }
+  /** Offset just past the envelope fields: where the ciphertext field begins. */
+  headerLen: number
+  /** Offset just past the signable content the `-E` count declares. */
+  contentEnd: number
+  /** MINOR as carried. Never gates processing (`tsp_rev3_subtask.md` §3.5). */
+  minor: number
+}
+
+/** The envelope *fields* — version, sender VID, receiver VID — without the
+ *  enclosing `-E` count code. These bytes are the HPKE-Base AAD. `version` is
+ *  Rev 3's unless a caller names another; it exists so a test can show the
+ *  marker is what the vectors pin, and so TSP 1.0 can share this layout. */
+export function encodeFieldsRev3(sender: string, receiver: string, version: TspVersion = TSP_REV3): Uint8Array {
+  const body: number[] = []
+  encodeTspVersion(version, body)
+  cesr.encodeVariableData(cesr.TSP_VID, utf8.encode(sender), body)
+  cesr.encodeVariableData(cesr.TSP_VID, utf8.encode(receiver), body)
+  if (body.length % 3 !== 0) throw new Error('tsp: envelope fields not a multiple of 3 bytes')
+  return new Uint8Array(body)
+}
+
+/** Prepend the `-E` count code to `fields ‖ body`. The count covers both and
+ *  excludes the signature attachment appended afterwards. */
+export function finalizeFrameRev3(fields: Uint8Array, body: Uint8Array): Uint8Array {
+  const contentLen = fields.length + body.length
+  if (contentLen % 3 !== 0) throw new Error('tsp: envelope content not a multiple of 3 bytes')
+  const out: number[] = []
+  cesr.encodeCount(cesr.TSP_ETS_WRAPPER, contentLen / 3, out)
+  for (const b of fields) out.push(b)
+  for (const b of body) out.push(b)
+  return new Uint8Array(out)
+}
+
+/** Decode a Rev 3 envelope and the offsets needed to open and verify it. */
+export function decodeEnvelopeRev3(data: Uint8Array): DecodedEnvelopeRev3 {
+  const cur: cesr.Cursor = { pos: 0 }
+  const quadlets = cesr.decodeCount(cesr.TSP_ETS_WRAPPER, data, cur)
+  if (quadlets === undefined) throw new Error('tsp: missing -E envelope frame')
+  const contentBegin = cur.pos
+  const contentEnd = contentBegin + quadlets * 3
+  if (contentEnd > data.length) throw new Error('tsp: -E frame declares more content than the message')
+
+  const version = cesr.readVersion(data, cur)
+  if (version === undefined) throw new Error('tsp: missing or malformed version marker')
+  if (version.major !== TSP_REV3.major && version.major !== TSP_V1.major) {
+    throw new Error(`tsp: unsupported TSP major version ${version.major}`)
+  }
+
+  const senderBytes = cesr.decodeVariableData(cesr.TSP_VID, data, cur)
+  if (senderBytes === undefined) throw new Error('tsp: missing sender VID')
+  const receiverBytes = cesr.decodeVariableData(cesr.TSP_VID, data, cur)
+  if (receiverBytes === undefined) throw new Error('tsp: missing receiver VID field')
+
+  let sender: string
+  let receiver: string
+  try {
+    sender = decodeUtf8Strict(senderBytes)
+    receiver = decodeUtf8Strict(receiverBytes)
+  } catch {
+    throw new Error('tsp: invalid VID encoding')
+  }
+  if (sender.length === 0) throw new Error('tsp: sender VID is the NULL VID; every TSP message names its sender')
+  if (cur.pos > contentEnd) throw new Error('tsp: envelope fields overrun the -E frame count')
+
+  return {
+    major: version.major,
+    sender,
+    receiver,
+    aad: { begin: contentBegin, end: cur.pos },
+    headerLen: cur.pos,
+    contentEnd,
+    minor: version.minor,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Payload frame
+// ---------------------------------------------------------------------------
+
+interface DecodedFrame {
+  kind: ApplicationKind
+  hops: string[]
+  body: Uint8Array
+  /** The ESSR sender VID as carried, or `""` for the NULL VID. */
+  senderVid: string
+}
+
+/** The ESSR sender-VID field. The NULL VID is the empty string. */
+function encodeSenderField(senderVid: string, out: number[]): void {
+  cesr.encodeVariableData(cesr.TSP_VID, utf8.encode(senderVid), out)
+}
+
+/** The padding field — always written, always empty (§7.5). */
+function encodeEmptyPadding(out: number[]): void {
+  cesr.encodeVariableData(cesr.TSP_PLAINTEXT, new Uint8Array(0), out)
+}
+
+function decodePadding(frame: Uint8Array, cur: cesr.Cursor): void {
+  if (cesr.decodeVariableData(cesr.TSP_PLAINTEXT, frame, cur) === undefined)
+    throw new Error('tsp: missing padding field')
+}
+
+/** A `-J` VID list. §9.2 counts the group's byte length in quadlets, where
+ *  Rev 2 counted VIDs; an empty list is `-JAA`. */
+function encodeVidList(vids: string[], out: number[]): void {
+  const body: number[] = []
+  for (const vid of vids) cesr.encodeVariableData(cesr.TSP_VID, utf8.encode(vid), body)
+  if (body.length % 3 !== 0) throw new Error('tsp: -J VID list not a multiple of 3 bytes')
+  cesr.encodeCount(cesr.TSP_HOP_LIST, body.length / 3, out)
+  for (const b of body) out.push(b)
+}
+
+function decodeVidList(stream: Uint8Array, cur: cesr.Cursor): string[] {
+  const quadlets = cesr.decodeCount(cesr.TSP_HOP_LIST, stream, cur)
+  if (quadlets === undefined) throw new Error('tsp: missing -J VID list')
+  const groupLen = quadlets * 3
+  if (groupLen > cesr.MAX_FIELD_SIZE) throw new Error('tsp: -J VID list too long')
+  const groupEnd = cur.pos + groupLen
+  if (groupEnd > stream.length) throw new Error('tsp: -J VID list overruns message')
+  const vids: string[] = []
+  while (cur.pos < groupEnd) {
+    if (vids.length >= cesr.MAX_HOPS) throw new Error('tsp: too many hops')
+    const vid = cesr.decodeVariableData(cesr.TSP_VID, stream, cur)
+    if (vid === undefined) throw new Error('tsp: malformed VID in -J list')
+    try {
+      vids.push(decodeUtf8Strict(vid))
+    } catch {
+      throw new Error('tsp: VID in -J list is not UTF-8')
+    }
+  }
+  if (cur.pos !== groupEnd) throw new Error('tsp: -J VID list does not fill its declared length')
+  return vids
+}
+
+/** Build an application payload frame and the thread digest over it. */
+export function encodePayloadFrameRev3(
+  body: Uint8Array,
+  kind: ApplicationKind,
+  hops: string[],
+  senderVid: string
+): { frame: Uint8Array; threadDigest: Uint8Array } {
+  const frameBody: number[] = []
+  if (kind === 'direct') {
+    for (const b of cesr.XSCS) frameBody.push(b)
+    encodeSenderField(senderVid, frameBody)
+    encodeEmptyPadding(frameBody)
+    // §9.2.3: the upper-layer payload is a generic CESR stream holding one
+    // Bytes primitive. The caller's bytes are carried opaquely — not wrapped
+    // in the non-native message group, which would assert a serialization
+    // this layer has not been told about.
+    const stream: number[] = []
+    cesr.encodeVariableData(cesr.TSP_PLAINTEXT, body, stream)
+    cesr.encodeCount(cesr.TSP_GENERIC_STREAM, stream.length / 3, frameBody)
+    for (const b of stream) frameBody.push(b)
+  } else {
+    for (const b of cesr.XHOP) frameBody.push(b)
+    encodeSenderField(senderVid, frameBody)
+    encodeVidList(kind === 'nested' ? [] : hops, frameBody)
+    encodeEmptyPadding(frameBody)
+    // The inner message is self-framing and carried raw; every TSP message
+    // is quadlet-aligned, so the frame stays aligned.
+    if (body.length % 3 !== 0) throw new Error('tsp: nested inner message is not quadlet-aligned')
+    for (const b of body) frameBody.push(b)
+  }
+  if (frameBody.length % 3 !== 0) throw new Error('tsp: payload frame not a multiple of 3 bytes')
+  const out: number[] = []
+  cesr.encodeCount(cesr.TSP_PAYLOAD, frameBody.length / 3, out)
+  for (const b of frameBody) out.push(b)
+  const frame = new Uint8Array(out)
+  return { frame, threadDigest: sha256(frame) }
+}
+
+/**
+ * Decode an application payload frame. `envelopeSender` is checked against
+ * the ESSR sender field: a non-NULL field that disagrees with the envelope is
+ * a message claiming two senders — a verification failure, not a parse one.
+ * Relationship-forming control frames (`XRFI`/`XRFA`/`XRFD`) are recognised
+ * and refused by name: this codec does not yet form relationships.
+ */
+export function decodePayloadFrameRev3(
+  frame: Uint8Array,
+  envelopeSender: string,
+  options: { requireSender?: boolean } = {}
+): DecodedFrame & { threadDigest: Uint8Array } {
+  const cur: cesr.Cursor = { pos: 0 }
+  const quadlets = cesr.decodeCount(cesr.TSP_PAYLOAD, frame, cur)
+  if (quadlets === undefined) throw new Error('tsp: missing -Z payload frame')
+  const frameEnd = cur.pos + quadlets * 3
+  if (frameEnd > frame.length) throw new Error('tsp: -Z frame declares more content than the payload')
+  const threadDigest = sha256(frame.slice(0, frameEnd))
+
+  if (cur.pos + 3 > frame.length) throw new Error('tsp: truncated payload type code')
+  const typeCode = frame.slice(cur.pos, cur.pos + 3)
+  cur.pos += 3
+
+  const senderStart = cur.pos
+  const senderBytes = cesr.decodeVariableData(cesr.TSP_VID, frame, cur)
+  if (senderBytes === undefined) throw new Error('tsp: missing ESSR sender VID field')
+  const senderField = frame.slice(senderStart, cur.pos)
+  let senderVid: string
+  try {
+    senderVid = decodeUtf8Strict(senderBytes)
+  } catch {
+    throw new Error('tsp: ESSR sender VID is not UTF-8')
+  }
+  // TSP 1.0 §3.2, §3.7 step 7: "For all PKAE schemes, the `VID_sndr` MUST
+  // appear as a confidential payload field". Rev 3 let HPKE-Base write the
+  // NULL VID there, so the rule is the caller's to ask for, per version.
+  if (options.requireSender && senderVid.length === 0) {
+    throw new Error('tsp: ESSR sender VID is the NULL VID; a TSP 1.0 confidential payload must name its sender')
+  }
+  if (senderVid.length > 0 && senderVid !== envelopeSender) {
+    throw new Error('tsp: ESSR sender VID does not match the envelope sender')
+  }
+
+  if (bytesEqual(typeCode, cesr.XSCS)) {
+    decodePadding(frame, cur)
+    const streamQuadlets = cesr.decodeCount(cesr.TSP_GENERIC_STREAM, frame, cur)
+    if (streamQuadlets === undefined) throw new Error('tsp: missing -A payload stream')
+    const streamEnd = cur.pos + streamQuadlets * 3
+    if (streamEnd !== frameEnd) throw new Error('tsp: -A stream does not end the payload frame')
+    const body = cesr.decodeVariableData(cesr.TSP_PLAINTEXT, frame, cur)
+    if (body === undefined) throw new Error('tsp: missing payload body')
+    if (cur.pos !== streamEnd) throw new Error('tsp: -A stream must hold exactly one Bytes primitive')
+    return { kind: 'direct', hops: [], body, senderVid, threadDigest }
+  }
+
+  if (bytesEqual(typeCode, cesr.XHOP)) {
+    const hops = decodeVidList(frame, cur)
+    decodePadding(frame, cur)
+    const body = frame.slice(cur.pos, frameEnd)
+    return { kind: hops.length === 0 ? 'nested' : 'routed', hops, body, senderVid, threadDigest }
+  }
+
+  if (bytesEqual(typeCode, cesr.XRFI) || bytesEqual(typeCode, cesr.XRFA) || bytesEqual(typeCode, cesr.XRFD)) {
+    throw decodeControlFrameRev3(frame, cur, frameEnd, typeCode, senderField)
+  }
+  if (bytesEqual(typeCode, cesr.XCTL) || bytesEqual(typeCode, cesr.XPAD)) {
+    throw new Error('tsp: control or padding payload; not an application message')
+  }
+  throw new Error('tsp: unsupported payload type marker')
+}
+
+/**
+ * Read a control frame's fields after its type code (§9.3), in the layout the
+ * packers below write, and return the error {@link unpackRev3} completes and
+ * throws. The self-addressing digest is checked there, where the envelope
+ * fields it covers are at hand.
+ *
+ * ```text
+ *   XRFI  sndr  Digest  Nonce  Reply_Path  Referral  pad
+ *   XRFA  sndr  Reply_Digest  Digest  pad
+ *   XRFD  sndr  Digest  pad
+ * ```
+ */
+function decodeControlFrameRev3(
+  frame: Uint8Array,
+  cur: cesr.Cursor,
+  frameEnd: number,
+  typeCode: Uint8Array,
+  senderField: Uint8Array
+): TspControlFrameReceived {
+  const fixed = (identifier: number, length: number, what: string) => {
+    const value = cesr.decodeFixedData(identifier, length, frame, cur)
+    if (value === undefined) throw new Error(`tsp: control frame is missing its ${what}`)
+    return value
+  }
+  const end = () => {
+    decodePadding(frame, cur)
+    if (cur.pos !== frameEnd) throw new Error('tsp: control frame has trailing fields')
+  }
+  if (bytesEqual(typeCode, cesr.XRFI)) {
+    const digest = fixed(cesr.TSP_SHA256, DIGEST_LEN, 'digest')
+    const nonce = fixed(cesr.TSP_NONCE, NONCE_LEN, 'nonce')
+    const route = decodeVidList(frame, cur)
+    const referrals = cesr.decodeCount(cesr.TSP_HOP_LIST, frame, cur)
+    if (referrals === undefined) throw new Error('tsp: invite is missing its referral list')
+    if (referrals !== 0) {
+      // The packer writes no referrals, and the derivation below rebuilds an empty list: an invite introducing
+      // someone is still refused as a control frame, but reported with no verified message (nothing answers it).
+      cur.pos += referrals * 3
+      end()
+      return new TspControlFrameReceived({ kind: 'invite', digest, nonce, route }, undefined)
+    }
+    end()
+    const after = concat(
+      bytesOf((out) => cesr.encodeFixedData(cesr.TSP_NONCE, nonce, out)),
+      bytesOf((out) => encodeVidList(route, out)),
+      bytesOf((out) => cesr.encodeCount(cesr.TSP_HOP_LIST, 0, out))
+    )
+    return new TspControlFrameReceived(
+      { kind: 'invite', digest, nonce, route },
+      { typeCode, before: senderField, after }
+    )
+  }
+  if (bytesEqual(typeCode, cesr.XRFA)) {
+    const replyStart = cur.pos
+    const replyDigest = fixed(cesr.TSP_SHA256, DIGEST_LEN, 'reply digest')
+    const before = concat(senderField, frame.slice(replyStart, cur.pos))
+    const digest = fixed(cesr.TSP_SHA256, DIGEST_LEN, 'digest')
+    end()
+    return new TspControlFrameReceived(
+      { kind: 'accept', digest, replyDigest },
+      { typeCode, before, after: new Uint8Array(0) }
+    )
+  }
+  // XRFD: the digest names the relationship it ends; it is echoed, not derived, so there is nothing to recompute.
+  const digest = fixed(cesr.TSP_SHA256, DIGEST_LEN, 'digest')
+  end()
+  return new TspControlFrameReceived({ kind: 'cancel', digest }, 'echoed')
+}
+
+// ---------------------------------------------------------------------------
+// Signature attachment
+// ---------------------------------------------------------------------------
+
+/** `-C23 -K22 B0 sig(64)`. */
+function encodeSignatureFrame(signature: Uint8Array, out: number[]): void {
+  cesr.encodeCount(cesr.TSP_ATTACH_GRP, ATTACH_GROUP_QUADLETS, out)
+  cesr.encodeCount(cesr.TSP_INDEX_SIG_GRP, SIG_GROUP_QUADLETS, out)
+  cesr.encodeIndexedEd25519Signature(SIG_INDEX, signature, out)
+}
+
+function decodeSignatureFrame(data: Uint8Array, cur: cesr.Cursor): Uint8Array {
+  const attach = cesr.decodeCount(cesr.TSP_ATTACH_GRP, data, cur)
+  const group = cesr.decodeCount(cesr.TSP_INDEX_SIG_GRP, data, cur)
+  if (attach !== ATTACH_GROUP_QUADLETS || group !== SIG_GROUP_QUADLETS)
+    throw new Error('tsp: unexpected signature group size')
+  if (cur.pos + 2 + SIG_LEN > data.length) throw new Error('tsp: truncated signature attachment')
+  const word = ((data[cur.pos] << 16) | (data[cur.pos + 1] << 8)) >>> 0
+  if (word >>> 18 !== cesr.ED25519_SIGNATURE) throw new Error('tsp: signature is not the indexed Ed25519 code')
+  const index = (word >>> 12) & 0x3f
+  if (index !== SIG_INDEX)
+    throw new Error(`tsp: signature names key index ${index}, but only index ${SIG_INDEX} can be verified`)
+  cur.pos += 2
+  const sig = data.slice(cur.pos, cur.pos + SIG_LEN)
+  cur.pos += SIG_LEN
+  return sig
+}
+
+// ---------------------------------------------------------------------------
+// pack / unpack
+// ---------------------------------------------------------------------------
+
+/**
+ * Pack a Rev 3 direct message. Only the sender's `SigningKey` port is used:
+ * HPKE-Base needs no sender key, so `senderIdentity.keyAgreement` is never
+ * consulted (a test double that throws on `agree()` proves it).
+ * @param resolver resolves the COUNTERPARTY's (receiver's) public keys.
+ */
+export async function packRev3(
+  body: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packWithHopsRev3(body, 'direct', [], senderVid, receiverVid, senderIdentity, resolver, unsafe)
+}
+
+/** Like {@link packRev3} for any application kind, with a routing `hops` list
+ *  (empty for Direct/Nested). */
+export async function packWithHopsRev3(
+  body: Uint8Array,
+  kind: ApplicationKind,
+  hops: string[],
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack,
+  version: TspVersion = TSP_REV3
+): Promise<PackedMessage> {
+  refuseNullSenderUnder(version, unsafe)
+  const fields = encodeFieldsRev3(senderVid, receiverVid, version)
+  const payloadSender = unsafe?.nullPayloadSender === true ? '' : senderVid
+  const { frame, threadDigest } = encodePayloadFrameRev3(body, kind, hops, payloadSender)
+
+  const { encryptionPublicKey: receiverEncPk } = await resolver.resolve(receiverVid)
+  const ephemeralSk = unsafe ? hpke.deriveKeyPair(unsafe.__unsafeIkmE).sk : undefined
+  const sealed = hpke.sealBase(frame, fields, receiverEncPk, cesr.TSP_INFO, ephemeralSk)
+
+  // Ciphertext field: `enc ‖ ct`, with the AEAD tag inside `ct`.
+  const ciphertext = new Uint8Array(sealed.enc.length + sealed.ciphertext.length)
+  ciphertext.set(sealed.enc, 0)
+  ciphertext.set(sealed.ciphertext, sealed.enc.length)
+  const field: number[] = []
+  cesr.encodeVariableData(cesr.TSP_HPKE_BASE_CIPHERTEXT, ciphertext, field)
+
+  const wireBytes = finalizeFrameRev3(fields, new Uint8Array(field))
+  const signature = await senderIdentity.signingKey.sign(wireBytes)
+  const out = Array.from(wireBytes)
+  encodeSignatureFrame(signature, out)
+  return { bytes: new Uint8Array(out), threadDigest, revision: revisionOf(version) }
+}
+
+/** The revision a version names: MAJOR 1 is TSP 1.0, MAJOR 0 here is Rev 3. */
+export function revisionOf(version: TspVersion): TspRevision {
+  return version.major === TSP_V1.major ? 'v1' : 'rev3'
+}
+
+/** 1.0 has no NULL sender to reproduce: the test-only option is refused there,
+ *  as affinidi-tsp 0.3.0's `insecure_deterministic` refuses it. */
+function refuseNullSenderUnder(version: TspVersion, unsafe?: UnsafeDeterministicPack): void {
+  if (unsafe?.nullPayloadSender === true && version.major === TSP_V1.major) {
+    throw new Error('tsp: a TSP 1.0 confidential payload must name its sender; nullPayloadSender is Rev 3 only')
+  }
+}
+
+/**
+ * Thrown when an incoming frame is a relationship-forming control message.
+ *
+ * Not an error in the protocol sense: this codec SENDS invites
+ * ({@link packInviteRev3}) and receives the peer's accept in reply, but it does
+ * not consume control frames as application traffic. Exported so a caller can
+ * tell "this was a control frame" from a real decoding failure without matching
+ * on prose — and treat it as handled, because a control frame it never
+ * acknowledges stays queued against the peer that sent it.
+ */
+export const CONTROL_FRAME_RECEIVED = 'tsp: relationship-forming control frame received'
+
+/** A relationship-forming control message read from a frame (§7.2, §9.3). */
+export interface TspControlMessage {
+  kind: 'invite' | 'accept' | 'cancel'
+  /**
+   * The frame's `TSP_Digest`. For an invite or an accept, its own self-addressing digest, checked against the
+   * frame by {@link unpackRev3} before the message is reported; for a cancel, the relationship it names.
+   */
+  digest: Uint8Array
+  /** An accept only: the invite digest it answers. */
+  replyDigest?: Uint8Array
+  /** An invite only: its 128-bit nonce. */
+  nonce?: Uint8Array
+  /** An invite only: the `Reply_Path` its accept travels back over (§7.2.4). */
+  route?: string[]
+}
+
+/**
+ * What {@link unpackRev3} throws for a control frame: still a refusal as an
+ * application message (its message starts with {@link CONTROL_FRAME_RECEIVED},
+ * so every caller that matches on that keeps working), but carrying what the
+ * frame said. `control` is present only once the frame was opened, its
+ * signature verified and, for an invite or an accept, its self-addressing
+ * digest recomputed and matched: a frame that fails any of those throws a
+ * plain error instead. Checked by {@link isTspControlFrame}, on the code, not
+ * the class, which may come from another bundle copy.
+ */
+export class TspControlFrameReceived extends Error {
+  readonly code = 'E_TSP_CONTROL_FRAME'
+  /** Set by {@link unpackRev3} once verified; absent while only decoded. */
+  control?: TspControlMessage
+  sender?: string
+  receiver?: string
+  revision?: TspRevision
+  constructor(
+    /** What was decoded, before the digest check. */
+    readonly decoded: TspControlMessage,
+    /**
+     * The derivation input either side of the digest slot (§7.2.1), rebuilt as the packer builds it; `'echoed'`
+     * for a cancel, whose digest names another message; `undefined` when it cannot be rebuilt (an invite with
+     * referrals), which leaves the frame unverified: refused, with no `control`.
+     */
+    readonly saidInput: { typeCode: Uint8Array; before: Uint8Array; after: Uint8Array } | 'echoed' | undefined
+  ) {
+    super(`${CONTROL_FRAME_RECEIVED}: an invite, accept or cancel is not an application message`)
+    this.name = 'TspControlFrameReceived'
+  }
+}
+
+/** A verified control frame (see {@link TspControlFrameReceived}). */
+export function isTspControlFrame(
+  error: unknown
+): error is TspControlFrameReceived & { control: TspControlMessage; sender: string; receiver: string } {
+  const e = error as { code?: unknown; control?: unknown } | undefined
+  return e?.code === 'E_TSP_CONTROL_FRAME' && e.control !== undefined
+}
+
+/** §9.2 (D9) fixes the relationship nonce at 128 bits. */
+export const NONCE_LEN = 16
+/** A digest field on the wire: the one-byte `I` code plus its 32 bytes. This is
+ *  the width the SAID derivation dummies out, so it is stated once. */
+const ENCODED_DIGEST_LEN = 33
+/** The byte the SAID derivation fills its own slot with. */
+const SAID_DUMMY = 0x23
+
+const concat = (...parts: Uint8Array[]): Uint8Array => {
+  const total = parts.reduce((n, p) => n + p.length, 0)
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const p of parts) {
+    out.set(p, at)
+    at += p.length
+  }
+  return out
+}
+
+const bytesOf = (write: (out: number[]) => void): Uint8Array => {
+  const out: number[] = []
+  write(out)
+  return new Uint8Array(out)
+}
+
+/**
+ * Derive a self-addressing `TSP_Digest` (§7.2.1).
+ *
+ * Covers the message's own envelope fields and payload fields, with the
+ * digest's own slot filled by {@link SAID_DUMMY} over its full encoded width.
+ * The `-E` and `-Z` framing tags and the padding field are excluded; the
+ * payload type code is included. A receiver recomputes it and refuses the
+ * message on a mismatch, which is what makes the correlation checkable —
+ * Rev 2 correlated on a hash that was never transmitted.
+ */
+function deriveSaid(
+  envelopeFields: Uint8Array,
+  typeCode: Uint8Array,
+  before: Uint8Array,
+  after: Uint8Array
+): Uint8Array {
+  return sha256(concat(envelopeFields, typeCode, before, new Uint8Array(ENCODED_DIGEST_LEN).fill(SAID_DUMMY), after))
+}
+
+/** Generate a 128-bit relationship nonce. */
+export function generateNonce(): Uint8Array {
+  const nonce = new Uint8Array(NONCE_LEN)
+  globalThis.crypto.getRandomValues(nonce)
+  return nonce
+}
+
+/**
+ * Pack a relationship-forming invite (`XRFI`, §7.2, §9.3).
+ *
+ * **This is what makes every other Rev 3 message deliverable.** §7.2.2: *"It is
+ * not permissible that one endpoint which has learned a VID of the other simply
+ * starts with an application level message without first having an exchange of
+ * TSP control messages."* A peer that has not been greeted **drops** what
+ * follows rather than refusing it, so the sender sees only a timeout — which is
+ * exactly how it presented when the community began advertising TSP and the
+ * ceremony died at its last step with nothing on the wire to read.
+ *
+ * Send-only: the peer records the invite on arrival and a recorded relationship
+ * already admits application messages, so traffic flows without waiting for the
+ * accept. The thread digest is returned because an accept echoes it and a later
+ * cancellation names it; it cannot be known before packing, since the
+ * derivation covers the envelope this call builds.
+ *
+ * The wire layout, §9.3:
+ *
+ * ```text
+ *   XRFI  sndr  Digest  Nonce  Reply_Path  Referral  pad
+ * ```
+ *
+ * `route` is the §7.2.4 `Reply_Path` the accept travels back over. Referrals
+ * are not emitted — an empty `-J` group says this invite introduces nobody.
+ */
+export async function packInviteRev3(
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  options: { route?: string[]; nonce?: Uint8Array } = {},
+  unsafe?: UnsafeDeterministicPack,
+  version: TspVersion = TSP_REV3
+): Promise<PackedMessage> {
+  refuseNullSenderUnder(version, unsafe)
+  const route = options.route ?? []
+  const nonce = options.nonce ?? generateNonce()
+  if (nonce.length !== NONCE_LEN) throw new Error(`tsp: an invite must carry a ${NONCE_LEN * 8}-bit nonce`)
+
+  const fields = encodeFieldsRev3(senderVid, receiverVid, version)
+  const senderField = bytesOf((out) => encodeSenderField(senderVid, out))
+
+  // The derivation input after the digest slot is REBUILT rather than sliced
+  // out of the frame: §9.3 excludes the referral field's own code and count, so
+  // the bytes there and the bytes here are deliberately different.
+  const after = concat(
+    bytesOf((out) => cesr.encodeFixedData(cesr.TSP_NONCE, nonce, out)),
+    bytesOf((out) => encodeVidList(route, out)),
+    bytesOf((out) => cesr.encodeCount(cesr.TSP_HOP_LIST, 0, out))
+  )
+  const digest = deriveSaid(fields, cesr.XRFI, senderField, after)
+
+  const frameBody: number[] = []
+  for (const b of cesr.XRFI) frameBody.push(b)
+  for (const b of senderField) frameBody.push(b)
+  cesr.encodeFixedData(cesr.TSP_SHA256, digest, frameBody)
+  cesr.encodeFixedData(cesr.TSP_NONCE, nonce, frameBody)
+  encodeVidList(route, frameBody)
+  cesr.encodeCount(cesr.TSP_HOP_LIST, 0, frameBody)
+  encodeEmptyPadding(frameBody)
+  return sealControlFrame(frameBody, fields, receiverVid, senderIdentity, resolver, digest, unsafe, version)
+}
+
+/**
+ * Frame, seal and sign a control payload body — the part every control
+ * message shares with every other. Kept in one place so the invite, the
+ * accept and the cancel cannot drift apart on the envelope.
+ */
+async function sealControlFrame(
+  frameBody: number[],
+  fields: Uint8Array,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  threadDigest: Uint8Array,
+  unsafe: UnsafeDeterministicPack | undefined,
+  version: TspVersion
+): Promise<PackedMessage> {
+  if (frameBody.length % 3 !== 0) throw new Error('tsp: control frame not a multiple of 3 bytes')
+  const framed: number[] = []
+  cesr.encodeCount(cesr.TSP_PAYLOAD, frameBody.length / 3, framed)
+  for (const b of frameBody) framed.push(b)
+  const frame = new Uint8Array(framed)
+
+  const { encryptionPublicKey: receiverEncPk } = await resolver.resolve(receiverVid)
+  const ephemeralSk = unsafe ? hpke.deriveKeyPair(unsafe.__unsafeIkmE).sk : undefined
+  const sealed = hpke.sealBase(frame, fields, receiverEncPk, cesr.TSP_INFO, ephemeralSk)
+  const ciphertext = new Uint8Array(sealed.enc.length + sealed.ciphertext.length)
+  ciphertext.set(sealed.enc, 0)
+  ciphertext.set(sealed.ciphertext, sealed.enc.length)
+  const field: number[] = []
+  cesr.encodeVariableData(cesr.TSP_HPKE_BASE_CIPHERTEXT, ciphertext, field)
+
+  const wireBytes = finalizeFrameRev3(fields, new Uint8Array(field))
+  const signature = await senderIdentity.signingKey.sign(wireBytes)
+  const out = Array.from(wireBytes)
+  encodeSignatureFrame(signature, out)
+  return { bytes: new Uint8Array(out), threadDigest, revision: revisionOf(version) }
+}
+
+const DIGEST_LEN = 32
+
+/**
+ * Pack a relationship accept (`XRFA`, §7.2, §9.3), answering an invite we
+ * received. Needed the day a peer invites US first — a vetter's wallet, or
+ * an agent that opens the conversation — since an invite left unanswered
+ * leaves that peer holding a one-sided relationship.
+ *
+ * Upstream's layout puts the echoed invite digest BEFORE the accept's own
+ * digest — the opposite order from the layout comment beside it — and the
+ * echoed digest is derivation input. Followed as the code writes it, since the
+ * code is what a peer parses; proven byte-identical in `tspControl.test.ts`.
+ *
+ * ```text
+ *   XRFA  sndr  Reply_Digest  Digest  pad
+ * ```
+ */
+export async function packAcceptRev3(
+  inviteDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack,
+  version: TspVersion = TSP_REV3
+): Promise<PackedMessage> {
+  if (inviteDigest.length !== DIGEST_LEN) throw new Error('tsp: an accept must name the invite it answers')
+  const fields = encodeFieldsRev3(senderVid, receiverVid, version)
+  const before = concat(
+    bytesOf((out) => encodeSenderField(senderVid, out)),
+    bytesOf((out) => cesr.encodeFixedData(cesr.TSP_SHA256, inviteDigest, out))
+  )
+  const digest = deriveSaid(fields, cesr.XRFA, before, new Uint8Array(0))
+  const frameBody: number[] = []
+  for (const b of cesr.XRFA) frameBody.push(b)
+  for (const b of before) frameBody.push(b)
+  cesr.encodeFixedData(cesr.TSP_SHA256, digest, frameBody)
+  encodeEmptyPadding(frameBody)
+  return sealControlFrame(frameBody, fields, receiverVid, senderIdentity, resolver, digest, unsafe, version)
+}
+
+/**
+ * Pack a relationship cancel (`XRFD`, §7.3): end a relationship we formed.
+ * The digest names the relationship-forming message it ends — a reference,
+ * echoed rather than derived — and is also the returned thread digest.
+ *
+ * ```text
+ *   XRFD  sndr  Digest  pad
+ * ```
+ */
+export async function packCancelRev3(
+  relationshipDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack,
+  version: TspVersion = TSP_REV3
+): Promise<PackedMessage> {
+  if (relationshipDigest.length !== DIGEST_LEN) throw new Error('tsp: a cancel must name the relationship it ends')
+  const fields = encodeFieldsRev3(senderVid, receiverVid, version)
+  const frameBody: number[] = []
+  for (const b of cesr.XRFD) frameBody.push(b)
+  encodeSenderField(senderVid, frameBody)
+  cesr.encodeFixedData(cesr.TSP_SHA256, relationshipDigest, frameBody)
+  encodeEmptyPadding(frameBody)
+  return sealControlFrame(frameBody, fields, receiverVid, senderIdentity, resolver, relationshipDigest, unsafe, version)
+}
+
+/**
+ * Unpack a Rev 3 message: decode the envelope, verify the indexed signature
+ * against the claimed sender's key as `resolver` gives it, then HPKE-Base
+ * open through the receiver's own `KeyAgreement` port and read the frame.
+ * The caller decides whether the claimed sender is who it expected; the
+ * ports carry no policy.
+ */
+export async function unpackRev3(
+  wireBytes: Uint8Array,
+  receiverIdentity: Pick<TspIdentity, 'keyAgreement'>,
+  resolver: VidResolver,
+  version: TspVersion = TSP_REV3
+): Promise<UnpackedMessage> {
+  if (wireBytes.length < 48) throw new Error('tsp: message too short')
+
+  const envelope = decodeEnvelopeRev3(wireBytes)
+  if (envelope.major !== version.major) {
+    throw new Error(`tsp: message declares MAJOR ${envelope.major}; this codec reads MAJOR ${version.major} here`)
+  }
+  const aad = wireBytes.slice(envelope.aad.begin, envelope.aad.end)
+
+  const cur: cesr.Cursor = { pos: envelope.headerLen }
+  const ctRange = cesr.decodeVariableDataRange(cesr.TSP_HPKE_BASE_CIPHERTEXT, wireBytes, cur)
+  if (ctRange === undefined) {
+    const probe: cesr.Cursor = { pos: envelope.headerLen }
+    if (cesr.decodeVariableDataRange(cesr.TSP_SEALED_BOX_CIPHERTEXT, wireBytes, probe)) {
+      throw new Error(
+        'tsp: message is sealed with the libsodium sealed box (§8.3), which this implementation does not support'
+      )
+    }
+    throw new Error('tsp: missing F ciphertext field')
+  }
+  const ctLen = ctRange.end - ctRange.begin
+  if (ctLen > cesr.MAX_FIELD_SIZE) throw new Error('tsp: ciphertext too large')
+  if (ctLen < ENC_LEN + TAG_LEN) throw new Error('tsp: ciphertext truncated')
+  if (cur.pos !== envelope.contentEnd) throw new Error('tsp: message body does not fill the -E frame')
+
+  const signature = decodeSignatureFrame(wireBytes, cur)
+  if (cur.pos !== wireBytes.length) throw new Error('tsp: trailing bytes after signature')
+
+  const { signingPublicKey: senderSignPk } = await resolver.resolve(envelope.sender)
+  if (!ed25519.verify(signature, wireBytes.slice(0, envelope.contentEnd), senderSignPk)) {
+    throw new Error('tsp: signature verification failed')
+  }
+
+  const ciphertext = wireBytes.slice(ctRange.begin, ctRange.end)
+  const payloadFrame = await hpke.openBase(
+    ciphertext.slice(ENC_LEN),
+    aad,
+    ciphertext.slice(0, ENC_LEN),
+    receiverIdentity.keyAgreement,
+    cesr.TSP_INFO
+  )
+  // Every message this codec opens is confidential (HPKE-Base), so 1.0's
+  // mandatory sender applies to all of them.
+  let frame: ReturnType<typeof decodePayloadFrameRev3>
+  try {
+    frame = decodePayloadFrameRev3(payloadFrame, envelope.sender, {
+      requireSender: version.major === TSP_V1.major,
+    })
+  } catch (error) {
+    if (error instanceof TspControlFrameReceived) {
+      // §7.2.1: the receiver recomputes the self-addressing digest over the envelope fields it arrived under
+      // (the HPKE associated data) and refuses the message on a mismatch.
+      const said = error.saidInput
+      if (said === undefined) throw error // unverifiable: refused as a control frame, reported with no message
+      if (
+        said !== 'echoed' &&
+        !bytesEqual(deriveSaid(aad, said.typeCode, said.before, said.after), error.decoded.digest)
+      ) {
+        throw new Error('tsp: control message digest does not match its frame')
+      }
+      error.control = error.decoded
+      error.sender = envelope.sender
+      error.receiver = envelope.receiver
+      error.revision = revisionOf(version)
+    }
+    throw error
+  }
+
+  return {
+    payload: frame.body,
+    sender: envelope.sender,
+    receiver: envelope.receiver,
+    messageType: frame.kind,
+    hops: frame.hops,
+    threadDigest: frame.threadDigest,
+    revision: revisionOf(version),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TSP 1.0: the Rev 3 layout under `YTSP-BAA`, with the sender always named
+// ---------------------------------------------------------------------------
+
+/** Pack a TSP 1.0 direct message. */
+export function packV1(
+  body: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packWithHopsRev3(body, 'direct', [], senderVid, receiverVid, senderIdentity, resolver, unsafe, TSP_V1)
+}
+
+/** Like {@link packV1} for any application kind, with a routing `hops` list. */
+export function packWithHopsV1(
+  body: Uint8Array,
+  kind: ApplicationKind,
+  hops: string[],
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packWithHopsRev3(body, kind, hops, senderVid, receiverVid, senderIdentity, resolver, unsafe, TSP_V1)
+}
+
+/** A TSP 1.0 relationship invite (`XRFI`). */
+export function packInviteV1(
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  options: { route?: string[]; nonce?: Uint8Array } = {},
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packInviteRev3(senderVid, receiverVid, senderIdentity, resolver, options, unsafe, TSP_V1)
+}
+
+/** A TSP 1.0 relationship accept (`XRFA`). */
+export function packAcceptV1(
+  inviteDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packAcceptRev3(inviteDigest, senderVid, receiverVid, senderIdentity, resolver, unsafe, TSP_V1)
+}
+
+/** A TSP 1.0 relationship cancel (`XRFD`). */
+export function packCancelV1(
+  relationshipDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packCancelRev3(relationshipDigest, senderVid, receiverVid, senderIdentity, resolver, unsafe, TSP_V1)
+}
+
+/** Unpack a TSP 1.0 message: Rev 3's procedure, plus the sender rule. */
+export function unpackV1(
+  wireBytes: Uint8Array,
+  receiverIdentity: Pick<TspIdentity, 'keyAgreement'>,
+  resolver: VidResolver
+): Promise<UnpackedMessage> {
+  return unpackRev3(wireBytes, receiverIdentity, resolver, TSP_V1)
+}

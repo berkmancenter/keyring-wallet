@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decide, fingerprintDiff, linkFiles } from './linkTrigger.mjs';
+import { decide, fingerprintDiff, linkFiles, rangeFiles } from './linkTrigger.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const gate = readFileSync(path.join(here, 'gate.sh'), 'utf8');
@@ -81,6 +81,53 @@ test('(b) end to end: the fingerprint is recorded, unchanged reads no trigger, a
     assert.match(moved.stdout, /VTA mini-prague: 0\.65\.0 → 0\.66\.0/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A wallet repo across the fold-in: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone), fold has
+ * bifold/ as a tree, after changes x.ts and VtaClient.ts (a link path) under it, plain changes app/ only.
+ */
+function foldRepo() {
+  const top = mkdtempSync(path.join(tmpdir(), 'fold-w-')), clone = mkdtempSync(path.join(tmpdir(), 'fold-b-'));
+  const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  const commit = (dir, m) => { git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
+  const put = (dir, rel, body) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), body); };
+  const VTA = 'packages/core/src/modules/trust-tasks/module/VtaClient.ts';
+  git(clone, 'init', '-q'); put(clone, 'packages/core/src/x.ts', '1'); put(clone, VTA, '1'); git(clone, 'add', '-A');
+  const pin1 = commit(clone, 'b1'); put(clone, VTA, '2'); git(clone, 'add', '-A'); const pin2 = commit(clone, 'b2');
+  git(top, 'init', '-q'); put(top, 'app/src/a.ts', 'a'); git(top, 'add', 'app');
+  git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin1},bifold`); const gl1 = commit(top, 'gitlink pin1');
+  git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin2},bifold`); const gl2 = commit(top, 'gitlink pin2');
+  git(top, 'rm', '-q', '--cached', 'bifold'); put(top, 'bifold/packages/core/src/x.ts', '1'); put(top, `bifold/${VTA}`, '2'); put(top, 'bifold/packages/core/testids.json', '{}'); git(top, 'add', 'bifold'); const fold = commit(top, 'fold');
+  put(top, 'bifold/packages/core/src/x.ts', '3'); put(top, `bifold/${VTA}`, '3'); git(top, 'add', 'bifold'); const after = commit(top, 'change x and VtaClient');
+  put(top, 'app/src/a.ts', 'b'); git(top, 'add', 'app'); const plain = commit(top, 'app only');
+  return { top, clone, gl1, gl2, fold, after, plain, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
+}
+
+test('(a) across the fold-in: a folded range reads bifold/ with no BIFOLD_GIT; a gitlink range still reads the clone; one crossing the fold runs the link legs', () => {
+  const r = foldRepo();
+  const saved = process.env.BIFOLD_GIT;
+  try {
+    delete process.env.BIFOLD_GIT;
+    const folded = rangeFiles(`${r.fold}..${r.after}`, r.top);
+    assert.equal(folded.rangeKnown, true);
+    assert.match(decide({ ...folded, prevFingerprint: FP, fingerprint: FP }).why.join(), /link file changed: bifold\/packages\/core\/src\/modules\/trust-tasks\/module\/VtaClient\.ts/);
+    // Control: a folded range that touches no link file is a NO, so the fold did not make every night a run.
+    assert.equal(decide({ ...rangeFiles(`${r.after}..${r.plain}`, r.top), prevFingerprint: FP, fingerprint: FP }).run, false);
+    // Crossing (the gitlink at one end, the tree at the other): unknown, with the reason, so it runs.
+    const crossing = rangeFiles(`${r.gl2}..${r.fold}`, r.top);
+    assert.equal(crossing.rangeKnown, false);
+    assert.match(crossing.rangeWhy, /crosses the bifold fold-in/);
+    assert.equal(decide({ ...crossing, prevFingerprint: FP, fingerprint: FP }).run, true);
+    // Before the fold, as before: the clone's own range at the pins.
+    process.env.BIFOLD_GIT = r.clone;
+    const gitlinks = rangeFiles(`${r.gl1}..${r.gl2}`, r.top);
+    assert.equal(gitlinks.rangeKnown, true);
+    assert.equal(decide({ ...gitlinks, prevFingerprint: FP, fingerprint: FP }).run, true);
+  } finally {
+    if (saved === undefined) delete process.env.BIFOLD_GIT; else process.env.BIFOLD_GIT = saved;
+    r.done();
   }
 });
 

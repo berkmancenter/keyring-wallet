@@ -1,0 +1,336 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vetting/_shared/0.1/hidden-vetting",
+  "title": "Hidden vetting — shared definitions",
+  "description": "Definitions used by more than one hidden-vetting task: the parameters a community stores and publishes for a criterion (vtc/vetting/hidden/publish, vtc/vetting/hidden/show, and the member-side vta/pcs engine tasks that take them as input), and the metadata of one attestation (vetting/attestation and the vta/pcs tasks that produce, hold and prove over attestations). Not itself a Trust Task specification: the `_shared` folder is skipped by the registry build and the codegen.",
+  "$defs": {
+    "TickLength": {
+      "title": "TickLength",
+      "type": "string",
+      "pattern": "^P(?:\\d+D(?:T\\d+H)?|T\\d+H)$",
+      "description": "The length of one tick of the drip, as an ISO 8601 duration in days and/or hours — at least `PT1H`. A label's tick `t` is the window starting `t` tick lengths after the label's start (`vtc/vetting/vetters/pcs-tokens`)."
+    },
+    "Tier": {
+      "title": "Tier",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dripPerTick"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How the menu names it: desk, busy-desk."
+        },
+        "dripPerTick": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many tokens a tick under this tier yields."
+        }
+      }
+    },
+    "StoredEvent": {
+      "title": "StoredEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "startDate",
+        "endDate",
+        "graceDays",
+        "groupFloor",
+        "tiers"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "graceDays": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "groupFloor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Tier"
+          }
+        },
+        "approvedBy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Who approved the event, or null when nobody has. Recorded in storage only — dropped from the published shape (see published.events)."
+        }
+      }
+    },
+    "PublishedEvent": {
+      "title": "PublishedEvent",
+      "description": "The published shape drops approvedBy and graceDays: who approved is the community's own record, and a vetter is told closesAfter when its request is approved rather than being handed the raw grace period here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "startDate",
+        "endDate",
+        "groupFloor",
+        "tiers"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "groupFloor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Tier"
+          }
+        }
+      }
+    },
+    "StoredConfig": {
+      "title": "StoredConfig",
+      "description": "The parameters exactly as the community stores them, including the helper key it never publishes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite",
+        "hvk",
+        "tvk",
+        "livePeriods",
+        "liveTokenLabels",
+        "dripPerTick",
+        "tickLength",
+        "events"
+      ],
+      "properties": {
+        "suite": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The blind-signature suite in force, e.g. ps-ddh-bls12381."
+        },
+        "hvk": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The helper verification key, multibase. A public value, published as helperKey."
+        },
+        "tvk": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The token verification key, multibase. Never the same key as hvk."
+        },
+        "livePeriods": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"
+          },
+          "description": "Live vetter class periods, current first, stored as the bare YYYY-MM period."
+        },
+        "liveTokenLabels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dripPerTick": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tickLength": {
+          "$ref": "#/$defs/TickLength"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StoredEvent"
+          }
+        }
+      }
+    },
+    "PublishedConfig": {
+      "title": "PublishedConfig",
+      "description": "The parameters exactly as they now appear in this community's join manifest, under vetting.ext. What an applicant and a vetter read.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite",
+        "helperKey",
+        "tokenKey",
+        "vetterLabels",
+        "tokenLabels",
+        "dripPerTick",
+        "tickLength",
+        "events"
+      ],
+      "properties": {
+        "suite": {
+          "type": "string",
+          "minLength": 1
+        },
+        "helperKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The helper verification key, multibase — named for its role on the wire rather than for hvk."
+        },
+        "tokenKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The token verification key, multibase — named for its role on the wire rather than for tvk."
+        },
+        "vetterLabels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Class labels published whole, e.g. vetter/2026-09 — a request names one of these, not the bare period."
+        },
+        "tokenLabels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dripPerTick": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tickLength": {
+          "$ref": "#/$defs/TickLength"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PublishedEvent"
+          }
+        }
+      }
+    },
+    "StatementMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "community",
+        "requirementsDigest",
+        "method",
+        "claimsVerified",
+        "livenessConfirmed",
+        "declaredRelationship",
+        "identityCommitment",
+        "cardDigestMultibase",
+        "validFrom",
+        "validUntil",
+        "tokenLabel",
+        "tokenSerial"
+      ],
+      "description": "What a Vetting Statement would have said, minus its issuer.",
+      "properties": {
+        "community": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The community this attestation is for. An attestation is not portable between communities."
+        },
+        "requirementsDigest": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The digest of the criterion's requirements as the vetter read them."
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "inPerson",
+            "video",
+            "priorAcquaintance"
+          ],
+          "description": "How the vetter met the applicant."
+        },
+        "claimsVerified": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The claim types the vetter checked."
+        },
+        "livenessConfirmed": {
+          "type": "boolean",
+          "description": "Whether the vetter confirmed a live person."
+        },
+        "declaredRelationship": {
+          "type": "string",
+          "enum": [
+            "none",
+            "family",
+            "sameEmployer",
+            "closeFriend",
+            "other"
+          ],
+          "description": "The relationship the vetter declared, which the community's independence rules count."
+        },
+        "identityCommitment": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The commitment on the Vetting Card the applicant showed. Consistency across attestations is what stops two applicants pooling them."
+        },
+        "cardDigestMultibase": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "Digest of that card, as the vetter verified it."
+        },
+        "validFrom": {
+          "type": "string",
+          "format": "date",
+          "description": "A DATE, never a timestamp: an exact time would let a community line an attestation up with a vetter's activity, which undoes the proof without touching it."
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date",
+          "description": "A date, for the same reason."
+        },
+        "tokenLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The token label spent, repeated inside the bound facts so it cannot be swapped in transit."
+        },
+        "tokenSerial": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The token serial spent, likewise bound."
+        }
+      }
+    }
+  }
+}

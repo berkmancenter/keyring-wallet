@@ -1,0 +1,131 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ScanHelp Screen Renders correctly 1`] = `
+<RNCSafeAreaView
+  edges={
+    Object {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "additive",
+    }
+  }
+  style={
+    Object {
+      "flex": 1,
+    }
+  }
+>
+  <RCTScrollView
+    contentContainerStyle={
+      Object {
+        "flexGrow": 1,
+        "padding": 26,
+      }
+    }
+  >
+    <View>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 26,
+              "fontWeight": "bold",
+            },
+            undefined,
+          ]
+        }
+      >
+        Scan.WhatToScan
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Array [
+              Object {
+                "marginTop": 15,
+              },
+              Object {
+                "marginTop": 20,
+              },
+            ],
+          ]
+        }
+      >
+        Scan.ScanOnySpecial
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "marginTop": 15,
+            },
+          ]
+        }
+      >
+        Scan.ScanOnlySpecial2
+      </Text>
+      <Text
+        accessibilityLabel="Scan.WhereToUseLink"
+        accessibilityRole="link"
+        accessible={true}
+        maxFontSizeMultiplier={2}
+        onPress={[Function]}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Array [
+              Object {
+                "alignSelf": "flex-start",
+                "color": "#42803E",
+                "textDecorationLine": "underline",
+              },
+              Object {
+                "marginTop": 15,
+              },
+            ],
+          ]
+        }
+        testID="com.ariesbifold:id/WhereToUseLink"
+      >
+        Scan.WhereToUseLink
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "marginTop": 15,
+            },
+          ]
+        }
+      >
+        Scan.ScanOnlySpecial3
+      </Text>
+    </View>
+  </RCTScrollView>
+</RNCSafeAreaView>
+`;

@@ -1,0 +1,26 @@
+{
+  "badge": {
+    "badgeId": "bdg_W5k2N8xRb3Qz7TpL",
+    "kind": "community",
+    "name": "Workshop host",
+    "description": "Ran a workshop for the community.",
+    "criteria": "Hosted any workshop on the community calendar. A badge owner gives it after the session.",
+    "image": {
+      "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "mediaType": "image/png",
+      "size": 61440
+    },
+    "repeatable": true,
+    "requestable": true,
+    "listed": true,
+    "shareableOutside": true,
+    "groupId": "grp_Hs7Qm2Lk9Tn4Bv1X",
+    "state": "active",
+    "holderCount": 12,
+    "createdAt": "2026-11-06T09:00:02Z"
+  },
+  "myCount": 0,
+  "myState": "requested",
+  "owners": ["dir_Pr1yaNatarajan00", "dir_BenOkafor0000000"],
+  "credentialRegime": "outside"
+}

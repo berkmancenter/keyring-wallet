@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vtc/join-requests/submit/0.3",
+  "title": "VTC Join-Requests Submit — payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "vp"
+  ],
+  "properties": {
+    "vp": {
+      "type": "object",
+      "description": "The applicant's W3C Verifiable Presentation (opaque here), satisfying the community's join policy. The applicant DID is the document proof's signer — not a payload field."
+    },
+    "criterion": {
+      "$ref": "../../../../_framework/0.3/framework.schema.json#/$defs/DigestMultibase",
+      "description": "The `requirementsDigest` of the criterion this submission is made under, as vtc/join-requests/manifest/0.3 published it. Absent: the community decides the submission under the first criterion, in the order it publishes them, that the submission meets."
+    },
+    "registryConsent": {
+      "type": "boolean",
+      "description": "Whether the applicant consents to trust-registry publication."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Opaque applicant-supplied extension bag."
+    },
+    "attributes": {
+      "type": "array",
+      "maxItems": 32,
+      "description": "The applicant's answers to the manifest's `requestedAttributes`: one entry per attribute given. Self-asserted and bound to the applicant by the document proof. A maintainer MUST refuse the submission with `attributesMissing` when a required attribute is absent and with `attributesUnrequested` when an entry names a type the manifest does not request.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "value"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(x:)?[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)*$",
+            "description": "A claim-type token from the persona claim-type registry (persona/_shared/0.1/CLAIM-TYPES.md) — `name.display`, `address.country` — or an `x:` extension token."
+          },
+          "value": {
+            "description": "The value the applicant gives. Self-asserted: the applicant's own statement, bound to them by the document proof, and attested by nobody."
+          }
+        }
+      }
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTC Join-Requests Submit — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "verdict"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Id of the created join request (a UUID)."
+        },
+        "verdict": {
+          "$ref": "../../../_shared/0.1/ceremony.schema.json#/$defs/Verdict",
+          "description": "What the community decided about this submission.\n\n`0.1` returned `status: \"pending\"` — a constant, which could express only one of the four outcomes a submission actually has. A policy that admits outright, refuses outright, or asks for more evidence had to be reported as 'pending' or not at all."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

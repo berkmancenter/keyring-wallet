@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vtc/vetting/pcs-challenge/0.1",
+  "title": "VTC \u2014 Vetting PCS Challenge \u2014 payload",
+  "description": "An applicant asks the community for the single-use challenge its hidden-vetting proof must be bound to. The community issues one per applicant and spends it when the proof is counted, so a proof cannot be submitted twice.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "criterionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "OPTIONAL. The `id` of the admission criterion the coming submission answers. A community running one hidden-vetting criterion needs no hint; one running several may use it to refuse early rather than at submit."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTC Vetting PCS Challenge \u2014 response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challenge",
+        "expiresAt"
+      ],
+      "description": "The challenge, and when it stops being accepted.",
+      "properties": {
+        "challenge": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "description": "Lowercase hex, 16 bytes. Compared for equality and never parsed; the applicant binds it into the proof's context."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "After this instant the challenge is refused. A submission that misses it asks for another."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

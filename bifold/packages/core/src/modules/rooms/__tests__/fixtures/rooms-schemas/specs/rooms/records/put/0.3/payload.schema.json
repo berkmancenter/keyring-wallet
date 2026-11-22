@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/records/put/0.3",
+  "title": "Rooms Records Put — payload",
+  "description": "A member writes a record to a data room, authorized by an authority chain the room itself issued. 0.2 added `blobs`: a record can carry a file, whose ciphertext the host stores outside the record and whose description is sealed inside it. 0.3 lets an `open` room's `cleartext` carry the record's provenance — `basis`, `confidence`, `evidence`, `validFor` — and its `validUntil`, which the sealed tiers carry inside the signed `SealedRecordBody`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "roomId",
+    "key",
+    "presentation"
+  ],
+  "properties": {
+    "roomId": {
+      "type": "string",
+      "description": "The room's identifier. A host verifies the presentation against credentials issued by this identifier, never against a member list of its own — which is what lets a room move hosts without reissuing a credential."
+    },
+    "key": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "The record's key within the room. MUST be opaque on an `attributed` or `private` room; see RecordMetadata.key."
+    },
+    "presentation": {
+      "$ref": "../../../_shared/0.1/room.schema.json#/$defs/AuthorityPresentation",
+      "description": "Must confer the `write` action at this room's scope."
+    },
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional precondition. Omit to overwrite unconditionally; `0` means create-only and fails if the key exists. On mismatch the host returns `rooms/records/put:versionConflict` CARRYING THE CURRENT VERSION AND RECORD — a bare rejection would force a re-read, and between rejection and re-read the record can change again, so the pattern has no fixed point under contention."
+    },
+    "sealed": {
+      "$ref": "../../../_shared/0.1/room.schema.json#/$defs/SealedRecord",
+      "description": "REQUIRED on an `attributed` or `private` room. Mutually exclusive with `cleartext`."
+    },
+    "cleartext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "body"
+      ],
+      "description": "REQUIRED on an `open` room, where the host reads records and can therefore search them. Mutually exclusive with `sealed`. On this tier the record is not signed by its author: every member here is the writer's claim as the host stores it, provenance and expiry included.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 1048576
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "maxItems": 32
+        },
+        "basis": {
+          "$ref": "../../../_shared/0.1/room.schema.json#/$defs/RecordBasis",
+          "description": "What kind of claim the record is. A writer SHOULD set it; an agent writer that does not know SHOULD write `inferred`. Provenance for display and weighting, never authority."
+        },
+        "confidence": {
+          "$ref": "../../../_shared/0.1/room.schema.json#/$defs/RecordConfidence"
+        },
+        "evidence": {
+          "$ref": "../../../_shared/0.1/room.schema.json#/$defs/RecordEvidenceList"
+        },
+        "validFor": {
+          "$ref": "../../../_shared/0.1/room.schema.json#/$defs/PermittedUse"
+        },
+        "validUntil": {
+          "$ref": "../../../_shared/0.1/room.schema.json#/$defs/RecordValidUntil",
+          "description": "When the writer stops standing behind the record as current. Readers hide the record once it has passed and show it only on explicit request. A host stores and serves it like any other cleartext member and MUST NOT act on it: it neither hides, refuses nor deletes an expired record."
+        }
+      }
+    },
+    "blobs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "../../../_shared/0.1/blobs.schema.json#/$defs/BlobRef"
+      },
+      "description": "The blobs this record keeps alive: today at most one, the file the record carries. Cleartext on every tier, because the host must know which blobs a record references to refuse a record naming a blob it does not hold, to count usage, and to collect a blob no record names. Every blob named MUST have been committed in THIS room (rooms/blobs/upload/commit). An array so that several files per record is a later minor version rather than a reshaped member. Omit for a record with no file; a rewrite that omits it releases whatever blob the previous version named."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Rooms Records Put — response payload",
+      "description": "Success response to rooms/records/put. Type https://trusttasks.org/spec/rooms/records/put/0.3#response.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "version"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 512,
+          "description": "The stored record's key."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The version assigned, monotonic per room."
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The epoch the record was stored under."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>{{WITNESS_NAME}} — Live Connections</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#000;
+    width:100vw; height:100vh;
+    overflow:hidden;
+    touch-action:none;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  #scene {
+    position:relative;
+    width:100vw;
+    height:100vh;
+  }
+  canvas {
+    position:absolute;
+    top:0; left:0;
+    width:100%; height:100%;
+  }
+  
+  @media (orientation: portrait) and (max-width: 1024px) {
+    body:not(.mirror)::after {
+      content: 'Rotate device for best experience';
+      position:fixed; bottom:50px; left:50%; transform:translateX(-50%);
+      color:rgba(100,210,255,0.35); font-family:'Share Tech Mono',monospace;
+      font-size:9px; letter-spacing:0.15em; white-space:nowrap; z-index:300;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="scene"><canvas id="main-canvas"></canvas></div>
+<script>
+// ── Pepper's Ghost mirror ────────────────────────────────────────────────────
+// Usage: /berkolator?mirror=vertical | horizontal | both
+(function applyMirror() {
+  const m = new URLSearchParams(window.location.search).get('mirror');
+  if (!m) return;
+  const transforms = {
+    vertical:   'scaleY(-1)',
+    horizontal: 'scaleX(-1)',
+    both:       'scale(-1,-1)',
+  };
+  const t = transforms[m.toLowerCase()];
+  if (t) { document.body.style.transform = t; document.body.classList.add('mirror'); }
+})();
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+let audioCtx = null;
+let audioReady = false;
+
+// On iOS Safari, resume() on a suspended AudioContext can hang forever.
+// The reliable workaround: create a NEW AudioContext during a user gesture —
+// it starts in 'running' state immediately.
+const AC = window.AudioContext || window.webkitAudioContext;
+if (AC) {
+  try { audioCtx = new AC(); } catch(e) {}
+  console.log('[audio] Initial AudioContext state:', audioCtx?.state);
+}
+
+// Listen on `document` (not body) — on iOS Safari, touch events on an
+// absolutely-positioned canvas don't bubble to document.body.
+const gestureEvents = ['touchstart', 'touchend', 'mousedown', 'click', 'keydown'];
+function onGesture(evt) {
+  console.log('[audio] Gesture:', evt.type, '| state:', audioCtx?.state);
+  if (audioCtx && audioCtx.state === 'running') {
+    audioReady = true;
+    console.log('[audio] Already running');
+    gestureEvents.forEach(e => document.removeEventListener(e, onGesture, true));
+    return;
+  }
+  try {
+    if (audioCtx) audioCtx.close().catch(() => {});
+  } catch(e) {}
+  try {
+    audioCtx = new AC();
+    console.log('[audio] New AudioContext in gesture, state:', audioCtx.state);
+  } catch(e) {
+    console.error('[audio] Failed to create AudioContext:', e);
+    return;
+  }
+  if (audioCtx.state === 'running') {
+    audioReady = true;
+    console.log('[audio] UNLOCKED (running)');
+    gestureEvents.forEach(e => document.removeEventListener(e, onGesture, true));
+  } else {
+    audioCtx.resume().then(() => {
+      console.log('[audio] resume() resolved, state:', audioCtx.state);
+      if (audioCtx.state === 'running') {
+        audioReady = true;
+        console.log('[audio] UNLOCKED via resume()');
+        gestureEvents.forEach(e => document.removeEventListener(e, onGesture, true));
+      }
+    }).catch(err => console.error('[audio] resume() failed:', err));
+  }
+}
+// Use capture phase (true) to catch events before any element can stop them
+gestureEvents.forEach(e => document.addEventListener(e, onGesture, true));
+
+function playSyntheticBloom() {
+  if (!audioCtx || audioCtx.state !== 'running') { console.log('[audio] bloom skipped, state:', audioCtx?.state); return; }
+  console.log('[audio] playing bloom');
+  const ctx = audioCtx;
+  const now = ctx.currentTime;
+
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0, now);
+  master.gain.linearRampToValueAtTime(0.16, now + 0.06);
+  master.gain.setValueAtTime(0.16, now + 0.2);
+  master.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+  master.connect(ctx.destination);
+
+  const delay = ctx.createDelay(0.08);
+  delay.delayTime.value = 0.048;
+  const delayGain = ctx.createGain();
+  delayGain.gain.value = 0.28;
+  const delayFilter = ctx.createBiquadFilter();
+  delayFilter.type = 'lowpass';
+  delayFilter.frequency.value = 3200;
+  master.connect(delay);
+  delay.connect(delayFilter);
+  delayFilter.connect(delayGain);
+  delayGain.connect(delay);
+  delayGain.connect(ctx.destination);
+
+  const tones = [
+    { freq: 440.0,  gain: 0.55, attack: 0.00, decay: 1.30, type: 'sine'     },
+    { freq: 554.4,  gain: 0.42, attack: 0.02, decay: 1.20, type: 'sine'     },
+    { freq: 659.3,  gain: 0.38, attack: 0.03, decay: 1.10, type: 'sine'     },
+    { freq: 880.0,  gain: 0.28, attack: 0.05, decay: 0.95, type: 'sine'     },
+    { freq: 1318.5, gain: 0.14, attack: 0.07, decay: 0.75, type: 'triangle' },
+  ];
+
+  for (const t of tones) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 5.5 + Math.random() * 1.5;
+    lfoGain.gain.value = t.freq * 0.003;
+    lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+    lfo.start(now); lfo.stop(now + t.decay + 0.1);
+    osc.type = t.type;
+    osc.frequency.setValueAtTime(t.freq, now);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(t.gain, now + t.attack + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.001, now + t.decay);
+    osc.connect(g); g.connect(master);
+    osc.start(now + t.attack); osc.stop(now + t.decay + 0.05);
+  }
+
+  const bufSize = Math.floor(ctx.sampleRate * 0.08);
+  const nBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const nd = nBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) nd[i] = (Math.random() * 2 - 1);
+  const noise = ctx.createBufferSource();
+  noise.buffer = nBuf;
+  const nf = ctx.createBiquadFilter();
+  nf.type = 'bandpass'; nf.frequency.value = 1200; nf.Q.value = 1.2;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.03, now);
+  ng.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+  noise.connect(nf); nf.connect(ng); ng.connect(master);
+  noise.start(now); noise.stop(now + 0.09);
+}
+
+function playMilestoneSound() {
+  if (!audioCtx || audioCtx.state !== 'running') { console.log('[audio] milestone skipped, state:', audioCtx?.state); return; }
+  console.log('[audio] playing milestone');
+  const ctx = audioCtx;
+  const now = ctx.currentTime;
+
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0, now);
+  master.gain.linearRampToValueAtTime(0.22, now + 0.05);
+  master.gain.setValueAtTime(0.22, now + 0.4);
+  master.gain.exponentialRampToValueAtTime(0.001, now + 3.8);
+  master.connect(ctx.destination);
+
+  const delay = ctx.createDelay(0.12);
+  delay.delayTime.value = 0.072;
+  const delayGain = ctx.createGain();
+  delayGain.gain.value = 0.32;
+  const delayFilter = ctx.createBiquadFilter();
+  delayFilter.type = 'lowpass';
+  delayFilter.frequency.value = 2800;
+  master.connect(delay);
+  delay.connect(delayFilter);
+  delayFilter.connect(delayGain);
+  delayGain.connect(delay);
+  delayGain.connect(ctx.destination);
+
+  const tones = [
+    { freq: 293.7,  gain: 0.50, attack: 0.00, decay: 3.5,  type: 'sine'     },
+    { freq: 369.9,  gain: 0.38, attack: 0.02, decay: 3.2,  type: 'sine'     },
+    { freq: 440.0,  gain: 0.32, attack: 0.03, decay: 3.0,  type: 'sine'     },
+    { freq: 587.3,  gain: 0.28, attack: 0.04, decay: 2.8,  type: 'sine'     },
+    { freq: 740.0,  gain: 0.20, attack: 0.06, decay: 2.4,  type: 'sine'     },
+    { freq: 880.0,  gain: 0.14, attack: 0.08, decay: 2.0,  type: 'sine'     },
+    { freq: 1174.7, gain: 0.08, attack: 0.10, decay: 1.6,  type: 'triangle' },
+  ];
+
+  for (const t of tones) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 4.8 + Math.random() * 1.2;
+    lfoGain.gain.value = t.freq * 0.0025;
+    lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+    lfo.start(now); lfo.stop(now + t.decay + 0.1);
+    osc.type = t.type;
+    osc.frequency.setValueAtTime(t.freq, now);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(t.gain, now + t.attack + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.001, now + t.decay);
+    osc.connect(g); g.connect(master);
+    osc.start(now + t.attack); osc.stop(now + t.decay + 0.1);
+  }
+
+  const arpNotes = [293.7, 369.9, 440.0, 587.3, 740.0];
+  arpNotes.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const t = now + i * 0.065;
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + 0.55);
+  });
+
+  const bufSize = Math.floor(ctx.sampleRate * 0.12);
+  const nBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const nd = nBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) nd[i] = (Math.random() * 2 - 1);
+  const noise = ctx.createBufferSource();
+  noise.buffer = nBuf;
+  const nf = ctx.createBiquadFilter();
+  nf.type = 'bandpass'; nf.frequency.value = 900; nf.Q.value = 0.8;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.06, now);
+  ng.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+  noise.connect(nf); nf.connect(ng); ng.connect(master);
+  noise.start(now); noise.stop(now + 0.13);
+}
+
+// ── 3D Math ───────────────────────────────────────────────────────────────────
+const V={
+  c:(x=0,y=0,z=0)=>({x,y,z}),
+  sub:(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z}),
+  sc:(v,s)=>({x:v.x*s,y:v.y*s,z:v.z*s}),
+  norm:v=>{const l=Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z)||1;return{x:v.x/l,y:v.y/l,z:v.z/l};},
+  dot:(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z,
+  cross:(a,b)=>({x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x}),
+  rotX:(v,a)=>({x:v.x,y:v.y*Math.cos(a)-v.z*Math.sin(a),z:v.y*Math.sin(a)+v.z*Math.cos(a)}),
+  rotY:(v,a)=>({x:v.x*Math.cos(a)+v.z*Math.sin(a),y:v.y,z:-v.x*Math.sin(a)+v.z*Math.cos(a)}),
+  rotZ:(v,a)=>({x:v.x*Math.cos(a)-v.y*Math.sin(a),y:v.x*Math.sin(a)+v.y*Math.cos(a),z:v.z}),
+};
+
+function project(v,cx,cy,size,fov=340){
+  const z=v.z+fov; if(z<0.001) return null;
+  const s=fov/z;
+  return{x:cx+v.x*s*size, y:cy+v.y*s*size, z:v.z, s};
+}
+
+// ── Icosahedron ───────────────────────────────────────────────────────────────
+function makeIcosahedron(r=1){
+  const t=(1+Math.sqrt(5))/2;
+  const verts=[
+    [-1,t,0],[1,t,0],[-1,-t,0],[1,-t,0],
+    [0,-1,t],[0,1,t],[0,-1,-t],[0,1,-t],
+    [t,0,-1],[t,0,1],[-t,0,-1],[-t,0,1]
+  ].map(([x,y,z])=>{const l=Math.sqrt(x*x+y*y+z*z);return V.c(x/l*r,y/l*r,z/l*r);});
+
+  const faceIdx=[
+    [0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],
+    [1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],
+    [3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],
+    [4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]
+  ];
+  const edgeSet=new Set();
+  for(const [a,b,c] of faceIdx){
+    [[a,b],[b,c],[a,c]].forEach(([i,j])=>edgeSet.add([Math.min(i,j),Math.max(i,j)].join('-')));
+  }
+  const faces=faceIdx.map(([a,b,c])=>{
+    const ab=V.sub(verts[b],verts[a]);
+    const ac=V.sub(verts[c],verts[a]);
+    return{idx:[a,b,c],normal:V.norm(V.cross(ab,ac))};
+  });
+  return{verts,faces,edges:[...edgeSet].map(e=>e.split('-').map(Number))};
+}
+
+function makeRing(r,segs,tiltX,tiltY=0){
+  const pts=[];
+  for(let i=0;i<=segs;i++){
+    const a=(i/segs)*Math.PI*2;
+    let v=V.c(Math.cos(a)*r,Math.sin(a)*r,0);
+    v=V.rotX(v,tiltX); v=V.rotY(v,tiltY);
+    pts.push(v);
+  }
+  return pts;
+}
+
+// ── Scene ─────────────────────────────────────────────────────────────────────
+class Scene3D{
+  constructor(canvas){
+    this.canvas=canvas;
+    this.ctx=canvas.getContext('2d');
+    this.w=this.h=this.cx=this.cy=this.size=0;
+    this.ico=makeIcosahedron(0.55);
+    this.ring1=makeRing(0.85,48,Math.PI*0.22,0.1);
+    this.ring2=makeRing(0.95,48,-Math.PI*0.12,-0.15);
+    this.rx=0.3;this.ry=0;this.rz=0;
+    this.rxV=0.0015;this.ryV=0.003;this.rzV=0.0005;
+    this.glowPhase=0;
+    this.burstIntensity=0;
+    this.icoScale=1;this.icoTargetScale=1;
+    this.depthParticles=[];
+    this.bursts=[];this.shockwaves=[];this.connectionLines=[];
+    this.milestoneParticles=[];
+    this.milestoneRings=[];
+    this.milestonePulse=0;
+    this.displayNum=0;this.numFlash=0;
+    this.idleParticles=[];
+    this.resize();this.initDepthField();this.initIdle();
+    window.addEventListener('resize',()=>{this.resize();this.initDepthField();this.initIdle();});
+    this.loop();
+  }
+  resize(){
+    const el=this.canvas.parentElement;
+    const w=el.clientWidth;
+    const h=el.clientHeight;
+    this.canvas.width=w;this.canvas.height=h;
+    this.w=w;this.h=h;
+    this.cx=w/2;this.cy=h/2;
+    this.size=Math.min(w,h)*0.36;
+  }
+  initDepthField(){
+    this.depthParticles=[];
+    for(let i=0;i<55;i++) this.depthParticles.push(this.newDP(true));
+  }
+  initIdle(){
+    this.idleParticles=[];
+    const layers=[
+      {count:55, rMin:0.25, rMax:0.7,  speedScale:0.04, alphaMin:0.06, alphaMax:0.22},
+      {count:35, rMin:0.5,  rMax:1.2,  speedScale:0.11, alphaMin:0.12, alphaMax:0.38},
+      {count:18, rMin:0.9,  rMax:1.8,  speedScale:0.22, alphaMin:0.18, alphaMax:0.55},
+    ];
+    for(const layer of layers){
+      for(let i=0;i<layer.count;i++){
+        const angle=Math.random()*Math.PI*2;
+        const speed=(layer.speedScale*0.4+Math.random()*layer.speedScale*0.6);
+        this.idleParticles.push({
+          x:Math.random()*this.w,
+          y:Math.random()*this.h,
+          r:layer.rMin+Math.random()*(layer.rMax-layer.rMin),
+          vx:Math.cos(angle)*speed,
+          vy:Math.sin(angle)*speed,
+          baseAlpha:layer.alphaMin+Math.random()*(layer.alphaMax-layer.alphaMin),
+          alpha:layer.alphaMin+Math.random()*(layer.alphaMax-layer.alphaMin),
+          flicker:Math.random()*Math.PI*2,
+          flickerSpeed:0.008+Math.random()*0.018,
+          twinkleAmp:Math.random()*0.35,
+          brightPulse:0,
+        });
+      }
+    }
+  }
+  newDP(rand=false){
+    const z=rand?(Math.random()*2-1)*1.5:-1.5;
+    const r=0.4+Math.random()*1.2, a=Math.random()*Math.PI*2;
+    return{x:Math.cos(a)*r,y:Math.sin(a)*r,z,
+      speed:0.004+Math.random()*0.006,
+      size:Math.random()*1.2+0.3,
+      alpha:Math.random()*0.35+0.08,
+      tw:Math.random()*Math.PI*2};
+  }
+  triggerMilestone(){
+    this.milestonePulse=1.0;
+    this.icoTargetScale=1.55;
+    setTimeout(()=>{this.icoTargetScale=1;},1100);
+    const iridPalette=[
+      [0,230,220],[60,190,255],[160,110,255],
+      [210,170,255],[230,248,255],[80,255,230],
+      [170,230,255],[120,90,220],[250,210,255],
+      [255,200,240],[100,255,210],[140,180,255],
+    ];
+    const waveDefs=[
+      {count:160, delay:0,     speedMul:1.0},
+      {count:110, delay:0.025, speedMul:1.15},
+      {count:80,  delay:0.055, speedMul:0.85},
+      {count:55,  delay:0.090, speedMul:1.3},
+      {count:35,  delay:0.130, speedMul:0.7},
+    ];
+    for(const wd of waveDefs){
+      for(let i=0;i<wd.count;i++){
+        const ang=(i/wd.count)*Math.PI*2+Math.random()*0.25;
+        const elev=(Math.random()-0.5)*Math.PI;
+        const baseSpeed=(0.018+Math.random()*0.028)*wd.speedMul;
+        const col=iridPalette[Math.floor(Math.random()*iridPalette.length)];
+        this.milestoneParticles.push({
+          x:0,y:0,z:0,
+          vx:Math.cos(elev)*Math.cos(ang)*baseSpeed,
+          vy:Math.sin(elev)*baseSpeed,
+          vz:Math.cos(elev)*Math.sin(ang)*baseSpeed,
+          life:1.0,
+          decay:0.003+Math.random()*0.006,
+          size:Math.random()*4.5+1.0,
+          r:col[0],g:col[1],b:col[2],
+          delay:wd.delay,
+          born:Date.now(),
+          trail:[],
+        });
+      }
+    }
+    for(let i=0;i<9;i++){
+      const col=iridPalette[i % iridPalette.length];
+      this.milestoneRings.push({
+        r:0, maxR:1.2+i*0.22, life:1.0,
+        delay:i*80, born:Date.now(),
+        r_col:col[0],g_col:col[1],b_col:col[2],
+        scaleY:0.30+Math.random()*0.30,
+      });
+    }
+    for(const p of this.idleParticles){
+      p.brightPulse=1.0+Math.random()*0.5;
+    }
+  }
+  triggerConnection(count){
+    this.displayNum=count;
+    this.numFlash=1.0;
+    this.icoTargetScale=1.18;
+    setTimeout(()=>{this.icoTargetScale=1;},420);
+    this.burstIntensity=1.0;
+    for(const p of this.idleParticles){
+      if(Math.random()<0.35) p.brightPulse=0.4+Math.random()*0.6;
+    }
+    const a1=Math.random()*Math.PI*2,a2=a1+Math.PI+(Math.random()-0.5)*0.5;
+    const e1=Math.random()*Math.PI-Math.PI/2,e2=Math.random()*Math.PI-Math.PI/2;
+    const r=0.6;
+    const nA=V.c(Math.cos(e1)*Math.cos(a1)*r,Math.sin(e1)*r,Math.cos(e1)*Math.sin(a1)*r);
+    const nB=V.c(Math.cos(e2)*Math.cos(a2)*r,Math.sin(e2)*r,Math.cos(e2)*Math.sin(a2)*r);
+    this.connectionLines.push({a:nA,b:nB,progress:0,life:1.0,phase:'draw',holdTimer:0});
+    for(let i=0;i<4;i++)
+      this.shockwaves.push({r:0,maxR:1.0+i*0.25,life:1.0,delay:i*90,born:Date.now()});
+    for(let i=0;i<80;i++){
+      const ang=(i/80)*Math.PI*2+Math.random()*0.15;
+      const el=(Math.random()-0.5)*Math.PI;
+      const sp=0.018+Math.random()*0.025;
+      this.bursts.push({x:0,y:0,z:0,
+        vx:Math.cos(el)*Math.cos(ang)*sp,vy:Math.sin(el)*sp,vz:Math.cos(el)*Math.sin(ang)*sp,
+        life:1.0,decay:0.008+Math.random()*0.01,size:Math.random()*2.5+0.5,hue:185+Math.random()*30});
+    }
+  }
+  update(){
+    this.glowPhase+=0.022;
+    this.rx+=this.rxV;this.ry+=this.ryV;this.rz+=this.rzV;
+    this.icoScale+=(this.icoTargetScale-this.icoScale)*0.12;
+    if(this.burstIntensity>0){this.burstIntensity-=0.025;if(this.burstIntensity<0)this.burstIntensity=0;}
+    if(this.numFlash>0){this.numFlash-=0.014;if(this.numFlash<0)this.numFlash=0;}
+    for(const p of this.idleParticles){
+      p.x+=p.vx; p.y+=p.vy; p.flicker+=p.flickerSpeed;
+      if(p.x<-4)p.x=this.w+4; if(p.x>this.w+4)p.x=-4;
+      if(p.y<-4)p.y=this.h+4; if(p.y>this.h+4)p.y=-4;
+      const twinkle=1-p.twinkleAmp+p.twinkleAmp*Math.sin(p.flicker);
+      if(p.brightPulse>0){p.brightPulse-=0.008; if(p.brightPulse<0)p.brightPulse=0;}
+      p.alpha=p.baseAlpha*twinkle+p.brightPulse*0.18;
+    }
+    for(let i=this.depthParticles.length-1;i>=0;i--){
+      const p=this.depthParticles[i];
+      p.z+=p.speed*(1+this.burstIntensity*3);p.tw+=0.04;
+      if(p.z>1.5)this.depthParticles[i]=this.newDP();
+    }
+    if(this.milestonePulse>0){this.milestonePulse-=0.012;if(this.milestonePulse<0)this.milestonePulse=0;}
+    const nowMs=Date.now();
+    for(let i=this.milestoneParticles.length-1;i>=0;i--){
+      const p=this.milestoneParticles[i];
+      const elapsed=(nowMs-p.born)/1000;
+      if(elapsed<p.delay)continue;
+      p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;
+      p.vy+=0.0002;
+      p.life-=p.decay;
+      if(p.life<=0)this.milestoneParticles.splice(i,1);
+    }
+    for(let i=this.milestoneRings.length-1;i>=0;i--){
+      const mr=this.milestoneRings[i];
+      const el=nowMs-mr.born-mr.delay;if(el<0)continue;
+      const t=el/1100;mr.r=mr.maxR*Math.min(t,1);mr.life=1-Math.min(t,1);
+      if(mr.life<=0)this.milestoneRings.splice(i,1);
+    }
+    for(let i=this.bursts.length-1;i>=0;i--){
+      const p=this.bursts[i];
+      p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;p.life-=p.decay;
+      if(p.life<=0)this.bursts.splice(i,1);
+    }
+    const now=Date.now();
+    for(let i=this.shockwaves.length-1;i>=0;i--){
+      const sw=this.shockwaves[i];
+      const el=now-sw.born-sw.delay; if(el<0)continue;
+      const t=el/850;sw.r=sw.maxR*Math.min(t,1);sw.life=1-Math.min(t,1);
+      if(sw.life<=0)this.shockwaves.splice(i,1);
+    }
+    for(let i=this.connectionLines.length-1;i>=0;i--){
+      const cl=this.connectionLines[i];
+      if(cl.phase==='draw'){cl.progress+=0.024;if(cl.progress>=1){cl.progress=1;cl.phase='hold';cl.holdTimer=65;}}
+      else if(cl.phase==='hold'){if(--cl.holdTimer<=0)cl.phase='fade';}
+      else{cl.life-=0.018;if(cl.life<=0)this.connectionLines.splice(i,1);}
+    }
+  }
+  rot(v){
+    let r=V.rotX(v,this.rx);r=V.rotY(r,this.ry);r=V.rotZ(r,this.rz);return r;
+  }
+
+  drawNumber(ctx,cx,cy,size){
+    const num=String(this.displayNum);
+    const flash=this.numFlash;
+    const bg=this.burstIntensity;
+    const fontSize=Math.round(size*0.54);
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    const shiftX=Math.sin(this.ry)*size*0.055;
+    const shiftY=Math.sin(this.rx)*size*0.03;
+    const layers=22;
+    ctx.font=`900 ${fontSize}px 'Orbitron', sans-serif`;
+    for(let i=layers;i>=1;i--){
+      const t=i/layers;
+      const ox=shiftX*t*2+t*1.8;
+      const oy=shiftY*t*2+t*2.2;
+      const green=Math.round(40+t*100);
+      const blue=Math.round(80+t*130);
+      const alpha=0.04+t*0.05;
+      ctx.fillStyle=`rgba(0,${green},${blue},${alpha.toFixed(3)})`;
+      ctx.fillText(num,cx+ox,cy+oy);
+    }
+    ctx.save();
+    ctx.shadowColor=`rgba(60,190,255,${0.6+flash*0.4})`;
+    ctx.shadowBlur=40+flash*60+bg*25;
+    ctx.fillStyle=`rgba(80,190,255,${(0.25+flash*0.2).toFixed(3)})`;
+    ctx.fillText(num,cx+shiftX*0.4,cy+shiftY*0.4);
+    ctx.restore();
+    ctx.save();
+    ctx.shadowColor='rgba(200,240,255,0.95)';
+    ctx.shadowBlur=10+flash*25;
+    const fr=Math.round(200+flash*55);
+    const fg=Math.round(238+flash*17);
+    ctx.fillStyle=`rgba(${fr},${fg},255,${(0.93+flash*0.07).toFixed(3)})`;
+    ctx.fillText(num,cx+shiftX*0.12,cy+shiftY*0.12);
+    ctx.restore();
+  }
+
+  draw(){
+    const{ctx,cx,cy,w,h,size}=this;
+    const drawCY = cy - size * 0.18;
+    ctx.clearRect(0,0,w,h);
+    const glow=0.5+0.5*Math.sin(this.glowPhase);
+    const bg=this.burstIntensity;
+    const lightDir=V.norm(V.c(-0.5,-0.7,1.0));
+
+    for(const p of this.idleParticles){
+      const a=Math.min(p.alpha,1);
+      if(a<0.01)continue;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(200,232,255,${a.toFixed(3)})`;
+      ctx.fill();
+    }
+
+    for(const p of this.depthParticles){
+      const proj=project(V.c(p.x,p.y,p.z),cx,drawCY,size);
+      if(!proj)continue;
+      const tw=0.6+0.4*Math.sin(p.tw);
+      const df=(p.z+1.5)/3;
+      const r2=p.size*proj.s*0.4;
+      ctx.beginPath();ctx.arc(proj.x,proj.y,Math.max(r2,0.5),0,Math.PI*2);
+      ctx.fillStyle=`rgba(140,215,255,${(p.alpha*tw*df).toFixed(3)})`;
+      ctx.fill();
+    }
+
+    this.drawNumber(ctx,cx,cy+size*0.78,size);
+
+    for(const sw of this.shockwaves){
+      if(sw.life<=0)continue;
+      ctx.save();ctx.translate(cx,drawCY);ctx.scale(1,0.38);
+      ctx.beginPath();ctx.arc(0,0,sw.r*size,0,Math.PI*2);
+      ctx.restore();
+      ctx.strokeStyle=`rgba(100,210,255,${(sw.life*0.5).toFixed(3)})`;
+      ctx.lineWidth=1;ctx.stroke();
+    }
+
+    const drawRing=(ring,al,lw)=>{
+      ctx.beginPath();let first=true;
+      for(const v of ring){
+        let rv=V.sc(v,this.icoScale);
+        rv=V.rotX(rv,this.rx*0.4);rv=V.rotY(rv,this.ry*0.7);
+        const p=project(rv,cx,drawCY,size);if(!p)continue;
+        first?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);first=false;
+      }
+      ctx.strokeStyle=`rgba(80,190,255,${(al*(glow*0.3+0.5)).toFixed(3)})`;
+      ctx.lineWidth=lw;ctx.stroke();
+    };
+    drawRing(this.ring1,0.32+bg*0.35,1);
+    drawRing(this.ring2,0.22+bg*0.28,0.8);
+
+    const sc=this.icoScale;
+    const projVerts=this.ico.verts.map(v=>{
+      const sv=V.sc(v,sc);const rv=this.rot(sv);
+      return{p:project(rv,cx,drawCY,size),w:rv};
+    });
+
+    const sortedFaces=[...this.ico.faces].sort((a,b)=>{
+      const zA=(projVerts[a.idx[0]].w.z+projVerts[a.idx[1]].w.z+projVerts[a.idx[2]].w.z)/3;
+      const zB=(projVerts[b.idx[0]].w.z+projVerts[b.idx[1]].w.z+projVerts[b.idx[2]].w.z)/3;
+      return zA-zB;
+    });
+
+    for(const face of sortedFaces){
+      const[ai,bi,ci]=face.idx;
+      const pa=projVerts[ai].p,pb=projVerts[bi].p,pc=projVerts[ci].p;
+      if(!pa||!pb||!pc)continue;
+      let rn=V.rotX(face.normal,this.rx);
+      rn=V.rotY(rn,this.ry);rn=V.rotZ(rn,this.rz);
+      const facing=rn.z;
+      const lit=Math.max(0,V.dot(rn,lightDir));
+      let fr,fg,fb,faceAlpha;
+      if(facing>0){
+        fr=Math.round(lit*140+bg*40);
+        fg=Math.round(lit*240+40+bg*20);
+        fb=Math.round(lit*255+20+bg*15);
+        faceAlpha=0.14+lit*0.58+bg*0.18;
+      } else {
+        fr=Math.round(lit*20);fg=Math.round(lit*35);fb=Math.round(lit*60);
+        faceAlpha=0.02+lit*0.07;
+      }
+      ctx.beginPath();
+      ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.lineTo(pc.x,pc.y);ctx.closePath();
+      ctx.fillStyle=`rgba(${fr},${fg},${fb},${faceAlpha.toFixed(3)})`;
+      ctx.fill();
+    }
+
+    for(const[ai,bi]of this.ico.edges){
+      const pa=projVerts[ai].p,pb=projVerts[bi].p;if(!pa||!pb)continue;
+      const avgZ=(projVerts[ai].w.z+projVerts[bi].w.z)/2;
+      const depth=0.3+0.7*((avgZ+0.6)/1.2);
+      ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);
+      ctx.strokeStyle=`rgba(160,240,255,${(Math.min(depth*(0.75+bg*0.35),1)).toFixed(3)})`;
+      ctx.lineWidth=0.9+depth*0.8;ctx.stroke();
+    }
+
+    for(let i=0;i<this.ico.verts.length;i++){
+      const pv=projVerts[i].p;if(!pv)continue;
+      const d=0.3+0.7*((projVerts[i].w.z+0.6)/1.2);
+      ctx.beginPath();ctx.arc(pv.x,pv.y,2.0*d+glow*0.8,0,Math.PI*2);
+      ctx.fillStyle=`rgba(230,250,255,${(d*0.95).toFixed(3)})`;ctx.fill();
+    }
+
+    const coreR=size*0.07+glow*size*0.03+bg*size*0.10;
+    const cg=ctx.createRadialGradient(cx,drawCY,0,cx,drawCY,coreR*3.2);
+    cg.addColorStop(0,`rgba(255,255,255,${0.95+bg*0.05})`);
+    cg.addColorStop(0.15,`rgba(180,240,255,${0.7+bg*0.2})`);
+    cg.addColorStop(0.45,`rgba(80,200,255,${0.35+bg*0.25})`);
+    cg.addColorStop(0.75,`rgba(120,40,180,${0.12+bg*0.1})`);
+    cg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath();ctx.arc(cx,drawCY,coreR*3.2,0,Math.PI*2);ctx.fillStyle=cg;ctx.fill();
+    ctx.beginPath();ctx.arc(cx,drawCY,coreR,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${0.95+bg*0.05})`;ctx.fill();
+
+    for(const p of this.bursts){
+      const proj=project(V.c(p.x,p.y,p.z),cx,drawCY,size);if(!proj)continue;
+      const r2=p.size*proj.s*0.5;
+      ctx.beginPath();ctx.arc(proj.x,proj.y,Math.max(r2,0.5),0,Math.PI*2);
+      ctx.fillStyle=`hsla(${p.hue},90%,78%,${p.life.toFixed(3)})`;ctx.fill();
+    }
+
+    for(const cl of this.connectionLines){
+      const alpha=cl.phase==='fade'?cl.life*0.8:0.8;
+      const prog=cl.phase==='draw'?cl.progress:1;
+      ctx.beginPath();let firstPt=true;
+      for(let s=0;s<=30*prog;s++){
+        const t=s/30;
+        const v={x:cl.a.x+(cl.b.x-cl.a.x)*t,y:cl.a.y+(cl.b.y-cl.a.y)*t,z:cl.a.z+(cl.b.z-cl.a.z)*t};
+        const bow=1+Math.sin(t*Math.PI)*0.12;
+        const nv=V.sc(V.norm(v),0.6*bow*this.icoScale);
+        const roted=this.rot(nv);
+        const proj=project(roted,cx,drawCY,size);if(!proj)continue;
+        firstPt?ctx.moveTo(proj.x,proj.y):ctx.lineTo(proj.x,proj.y);firstPt=false;
+      }
+      ctx.save();ctx.shadowColor='rgba(120,220,255,0.9)';ctx.shadowBlur=8;
+      ctx.strokeStyle=`rgba(210,245,255,${alpha.toFixed(3)})`;ctx.lineWidth=1.5;ctx.stroke();
+      ctx.restore();
+      if(prog>=1){
+        for(const ep of[cl.a,cl.b]){
+          const rv=V.sc(ep,this.icoScale);const rot=this.rot(rv);
+          const proj=project(rot,cx,drawCY,size);if(!proj)continue;
+          ctx.beginPath();ctx.arc(proj.x,proj.y,3.5,0,Math.PI*2);
+          ctx.fillStyle=`rgba(255,255,255,${alpha.toFixed(3)})`;ctx.fill();
+          ctx.beginPath();ctx.arc(proj.x,proj.y,6,0,Math.PI*2);
+          ctx.strokeStyle=`rgba(160,235,255,${(alpha*0.6).toFixed(3)})`;ctx.lineWidth=1;ctx.stroke();
+        }
+      }
+    }
+
+    for(const mr of this.milestoneRings){
+      if(mr.life<=0)continue;
+      ctx.save();
+      ctx.translate(cx,drawCY);
+      ctx.scale(1,mr.scaleY);
+      ctx.beginPath();
+      ctx.arc(0,0,mr.r*size,0,Math.PI*2);
+      ctx.restore();
+      const alpha=mr.life*0.65;
+      ctx.strokeStyle=`rgba(${mr.r_col},${mr.g_col},${mr.b_col},${alpha.toFixed(3)})`;
+      ctx.lineWidth=1.5+mr.life;
+      ctx.stroke();
+    }
+
+    const nowMs2=Date.now();
+    for(const p of this.milestoneParticles){
+      const elapsed=(nowMs2-p.born)/1000;
+      if(elapsed<p.delay)continue;
+      const proj=project(V.c(p.x,p.y,p.z),cx,drawCY,size);if(!proj)continue;
+      const r2=Math.max(p.size*proj.s*0.6,0.5);
+      const hueShift=Math.sin(p.life*Math.PI)*30;
+      const rr=Math.min(255,p.r+hueShift);
+      const gg=Math.min(255,p.g+hueShift*0.5);
+      const bb=Math.min(255,p.b+hueShift*0.3);
+      ctx.beginPath();ctx.arc(proj.x,proj.y,r2,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${Math.round(rr)},${Math.round(gg)},${Math.round(bb)},${p.life.toFixed(3)})`;
+      ctx.fill();
+      if(r2>1.5){
+        ctx.beginPath();ctx.arc(proj.x,proj.y,r2*2.2,0,Math.PI*2);
+        ctx.fillStyle=`rgba(${Math.round(rr)},${Math.round(gg)},${Math.round(bb)},${(p.life*0.15).toFixed(3)})`;
+        ctx.fill();
+      }
+    }
+  }
+
+  loop(){this.update();this.draw();requestAnimationFrame(()=>this.loop());}
+}
+
+// ── Init & WebSocket ──────────────────────────────────────────────────────────
+let connectionCount = 0;
+let scene = null;
+
+window.addEventListener('load', () => {
+  scene = new Scene3D(document.getElementById('main-canvas'));
+  connectWS();
+});
+
+function fireConnection() {
+  connectionCount++;
+  console.log('[audio] fireConnection #' + connectionCount, '| audioReady:', audioReady, '| state:', audioCtx?.state);
+  const isMilestone = connectionCount % 10 === 0;
+  if (isMilestone) {
+    playMilestoneSound();
+    if (scene) scene.triggerMilestone();
+  } else {
+    playSyntheticBloom();
+  }
+  if (scene) scene.triggerConnection(connectionCount);
+}
+
+// ── WebSocket — mirrors the /dashboard pattern ──
+let ws;
+let reconnectTimer;
+
+function connectWS() {
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(protocol + '://' + location.host + '/ws');
+
+  ws.onopen = () => {};
+
+  ws.onclose = () => {
+    reconnectTimer = setTimeout(connectWS, 3000);
+  };
+
+  ws.onmessage = (evt) => {
+    const event = JSON.parse(evt.data);
+    handleEvent(event);
+  };
+}
+
+function handleEvent(event) {
+  switch (event.type) {
+    case 'initial-state': {
+      const { wallets } = event.data;
+      if (wallets && wallets.length > 0) {
+        connectionCount = wallets.length;
+        if (scene) {
+          scene.displayNum = connectionCount;
+        }
+      }
+      break;
+    }
+    case 'wallet-connected': {
+      fireConnection();
+      break;
+    }
+  }
+}
+
+// Play a catch-up sound once audio becomes available, so the first
+// user interaction gives immediate feedback if wallets already connected.
+if (audioCtx) {
+  let caughtUp = false;
+  audioCtx.addEventListener('statechange', () => {
+    if (!caughtUp && audioCtx.state === 'running' && connectionCount > 0) {
+      caughtUp = true;
+      playSyntheticBloom();
+    }
+  });
+}
+</script>
+</body>
+</html>

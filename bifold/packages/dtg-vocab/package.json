@@ -1,0 +1,42 @@
+{
+  "name": "@bifold/dtg-vocab",
+  "version": "0.1.0-alpha.1",
+  "description": "Predicate Handling (cred-spec C4) and a mirrored copy of the dtgwg-vsc-registry's predicate vocabulary — the accept-list a verifier configures itself with, never dereferenced at verification time. See README.md for the mirror's deletion trigger.",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build",
+    "vocab"
+  ],
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "echo 'building dtg-vocab 🏗️' && yarn run clean && yarn run build:vocab && yarn run compile && echo 'dtg-vocab built ✅'",
+    "build:vocab": "node vocab/tools/build.mjs",
+    "clean": "rimraf ./build",
+    "compile": "tsc",
+    "typecheck": "tsc --noEmit",
+    "pretest": "yarn run build:vocab",
+    "test": "jest",
+    "coverage": "jest --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
+    "directory": "packages/dtg-vocab"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.5.0",
+    "rimraf": "~5.0.10",
+    "ts-jest": "^29.1.0",
+    "typescript": "~5.5.4"
+  }
+}

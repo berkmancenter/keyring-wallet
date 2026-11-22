@@ -1,0 +1,407 @@
+/**
+ * vtiInbox — what a community sends a persona that is not the answer to a
+ * question: credentials.
+ *
+ * Measured on VTI-Eucalyptus-RC-0: after `allow`, the VTC no longer relies on
+ * the verdict to carry the card. It sends the membership credential and the
+ * role endorsement as two separate `credential-exchange/issue/0.1` messages
+ * from a durable outbox (retried until acknowledged). A vetter's grant and a
+ * vetter's statement arrive the same way. The payload is an OID4VCI
+ * Credential Response carried verbatim (`credential_response.credential`, or
+ * `credentials[]`), or `sealed` for a holder the issuer cannot name.
+ *
+ * This module classifies what arrived and keeps it; it never sends.
+ *
+ * @module trust-tasks/module/vtiInbox
+ */
+
+import {
+  communityRoleCard,
+  confersRole,
+  isCommunityIdentityCheck,
+  roleMatches,
+  vettingStatementBody,
+  VETTER_ROLE,
+} from '@bifold/trust-tasks'
+import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { DeviceEventEmitter } from 'react-native'
+
+import { isBadgeCredential, laterBadge } from './badgeCredentials'
+import { membershipLockKey, withKeyLock } from './keyedRecords'
+import { heldCredentialKey, isCurrentMembership, type VtiCommunityStore, type VtiMembership } from './VtiCommunityStore'
+import type { VtiCardCheckRefusal, VtiDeliveredCardCheck } from './vtiDeliveredCheck'
+
+/**
+ * A delivered card was not kept because it did not hold up (see
+ * `vtiDeliveredCheck`): `{ communityDid, kind, refusal }`, for a notice in
+ * plain words (`useVtiRefusedCardNotice`).
+ */
+export const VTI_CARD_REFUSED_EVENT = 'vti:card-refused'
+/**
+ * Emitted with `{ communityDid }` when a membership card makes this phone a
+ * member of a community it was not a current member of: the first card, or
+ * the first after a removal. A renewed card for a current membership is not
+ * news, and a card brought back from the agent's keeping does not pass here.
+ */
+export const VTI_JOINED_EVENT = 'vti:joined'
+
+/**
+ * A community made this phone's identity a vetter: emitted with
+ * `{ communityDid }` when a vetter grant is kept that this phone did not
+ * already hold — the first grant, or a new one after a revoke or expiry.
+ * The same grant delivered again is not news.
+ */
+export const VTI_VETTER_GRANTED_EVENT = 'vti:vetterGranted'
+
+export const CREDENTIAL_EXCHANGE_ISSUE = 'https://trusttasks.org/spec/credential-exchange/issue/0.1'
+export { IDENTITY_VETTING_ENDORSEMENT_TYPE } from '@bifold/trust-tasks'
+export const COMMUNITY_ROLE_ENDORSEMENT_TYPE = 'CommunityRole'
+
+export type VtiCredentialKind =
+  | 'membership'
+  | 'role'
+  | 'vetter-grant'
+  | 'vetting-statement'
+  | 'identity-check'
+  | 'badge'
+  | 'other'
+
+export interface VtiReceivedCredential {
+  kind: VtiCredentialKind
+  /** The community that issued it (or, for a statement, the vetter's community). */
+  communityDid: string
+  /** Who it is about. */
+  subjectDid: string
+  credential: Record<string, unknown>
+  receivedAt: string
+}
+
+const types = (vc: Record<string, unknown>): string[] =>
+  Array.isArray(vc.type) ? vc.type.map(String) : vc.type ? [String(vc.type)] : []
+const issuerOf = (vc: Record<string, unknown>): string =>
+  typeof vc.issuer === 'string' ? vc.issuer : String((vc.issuer as { id?: string })?.id ?? '')
+const subjectOf = (vc: Record<string, unknown>) => vc.credentialSubject as Record<string, unknown> | undefined
+
+/** Pull the credentials out of a `credential-exchange/issue` document body. */
+export function credentialsOfIssue(body: unknown): Record<string, unknown>[] {
+  // The body is the Trust Task document (payload inside) when the message is
+  // the binding envelope, and — measured on the train, where the VTC types the
+  // message as the task itself — may also be the document or the bare payload.
+  const b = (body ?? {}) as Record<string, unknown>
+  const payload = ((b.payload as Record<string, unknown> | undefined) ?? b) as Record<string, unknown>
+  const response = (payload.credential_response ?? payload.credentialResponse) as Record<string, unknown> | undefined
+  if (!response) return []
+  const out: Record<string, unknown>[] = []
+  if (response.credential && typeof response.credential === 'object')
+    out.push(response.credential as Record<string, unknown>)
+  if (Array.isArray(response.credentials)) {
+    for (const entry of response.credentials) {
+      const c = (entry as { credential?: unknown })?.credential
+      if (c && typeof c === 'object') out.push(c as Record<string, unknown>)
+    }
+  }
+  return out
+}
+
+/**
+ * The role a role card confers, in either shape: the endorsement's `role`, or
+ * a DTG Credentials v1 VAC's `role:<name>`. A VAC may confer several; when one
+ * is the vetter role it is the one named, as classifyCredential files such a
+ * card as the vetter grant — so the card is not labelled with another role.
+ * Undefined for anything else.
+ */
+export function roleNameOf(credential: Record<string, unknown>): string | undefined {
+  const endorsement = (credential.credentialSubject as Record<string, unknown> | undefined)?.endorsement as
+    | Record<string, unknown>
+    | undefined
+  if (typeof endorsement?.role === 'string' && endorsement.role) return endorsement.role
+  const card = communityRoleCard(credential)
+  if (!card) return undefined
+  return card.roles.find((role) => roleMatches(role, VETTER_ROLE)) ?? card.roles[0]
+}
+
+/** Say what a credential is, from its type and its endorsement body. */
+export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCredential {
+  const t = types(vc)
+  const subject = subjectOf(vc)
+  const endorsement = subject?.endorsement as Record<string, unknown> | undefined
+  let kind: VtiCredentialKind = 'other'
+  let communityDid = issuerOf(vc)
+  // A vetting statement in either shape: the endorsement, or a vetted/1
+  // StatementCredential (DTG Credentials v1). Its community is in the body.
+  const statement = vettingStatementBody(vc)
+  if (t.includes('MembershipCredential')) kind = 'membership'
+  // A community badge (Open Badges 3.0, issued by the community: badgeCredentials).
+  else if (isBadgeCredential(vc)) kind = 'badge'
+  else if (statement && isCommunityIdentityCheck(vc)) {
+    // A community's own identity check (vetted/1 by the community it names,
+    // none of the vetter-only members): evidence it holds about this person,
+    // kept as its other cards are — not a vetter's statement.
+    kind = 'identity-check'
+    communityDid = String(statement.body.community)
+  } else if (statement) {
+    kind = 'vetting-statement'
+    communityDid = String(statement.body.community ?? communityDid)
+  } else if (t.includes('EndorsementCredential') && endorsement) {
+    const et = String(endorsement.type ?? '')
+    if (et === COMMUNITY_ROLE_ENDORSEMENT_TYPE || endorsement.role !== undefined) {
+      kind = String(endorsement.role ?? '') === 'vetter' ? 'vetter-grant' : 'role'
+      communityDid = String(endorsement.communityDid ?? endorsement.community ?? communityDid)
+    }
+  }
+  // A DTG Credentials v1 role grant: a VAC conferring `role:<name>` at the
+  // community's own DID (vta-sdk community_roles). `role:vetter` is the
+  // vetter grant (tf vetting/vetters/grant/0.1 as recast by #691).
+  const roleGrant = kind === 'other' ? communityRoleCard(vc) : undefined
+  if (roleGrant?.shape === 'vac') {
+    kind = confersRole(roleGrant, VETTER_ROLE) ? 'vetter-grant' : 'role'
+    communityDid = roleGrant.communityDid
+  }
+  return {
+    kind,
+    communityDid,
+    subjectDid: String(subject?.id ?? ''),
+    credential: vc,
+    receivedAt: new Date().toISOString(),
+  }
+}
+
+/**
+ * Why a credential a community delivered was not kept — openvtc's checks on a
+ * delivered credential. First, who sent it and who it is for:
+ *
+ * - `issuerNotSender` — its `issuer` is not the transport-authenticated sender
+ *   (`handle_credential_issue`, openvtc-core messaging.rs:889-900);
+ * - `notFromCommunity` — the community it names is not that sender: a role
+ *   or grant must come from the community it is for (`vetter_grant`,
+ *   vetting/inbound.rs:850);
+ * - `subject` — it names no subject, or not this persona (messaging.rs:901-914,
+ *   inbound.rs:850).
+ *
+ * Then whether the card itself holds up (`vtiDeliveredCheck`, as openvtc
+ * checks every issued credential since #380): `proof`, `notYetValid`,
+ * `expired`, `revoked`. Until then Keyring kept a card on the sender alone.
+ */
+export type VtiCredentialRefusal =
+  | 'issuerNotSender'
+  | 'notFromCommunity'
+  | 'subject'
+  /** A badge from a community this persona is not a current member of: a badge is a member's, in that community. */
+  | 'notMember'
+  | VtiCardCheckRefusal
+
+/** Whether a delivered credential may be kept, and if not why: see `VtiCredentialRefusal`. */
+export function credentialRefusal(
+  item: VtiReceivedCredential,
+  sender: string,
+  personaDid: string
+): VtiCredentialRefusal | undefined {
+  if (!sender || issuerOf(item.credential) !== sender) return 'issuerNotSender'
+  if (item.communityDid !== sender) return 'notFromCommunity'
+  if (item.subjectDid !== personaDid) return 'subject'
+  return undefined
+}
+
+/**
+ * Keep what a community delivered. A membership credential becomes (or
+ * completes) the membership record; a role endorsement fills in the role;
+ * grants are held as credentials in their own right.
+ *
+ * A vetter's statement is never stored here. It is handed to
+ * `acceptStatement` — `VtiApplicant.receiveStatement`, the full check an
+ * openvtc applicant runs (vta-sdk `verify_statement`, openvtc `on_statement`)
+ * — which keeps it only if it passes. Without `acceptStatement` a statement is
+ * left alone. Until PR D this stored every statement unchecked, and the
+ * applicant's checklist counted it (conformance inventory, "Vetting statement
+ * (accepted)", the bypass).
+ */
+export async function receiveIssue(
+  store: VtiCommunityStore,
+  personaDid: string,
+  plaintext: DidCommV2PlaintextMessage,
+  options: {
+    via?: VtiMembership['via']
+    /** Check a vetting statement and keep it if it passes; see above. */
+    acceptStatement?: (plaintext: DidCommV2PlaintextMessage) => Promise<void>
+    /** Told of each credential not kept, and why — for the log. */
+    onRefused?: (item: VtiReceivedCredential, refusal: VtiCredentialRefusal) => void
+    /** Told of each card once it is filed (a membership, a role card or a held credential) — for the log. */
+    onFiled?: (item: VtiReceivedCredential) => void
+    /**
+     * Whether a membership card or a role card may be filed on a membership
+     * of this persona, asked of each one. A card from a community this persona
+     * was not made for is filed only once the persona is kept for that
+     * community too (`sharedIdentity`); false keeps it on its own, as a held
+     * credential. Absent, every card is filed on the membership.
+     */
+    fileUnder?: (item: VtiReceivedCredential) => Promise<boolean>
+    /**
+     * Checks a card before it is kept (`deliveredCardCheck(agent)`). Required,
+     * so no caller can keep a card unchecked. It may throw to leave the
+     * delivery for redelivery (a status list that cannot be read now).
+     */
+    checkCard: VtiDeliveredCardCheck
+  }
+): Promise<VtiReceivedCredential[]> {
+  const body = plaintext.body as { type?: string } | undefined
+  const isIssue = plaintext.type === CREDENTIAL_EXCHANGE_ISSUE || body?.type === CREDENTIAL_EXCHANGE_ISSUE
+  if (!isIssue) return []
+  const received = credentialsOfIssue(body).map(classifyCredential)
+  const sender = typeof plaintext.from === 'string' ? plaintext.from : ''
+  const kept: VtiReceivedCredential[] = []
+  let statementHandled = false
+  for (const item of received) {
+    if (item.kind === 'vetting-statement') {
+      if (item.subjectDid && item.subjectDid !== personaDid) continue
+      // One message carries one statement; the check reads it from the message.
+      if (options.acceptStatement && !statementHandled) await options.acceptStatement(plaintext)
+      statementHandled = true
+      kept.push(item)
+      continue
+    }
+    // Everything else comes from a community, about this persona (openvtc
+    // `handle_credential_issue`, `vetter_grant`). Before PR E Keyring checked
+    // the type and, when there was one, the subject — so anyone could hand
+    // this persona a membership or a vetter grant in any community's name.
+    const refusal = credentialRefusal(item, sender, personaDid)
+    if (refusal) {
+      options.onRefused?.(item, refusal)
+      continue
+    }
+    if (item.kind === 'badge') {
+      const member = await store.getMembership(item.communityDid, personaDid)
+      if (!member || !isCurrentMembership(member)) {
+        options.onRefused?.(item, 'notMember')
+        continue
+      }
+    }
+    // The sender is the community the card names; now the card itself.
+    const checked = await options.checkCard(item.credential, sender)
+    if (checked) {
+      options.onRefused?.(item, checked)
+      DeviceEventEmitter.emit(VTI_CARD_REFUSED_EVENT, {
+        communityDid: item.communityDid,
+        kind: item.kind,
+        refusal: checked,
+      })
+      continue
+    }
+    if (item.kind === 'membership') {
+      // The very card the community ended, delivered again, does not bring
+      // the membership back.
+      const ended = await store.getMembership(item.communityDid, personaDid)
+      if (ended && !isCurrentMembership(ended) && ended.vmc?.id === item.credential.id) continue
+    }
+    if (item.kind === 'badge') {
+      if (!(await keepBadge(store, personaDid, item))) continue
+      kept.push(item)
+      options.onFiled?.(item)
+      continue
+    }
+    kept.push(item)
+    const onMembership =
+      (item.kind === 'membership' || item.kind === 'role') && (!options.fileUnder || (await options.fileUnder(item)))
+    if (onMembership) {
+      // A community issues the membership card and the role card in two
+      // messages a few milliseconds apart, and each is kept as it arrives:
+      // one at a time per membership, or one overwrote the other's work and
+      // the role card was lost (241 gate, run 1014-2239).
+      await withKeyLock(membershipLockKey(item.communityDid, personaDid), () =>
+        keepMembershipCard(store, personaDid, item, options.via)
+      )
+    } else {
+      const news =
+        item.kind === 'vetter-grant' &&
+        !((await store.listHeldCredentials?.('vetter-grant', item.communityDid).catch(() => [])) ?? []).some(
+          (held) => held.credential?.id !== undefined && held.credential.id === item.credential.id
+        )
+      // A membership card kept on its own (fileUnder) is held as any other card: a held membership is not a kind.
+      await store.saveHeldCredential({ ...item, kind: item.kind === 'membership' ? 'other' : item.kind })
+      if (news) DeviceEventEmitter.emit(VTI_VETTER_GRANTED_EVENT, { communityDid: item.communityDid })
+    }
+    options.onFiled?.(item)
+  }
+  return kept
+}
+
+/**
+ * Keep a badge: one copy per badge and holder (`heldCredentialKey`), so a
+ * renewal, which comes under a new id, replaces the copy it renews, and an
+ * older copy delivered again after it is not kept over it (`laterBadge`).
+ * False when the copy already kept is the later one.
+ */
+async function keepBadge(store: VtiCommunityStore, personaDid: string, item: VtiReceivedCredential): Promise<boolean> {
+  const badge = { ...item, kind: 'badge' as const, subjectDid: personaDid }
+  const key = heldCredentialKey(badge)
+  return withKeyLock(key, async () => {
+    const held = (await store.listHeldCredentials?.('badge', item.communityDid).catch(() => [])) ?? []
+    const same = held.find((h) => heldCredentialKey(h) === key)
+    if (same && laterBadge(same.credential, item.credential) === 'kept') return false
+    await store.saveHeldCredential(badge)
+    return true
+  })
+}
+
+/** The role card this persona holds for a community without a membership to keep it on, if any. */
+async function heldRoleCard(
+  store: VtiCommunityStore,
+  communityDid: string,
+  personaDid: string
+): Promise<Record<string, unknown> | undefined> {
+  const held = (await store.listHeldCredentials?.('role', communityDid).catch(() => [])) ?? []
+  return held.filter((h) => !h.subjectDid || h.subjectDid === personaDid).slice(-1)[0]?.credential
+}
+
+/** Keep a membership card or a role card on the membership it belongs to. */
+async function keepMembershipCard(
+  store: VtiCommunityStore,
+  personaDid: string,
+  item: VtiReceivedCredential,
+  via: VtiMembership['via'] | undefined
+): Promise<void> {
+  {
+    if (item.kind === 'membership') {
+      const found = await store.getMembership(item.communityDid, personaDid)
+      // Joining again after a removal starts afresh: the ended membership's
+      // role, role card and way in are not this one's.
+      const existing = found && isCurrentMembership(found) ? found : undefined
+      // A role card that came first, with no membership yet to keep it on,
+      // was held on its own: it goes with this membership now.
+      const roleVec =
+        existing?.roleVec ?? (existing ? undefined : await heldRoleCard(store, item.communityDid, personaDid))
+      await store.saveMembership({
+        communityDid: item.communityDid,
+        personaDid,
+        role: existing?.role ?? (roleVec ? String(roleNameOf(roleVec) ?? 'member') : 'member'),
+        vmc: item.credential,
+        roleVec,
+        grantedAt:
+          typeof item.credential.validFrom === 'string'
+            ? (item.credential.validFrom as string)
+            : new Date().toISOString(),
+        validUntil: typeof item.credential.validUntil === 'string' ? (item.credential.validUntil as string) : undefined,
+        via: existing?.via ?? via ?? 'unknown',
+        // How the community decided, from the submission that earned this
+        // card: a hidden-vetting proof counts vouches without naming anyone,
+        // and the credential says nothing about it (03's "Joined with private
+        // vetting" line).
+        ...((existing?.privateVetting ?? (await store.getSubmission?.(item.communityDid))?.privateVetting)
+          ? { privateVetting: true }
+          : {}),
+        // The directory statement the person applied under, from that same submission.
+        ...(await (async () => {
+          const digest =
+            existing?.directoryStatementDigest ??
+            (await store.getSubmission?.(item.communityDid))?.directoryStatementDigest
+          return digest ? { directoryStatementDigest: digest } : {}
+        })()),
+      })
+      if (!existing) DeviceEventEmitter.emit(VTI_JOINED_EVENT, { communityDid: item.communityDid })
+    } else {
+      const existing = await store.getMembership(item.communityDid, personaDid)
+      const role = String(roleNameOf(item.credential) ?? 'member')
+      if (existing) await store.saveMembership({ ...existing, role, roleVec: item.credential })
+      else await store.saveHeldCredential({ ...item, kind: 'role' })
+    }
+  }
+}

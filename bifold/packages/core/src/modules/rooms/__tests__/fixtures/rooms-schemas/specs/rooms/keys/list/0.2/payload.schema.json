@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/keys/list/0.2",
+  "title": "Rooms Keys List — payload",
+  "description": "List the rooms the key holder can open for members the caller may act as. `includePersonal` asks for each entry's personal label as well; absent, none is returned. Carries no filter: the recipient answers for the members its caller acts as, and there is nothing to ask it about. The outer document members are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "includePersonal": {
+      "type": "boolean",
+      "description": "`true` asks for each entry's personal label (rooms/keys/label) in `personal`. Absent or `false`: no entry carries one. A request option, not a filter — it changes which members of an entry are returned, never which entries — and off by default so that a caller that has no use for the member's own names, or will pass the list on, never receives them."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Rooms Keys List — response payload",
+      "description": "Success response to rooms/keys/list. Type https://trusttasks.org/spec/rooms/keys/list/0.2#response. The rooms this key holder can open, one entry per room and member, for the members the caller may act as. This is key custody, not membership: a room whose group state was never delivered is absent here and the member may still hold a perfectly good VMC for it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rooms"
+      ],
+      "properties": {
+        "rooms": {
+          "type": "array",
+          "description": "One entry per room and member, in no guaranteed order. A room held as two members the caller may act as appears twice, once per member.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["roomId", "member", "epoch", "earliestReadableEpoch"],
+            "properties": {
+              "roomId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "description": "The room's identifier."
+              },
+              "member": {
+                "type": "string",
+                "pattern": "^did:",
+                "maxLength": 2048,
+                "description": "The member this entry's group state is held for: the DID the room admitted. What a client names as `member` to rooms/keys/label, and as `issuer` to rooms/keys/act, to act on this entry rather than on the same room held as another member."
+              },
+              "epoch": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The epoch this key holder is at for this member. Behind the room's own epoch means a commit has not been delivered, and records sealed since will not open."
+              },
+              "earliestReadableEpoch": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The earliest epoch this key holder can derive a key for, for this member, walking the epoch key chain it holds. Equal to `epoch` means it reads only from where it joined; `1` means the room's whole retained history. Anything between is a chain that has been delivered in part, or one deliberately severed below that point."
+              },
+              "personal": {
+                "$ref": "../../../_shared/0.1/personal-label.schema.json#/$defs/PersonalLabel",
+                "description": "The member's own label for the room (rooms/keys/label). Present only when the request set `includePersonal: true` and the member has one. Private to the member: a caller MUST NOT pass it to the room's host, its owner, a community or a website the member has not chosen to show it to."
+              }
+            }
+          }
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}
