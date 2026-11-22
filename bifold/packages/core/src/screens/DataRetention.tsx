@@ -1,0 +1,91 @@
+import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { StyleSheet, View } from 'react-native'
+import BouncyCheckbox from 'react-native-bouncy-checkbox'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import Icon from 'react-native-vector-icons/MaterialIcons'
+
+import { DispatchAction } from '../contexts/reducers/store'
+import { useStore } from '../contexts/store'
+import { useTheme } from '../contexts/theme'
+import { testIdWithKey } from '../utils/testable'
+import { ThemedText } from '../components/texts/ThemedText'
+
+const DataRetention: React.FC = () => {
+  const { t } = useTranslation()
+  const [store, dispatch] = useStore()
+  const { ColorPalette, SettingsTheme } = useTheme()
+  const [useDataRetention, setUseDataRetention] = useState<boolean>(!!store.preferences.useDataRetention)
+
+  const styles = StyleSheet.create({
+    container: {
+      backgroundColor: ColorPalette.brand.primaryBackground,
+      width: '100%',
+    },
+    section: {
+      backgroundColor: SettingsTheme.groupBackground,
+      paddingHorizontal: 25,
+      paddingVertical: 16,
+    },
+    sectionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    itemSeparator: {
+      borderBottomWidth: 1,
+      borderBottomColor: ColorPalette.brand.primaryBackground,
+      marginHorizontal: 25,
+    },
+  })
+
+  const updateDataRetention = (state: boolean) => {
+    dispatch({
+      type: DispatchAction.USE_DATA_RETENTION,
+      payload: [state],
+    })
+    setUseDataRetention(state)
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={[styles.section, styles.sectionRow]}>
+        <ThemedText variant="title">{t('Global.On')}</ThemedText>
+        <BouncyCheckbox
+          accessibilityLabel={t('Global.On')}
+          disableText
+          fillColor={ColorPalette.brand.secondaryBackground}
+          unfillColor={ColorPalette.brand.secondaryBackground}
+          size={36}
+          innerIconStyle={{ borderColor: ColorPalette.brand.primary, borderWidth: 2 }}
+          ImageComponent={() => <Icon name="circle" size={18} color={ColorPalette.brand.primary}></Icon>}
+          onPress={() => updateDataRetention(true)}
+          isChecked={useDataRetention}
+          disableBuiltInState
+          testID={testIdWithKey('dataRetentionOn')}
+        />
+      </View>
+      <View style={{ backgroundColor: SettingsTheme.groupBackground }}>
+        <View style={styles.itemSeparator}></View>
+      </View>
+      <View style={[styles.section, styles.sectionRow]}>
+        <ThemedText variant="title">{t('Global.Off')}</ThemedText>
+        <BouncyCheckbox
+          accessibilityLabel={t('Global.Off')}
+          disableText
+          fillColor={ColorPalette.brand.secondaryBackground}
+          unfillColor={ColorPalette.brand.secondaryBackground}
+          size={36}
+          innerIconStyle={{ borderColor: ColorPalette.brand.primary, borderWidth: 2 }}
+          ImageComponent={() => <Icon name="circle" size={18} color={ColorPalette.brand.primary}></Icon>}
+          onPress={() => updateDataRetention(false)}
+          isChecked={!useDataRetention}
+          disableBuiltInState
+          testID={testIdWithKey('dataRetentionOff')}
+        />
+      </View>
+    </SafeAreaView>
+  )
+}
+
+export default DataRetention

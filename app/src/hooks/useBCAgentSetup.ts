@@ -19,6 +19,7 @@ import {
   setTspCarriageEnabled,
   setDidCommV2Enabled,
   openWalletMailbox,
+  vtaAgent,
 } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
 import {
@@ -34,6 +35,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
+import { appWakeHandles } from '@/push/pushDefaults'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
 import {
@@ -181,7 +183,15 @@ export const openWalletMailboxIfConfigured = async (agent: Agent, enabled: boole
     return
   }
   try {
-    await openWalletMailbox(agent, mediatorDid)
+    await openWalletMailbox(agent, mediatorDid, {
+      // The push handle this phone already holds for its linked agent, left at the mailbox's mediator too, so a
+      // sender's wake request there rings the phone (pushWake.ts leaves it as well whenever the handle changes).
+      wakeHandle: async () => {
+        const agentDid = vtaAgent.agentAddress()
+        const kept = agentDid ? await appWakeHandles.get(agentDid) : undefined
+        return kept?.handle
+      },
+    })
   } catch (error) {
     agent.config.logger.warn(`[WalletMailbox] could not open, continuing on v1 only: ${(error as Error).message}`)
   }

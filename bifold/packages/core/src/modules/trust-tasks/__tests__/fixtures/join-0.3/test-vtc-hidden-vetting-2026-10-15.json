@@ -1,0 +1,87 @@
+{
+  "source": "test-vtc.openvtc.net (VTC 0.11.58), vtc/join-requests/manifest 0.3 answer, captured 2026-10-15 16:18Z",
+  "manifest03": {
+    "id": "urn:uuid:9b083570-8e22-4a14-90bf-f85a64853edf",
+    "issuedAt": "2026-10-15T16:17:56Z",
+    "issuer": "did:webvh:QmNvAiYMwoZMWGfY62gqNJuedQgH224FMpHenzJTK1wJrG:webvh.storm.ws:test-vtc",
+    "payload": {
+      "communityDid": "did:webvh:QmNvAiYMwoZMWGfY62gqNJuedQgH224FMpHenzJTK1wJrG:webvh.storm.ws:test-vtc",
+      "criteria": [
+        {
+          "admission": "automatic",
+          "description": "Invited by this community",
+          "id": "invited",
+          "invitationRequired": true,
+          "requirementsDigest": "zQmQn96RqUtEvrotxBniT2zymX4W7kXBmnWiiAmbJemqpoi"
+        },
+        {
+          "admission": "automatic",
+          "credentialIssuers": "community",
+          "description": "A member of this community",
+          "id": "member-credential",
+          "presentationDefinition": {
+            "credentials": [
+              {
+                "format": "ldp_vc",
+                "id": "membership",
+                "meta": {
+                  "type_values": [["MembershipCredential"]]
+                }
+              }
+            ]
+          },
+          "requirementsDigest": "zQmScJL1HRMZfD8bMT2JrbcgzHN74uR29JdSKeF5cCFRYed"
+        },
+        {
+          "admission": "review",
+          "description": "Reviewed by an administrator",
+          "id": "review",
+          "requirementsDigest": "zQmV4x4TRAZFNpuqGBgS17EFy1UxRNdD7DpyuTbegBRPeEC"
+        },
+        {
+          "admission": "automatic",
+          "description": "PCS Vetting",
+          "id": "Vetted-Member",
+          "requirementsDigest": "zQmYQEnpKD9N2dpLRfVRZfZUVmBZ8BWvnJmNvorLxKeP2NC",
+          "vetting": {
+            "acceptedMethods": ["inPerson", "video"],
+            "eligibleVetters": {
+              "role": "vetter"
+            },
+            "ext": {
+              "org.openvtc.hidden-vetting": {
+                "dripPerTick": 3,
+                "events": [],
+                "helperKey": "zJSRg5D8kY1yJ7uapWTypywh78UdutTDXAHanpTR7atviDBYLvoeNgcADfxMhgWrgagHFYRwVF9rrnbJA41ZyXpQEDtdnc6UF43qcatoSZnr99WWZXXZ3YBGSGAZbqTafwtVtf4zMyTs1mjuRh7swMLHQ5RfExSjMWZB4wzo6Ws7vbnfhq2Afg9x9k7E1JXw9HQXs4THjdYXxztV3DkETFxRUuerN4GxDwZStGfkT7sdaY2yfRZcKYnbpgip26NFDWZJ9s8mzf5nFoZaQuVRC7pVEXBDXpycMNqN32fCn1b7Neu4qvbiyGHBWaSf3YUMh16HRXUf8RGJ8Pb5NBqWEoWZKMEyVsraixzxLMy5gG1Ptw9wAbkHpo8jCNDgcT4DEunNFaspgs4u2U6S9FfnTVN3jQQtF8V1sHr4JKwVKz1rTZ5nr5LWYV79eg9fV8aCdc2x1KRMXnVe",
+                "suite": "ps-ddh-bls12381",
+                "tickLength": "P3D",
+                "tokenKey": "zJDqA8PGeYNCsmurUBrL1TegHDftyY97z9EnUzhW4aKnpTwByxA4yTuqwHxGUseibPC43Th4rJh5ozBXKQ1PYqz8KNAzPStjamAzRRuKS1dnCZNGdUhQtexo4kdH8Cq4P4cGNbW6km9NgcPLekiKeo4mtRphjPzux9EcpiVWasQSbAzMNpvpg6zvRDKGbjhxuDRMpqzFNSe7jg8Ej58kbzJEnAm6Q2Bn1Gb2DDiyH42TAhHKisPH3zoQahx96spCsxpLcnbgrzXLpTud4p3oXos9rCQeSsB6uUm9cBFuiwZ7wNzne3NhMfaX37hK4e1fDGAwCCDZNPCvdK4VQYZkgB4Fss3FVbdEYmciniW9ENpguRmHA3SYi2SDG2Mc4fQakixmLgNQ6FCoiL6LrQVdacqUMh9SAVc3iA8bbfd9EYrsnVcmNM4VXjxM43Y8pf9rTxvBV16PeNJV",
+                "tokenLabels": ["token/2026-10"],
+                "vetterLabels": ["vetter/2026-10"]
+              }
+            },
+            "independence": {
+              "requireConsistentIdentityCommitment": true
+            },
+            "invitation": "none",
+            "maxStatementAge": "P120D",
+            "minStatements": 1,
+            "requiredClaims": ["name.legal"],
+            "statementType": "https://registry.trustoverip.org/dtg/vsc/vetted/1",
+            "version": "0.1"
+          }
+        }
+      ]
+    },
+    "proof": {
+      "created": "2026-10-15T16:17:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "authentication",
+      "proofValue": "z39U7vTEMsfrSWo22PMJc4tjyKrVDhDHVMonaNJuLXz3qTdHLj2G5QYaPERiqp3WahxdkR9g9wCKRbMpBtahyu2a4",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:webvh:QmNvAiYMwoZMWGfY62gqNJuedQgH224FMpHenzJTK1wJrG:webvh.storm.ws:test-vtc#key-0"
+    },
+    "threadId": "urn:uuid:29ab3c60-818f-4123-bd22-22edc9a24a28",
+    "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3#response"
+  }
+}

@@ -1,0 +1,90 @@
+<svg id="Group_2230" data-name="Group 2230" xmlns="http://www.w3.org/2000/svg"
+  xmlns:xlink="http://www.w3.org/1999/xlink" width="250" height="250" viewBox="0 0 250 250">
+  <defs>
+    <clipPath id="clip-path">
+      <rect id="Rectangle_1594" data-name="Rectangle 1594" width="250" height="250" fill="none" />
+    </clipPath>
+    <clipPath id="clip-path-2">
+      <path id="Path_528" data-name="Path 528"
+        d="M21.272,71.4l-.118.323a4.39,4.39,0,0,0,8.246,3l.129-.313.148-.363-8.243-3.04-.162.4"
+        transform="translate(-20.944 -71.005)" fill="none" />
+    </clipPath>
+    <clipPath id="clip-path-3">
+      <path id="Path_529" data-name="Path 529"
+        d="M120.1,16.171A105.345,105.345,0,0,0,21.69,84.208L21.205,85.4c1.377.5,2.064.751,2.064.751.688.25,1.376.5,2.065.752s1.376.5,2.065.751l2.064.752q.446-1.088.447-1.088A96.552,96.552,0,0,1,120.1,24.958h.025a96.3,96.3,0,0,1,96.4,95.262c.009.393.02.786.03,1.177h8.787q-.015-.64-.033-1.282A105.17,105.17,0,0,0,120.126,16.171Z"
+        transform="translate(-21.205 -16.171)" fill="none" />
+    </clipPath>
+    <clipPath id="clip-path-4">
+      <path id="Path_530" data-name="Path 530"
+        d="M176.822,99.694l.01.393.006.215a4.392,4.392,0,0,0,8.782-.009c0-.069,0-.138,0-.206l-.011-.428Z"
+        transform="translate(-176.822 -99.659)" fill="none" />
+    </clipPath>
+    <clipPath id="clip-path-5">
+      <path id="Path_531" data-name="Path 531"
+        d="M171.908,127.843l-.127.3-.005.011c-.043.1-.085.2-.129.3l-.025.059,8.188,3.186.168-.4c.039-.1.079-.2.12-.309a4.391,4.391,0,0,0-8.191-3.148"
+        transform="translate(-171.622 -125.187)" fill="none" />
+    </clipPath>
+    <clipPath id="clip-path-6">
+      <path id="Path_532" data-name="Path 532"
+        d="M22.76,100H16.17c.01.428.02.855.031,1.283A105.172,105.172,0,0,0,121.384,205.228h.028a105.344,105.344,0,0,0,97.743-66.316s.168-.393.5-1.182l-2.05-.786c-.684-.265-1.367-.526-2.05-.788s-1.368-.525-2.051-.788l-2.051-.787q-.465,1.081-.464,1.081a96.56,96.56,0,0,1-89.581,60.781h-.025a96.3,96.3,0,0,1-96.4-95.262c-.009-.393-.02-.787-.03-1.179Z"
+        transform="translate(-16.17 -100)" fill="none" />
+    </clipPath>
+    <clipPath id="clip-path-7">
+      <path id="Path_533" data-name="Path 533"
+        d="M20.453,96.416a4.394,4.394,0,0,0-4.283,4.289v.21c0,.143.008.285.01.427l8.787-.035-.01-.392-.006-.215a4.392,4.392,0,0,0-4.388-4.285h-.109"
+        transform="translate(-16.17 -96.415)" fill="none" />
+    </clipPath>
+    <image id="image" width="10.042" height="7.532"
+      xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAYAAAD+Bd/7AAAAFUlEQVR4nGP8//8/Az7AhFd2kCgAAE88Awn/1SVAAAAAAElFTkSuQmCC" />
+  </defs>
+  <g id="Group_2229" data-name="Group 2229" clip-path="url(#clip-path)">
+    <g id="Group_2216" data-name="Group 2216" transform="translate(26.29 89.129)">
+      <g id="Group_2215" data-name="Group 2215" clip-path="url(#clip-path-2)">
+        <use id="Rectangle_1587" data-name="Rectangle 1587" transform="translate(-1.184 -0.006)" xlink:href="#image" />
+      </g>
+    </g>
+    <g id="Group_2218" data-name="Group 2218" transform="translate(26.618 20.299)">
+      <g id="Group_2217" data-name="Group 2217" clip-path="url(#clip-path-3)">
+        <image id="Rectangle_1588" data-name="Rectangle 1588" width="204.606" height="105.441"
+          transform="translate(-0.257 -0.215)"
+          xlink:href="data:image/png;base64,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" />
+      </g>
+    </g>
+    <g id="Group_2220" data-name="Group 2220" transform="translate(221.956 125.097)">
+      <g id="Group_2219" data-name="Group 2219" clip-path="url(#clip-path-4)">
+        <image id="Rectangle_1589" data-name="Rectangle 1589" width="10.042" height="6.276"
+          transform="translate(-1.032 -0.827)"
+          xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAFCAYAAAB4ka1VAAAAI0lEQVR4nGNc7LnkHwME/GdgYGBEp1mgHBDASjNBOTgB5QoAWEQFnn70oQwAAAAASUVORK5CYII=" />
+      </g>
+    </g>
+    <g id="Group_2222" data-name="Group 2222" transform="translate(215.429 157.141)">
+      <g id="Group_2221" data-name="Group 2221" clip-path="url(#clip-path-5)">
+        <use id="Rectangle_1590" data-name="Rectangle 1590" transform="translate(-0.781 -0.235)" xlink:href="#image" />
+      </g>
+    </g>
+    <g id="Group_2224" data-name="Group 2224" transform="translate(20.297 125.525)">
+      <g id="Group_2223" data-name="Group 2223" clip-path="url(#clip-path-6)">
+        <image id="Rectangle_1591" data-name="Rectangle 1591" width="204.606" height="105.441"
+          transform="translate(-0.213)"
+          xlink:href="data:image/png;base64,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" />
+      </g>
+    </g>
+    <g id="Group_2226" data-name="Group 2226" transform="translate(20.297 121.025)">
+      <g id="Group_2225" data-name="Group 2225" clip-path="url(#clip-path-7)">
+        <image id="Rectangle_1592" data-name="Rectangle 1592" width="10.042" height="6.276"
+          transform="translate(-0.213 -0.521)"
+          xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAFCAYAAAB4ka1VAAAAI0lEQVR4nGNc7LnkPwMewIRPkjoKWBgYGEBuQHYHI5QPohkA4hAFmiPNcxYAAAAASUVORK5CYII=" />
+      </g>
+    </g>
+    <g id="Group_2228" data-name="Group 2228">
+      <g id="Group_2227" data-name="Group 2227" clip-path="url(#clip-path)">
+        <path id="Path_534" data-name="Path 534"
+          d="M34.775,102.553A12.553,12.553,0,1,1,22.223,90a12.552,12.552,0,0,1,12.553,12.553"
+          transform="translate(2.468 22.973)" fill="#A349A4" />
+        <path id="Path_535" data-name="Path 535"
+          d="M195.435,102.553A12.553,12.553,0,1,1,182.883,90a12.552,12.552,0,0,1,12.553,12.553"
+          transform="translate(43.477 22.973)" fill="#A349A4" />
+      </g>
+    </g>
+  </g>
+</svg>

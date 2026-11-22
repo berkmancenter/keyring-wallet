@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/trust-task/0.5.0",
+  "title": "Trust Task document — framework envelope (0.5)",
+  "description": "The outer structure of a Trust Task document, per SPEC.md §4.2. This is the schema SPEC §7.2 item 1 requires a conforming consumer to validate the outer document against, selected by the target framework version the Trust Task specification declares (§7.3 item 3) — not by the version in the document's own type member. A complete validation composes this schema with the task-specific payload schema obtained from the document's type (§6.3).\n\nAdditive over 0.4, and this version adds no envelope member: every property, type and constraint here is 0.4's carried forward unchanged, and every document conforming to 0.4 conforms to 0.5. What 0.5 adds sits outside the envelope — consumer requirements (the document lifecycle of §4.12; the freshness bounds of §7.2 item 13 over the existing `issuedAt` and `expiresAt`), specification requirements (`retention`, `exposure.ingests`, `parties[].identifierScope`, and a `maxLength` on every free-text member — §7.3 items 5, 14, 17, 18 and 19), and prose.\n\nA version with no member change still needs its own schema because §7.2 item 1 selects the schema by the *declared target framework version* of the specification, not by anything in the document: a specification cannot declare 0.5 as its target unless a 0.5 envelope schema exists to validate its documents against. Publishing 0.5 here is what makes 0.5 targetable; it re-targets nothing on its own.\n\nDescriptive, not a tightening: `additionalProperties` is true because §4.2 states a document MAY carry additional top-level members, and §7.2 requires a consumer to preserve — while not acting on — members it does not recognize.",
+  "type": "object",
+  "required": ["id", "type", "payload"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The Document identifier — globally unique to this instance of the task, and never reused across documents (§4.3). UUIDv4 is RECOMMENDED; any string the producer can guarantee unique is permitted, so no form is imposed here."
+    },
+    "threadId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Correlates this document with others in the same logical exchange (§4.9). Carries no normative validation semantics: a consumer MUST NOT reject a document on the basis of threadId alone."
+    },
+    "parentThreadId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The threadId of the exchange that contains this one, where this exchange is conducted inside another (§4.9.2). A navigation aid: it records one level of containment and does not change which exchange attests an event (§4.9.1). Like threadId it carries no normative validation semantics — a consumer MUST NOT reject a document on the basis of parentThreadId alone. A producer MUST NOT set it equal to this document's own threadId; an exchange cannot contain itself."
+    },
+    "ceremony": {
+      "type": "object",
+      "description": "Records that this document is a step of a Trust Ceremony — a flow composed of several Trust Tasks (§4.11).\n\nOptional in every sense that matters. No Trust Task specification declares anything about ceremonies, a document without this member is fully conforming, and a consumer that does not implement ceremonies processes the document unchanged under the §7.2 pipeline. Ignoring the member is always safe, because §4.11.4 forbids deriving authority from it: there is nothing a ceremony-aware consumer may do that an unaware one omits.\n\nCovered by `proof` when present, which is what binds a step to one enactment and one definition and prevents it being lifted into another (§4.11.3).",
+      "required": ["enactment", "step"],
+      "additionalProperties": false,
+      "properties": {
+        "enactment": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifies one run of a ceremony. Globally unique and never reused, on the same terms as the document `id` (§4.3) and unlike `threadId` — evidence about a flow needs a stable anchor, and §4.9 does not require one of threadId. This is the value an outside reference names when citing the flow rather than one exchange (§4.9.1)."
+        },
+        "parentEnactment": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The enactment containing this one, where a ceremony is conducted as a step of another. Takes the posture of parentThreadId (§4.9.2): one level, navigation only, no normative validation semantics, and never equal to this document's own enactment. One level is not a depth limit — the pointers form a chain, so ceremonies nest arbitrarily deep."
+        },
+        "definition": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1,
+          "description": "The ceremony definition this step is enacted under, rooted at https://trusttasks.org/ceremony/ (§6.7). OPTIONAL: a flow whose evidence is only the collected or chained documents needs no published definition, and requiring one would make ad-hoc use impossible. Where present, `definitionDigest` MUST accompany it."
+        },
+        "definitionDigest": {
+          "type": "string",
+          "pattern": "^(z[1-9A-HJ-NP-Za-km-z]+|u[A-Za-z0-9_-]+)$",
+          "description": "Multibase-encoded multihash over the RFC 8785 (JCS) canonicalization of the definition named by `definition`. Pins the definition by CONTENT rather than by name: without it the completion rule, role list and evidence level are whatever the URI serves at verification time, which may be years later and under different control. Being covered by `proof`, it also means a step commits to the exact rules it was enacted under, so a revised definition never changes an enactment underneath itself."
+        },
+        "step": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Names this step within the ceremony. The step name — not the Type URI — is the step's identity: one Type URI may serve several steps whose meaning differs by context, and may recur within a flow."
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Distinguishes repetitions of the same step by the same party, where a definition permits bounded repetition. Absent means 1. Being covered by `proof`, it is what stops one round's document being replayed as another's."
+        },
+        "terminal": {
+          "type": "boolean",
+          "description": "Marks a step that ends the enactment. A set of steps containing none so marked is a prefix, not a completed flow — which is what makes truncation of a ceremony's record detectable, since the marker cannot be minted without this step issuer's key."
+        },
+        "prev": {
+          "type": "array",
+          "description": "The steps this one follows, each named by document identifier and digest. A SET rather than a single predecessor, so a flow with concurrent branches is expressible and a linear chain is the degenerate case. An unresolvable entry means the holder lacks a document, not that the document is invalid.",
+          "items": {
+            "type": "object",
+            "required": ["id", "digestMultibase"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The `id` of the predecessor document (§4.3) — globally unique and never reused, so a verifier can locate what the digest is over."
+              },
+              "digestMultibase": {
+                "type": "string",
+                "pattern": "^(z[1-9A-HJ-NP-Za-km-z]+|u[A-Za-z0-9_-]+)$",
+                "description": "Multibase-encoded multihash over the predecessor document, salted per enactment. Salted because many steps carry near-zero-entropy payloads, and an unsalted digest over one is a confirmation oracle for any party handed it — which a chain does by design, since it passes predecessor digests to parties not entitled to predecessor content."
+              }
+            }
+          }
+        }
+      },
+      "dependentRequired": {
+        "definition": ["definitionDigest"]
+      }
+    },
+    "type": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1,
+      "description": "The Type URI identifying the Trust Task specification and version this document conforms to (§4.4), optionally carrying the reserved #request or #response fragment (§4.4.1).\n\nDeliberately not constrained to the trusttasks.org authority: §6.5 permits a private specification to use any HTTPS authority its publisher controls, and such documents conform fully. The Type URI grammar of §6.1 is applied by the consumer, not by this schema."
+    },
+    "issuer": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A Verifiable Identifier for the party responsible for the document's content (§4.8). Compared by exact string equality wherever the framework compares VIDs, so producers SHOULD emit canonical form."
+    },
+    "recipient": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A Verifiable Identifier for the party the issuer expects to act upon the document (§4.8)."
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "An RFC 3339 timestamp recording when the document was produced. SHOULD be populated, to support freshness checks downstream (§7.1). It is the value a consumer places the document in its acceptance window by: §7.2 item 13 requires a consumer to reject with `malformedRequest` a document whose issuedAt is in the consumer's own future beyond its skew tolerance, and §7.3 item 17 requires a Trust Task specification defining a consequential Trust Task to require this member. Neither bound is expressible here — the first is relative to the consumer's clock, the second is declared by the specification — so this schema is unchanged from 0.4 and a conforming consumer applies §7.2 item 13 after schema validation."
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "An RFC 3339 timestamp after which the document is no longer valid. Where present, a consumer MUST NOT act upon the document once now ≥ expiresAt — an inclusive bound, so the instant itself is expired (§4.2, §7.2 item 4). §7.2 item 13 additionally requires a consumer to reject with `malformedRequest` a document whose expiresAt is at or before its issuedAt: `expired` names a document that was once acceptable, and one whose validity ended before it began never was. That is a relation between two members rather than a constraint on this one, and is left to the consumer rather than tightened here, so that a 0.4 document remains valid against 0.5."
+    },
+    "payload": {
+      "type": "object",
+      "description": "The task-specific body. Its internal structure is governed by the Trust Task specification identified by type, and is validated separately against that specification's payload schema (§4.5, §7.2 item 2). The framework constrains it only to be an object."
+    },
+    "@context": {
+      "type": ["string", "array", "object"],
+      "description": "If present, enables JSON-LD processing of the document (§4.6). A consumer that does not implement JSON-LD MUST ignore it."
+    },
+    "proof": {
+      "type": "object",
+      "description": "A W3C Data Integrity Proof binding the document's content to its issuer (§4.7). The suite is open, so the internal structure is not constrained here; a consumer verifies it per §4.7 and the rules of the chosen cryptosuite."
+    }
+  }
+}

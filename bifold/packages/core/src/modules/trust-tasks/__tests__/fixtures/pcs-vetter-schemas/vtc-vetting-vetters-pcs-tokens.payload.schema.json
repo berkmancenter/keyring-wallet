@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vtc/vetting/vetters/pcs-tokens/0.1",
+  "title": "VTC \u2014 Vetting PCS Tokens \u2014 payload",
+  "description": "A vetter draws its tick of attestation tokens. The draw is unconditional and on a schedule \u2014 a vetter asks whether or not it has vetted anyone \u2014 because a fetch that tracked activity would report activity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "label",
+    "tick",
+    "requests"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "The token label to draw under: the community's current monthly label, or an event label it has approved for this vetter."
+    },
+    "tick": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Which tick of this label is being drawn: tick `t` is the window starting `t` tick lengths after the label's start instant (see the specification's Definitions). The community refuses a tick that has not begun (`tickNotYet`) and one already served (`alreadyServed`), so the total drawn under a label is bounded by the drip rate times the ticks elapsed."
+    },
+    "requests": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "description": "One blinded serial per token asked for. More than the community's published `dripPerTick` is refused outright \u2014 the cap is the community's, not the asker's restraint.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commitment",
+          "openingProof"
+        ],
+        "properties": {
+          "commitment": {
+            "type": "string",
+            "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "A commitment to a serial only the vetter knows."
+          },
+          "openingProof": {
+            "type": "string",
+            "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+            "description": "Proof that the commitment opens to a serial the vetter holds, bound to this label, member and tick."
+          }
+        }
+      }
+    },
+    "ext": {
+      "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTC Vetting PCS Tokens \u2014 response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "tick",
+        "preCredentials"
+      ],
+      "description": "One blind signature per request, in the order asked.",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The label served."
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The tick served."
+        },
+        "preCredentials": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "description": "The blind signatures, positionally matching `requests`.",
+          "items": {
+            "type": "string",
+            "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+          }
+        },
+        "ext": {
+          "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}
