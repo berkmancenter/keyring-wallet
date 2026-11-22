@@ -107,8 +107,10 @@ jobs:
             fi
             # One path per line: a framework file with a space in its name (docs/design-guidelines/design guidelines.md)
             # word-split into two arguments and was never checked (review of the fold, 2026-11-22).
-            # --ignore-path: the framework's ignore file (its vendored fixtures), beside its .prettierrc under packages/.
-            echo "$CHANGED" | xargs -d '\n' yarn exec prettier --check --ignore-path packages/.prettierignore
+            # --config and --ignore-path: the framework's style and its ignore file (its vendored fixtures) live under
+            # packages/, and the framework files at the root (eslint.config.mjs, eslint-rules/, scripts/ci/select-tests*,
+            # scripts/tsc-ratchet*) would otherwise be checked against prettier's defaults (semicolons, double quotes).
+            echo "$CHANGED" | xargs -d '\n' yarn exec prettier --check --config packages/.prettierrc --ignore-path packages/.prettierignore
           else
             yarn prettier:packages || echo "::warning::Repo-wide prettier check failed (known debt); not blocking main pushes yet"
           fi

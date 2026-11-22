@@ -239,7 +239,11 @@ test('a wallet-only PR comes back as its paths (the rules then select nothing), 
   const diffs = calls.filter((c) => c[0] === 'diff')
   assert.equal(diffs.length, 1)
   assert.ok(!diffs[0].includes('--relative') && diffs[0].includes('--name-status'))
-  assert.deepEqual(run(M('app/src/x.ts', 'scripts/y.mjs')).modes, {}, 'and the rules read those paths as no framework suite')
+  assert.deepEqual(
+    run(M('app/src/x.ts', 'scripts/y.mjs')).modes,
+    {},
+    'and the rules read those paths as no framework suite'
+  )
 })
 
 test('control: a diff that is empty while GitHub lists files refuses to select nothing', () => {

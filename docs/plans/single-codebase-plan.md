@@ -252,6 +252,9 @@ git mv bifold/packages packages
 git mv bifold/eslint-rules eslint-rules            # require-testid rule, used by core's lint
 git mv bifold/__mocks__ packages/__mocks__          # shared jest mocks
 # bifold/tsconfig-base.json → packages/tsconfig-base.json (the framework's; the root's tsconfig-base.json is the app's, the two differ)
+# bifold/{.prettierrc,.prettierignore,.gitignore} → packages/: the framework's style applies by proximity under packages/, so a
+# framework file lifted above it (eslint.config.mjs, eslint-rules/, scripts/ci/select-tests*, scripts/tsc-ratchet*) is
+# checked with --config packages/.prettierrc named explicitly, or prettier's defaults judge it
 # bifold/{README,CONTRIBUTING,PATCH_NOTES,CODE_OF_CONDUCT,CONTRIBUTORS,HISTORICAL_CONTRIBUTORS}.md → docs/bifold-origin/
 # bifold/{package.json,yarn.lock,package-lock.json,noop,samples,docs/images,scripts,.githooks} → removed; they are in history
 ```
@@ -282,7 +285,7 @@ Bifold's shared root files (`eslint-rules/`, `__mocks__/`) go to the repository 
 - `du -sh node_modules app/node_modules` shows no `bifold/node_modules`, and `find . -name yarn.lock -not -path '*/node_modules/*'` finds one file.
 - `yarn workspaces list` shows `app` and every package; `yarn test` at the root runs the app's and each package's `test` script (a root script using `yarn workspaces foreach --topological run test`).
 - Release bundle sizes for both platforms are within 0.5 % of the Phase 0 record, and the e2e suites in §5.1 pass on Test builds.
-- The native fingerprint equals the Phase 0 record **or** the §5.3 rule is in force and recorded.
+- The native fingerprint equals the Phase 0 record **or** the §5.3 rule is in force and recorded. *(Phase 2's move changes it on both platforms, by the two native packages' paths alone; the rule is in force, recorded in the 2026-11-22 companion §8.)*
 - `tier.mjs` grades the ten fixture ranges identically after the path rewrite (the fixtures' paths are rewritten `bifold/packages/` → `packages/`, nothing else).
 - `node packages/core/scripts/gen-testids.mjs --check` and `e2e/scripts/sync-testids.sh` (now reading `packages/core/testids.json`) pass with the manifest unchanged.
 - **The OTA cut tooling works on the folded tree** (§5.3): a rehearsal cut on a `test/ota-*` branch from the integration branch grades, builds and publishes to the throwaway channel in `gate-ota.yml`. A Phase 2 exit criterion, because the first post-fold OTA cannot wait for Phase 3.

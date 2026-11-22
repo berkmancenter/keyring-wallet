@@ -26,6 +26,3 @@ const keychainMock = {
 
 export default keychainMock
 export { getSupportedBiometryType, setGenericPassword, getGenericPassword, resetGenericPassword }
-
-
-
