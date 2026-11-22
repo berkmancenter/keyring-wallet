@@ -2,10 +2,11 @@
 // changed.mjs picks the gate legs whose drivers reach a testID that a changed file owns.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { idsOwnedBy, ownersFrom, pathExists, select, unitsOf } from './changed.mjs';
+import { bifoldKind, changedFiles, idsOwnedBy, ownersFrom, pathExists, select, unitsOf } from './changed.mjs';
 
 /** A small repo: two screens, a page object, three drivers, four legs. */
 function fixture() {
@@ -121,5 +122,65 @@ test('a path in neither tree is reported as missing, not taken for a logic file'
     assert.equal(pathExists('app/src/Typo.tsx', f.top), false);
   } finally {
     f.done();
+  }
+});
+
+/**
+ * A wallet repo across the fold-in: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone), fold has
+ * bifold/ as a tree (x.ts, testids.json), after changes bifold/packages/core/src/x.ts.
+ */
+function foldRepo() {
+  const top = mkdtempSync(path.join(tmpdir(), 'fold-w-')), clone = mkdtempSync(path.join(tmpdir(), 'fold-b-'));
+  const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  const commit = (dir, m) => { git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
+  const put = (dir, rel, body) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), body); };
+  git(clone, 'init', '-q'); put(clone, 'packages/core/src/x.ts', '1'); put(clone, 'packages/core/testids.json', '{"keys":{},"stems":{}}'); git(clone, 'add', '-A');
+  const pin1 = commit(clone, 'b1'); put(clone, 'packages/core/src/x.ts', '2'); git(clone, 'add', '-A'); const pin2 = commit(clone, 'b2');
+  git(top, 'init', '-q'); put(top, 'app/src/a.ts', 'a'); git(top, 'add', 'app');
+  git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin1},bifold`); const gl1 = commit(top, 'gitlink pin1');
+  git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin2},bifold`); const gl2 = commit(top, 'gitlink pin2');
+  git(top, 'rm', '-q', '--cached', 'bifold'); put(top, 'bifold/packages/core/src/x.ts', '2'); put(top, 'bifold/packages/core/testids.json', '{"keys":{},"stems":{}}'); git(top, 'add', 'bifold'); const fold = commit(top, 'fold');
+  put(top, 'bifold/packages/core/src/x.ts', '3'); git(top, 'add', 'bifold'); const after = commit(top, 'change x');
+  return { top, clone, pin1, pin2, gl1, gl2, fold, after, git: (...a) => git(top, ...a), done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
+}
+const X = 'bifold/packages/core/src/x.ts';
+
+test('a range: folded ends read bifold/ from the wallet diff alone; gitlink ends read the clone; one crossing the fold is marked, never empty', () => {
+  const r = foldRepo();
+  const saved = process.env.BIFOLD_GIT;
+  try {
+    delete process.env.BIFOLD_GIT;
+    assert.deepEqual([bifoldKind(r.gl2, r.top), bifoldKind(r.fold, r.top), bifoldKind('nonesuch', r.top)], ['commit', 'tree', null]);
+    // tree..tree, no clone anywhere: the diff names the path.
+    assert.deepEqual(changedFiles(`${r.fold}..${r.after}`, r.top), [X]);
+    // commit..commit: the pin moved, so bifold's own range from the clone, as before the fold.
+    process.env.BIFOLD_GIT = r.clone;
+    assert.deepEqual(changedFiles(`${r.gl1}..${r.gl2}`, r.top), [X]);
+    assert.deepEqual(changedFiles(`${r.gl2}..${r.gl2}`, r.top), []);
+    // commit..tree: the fold itself is in the range; the mark makes it unmapped (the full gate), not nothing.
+    const crossing = changedFiles(`${r.gl2}..${r.fold}`, r.top);
+    assert.ok(crossing.includes('bifold'), crossing.join());
+    assert.ok(crossing.includes(X));
+    assert.deepEqual(idsOwnedBy(['bifold'], ownersFrom([])).unmapped, ['bifold']);
+    assert.ok(changedFiles(`${r.gl2}..${r.after}`, r.top).includes('bifold'));
+  } finally {
+    if (saved === undefined) delete process.env.BIFOLD_GIT; else process.env.BIFOLD_GIT = saved;
+    r.done();
+  }
+});
+
+test('pathExists: a folded bifold/ is read from HEAD’s tree (a typo is missing, not unknowable); a gitlink HEAD with no clone cannot tell', () => {
+  const r = foldRepo();
+  const saved = process.env.BIFOLD_GIT;
+  try {
+    delete process.env.BIFOLD_GIT;
+    rmSync(path.join(r.top, 'bifold'), { recursive: true, force: true }); // a worktree whose bifold/ is not on disk
+    assert.equal(pathExists(X, r.top), true);
+    assert.equal(pathExists('bifold/packages/core/src/Typo.ts', r.top), false);
+    r.git('checkout', '-q', r.gl2);
+    assert.equal(pathExists('bifold/packages/core/src/Typo.ts', r.top), null);
+  } finally {
+    if (saved === undefined) delete process.env.BIFOLD_GIT; else process.env.BIFOLD_GIT = saved;
+    r.done();
   }
 });

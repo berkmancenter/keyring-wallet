@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/pcs/applications/delete/0.1",
+  "title": "VTA PCS — Applications — Delete — payload",
+  "description": "A client tells its VTA to forget a hidden-vetting application: its PCS key and every attestation it holds are destroyed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "applicationId"
+  ],
+  "properties": {
+    "applicationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "The handle vta/pcs/applications/create returned."
+    },
+    "ext": {
+      "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA PCS — Applications — Delete — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "deleted"
+      ],
+      "properties": {
+        "applicationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "deleted": {
+          "type": "boolean",
+          "const": true,
+          "description": "Always true: a refusal is a trust-task-error, not a false here."
+        },
+        "ext": {
+          "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

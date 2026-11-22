@@ -1,0 +1,242 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native'
+import {
+  CodeField,
+  Cursor,
+  useClearByFocusCell,
+  MaskSymbol,
+  isLastFilledCell,
+} from 'react-native-confirmation-code-field'
+import Icon from 'react-native-vector-icons/MaterialIcons'
+
+import { hitSlop, minPINLength } from '../../constants'
+import { useServices, TOKENS } from '../../container-api'
+import { useTheme } from '../../contexts/theme'
+import { InlineErrorPosition } from '../../types/error'
+import { testIdWithKey } from '../../utils/testable'
+import { ThemedText } from '../texts/ThemedText'
+import InlineErrorText, { InlineMessageProps } from './InlineErrorText'
+
+// adjusting for the spaces between numbers. Read when the field renders, not when this module loads:
+// constants.ts reaches this file again through its own imports, so at load time minPINLength can still be
+// undefined, and a NaN cell count throws "Invalid array length" from CodeField (seen with the PIN entry
+// the confirm sheet opens).
+const cellCountOf = () => minPINLength * 2 - 1
+const separatedPINCellCount = 6
+
+interface PINInputProps {
+  label?: string
+  onPINChanged?: (PIN: string) => void
+  testID?: string
+  accessibilityLabel?: string
+  autoFocus?: boolean
+  inlineMessage?: InlineMessageProps
+  onSubmitEditing?: (...args: any[]) => void
+  ref?: React.Ref<TextInput>
+  /**
+   * Change it to empty the field and focus it again, as after a wrong PIN: the
+   * digits are this field's own, so a screen cannot clear them otherwise and
+   * the person had to delete them one by one. `onPINChanged` is not called.
+   */
+  clearSignal?: number
+}
+
+const PINInput = ({
+  label,
+  onPINChanged,
+  testID,
+  accessibilityLabel,
+  autoFocus = false,
+  inlineMessage,
+  onSubmitEditing = () => {},
+  ref,
+  clearSignal,
+}: PINInputProps) => {
+  const [{ PINScreensConfig }] = useServices([TOKENS.CONFIG])
+
+  const { PINInputTheme, SeparatedPINInputTheme, ColorPalette } = useTheme()
+
+  const theme = PINScreensConfig.useNewPINDesign ? SeparatedPINInputTheme : PINInputTheme
+
+  const [PIN, setPIN] = useState('')
+  const [showPIN, setShowPIN] = useState(false)
+  const field = useRef<TextInput | null>(null)
+  const setFieldRef = useCallback(
+    (node: TextInput | null) => {
+      field.current = node
+      if (typeof ref === 'function') ref(node)
+      else if (ref) (ref as React.MutableRefObject<TextInput | null>).current = node
+    },
+    [ref]
+  )
+  // Only a change clears: the value the field starts with does not.
+  const clearedFor = useRef(clearSignal)
+  useEffect(() => {
+    if (clearSignal === clearedFor.current) return
+    clearedFor.current = clearSignal
+    setPIN('')
+    field.current?.focus()
+  }, [clearSignal])
+  const { t } = useTranslation()
+  const cellHeight = 48
+
+  // including spaces to prevent screen reader from reading the PIN as a single number
+  // filling with bullets when masked to prevent screen reader from reading the actual PIN
+  // and to have the proper appearance when the PIN is masked
+  const displayValue = useMemo(() => {
+    if (showPIN) {
+      return PIN.split('').join(' ')
+    } else {
+      return '●'.repeat(PIN.length).split('').join(' ')
+    }
+  }, [PIN, showPIN])
+
+  const onChangeText = useCallback(
+    (value: string) => {
+      const cleanValue = value.replaceAll(' ', '')
+      // typed new characters
+      if (cleanValue.length > PIN.length) {
+        // add new characters to the actual PIN
+        // only allow numbers
+        const newChars = cleanValue.slice(PIN.length)
+        const newPIN = PIN + newChars.replace(/●/g, '').replace(/\D/g, '')
+        setPIN(newPIN)
+        onPINChanged && onPINChanged(newPIN)
+        // characters were removed
+      } else if (cleanValue.length < displayValue.replaceAll(' ', '').length) {
+        // remove same number of characters from actual PIN
+        const newPIN = PIN.slice(0, cleanValue.length)
+        setPIN(newPIN)
+        onPINChanged && onPINChanged(newPIN)
+      }
+    },
+    [PIN, displayValue, onPINChanged]
+  )
+
+  const [props, getCellOnLayoutHandler] = useClearByFocusCell({
+    value: PINScreensConfig.useNewPINDesign ? PIN : displayValue,
+    setValue: onChangeText,
+  })
+
+  const allyLabel = useMemo(() => {
+    return showPIN ? accessibilityLabel : t('PINCreate.Masked')
+  }, [accessibilityLabel, showPIN, t])
+
+  const style = StyleSheet.create({
+    container: {
+      flexDirection: 'column',
+      marginBottom: 24,
+    },
+    codeFieldContainer: {
+      flex: 1,
+    },
+    cell: {
+      ...theme.cell,
+      borderColor:
+        inlineMessage && PINScreensConfig.useNewPINDesign ? ColorPalette.semantic.error : theme.cell.borderColor,
+    },
+    cellText: {
+      color: theme.cellText.color,
+      textAlign: 'center',
+      lineHeight: cellHeight,
+    },
+    hideIcon: {
+      paddingLeft: PINScreensConfig.useNewPINDesign ? 2 : 10,
+    },
+  })
+
+  const content = () => (
+    <View style={theme.labelAndFieldContainer}>
+      <View style={style.codeFieldContainer}>
+        <CodeField
+          {...props}
+          testID={testID}
+          accessibilityLabel={allyLabel}
+          accessibilityRole={'text'}
+          accessible
+          value={PINScreensConfig.useNewPINDesign ? PIN : displayValue}
+          rootStyle={theme.codeFieldRoot}
+          onChangeText={onChangeText}
+          cellCount={PINScreensConfig.useNewPINDesign ? separatedPINCellCount : cellCountOf()}
+          keyboardType="number-pad"
+          textContentType="password"
+          renderCell={({ index, symbol, isFocused }) => {
+            let child: React.ReactNode | string = ''
+            // skip spaces
+            if (symbol && symbol !== ' ') {
+              if (PINScreensConfig.useNewPINDesign) {
+                child = showPIN ? (
+                  symbol
+                ) : (
+                  <MaskSymbol
+                    maskSymbol="●"
+                    isLastFilledCell={isLastFilledCell({
+                      index,
+                      value: PINScreensConfig.useNewPINDesign ? PIN : displayValue,
+                    })}
+                  >
+                    {symbol}
+                  </MaskSymbol>
+                )
+              } else {
+                child = symbol
+              }
+            } else if (isFocused) {
+              child = <Cursor />
+            }
+            return (
+              <View key={index} style={style.cell} onLayout={getCellOnLayoutHandler(index)}>
+                <ThemedText variant="headingThree" style={style.cellText} maxFontSizeMultiplier={1}>
+                  {child}
+                </ThemedText>
+              </View>
+            )
+          }}
+          autoFocus={autoFocus}
+          ref={setFieldRef}
+          onSubmitEditing={(e) => {
+            onSubmitEditing(e?.nativeEvent?.text ?? '')
+          }}
+        />
+      </View>
+      <TouchableOpacity
+        style={style.hideIcon}
+        accessibilityLabel={showPIN ? t('PINCreate.Hide') : t('PINCreate.Show')}
+        accessibilityRole={'button'}
+        testID={showPIN ? testIdWithKey('Hide') : testIdWithKey('Show')}
+        onPress={() => setShowPIN(!showPIN)}
+        hitSlop={PINScreensConfig.useNewPINDesign ? { ...hitSlop, left: 10 } : hitSlop}
+      >
+        <Icon color={PINInputTheme.icon.color} name={showPIN ? 'visibility-off' : 'visibility'} size={30} />
+      </TouchableOpacity>
+    </View>
+  )
+
+  return (
+    <View style={style.container}>
+      {label && (
+        <ThemedText variant={PINScreensConfig.useNewPINDesign ? 'labelTitle' : 'label'} style={{ marginBottom: 8 }}>
+          {label}
+        </ThemedText>
+      )}
+      {inlineMessage?.config.position === InlineErrorPosition.Above ? (
+        <InlineErrorText
+          message={inlineMessage.message}
+          inlineType={inlineMessage.inlineType}
+          config={inlineMessage.config}
+        />
+      ) : null}
+      {content()}
+      {inlineMessage?.config.position === InlineErrorPosition.Below ? (
+        <InlineErrorText
+          message={inlineMessage.message}
+          inlineType={inlineMessage.inlineType}
+          config={inlineMessage.config}
+        />
+      ) : null}
+    </View>
+  )
+}
+
+export default PINInput

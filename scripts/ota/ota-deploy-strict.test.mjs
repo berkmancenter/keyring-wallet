@@ -44,8 +44,9 @@ console.log(JSON.stringify(slurp ? [out] : out))
 /**
  * A repository at <base> plus one commit touching `file`; returns how to run the publisher in it. tier: a stand-in
  * tier.mjs that prints this verdict and exits with this code, for the outcomes a real change can't be made to give.
+ * folded: bifold/ is a tree of the repository (since the fold) rather than a submodule's gitlink.
  */
-const repoWith = (file, { tier } = {}) => {
+const repoWith = (file, { tier, folded = false } = {}) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'ota-deploy-strict-'))
   dirs.push(dir)
   const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim()
@@ -61,10 +62,16 @@ const repoWith = (file, { tier } = {}) => {
     const stub = `console.log(${JSON.stringify(JSON.stringify({ reasons: {}, flags: [], held: [], strict: ['sign-in / key handling'], unchecked: [], ...tier.verdict }))}); process.exitCode = ${tier.exit}\n`
     writeFileSync(path.join(dir, 'scripts/release/tier.mjs'), stub)
   }
-  git('add', '.')
-  // ota-deploy reads HEAD:bifold; any commit id serves as the gitlink.
-  git('update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},bifold`)
-  mkdirSync(path.join(dir, 'bifold')) // as an uninitialised submodule is, so the tree reads clean
+  // ota-deploy reads HEAD:bifold: the folded tree, or the gitlink before the fold (any commit id serves as one).
+  if (folded) {
+    mkdirSync(path.join(dir, 'bifold/packages/core/src'), { recursive: true })
+    writeFileSync(path.join(dir, 'bifold/packages/core/src/index.ts'), 'export const core = 1\n')
+    git('add', '.')
+  } else {
+    git('add', '.')
+    git('update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},bifold`)
+    mkdirSync(path.join(dir, 'bifold')) // as an uninitialised submodule is, so the tree reads clean
+  }
   git('commit', '-q', '-m', 'base')
   const base = git('rev-parse', 'HEAD')
   mkdirSync(path.dirname(path.join(dir, file)), { recursive: true })
@@ -116,6 +123,14 @@ test('a plain ota change passes without any proof, as before', () => {
   const r = repoWith('app/src/screens/Home.tsx')('none')
   assert.doesNotMatch(r.stdout, /ota-strict/)
   assert.match(r.stderr, PASSED_THE_GATE)
+})
+
+test('since the fold, bifold is a tree of the repository: a core screen change still reads ota and passes the gate', () => {
+  const r = repoWith('bifold/packages/core/src/screens/Home.tsx', { folded: true })('none')
+  assert.doesNotMatch(r.stdout, /ota-strict/)
+  assert.match(r.stderr, PASSED_THE_GATE)
+  // And the publisher reads bifold's id from the wallet tree without a submodule (no `git -C bifold`).
+  assert.doesNotMatch(r.stderr, /fatal|cannot resolve|HEAD:bifold/)
 })
 
 test('a store change is refused whatever is proven', () => {

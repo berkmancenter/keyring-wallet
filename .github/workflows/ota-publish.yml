@@ -111,7 +111,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           fetch-depth: 0
       - name: Tier, and every tier exemption, before the approval
         env:
@@ -169,7 +168,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           fetch-depth: 0
 
       # main's ruleset requires signed commits and green checks; release/* and

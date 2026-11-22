@@ -1,0 +1,63 @@
+import React, { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { StyleSheet, View, ViewStyle, useWindowDimensions } from 'react-native'
+import QRCode from 'react-native-qrcode-svg'
+
+import { useTheme } from '../../contexts/theme'
+import { testIdWithKey } from '../../utils/testable'
+import { ThemedText } from '../texts/ThemedText'
+
+interface QRRendererProps {
+  value: string
+  size?: number
+  /** White margin around the code, in points: cameras need one to find it. Default none. */
+  quietZone?: number
+  style?: ViewStyle
+  onError?: () => void
+  /** The code's testID key; 'QRRenderer' unless a screen needs to tell its codes apart. */
+  testID?: string
+}
+
+/** The margin QRRenderer keeps above and below its code, in points. A screen that sizes a box around the code reads
+ * this rather than repeating the number. */
+export const QR_RENDERER_MARGIN = 20
+
+const QRRenderer: React.FC<QRRendererProps> = ({ value, onError, size, quietZone, testID = 'QRRenderer' }) => {
+  const { width } = useWindowDimensions()
+  const { t } = useTranslation()
+  const { ColorPalette } = useTheme()
+
+  const styles = StyleSheet.create({
+    container: {
+      flexGrow: 1,
+      marginVertical: QR_RENDERER_MARGIN,
+      backgroundColor: 'white',
+      // A code sized smaller than its box sits in the middle, not at the left.
+      alignItems: 'center',
+    },
+    errorMessage: {
+      color: ColorPalette.semantic.error,
+      textAlign: 'center',
+    },
+  })
+
+  const [isInvalidQR, setIsInvalidQR] = useState(false)
+
+  const handleQRCodeGenerationError = useCallback(() => {
+    setIsInvalidQR(true)
+    if (onError) {
+      onError()
+    }
+  }, [onError])
+
+  const qrSize = size ?? width - 80
+
+  return (
+    <View style={styles.container} testID={testIdWithKey(testID)}>
+      {<QRCode ecl="L" value={value} size={qrSize} quietZone={quietZone} onError={handleQRCodeGenerationError} />}
+      {isInvalidQR && <ThemedText style={styles.errorMessage}>{t('QRRender.GenerationError')}</ThemedText>}
+    </View>
+  )
+}
+
+export default QRRenderer

@@ -1,0 +1,355 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`TogglePushNotification Screen Push notification screen renders correctly in settings 1`] = `
+<RNCSafeAreaView
+  edges={
+    Object {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "off",
+    }
+  }
+  style={
+    Array [
+      Object {
+        "backgroundColor": "#000000",
+        "flex": 1,
+      },
+      undefined,
+    ]
+  }
+>
+  <RCTScrollView
+    contentContainerStyle={
+      Array [
+        Object {
+          "padding": 16,
+        },
+        undefined,
+      ]
+    }
+    showsVerticalScrollIndicator={false}
+  >
+    <View>
+      <View
+        style={
+          Object {
+            "height": 200,
+            "marginBottom": 20,
+          }
+        }
+        testID="com.ariesbifold:id/PushNotificationImage"
+      >
+        < />
+      </View>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 26,
+              "fontWeight": "bold",
+            },
+            Object {
+              "marginBottom": 20,
+            },
+          ]
+        }
+      >
+        PushNotifications.EnableNotifications
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            undefined,
+          ]
+        }
+      >
+        PushNotifications.BeNotified
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#606060",
+              "marginTop": 20,
+            },
+          ]
+        }
+        testID="com.ariesbifold:id/PushNotificationWhatItSays"
+      >
+        PushNotifications.WhatItSays
+      </Text>
+      <View
+        style={
+          Object {
+            "flexDirection": "row",
+            "marginTop": 20,
+          }
+        }
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              undefined,
+            ]
+          }
+        >
+          •
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#FFFFFF",
+                "flex": 1,
+                "fontSize": 18,
+                "fontWeight": "normal",
+                "paddingLeft": 5,
+              },
+            ]
+          }
+        >
+          PushNotifications.BulletOne
+        </Text>
+      </View>
+      <View
+        style={
+          Object {
+            "flexDirection": "row",
+            "marginTop": 20,
+          }
+        }
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              undefined,
+            ]
+          }
+        >
+          •
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#FFFFFF",
+                "flex": 1,
+                "fontSize": 18,
+                "fontWeight": "normal",
+                "paddingLeft": 5,
+              },
+            ]
+          }
+        >
+          PushNotifications.BulletTwo
+        </Text>
+      </View>
+      <View
+        style={
+          Object {
+            "flexDirection": "row",
+            "marginTop": 20,
+          }
+        }
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              undefined,
+            ]
+          }
+        >
+          •
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#FFFFFF",
+                "flex": 1,
+                "fontSize": 18,
+                "fontWeight": "normal",
+                "paddingLeft": 5,
+              },
+            ]
+          }
+        >
+          PushNotifications.BulletThree
+        </Text>
+      </View>
+      <View
+        style={
+          Object {
+            "flexDirection": "row",
+            "marginTop": 20,
+          }
+        }
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              undefined,
+            ]
+          }
+        >
+          •
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#FFFFFF",
+                "flex": 1,
+                "fontSize": 18,
+                "fontWeight": "normal",
+                "paddingLeft": 5,
+              },
+            ]
+          }
+        >
+          PushNotifications.BulletFour
+        </Text>
+      </View>
+    </View>
+  </RCTScrollView>
+  <View
+    style={
+      Array [
+        Object {
+          "gap": 16,
+        },
+        Object {
+          "paddingBottom": 16,
+          "paddingHorizontal": 16,
+        },
+        undefined,
+      ]
+    }
+  >
+    <View
+      style={
+        Object {
+          "gap": 16,
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "display": "flex",
+            "flexDirection": "row",
+            "gap": 16,
+            "justifyContent": "center",
+          }
+        }
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "flexShrink": 1,
+              },
+            ]
+          }
+        >
+          PushNotifications.ReceiveNotifications
+        </Text>
+        <RCTSwitch
+          accessibilityLabel="PushNotifications.ReceiveNotifications"
+          accessibilityRole="switch"
+          onChange={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          onTintColor="rgba(53, 130, 63, 0.35)"
+          style={
+            Array [
+              Object {
+                "alignSelf": "flex-start",
+              },
+              Object {
+                "backgroundColor": "#D3D3D3",
+                "borderRadius": 16,
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/PushNotificationSwitch"
+          thumbTintColor="#606060"
+          tintColor="#D3D3D3"
+          value={false}
+        />
+      </View>
+    </View>
+  </View>
+</RNCSafeAreaView>
+`;

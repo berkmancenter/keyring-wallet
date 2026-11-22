@@ -4,10 +4,14 @@
  * it need a full native build? Two independent guards, both from git objects
  * (nothing is checked out or built); a change is JS-only only when BOTH say so.
  *
- *   1. The change, file by file (wallet diff + the bifold pin's diff). An
- *      allowlist: a file is JS (goes into the bundle), none (not in the app:
- *      tests, docs, e2e, server-only packages), or native. Anything the list
- *      does not know is native. Any native file → full build.
+ *   1. The change, file by file: the wallet diff, whose bifold/… paths are
+ *      judged by the bifold rules (since the fold bifold/ is a tree of this
+ *      repository; before it, a gitlink, and the pin's diff is read from the
+ *      submodule's clone). An allowlist: a file is JS (goes into the bundle),
+ *      none (not in the app: tests, docs, e2e, server-only packages), or
+ *      native. Anything the list does not know is native. Any native file →
+ *      full build. A range crossing the fold (a gitlink at one end, a tree at
+ *      the other) has no readable bifold range: every bifold path is native.
  *   2. A fingerprint of every native input, taken at both commits: app/ios and
  *      app/android (Podfile.lock, Info.plist, entitlements, manifest, gradle,
  *      icons), package.json files and yarn.lock, dependency patches, the
@@ -22,8 +26,8 @@
  *
  * Usage:
  *   node scripts/ci/js-only.mjs --base <wallet-sha> --head <wallet-sha> \
- *     [--bifold-base <sha> --bifold-head <sha>]   (default: each commit's pin)
- *     [--bifold-repo <path>]                        (default: ./bifold)
+ *     [--bifold-base <sha> --bifold-head <sha>]   (gitlink ranges only; default: each commit's pin)
+ *     [--bifold-repo <path>]                        (gitlink ranges only; default: ./bifold)
  *     [--env-base <sha256> --env-head <sha256>]     (hash of the .env each build used)
  *     [--json]
  * Exit: 0 js-only, 10 no app change, 20 full build.
@@ -69,10 +73,12 @@ const NATIVE_MARKERS = /^(android|ios|.*\.podspec|react-native\.config\.js|expo-
 
 /**
  * One wallet path: 'js' (in the bundle), 'none' (not in the app), or 'native'.
- * Anything not recognised is native.
+ * Anything not recognised is native. A bifold/… path (the folded tree) is the
+ * bifold rules' to judge; `natives` is theirs (classifyBifoldPath).
  */
-export function classifyWalletPath(p) {
+export function classifyWalletPath(p, natives = new Set()) {
   if (p === "bifold") return { cls: "none", why: "submodule pin (its diff is judged file by file)" };
+  if (p.startsWith("bifold/")) return classifyBifoldPath(p.slice("bifold/".length), natives);
   if (p.startsWith("app/ios/") || p.startsWith("app/android/")) return { cls: "native", why: "native project" };
   // Before the dependency and .env rules: e2e is a standalone package outside
   // the workspaces, so its package.json and lockfile never reach a build.
@@ -132,23 +138,46 @@ export function changedPaths(repo, a, b) {
   return out ? out.split("\n").map((l) => l.split("\t").slice(1)).flat() : [];
 }
 
+/** What bifold is at a wallet commit: the submodule's gitlink (the pin, before the fold) or the folded tree's id. */
 export function bifoldPin(repo, commit) {
   const pin = objectAt(repo, commit, "bifold");
   if (pin === "absent") throw new Error(`no bifold pin at ${commit}`);
   return pin;
 }
 
+/**
+ * 'commit' (a gitlink: the submodule, before the fold), 'tree' (the folded directory) or 'absent'. From the tree entry's
+ * type, not `cat-file -t <commit>:bifold`: a gitlink's commit lives in the submodule's repository, so that read fails
+ * whenever it was not fetched here, which is the usual case.
+ */
+export function bifoldKind(repo, commit) {
+  try {
+    return git(repo, "ls-tree", commit, "bifold").split(/\s+/)[1] || "absent";
+  } catch {
+    return "absent";
+  }
+}
+
+/**
+ * Where bifold's files are read for one wallet commit: the submodule's clone at
+ * the pin (a gitlink), or this repository under bifold/ (the folded tree).
+ * Paths handed to it are bifold-relative (packages/core/…) either way.
+ */
+export function bifoldSide({ walletRepo, bifoldRepo, commit, pin, kind }) {
+  return kind === "tree" ? { repo: walletRepo, at: commit, prefix: "bifold/" } : { repo: bifoldRepo, at: pin, prefix: "" };
+}
+
 /** Package directories of bifold at a commit, with whether each carries native markers. */
-export function bifoldPackages(bifoldRepo, commit) {
-  const dirs = git(bifoldRepo, "ls-tree", "-d", "--name-only", commit, "packages/").split("\n").filter(Boolean);
+export function bifoldPackages(bifoldRepo, commit, prefix = "") {
+  const dirs = git(bifoldRepo, "ls-tree", "-d", "--name-only", commit, `${prefix}packages/`).split("\n").filter(Boolean);
   return dirs.map((dir) => {
     const names = git(bifoldRepo, "ls-tree", "--name-only", commit, `${dir}/`).split("\n").map((n) => n.split("/").pop());
-    return { name: dir.slice("packages/".length), markers: names.filter((n) => NATIVE_MARKERS.test(n)) };
+    return { name: dir.slice(`${prefix}packages/`.length), markers: names.filter((n) => NATIVE_MARKERS.test(n)) };
   });
 }
 
-/** Every native input at one wallet commit (and its bifold pin), as object hashes. */
-export function nativeInputs(walletRepo, bifoldRepo, commit, pin) {
+/** Every native input at one wallet commit (and its bifold, read from `side`: bifoldSide), as object hashes. */
+export function nativeInputs(walletRepo, side, commit) {
   const inputs = {};
   for (const p of ["app/ios", "app/android", "package.json", "app/package.json", "yarn.lock", ".yarnrc.yml", ".yarn/patches", "app/patches", "app/react-native.config.js", "app/app.json", ...BUILD_SCRIPTS]) {
     inputs[`wallet:${p}`] = objectAt(walletRepo, commit, p);
@@ -157,14 +186,19 @@ export function nativeInputs(walletRepo, bifoldRepo, commit, pin) {
     const [meta, path] = line.split("\t");
     if (path && ASSET_EXT.test(path) && !path.startsWith("app/ios/") && !path.startsWith("app/android/")) inputs[`wallet:${path}`] = meta.split(" ")[2];
   }
-  for (const p of ["package.json", "yarn.lock", ".yarnrc.yml", ".yarn/patches"]) inputs[`bifold:${p}`] = objectAt(bifoldRepo, pin, p);
-  for (const { name, markers } of bifoldPackages(bifoldRepo, pin)) {
+  const { repo, at, prefix } = side;
+  // Only the folded side says so: a gitlink side fingerprints as it always did, and the two sides of a range that
+  // crosses the fold never match, even when every object under bifold/ is byte for byte the submodule's.
+  if (prefix) inputs["bifold:(layout)"] = "folded tree";
+  for (const p of ["package.json", "yarn.lock", ".yarnrc.yml", ".yarn/patches"]) inputs[`bifold:${p}`] = objectAt(repo, at, prefix + p);
+  for (const { name, markers } of bifoldPackages(repo, at, prefix)) {
     if (SERVER_ONLY.has(name)) continue;
-    inputs[`bifold:packages/${name}/package.json`] = objectAt(bifoldRepo, pin, `packages/${name}/package.json`);
-    for (const m of markers) inputs[`bifold:packages/${name}/${m}`] = objectAt(bifoldRepo, pin, `packages/${name}/${m}`);
+    inputs[`bifold:packages/${name}/package.json`] = objectAt(repo, at, `${prefix}packages/${name}/package.json`);
+    for (const m of markers) inputs[`bifold:packages/${name}/${m}`] = objectAt(repo, at, `${prefix}packages/${name}/${m}`);
   }
-  for (const line of git(bifoldRepo, "ls-tree", "-r", pin, "packages/").split("\n")) {
-    const [meta, path] = line.split("\t");
+  for (const line of git(repo, "ls-tree", "-r", at, `${prefix}packages/`).split("\n")) {
+    const [meta, full] = line.split("\t");
+    const path = full?.slice(prefix.length);
     const pkg = path?.split("/")[1];
     if (path && ASSET_EXT.test(path) && !SERVER_ONLY.has(pkg) && !TEST.test(path)) inputs[`bifold:${path}`] = meta.split(" ")[2];
   }
@@ -183,24 +217,58 @@ export const digestOf = (inputs) =>
 export function judge({ walletRepo, bifoldRepo, base, head, bifoldBase, bifoldHead, env = {} }) {
   const reasons = [];
   const files = [];
-  const pinA = bifoldBase ?? bifoldPin(walletRepo, base);
-  const pinB = bifoldHead ?? bifoldPin(walletRepo, head);
+  const envReasons = () => {
+    if (!env.base || !env.head) reasons.push("no .env evidence for the base build or this one: cannot rule out baked config");
+    else if (env.base !== env.head) reasons.push(".env differs from the base build's (react-native-config bakes it into native code)");
+  };
+  // Gitlink at both ends (before the fold): the pin's diff is read from the submodule's clone, as it always was, and
+  // --bifold-base/--bifold-head may name the pins. Tree at both ends (since the fold): the wallet diff carries the
+  // bifold/… paths itself, there is no pin and no second repository. One of each, or bifold absent at an end: the
+  // range crosses the fold, and the verdict is a full build before anything of bifold's is read, because nothing of
+  // it can be: once ./bifold is a tree there is no clone here for the gitlink side, and an absent side has nothing.
+  const kindA = bifoldKind(walletRepo, base);
+  const kindB = bifoldKind(walletRepo, head);
+  const folded = kindA === "tree" && kindB === "tree";
+  const FOLD = "the fold: the submodule became a tree";
+  if (kindA !== kindB || kindA === "absent") {
+    for (const p of changedPaths(walletRepo, base, head)) {
+      const bifold = p === "bifold" || p.startsWith("bifold/");
+      files.push({ repo: "wallet", path: p, ...(bifold ? { cls: "native", why: FOLD } : classifyWalletPath(p)) });
+    }
+    // The fold is one reason, not one per file under bifold/ (the whole tree arrives in that diff).
+    reasons.push(`${FOLD} between ${base} and ${head} (bifold is ${kindA} at the base, ${kindB} at the head): every bifold path is native`);
+    reasons.push("fingerprint: bifold:(layout) changed");
+    for (const f of files) if (f.cls === "native" && f.why !== FOLD) reasons.push(`${f.repo}:${f.path} — ${f.why}`);
+    envReasons();
+    const at = (commit) => { const o = objectAt(walletRepo, commit, "bifold"); return o === "absent" ? null : o; };
+    return {
+      verdict: VERDICT.FULL,
+      reasons,
+      base: { wallet: base, bifold: at(base), fingerprint: null },
+      head: { wallet: head, bifold: at(head), fingerprint: null },
+      files,
+    };
+  }
+  if (folded && (bifoldBase || bifoldHead)) throw new Error("--bifold-base/--bifold-head name a pin, and bifold is a tree of this repository at both commits");
+  const pinA = (!folded && bifoldBase) || bifoldPin(walletRepo, base);
+  const pinB = (!folded && bifoldHead) || bifoldPin(walletRepo, head);
+  const sideA = bifoldSide({ walletRepo, bifoldRepo, commit: base, pin: pinA, kind: kindA });
+  const sideB = bifoldSide({ walletRepo, bifoldRepo, commit: head, pin: pinB, kind: kindB });
 
   const natives = new Set();
-  for (const c of [pinA, pinB]) for (const p of bifoldPackages(bifoldRepo, c)) if (p.markers.length) natives.add(p.name);
+  for (const s of [sideA, sideB]) for (const p of bifoldPackages(s.repo, s.at, s.prefix)) if (p.markers.length) natives.add(p.name);
 
-  for (const p of changedPaths(walletRepo, base, head)) files.push({ repo: "wallet", path: p, ...classifyWalletPath(p) });
-  if (pinA !== pinB) for (const p of changedPaths(bifoldRepo, pinA, pinB)) files.push({ repo: "bifold", path: p, ...classifyBifoldPath(p, natives) });
+  for (const p of changedPaths(walletRepo, base, head)) files.push({ repo: "wallet", path: p, ...classifyWalletPath(p, natives) });
+  if (!folded && pinA !== pinB) for (const p of changedPaths(bifoldRepo, pinA, pinB)) files.push({ repo: "bifold", path: p, ...classifyBifoldPath(p, natives) });
 
   for (const f of files) if (f.cls === "native") reasons.push(`${f.repo}:${f.path} — ${f.why}`);
 
-  const a = nativeInputs(walletRepo, bifoldRepo, base, pinA);
-  const b = nativeInputs(walletRepo, bifoldRepo, head, pinB);
+  const a = nativeInputs(walletRepo, sideA, base);
+  const b = nativeInputs(walletRepo, sideB, head);
   const fingerprintChanges = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k]).sort();
   for (const k of fingerprintChanges) reasons.push(`fingerprint: ${k} changed`);
 
-  if (!env.base || !env.head) reasons.push("no .env evidence for the base build or this one: cannot rule out baked config");
-  else if (env.base !== env.head) reasons.push(".env differs from the base build's (react-native-config bakes it into native code)");
+  envReasons();
 
   const verdict = reasons.length ? VERDICT.FULL : files.some((f) => f.cls === "js") ? VERDICT.JS_ONLY : VERDICT.NO_APP_CHANGE;
   return {

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Broadcast/signal arcs emanating from a central dot -->
+  <circle cx="12" cy="12" r="2" fill="black" stroke="none"/>
+  <path d="M8.5 8.5a5 5 0 0 0 0 7"/>
+  <path d="M15.5 8.5a5 5 0 0 1 0 7"/>
+  <path d="M5.5 5.5a10 10 0 0 0 0 13"/>
+  <path d="M18.5 5.5a10 10 0 0 1 0 13"/>
+</svg>

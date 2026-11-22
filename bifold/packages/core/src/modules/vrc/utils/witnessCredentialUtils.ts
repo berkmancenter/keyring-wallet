@@ -1,0 +1,476 @@
+/**
+ * Utility functions for working with Witness Credentials (VWCs)
+ *
+ * These functions help identify, filter, and extract information from
+ * WitnessCredentials in the credential store.
+ *
+ * VSC migration (docs/plans/vsc-migration-plan.md §6 V3, §7): every function
+ * here that classifies a credential (`hasWitnessCredentialType`,
+ * `getWitnessCredentialsForSubject`) reads BOTH shapes through
+ * `credentialTypes.ts`'s `isWitnessCredential` — the legacy WD02 type-string
+ * form, and the new VSC/`dtg:witnessed` predicate form.
+ *
+ * TODO(vsc-migration): this dual-read is a DATED deletion, not a permanent
+ * tolerance (plan §7) — delete it one release after V4 ships to the last
+ * channel. Date not yet known; V4 hasn't shipped. Fill in the actual date
+ * here once it does, and remove the legacy-shape handling in
+ * `extractWitnessInfo` below (the nested `witnessContext.localityVerification`
+ * / flat `locality*`-inside-`witnessContext` reads — V4 moves these to be
+ * siblings of `witnessContext` instead, per plan §3.5).
+ */
+
+import { W3cCredentialRecord } from '@credo-ts/core'
+
+import { isPeerVrcCredential, isWitnessCredential } from '../credentialTypes'
+import { toRawCredential } from './rcardDisplayUtils'
+
+/**
+ * The tag a witness credential carries once THIS device has verified it, set
+ * where it is stored: `trust-tasks/witnessCeremony.ts` for our own session's
+ * VWC, and the witness-share leg of `trust-tasks/ceremony.ts` for the peer's.
+ * Both check the credential before storing — the session binding, and, where
+ * a locality observation is claimed, that it matches the transcript this
+ * device itself produced.
+ *
+ * A credential in the store without this tag has not been verified here. It
+ * may be perfectly genuine — one stored before this tag existed, say — but
+ * nothing has checked it, so it earns no witness or locality mark in the UI.
+ */
+export const WITNESS_VERIFIED_TAG = 'witnessVerified'
+
+/** Whether this record was verified and marked by one of the ceremony paths. */
+export function isVerifiedWitnessRecord(credential: W3cCredentialRecord): boolean {
+  try {
+    const tags = credential.getTags() as Record<string, unknown> | undefined
+    return tags?.[WITNESS_VERIFIED_TAG] === 'true'
+  } catch (_error) {
+    // A record shape without tags cannot have been marked.
+    return false
+  }
+}
+
+/**
+ * Locality verification information from witnessContext
+ *
+ * @deprecated the pre-locality-plan nested shape (`witnessContext.localityVerification`).
+ * Kept for VWCs issued before the flat `locality*` members landed — see `LocalityStatus`.
+ */
+export interface LocalityVerification {
+  /** Type of locality verification (e.g., "proximity", "gps") */
+  type?: string
+  /** Whether verification was confirmed */
+  confirmed?: boolean
+  /** Additional details */
+  details?: string
+}
+
+/**
+ * The three states locality-plan.md §7.1 rule 5 requires to stay
+ * distinguishable — never collapsed into a boolean:
+ *   - 'confirmed'    — a real observation, with method/venue/time to show
+ *   - 'declined'     — attempted and not confirmed, WITH a reason (a choice
+ *                      vs. an interruption read differently to a holder)
+ *   - 'not-offered'  — this witness doesn't do locality at all; the ONLY
+ *                      signal for this is the total absence of any
+ *                      `locality*` member (never inferred from one being
+ *                      false or empty)
+ */
+export type LocalityOutcome = 'confirmed' | 'declined' | 'not-offered'
+
+export interface LocalityStatus {
+  outcome: LocalityOutcome
+  /** Present when outcome is 'confirmed' — e.g. "ble-challenge-response/0.1" */
+  method?: string
+  /** Present when outcome is 'declined' — e.g. "declinedByHolder" | "windowLost" */
+  reason?: string
+  /** Present when outcome is 'confirmed' — the witness's (unverified, §11-Q4) claim about itself */
+  venue?: string
+  observedAt?: string
+}
+
+/**
+ * Extracted witness record information for display
+ */
+export interface WitnessRecord {
+  /** Event name from witnessContext */
+  event?: string
+  /** Verification method used */
+  method?: string
+  /** Session ID */
+  sessionId?: string
+  /** Witness DID (issuer) */
+  witnessDid: string
+  /** Witness name, when the credential gives one (credentialSubject.witnessName, else a legacy issuer.name) */
+  witnessName?: string
+  /** Issuance date */
+  issuanceDate?: string
+  /** Credential ID for navigation */
+  credentialId: string
+  /** @deprecated — the pre-locality-plan nested shape. Populated only when a VWC has no flat `locality*` members at all but does have this old nested one (an older-issued credential). */
+  localityVerification?: LocalityVerification
+  /** The three-state locality read (locality-plan.md §7.1) — always populated, one of 'confirmed' | 'declined' | 'not-offered'. */
+  locality?: LocalityStatus
+  /** Whether hardware attestation was included in the exchange */
+  hardwareAttestationIncluded?: boolean
+}
+
+/**
+ * Check if a VRC (DTGCredential) has a hardware attestation evidence block.
+ * This is the evidence added directly to the main VRC when HW signing is on,
+ * regardless of whether a witness was involved.
+ *
+ * @param credential - W3C credential record to check
+ * @returns True if the credential contains a HardwareKeyAttestation evidence block
+ */
+export function hasHardwareAttestationEvidence(credential: W3cCredentialRecord): boolean {
+  try {
+    const raw = toRawCredential(credential)
+    if (!raw || !Array.isArray(raw.evidence)) {
+      return false
+    }
+
+    return raw.evidence.some((ev: any) => {
+      if (!ev || typeof ev !== 'object') return false
+      const types = Array.isArray(ev.type) ? ev.type : [ev.type]
+      return types.includes('HardwareKeyAttestation')
+    })
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Check if any VRC credential (DTGCredential, non-Witness) issued by a
+ * specific DID contains hardware attestation evidence.
+ *
+ * NOTE: This only checks for presence of evidence, NOT verification.
+ * For badge display, use verifyVrcHardwareEvidence instead.
+ *
+ * @param credentials - All W3C credential records
+ * @param issuerDid - The counterparty's relationship DID (the credential issuer)
+ * @returns True if any matching VRC has HW attestation evidence
+ */
+export function hasVrcHardwareAttestation(credentials: W3cCredentialRecord[], issuerDid: string): boolean {
+  return credentials.some((credential) => {
+    try {
+      const raw = toRawCredential(credential)
+      if (!raw) return false
+
+      // Must be a DTGCredential (the VRC), not a WitnessCredential
+      if (!isPeerVrcCredential(raw)) return false
+
+      // issuer.id must match the contact's DID
+      const issuerId = typeof raw.issuer === 'string' ? raw.issuer : raw.issuer?.id
+      if (issuerId !== issuerDid) return false
+
+      return hasHardwareAttestationEvidence(credential)
+    } catch {
+      return false
+    }
+  })
+}
+
+/**
+ * Get the raw VRC credential JSON (with evidence) for a specific issuer DID.
+ * Used to feed into verifyVrcHardwareEvidence for actual cryptographic verification.
+ *
+ * @param credentials - All W3C credential records
+ * @param issuerDid - The counterparty's relationship DID (the credential issuer)
+ * @returns Raw credential JSON object or null
+ */
+export function getVrcCredentialJsonForSubject(
+  credentials: W3cCredentialRecord[],
+  issuerDid: string
+): Record<string, unknown> | null {
+  for (const credential of credentials) {
+    try {
+      const raw = toRawCredential(credential)
+      if (!raw) continue
+
+      if (!isPeerVrcCredential(raw)) continue
+
+      // Match by issuer DID (the contact who issued this credential to us)
+      const issuerId = typeof raw.issuer === 'string' ? raw.issuer : raw.issuer?.id
+      if (issuerId !== issuerDid) continue
+
+      if (!hasHardwareAttestationEvidence(credential)) continue
+
+      return raw as Record<string, unknown>
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+/**
+ * Check if a credential has the WitnessCredential type
+ *
+ * @param credential - W3C credential record to check
+ * @returns True if the credential includes "WitnessCredential" in its type array
+ */
+export function hasWitnessCredentialType(credential: W3cCredentialRecord): boolean {
+  try {
+    const raw = toRawCredential(credential)
+    return raw ? isWitnessCredential(raw) : false
+  } catch (_error) {
+    return false
+  }
+}
+
+/**
+ * The witness credentials for a subject DID that THIS device verified.
+ *
+ * Narrower than `getWitnessCredentialsForSubject` below by the verification
+ * mark (see `WITNESS_VERIFIED_TAG`). This is what the contact list and the
+ * contact detail screen read, so that a witness mark, a locality mark and a
+ * witness's name only ever come from a credential this device checked —
+ * not from one a peer handed us.
+ *
+ * @param credentials - Array of W3C credential records
+ * @param subjectDid - The DID to match against credentialSubject.id (counterparty's R-DID)
+ * @returns The verified matching records, newest-first order unchanged
+ */
+export function getVerifiedWitnessCredentialsForSubject(
+  credentials: W3cCredentialRecord[],
+  subjectDid: string
+): W3cCredentialRecord[] {
+  return getWitnessCredentialsForSubject(credentials, subjectDid).filter(isVerifiedWitnessRecord)
+}
+
+/**
+ * Every witness credential in the store naming this subject, verified here or
+ * not.
+ *
+ * Do NOT use this to decide what to show a user about a contact's
+ * trustworthiness: anything a peer can put in the wallet appears here.
+ * `getVerifiedWitnessCredentialsForSubject` above is the one the screens use.
+ * This one remains for callers that want the whole picture, including records
+ * this device never checked.
+ *
+ * This filters credentials where:
+ * - the credential names the WitnessCredential type (or the witnessed/1 shape)
+ * - credentialSubject.id matches the provided subjectDid
+ */
+export function getWitnessCredentialsForSubject(
+  credentials: W3cCredentialRecord[],
+  subjectDid: string
+): W3cCredentialRecord[] {
+  return credentials.filter((credential) => {
+    // Check if it's a WitnessCredential
+    if (!hasWitnessCredentialType(credential)) {
+      return false
+    }
+
+    // Check if credentialSubject.id matches the subjectDid
+    try {
+      const raw = toRawCredential(credential)
+      if (!raw) return false
+
+      const credentialSubject = raw.credentialSubject
+      if (!credentialSubject || typeof credentialSubject !== 'object') {
+        return false
+      }
+
+      return credentialSubject.id === subjectDid
+    } catch (_error) {
+      return false
+    }
+  })
+}
+
+/**
+ * Extract display information from a witness credential
+ *
+ * @param vwc - Witness credential record
+ * @returns WitnessRecord with extracted information, or null if extraction fails
+ */
+export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | null {
+  try {
+    const rawCredential = toRawCredential(vwc)
+    if (!rawCredential) {
+      return null
+    }
+
+    // Extract issuer (witness DID)
+    let witnessDid: string
+    // Legacy fallback only: pre-VSC-migration VWCs carried `issuer: { id, name }`
+    // before the spec required a bare string (ref-07e Act 4). Superseded by
+    // credentialSubject.witnessName below, which is the spec-conforming home
+    // for the display name (§Predicate Profiles point 5's ignorable-extras
+    // clause) — kept here only for any VWC signed before that change existed.
+    let issuerObjectName: string | undefined
+
+    if ('issuer' in rawCredential) {
+      const issuerValue = rawCredential.issuer
+
+      if (typeof issuerValue === 'string') {
+        witnessDid = issuerValue
+      } else if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
+        witnessDid = issuerValue.id
+        issuerObjectName = issuerValue.name
+      } else {
+        return null
+      }
+    } else {
+      return null
+    }
+
+    // Extract witnessContext from credentialSubject
+    let event: string | undefined
+    let method: string | undefined
+    let sessionId: string | undefined
+    let localityVerification: LocalityVerification | undefined
+    let locality: LocalityStatus | undefined
+    let hardwareAttestationIncluded: boolean | undefined
+    let witnessNameFromSubject: string | undefined
+
+    if ('credentialSubject' in rawCredential) {
+      let credentialSubject = rawCredential.credentialSubject
+
+      // Handle array case (W3C VC allows credentialSubject to be an array)
+      if (Array.isArray(credentialSubject)) {
+        credentialSubject = credentialSubject[0] // Take first subject
+      }
+
+      if (credentialSubject && typeof credentialSubject === 'object') {
+        // Spec-conforming home for the witness's display name (added as a
+        // credentialSubject sibling of witnessContext, same pattern as
+        // hardwareAttestationIncluded/locality* — see WitnessService.ts).
+        if ('witnessName' in credentialSubject && typeof (credentialSubject as any).witnessName === 'string') {
+          witnessNameFromSubject = (credentialSubject as any).witnessName
+        }
+
+        // Check for hardwareAttestationIncluded directly in credentialSubject first
+        if ('hardwareAttestationIncluded' in credentialSubject) {
+          hardwareAttestationIncluded = credentialSubject.hardwareAttestationIncluded === true
+        }
+
+        // VSC migration (plan §6 V4): locality* and localityVerification are
+        // siblings of witnessContext in credentialSubject (plan §3.5), not
+        // nested inside it — check there FIRST, same pattern as
+        // hardwareAttestationIncluded above. The witnessContext-nested checks
+        // below remain as the legacy (wd02) fallback.
+        if ('localityConfirmed' in credentialSubject) {
+          locality = {
+            outcome: (credentialSubject as any).localityConfirmed === true ? 'confirmed' : 'declined',
+            method: (credentialSubject as any).localityMethod,
+            reason: (credentialSubject as any).localityReason,
+            venue: (credentialSubject as any).localityVenue,
+            observedAt: (credentialSubject as any).localityObservedAt,
+          }
+        } else if (
+          'localityVerification' in credentialSubject &&
+          (credentialSubject as any).localityVerification &&
+          typeof (credentialSubject as any).localityVerification === 'object'
+        ) {
+          localityVerification = {
+            type: (credentialSubject as any).localityVerification.type,
+            confirmed: (credentialSubject as any).localityVerification.confirmed,
+            details: (credentialSubject as any).localityVerification.details,
+          }
+          locality = { outcome: localityVerification.confirmed ? 'confirmed' : 'declined' }
+        }
+
+        // Try to find witnessContext - check both direct and nested under claims
+        let witnessContext: any = null
+
+        // First, check directly in credentialSubject
+        if ('witnessContext' in credentialSubject && credentialSubject.witnessContext) {
+          witnessContext = credentialSubject.witnessContext
+        }
+        // Second, check under credentialSubject.claims
+        else if (
+          'claims' in credentialSubject &&
+          credentialSubject.claims &&
+          typeof credentialSubject.claims === 'object'
+        ) {
+          const claims = credentialSubject.claims
+
+          if ('witnessContext' in claims && claims.witnessContext) {
+            witnessContext = claims.witnessContext
+          }
+        }
+
+        if (witnessContext && typeof witnessContext === 'object') {
+          event = witnessContext.event
+          method = witnessContext.method
+          sessionId = witnessContext.sessionId
+
+          // Extract hardwareAttestationIncluded from witnessContext (where witness server puts it)
+          if ('hardwareAttestationIncluded' in witnessContext) {
+            hardwareAttestationIncluded = witnessContext.hardwareAttestationIncluded === true
+          }
+
+          // Locality (locality-plan.md §7.1) — three states, read in this
+          // order so the check for "not offered" is never inferred from a
+          // false/empty value, only from total absence:
+          //   1. the flat `locality*` members as credentialSubject siblings
+          //      (vsc shape, plan §3.5 — checked above, before witnessContext
+          //      was even located)
+          //   2. the flat `locality*` members nested in witnessContext
+          //      (wd02 shape, current)
+          //   3. the old nested `witnessContext.localityVerification` (VWCs
+          //      issued before the flat shape existed) — kept for those only
+          //   4. none present → 'not-offered'
+          // `locality` may already be set from the credentialSubject-level
+          // check above — don't let this block's "not-offered" default
+          // clobber a real finding just because THIS VWC's locality data
+          // lives at the other nesting level.
+          if (locality) {
+            // already found as a credentialSubject sibling — nothing to do
+          } else if ('localityConfirmed' in witnessContext) {
+            locality = {
+              outcome: witnessContext.localityConfirmed === true ? 'confirmed' : 'declined',
+              method: witnessContext.localityMethod,
+              reason: witnessContext.localityReason,
+              venue: witnessContext.localityVenue,
+              observedAt: witnessContext.localityObservedAt,
+            }
+          } else if (witnessContext.localityVerification && typeof witnessContext.localityVerification === 'object') {
+            localityVerification = {
+              type: witnessContext.localityVerification.type,
+              confirmed: witnessContext.localityVerification.confirmed,
+              details: witnessContext.localityVerification.details,
+            }
+            locality = { outcome: localityVerification.confirmed ? 'confirmed' : 'declined' }
+          } else {
+            locality = { outcome: 'not-offered' }
+          }
+        } else if (!locality) {
+          // No witnessContext at all on this VWC, and nothing found as a
+          // credentialSubject sibling either — no locality claim exists.
+          locality = { outcome: 'not-offered' }
+        }
+      }
+    }
+
+    // Extract issuance date
+    let issuanceDate: string | undefined
+    if ('validFrom' in rawCredential && typeof rawCredential.validFrom === 'string') {
+      issuanceDate = rawCredential.validFrom
+    } else if ('issuanceDate' in rawCredential && typeof rawCredential.issuanceDate === 'string') {
+      issuanceDate = rawCredential.issuanceDate
+    }
+
+    return {
+      event,
+      method,
+      sessionId,
+      witnessDid,
+      // No name: undefined, so each screen says so in its own language (never the English 'Witness').
+      witnessName: witnessNameFromSubject || issuerObjectName || undefined,
+      issuanceDate,
+      credentialId: vwc.id,
+      localityVerification,
+      // Guaranteed set even if credentialSubject was missing/malformed above —
+      // "not-offered" is the honest read of a VWC with no locality claim at all.
+      locality: locality ?? { outcome: 'not-offered' },
+      hardwareAttestationIncluded,
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[WitnessUtils] Error extracting witness info:', error)
+    return null
+  }
+}

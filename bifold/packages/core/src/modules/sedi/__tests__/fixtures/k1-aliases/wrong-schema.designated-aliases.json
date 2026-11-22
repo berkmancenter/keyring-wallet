@@ -1,0 +1,10 @@
+{
+  "said": "EPGbFQkt3nGyx7iaHSxtFOZoqbORnNfk2Vh4HLpsoPMd",
+  "proof": "{\"v\":\"ACDCCAACAAJSONAAJU.\",\"t\":\"acm\",\"d\":\"EPGbFQkt3nGyx7iaHSxtFOZoqbORnNfk2Vh4HLpsoPMd\",\"u\":\"0ACtllVyL3rqyDMlCuhn_SD_\",\"i\":\"IACQg23100QMBcnrf576nwmcFebXw3ymHWhOLQAOzg8J\",\"rd\":\"ENTxXqvxfswRicvUxLPcgEbvt8Mn6UjJbJWQpB-tJ9bk\",\"s\":\"EBbOpBe0lP_epHhakeiXdOmeal3leDfLRf0PAItsanoQ\",\"a\":{\"d\":\"EIx9jKqQrfChGLXzW9nX8yg3Yes5rh3rHqUrcK0t8UT_\",\"u\":\"0ACs_z7bkpVGakEjK8aX41US\",\"i\":\"IBU-uYDkpEgRFwTgpeauWgeUoBksyIQg0mh2hqdhFdhi\",\"issuedDate\":\"2026-11-13T00:27:03.909065+00:00\",\"unit\":\"KeyringDemoSediProgramOffice\"},\"r\":{\"d\":\"EIhI1S78NgtUYG3H0tTGHw4l_81M9jutv5SriAmOXGhC\",\"l\":\"Demo only. Not a legal instrument.\"}}-CAk-aAjECfwcZFUZlpD28ufF1KUuKTRvkACkGUru2ZFnBq2TfI6aMI-jmQ4Gal2ENH_QYz9xQ02XvjjEQK51jhe-zBIOViAEPGbFQkt3nGyx7iaHSxtFOZoqbORnNfk2Vh4HLpsoPMd0Missued",
+  "tel": {
+    "ripText": "{\"v\":\"ACDCCAACAAJSONAADa.\",\"t\":\"rip\",\"d\":\"ENTxXqvxfswRicvUxLPcgEbvt8Mn6UjJbJWQpB-tJ9bk\",\"u\":\"0AAG58Js1IlRGIj-OnaDWT9u\",\"i\":\"IACQg23100QMBcnrf576nwmcFebXw3ymHWhOLQAOzg8J\",\"n\":\"0\",\"dt\":\"2026-11-13T00:27:03.909210+00:00\"}",
+    "updateTexts": [
+      "{\"v\":\"ACDCCAACAAJSONAAEi.\",\"t\":\"bup\",\"d\":\"EGe-ti3Tz7rZLL6V5VMV4-5xOBJZpzTKOeOXpSgqqSUr\",\"rd\":\"ENTxXqvxfswRicvUxLPcgEbvt8Mn6UjJbJWQpB-tJ9bk\",\"n\":\"1\",\"p\":\"ENTxXqvxfswRicvUxLPcgEbvt8Mn6UjJbJWQpB-tJ9bk\",\"dt\":\"2026-11-13T00:27:04.054108+00:00\",\"b\":\"ECfwcZFUZlpD28ufF1KUuKTRvkACkGUru2ZFnBq2TfI6\"}"
+    ]
+  }
+}

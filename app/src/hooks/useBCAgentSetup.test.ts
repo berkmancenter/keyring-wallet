@@ -1,104 +1,148 @@
 /**
- * Regression test for the duplicate v2 message-pickup loop: on every launch
- * after the first, `provisionV2MediationIfConfigured` re-ran
- * `startV2MessagePickup` on a v2 mediation record that `configureMessagePickup`
- * had already started pickup for earlier in the same setup — subscribing a
- * second Pickup 4.0 polling loop (startV2MessagePickup's PickUpV4 start has no
- * anti-stacking guard, unlike the patched v1/v2 start; see
- * src/utils/mediatorPickupStrategy.guard.test.ts).
+ * Agent start-up's DIDComm v2 wiring (useBCAgentSetup.ts): which switches bifold is told, when the wallet mailbox
+ * opens, and that nothing calls the retired Coordinate Mediation 2.0 entry points any more (bifold v2Routing.ts:
+ * provisionV2Mediation, startV2MessagePickup and setV2MediationEnabled are wrappers until the wallet stops calling
+ * them, which is this change).
  */
 import { DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import Config from 'react-native-config'
 
 import {
   applyDidCommSwitches,
-  provisionV2MediationIfConfigured,
+  openWalletMailboxIfConfigured,
   restartPickupOnReturn,
   v2MailboxOn,
 } from './useBCAgentSetup'
 import { initialState } from '../store'
 
-const mockFindV2MediationRecord = jest.fn()
-const mockProvisionV2Mediation = jest.fn()
-const mockStartV2MessagePickup = jest.fn()
+const mockOpenWalletMailbox = jest.fn()
+const mockAgentAddress = jest.fn<string | undefined, []>(() => undefined)
+const mockKeptHandle = jest.fn<Promise<{ handle: { gateway: string; handle: string } } | undefined>, [string]>(
+  async () => undefined
+)
 const mockSetTsp = jest.fn()
 const mockSetV2 = jest.fn()
-const mockSetV2Mailbox = jest.fn()
+// The retired entry points, mocked so a call to any of them would be seen.
+const mockRetired = {
+  provisionV2Mediation: jest.fn(),
+  startV2MessagePickup: jest.fn(),
+  setV2MediationEnabled: jest.fn(),
+}
 
 jest.mock('@bifold/core', () => ({
   ...jest.requireActual('@bifold/core'),
-  findV2MediationRecord: (...args: unknown[]) => mockFindV2MediationRecord(...args),
-  provisionV2Mediation: (...args: unknown[]) => mockProvisionV2Mediation(...args),
-  startV2MessagePickup: (...args: unknown[]) => mockStartV2MessagePickup(...args),
+  openWalletMailbox: (...args: unknown[]) => mockOpenWalletMailbox(...args),
+  vtaAgent: { agentAddress: () => mockAgentAddress() },
   setTspCarriageEnabled: (on: boolean) => mockSetTsp(on),
   setDidCommV2Enabled: (on: boolean) => mockSetV2(on),
-  setV2MediationEnabled: (on: boolean) => mockSetV2Mailbox(on),
+  provisionV2Mediation: (...args: unknown[]) => mockRetired.provisionV2Mediation(...args),
+  startV2MessagePickup: (...args: unknown[]) => mockRetired.startV2MessagePickup(...args),
+  setV2MediationEnabled: (...args: unknown[]) => mockRetired.setV2MediationEnabled(...args),
 }))
 
-jest.mock('react-native-config', () => ({ MEDIATOR_V2_URL: undefined }))
+jest.mock('react-native-config', () => ({ MAILBOX_MEDIATOR_DID: undefined }))
+jest.mock('@/push/pushDefaults', () => ({ appWakeHandles: { get: (agentDid: string) => mockKeptHandle(agentDid) } }))
 
-// The mocked Config, typed so a case can set the URL. Cast once into a name:
+// The mocked Config, typed so a case can set the DID. Cast once into a name:
 // assigning through `(Config as ...)` at the start of a line needs a leading
 // semicolon under prettier and forbids one under eslint's no-extra-semi, so
 // the two tools reformat each other forever (2026-09-16).
-const mockedConfig = Config as unknown as { MEDIATOR_V2_URL?: string }
+const mockedConfig = Config as unknown as { MAILBOX_MEDIATOR_DID?: string }
+
+const MEDIATOR = 'did:peer:2.keyring-affinidi-mediator'
 
 function fakeAgent() {
   return {
     config: { logger: { info: jest.fn(), warn: jest.fn() } },
-  } as never
+  } as unknown as { config: { logger: { info: jest.Mock; warn: jest.Mock } } }
 }
 
-describe('provisionV2MediationIfConfigured', () => {
+describe('openWalletMailboxIfConfigured: testers first, and never in the way of start-up', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockedConfig.MAILBOX_MEDIATOR_DID = undefined
   })
 
-  it('does nothing when the developer flag is off', async () => {
-    mockedConfig.MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
-    await provisionV2MediationIfConfigured(fakeAgent(), false)
-    expect(mockProvisionV2Mediation).not.toHaveBeenCalled()
-    expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
+  it('as every build ships today (switch off, no mediator): nothing opens, and the log says why', async () => {
+    const agent = fakeAgent()
+    await openWalletMailboxIfConfigured(agent as never, false)
+    expect(mockOpenWalletMailbox).not.toHaveBeenCalled()
+    expect(agent.config.logger.info).toHaveBeenCalledWith(
+      '[WalletMailbox] not opening: switch=off, MAILBOX_MEDIATOR_DID=unset'
+    )
   })
 
-  it('does nothing when MEDIATOR_V2_URL is unset', async () => {
-    mockedConfig.MEDIATOR_V2_URL = undefined
-    await provisionV2MediationIfConfigured(fakeAgent(), true)
-    expect(mockProvisionV2Mediation).not.toHaveBeenCalled()
-    expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
+  it('the switch on, but no mediator configured: nothing opens', async () => {
+    await openWalletMailboxIfConfigured(fakeAgent() as never, true)
+    expect(mockOpenWalletMailbox).not.toHaveBeenCalled()
   })
 
-  it('starts pickup once when newly provisioning a v2 mediation record', async () => {
-    mockedConfig.MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
-    mockFindV2MediationRecord.mockResolvedValueOnce(undefined) // none yet
-    mockProvisionV2Mediation.mockResolvedValueOnce({ id: 'm-v2' })
-
-    await provisionV2MediationIfConfigured(fakeAgent(), true)
-
-    expect(mockProvisionV2Mediation).toHaveBeenCalledTimes(1)
-    expect(mockStartV2MessagePickup).toHaveBeenCalledTimes(1)
+  it('a mediator configured, but the switch off (not a tester): nothing opens', async () => {
+    mockedConfig.MAILBOX_MEDIATOR_DID = MEDIATOR
+    await openWalletMailboxIfConfigured(fakeAgent() as never, false)
+    expect(mockOpenWalletMailbox).not.toHaveBeenCalled()
   })
 
-  it('does NOT start a second pickup loop when the v2 record already existed (the bug)', async () => {
-    mockedConfig.MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
-    mockFindV2MediationRecord.mockResolvedValueOnce({ id: 'm-v2' }) // already provisioned on a prior launch
-    mockProvisionV2Mediation.mockResolvedValueOnce({ id: 'm-v2' }) // idempotent no-op, per provisionV2Mediation's own contract
-
-    await provisionV2MediationIfConfigured(fakeAgent(), true)
-
-    expect(mockProvisionV2Mediation).toHaveBeenCalledTimes(1)
-    // configureMessagePickup (called earlier in agent setup, unconditionally)
-    // already started pickup for this pre-existing record.
-    expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
+  it('CONTROL: the switch on and a mediator configured: the mailbox opens at that mediator', async () => {
+    mockedConfig.MAILBOX_MEDIATOR_DID = MEDIATOR
+    mockOpenWalletMailbox.mockResolvedValueOnce({ did: 'did:peer:2.mailbox', mediatorDid: MEDIATOR })
+    const agent = fakeAgent()
+    await openWalletMailboxIfConfigured(agent as never, true)
+    expect(mockOpenWalletMailbox).toHaveBeenCalledWith(agent, MEDIATOR, { wakeHandle: expect.any(Function) })
   })
 
-  it('logs and swallows a provisioning failure without starting pickup', async () => {
-    mockedConfig.MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
-    mockFindV2MediationRecord.mockResolvedValueOnce(undefined)
-    mockProvisionV2Mediation.mockRejectedValueOnce(new Error('mediator unreachable'))
+  it('the mailbox is given this phone’s push handle for its linked agent, so the mailbox’s mediator can ring it', async () => {
+    mockedConfig.MAILBOX_MEDIATOR_DID = MEDIATOR
+    mockOpenWalletMailbox.mockResolvedValueOnce({ did: 'did:peer:2.mailbox', mediatorDid: MEDIATOR })
+    mockAgentAddress.mockReturnValue('did:webvh:QmAgent:host.example:agent')
+    mockKeptHandle.mockResolvedValueOnce({ handle: { gateway: 'did:web:gateway.example', handle: 'wh_7' } })
+    await openWalletMailboxIfConfigured(fakeAgent() as never, true)
+    const deps = mockOpenWalletMailbox.mock.calls[0][2] as { wakeHandle: () => Promise<unknown> }
+    await expect(deps.wakeHandle()).resolves.toEqual({ gateway: 'did:web:gateway.example', handle: 'wh_7' })
+    expect(mockKeptHandle).toHaveBeenCalledWith('did:webvh:QmAgent:host.example:agent')
+  })
 
-    await expect(provisionV2MediationIfConfigured(fakeAgent(), true)).resolves.toBeUndefined()
-    expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
+  it('CONTROL: no linked agent, or no handle kept for it: the mailbox is given none', async () => {
+    mockedConfig.MAILBOX_MEDIATOR_DID = MEDIATOR
+    mockOpenWalletMailbox.mockResolvedValue({ did: 'did:peer:2.mailbox', mediatorDid: MEDIATOR })
+    mockAgentAddress.mockReturnValue(undefined)
+    await openWalletMailboxIfConfigured(fakeAgent() as never, true)
+    const noAgent = mockOpenWalletMailbox.mock.calls[0][2] as { wakeHandle: () => Promise<unknown> }
+    await expect(noAgent.wakeHandle()).resolves.toBeUndefined()
+    expect(mockKeptHandle).not.toHaveBeenCalled()
+    mockAgentAddress.mockReturnValue('did:webvh:QmAgent:host.example:agent')
+    mockKeptHandle.mockResolvedValueOnce(undefined)
+    await openWalletMailboxIfConfigured(fakeAgent() as never, true)
+    const noHandle = mockOpenWalletMailbox.mock.calls[1][2] as { wakeHandle: () => Promise<unknown> }
+    await expect(noHandle.wakeHandle()).resolves.toBeUndefined()
+  })
+
+  it('a mediator that cannot be reached is one warning; the phone carries on over v1', async () => {
+    mockedConfig.MAILBOX_MEDIATOR_DID = MEDIATOR
+    mockOpenWalletMailbox.mockRejectedValueOnce(new Error('mediator unreachable'))
+    const agent = fakeAgent()
+    await expect(openWalletMailboxIfConfigured(agent as never, true)).resolves.toBeUndefined()
+    expect(agent.config.logger.warn).toHaveBeenCalledWith(
+      '[WalletMailbox] could not open, continuing on v1 only: mediator unreachable'
+    )
+  })
+})
+
+describe('the retired Coordinate Mediation 2.0 entry points are gone from start-up, not just unreachable', () => {
+  const source = readFileSync(join(__dirname, 'useBCAgentSetup.ts'), 'utf8')
+
+  it.each(['provisionV2Mediation', 'startV2MessagePickup', 'setV2MediationEnabled', 'MEDIATOR_V2_URL'])(
+    'useBCAgentSetup.ts names %s nowhere',
+    (name) => {
+      expect(source).not.toContain(name)
+    }
+  )
+
+  it('CONTROL: the check reads the real module (it names what replaced them)', () => {
+    expect(source).toContain('openWalletMailbox')
+    expect(source).toContain('MAILBOX_MEDIATOR_DID')
   })
 })
 
@@ -122,14 +166,13 @@ describe('restartPickupOnReturn', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockStartV2MessagePickup.mockResolvedValue(undefined)
   })
 
-  it("stops, then starts the app's own pickup (PickUpV2 named explicitly), and says so", async () => {
+  it("stops, then starts the app's own pickup (PickUpV2 named explicitly), and no Pickup 4.0 loop", async () => {
     const { agent, calls } = pickupAgent()
     await restartPickupOnReturn(agent, logger)
     expect(calls).toEqual(['stop', 'stop', `initiate ${DidCommMediatorPickupStrategy.PickUpV2}`])
-    expect(mockStartV2MessagePickup).toHaveBeenCalledTimes(1)
+    expect(mockRetired.startV2MessagePickup).not.toHaveBeenCalled()
     expect(logger.info).toHaveBeenCalledWith('Message pickup restarted after returning to the foreground')
     expect(logger.warn).not.toHaveBeenCalled()
   })
@@ -149,23 +192,20 @@ describe('restartPickupOnReturn', () => {
 
 describe('applyDidCommSwitches: what bifold is told at every agent start', () => {
   beforeEach(() => {
-    mockSetTsp.mockClear()
-    mockSetV2.mockClear()
-    mockSetV2Mailbox.mockClear()
+    jest.clearAllMocks()
   })
 
-  test('as shipped (nothing saved): TSP on, DIDComm v2 on, the v2 mailbox off', () => {
+  test('as shipped (nothing saved): TSP on, DIDComm v2 on; the mailbox switch is not bifold’s to know', () => {
     applyDidCommSwitches(initialState.developer)
     expect(mockSetTsp).toHaveBeenLastCalledWith(true)
     expect(mockSetV2).toHaveBeenLastCalledWith(true)
-    expect(mockSetV2Mailbox).toHaveBeenLastCalledWith(false)
+    expect(mockRetired.setV2MediationEnabled).not.toHaveBeenCalled()
   })
 
   test('CONTROL: the opt-outs reach bifold as off', () => {
     applyDidCommSwitches({ enableTspCarriage: false, enableDidCommV2: false, enableV2Mailbox: false })
     expect(mockSetTsp).toHaveBeenLastCalledWith(false)
     expect(mockSetV2).toHaveBeenLastCalledWith(false)
-    expect(mockSetV2Mailbox).toHaveBeenLastCalledWith(false)
   })
 
   test.each([
@@ -173,9 +213,7 @@ describe('applyDidCommSwitches: what bifold is told at every agent start', () =>
     [true, false, false],
     [false, true, false],
     [false, false, false],
-  ])('v2 %s, mailbox switch %s → the v2 mailbox is used: %s (never without v2)', (v2, mailbox, expected) => {
+  ])('v2 %s, mailbox switch %s → the mailbox may open: %s (never without v2)', (v2, mailbox, expected) => {
     expect(v2MailboxOn({ enableDidCommV2: v2, enableV2Mailbox: mailbox })).toBe(expected)
-    applyDidCommSwitches({ enableTspCarriage: true, enableDidCommV2: v2, enableV2Mailbox: mailbox })
-    expect(mockSetV2Mailbox).toHaveBeenLastCalledWith(expected)
   })
 })

@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/keys/act/0.9",
+  "title": "Rooms Keys Act — payload",
+  "description": "A member's own client asks the member's key holder to complete one host-bound room request — or one of the two requests by which a member takes up a community's offer of admission to a room — as the member: the member's own authority narrowed to the one action the request's type needs, the member as issuer, and the member's signature. The outer document members are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "document"
+  ],
+  "properties": {
+    "document": {
+      "$ref": "#/$defs/UnsignedRoomRequest",
+      "description": "The room request to complete, as the client will send it, minus its presentation and its proof."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "UnsignedRoomRequest": {
+      "$anchor": "unsigned-room-request",
+      "title": "Unsigned room request",
+      "description": "A Trust Task document of a type in the rooms/keys/act table, built by the member's client: no proof, and no presentation in its payload. The recipient validates the payload against the named type's own schema; this one fixes only the envelope.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "recipient",
+        "issuedAt",
+        "payload"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The request's identifier, set by the client. The host keys duplicate-execution protection on it."
+        },
+        "type": {
+          "type": "string",
+          "pattern": "^https://trusttasks\\.org/spec/(rooms|vtc/rooms/(offers|memberships))/",
+          "maxLength": 2048,
+          "description": "The room request's Type URI: a rooms/* request, or one of the community types: vtc/rooms/offers/{list,accept} or vtc/rooms/memberships/list. Only the types in this task's table are completed; any other is `typeNotActable`."
+        },
+        "issuer": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The member to act as, and this task's subject (subjectPath /document/issuer). REQUIRED for a type that names no room (rooms/blobs/chunk/0.1, rooms/blobs/upload/{commit,abort}/0.2), where it is the member whose request opened the transfer; REQUIRED for the community types (vtc/rooms/offers/list/0.1, 0.2, 0.3 and 0.4, vtc/rooms/offers/accept/0.1, vtc/rooms/memberships/list/0.1), where it is the DID the community addressed its offers to; REQUIRED where the caller may act as more than one member of the room; optional where it may act as exactly one. A rule over two members this schema does not express: the recipient refuses an absent issuer it needs with principalAmbiguous. Never the client's own identifier."
+        },
+        "recipient": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The room's host, or for the community types the community that made the offers: the party the completed document is for. Covered by the member's proof."
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "payload": {
+          "type": "object",
+          "description": "The request's payload, as the named type's schema defines it but without `presentation`: the recipient inserts the member's own, narrowed to the table's action, where the type takes one, and refuses a payload that already carries one. For vtc/rooms/offers/accept/0.1 a `keyPackage`, where present, MUST be one the recipient minted with rooms/keys/key-package at 0.1 or 0.2 (Recipient item 10)."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      },
+      "not": {
+        "required": [
+          "proof"
+        ]
+      }
+    },
+    "Response": {
+      "$anchor": "response",
+      "title": "Rooms Keys Act — response payload",
+      "description": "Success response to rooms/keys/act. Type https://trusttasks.org/spec/rooms/keys/act/0.9#response. The request, completed as the member, for the caller to send to its recipient unaltered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principal",
+        "document"
+      ],
+      "properties": {
+        "principal": {
+          "type": "string",
+          "pattern": "^did:",
+          "maxLength": 2048,
+          "description": "The member the recipient signed as: the completed document's `issuer`."
+        },
+        "document": {
+          "type": "object",
+          "required": [
+            "id",
+            "type",
+            "issuer",
+            "recipient",
+            "issuedAt",
+            "payload",
+            "proof"
+          ],
+          "description": "The supplied document with `issuer` set to the member, `payload.presentation` inserted where the type takes one, and the member's Data Integrity `proof` (`proofPurpose: authentication`). Every other member is unchanged."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the inserted presentation's leaf lapses. Absent when the type takes no presentation."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

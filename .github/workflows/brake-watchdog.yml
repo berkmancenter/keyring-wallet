@@ -60,10 +60,6 @@ jobs:
           PLATFORMS: ${{ steps.check.outputs.platforms }}
         run: node scripts/ota/brake.mjs rerun --gate-smoke "$GATE_SMOKE" --platforms "$PLATFORMS"
 
-      - name: Check out the submodule for the install
-        if: ${{ steps.check.outputs.act == 'true' && steps.rerun.outputs.still_red == 'true' }}
-        run: git submodule update --init --depth 1 bifold
-
       - name: Setup NodeJS
         if: ${{ steps.check.outputs.act == 'true' && steps.rerun.outputs.still_red == 'true' }}
         uses: ./.github/workflows/actions/setup-node
