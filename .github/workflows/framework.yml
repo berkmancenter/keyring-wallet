@@ -59,7 +59,10 @@ jobs:
             exit 1
           fi
           git diff --name-only --relative "$BASE...HEAD" -- . > "$RUNNER_TEMP/changed-files-all.txt"
-          git diff --name-only --relative "$BASE...HEAD" > "$RUNNER_TEMP/changed-files-repo.txt"
+          # The whole repository's list, for the guard below: no --relative here, since --relative also FILTERS the diff
+          # to bifold/, and a wallet-only PR into the integration branch then read as "GitHub lists files, the diff is
+          # empty" and failed this step (first seen on the third PR of the stack).
+          git diff --name-only "$BASE...HEAD" > "$RUNNER_TEMP/changed-files-repo.txt"
           if [ ! -s "$RUNNER_TEMP/changed-files-repo.txt" ] && [ "${PR_CHANGED_FILES:-0}" -gt 0 ]; then
             echo "::error::The diff against $BASE is empty, but GitHub lists $PR_CHANGED_FILES changed files in this PR; refusing to pass without checking anything"
             git diff --stat "$BASE...HEAD" || true

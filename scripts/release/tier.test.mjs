@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { addedLines, applyHolds, changedFiles, classify, exemptionOf, FLAGS, flagsOf, MIGRATION_PATHS, parseRange, verdict } from './tier.mjs';
@@ -84,6 +84,27 @@ test('what the app never ships is none, even a manifest there', () => {
   // Only its script files: a manifest or anything deeper there is not tooling by this rule.
   assert.equal(tierOf('app/scripts/package.json'), 'store');
   assert.equal(tierOf('app/scripts/lib/x.mjs'), 'store');
+});
+
+test('a third react-native-* package is native too, specs in src included; the rule follows test-builds.yml\'s glob', () => {
+  // Review of the fold (2026-11-21): with a two-name allowlist, bifold/packages/react-native-foo/src/Foo.ts graded ota.
+  assert.equal(tierOf('bifold/packages/react-native-foo/src/Foo.ts'), 'store');
+  assert.equal(tierOf('bifold/packages/react-native-foo/android/build.gradle'), 'store');
+  assert.equal(tierOf('bifold/packages/react-native-foo/README.md'), 'none');
+  assert.equal(tierOf('bifold/packages/react-native-foo/__tests__/x.test.ts'), 'none');
+  // Every bifold/packages/… path the Test build triggers on is a native input by the workflow's reckoning, so a sample
+  // path under each must grade store here too: a glob added to the workflow under a new name fails this until the rule
+  // learns it (review of the fold: a differently named native package would otherwise grade its specs as JavaScript).
+  // The premise is that test-builds.yml's list names native inputs only. If a trigger path is ever added there that is
+  // deliberately NOT a native input (say a jest config), exclude it HERE, in this test; do not widen tier.mjs to grade
+  // it store, which would hold OTA-safe changes back from the air.
+  const wf = readFileSync(path.join(here, '../../.github/workflows/test-builds.yml'), 'utf8');
+  const globs = [...wf.matchAll(/^\s+- "(bifold\/packages\/[^"]+)"/gm)].map((m) => m[1]);
+  assert.ok(globs.includes('bifold/packages/react-native-*/**'), 'test-builds.yml names the bifold/packages/react-native-*/** trigger');
+  for (const g of globs) {
+    const sample = g.replace(/\*\*$/, 'src/NativeZzz.ts').replace(/\*/g, 'zzz');
+    assert.equal(tierOf(sample), 'store', `${sample} is under the workflow's trigger ${g} and must be store here`);
+  }
 });
 
 test('an unknown path is store, never OTA by default; an unread bifold range too', () => {
