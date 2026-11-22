@@ -216,13 +216,19 @@ test('a wallet-only PR (empty relative diff, non-empty whole diff, GitHub lists 
 
 test('control: a whole-repository diff that is empty while GitHub lists files still refuses to select nothing', () => {
   const { run } = fakeGit({ relative: '', whole: '' })
-  assert.throws(() => changedAgainst('origin/main', { run, listed: 1 }), /GitHub lists 1 changed files; refusing to select nothing/)
+  assert.throws(
+    () => changedAgainst('origin/main', { run, listed: 1 }),
+    /GitHub lists 1 changed files; refusing to select nothing/
+  )
   // and with nothing listed, an empty range is simply nothing to run
   assert.deepEqual(changedAgainst('origin/main', { run: fakeGit({ relative: '', whole: '' }).run, listed: 0 }), [])
 })
 
 test('a framework change comes back relative to bifold/, status and path', () => {
-  const { run } = fakeGit({ relative: 'M\tpackages/core/src/x.ts\nA\tpackages/core/src/__tests__/x.test.ts\n', whole: 'bifold/packages/core/src/x.ts\nbifold/packages/core/src/__tests__/x.test.ts\n' })
+  const { run } = fakeGit({
+    relative: 'M\tpackages/core/src/x.ts\nA\tpackages/core/src/__tests__/x.test.ts\n',
+    whole: 'bifold/packages/core/src/x.ts\nbifold/packages/core/src/__tests__/x.test.ts\n',
+  })
   assert.deepEqual(changedAgainst('origin/main', { run, listed: 2 }), [
     { status: 'M', path: 'packages/core/src/x.ts' },
     { status: 'A', path: 'packages/core/src/__tests__/x.test.ts' },
