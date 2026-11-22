@@ -262,6 +262,33 @@ yarn install
 
 `yarn install` also installs and builds the framework under `bifold/`.
 
+#### Moving an existing checkout to the folded `main`
+
+A checkout made before 2026-11-22 has `bifold/` as an initialised **submodule**,
+and a plain `git checkout main` then fails with "untracked working tree files
+would be overwritten" under `bifold/…`, because `main` now carries those paths as
+ordinary files. The submodule's own repository lives in `.git/modules/bifold`,
+with its branches, stashes and reflogs; only its working folder is in the way.
+In order:
+
+```sh
+git -C bifold status --short                     # 1. local changes under bifold/?
+git -C bifold stash list                         #    stashes live in .git/modules/bifold and survive the steps below
+git -C bifold branch -r --contains HEAD | head   # 2. is bifold's HEAD on a remote? If this prints nothing:
+#    git -C bifold push origin HEAD:refs/heads/<your-branch>        (or save a patch: git -C bifold diff > /tmp/bifold.patch)
+#    an untracked file you want to keep (a lockfile, a note): copy it out, e.g. cp bifold/<file> /tmp/
+rm -rf bifold                                    # 3. the working folder only; NOT .git/modules/bifold
+git checkout main && git pull                    # 4. bifold/ comes back as part of main
+yarn install                                     # 5. reinstalls and builds the framework (its node_modules went with the folder)
+```
+
+Afterwards the old repository is still there: `git --git-dir=.git/modules/bifold
+stash list` and `git --git-dir=.git/modules/bifold log -1 <branch>` read it, and
+a change kept there is re-applied with `git am -p1 --directory=bifold` (a
+`format-patch` of the bifold commit) or `git apply --directory=bifold` (a plain
+diff). A worktree whose `bifold/` is an empty, never-initialised folder needs only
+step 4.
+
 ### The quick way: run a demo
 
 ```sh
