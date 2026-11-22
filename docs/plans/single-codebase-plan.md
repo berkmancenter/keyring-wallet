@@ -1,9 +1,9 @@
 # One codebase: folding bifold into keyring-wallet
 
-**Status:** Accepted 2026-11-20 (the product owner's decisions were given that evening), top priority alongside the DIDComm v2 migration, which runs in parallel (§7). Phase 0 is under way; nothing is merged.
+**Status:** Accepted 2026-11-20; **Phase 1 and the CI port are on `main` since 2026-11-22** (one squash commit, 7e07bb801, from the integration branch `feat/one-codebase`; companion [`2026-11-22-al.md`](single-codebase-plan/2026-11-22-al.md)). Phase 2 is next, after store build 282; the archive of `keyring-bifold` waits for 282 as well (§4, Phase 3).
 **Reviewers:** the product owner and a second maintainer.
 **Scope:** move the `keyring-bifold` framework into this repository with its history, in two moves, so a change to the app and its framework is one commit and one pull request.
-**Companions:** [`single-codebase-plan/`](single-codebase-plan/): the measurements, positions and decisions behind this plan ([`2026-11-20-al.md`](single-codebase-plan/2026-11-20-al.md)) and the review of it ([`2026-11-20-bam.md`](single-codebase-plan/2026-11-20-bam.md)); review index in this plan's §14.
+**Companions:** [`single-codebase-plan/`](single-codebase-plan/): the measurements, positions and decisions behind this plan ([`2026-11-20-al.md`](single-codebase-plan/2026-11-20-al.md)), the review of it ([`2026-11-20-bam.md`](single-codebase-plan/2026-11-20-bam.md)), the Phase 0 record and Phase 1's execution ([`2026-11-21-al.md`](single-codebase-plan/2026-11-21-al.md)) and the merge day ([`2026-11-22-al.md`](single-codebase-plan/2026-11-22-al.md)); review index in this plan's §14.
 **Related plans:** listed in §14.
 
 ## Overview
@@ -56,28 +56,26 @@ This plan does not rename or rewrite any module, does not change what ships, and
 
 | Claim | Proved by | Runs where | Status |
 |---|---|---|---|
-| The fold builds and the app behaves as before | Lint, types and formatting; app and package jest (core's 491 suites are the contract); the `scripts/*` tests (§5.1, rungs 1 to 3) | CI | Not run |
-| The store configuration builds on both platforms | iOS simulator app and Android APK from `test-builds.yml` (§5.1, rung 4) | CI | Not run |
-| The app works end to end on the folded tree | `e2e:smoke`, `e2e:vrc` and the other suites in rung 5 | Mac mini, emulator and simulator | Not run |
-| Hardware attestation still works | `e2e:vrc:devices` and the witnessed iOS TSP run on two phones (rung 6; simulators cannot prove it) | Physical phones, attended | Not run |
-| The release gate and OTA delivery work on the folded tree | `gate.sh` nightly (rung 7); a throwaway OTA to a Release APK in `gate-ota.yml` (rung 8) | Mac mini; CI | Not run |
-| The product owner's phone works with the folded build | A hands-on install (rung 9) | Attended | Not run |
-| Release grading is unchanged by the fold | `tier.mjs` grades the ten recorded ranges byte-identically, before and after the path rewrite (§4, Phases 1 and 2) | CI and `tier.test.mjs` | Fixtures recorded; not yet compared |
-| `main` can accept the fold | The signed squash and the one-commit PR, rehearsed on a throwaway repository with a copy of the ruleset (§4, Phase 0) | Throwaway GitHub repository | Rehearsed at bifold `a5bfcf3b2`; redone at the real cut |
-| A bifold change merged during the fold replays cleanly | `git am` replay of bifold #1163 and #1164, identical by `git patch-id` (§4, Phase 0; §7.1) | Throwaway repository | Not run |
-| The native fingerprint after the fold is known | `fingerprint-report.mjs --diff` against the Phase 0 record (§5.3) | CI | Not run |
+| The fold builds and the app behaves as before | Lint, types and formatting; app and package jest (core's 491 suites are the contract); the `scripts/*` tests (§5.1, rungs 1 to 3) | CI | **Passed** for Phase 1 (PRs #960, #966, #968, #971; the framework's full suite in CI) |
+| The store configuration builds on both platforms | iOS simulator app and Android APK from `test-builds.yml` (§5.1, rung 4) | CI | **Passed** (run 44954115049) |
+| The app works end to end on the folded tree | `e2e:smoke`, `e2e:vrc` and the other suites in rung 5 | Mac mini, emulator and simulator | **smoke and vrc passed** on the final head's build; the other suites run with the nightly on the folded `main` |
+| Hardware attestation still works | `e2e:vrc:devices` and the witnessed iOS TSP run on two phones (rung 6; simulators cannot prove it) | Physical phones, attended | Not run for Phase 1 (no native change; the fingerprints are 280's); due before 282 |
+| The release gate and OTA delivery work on the folded tree | `gate.sh` nightly (rung 7); a throwaway OTA to a Release APK in `gate-ota.yml` (rung 8) | Mac mini; CI | Nightly: first run on the folded `main` is the next one; OTA rung: before 282 |
+| The product owner's phone works with the folded build | A hands-on install (rung 9) | Attended | Due with 282 |
+| Release grading is unchanged by the fold | `tier.mjs` grades the sixteen recorded ranges byte-identically, before and after (§4, Phases 1 and 2) | CI and `tier.test.mjs` | **Passed** for Phase 1 (16 of 16, repeated on the merged tree); again at Phase 2 |
+| `main` can accept the fold | The signed squash and the one-commit PR, rehearsed on a throwaway repository with a copy of the ruleset (§4, Phase 0) | Throwaway GitHub repository, then `main` | **Done**: 7e07bb801 on `main`, verified |
+| A bifold change merged during the fold replays cleanly | `git am` replay of bifold #1163 and #1164, identical by `git patch-id` (§4, Phase 0; §7.1) | Throwaway repository, then the fold branch | **Passed**: the rehearsal, then five real merges (#1169 to #1173), each byte-identical |
+| The native fingerprint after the fold is known | the store builds' fingerprint steps on the folded tree against the Phase 0 record (§5.3) | CI | **Passed**: equal to 280's on both platforms, on the fold and on the merged tree |
 
-**Where it stands:** Phase 0 is under way; nothing is merged. The one PR to `main` needs the product owner's explicit word, and removal of the stale worktrees that the install needs room for needs his word as well (§4, §11).
+**Where it stands:** Phase 1 and the CI port are merged (2026-11-22). Store build 281 ships from `release/255` with the submodule structure; Friday 2026-11-27's 282 is the first build from the folded tree, where the 279/280/281 OTA lines retire (§5.3). Two follow-ups are open (the lint step's `xargs`, and the framework's inherited formatting debt, §4 Phase 3); Phase 2 starts after 282.
 
 **Open decisions**
 
 | Question | Recommendation | Who decides | By when, or what it blocks |
 |---|---|---|---|
-| Does the Friday 2026-11-27 store build ship from today's structure, or is it skipped? | None yet, because it depends on whether the folded tree is ready that week (§12) | Product owner | That week |
+| The framework's inherited formatting debt (244 files prettier flags, all unchanged from bifold `main`): one `prettier --write` commit, or an ignore? | One style-only PR, proven by the framework's suite and typecheck rather than by lines, so a later PR touching one of those files is not punished for it (§4, Phase 3) | Product owner | Before many framework PRs land on `main` |
 | Should "merge `packages/core` into `app/`" stay in Phase 4? | No: drop it, because core is a separate boundary that the container seam, hot reload, `remote-logs` and the SDK direction use (§4, Phase 4; §3, D6) | Product owner | Not stated; blocks nothing before Phase 4 |
 | Rename `@bifold/*` to `@keyring/*`? | None yet; it stays out of Phases 1 to 3 (§3, D3) | Product owner | Phase 4, not scheduled |
-| Run the optional fingerprint experiment in Phase 0? | Yes if a Mac slot is free; it changes no decision already taken (§4, Phase 0) | Product owner | Phase 0 |
-| Push the graft ref after the merge so blame reaches the old history? | Yes, under the same word that covers `history/bifold` (§3, D1) | Product owner | After the merge to `main` |
 
 **Not doing:** rewriting, re-architecting or renaming any module in Phases 1 to 3; changing what ships; continuing the upstream sync as shared Git history; deleting `keyring-bifold` or rewriting its history; publishing `@bifold/*` to npm; changing the OTA server, signing keys, channels or `hot-updater`. (§1, §9)
 
@@ -522,7 +520,7 @@ What the compression costs: half of the submodule's cost (the nested install and
 ## 13. Blocked, and open decisions
 
 Blocked, and on whom:
-- The one PR to `main` waits on the product owner's explicit word (D2), asked for on Monday 2026-11-23 together with the other items of that day (the "Main" ruleset gaining the ported core checks as required, the archive of `keyring-bifold` and the closing of its open drafts, the `refs/replace` graft push, any stale worktrees to remove), after the proof in §5.1 (§12). The stacked phase PRs merge on review clearance.
+- Done on 2026-11-22 on the product owner's word: the one PR to `main` (7e07bb801), the "Main" ruleset's two new required checks ("Framework tests", "Type check (ratchet)"), the `refs/replace` graft push (`refs/replace/7e07bb80…` → `3956222fe`). He named no worktrees to remove. The archive of `keyring-bifold` and the closing of its open drafts wait for store build 282, because 281's OTA line runs on `release/255` with the submodule structure until then.
 - Store build 281 (release/255, today's structure) must be cut from `main` before the fold merges; its sequencing with the mailbox work is the release coordination's, not this plan's (§12).
 - The throwaway rehearsal repository's deletion needs a `gh` scope the Mac's token lacks, so it is the product owner's click (companion 2026-11-20 §3a).
 - Conditional: GitHub's stacked pull requests may not be available to the organisation; the same stack is then PRs retargeted by hand (D2).
@@ -530,7 +528,7 @@ Blocked, and on whom:
 Open decisions, recommendation first:
 - **Whether Phase 4 keeps "merge `packages/core` into `app/`".** Recommendation: no, drop it (Phase 4 gives the evidence). Cost of keeping it listed: a later reader re-proposes a large, low-value change. Product owner; blocks nothing before Phase 4.
 - **Rename `@bifold/*` to `@keyring/*`.** No recommendation yet; it stays out of Phases 1 to 3 (D3), and the diff is one `sed` and one PR. Product owner; Phase 4.
-- **Pushing the graft ref after the merge.** Recommendation: yes, under the same word as `history/bifold`, so blame reaches the old history from a clone that fetches it; cost: one more ref on the remote that tooling never needs (D1). Product owner; Monday's batch.
+- **The framework's inherited formatting debt.** Prettier flags 244 framework files that are byte-identical to bifold `main` (bifold's own CI checked only changed files on PRs and warned repo-wide on `main`); after the fold any PR touching one of them meets a formatting red it did not cause. Recommendation: one style-only `prettier --write` PR over them, proven by the framework's suite and typecheck, rather than an ignore that hides the debt; cost: one noisy commit in blame. Product owner; before many framework PRs land.
 
 ## 14. Companions and related plans
 
@@ -541,3 +539,4 @@ Related plans: [`release-cadence-and-testing-strategy.md`](release-cadence-and-t
 | 2026-11-20, AL | [`2026-11-20-al.md`](single-codebase-plan/2026-11-20-al.md): the measurements this plan rests on, the positions it rejects, the decisions taken and the rehearsal record |
 | 2026-11-20, BAM | [`2026-11-20-bam.md`](single-codebase-plan/2026-11-20-bam.md): review of the plan: structure, the `git am` recipes, dates, the missed `bifold` references, and coverage against the 2026-11-08 evaluation |
 | 2026-11-21, AL | [`2026-11-21-al.md`](single-codebase-plan/2026-11-21-al.md): the Phase 0 record (cut, fingerprints, tier fixtures, the replay rehearsal and its patch-id nuance), two tooling findings, the Monday 2026-11-23 target and what moves past Friday 2026-11-27 |
+| 2026-11-22, AL | [`2026-11-22-al.md`](single-codebase-plan/2026-11-22-al.md): the merge day: what is on `main`, the proofs on the final tree, the four review findings fixed before the merge, the e2e harness gap, what is open after the merge, the product owner's words, lessons |
