@@ -26,7 +26,12 @@ wallet=$(git -C "$ROOT" rev-parse HEAD)
 # folded tree. `ls-tree HEAD bifold` would give the tree's id after the fold, and a tree id never equals a commit id.
 entry=$(git -C "$ROOT" ls-files -s -- bifold | awk 'NR == 1')
 if [ "${entry:0:6}" != "160000" ]; then
-  tree=$(git -C "$ROOT" rev-parse "HEAD:bifold" 2>/dev/null || echo "")
+  # --verify --quiet: a plain rev-parse echoes an unresolvable "HEAD:bifold" back on stdout, which would land in the
+  # SUMMARY as a tree id and pass a checkout with no bifold at all (review of the fold).
+  tree=$(git -C "$ROOT" rev-parse --verify --quiet "HEAD:bifold") || {
+    echo "heads: HEAD has no bifold at all: not a wallet checkout, or an incomplete one" >&2
+    exit 1
+  }
   dirty=""
   [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] && dirty=" (tree dirty)"
   echo "heads: wallet ${wallet:0:8} · bifold tree ${tree:0:8} (one codebase, no pin)${dirty}"

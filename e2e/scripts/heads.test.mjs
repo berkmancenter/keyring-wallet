@@ -69,3 +69,18 @@ test('submodule era: at the pin exit 0; behind the pin, the gap is named and the
     rmSync(top, { recursive: true, force: true });
   }
 });
+
+test('no bifold at all: refused, no SUMMARY, exit 1 (a plain rev-parse would have echoed "HEAD:bifold" as the tree)', () => {
+  const top = mkdtempSync(path.join(tmpdir(), 'heads-none-'));
+  try {
+    const w = wallet(top);
+    writeFileSync(path.join(w, 'app.txt'), 'app\n');
+    commit(w, 'no bifold');
+    const r = run(w);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /HEAD has no bifold at all/);
+    assert.doesNotMatch(r.stdout, /SUMMARY|HEAD:bif/);
+  } finally {
+    rmSync(top, { recursive: true, force: true });
+  }
+});
