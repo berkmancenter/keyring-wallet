@@ -9,10 +9,11 @@ require('dotenv').config()
 
 // The framework's packages (@bifold/*) are workspaces of this repository at packages/*, installed by the one
 // `yarn install` at the root (docs/plans/single-codebase-plan.md, Phase 2). Each resolves to its TypeScript source
-// through its `source` main field (resolverMainFields below puts it first), in development and release bundles
-// alike: there is no built lib/ to fall out of date, and no second install whose node_modules could hold a second
-// copy of anything. Metro only resolves files inside its watch folders, so the repository root is watched: it
-// covers packages/*, app/ and the hoisted node_modules.
+// through Metro's default main fields: the React Native packages name src/index.ts as `main`, the Node-consumed
+// ones (whose `main` is a build/ for Node) name it in their `react-native` field, which Metro reads first. So the
+// bundle is built from source in development and release alike: no built lib/ to fall out of date, and no second
+// install whose node_modules could hold a second copy of anything. Metro only resolves files inside its watch
+// folders, so the repository root is watched: it covers packages/*, app/ and the hoisted node_modules.
 const repoRoot = fs.realpathSync(path.join(__dirname, '..'))
 const rootNodeModules = path.join(repoRoot, 'node_modules')
 

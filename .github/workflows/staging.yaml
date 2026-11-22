@@ -162,6 +162,11 @@ jobs:
         run: |
           yarn install --immutable
 
+      # As quality.yml's Testing job: the app's jest maps every @bifold/* package to source, and the build is made
+      # anyway so an import no mapper covers resolves as it does at runtime.
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
       - name: Run tests
         working-directory: app
         run: |
