@@ -1,9 +1,12 @@
 #!/bin/bash
 # Before a store cut: everything an OTA shipped since the last store build must reach the new one, or testers who
 # had it lose it. For each commit an OTA branch carries beyond main, it looks for a commit with the same patch-id on
-# the wallet target, or in the bifold commit that target PINS (what the store build ships; the pin can lag bifold
-# main). A wallet commit that moves the bifold pin is checked through the bifold commit it pins: every bifold commit
-# that one carries beyond bifold main gets a row of its own. Otherwise a commit is docs only (ships no code), replaced
+# the wallet target, or (before the fold, when the target carries bifold as a submodule) in the bifold commit that
+# target PINS (what the store build ships; the pin can lag bifold main). A wallet commit that moves the bifold pin is
+# checked through the bifold commit it pins: every bifold commit that one carries beyond bifold main gets a row of its
+# own. Since the fold the target carries bifold as a tree of this repository: a bifold change is a wallet commit
+# touching bifold/… paths, checked like any other, and a pin bump cannot be followed into a tree (exit 2: check it by
+# hand). Otherwise a commit is docs only (ships no code), replaced
 # by a commit on the target (ota-carried-replacements.txt), or MISSING. An open PR's commit is MISSING: it has to merge
 # before the cut. Merge commits carry no change of their own and are skipped. Exit 0 only when nothing is MISSING
 # (docs/RELEASE_GATE.md §1); exit 2 when it cannot check (a commit it needs is not in the local repositories).
@@ -41,11 +44,20 @@ need() { # dir commit what: the commit must be in the repository, or nothing abo
 
 if [ "$fetch" = 1 ]; then
   git -C "$root" fetch -q "$remote" main $wallet_branches || exit 2
-  git -C "$bifold_dir" fetch -q "$remote" main $bifold_branches || exit 2
 fi
-pin=$(git -C "$root" ls-tree "$target" bifold | awk '{print $3}')
+# What the target carries as bifold: a commit (the submodule's pin, before the fold) or a tree (the folded bifold/,
+# since it). Only a pin names a bifold repository to fetch and read; a tree's bifold changes are in the wallet commits.
+# The kind is the tree entry's (ls-tree), not `cat-file -t`: a gitlink's commit is not in this repository.
+kind=$(git -C "$root" ls-tree "$target" bifold | awk '{print $2}')
+pin=$(git -C "$root" rev-parse "$target:bifold" 2>/dev/null)
 [ -n "$pin" ] || { echo "ota-carried-check: $target pins no bifold" >&2; exit 2; }
-need "$bifold_dir" "$pin" "the bifold commit $target pins"
+if [ "$kind" = commit ]; then
+  [ "$fetch" = 0 ] || git -C "$bifold_dir" fetch -q "$remote" main $bifold_branches || exit 2
+  need "$bifold_dir" "$pin" "the bifold commit $target pins"
+elif [ -n "$bifold_branches" ]; then
+  echo "ota-carried-check: $target carries bifold as a tree of this repository (the fold), not a submodule: --bifold names branches it cannot read; their changes are wallet commits, name those branches with --wallet" >&2
+  exit 2
+fi
 
 # Whether a commit's change is in a tree when no single commit there has its changed lines (a squash of several
 # commits). Its patch reverses cleanly onto the tree when every line it added is there as it added it. Checked in
@@ -97,8 +109,11 @@ check() { # repo dir label tip target-commit: the commits tip carries beyond its
     elif [ -n "$hit0" ]; then status="on the target as $hit0 (the same changed lines, in new context)"
     elif [ "$repo" = wallet ] && [ "$files" = bifold ]; then
       to=$(git -C "$dir" ls-tree "$c" bifold | awk '{print $3}')
-      status="pin bump to ${to:0:8}: its bifold commits are checked below"
-      case " $pinned " in *" $to "*) ;; *) pinned="$pinned $to" ;; esac
+      if [ -z "$to" ]; then status="drops the bifold gitlink (the fold): ships no code of its own"
+      else
+        status="pin bump to ${to:0:8}: its bifold commits are checked below"
+        case " $pinned " in *" $to "*) ;; *) pinned="$pinned $to" ;; esac
+      fi
     elif ! echo "$files" | grep -qvE '^(docs/.*|.*\.md)$'; then status="docs only: ships no code"
     elif in_tree "$dir" "$c" "$into"; then status="on the target by content (the patch reverses cleanly onto it)"
     else
@@ -111,6 +126,9 @@ check() { # repo dir label tip target-commit: the commits tip carries beyond its
 for b in $wallet_branches; do check wallet "$root" "$b" "$(ref "$b")" "$target"; done
 # Every bifold commit an OTA pinned, then any named bifold branch whose tip was not already checked that way.
 for to in $pinned; do
+  # A pin bump on an OTA branch from before the fold, against a target that carries bifold as a tree: there is no
+  # bifold commit on the target to search, so this cannot tell, and says so rather than waving the bump through.
+  [ "$kind" = commit ] || { echo "ota-carried-check: an OTA branch pins bifold ${to:0:8}, but $target carries bifold as a tree of this repository (the fold): its bifold commits cannot be followed here, check them by hand" >&2; exit 2; }
   need "$bifold_dir" "$to" "a bifold commit an OTA branch pins"
   check bifold "$bifold_dir" "pinned ${to:0:8}" "$to" "$pin"; checked="$checked $to"
 done
@@ -120,7 +138,8 @@ for b in $bifold_branches; do
   check bifold "$bifold_dir" "$b" "$tip" "$pin"
 done
 echo
-echo "target $(git -C "$root" rev-parse --short "$target"), its bifold pin ${pin:0:8}"
+if [ "$kind" = commit ]; then echo "target $(git -C "$root" rev-parse --short "$target"), its bifold pin ${pin:0:8}"
+else echo "target $(git -C "$root" rev-parse --short "$target"), its bifold tree ${pin:0:8} (folded into this repository)"; fi
 [ "$missing" = 0 ] && echo "ota-carried-check: everything shipped by OTA reaches the target" ||
   echo "ota-carried-check: MISSING rows above: merge them (or name a replacement) before the cut"
 exit $missing

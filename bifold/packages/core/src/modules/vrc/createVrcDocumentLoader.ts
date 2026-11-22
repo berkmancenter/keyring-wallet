@@ -1,0 +1,228 @@
+/**
+ * Document loader for W3C Verifiable Relationship Credentials (VRC)
+ *
+ * Handles DID resolution, custom VRC contexts, and HTTP fallback
+ * for JSON-LD signature creation and verification.
+ */
+import type { AgentContext, VerificationMethod } from '@credo-ts/core'
+import { DidResolverService, isDid } from '@credo-ts/core'
+
+import {
+  DTG_CONTEXT_URL,
+  DTG_CONTEXT_DOCUMENT,
+  RELATIONSHIP_CONTEXT_URL,
+  RELATIONSHIP_CONTEXT_DOCUMENT,
+  RCARD_CONTEXT_URL,
+  RCARD_CONTEXT_DOCUMENT,
+  REGISTRY_DTG_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
+} from './types/relationshipContext'
+import { WITNESSED_EXCHANGE_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_DOCUMENT } from './types/witnessedExchangeContext'
+import { CACHED_SECURITY_CONTEXTS } from './types/cachedSecurityContexts'
+import {
+  CREDENTIALS_V2_CONTEXT_URL,
+  CREDENTIALS_V2_CONTEXT_DOCUMENT,
+  DTG_REGISTRY_CONTEXT_V1_URL,
+  DTG_REGISTRY_CONTEXT_V1_DOCUMENT,
+  OPEN_BADGES_CONTEXT_V3_URL,
+  OPEN_BADGES_CONTEXT_V3_DOCUMENT,
+} from '@bifold/vrc-contexts'
+
+/**
+ * The context community cards name (VTC-issued membership, role and vetter
+ * cards): `https://firstperson.network/credentials/dtg/v1`. Upstream does not
+ * publish it. The URL answers 404 with an HTML page (checked 2026-09-27), and
+ * no copy exists in the upstream sources (verifiable-trust-infrastructure
+ * ed672fff, openvtc ed13d29, dtgwg-cred-spec b89f389, dtg-credentials 0.9.1 and
+ * 0.11.0), which sign with JCS and never dereference it.
+ *
+ * Credo expands every JSON-LD credential when it stores one
+ * (W3cCredentialService.storeCredential → getExpandedTypesForCredential), so
+ * with no document here no community card can be stored for the Wallet
+ * (226, found on a device: "Dereferencing a URL did not result in a valid
+ * JSON-LD object").
+ *
+ * Until upstream publishes it, it stands in as an EMPTY context. It defines no
+ * terms, so the DTG terms expand under VCDM 2.0's issuer-dependent `@vocab`,
+ * which is what VCDM 2.0 specifies for terms no context defines. The cards'
+ * JCS proofs do not depend on any of this. Replace it with upstream's document,
+ * byte for byte, once one exists.
+ */
+export const DTG_CREDENTIALS_V1_CONTEXT_URL = 'https://firstperson.network/credentials/dtg/v1'
+export const DTG_CREDENTIALS_V1_STAND_IN: Record<string, unknown> = Object.freeze({ '@context': {} })
+
+/**
+ * The context the Real Life Trust Protocol (RLTP) encounter credential names:
+ * `https://real-life.org/rltp/v1`. It is not published: the URL answers 301 to
+ * an HTML page (checked 2026-11-08), so Credo's expansion on store failed with
+ * "Dereferencing a URL did not result in a valid JSON-LD object" and the run-3
+ * exchange with Anton's CLI ended `credential could not be stored`.
+ *
+ * Stands in as an EMPTY context, as for the community-card context above: the
+ * RLTP subject members (ceremony, challenge, enactmentBinding, channel) expand
+ * under VCDM 2.0's issuer-dependent `@vocab`, and the credential's JCS proof
+ * does not depend on it. Replace with the RLTP group's document, byte for byte,
+ * once one is published. Served for the exact URL only.
+ */
+export const RLTP_CONTEXT_V1_URL = 'https://real-life.org/rltp/v1'
+export const RLTP_CONTEXT_V1_STAND_IN: Record<string, unknown> = Object.freeze({ '@context': {} })
+
+/**
+ * Maps verification method types to their required JSON-LD contexts
+ */
+const VERIFICATION_METHOD_CONTEXTS: Record<string, string[]> = {
+  Ed25519VerificationKey2018: ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/suites/ed25519-2018/v1'],
+}
+
+/**
+ * Converts a VerificationMethod to a plain JSON object suitable for JSON-LD processing
+ */
+function toPlainVerificationMethod(key: VerificationMethod): Record<string, unknown> {
+  const plain: Record<string, unknown> = {
+    id: key.id,
+    type: key.type,
+    controller: key.controller,
+  }
+
+  if (VERIFICATION_METHOD_CONTEXTS[key.type]) {
+    plain['@context'] = VERIFICATION_METHOD_CONTEXTS[key.type]
+  }
+
+  if (key.publicKeyBase58) plain.publicKeyBase58 = key.publicKeyBase58
+  if (key.publicKeyBase64) plain.publicKeyBase64 = key.publicKeyBase64
+  if (key.publicKeyHex) plain.publicKeyHex = key.publicKeyHex
+  if (key.publicKeyPem) plain.publicKeyPem = key.publicKeyPem
+  if (key.publicKeyMultibase) plain.publicKeyMultibase = key.publicKeyMultibase
+  if (key.publicKeyJwk) plain.publicKeyJwk = key.publicKeyJwk
+
+  return plain
+}
+
+/**
+ * Enriches a DID document by copying authentication methods to assertionMethod if missing.
+ * Needed because some DID methods (like did:peer:0) don't explicitly include assertionMethod.
+ */
+function enrichDidDocument(documentJson: Record<string, any>): Record<string, any> {
+  const assertionMethods = documentJson.assertionMethod as Array<string | Record<string, unknown>> | undefined
+  const authenticationMethods = documentJson.authentication as Array<string | Record<string, unknown>> | undefined
+
+  if ((!assertionMethods || assertionMethods.length === 0) && authenticationMethods?.length) {
+    documentJson.assertionMethod = authenticationMethods.map((m) => (typeof m === 'string' ? m : { ...m }))
+  }
+
+  return documentJson
+}
+
+/**
+ * Creates a document loader function for W3C credentials module.
+ * Handles DID resolution, custom VRC contexts, and HTTP fallback.
+ *
+ * @param agentContext - The agent context containing dependency manager
+ * @returns A document loader function that resolves URLs to JSON-LD documents
+ *
+ * @example
+ * ```typescript
+ * w3cCredentials: new W3cCredentialsModule({
+ *   documentLoader: createVrcDocumentLoader,
+ * }),
+ * ```
+ */
+export function createVrcDocumentLoader(agentContext: AgentContext) {
+  const didResolver = agentContext.dependencyManager.resolve(DidResolverService)
+
+  return async (url: string) => {
+    const normalizedUrl = url.split('#')[0]
+
+    // Handle DID resolution (including fragment dereference)
+    if (isDid(normalizedUrl)) {
+      const result = await didResolver.resolve(agentContext, normalizedUrl)
+
+      if (result.didResolutionMetadata.error || !result.didDocument) {
+        throw new Error(`Unable to resolve DID: ${normalizedUrl}`)
+      }
+
+      const { didDocument } = result
+      const documentJson = enrichDidDocument(didDocument.toJSON())
+
+      // Handle fragment (e.g., did:peer:0z...#key-1)
+      if (url.includes('#')) {
+        const fragment = `#${url.split('#').pop() ?? ''}`
+        const key = didDocument.dereferenceKey(fragment)
+        return {
+          contextUrl: null,
+          documentUrl: url,
+          document: toPlainVerificationMethod(key),
+        }
+      }
+
+      return {
+        contextUrl: null,
+        documentUrl: url,
+        document: documentJson,
+      }
+    }
+
+    // Handle custom VRC context URLs
+    if (normalizedUrl === DTG_CREDENTIALS_V1_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: DTG_CREDENTIALS_V1_STAND_IN }
+    }
+    if (url === RLTP_CONTEXT_V1_URL) {
+      return { contextUrl: null, documentUrl: url, document: RLTP_CONTEXT_V1_STAND_IN }
+    }
+    if (url === DTG_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: DTG_CONTEXT_DOCUMENT }
+    }
+    if (url === RELATIONSHIP_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: RELATIONSHIP_CONTEXT_DOCUMENT }
+    }
+    if (url === REGISTRY_DTG_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: REGISTRY_DTG_CONTEXT_DOCUMENT }
+    }
+    if (url === HARDWARE_EVIDENCE_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: HARDWARE_EVIDENCE_CONTEXT_DOCUMENT }
+    }
+    if (url === RCARD_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: RCARD_CONTEXT_DOCUMENT }
+    }
+    if (url === WITNESSED_EXCHANGE_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: WITNESSED_EXCHANGE_CONTEXT_DOCUMENT }
+    }
+
+    // W3C VCDM 2.0 base context (credo's offline cache only bundles v1.1)
+    if (url === CREDENTIALS_V2_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: CREDENTIALS_V2_CONTEXT_DOCUMENT }
+    }
+
+    // DTG Credentials v1 (community cards from VTI 0.47.0 on): the registry's
+    // frozen bytes, never fetched. The spec compares this IRI byte-exact, so
+    // only the exact URL is served from here.
+    if (url === DTG_REGISTRY_CONTEXT_V1_URL) {
+      return { contextUrl: null, documentUrl: url, document: DTG_REGISTRY_CONTEXT_V1_DOCUMENT }
+    }
+
+    // Open Badges 3.0.3 (a community's badge credentials): 1EdTech's published
+    // bytes, never fetched, so a badge is stored for the Wallet offline. Only
+    // the exact versioned URL is served from here.
+    if (url === OPEN_BADGES_CONTEXT_V3_URL) {
+      return { contextUrl: null, documentUrl: url, document: OPEN_BADGES_CONTEXT_V3_DOCUMENT }
+    }
+
+    // Handle well-known W3C/DID/security contexts locally to avoid
+    // network dependencies on mobile (w3id.org redirects can be unreliable)
+    if (CACHED_SECURITY_CONTEXTS[url]) {
+      return { contextUrl: null, documentUrl: url, document: CACHED_SECURITY_CONTEXTS[url] }
+    }
+
+    // Handle non-HTTP URLs (return minimal document)
+    if (!/^https?:/i.test(normalizedUrl)) {
+      return { contextUrl: null, documentUrl: url, document: { '@id': url } }
+    }
+
+    // Fallback: fetch remote context via HTTP
+    const response = await fetch(url)
+    const document = await response.json()
+    return { contextUrl: null, documentUrl: url, document }
+  }
+}

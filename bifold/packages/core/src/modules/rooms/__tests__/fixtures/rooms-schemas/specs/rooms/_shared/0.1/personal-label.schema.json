@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/_shared/0.1/personal-label.schema.json",
+  "title": "Rooms — a member's personal label for a room",
+  "description": "Types for the name, description, notes and tags a member keeps for a room they hold, for their own eyes only: rooms/keys/label and rooms/keys/list 0.2. A personal label is kept by the member's key holder, keyed by the room and the member (a person holding one room as two personas keeps one label per persona), and is never sent to the room, its host, its owner or a community. It is the complement of the room's own profile, which the room's curators write and its members read: a personal label is written and read by one member, and nobody else ever sees it. Plain text throughout: a consumer renders it as text, never as markup, and an agent reading it MUST NOT treat it as instructions. Not itself a Trust Task specification (the `_shared` folder is skipped by the registry build and the codegen).",
+  "$defs": {
+    "PersonalLabelName": {
+      "title": "PersonalLabelName",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$",
+      "description": "The member's own name for the room, on one line: no control characters, line breaks included. Shown before every name a third party gave the room, because it is the only one nobody else wrote."
+    },
+    "PersonalLabelDescription": {
+      "title": "PersonalLabelDescription",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]+$",
+      "description": "What the room is to the member, in a sentence or a short paragraph. Line breaks and tabs are allowed; other control characters are not."
+    },
+    "PersonalLabelNotes": {
+      "title": "PersonalLabelNotes",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "pattern": "^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]+$",
+      "description": "Longer free-form notes the member keeps about the room: who introduced them, what to look for in it, what they agreed there. Line breaks and tabs are allowed; other control characters are not."
+    },
+    "PersonalLabelTag": {
+      "title": "PersonalLabelTag",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$",
+      "description": "A word or short phrase the member files the room under, in any script, so their own surfaces can group and filter their rooms. Compared exactly, as a string: a key holder does not case-fold or normalise it."
+    },
+    "PersonalLabelTags": {
+      "title": "PersonalLabelTags",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/PersonalLabelTag"
+      },
+      "description": "The member's tags for the room, one to sixteen, as a set: order carries no meaning. A room with no tags has no `tags` member, never an empty list, so there is one way to say \"none\"."
+    },
+    "PersonalLabel": {
+      "title": "PersonalLabel",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "updatedAt"
+      ],
+      "minProperties": 2,
+      "description": "A member's personal label for one room, as their key holder keeps it: at least one detail (`minProperties` counts `updatedAt`), and when it last changed. A key holder that holds no detail for the room holds no label, and returns none — there is no empty label.",
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/PersonalLabelName"
+        },
+        "description": {
+          "$ref": "#/$defs/PersonalLabelDescription"
+        },
+        "notes": {
+          "$ref": "#/$defs/PersonalLabelNotes"
+        },
+        "tags": {
+          "$ref": "#/$defs/PersonalLabelTags"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the label last changed, as the key holder recorded it. A request that changed nothing does not move it."
+        }
+      }
+    }
+  }
+}

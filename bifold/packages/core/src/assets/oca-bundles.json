@@ -1,0 +1,174 @@
+{
+  "XUxBrVSALWHLeycAUhrNr9:3:CL:26293:Student Card": {
+    "capture_base": {
+      "attributes": {
+        "student_first_name": "Text",
+        "student_last_name": "Text"
+      },
+      "classification": "",
+      "digest": "xuDvIavV99IjR4ZghUZb8ohgKUVvlBzw424Fv8na7MEF",
+      "flagged_attributes": [],
+      "type": "spec/capture_base/1.0"
+    },
+    "overlays": [
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/meta/1.0",
+        "language": "en",
+        "name": "Student",
+        "credential_help_text": "http://example.com/help",
+        "credential_support_url": "http://example.com/help",
+        "description": "",
+        "issuer": "",
+        "issuer_description": "",
+        "issuer_url": "http://example.com/issue"
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/meta/1.0",
+        "language": "fr",
+        "name": "Étudiant",
+        "credential_help_text": "http://example.com/help",
+        "credential_support_url": "http://example.com/help",
+        "description": "",
+        "issuer": "",
+        "issuer_description": "",
+        "issuer_url": "http://example.com/issue"
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/label/1.0",
+        "language": "en",
+        "attribute_labels": {
+          "student_first_name": "First Name",
+          "student_last_name": "Last Name"
+        }
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/label/1.0",
+        "language": "fr",
+        "attribute_labels": {
+          "student_last_name": "nom de famille"
+        }
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "aries/overlays/branding/0.1",
+        "language": "en",
+        "background_color": "#FFFFFF",
+        "header": {
+          "color": "#FFFFFF"
+        },
+        "footer": {
+          "color": "#FFFFFF"
+        }
+      }
+    ]
+  },
+  "XUxBrVSALWHLeycAUhrNr9:2:student_card:1.0": {
+    "capture_base": {
+      "attributes": {
+        "student_first_name": "Text",
+        "student_last_name": "Text"
+      },
+      "classification": "",
+      "digest": "xuDvIavV99IjR4ZghUZb8ohgKUVvlBzw424Fv8na7MEF",
+      "flagged_attributes": [],
+      "type": "spec/capture_base/1.0"
+    },
+    "overlays": [
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/meta/1.0",
+        "language": "en",
+        "name": "Student",
+        "credential_help_text": "http://example.com/help",
+        "credential_support_url": "http://example.com/help",
+        "description": "",
+        "issuer": "",
+        "issuer_description": "",
+        "issuer_url": "http://example.com/issue"
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/meta/1.0",
+        "language": "fr",
+        "name": "Étudiant",
+        "credential_help_text": "http://example.com/help",
+        "credential_support_url": "http://example.com/help",
+        "description": "",
+        "issuer": "",
+        "issuer_description": "",
+        "issuer_url": "http://example.com/issue"
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/label/1.0",
+        "language": "en",
+        "attribute_labels": {
+          "student_first_name": "First Name",
+          "student_last_name": "Last Name"
+        }
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/label/1.0",
+        "language": "fr",
+        "attribute_labels": {
+          "student_last_name": "nom de famille"
+        }
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "aries/overlays/branding/0.1",
+        "language": "en",
+        "background_color": "#FFFFFF",
+        "header": {
+          "color": "#FFFFFF"
+        },
+        "footer": {
+          "color": "#FFFFFF"
+        }
+      }
+    ]
+  },
+  "Aries:5:StudentFullName:0.0.1:indy": {
+    "capture_base": {
+      "attributes": {
+        "student_first_name": "Text",
+        "student_last_name": "Text"
+      },
+      "classification": "",
+      "digest": "xuDvIavV99IjR4ZghUZb8ohgKUVvlBzw424Fv8na7MEF",
+      "flagged_attributes": [],
+      "type": "spec/capture_base/1.0"
+    },
+    "overlays": [
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/meta/1.0",
+        "language": "en",
+        "name": "Student full name",
+        "description": "Verify the full name of a student",
+        "credential_help_text": "",
+        "credential_support_url": "",
+        "issuer": "",
+        "issuer_description": "",
+        "issuer_url": ""
+      },
+      {
+        "capture_base": "EfeQBz5tyC0gett-ETgkg4pkxBwwuQoeYsT-9Nt0cNsc",
+        "type": "spec/overlays/meta/1.0",
+        "language": "fr",
+        "name": "Nom complet de l'étudiant",
+        "description": "Vérifier le nom complet d'un étudiant",
+        "credential_help_text": "",
+        "credential_support_url": "",
+        "issuer": "",
+        "issuer_description": "",
+        "issuer_url": ""
+      }
+    ]
+  }
+}

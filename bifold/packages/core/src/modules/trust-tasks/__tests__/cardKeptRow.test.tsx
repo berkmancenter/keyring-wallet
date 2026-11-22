@@ -1,0 +1,162 @@
+/**
+ * A community's card on "Your agent" shows the person's membership and role
+ * cards, and where each is kept (226, agent-kept cards): by the agent, on its
+ * way there, not yet, or on this phone only and why. The line follows the
+ * vault state as it changes, without a reload.
+ */
+import { act, render } from '@testing-library/react-native'
+import React from 'react'
+
+import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import {
+  COMMUNITY,
+  membership,
+  membershipCard,
+  roleCard,
+  seedCardVaultState,
+} from '../../../../__tests__/helpers/cardVault'
+import { testIdWithKey } from '../../../utils/testable'
+import { resetCardVaultCache } from '../module/vtiCardVault'
+import { CardKeptRow } from '../screens/CardKeptRow'
+import { CommunityCard, communityCardKey } from '../screens/CommunityCard'
+
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+
+const key = communityCardKey(COMMUNITY)
+const keptLine = (tree: ReturnType<typeof render>, kind: 'membership' | 'role') =>
+  tree.getByTestId(testIdWithKey(`AgentCardKept_${kind}_${key}`))
+
+describe('where a card is kept', () => {
+  beforeEach(() => resetCardVaultCache())
+
+  it.each([
+    [{ state: 'kept', at: '2026-09-26T10:00:00Z' }, 'VtaLink.CardKept'],
+    [{ state: 'pending' }, 'VtaLink.CardSaving'],
+    [{ state: 'cannotKeep', reason: 'proofSet' }, 'VtaLink.CardPhoneOnlyProofSet'],
+    [{ state: 'cannotKeep', reason: 'refusedByAgent' }, 'VtaLink.CardPhoneOnlyRefused'],
+  ] as const)('%j reads %s', (state, words) => {
+    seedCardVaultState(membershipCard.id as string, state)
+    const tree = render(
+      <BasicAppContext>
+        <CardKeptRow card={membershipCard} kind="membership" handle={key} />
+      </BasicAppContext>
+    )
+    expect(keptLine(tree, 'membership')).toHaveTextContent(words)
+  })
+
+  it('a card never sent says "not yet", and the line follows the vault as it keeps it', () => {
+    const tree = render(
+      <BasicAppContext>
+        <CardKeptRow card={membershipCard} kind="membership" handle={key} />
+      </BasicAppContext>
+    )
+    expect(keptLine(tree, 'membership')).toHaveTextContent('VtaLink.CardNotYetKept')
+    act(() => seedCardVaultState(membershipCard.id as string, { state: 'pending' }))
+    expect(keptLine(tree, 'membership')).toHaveTextContent('VtaLink.CardSaving')
+    act(() => seedCardVaultState(membershipCard.id as string, { state: 'kept', at: '2026-09-26T10:00:00Z' }))
+    expect(keptLine(tree, 'membership')).toHaveTextContent('VtaLink.CardKept')
+  })
+
+  it('a card without an id says nothing, rather than something untrue', () => {
+    const { id: _id, ...noId } = membershipCard
+    const tree = render(
+      <BasicAppContext>
+        <CardKeptRow card={noId} kind="membership" handle={key} />
+      </BasicAppContext>
+    )
+    expect(tree.queryByTestId(testIdWithKey(`AgentCard_membership_${key}`))).toBeNull()
+  })
+})
+
+// IN-501: a lapsed card of a membership that stands needs renewing; the community ending the membership is history.
+describe('a card past its end date', () => {
+  beforeEach(() => resetCardVaultCache())
+  const lapsedRole = { ...roleCard, validUntil: '2023-06-01T00:00:00Z' }
+  const rowOf = (endedAt?: string) =>
+    render(
+      <BasicAppContext>
+        <CardKeptRow card={lapsedRole} kind="role" handle={key} endedAt={endedAt} />
+      </BasicAppContext>
+    )
+
+  it('a role card needs renewing while the membership stands', () => {
+    const tree = rowOf()
+    expect(tree.getByTestId(testIdWithKey(`AgentCardRenew_role_${key}`))).toHaveTextContent(
+      'VtaLink.CardRoleNeedsRenewing'
+    )
+    expect(tree.queryByTestId(testIdWithKey(`AgentCardHistory_role_${key}`))).toBeNull()
+  })
+
+  it('ended by the community, it is history (control)', () => {
+    const tree = rowOf('2023-05-01T00:00:00Z')
+    expect(tree.getByTestId(testIdWithKey(`AgentCardHistory_role_${key}`))).toHaveTextContent('VtaLink.CardRoleEnded')
+    expect(tree.queryByTestId(testIdWithKey(`AgentCardRenew_role_${key}`))).toBeNull()
+  })
+})
+
+describe("the community's card on Your agent", () => {
+  beforeEach(() => resetCardVaultCache())
+
+  it('shows the membership and the role card, each with where it is kept', () => {
+    seedCardVaultState(membershipCard.id as string, { state: 'kept', at: '2026-09-26T10:00:00Z' })
+    seedCardVaultState(roleCard.id as string, { state: 'cannotKeep', reason: 'proofSet' })
+    const tree = render(
+      <BasicAppContext>
+        <CommunityCard
+          communityDid={COMMUNITY}
+          membership={membership}
+          invited={false}
+          vetter={false}
+          onOpen={jest.fn()}
+          onPrimary={jest.fn()}
+        />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(testIdWithKey(`AgentCard_membership_${key}`))).toHaveTextContent(
+      /VtaLink\.YourMembershipCard/
+    )
+    expect(keptLine(tree, 'membership')).toHaveTextContent('VtaLink.CardKept')
+    expect(tree.getByTestId(testIdWithKey(`AgentCard_role_${key}`))).toHaveTextContent(/VtaLink\.YourRoleCard/)
+    expect(keptLine(tree, 'role')).toHaveTextContent('VtaLink.CardPhoneOnlyProofSet')
+  })
+
+  // The row read "Member of …" to a screen reader on every card, a request
+  // turned down included (several-agents device check, 10-04).
+  it('the row reads its name and where the person stands, as the screen shows them', () => {
+    for (const held of [undefined, membership]) {
+      const tree = render(
+        <BasicAppContext>
+          <CommunityCard
+            communityDid={COMMUNITY}
+            membership={held}
+            invited={false}
+            vetter={false}
+            onOpen={jest.fn()}
+            onPrimary={jest.fn()}
+          />
+        </BasicAppContext>
+      )
+      const row = tree.getByTestId(testIdWithKey(held ? 'AgentMembershipRow' : `AgentCommunityOpen_${key}`))
+      const name = tree.getByTestId(testIdWithKey(`AgentCommunityName_${key}`)).props.children
+      const status = tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`)).props.children[0]
+      expect(row.props.accessibilityLabel).toBe(`${name}, ${status}`)
+      expect(row.props.accessibilityLabel).not.toMatch(/VtaLink\.MemberOf/)
+      tree.unmount()
+    }
+  })
+
+  it('without a membership there is no card to show', () => {
+    const tree = render(
+      <BasicAppContext>
+        <CommunityCard
+          communityDid={COMMUNITY}
+          invited={false}
+          vetter={false}
+          onOpen={jest.fn()}
+          onPrimary={jest.fn()}
+        />
+      </BasicAppContext>
+    )
+    expect(tree.queryByTestId(testIdWithKey(`AgentCard_membership_${key}`))).toBeNull()
+  })
+})

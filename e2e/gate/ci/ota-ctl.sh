@@ -23,7 +23,7 @@ publish() {
   # pattern of retries shows up rather than hiding.
   local try
   for try in 1 2; do
-    if out=$(cd app && BIFOLD_GIT="$PWD/../bifold" node scripts/ota-deploy.mjs --base "$OTA_BASE" --platform android --channel "$OTA_CHANNEL" --message "$1" 2>&1); then break; fi
+    if out=$(cd app && node scripts/ota-deploy.mjs --base "$OTA_BASE" --platform android --channel "$OTA_CHANNEL" --message "$1" 2>&1); then break; fi
     if [ "$try" = 1 ] && echo "$out" | grep -q 'Failed to upload bundle to storage'; then
       echo "RETRY publish: the storage upload failed ($(echo "$out" | grep -m1 -oE 'fetch failed|ECONN[A-Z]+|socket hang up' || echo unknown)); trying once more"
       continue

@@ -1,0 +1,42 @@
+{
+  "award": {
+    "awardId": "awd_Qz7TpLW5k2N8xRb3",
+    "badgeId": "bdg_W5k2N8xRb3Qz7TpL",
+    "entryId": "dir_NoorElSayed00000",
+    "givenBy": "dir_Pr1yaNatarajan00",
+    "note": "Resin pour workshop, 25 October 2026",
+    "state": "accepted",
+    "offeredAt": "2026-11-06T18:00:01Z",
+    "decidedAt": "2026-11-06T19:10:02Z",
+    "credentialId": "urn:uuid:9c1d2e3f-4a5b-4c6d-8e7f-000000000777"
+  },
+  "badge": {
+    "badge": {
+      "badgeId": "bdg_W5k2N8xRb3Qz7TpL",
+      "kind": "community",
+      "name": "Workshop host",
+      "description": "Ran a workshop for the community.",
+      "image": {
+        "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "mediaType": "image/png",
+        "size": 61440
+      },
+      "repeatable": true,
+      "requestable": true,
+      "listed": true,
+      "shareableOutside": true,
+      "groupId": "grp_Hs7Qm2Lk9Tn4Bv1X",
+      "state": "active",
+      "holderCount": 10,
+      "createdAt": "2026-11-06T09:00:02Z"
+    },
+    "count": 1,
+    "since": "2026-11-06T19:10:02Z",
+    "latestAt": "2026-11-06T19:10:02Z",
+    "pinned": false,
+    "hidden": false,
+    "position": 7,
+    "credentialId": "urn:uuid:9c1d2e3f-4a5b-4c6d-8e7f-000000000777",
+    "credentialValidUntil": "2028-11-06T19:10:02Z"
+  }
+}

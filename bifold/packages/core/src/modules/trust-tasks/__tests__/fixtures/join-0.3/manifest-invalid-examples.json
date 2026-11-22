@@ -1,0 +1,89 @@
+[
+  {
+    "note": "The request takes no parameters; a stray field is rejected.",
+    "payload": {
+      "communityDid": "did:webvh:x"
+    }
+  },
+  {
+    "note": "Nor does the request name a criterion to fetch. A per-criterion read would let the community see which requirement a caller cares about — the one thing discovery must not reveal.",
+    "payload": {
+      "criterionId": "kernel-developer"
+    }
+  },
+  {
+    "note": "`ext` keys must be reverse-DNS namespaces (SPEC §4.5.1); a bare word is not one.",
+    "payload": {
+      "ext": {
+        "mine": {
+          "a": 1
+        }
+      }
+    }
+  },
+  {
+    "variant": "response",
+    "note": "A criterion without `admission` — every criterion says how a submission meeting it is decided.",
+    "payload": {
+      "communityDid": "did:webvh:QmVtcScid:kernel-vtc.example",
+      "criteria": [
+        {
+          "id": "open",
+          "requirementsDigest": "zQmVmw2GuXQsXe1yJf5xwU2TPvhP5mtwpQ5ACLwK76RAiEV"
+        }
+      ]
+    }
+  },
+  {
+    "variant": "response",
+    "note": "A criterion without `requirementsDigest` — 0.3 requires one on every criterion.",
+    "payload": {
+      "communityDid": "did:webvh:QmVtcScid:kernel-vtc.example",
+      "criteria": [
+        {
+          "id": "open",
+          "admission": "automatic"
+        }
+      ]
+    }
+  },
+  {
+    "variant": "response",
+    "note": "A presentationDefinition without credentialIssuers — whose credentials count must be stated.",
+    "payload": {
+      "communityDid": "did:webvh:QmVtcScid:kernel-vtc.example",
+      "criteria": [
+        {
+          "id": "partner-member",
+          "admission": "automatic",
+          "presentationDefinition": {
+            "credentials": [
+              {
+                "id": "membership",
+                "format": "ldp_vc",
+                "meta": {
+                  "type_values": [["MembershipCredential"]]
+                }
+              }
+            ]
+          },
+          "requirementsDigest": "zQmVmw2GuXQsXe1yJf5xwU2TPvhP5mtwpQ5ACLwK76RAiEV"
+        }
+      ]
+    }
+  },
+  {
+    "variant": "response",
+    "note": "An admission that is neither automatic nor review.",
+    "payload": {
+      "communityDid": "did:webvh:QmVtcScid:kernel-vtc.example",
+      "criteria": [
+        {
+          "id": "open",
+          "admission": "maybe",
+          "requirementsDigest": "zQmVmw2GuXQsXe1yJf5xwU2TPvhP5mtwpQ5ACLwK76RAiEV"
+        }
+      ]
+    }
+  }
+]

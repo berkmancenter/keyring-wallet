@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Whether tonight's nightly runs the link legs (linkwait, linkfail, pnmlink). W1 of
 // docs/plans/farm-test-footprint-plan.md (IN-560): they leave the nightly's fixed list and run only when
-//   (a) a change touches linking: a path rule on last night's pin to tonight's, in both repos (changed.mjs maps diffs
-//       only through testIDs, so VtaClient.ts and vtaAgent.ts come back "unmapped");
+//   (a) a change touches linking: a path rule on last night's pin to tonight's, bifold/ paths included (changed.mjs
+//       maps diffs only through testIDs, so VtaClient.ts and vtaAgent.ts come back "unmapped");
 //   (b) a runner VTA's or pnm's version changed: the VTA's `info.version` from <url>/openapi.json, and the sha256 of
 //       each pnm file the gate's wrapper can run;
 //   (c) always, on the store-build gate (gate.sh run --kind gate: not this file's business).
@@ -61,6 +61,23 @@ export function decide({ files, rangeKnown = true, rangeWhy = 'no last nightly p
   return { run: why.length > 0, why };
 }
 
+/**
+ * The range's files for decide(). A range is known only as <a>..<b> with both sides: no range, a bare pin or a half
+ * range is "no last nightly pin". One that cannot be read, or that crosses the bifold fold-in (changed.mjs marks it
+ * with a bare `bifold`: what moved under bifold/ cannot be told), is unknown too, and an unknown range runs.
+ */
+export function rangeFiles(range, top) {
+  let files = [], rangeKnown = /^[^.\s]+\.\.[^.\s]+$/.test(range ?? ''), rangeWhy;
+  if (rangeKnown) {
+    try { files = changedFiles(range, top); } catch (e) {
+      rangeKnown = false;
+      rangeWhy = `the range ${range} could not be read (${String(e.message).split('\n')[0].slice(0, 120)}; a pre-fold range with an empty bifold/ in a worktree needs BIFOLD_GIT)`;
+    }
+    if (files.includes('bifold')) { rangeKnown = false; rangeWhy = `the range ${range} crosses the bifold fold-in (a gitlink at one end, a tree at the other): what moved under bifold/ cannot be read`; }
+  }
+  return { files, rangeKnown, rangeWhy };
+}
+
 /** The served version, read-only: <url>/openapi.json info.version, or "unread". */
 function servedVersion(url) {
   try {
@@ -98,15 +115,7 @@ function main(argv) {
   }
   let prev;
   try { prev = opt.file ? JSON.parse(fs.readFileSync(opt.file, 'utf8')) : undefined; } catch { prev = undefined; }
-  // A range is known only as <a>..<b> with both sides: no range, a bare pin or a half range is "no last nightly pin".
-  let files = [], rangeKnown = /^[^.\s]+\.\.[^.\s]+$/.test(opt.range ?? ''), rangeWhy;
-  if (rangeKnown) {
-    try { files = changedFiles(opt.range); } catch (e) {
-      rangeKnown = false;
-      rangeWhy = `the range ${opt.range} could not be read (${String(e.message).split('\n')[0].slice(0, 120)}; an empty bifold/ in a worktree needs BIFOLD_GIT)`;
-    }
-  }
-  const d = decide({ files, rangeKnown, rangeWhy, prevFingerprint: prev, fingerprint });
+  const d = decide({ ...rangeFiles(opt.range), prevFingerprint: prev, fingerprint });
   if (opt.json) console.log(JSON.stringify({ ...d, fingerprint }, null, 2));
   else console.log(d.run ? `RUN link legs: ${d.why.join('; ')}` : 'NO link trigger: no link file changed, no runner or pnm version moved');
   process.exitCode = d.run ? 0 : 1;

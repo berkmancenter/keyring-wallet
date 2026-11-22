@@ -124,6 +124,8 @@ if (unexpected.length) {
   fail(`the working tree has changes (${unexpected.join(', ')}); publish from a clean checkout of a signed commit`)
 }
 const walletHead = git('rev-parse', 'HEAD')
+// bifold at this commit, read from the wallet tree: the folded bifold/ tree's id since the fold, the submodule's pin
+// before it. Never `git -C bifold`: since the fold that is this repository, and its HEAD is the wallet's.
 const bifoldHead = git('rev-parse', 'HEAD:bifold')
 
 // The store build's own commit.

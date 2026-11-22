@@ -1,0 +1,200 @@
+import { fireEvent, render, waitFor, act } from '@testing-library/react-native'
+import React from 'react'
+
+import { container } from 'tsyringe'
+import { TOKENS } from '../../src/container-api'
+import { MainContainer, defaultConfig } from '../../src/container-impl'
+import { StoreProvider, defaultState } from '../../src/contexts/store'
+import reducer from '../../src/contexts/reducers/store'
+import TogglePushNotifications from '../../src/screens/TogglePushNotifications'
+import { vtaAgent } from '../../src/modules/trust-tasks/module/vtaAgent'
+import { testIdWithKey } from '../../src/utils/testable'
+import { CustomBasicAppContext } from '../helpers/app'
+
+// Create a stable reducer reference for testing
+const stableReducer = reducer
+
+describe('TogglePushNotification Screen', () => {
+  let setup: jest.Mock
+  let toggle: jest.Mock
+  let status: jest.Mock
+  let testContainer: ReturnType<typeof MainContainer.prototype.init>
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    setup = jest.fn().mockResolvedValue('granted')
+    toggle = jest.fn()
+    status = jest.fn().mockResolvedValue('denied')
+
+    // Create a fresh child container for each test
+    const childContainer = container.createChildContainer()
+
+    // Init the container first
+    testContainer = new MainContainer(childContainer).init()
+
+    // Override CONFIG AFTER init (like BasicAppContext does with UTIL_LOGGER)
+    const configWithMock = {
+      ...defaultConfig,
+      enablePushNotifications: { status, setup, toggle },
+    }
+    childContainer.registerInstance(TOKENS.CONFIG, configWithMock)
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  test('Push notification screen renders correctly in settings', async () => {
+    const tree = render(
+      <StoreProvider
+        initialState={{
+          ...defaultState,
+        }}
+        reducer={stableReducer}
+      >
+        <CustomBasicAppContext container={testContainer}>
+          <TogglePushNotifications />
+        </CustomBasicAppContext>
+      </StoreProvider>
+    )
+
+    expect(tree).toMatchSnapshot()
+    const toggleSwitch = tree.getByTestId(testIdWithKey('PushNotificationSwitch'))
+    expect(toggleSwitch).not.toBe(null)
+
+    await act(async () => {
+      fireEvent(toggleSwitch, 'onValueChange', true)
+    })
+
+    await waitFor(() => {
+      expect(setup).toHaveBeenCalledTimes(1)
+      expect(toggle).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  test('says plainly when an approval rule on the agent blocks the notification setting', async () => {
+    const real = vtaAgent.getState()
+    const getState = jest.spyOn(vtaAgent, 'getState').mockReturnValue({ ...real, wakeBlockedByRule: true })
+    const tree = render(
+      <StoreProvider initialState={{ ...defaultState }} reducer={stableReducer}>
+        <CustomBasicAppContext container={testContainer}>
+          <TogglePushNotifications />
+        </CustomBasicAppContext>
+      </StoreProvider>
+    )
+    expect(tree.getByTestId(testIdWithKey('PushNotificationBlockedByRule'))).toHaveTextContent(
+      'PushNotifications.BlockedByApprovalRule'
+    )
+    // The switch is still there: the message explains, it does not take the setting away.
+    expect(tree.getByTestId(testIdWithKey('PushNotificationSwitch'))).toBeTruthy()
+    getState.mockRestore()
+  })
+
+  test('puts the switch back when an approval rule holds the change', async () => {
+    status.mockResolvedValue('granted')
+    const real = vtaAgent.getState()
+    const getState = jest.spyOn(vtaAgent, 'getState').mockReturnValue({ ...real, wakeBlockedByRule: false })
+    // The agent answers set-wake "consent required": vtaAgent marks it blocked.
+    toggle.mockImplementation(async () => {
+      getState.mockReturnValue({ ...real, wakeBlockedByRule: true })
+    })
+    const tree = render(
+      <StoreProvider initialState={{ ...defaultState }} reducer={stableReducer}>
+        <CustomBasicAppContext container={testContainer}>
+          <TogglePushNotifications />
+        </CustomBasicAppContext>
+      </StoreProvider>
+    )
+    const toggleSwitch = tree.getByTestId(testIdWithKey('PushNotificationSwitch'))
+    expect(toggleSwitch.props.value).toBe(false)
+
+    await act(async () => {
+      fireEvent(toggleSwitch, 'onValueChange', true)
+    })
+
+    await waitFor(() => expect(toggle.mock.calls[0]?.[0]).toBe(true))
+    // The agent kept what it had, so the switch says so.
+    expect(tree.getByTestId(testIdWithKey('PushNotificationSwitch')).props.value).toBe(false)
+  })
+
+  test('the switch keeps the new value when the agent accepts it', async () => {
+    status.mockResolvedValue('granted')
+    toggle.mockResolvedValue(undefined)
+    const tree = render(
+      <StoreProvider initialState={{ ...defaultState }} reducer={stableReducer}>
+        <CustomBasicAppContext container={testContainer}>
+          <TogglePushNotifications />
+        </CustomBasicAppContext>
+      </StoreProvider>
+    )
+    await act(async () => {
+      fireEvent(tree.getByTestId(testIdWithKey('PushNotificationSwitch')), 'onValueChange', true)
+    })
+    await waitFor(() => expect(toggle).toHaveBeenCalledTimes(1))
+    expect(tree.getByTestId(testIdWithKey('PushNotificationSwitch')).props.value).toBe(true)
+  })
+
+  test('no message while no rule blocks it', () => {
+    const tree = render(
+      <StoreProvider initialState={{ ...defaultState }} reducer={stableReducer}>
+        <CustomBasicAppContext container={testContainer}>
+          <TogglePushNotifications />
+        </CustomBasicAppContext>
+      </StoreProvider>
+    )
+    expect(tree.queryByTestId(testIdWithKey('PushNotificationBlockedByRule'))).toBeNull()
+  })
+
+  describe('what came of turning them on', () => {
+    const mount = (usePushNotifications = false) => {
+      status.mockResolvedValue('granted')
+      return render(
+        <StoreProvider
+          initialState={{ ...defaultState, preferences: { ...defaultState.preferences, usePushNotifications } }}
+          reducer={stableReducer}
+        >
+          <CustomBasicAppContext container={testContainer}>
+            <TogglePushNotifications />
+          </CustomBasicAppContext>
+        </StoreProvider>
+      )
+    }
+    const flip = async (tree: ReturnType<typeof render>, to: boolean) => {
+      await act(async () => {
+        fireEvent(tree.getByTestId(testIdWithKey('PushNotificationSwitch')), 'onValueChange', to)
+      })
+      await waitFor(() => expect(toggle).toHaveBeenCalled())
+    }
+
+    test('a failure says so under the switch, which stays on: the choice has not changed', async () => {
+      toggle.mockResolvedValue('failed')
+      const tree = mount()
+      await flip(tree, true)
+      expect(tree.getByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeTruthy()
+      expect(tree.getByTestId(testIdWithKey('PushNotificationSwitch')).props.value).toBe(true)
+    })
+
+    test.each(['on', 'later', undefined])('says nothing more with %s', async (outcome) => {
+      toggle.mockResolvedValue(outcome)
+      const tree = mount()
+      await flip(tree, true)
+      expect(tree.queryByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeNull()
+    })
+
+    test('turning off again takes the line away', async () => {
+      toggle.mockResolvedValueOnce('failed').mockResolvedValueOnce('off')
+      const tree = mount()
+      await flip(tree, true)
+      expect(tree.getByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeTruthy()
+      await flip(tree, false)
+      expect(tree.queryByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeNull()
+    })
+
+    test('a failure turning off says nothing about setting up', async () => {
+      toggle.mockResolvedValue('failed')
+      const tree = mount(true)
+      await flip(tree, false)
+      expect(tree.queryByTestId(testIdWithKey('PushNotificationNotSetUp'))).toBeNull()
+    })
+  })
+})

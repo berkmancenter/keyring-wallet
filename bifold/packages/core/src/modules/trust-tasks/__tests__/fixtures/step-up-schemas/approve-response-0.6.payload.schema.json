@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/auth/step-up/approve-response/0.6",
+  "title": "Auth — Step-up Approve Response",
+  "description": "The approver's signed ratification of a step-up: subject + challenge (+ sessionId, when the request carried one) are echoed inside a document signed by the approver, backed by a gate — the proof itself, a WebAuthn assertion, or a bound step-up approver's signed statement — so the relying party can elevate the session, or apply the approval to the one operation it was bound to.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["subject", "challenge", "decision"],
+  "properties": {
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Echoed from the matching approve-request. The relying party verifies it equals the subject bound to the pending step-up. With `approverSigned` evidence it is also the document's issuer: the subject signs as its own DID."
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Echoed from the matching approve-request when that request carried one, and absent when it did not — a step-up bound to an operation that arrived without a session."
+    },
+    "challenge": {
+      "type": "string",
+      "minLength": 16,
+      "description": "Echoed from the matching approve-request. The relying party verifies it equals the bound challenge."
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["approved", "denied"],
+      "description": "`approved` elevates the session, or authorizes the bound operation, per the relying party's policy. `denied` is a signed refusal — useful for audit even though it changes nothing."
+    },
+    "deniedReason": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Required when decision is `denied`. Human-readable rationale the user provided (or which the approver inferred)."
+    },
+    "grantedAcr": {
+      "type": "string",
+      "description": "The acr the approver believes it has cryptographically demonstrated. The relying party MAY accept this, MAY upgrade to a lower value, but MUST NOT exceed it."
+    },
+    "evidence": {
+      "$ref": "#/$defs/Evidence",
+      "description": "How the approver demonstrated the factor backing this approval. A tagged union on `kind`; absent is equivalent to `didSigned`. Whatever the kind, the document's framework `proof` is REQUIRED — evidence is in addition to it, never instead."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Evidence": {
+      "$anchor": "evidence",
+      "title": "Step-up Evidence",
+      "description": "Tagged union over `kind` describing the cryptographic factor the approver presents to back the approval.",
+      "oneOf": [
+        {
+          "title": "DidSigned",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "const": "didSigned"
+            }
+          },
+          "description": "The approval is gated by the document's framework `proof` alone. The default when `evidence` is omitted. `amr` reflects \"vta\"/\"did\"."
+        },
+        {
+          "title": "WebAuthn",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "assertion"],
+          "properties": {
+            "kind": {
+              "const": "webauthn"
+            },
+            "assertion": {
+              "$ref": "../../../_shared/0.1/webauthn.schema.json#/$defs/AssertionResponse",
+              "description": "The unmodified AuthenticatorAssertionResponse from the platform WebAuthn API. Its `clientDataJSON` challenge MUST equal the step-up `challenge`. Verified per WebAuthn Level 2 §7.2 in addition to the framework proof; `amr` reflects \"passkey\"."
+            }
+          }
+        },
+        {
+          "title": "ApproverSigned",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "statement"],
+          "properties": {
+            "kind": {
+              "const": "approverSigned"
+            },
+            "statement": {
+              "$ref": "../../approver/_shared/0.1/approver.schema.json#/$defs/AttestStatement",
+              "description": "A complete, signed auth/step-up/approver/attest/0.1 document with `purpose: stepUp`, issued by one of the subject's bound step-up approvers over the step-up `challenge` and `boundTo`, addressed to the relying party. The statement is the factor; the document carrying it MUST still be proved by the subject's own DID — never a delegated key. Verified as received, in addition to the framework proof; `amr` reflects \"approver\"."
+            }
+          }
+        }
+      ]
+    },
+    "Response": {
+      "$anchor": "response",
+      "title": "Auth Step-up Approve Response — relying party ack",
+      "description": "Acknowledgement the relying party returns after processing the approval. Carried in a Trust Task document whose type is https://trusttasks.org/spec/auth/step-up/approve-response/0.6#response.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["elevated", "recorded", "rejected"],
+          "description": "`elevated` — the approval was applied and the session's assurance level was raised. `recorded` — the approval was applied to the single operation it was bound to, and NO session was elevated; see `boundTo`. `rejected` — the approval was not applied."
+        },
+        "session": {
+          "$ref": "../../../_shared/0.1/session.schema.json#/$defs/Session",
+          "description": "Present when status is `elevated`. Absent for `recorded`, which changes no session."
+        },
+        "boundTo": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Present when status is `recorded`. The opaque relying-party identifier for the single operation this approval authorised. Not a capability."
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Present when status is `rejected`."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

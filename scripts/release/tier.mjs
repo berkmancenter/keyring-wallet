@@ -10,7 +10,8 @@
 // The tier of a change is its highest: one store file makes the whole change "store".
 //
 //   tier.mjs --files a,b,…           paths from the wallet root (bifold/packages/…, app/…)
-//   tier.mjs --range <a>..<b>        the wallet range, plus the bifold submodule's range when its pin moved
+//   tier.mjs --range <a>..<b>        the wallet range; bifold/… paths are in it since the fold (before it, when
+//                                    `bifold` was a submodule, the pin's own range is read from a bifold clone)
 //   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, policy, files}], held,
 //                                    strict, unchecked}
 // Exit: 0 ota, 1 none, 2 store (native, or a held flag), 3 an error (reported as store, never none), 4 unchecked (ota by
@@ -62,7 +63,9 @@ export const RULES = [
   ['store', 'native project (iOS/Android folder)', /^(app|bifold\/packages\/[^/]+)\/(ios|android)\//],
   ['store', 'native build file', /(^|\/)(Podfile(\.lock)?|[^/]+\.podspec|[^/]+\.gradle(\.kts)?|gradle\.properties|Info\.plist|AndroidManifest\.xml|[^/]+\.entitlements|CMakeLists\.txt)$/],
   ['store', 'Xcode project', /\.(xcodeproj|xcworkspace)\//],
-  // Codegen TurboModule specs live in their src (codegenConfig jsSrcsDir "src"): the whole package is native.
+  // Codegen TurboModule specs live in their src (codegenConfig jsSrcsDir "src"): the whole package is native. The
+  // names here and test-builds.yml's `bifold/packages/react-native-*/**` trigger rest on the same assumption: a native
+  // package named otherwise is added to both together.
   ['store', 'native module package (codegen specs included)', /^bifold\/packages\/(react-native-attestation|react-native-locality-peripheral)\/(?!__tests__\/|README)/],
   ['store', 'font (linked into the binary: react-native.config assets)', /\.(ttf|otf|woff2?)$/i],
   ['store', 'build-time config (react-native-config, app config, babel/metro)', /^app\/(\.env(?!\.sample$)(\.[^/]*)?|app\.json|app\.config\.[cm]?[jt]s|(react-native|babel|metro)\.config\.[cm]?[jt]s)$/],
@@ -216,11 +219,22 @@ export function parseRange(range) {
 
 const bifoldDirOf = (repo) => process.env.BIFOLD_GIT || path.join(repo, 'bifold');
 const pinAt = (repo, rev) => { try { return execFileSync('git', ['-C', repo, 'rev-parse', `${rev}:bifold`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; } };
+/** What `bifold` is at a revision: 'commit' (the submodule's gitlink, before the fold), 'tree' (part of this repository,
+ * since the fold), or '' (absent). The two kinds need different reads; a range with one of each crosses the fold. */
+export const bifoldKindAt = (repo, rev) => {
+  // ls-tree, not cat-file: a gitlink's commit is an object of the submodule's repository, not of this one.
+  try { return execFileSync('git', ['-C', repo, 'ls-tree', rev, '--', 'bifold'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/)[1] || ''; } catch { return ''; }
+};
 
-/** The paths a range changes (renames as delete + add), with the bifold submodule's own paths when its pin moved. */
+/** The paths a range changes (renames as delete + add). Since the fold the bifold/… paths are in the wallet diff; before
+ * it (a gitlink at both ends) the submodule's own paths are read from its clone when the pin moved. A range that crosses
+ * the fold carries an unreadable marker, which grades store: the fold is a store-build boundary by design. */
 export function changedFiles(range, { repo = repoRoot, bifold = bifoldDirOf(repo) } = {}) {
   const [a, b] = parseRange(range);
   const files = execFileSync('git', ['-C', repo, 'diff', '--no-renames', '--name-only', `${a}..${b}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+  const ka = bifoldKindAt(repo, a), kb = bifoldKindAt(repo, b);
+  if (ka === 'tree' && kb === 'tree') return files;
+  if (ka !== kb) return [...files.filter((f) => f !== 'bifold'), `bifold@${a.slice(0, 8)}..${b.slice(0, 8)} (the range crosses the fold: bifold was a submodule at one end and a tree at the other)`];
   if (!files.includes('bifold')) return files;
   const pa = pinAt(repo, a), pb = pinAt(repo, b);
   const out = files.filter((f) => f !== 'bifold');
@@ -248,6 +262,9 @@ export function addedLines(range, { repo = repoRoot, bifold = bifoldDirOf(repo) 
     }
   };
   read(repo, `${a}..${b}`, '');
+  // Since the fold the bifold/… files' lines are in the wallet diff above; the pin's own diff exists only while both
+  // ends carry the gitlink (a range crossing the fold reads the wallet side alone, and grades store anyway).
+  if (bifoldKindAt(repo, a) !== 'commit' || bifoldKindAt(repo, b) !== 'commit') return out;
   const pa = pinAt(repo, a), pb = pinAt(repo, b);
   if (pa && pb && pa !== pb) read(bifold, `${pa}..${pb}`, 'bifold/');
   return out;

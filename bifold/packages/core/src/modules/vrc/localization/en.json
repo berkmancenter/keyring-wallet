@@ -1,0 +1,192 @@
+{
+  "Contacts": {
+    "EmptyList": "No contacts yet",
+    "PeopleAndOrganizations": "Relationship credentials with people and organizations appear here.",
+    "WhatAreContacts": "What are Contacts?",
+    "AcceptContact": "Accept Contact",
+    "DeclineContact": "Decline Contact",
+    "IssuanceDate": "Issuance Date",
+    "IssuerName": "Name",
+    "IssuerEmail": "Email",
+    "IssuerOrganization": "Organization",
+    "IssuerDID": "Issuer DID",
+    "RecipientDID": "Your DID",
+    "Contact": "contact",
+    "Contacts": "contacts",
+    "OfferScreenTitle": "Contact Request",
+    "DetailScreenTitle": "Contact Details",
+    "IsOfferingYouAContact": "is offering to connect with you",
+    "DeclineTitle": "Decline contact request?",
+    "ConfirmDecline": "Yes, decline this contact",
+    "ContactAddedToYourWallet": "Contact added to your wallet",
+    "ContactOnTheWay": "Your contact is on the way",
+    "ConnectedWith": "Connected with",
+    "RemoveTitle": "Remove contact from your wallet",
+    "RemoveFromWallet": "Remove Contact",
+    "RemoveCaption": "You will lose your connection with this contact. They will no longer be able to send you messages or credential offers.",
+    "ContactRemoved": "Contact removed",
+    "YouDoNotHaveAnyContacts": "You don't have any contacts yet",
+    "InviteContact": "Invite Contact",
+    "TourAddTitle": "Add Contacts",
+    "TourAddDescription": "Add contacts by scanning a QR code or sharing your own code. Contacts can send you credentials and messages.",
+    "WitnessedContact": "Witnessed Contact",
+    "WitnessRecords": "Witness Records",
+    "WitnessedBy": "Witnessed By",
+    "NoWitnessRecords": "No witness records available",
+    "WitnessEvent": "Event",
+    "WitnessMethod": "Method",
+    "WitnessSession": "Session",
+    "WitnessDate": "Date"
+  },
+  "Connections": {
+    "EmptyList": "No connections yet",
+    "PeopleAndOrganizations": "Chat connections with people and organizations appear here.",
+    "WhatAreConnections": "What are Connections?"
+  },
+  "WhatAreConnections": {
+    "Title": "What are Connections?",
+    "Preamble": "Connections are secure messaging channels with people and organizations.\n\nUnlike Contacts (which are relationship credentials stored in your wallet), Connections enable real-time chat and credential exchange.\n\nWith connections, you can:",
+    "ListItemDirectMessage": "Send and receive secure messages",
+    "ListItemReceiveOffers": "Receive credential offers",
+    "ListItemProofRequests": "Respond to proof requests",
+    "ListItemNotifications": "Get real-time notifications",
+    "DifferenceFromContacts": "Connections are different from Contacts. Contacts are formal relationships represented by credentials that you store in your wallet.",
+    "ManageConnections": "You can manage your connections from",
+    "MessagesLink": "Messages"
+  },
+  "ContactDetails": {
+    "ViewMessages": "View Messages"
+  },
+  "WhatAreContacts": {
+    "Title": "What are Contacts?",
+    "Preamble": "Contacts are relationship credentials stored in your wallet that represent formal connections with people and organizations.\n\nUnlike messaging connections, Contacts are verifiable credentials that prove your relationship with the issuer.\n\nWith contacts, you can:",
+    "ListItemDirectMessage": "Establish verified relationships",
+    "ListItemNewCredentials": "Receive credentials from trusted contacts",
+    "ListItemNotifiedOfUpdates": "Prove your connection to others",
+    "ListItemRequest": "Share relationship information securely",
+    "RemoveContacts": "You can manage your contacts from your",
+    "ContactsLink": "Contacts list"
+  },
+  "WhatAreContactsAddendum": {
+    "DifferenceFromConnections": "Contacts are different from Connections. Connections are messaging channels that appear in the Messages tab for real-time chat."
+  },
+  "Witness": {
+    "Discovery": {
+      "Title": "Witness Discovery",
+      "Scanning": "Scanning for witnesses...",
+      "Found": "Found {{count}} witness(es)",
+      "Refresh": "Refresh",
+      "Connect": "Connect",
+      "Connected": "Connected",
+      "Connecting": "Connecting...",
+      "NoWitnessesFound": "No witnesses found on the local network",
+      "NoWitnessesHint": "Make sure a witness server is running and you're on the same network"
+    },
+    "Connection": {
+      "Prompt": "Witness Available",
+      "PromptMessage": "Do you want to connect to {{name}}?",
+      "Connecting": "Connecting...",
+      "Connected": "Connected to {{name}}",
+      "Disconnected": "Disconnected from witness",
+      "LocalityVerified": "Locality verified",
+      "LocalityPending": "Locality verification pending...",
+      "LocalityFailed": "Locality verification failed",
+      "WitnessConnection": "Witness Connection",
+      "ViewDetails": "View Details",
+      "Disconnect": "Disconnect",
+      "Reconnection": {
+        "ReusingConnection": "Reusing existing connection",
+        "CleaningUpStaleRecords": "Cleaning up stale connection records...",
+        "RetryingConnection": "Retrying connection...",
+        "ConnectionFailed": "Connection failed",
+        "DuplicateInvitation": "This invitation has already been used",
+        "StaleConnection": "Previous connection was interrupted, reconnecting...",
+        "MaxRetriesExceeded": "Unable to establish connection after multiple attempts",
+        "CleanupFailed": "Failed to clean up previous connection records",
+        "ReconnectionSuccessful": "Successfully reconnected to witness"
+      }
+    },
+    "Session": {
+      "Joined": "Joined witness session",
+      "Complete": "VRC exchange witnessed successfully",
+      "Error": "Witness error: {{message}}"
+    },
+    "Status": {
+      "ConnectedPrefix": "📍 Connected: ",
+      "ConnectingPrefix": "📍 Connecting: ",
+      "VerifiedSuffix": "Locality verified ✓",
+      "PendingSuffix": "Locality verification pending...",
+      "Event": "Event",
+      "Locality": "Locality",
+      "Verified": "Verified ✓",
+      "Pending": "Pending...",
+      "VerifiedAt": "Verified At",
+      "WitnessDID": "Witness DID"
+    },
+    "VWC": {
+      "Title": "Witness Credential",
+      "Event": "Event",
+      "Method": "Method",
+      "Locality": "Locality",
+      "Verified": "Verified",
+      "NotVerified": "Not verified",
+      "SessionID": "Session ID",
+      "WitnessedVRC": "Witnessed VRC"
+    },
+    "Errors": {
+      "WitnessTimeout": {
+        "Title": "Witness Not Responding",
+        "Message": "The witness \"{{witnessName}}\" did not respond within 60 seconds.",
+        "Info": "The witness server may be offline or experiencing high load. You can retry or proceed without witness protection."
+      },
+      "VPSubmissionFailed": {
+        "Title": "Submission Failed",
+        "Message": "Failed to submit credentials to the witness \"{{witnessName}}\".",
+        "Info": "A network error occurred while communicating with the witness. You can retry or proceed without witness protection."
+      },
+      "SessionTimeout": {
+        "Title": "Session Could Not Be Established",
+        "Message": "Could not establish a witness session with \"{{witnessName}}\".",
+        "Info": "The witness may be busy or your connection may have been interrupted. You can retry or proceed without witness protection."
+      },
+      "CounterpartyNotConnected": {
+        "Title": "Contact Not on Witness",
+        "Message": "{{contactName}} is not connected to \"{{witnessName}}\".",
+        "Info": "For witnessed exchange, both parties must be connected to the same witness. Ask your contact to connect to the witness and try again."
+      },
+      "BiometricCancelled": {
+        "Title": "Verification Cancelled",
+        "Message": "Biometric verification was cancelled.",
+        "Info": "The credential was not sent because biometric confirmation is required for hardware-backed signing."
+      },
+      "BiometricFailed": {
+        "Title": "Verification Failed",
+        "Message": "Biometric verification failed.",
+        "Info": "Please try again. Make sure your fingerprint or face is properly positioned."
+      },
+      "StaleWitness": {
+        "Title": "Witness Disconnected",
+        "Message": "Your connection to \"{{witnessName}}\" has expired.",
+        "Info": "The witness connection may have timed out or been interrupted. Please reconnect to the witness to continue with witnessed exchange."
+      },
+      "NetworkError": {
+        "Title": "Connection Error",
+        "Message": "A network error occurred during the exchange.",
+        "Info": "Please check your network connection and try again."
+      },
+      "Actions": {
+        "Retry": "Retry",
+        "Cancel": "Cancel",
+        "ProceedWithoutWitness": "Proceed Without Witness",
+        "KeepWaiting": "Keep Waiting",
+        "Reconnect": "Reconnect"
+      },
+      "Options": {
+        "WhatToDo": "What would you like to do?",
+        "RetryDescription": "Attempt the operation again",
+        "CancelDescription": "Stop and try again later",
+        "ProceedWithoutDescription": "Send credential without witness protection (reduced trust)"
+      }
+    }
+  }
+}

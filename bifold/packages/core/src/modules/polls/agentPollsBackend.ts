@@ -1,0 +1,145 @@
+/**
+ * The polls backend on the app's existing legs, as rooms has: the person's own agent through `vtaAgent`, each
+ * community through `vtiAgent` as the identity the phone joined it with, and the ballot box over its own HTTPS door.
+ * Nothing new is opened to the agent or the community.
+ *
+ * @module polls/agentPollsBackend
+ */
+import type { Agent } from '@credo-ts/core'
+
+import { getKeyed, listKeyed, putKeyed, withKeyLock } from '../trust-tasks/module/keyedRecords'
+import { vtaAgent } from '../trust-tasks/module/vtaAgent'
+import { vtiAgent, VtiNoOwnSession } from '../trust-tasks/module/vtiAgent'
+import { isSessionsPerIdentityOn } from '../trust-tasks/module/sessionsPerIdentitySwitch'
+import type { VtiPersona } from '../trust-tasks/module/VtiIdentityStore'
+import { canConnectAs, personaForCommunity, VtiKeysNotHeld, VtiNoIdentity } from '../trust-tasks/module/sharedIdentity'
+import { GenericRecordsCommunityStore } from '../trust-tasks/module/VtiCommunityStore'
+import { GenericRecordsIdentityStore } from '../trust-tasks/module/VtiIdentityStore'
+import { GenericRecordsTspPeerRevisionStore } from '../trust-tasks/module/vtiTsp'
+
+import { createBallotBoxDoor } from './ballotBoxDoor'
+import type { PollRecord, PollRecordStore, PollsBackend } from './pollService'
+
+/** This phone's poll records: one per (community, poll), across every agent linked to it. */
+const RECORD_TYPE = 'keyring/polls'
+const KIND = 'poll'
+
+const keyOf = (community: string, electionId: string) => `${community} ${electionId}`
+
+export function createPollRecordStore(agent: Agent): PollRecordStore {
+  return {
+    get: (community, electionId) => getKeyed<PollRecord>(agent, RECORD_TYPE, KIND, keyOf(community, electionId)),
+    put: (record) =>
+      putKeyed(
+        agent,
+        RECORD_TYPE,
+        KIND,
+        keyOf(record.community, record.electionId),
+        record as unknown as Record<string, unknown>
+      ),
+    list: () => listKeyed<PollRecord>(agent, RECORD_TYPE, KIND),
+  }
+}
+
+/** A polls listing read (`vtc/elections/list`, `vtc/elections/show`, any version): a screen's, not a step's. */
+export const isPollsListing = (type: string): boolean => /\/vtc\/elections\/(list|show)\/[\d.]+$/.test(type)
+
+export function createAgentPollsBackend(agent: Agent, options: { mediatorDid?: string } = {}): PollsBackend {
+  const identityStore = new GenericRecordsIdentityStore(agent)
+  const communityStore = new GenericRecordsCommunityStore(agent)
+  // The session to a community is the persona the phone joined it with. Where that identity's own session is open
+  // (sessions phase B, below) every ask — listing reads and the ticket request alike — goes over it and holds nothing
+  // of the shared session. Otherwise the shared session is held while the task runs: a ticket request is the person's
+  // own act, and holds it as an ordinary caller does. A listing read takes its turn (`listing`): it waits
+  // for another community's rooms listing rather than cutting it off, and that listing waits for it rather than being
+  // refused — while a polls read held the session as an ordinary caller, the rooms of both communities were refused
+  // and the list showed neither (rooms slow, 11-04). It leaves no claim after it either: each one renewed the claim, and
+  // another community's rooms were refused for as long as the polls were open (34VR-Y58H, 277.8, 11-03).
+  const asPersona = async <T>(
+    community: string,
+    fn: () => Promise<T>,
+    listing = false,
+    own?: (persona: VtiPersona) => Promise<T>
+  ): Promise<T> => {
+    // As rooms: the identity kept for this community, or the one its membership names (sharedIdentity, IN-517).
+    const persona = await personaForCommunity(identityStore, communityStore, community)
+    if (!persona) {
+      agent.config?.logger?.warn?.('[Polls] no identity for the community: nothing asked (noIdentity)')
+      throw new VtiNoIdentity('polls: this phone holds no identity for that community')
+    }
+    if (!canConnectAs(persona)) {
+      agent.config?.logger?.warn?.("[Polls] the identity's keys are not on the phone yet: nothing asked (keysNotHeld)")
+      throw new VtiKeysNotHeld("polls: this identity's keys are not on this phone yet")
+    }
+    // Sessions phase B, as rooms (agentRoomsBackend): the identity's own session where it is open, so opening a poll no
+    // longer signs the shared session in as this identity and waits on another community's rooms listing (Y74V-MEPV,
+    // 11-17: +2.2 s before elections/show, lists ~5.9 s). Only a session found not open falls back, and that is decided
+    // before anything is sent: a ticket request never goes out twice.
+    // A listing also waits, bounded, for that session while it is opening (as rooms; QG4P-MQCT, 11-17). Never a ticket
+    // request: that goes at once, as before.
+    if (
+      own &&
+      isSessionsPerIdentityOn() &&
+      (vtiAgent.ownSessionOpen(persona.did) || (listing && (await vtiAgent.ownSessionOnceOpen(persona.did))))
+    ) {
+      try {
+        return await own(persona)
+      } catch (error) {
+        if (!(error instanceof VtiNoOwnSession)) throw error
+      }
+    }
+    return vtiAgent.holding(agent, options.mediatorDid, persona, fn, {
+      peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+      reason: 'polls',
+      claims: !listing,
+      ...(listing ? { listing } : {}),
+    })
+  }
+  // The signed-in client rooms use: `task` and what the agent serves, nothing else.
+  const client = async () => {
+    const c = await vtaAgent.roomsClient(agent)
+    if (!c) throw new Error('polls: no agent is linked to this phone')
+    return c
+  }
+
+  return {
+    communityTask: (community, type, payload) =>
+      asPersona(
+        community,
+        () => vtiAgent.communityTask(community, type, payload),
+        isPollsListing(type),
+        (persona) => vtiAgent.communityTaskAs(persona, community, type, payload)
+      ),
+    sendCompleted: (community, document) =>
+      asPersona(
+        community,
+        () => vtiAgent.sendCompleted(community, document),
+        false,
+        (persona) => vtiAgent.sendCompletedAs(persona, community, document)
+      ),
+    agentTask: async (type, payload) => {
+      try {
+        return (await (await client()).task(type, payload as Record<string, unknown>)) as Record<string, unknown>
+      } catch (error) {
+        // Refused as a task the agent does not serve: what was kept of its answer is asked for again now.
+        vtaAgent.servedRefused(agent, error)
+        throw error
+      }
+    },
+    // The agent's last answer, asked again behind the session's first work (agentLastKnownSwitch.ts).
+    agentServedTypes: () => vtaAgent.servedTypes(agent),
+    currentAgent: () => vtaAgent.agentAddress(),
+    linkedAgents: () => (vtaAgent.getState().agents ?? []).map((a) => a.vtaDid),
+    voterTarget: async (community) => {
+      const persona = await personaForCommunity(identityStore, communityStore, community)
+      return persona ? { contextId: persona.contextId, community, member: persona.did } : undefined
+    },
+    records: createPollRecordStore(agent),
+    door: createBallotBoxDoor(agent),
+    serially: (key, work) => withKeyLock(`polls|${key}`, work),
+    now: () => Date.now(),
+    random: () => Math.random(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    warn: (message) => agent.config.logger.warn(message),
+  }
+}
