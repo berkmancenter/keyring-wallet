@@ -92,12 +92,16 @@ test('a third react-native-* package is native too, specs in src included; the r
   assert.equal(tierOf('bifold/packages/react-native-foo/android/build.gradle'), 'store');
   assert.equal(tierOf('bifold/packages/react-native-foo/README.md'), 'none');
   assert.equal(tierOf('bifold/packages/react-native-foo/__tests__/x.test.ts'), 'none');
-  // The workflow's trigger glob and this rule must keep the same shape: read the glob and grade a path under it.
+  // Every bifold/packages/… path the Test build triggers on is a native input by the workflow's reckoning, so a sample
+  // path under each must grade store here too: a glob added to the workflow under a new name fails this until the rule
+  // learns it (review of the fold: a differently named native package would otherwise grade its specs as JavaScript).
   const wf = readFileSync(path.join(here, '../../.github/workflows/test-builds.yml'), 'utf8');
-  const glob = wf.match(/^\s+- "(bifold\/packages\/react-native-\*\/\*\*)"/m);
-  assert.ok(glob, 'test-builds.yml names the bifold/packages/react-native-*/** trigger');
-  const sample = glob[1].replace('react-native-*', 'react-native-zzz').replace('**', 'src/NativeZzz.ts');
-  assert.equal(tierOf(sample), 'store', `${sample} is under the workflow's native glob and must be store here`);
+  const globs = [...wf.matchAll(/^\s+- "(bifold\/packages\/[^"]+)"/gm)].map((m) => m[1]);
+  assert.ok(globs.includes('bifold/packages/react-native-*/**'), 'test-builds.yml names the bifold/packages/react-native-*/** trigger');
+  for (const g of globs) {
+    const sample = g.replace(/\*\*$/, 'src/NativeZzz.ts').replace(/\*/g, 'zzz');
+    assert.equal(tierOf(sample), 'store', `${sample} is under the workflow's trigger ${g} and must be store here`);
+  }
 });
 
 test('an unknown path is store, never OTA by default; an unread bifold range too', () => {
