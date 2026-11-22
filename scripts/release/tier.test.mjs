@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { addedLines, applyHolds, changedFiles, classify, exemptionOf, FLAGS, flagsOf, MIGRATION_PATHS, parseRange, verdict } from './tier.mjs';
@@ -84,6 +84,27 @@ test('what the app never ships is none, even a manifest there', () => {
   // Only its script files: a manifest or anything deeper there is not tooling by this rule.
   assert.equal(tierOf('app/scripts/package.json'), 'store');
   assert.equal(tierOf('app/scripts/lib/x.mjs'), 'store');
+});
+
+test('a third react-native-* package is native too, specs in src included; the rule follows test-builds.yml\'s glob', () => {
+  // Review of the fold (2026-11-21): with a two-name allowlist, bifold/packages/react-native-foo/src/Foo.ts graded ota.
+  assert.equal(tierOf('bifold/packages/react-native-foo/src/Foo.ts'), 'store');
+  assert.equal(tierOf('bifold/packages/react-native-foo/android/build.gradle'), 'store');
+  assert.equal(tierOf('bifold/packages/react-native-foo/README.md'), 'none');
+  assert.equal(tierOf('bifold/packages/react-native-foo/__tests__/x.test.ts'), 'none');
+  // Every bifold/packages/… path the Test build triggers on is a native input by the workflow's reckoning, so a sample
+  // path under each must grade store here too: a glob added to the workflow under a new name fails this until the rule
+  // learns it (review of the fold: a differently named native package would otherwise grade its specs as JavaScript).
+  // The premise is that test-builds.yml's list names native inputs only. If a trigger path is ever added there that is
+  // deliberately NOT a native input (say a jest config), exclude it HERE, in this test; do not widen tier.mjs to grade
+  // it store, which would hold OTA-safe changes back from the air.
+  const wf = readFileSync(path.join(here, '../../.github/workflows/test-builds.yml'), 'utf8');
+  const globs = [...wf.matchAll(/^\s+- "(bifold\/packages\/[^"]+)"/gm)].map((m) => m[1]);
+  assert.ok(globs.includes('bifold/packages/react-native-*/**'), 'test-builds.yml names the bifold/packages/react-native-*/** trigger');
+  for (const g of globs) {
+    const sample = g.replace(/\*\*$/, 'src/NativeZzz.ts').replace(/\*/g, 'zzz');
+    assert.equal(tierOf(sample), 'store', `${sample} is under the workflow's trigger ${g} and must be store here`);
+  }
 });
 
 test('an unknown path is store, never OTA by default; an unread bifold range too', () => {
@@ -202,6 +223,70 @@ test('range mode: an unreadable bifold range is store; only a..b is accepted', (
     assert.throws(() => parseRange(`${r.w1}...${r.w2}`), /base>\.\.<tip/);
     assert.throws(() => parseRange('HEAD'), /base>\.\.<tip/);
     assert.deepEqual(parseRange('staging-v0.2.0-237..staging-v0.2.0-238'), ['staging-v0.2.0-237', 'staging-v0.2.0-238']);
+  } finally {
+    r.done();
+  }
+});
+
+// The fold: bifold/ stops being a submodule and becomes a tree of this repository at the same paths. Its wiring is the
+// only thing that changes here; every path rule above is unchanged, and the recorded cut ranges (companion §2.6 of
+// docs/plans/single-codebase-plan) grade byte-identically because a gitlink at both ends still takes the pin walk.
+function foldedRepos() {
+  const top = mkdtempSync(path.join(tmpdir(), 'tier-fold-'));
+  const wallet = path.join(top, 'wallet'), bifold = path.join(top, 'bifold');
+  const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  // `add -A` would drop a gitlink whose directory is not on disk, so the gitlink-era commit stages by name.
+  const commit = (dir, m, all = true) => { if (all) git(dir, 'add', '-A'); git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
+  const put = (dir, f, body) => { mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); writeFileSync(path.join(dir, f), body); };
+  for (const d of [wallet, bifold]) { mkdirSync(d); git(d, 'init', '-q'); }
+  put(bifold, 'packages/core/src/x.ts', 'a\n');
+  const b1 = commit(bifold, 'b1');
+  put(wallet, 'app/src/a.ts', 'a\n');
+  git(wallet, 'add', 'app/src/a.ts');
+  git(wallet, 'update-index', '--add', '--cacheinfo', `160000,${b1},bifold`);
+  const gitlink = commit(wallet, 'gitlink era', false);
+  // The fold commit: the gitlink goes, the same files come in as a tree under bifold/.
+  git(wallet, 'rm', '-q', '--cached', 'bifold');
+  put(wallet, 'bifold/packages/core/src/x.ts', 'a\n');
+  const fold = commit(wallet, 'fold');
+  put(wallet, 'bifold/packages/core/src/screens/Home.tsx', 'screen\n');
+  const screen = commit(wallet, 'a screen after the fold');
+  put(wallet, 'bifold/packages/core/src/modules/trust-tasks/module/VtiMediatorTransport.ts', 'line\nawait store.deleteById(id)\n');
+  const vti = commit(wallet, 'vti after the fold');
+  return { wallet, bifold, gitlink, fold, screen, vti, done: () => rmSync(top, { recursive: true, force: true }) };
+}
+
+test('fold: a tree at both ends reads the wallet diff alone, without a bifold clone or BIFOLD_GIT', () => {
+  const r = foldedRepos();
+  const noClone = path.join(r.wallet, 'no-such-clone');
+  try {
+    const files = changedFiles(`${r.fold}..${r.screen}`, { repo: r.wallet, bifold: noClone });
+    assert.deepEqual(files, ['bifold/packages/core/src/screens/Home.tsx']);
+    assert.equal(verdict(files, { added: addedLines(`${r.fold}..${r.screen}`, { repo: r.wallet, bifold: noClone }) }).tier, 'ota');
+    // The content flags read the bifold/ lines from the same diff: the VTI line is strict, the storage delete holds.
+    const more = changedFiles(`${r.screen}..${r.vti}`, { repo: r.wallet, bifold: noClone });
+    const added = addedLines(`${r.screen}..${r.vti}`, { repo: r.wallet, bifold: noClone });
+    assert.ok(added['bifold/packages/core/src/modules/trust-tasks/module/VtiMediatorTransport.ts'].some((l) => /deleteById/.test(l)));
+    const v = verdict(more, { added });
+    assert.equal(v.tier, 'store');
+    assert.deepEqual(v.held, ['deletes stored records']);
+    assert.deepEqual(v.flags.map((f) => f.flag).sort(), ['VTI protocol line', 'deletes stored records']);
+  } finally {
+    r.done();
+  }
+});
+
+test('fold: a range that crosses the fold grades store, with the crossing named', () => {
+  const r = foldedRepos();
+  try {
+    const files = changedFiles(`${r.gitlink}..${r.screen}`, { repo: r.wallet, bifold: r.bifold });
+    assert.ok(files.includes('bifold/packages/core/src/screens/Home.tsx'));
+    assert.ok(!files.includes('bifold'));
+    assert.ok(files.some((f) => /^bifold@.*crosses the fold/.test(f)));
+    assert.equal(classify(files).tier, 'store');
+    // The pin's diff is not read across the fold (one end has no pin), and the wallet side still gives its lines.
+    const added = addedLines(`${r.gitlink}..${r.screen}`, { repo: r.wallet, bifold: r.bifold });
+    assert.ok(Object.keys(added).includes('bifold/packages/core/src/screens/Home.tsx'));
   } finally {
     r.done();
   }

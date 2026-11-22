@@ -358,10 +358,7 @@ corepack enable >/dev/null 2>&1 || true
 corepack prepare "yarn@${YARN_VERSION}" --activate >/dev/null 2>&1 || true
 ok "yarn $(yarn --version 2>/dev/null || echo '(unavailable)')"
 
-if [ ! -d bifold/packages ] || [ -z "$(ls -A bifold 2>/dev/null)" ]; then
-  step "Fetching the bifold submodule"
-  git submodule update --init --recursive
-fi
+# bifold/ is part of this repository since the fold (no submodule to fetch): the checkout already has it.
 
 step "Installing dependencies (a few minutes the first time)"
 yarn install

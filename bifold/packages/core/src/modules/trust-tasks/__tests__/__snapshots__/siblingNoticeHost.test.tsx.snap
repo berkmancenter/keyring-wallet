@@ -1,0 +1,397 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`how it looks one line, and opened: closed 1`] = `
+<View
+  testID="screen-0"
+>
+  <View
+    accessibilityLiveRegion="polite"
+    style={
+      Object {
+        "backgroundColor": "#313132",
+        "borderBottomColor": "#D3D3D3",
+        "borderBottomWidth": 0.5,
+      }
+    }
+  >
+    <View
+      accessibilityLabel="Devices.SiblingOne"
+      accessibilityRole="button"
+      accessibilityState={
+        Object {
+          "busy": undefined,
+          "checked": undefined,
+          "disabled": undefined,
+          "expanded": false,
+          "selected": undefined,
+        }
+      }
+      accessibilityValue={
+        Object {
+          "max": undefined,
+          "min": undefined,
+          "now": undefined,
+          "text": undefined,
+        }
+      }
+      accessible={true}
+      collapsable={false}
+      focusable={true}
+      onBlur={[Function]}
+      onClick={[Function]}
+      onFocus={[Function]}
+      onResponderGrant={[Function]}
+      onResponderMove={[Function]}
+      onResponderRelease={[Function]}
+      onResponderTerminate={[Function]}
+      onResponderTerminationRequest={[Function]}
+      onStartShouldSetResponder={[Function]}
+      style={
+        Object {
+          "alignItems": "center",
+          "flexDirection": "row",
+          "gap": 10,
+          "minHeight": 44,
+          "paddingHorizontal": 16,
+        }
+      }
+      testID="com.ariesbifold:id/SiblingNotice"
+    >
+      <Text
+        allowFontScaling={false}
+        selectable={false}
+        style={
+          Array [
+            Object {
+              "color": "#0099FF",
+              "fontSize": 20,
+            },
+            undefined,
+            Object {
+              "fontFamily": "Material Icons",
+              "fontStyle": "normal",
+              "fontWeight": "normal",
+            },
+            Object {},
+          ]
+        }
+      >
+        
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        numberOfLines={1}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#FFFFFF",
+              "flex": 1,
+              "fontSize": 16,
+            },
+          ]
+        }
+      >
+        Devices.SiblingStripOne
+      </Text>
+      <Text
+        allowFontScaling={false}
+        selectable={false}
+        style={
+          Array [
+            Object {
+              "color": "#0099FF",
+              "fontSize": 22,
+            },
+            undefined,
+            Object {
+              "fontFamily": "Material Icons",
+              "fontStyle": "normal",
+              "fontWeight": "normal",
+            },
+            Object {},
+          ]
+        }
+      >
+        
+      </Text>
+    </View>
+  </View>
+</View>
+`;
+
+exports[`how it looks one line, and opened: open 1`] = `
+<View
+  testID="screen-0"
+>
+  <View
+    accessibilityLiveRegion="polite"
+    style={
+      Object {
+        "backgroundColor": "#313132",
+        "borderBottomColor": "#D3D3D3",
+        "borderBottomWidth": 0.5,
+      }
+    }
+  >
+    <View
+      accessibilityLabel="Devices.SiblingOne"
+      accessibilityRole="button"
+      accessibilityState={
+        Object {
+          "busy": undefined,
+          "checked": undefined,
+          "disabled": undefined,
+          "expanded": true,
+          "selected": undefined,
+        }
+      }
+      accessibilityValue={
+        Object {
+          "max": undefined,
+          "min": undefined,
+          "now": undefined,
+          "text": undefined,
+        }
+      }
+      accessible={true}
+      collapsable={false}
+      focusable={true}
+      onBlur={[Function]}
+      onClick={[Function]}
+      onFocus={[Function]}
+      onResponderGrant={[Function]}
+      onResponderMove={[Function]}
+      onResponderRelease={[Function]}
+      onResponderTerminate={[Function]}
+      onResponderTerminationRequest={[Function]}
+      onStartShouldSetResponder={[Function]}
+      style={
+        Object {
+          "alignItems": "center",
+          "flexDirection": "row",
+          "gap": 10,
+          "minHeight": 44,
+          "paddingHorizontal": 16,
+        }
+      }
+      testID="com.ariesbifold:id/SiblingNotice"
+    >
+      <Text
+        allowFontScaling={false}
+        selectable={false}
+        style={
+          Array [
+            Object {
+              "color": "#0099FF",
+              "fontSize": 20,
+            },
+            undefined,
+            Object {
+              "fontFamily": "Material Icons",
+              "fontStyle": "normal",
+              "fontWeight": "normal",
+            },
+            Object {},
+          ]
+        }
+      >
+        
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#FFFFFF",
+              "flex": 1,
+              "fontSize": 16,
+            },
+          ]
+        }
+      >
+        Devices.SiblingStripOne
+      </Text>
+      <Text
+        allowFontScaling={false}
+        selectable={false}
+        style={
+          Array [
+            Object {
+              "color": "#0099FF",
+              "fontSize": 22,
+            },
+            undefined,
+            Object {
+              "fontFamily": "Material Icons",
+              "fontStyle": "normal",
+              "fontWeight": "normal",
+            },
+            Object {},
+          ]
+        }
+      >
+        
+      </Text>
+    </View>
+    <Text
+      maxFontSizeMultiplier={2}
+      style={
+        Array [
+          Object {
+            "color": "#FFFFFF",
+            "fontSize": 18,
+            "fontWeight": "normal",
+          },
+          Object {
+            "color": "#FFFFFF",
+            "fontSize": 16,
+            "paddingLeft": 46,
+            "paddingRight": 16,
+          },
+        ]
+      }
+    >
+      Devices.SiblingStripWhy
+    </Text>
+    <View
+      style={
+        Object {
+          "flexDirection": "row",
+          "gap": 8,
+          "paddingBottom": 4,
+          "paddingLeft": 38,
+        }
+      }
+    >
+      <View
+        accessibilityRole="button"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onBlur={[Function]}
+        onClick={[Function]}
+        onFocus={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Object {
+            "justifyContent": "center",
+            "minHeight": 44,
+            "paddingHorizontal": 8,
+          }
+        }
+        testID="com.ariesbifold:id/SiblingNoticeOpen"
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "bold",
+              },
+              Object {
+                "color": "#42803E",
+                "fontSize": 16,
+              },
+            ]
+          }
+        >
+          Devices.SiblingOpen
+        </Text>
+      </View>
+      <View
+        accessibilityRole="button"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onBlur={[Function]}
+        onClick={[Function]}
+        onFocus={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Object {
+            "justifyContent": "center",
+            "minHeight": 44,
+            "paddingHorizontal": 8,
+          }
+        }
+        testID="com.ariesbifold:id/SiblingNoticeDismiss"
+      >
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "bold",
+              },
+              Object {
+                "color": "#42803E",
+                "fontSize": 16,
+              },
+            ]
+          }
+        >
+          Devices.SiblingDismiss
+        </Text>
+      </View>
+    </View>
+  </View>
+</View>
+`;

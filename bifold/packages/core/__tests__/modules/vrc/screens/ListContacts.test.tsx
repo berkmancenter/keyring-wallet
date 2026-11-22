@@ -1,0 +1,712 @@
+import { ClaimFormat, JsonTransformer, W3cCredentialRecord } from '@credo-ts/core'
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
+import React from 'react'
+import { Text } from 'react-native'
+import { container } from 'tsyringe'
+
+import { useNavigation as testUseNavigation } from '../../../../__mocks__/@react-navigation/native'
+import { TOKENS } from '../../../../src/container-api'
+import { MainContainer } from '../../../../src/container-impl'
+import ListContacts from '../../../../src/modules/vrc/screens/ListContacts'
+import { ContactCardProps } from '../../../../src/types/contact-card'
+import { BasicAppContext, CustomBasicAppContext } from '../../../helpers/app'
+import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
+import { buildJCardFromFormInput, RCardFormInput } from '../../../../src/modules/vrc/types/rcard'
+import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../../../../src/modules/vrc/types/relationshipContext'
+import {
+  createDTGCredential,
+  createCredentialsFromSameIssuer,
+  createTestCredentialsForHolder,
+  TEST_CONTACTS,
+  generateTestDid,
+} from '../fixtures/dtg-credentials'
+import { WITNESS_VERIFIED_TAG } from '../../../../src/modules/vrc/utils/witnessCredentialUtils'
+import { testIdWithKey } from '../../../../src/utils/testable'
+
+const ALICE_PHOTO =
+  'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+
+/** A received RelationshipCard record from a contact, as stored after auto-accept */
+function createReceivedRCard(issuerDid: string, holderDid: string, form: RCardFormInput): W3cCredentialRecord {
+  const issuanceDate = new Date().toISOString()
+  return JsonTransformer.fromJSON(
+    {
+      _tags: {
+        claimFormat: ClaimFormat.LdpVc,
+        types: ['VerifiableCredential', 'RelationshipCard'],
+        issuerId: issuerDid,
+      },
+      type: 'W3cCredentialRecord',
+      id: `urn:uuid:rcard-${Math.random().toString(16).slice(2)}`,
+      createdAt: issuanceDate,
+      credential: {
+        '@context': ['https://www.w3.org/2018/credentials/v1', DTG_CONTEXT_URL, RCARD_CONTEXT_URL],
+        type: ['VerifiableCredential', 'RelationshipCard'],
+        issuer: issuerDid,
+        issuanceDate,
+        credentialSubject: { id: holderDid, card: buildJCardFromFormInput(form) },
+        proof: {
+          type: 'Ed25519Signature2018',
+          created: issuanceDate,
+          proofPurpose: 'assertionMethod',
+          verificationMethod: `${issuerDid}#key-1`,
+          jws: 'mock-jws-signature',
+        },
+      },
+    },
+    W3cCredentialRecord
+  )
+}
+
+/** A minimal VWC naming `subjectId` — same lightweight shape as
+ * witnessCredentialUtils.test.ts's own `vwcWith`, since the code under test
+ * (getWitnessCredentialsForSubject/extractWitnessInfo) only ever reads
+ * `.encoded`. */
+function createLocalityVwc(subjectId: string, localityConfirmed: boolean, verified = true): W3cCredentialRecord {
+  return {
+    id: 'credential-locality-vwc',
+    // What the ceremony paths mark a credential with once they have verified
+    // it (WITNESS_VERIFIED_TAG). The badges come from marked records only;
+    // pass verified=false for one the wallet holds but never checked.
+    getTags: () => (verified ? { [WITNESS_VERIFIED_TAG]: 'true' } : {}),
+    encoded: {
+      type: ['VerifiableCredential', 'WitnessCredential'],
+      issuer: 'did:example:witness',
+      credentialSubject: {
+        id: subjectId,
+        witnessContext: {
+          localityConfirmed,
+          localityMethod: localityConfirmed ? 'ble-challenge-response/0.1' : 'none',
+          localityReason: localityConfirmed ? undefined : 'declinedByHolder',
+        },
+      },
+    },
+  } as unknown as W3cCredentialRecord
+}
+
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+jest.mock('react-native-localize', () => {})
+jest.useFakeTimers({ legacyFakeTimers: true })
+
+// Mock the OpenID credentials hook
+jest.mock('../../../../src/modules/openid/context/OpenIDCredentialRecordProvider', () => ({
+  ...jest.requireActual('../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'),
+  useOpenIDCredentials: jest.fn(),
+}))
+
+// Mock the witness connection hook
+jest.mock('../../../../src/modules/vrc/context/WitnessConnectionProvider', () => ({
+  ...jest.requireActual('../../../../src/modules/vrc/context/WitnessConnectionProvider'),
+  useWitnessConnection: jest.fn().mockReturnValue({
+    connectedWitness: null,
+    connectToWitness: jest.fn(),
+    disconnectWitness: jest.fn(),
+    isWitnessConnected: jest.fn().mockReturnValue(false),
+    isLocalityVerified: jest.fn().mockReturnValue(false),
+    checkWitnessLocalityFresh: jest.fn().mockResolvedValue({ available: false }),
+    verifyLocality: jest.fn(),
+    setActiveSession: jest.fn(),
+    clearActiveSession: jest.fn(),
+    getState: jest.fn().mockReturnValue({}),
+    validateWitnessConnection: jest.fn().mockResolvedValue(true),
+  }),
+}))
+
+const mockUseOpenIDCredentials = useOpenIDCredentials as jest.MockedFunction<typeof useOpenIDCredentials>
+
+const navigation = testUseNavigation()
+
+describe('ListContacts Screen', () => {
+  const holderDid = generateTestDid('holder')
+
+  beforeEach(() => {
+    jest.clearAllTimers()
+    jest.clearAllMocks()
+
+    // Default mock implementation
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: [],
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+  })
+
+  test('Renders correctly with no contacts', async () => {
+    const tree = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    await waitFor(() => {
+      expect(tree.getByText('Contacts.EmptyList')).toBeTruthy()
+    })
+  })
+
+  test('does not say "No contacts yet" while the contacts are still being read', async () => {
+    const loading = mockUseOpenIDCredentials()
+    mockUseOpenIDCredentials.mockReturnValue({ ...loading, openIdState: { ...loading.openIdState, isLoading: true } })
+    const tree = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    // The control is 'Renders correctly with no contacts': the same empty list, loaded, does say it.
+    await act(async () => undefined)
+    expect(tree.queryByText('Contacts.EmptyList')).toBeNull()
+  })
+
+  test('Displays contacts from DTG credentials', async () => {
+    const credentials = createTestCredentialsForHolder(holderDid, [
+      { issuer: TEST_CONTACTS.alice.issuer },
+      { issuer: TEST_CONTACTS.bob.issuer },
+      { issuer: TEST_CONTACTS.charlie.issuer },
+    ])
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: credentials,
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { findByText } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    expect(await findByText('Bob Jones')).toBeTruthy()
+    expect(await findByText('Charlie Wilson')).toBeTruthy()
+  })
+
+  test('Groups multiple credentials from same issuer', async () => {
+    // Create 3 credentials from Alice at different times
+    const aliceCredentials = createCredentialsFromSameIssuer(
+      TEST_CONTACTS.alice.issuer,
+      holderDid,
+      3,
+      new Date('2024-01-01')
+    )
+    const bobCredential = createDTGCredential({
+      issuer: TEST_CONTACTS.bob.issuer,
+      credentialSubject: { id: holderDid },
+    })
+
+    const credentials = [...aliceCredentials, bobCredential]
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: credentials,
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { queryAllByText, findByText } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    // Bob should appear once (found first: the list has rendered by then)
+    expect(await findByText('Bob Jones')).toBeTruthy()
+
+    // Alice should appear only once despite having 3 credentials
+    const aliceElements = queryAllByText('Alice Smith')
+    expect(aliceElements).toHaveLength(1)
+  })
+
+  test('Sorts contacts alphabetically', async () => {
+    const credentials = createTestCredentialsForHolder(holderDid, [
+      { issuer: TEST_CONTACTS.charlie.issuer },
+      { issuer: TEST_CONTACTS.alice.issuer },
+      { issuer: TEST_CONTACTS.diana.issuer },
+      { issuer: TEST_CONTACTS.bob.issuer },
+    ])
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: credentials,
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { getAllByRole } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    await waitFor(() => {
+      const buttons = getAllByRole('button')
+      // Filter out witness banner button (if present) - it has "witness" in accessibility label
+      const contactButtons = buttons.filter(
+        (btn) => btn.props.accessibilityLabel && !btn.props.accessibilityLabel.toLowerCase().includes('witness')
+      )
+      // Check that contacts are in alphabetical order
+      expect(contactButtons[0].props.accessibilityLabel).toContain('Alice Smith')
+      expect(contactButtons[1].props.accessibilityLabel).toContain('Bob Jones')
+      expect(contactButtons[2].props.accessibilityLabel).toContain('Charlie Wilson')
+      expect(contactButtons[3].props.accessibilityLabel).toContain('Diana Martinez')
+    })
+  })
+
+  test('Pressing on a contact navigates to contact details screen', async () => {
+    const credentials = createTestCredentialsForHolder(holderDid, [{ issuer: TEST_CONTACTS.alice.issuer }])
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: credentials,
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { findByText } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    const contactElement = await findByText('Alice Smith')
+    fireEvent(contactElement, 'press')
+
+    expect(navigation.navigate).toBeCalledWith('Contact Details', {
+      contact: expect.objectContaining({
+        issuer: expect.objectContaining({
+          id: TEST_CONTACTS.alice.issuer.id,
+          name: TEST_CONTACTS.alice.issuer.name,
+          email: TEST_CONTACTS.alice.issuer.email,
+          organization: TEST_CONTACTS.alice.issuer.organization,
+        }),
+      }),
+    })
+  })
+
+  test('Displays unknown issuer format when name is missing', async () => {
+    const unknownIssuerDid = generateTestDid('unknown')
+    const credential = createDTGCredential({
+      issuer: {
+        id: unknownIssuerDid,
+        name: '', // Empty name
+      },
+      credentialSubject: { id: holderDid },
+    })
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: [credential],
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { findByText, queryByText } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    // An unnamed contact is said to be one — never a piece of its DID (#12).
+    expect(await findByText('ContactDetails.UnnamedContact')).toBeTruthy()
+    expect(queryByText(new RegExp(unknownIssuerDid.slice(-8)))).toBeNull()
+  })
+
+  test('Filters out non-DTG credentials', async () => {
+    const dtgCredential = createDTGCredential({
+      issuer: TEST_CONTACTS.alice.issuer,
+      credentialSubject: { id: holderDid },
+    })
+
+    // Create a non-DTG credential (without DTGCredential in type)
+    const nonDtgCredential = createDTGCredential({
+      issuer: TEST_CONTACTS.bob.issuer,
+      credentialSubject: { id: holderDid },
+    })
+    // Modify the type array to remove DTGCredential
+    ;(nonDtgCredential.encoded as any).type = ['VerifiableCredential']
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: [dtgCredential, nonDtgCredential],
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { queryByText, findByText } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    // Alice (DTG) should appear
+    expect(await findByText('Alice Smith')).toBeTruthy()
+
+    // Bob (non-DTG) should not appear
+    expect(queryByText('Bob Jones')).toBeNull()
+  })
+
+  test('Uses most recent credential data for contact display', async () => {
+    // Create credentials with different dates
+    const olderCredential = createDTGCredential({
+      issuer: {
+        id: TEST_CONTACTS.alice.issuer.id,
+        name: 'Old Name',
+      },
+      credentialSubject: { id: holderDid },
+      validFrom: '2024-01-01T00:00:00Z',
+    })
+
+    const newerCredential = createDTGCredential({
+      issuer: {
+        id: TEST_CONTACTS.alice.issuer.id,
+        name: 'Alice Smith', // Updated name
+      },
+      credentialSubject: { id: holderDid },
+      validFrom: '2024-06-01T00:00:00Z',
+    })
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: [olderCredential, newerCredential],
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { findByText, queryByText } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    // Should display the newer name
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    expect(queryByText('Old Name')).toBeNull()
+  })
+
+  test('Displays a contact photo when their RCard carries one', async () => {
+    const dtgCredential = createDTGCredential({
+      issuer: TEST_CONTACTS.alice.issuer,
+      credentialSubject: { id: holderDid },
+    })
+    const rcard = createReceivedRCard(TEST_CONTACTS.alice.issuer.id, holderDid, {
+      firstName: 'Alice',
+      lastName: 'Smith',
+      email: TEST_CONTACTS.alice.issuer.email,
+      organization: TEST_CONTACTS.alice.issuer.organization,
+      photo: ALICE_PHOTO,
+    })
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: [dtgCredential, rcard],
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { findByText, findByTestId } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    const image = await findByTestId(testIdWithKey('ContactAvatarImage'))
+    expect(image.props.source).toEqual({ uri: ALICE_PHOTO })
+  })
+
+  test('Draws each contact with the registered contact card', async () => {
+    // An exchanged R-Card is the app's most skinnable credential, so how one
+    // is drawn is injected rather than hard-coded — this is the seam a demo
+    // profile takes over to render the same R-Card as a trading card.
+    const credentials = createTestCredentialsForHolder(holderDid, [{ issuer: TEST_CONTACTS.alice.issuer }])
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: credentials,
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const CustomCard: React.FC<ContactCardProps> = ({ contact }) => <Text>{`Custom: ${contact.issuer.name}`}</Text>
+    const customContainer = new MainContainer(container.createChildContainer()).init()
+    customContainer.container.registerInstance(TOKENS.COMPONENT_CONTACT_CARD, CustomCard)
+
+    const { findByText, queryByText } = render(
+      <CustomBasicAppContext container={customContainer}>
+        <ListContacts />
+      </CustomBasicAppContext>
+    )
+
+    expect(await findByText('Custom: Alice Smith')).toBeTruthy()
+    // The default row is gone, not merely joined by the override.
+    expect(queryByText('Alice Smith')).toBeNull()
+  })
+
+  test('Falls back to the generic icon when the contact has no photo', async () => {
+    const credentials = createTestCredentialsForHolder(holderDid, [{ issuer: TEST_CONTACTS.alice.issuer }])
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: credentials,
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { findByText, queryByTestId } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    expect(queryByTestId(testIdWithKey('ContactAvatarImage'))).toBeNull()
+  })
+
+  describe('locality-confirmed badge', () => {
+    it('shows the badge for a contact with a confirmed-locality VWC', async () => {
+      const aliceCredential = createDTGCredential({
+        issuer: TEST_CONTACTS.alice.issuer,
+        credentialSubject: { id: holderDid },
+      })
+      const vwc = createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true)
+
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: {
+          w3cCredentialRecords: [aliceCredential, vwc],
+          sdJwtVcRecords: [],
+          mdocVcRecords: [],
+          openIDCredentialRecords: [],
+          isLoading: false,
+        },
+        getW3CCredentialById: jest.fn(),
+        getSdJwtCredentialById: jest.fn(),
+        getMdocCredentialById: jest.fn(),
+        storeCredential: jest.fn(),
+        removeCredential: jest.fn(),
+        resolveBundleForCredential: jest.fn(),
+      } as any)
+
+      const { findByText, findByTestId } = render(
+        <BasicAppContext>
+          <ListContacts />
+        </BasicAppContext>
+      )
+
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
+    })
+
+    it('does not show the badge when the VWC declined locality', async () => {
+      const aliceCredential = createDTGCredential({
+        issuer: TEST_CONTACTS.alice.issuer,
+        credentialSubject: { id: holderDid },
+      })
+      const vwc = createLocalityVwc(TEST_CONTACTS.alice.issuer.id, false)
+
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: {
+          w3cCredentialRecords: [aliceCredential, vwc],
+          sdJwtVcRecords: [],
+          mdocVcRecords: [],
+          openIDCredentialRecords: [],
+          isLoading: false,
+        },
+        getW3CCredentialById: jest.fn(),
+        getSdJwtCredentialById: jest.fn(),
+        getMdocCredentialById: jest.fn(),
+        storeCredential: jest.fn(),
+        removeCredential: jest.fn(),
+        resolveBundleForCredential: jest.fn(),
+      } as any)
+
+      const { findByText, queryByTestId } = render(
+        <BasicAppContext>
+          <ListContacts />
+        </BasicAppContext>
+      )
+
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+    })
+
+    it('does not show the badge for a contact with no witness credentials at all', async () => {
+      const aliceCredential = createDTGCredential({
+        issuer: TEST_CONTACTS.alice.issuer,
+        credentialSubject: { id: holderDid },
+      })
+
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: {
+          w3cCredentialRecords: [aliceCredential],
+          sdJwtVcRecords: [],
+          mdocVcRecords: [],
+          openIDCredentialRecords: [],
+          isLoading: false,
+        },
+        getW3CCredentialById: jest.fn(),
+        getSdJwtCredentialById: jest.fn(),
+        getMdocCredentialById: jest.fn(),
+        storeCredential: jest.fn(),
+        removeCredential: jest.fn(),
+        resolveBundleForCredential: jest.fn(),
+      } as any)
+
+      const { findByText, queryByTestId } = render(
+        <BasicAppContext>
+          <ListContacts />
+        </BasicAppContext>
+      )
+
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+    })
+  })
+
+  describe('only a witness credential this device verified earns a badge', () => {
+    const renderWith = (vwc: W3cCredentialRecord) => {
+      const aliceCredential = createDTGCredential({
+        issuer: TEST_CONTACTS.alice.issuer,
+        credentialSubject: { id: holderDid },
+      })
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: {
+          w3cCredentialRecords: [aliceCredential, vwc],
+          sdJwtVcRecords: [],
+          mdocVcRecords: [],
+          openIDCredentialRecords: [],
+          isLoading: false,
+        },
+        getW3CCredentialById: jest.fn(),
+        getSdJwtCredentialById: jest.fn(),
+        getMdocCredentialById: jest.fn(),
+        storeCredential: jest.fn(),
+        removeCredential: jest.fn(),
+        resolveBundleForCredential: jest.fn(),
+      } as any)
+      return render(
+        <BasicAppContext>
+          <ListContacts />
+        </BasicAppContext>
+      )
+    }
+
+    it('shows neither badge for a witness credential the wallet holds but never verified, though it claims locality', async () => {
+      // A peer-supplied record, typed exactly right and saying locality was confirmed, but without the
+      // ceremony's verified mark: the contact is listed, unbadged.
+      const { findByText, queryByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true, false))
+
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId('WitnessVerifiedBadge')).toBeNull()
+      expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+    })
+
+    it('shows both badges for the same credential once the ceremony verified it', async () => {
+      const { findByText, findByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true, true))
+
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(await findByTestId('WitnessVerifiedBadge')).toBeTruthy()
+      expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
+    })
+  })
+})

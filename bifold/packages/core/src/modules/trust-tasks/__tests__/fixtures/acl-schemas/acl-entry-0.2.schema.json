@@ -1,0 +1,409 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/acl/_shared/0.2/acl-entry",
+  "title": "AclEntry 0.2 — shared definitions for the acl/* spec family",
+  "description": "Canonical AclEntry 0.2 and its component $defs, referenced by the 0.2 acl/* specifications and by any family that reuses the capability shape (vtc/roles). Not itself a Trust Task specification (the `_shared` folder is skipped by the registry build and the codegen). See CONVENTIONS.md beside this file for the rules a consumer applies across tasks.\n\nWhat 0.2 changes over 0.1: authority is STATED, never inferred from a shape. 0.1's `scopes` — a list whose emptiness meant `everywhere` for one role and `nowhere` for another, depending on a maintainer convention the wire could not carry — is replaced by `act`, an explicit act scope that is one of `all`, `none`, or a non-empty list of contexts. 0.1's `approve {all, scopes}` is replaced by the same explicit three-shape scope. 0.1's `allowedKeys` — where absent meant every key and empty meant none — is replaced by an explicit, REQUIRED `keys` scope. Capability-level authority is new and equally explicit: `capabilities` is REQUIRED and states `ceiling`, `none` or a listed set; `approveCapabilities` states the same three or is absent, which means none. No member's absence, and no collection's emptiness, ever confers authority. Delegation provenance (`delegatedBy`) is new. CONVENTIONS.md §8 documents how a maintainer maps a 0.1 entry onto 0.2.\n\nRole and capability identifiers are OPAQUE to this family: the acl/* tasks are used by maintainers with different vocabularies (a VTA's context administrators, a VTC's administrative roles). A maintainer publishes its own role set and capability registry; the vtc/roles family is one such vocabulary.\n\nTimestamp invariants (SHOULD-level, prose — not expressible in JSON Schema): when both `createdAt` and `updatedAt` are present, `updatedAt >= createdAt`; when both `createdAt` and `expiresAt` are present, `expiresAt > createdAt`. Consumers SHOULD reject documents that violate either.",
+  "$defs": {
+    "AclEntry": {
+      "title": "AclEntry",
+      "description": "One access-control entry: who the grant is for (`subject`), the ceiling it is held under (`role`), where the subject may act (`act`) and approve (`approve`), and which capabilities it may exercise (`capabilities`) and approve (`approveCapabilities`).\n\nThe act axis and the approve axis are independent and a consumer MUST resolve them separately: `act` + `capabilities` (+ `keys`) answer \"may this subject do X\"; `approve` + `approveCapabilities` answer \"may this subject ratify someone else doing X\". Neither implies the other. An entry with `act: {scope: none}` and an approve scope other than none is a least-privilege approver — able to satisfy an approval and unable to initiate any change.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject",
+        "role",
+        "act",
+        "keys",
+        "capabilities"
+      ],
+      "properties": {
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "description": "VID of the party in the ACL. Compared by exact string equality (SPEC.md §4.8); producers SHOULD emit canonical form."
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque role identifier interpreted by the ACL maintainer. A role is a CEILING, never a grant: it bounds the capabilities the entry may hold and never adds to them. A consumer that does not recognise the role MUST treat the entry as conferring no authority and MUST NOT fall back to a default role. Act scope and role are independent members; a consumer MUST NOT compute either from the other."
+        },
+        "act": {
+          "$ref": "#/$defs/AuthorityScope",
+          "description": "REQUIRED explicit act scope: where this subject may make a change itself. Exactly one of `{\"scope\": \"all\"}` (unrestricted — every context the maintainer has), `{\"scope\": \"none\"}` (may act nowhere), or `{\"scope\": \"contexts\", \"contexts\": [...]}` with at least one context path (the named contexts and, where the maintainer's contexts are hierarchical, their descendants). There is no default and no implicit form: an entry without `act`, or with an empty `contexts` list, is malformed and MUST be refused, never read as `all` and never read as `none`. A maintainer that has no contexts (for example a community node that narrows authority with resource qualifiers instead) states `all` or `none` only. Replaces 0.1's `scopes`."
+        },
+        "approve": {
+          "$ref": "#/$defs/AuthorityScope",
+          "description": "OPTIONAL approve scope: where this subject may ratify a change made by someone else (a step-up ratification, a consent decision, an N-of-M approval). Same three shapes as `act`, resolved independently of it. ABSENT MEANS NONE — the subject may ratify nothing — so a consumer that has not implemented the member confers less than the producer intended, never more. A producer SHOULD state `{\"scope\": \"none\"}` explicitly rather than rely on omission. A subject MUST NOT confer approve authority wider than the approve authority it holds itself (see acl/grant `approveWiderThanGranter`). Replaces 0.1's `approve {all, scopes}`."
+        },
+        "capabilities": {
+          "$ref": "#/$defs/CapabilityScope",
+          "description": "REQUIRED explicit capability scope: which capabilities this entry holds. Exactly one of `{\"scope\": \"ceiling\"}` (the role's full ceiling, unnarrowed), `{\"scope\": \"none\"}` (no capabilities), or `{\"scope\": \"listed\", \"grants\": [...]}` with at least one CapabilityGrant. For `listed`, the EFFECTIVE set is (the role's ceiling ∩ the non-additive grants) ∪ the additive grants; it can only narrow the ceiling, except through an explicit additive grant, which only an unrestricted granter may make. There is no implicit form: an entry without `capabilities`, or with an empty `grants` list, is malformed and MUST be refused. A non-additive grant outside the role's ceiling is refused when written, never accepted with the capability silently dropped; a capability the consumer does not recognise is never treated as granted. Producers SHOULD NOT list the same (capability, resource) pair twice; a consumer MAY refuse a list that does."
+        },
+        "approveCapabilities": {
+          "$ref": "#/$defs/ApproveCapabilityScope",
+          "description": "OPTIONAL explicit approvable-capability scope: which capabilities this subject may APPROVE an action needing — independent of what it may do itself, so an approver can ratify a capability it does not hold (the least-privilege approver). One of `{\"scope\": \"ceiling\"}` (the role's full approve ceiling; at a maintainer whose roles define no capability-level approve ceiling, any action within `approve`), `{\"scope\": \"none\"}`, or `{\"scope\": \"listed\", \"grants\": [...]}` with at least one CapabilityRef (intersected with the role's approve ceiling where one is defined). ABSENT MEANS NONE: the subject may approve no capability, because absence derives no authority. Bounded by `approve`: where `approve` is absent or `{\"scope\": \"none\"}` this member confers nothing whatever it states. A subject MUST NOT confer approvable capabilities it cannot itself approve."
+        },
+        "delegatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "description": "VID of the granter whose authority this entry was delegated from and is bounded by. The entry MUST NOT hold authority the granter did not hold when it was written, and MUST NOT retain authority the granter has since lost, so a maintainer re-evaluates it when the granter's own entry narrows or is removed. Distinct from `createdBy`, which records who wrote the entry: the two differ where an entry is written on a granter's behalf (for example after an N-of-M approval, or by an offline operator). Set by the maintainer from the granter it authorized; absent on an entry that derives from no granter's authority (the first administrator, an operator-written recovery entry)."
+        },
+        "keys": {
+          "$ref": "#/$defs/KeyScope",
+          "description": "REQUIRED explicit key scope: which keys this subject may invoke the maintainer's signing oracle on. Exactly one of `{\"scope\": \"all\"}` (every key the entry's act scope reaches), `{\"scope\": \"none\"}` (no keys), or `{\"scope\": \"listed\", \"keys\": [...]}` with at least one key identifier. INTERSECTS WITH `act` — it can only narrow, never widen: a listed key that lies outside the entry's act scope remains unreachable, exactly as if it were not listed. There is no implicit form: an entry without `keys`, or with an empty `keys` list, is malformed and MUST be refused. A maintainer that operates no signing oracle states `{\"scope\": \"none\"}`. Replaces 0.1's `allowedKeys`, whose absence meant every key."
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Optional human-readable label. Confers nothing."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "VID of the party that originally wrote this entry."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "VID of the party that last modified this entry."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional time after which the entry confers no authority. Evaluated at every authorization decision, not only when a session is established."
+        },
+        "stepUp": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Per-entry authentication step-up configuration, consumed by the ACL maintainer when it gates an operation behind a step-up (see auth/step-up/policy). ADDITIVE-ONLY: a per-entry setting MAY raise the assurance required of this subject above the maintainer's system-wide floor, but MUST NOT lower it. The maintainer resolves the effective requirement as the strictest of (system floor, this entry). Carried forward from 0.1 unchanged.",
+          "properties": {
+            "approver": {
+              "type": "string",
+              "description": "VID authorized to ratify step-up for this subject — the `recipient` the maintainer addresses an auth/step-up/approve-request to (e.g. the holder's mobile authenticator or browser companion). Absent → the subject is its own approver (mode `self`) when it holds a usable authenticator; if neither an `approver` nor a self authenticator exists, no step-up method is available for this subject and the maintainer's fail-closed rule applies."
+            },
+            "require": {
+              "type": "string",
+              "enum": [
+                "self",
+                "delegated"
+              ],
+              "description": "Minimum step-up mode this subject MUST satisfy for gated operations, raising the system floor. `self` = the subject re-authenticates its own session; `delegated` = a separate `approver` MUST ratify. Omitted → the system floor applies unchanged. A value weaker than the resolved floor is ignored (additive-only)."
+            }
+          }
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1. Reverse-DNS-namespaced; consumers MUST ignore unrecognized namespaces. An extension member MUST NOT be interpreted as conferring authority."
+        }
+      }
+    },
+    "AuthorityScope": {
+      "title": "AuthorityScope",
+      "description": "An explicit authority scope — used for both the act scope and the approve scope of an entry. Exactly one of three shapes, discriminated by `scope`: `all`, `none`, or `contexts` with a NON-EMPTY list. The empty list is not a fourth shape: it is invalid, so a serializer that drops or empties the list produces a document that fails validation rather than one that silently means something else.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AuthorityScopeAll"
+        },
+        {
+          "$ref": "#/$defs/AuthorityScopeNone"
+        },
+        {
+          "$ref": "#/$defs/AuthorityScopeContexts"
+        }
+      ]
+    },
+    "AuthorityScopeAll": {
+      "title": "AuthorityScopeAll",
+      "description": "Unrestricted: every context the maintainer holds, present and future. On the act axis this is a super-administrator (or, at a maintainer without contexts, an entry whose authority is not narrowed by location).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "const": "all"
+        }
+      }
+    },
+    "AuthorityScopeNone": {
+      "title": "AuthorityScopeNone",
+      "description": "No authority on this axis. Stated, not implied: `none` is how an entry says it may not act (a least-privilege approver) or may not approve.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "const": "none"
+        }
+      }
+    },
+    "AuthorityScopeContexts": {
+      "title": "AuthorityScopeContexts",
+      "description": "The named contexts and, where the maintainer's contexts are hierarchical, every descendant of them — and nowhere else. `contexts` MUST carry at least one path.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "contexts"
+      ],
+      "properties": {
+        "scope": {
+          "const": "contexts"
+        },
+        "contexts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/ContextPath"
+          },
+          "description": "Non-empty set of context paths. An empty array is invalid (it is neither `all` nor `none`)."
+        }
+      }
+    },
+    "ContextPath": {
+      "title": "ContextPath",
+      "description": "Opaque identifier of one of the maintainer's contexts, compared by the maintainer's own ancestry predicate. Its grammar is the maintainer's.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "KeyScope": {
+      "title": "KeyScope",
+      "description": "An explicit key scope. Exactly one of three shapes, discriminated by `scope`: `all`, `none`, or `listed` with a NON-EMPTY list of key identifiers. The empty list is invalid, not a fourth shape.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/KeyScopeAll"
+        },
+        {
+          "$ref": "#/$defs/KeyScopeNone"
+        },
+        {
+          "$ref": "#/$defs/KeyScopeListed"
+        }
+      ]
+    },
+    "KeyScopeAll": {
+      "title": "KeyScopeAll",
+      "description": "Every key the entry's act scope reaches.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "const": "all"
+        }
+      }
+    },
+    "KeyScopeNone": {
+      "title": "KeyScopeNone",
+      "description": "No keys.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "const": "none"
+        }
+      }
+    },
+    "KeyScopeListed": {
+      "title": "KeyScopeListed",
+      "description": "Exactly the listed keys, intersected with the entry's act scope.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "keys"
+      ],
+      "properties": {
+        "scope": {
+          "const": "listed"
+        },
+        "keys": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "description": "Non-empty set of key identifiers. An empty array is invalid (it is neither `all` nor `none`)."
+        }
+      }
+    },
+    "Capability": {
+      "title": "Capability",
+      "description": "Opaque identifier of one administrative power in the maintainer's capability registry — lowercase dot-separated segments (e.g. `keys.sign`, `vtc.roles.assign`, `git.repo.manage`). A consumer MUST NOT treat a capability it does not recognise as granted.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)*$"
+    },
+    "ResourceQualifier": {
+      "title": "ResourceQualifier",
+      "description": "Opaque qualifier naming the part of the maintainer's resources a capability applies to (e.g. `git-ns:github.com/acme`, `git-repo:github.com/acme/r#4211`, `policy:join`). Its grammar and containment rule are the maintainer's: a qualified capability covers the named resource and the resources inside it. A qualifier MUST NOT be read as widening the entry's act scope.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "CapabilityRef": {
+      "title": "CapabilityRef",
+      "description": "A capability, optionally qualified by a resource. Used where a capability is named but not granted — a role's ceiling, a role's approve ceiling, an entry's approvable capabilities. An unqualified reference covers every resource of the capability's kind.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability"
+      ],
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/Capability"
+        },
+        "resource": {
+          "$ref": "#/$defs/ResourceQualifier",
+          "description": "Optional qualifier. Absent covers every resource of the capability's kind."
+        }
+      }
+    },
+    "CapabilityGrant": {
+      "title": "CapabilityGrant",
+      "description": "A capability held by an entry, optionally qualified by a resource, optionally marked additive. A qualified grant confers nothing without a live entry for the same subject, and is bounded as delegated authority is.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability"
+      ],
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/Capability"
+        },
+        "resource": {
+          "$ref": "#/$defs/ResourceQualifier",
+          "description": "Optional qualifier. Absent covers every resource of the capability's kind."
+        },
+        "additive": {
+          "type": "boolean",
+          "description": "`true` declares an ADDITIVE grant: a capability no role implies, granted to this entry beside its role rather than through it, and therefore not intersected with the role's ceiling. Granting one requires unrestricted act authority (`act: {scope: all}`) of the granter, and an entry never acquires one by virtue of its role. Absent or `false` → an ordinary grant, intersected with the role's ceiling, and refused when written if it lies outside it. A consumer MUST refuse `additive: true` on a capability the role's ceiling already includes, so that the flag cannot be used to make an ordinary capability survive a later role change."
+        }
+      }
+    },
+    "CapabilityScope": {
+      "title": "CapabilityScope",
+      "description": "An explicit statement of the capabilities an entry holds. Exactly one of three shapes, discriminated by `scope`: `ceiling` (the role's full ceiling), `none`, or `listed` with a NON-EMPTY list of CapabilityGrant. The empty list is invalid, not a fourth shape.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CapabilityScopeCeiling"
+        },
+        {
+          "$ref": "#/$defs/CapabilityScopeNone"
+        },
+        {
+          "$ref": "#/$defs/CapabilityScopeListed"
+        }
+      ]
+    },
+    "CapabilityScopeCeiling": {
+      "title": "CapabilityScopeCeiling",
+      "description": "The role's full ceiling on this axis, unnarrowed: what the role admits, the entry holds (or, for approvable capabilities, may approve). Stated, not implied — it is the explicit spelling of \"no narrowing\".",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "const": "ceiling"
+        }
+      }
+    },
+    "CapabilityScopeNone": {
+      "title": "CapabilityScopeNone",
+      "description": "No capabilities on this axis.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "const": "none"
+        }
+      }
+    },
+    "CapabilityScopeListed": {
+      "title": "CapabilityScopeListed",
+      "description": "Exactly the listed grants: (role ceiling ∩ non-additive grants) ∪ additive grants.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "grants"
+      ],
+      "properties": {
+        "scope": {
+          "const": "listed"
+        },
+        "grants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/CapabilityGrant"
+          },
+          "description": "Non-empty list of capability grants. An empty array is invalid (it is neither `ceiling` nor `none`)."
+        }
+      }
+    },
+    "ApproveCapabilityScope": {
+      "title": "ApproveCapabilityScope",
+      "description": "An explicit statement of the capabilities a subject may approve. Exactly one of `ceiling` (the role's full approve ceiling), `none`, or `listed` with a NON-EMPTY list of CapabilityRef.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CapabilityScopeCeiling"
+        },
+        {
+          "$ref": "#/$defs/CapabilityScopeNone"
+        },
+        {
+          "$ref": "#/$defs/ApproveCapabilityScopeListed"
+        }
+      ]
+    },
+    "ApproveCapabilityScopeListed": {
+      "title": "ApproveCapabilityScopeListed",
+      "description": "Exactly the listed capabilities, intersected with the role's approve ceiling where the maintainer's roles define one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "grants"
+      ],
+      "properties": {
+        "scope": {
+          "const": "listed"
+        },
+        "grants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/CapabilityRef"
+          },
+          "description": "Non-empty list of approvable capabilities. An empty array is invalid."
+        }
+      }
+    }
+  }
+}

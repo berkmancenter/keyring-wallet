@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/pcs/vetter/show/0.1",
+  "title": "VTA PCS — Vetter — Show — payload",
+  "description": "A vetter's client reads back its VTA's vetter engine for a community: identifier, enrolled labels, token counts and draws in flight — never its key, credentials or tokens.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contextId",
+    "community"
+  ],
+  "properties": {
+    "contextId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The context the engine belongs to. Its key is derived from this context's base."
+    },
+    "community": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The community's DID: the helper whose parameters the engine runs under."
+    },
+    "ext": {
+      "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA PCS — Vetter — Show — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vetter"
+      ],
+      "properties": {
+        "vetter": {
+          "$ref": "../../../../_shared/0.4/pcs-engine.schema.json#/$defs/VetterSummary"
+        },
+        "ext": {
+          "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

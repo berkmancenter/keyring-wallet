@@ -1,0 +1,190 @@
+import {
+  OpenId4VciCredentialIssuerMetadataDisplay,
+  OpenId4VciDpopRequestOptions,
+  OpenId4VpResolvedAuthorizationRequest,
+} from '@credo-ts/openid4vc'
+import { CredentialMetadata } from './display'
+import { ClaimFormat } from '@credo-ts/core'
+
+export type CredentialForDisplayId = `w3c-credential-${string}` | `sd-jwt-vc-${string}` | `mdoc-${string}`
+export interface OpenId4VcCredentialMetadata {
+  credential: {
+    display?: CredentialDisplay[]
+    order?: string[]
+    credential_subject?: CredentialSubjectRecord
+  }
+  issuer: {
+    display?: OpenId4VciCredentialIssuerMetadataDisplay[]
+    id: string
+  }
+}
+
+export type W3cIssuerJson = {
+  id: string
+}
+
+export type W3cCredentialSubjectJson = {
+  id?: string
+  [key: string]: unknown
+}
+
+export type W3cCredentialJson = {
+  type: Array<string>
+  issuer: W3cIssuerJson
+  /** VCDM 1.1; a VCDM 2.0 credential has `validFrom` instead. */
+  issuanceDate?: string
+  expiryDate?: string
+  /** VCDM 2.0 */
+  validFrom?: string
+  /** VCDM 2.0 */
+  validUntil?: string
+  credentialSubject: W3cCredentialSubjectJson | W3cCredentialSubjectJson[]
+}
+
+export type JffW3cCredentialJson = W3cCredentialJson & {
+  name?: string
+  description?: string
+  credentialBranding?: {
+    backgroundColor?: string
+  }
+
+  issuer:
+    | string
+    | (W3cIssuerJson & {
+        name?: string
+        iconUrl?: string
+        logoUrl?: string
+        image?: string | { id?: string; type?: 'Image' }
+      })
+}
+
+export interface DisplayImage {
+  uri?: string
+  altText?: string
+}
+
+export interface CredentialDisplay {
+  name: string
+  issuer: CredentialIssuerDisplay
+  locale?: string
+  description?: string
+  textColor?: string
+  backgroundColor?: string
+  backgroundImage?: DisplayImage
+  logo?: DisplayImage
+  primary_overlay_attribute?: string
+}
+
+export interface CredentialIssuerDisplay {
+  name: string
+  locale?: string
+  logo?: DisplayImage
+  domain?: string
+}
+
+export interface W3cCredentialDisplay {
+  id: string
+  createdAt: Date
+  display: CredentialDisplay
+  credential?: W3cCredentialJson
+  attributes: W3cCredentialSubjectJson
+  metadata: CredentialMetadata
+  claimFormat: ClaimFormat
+  validUntil: Date | undefined
+  validFrom: Date | undefined
+  credentialSubject: CredentialSubjectRecord | undefined
+  attributeOrder?: string[]
+}
+
+export interface OpenId4VPRequestRecord extends OpenId4VpResolvedAuthorizationRequest {
+  verifierHostName: string | undefined
+  createdAt: string | Date
+  type: 'OpenId4VPRequestRecord'
+}
+
+export type FormattedSelectedCredentialEntry = {
+  id: string
+  credentialName: string
+  issuerName?: string
+  requestedAttributes?: string[]
+  metadata?: CredentialMetadata
+  backgroundColor?: string
+  backgroundImage?: DisplayImage
+  textColor?: string
+  claimFormat: ClaimFormat | 'AnonCreds'
+}
+
+export interface FormattedSubmissionEntry {
+  /** can be either AnonCreds groupName, PEX inputDescriptorId, or DCQL credential query id */
+  inputDescriptorId: string
+  isSatisfied: boolean
+  name: string
+  purpose?: string
+  description?: string
+
+  credentials: Array<FormattedSelectedCredentialEntry>
+}
+
+export interface FormattedSubmission {
+  name: string
+  purpose?: string
+  areAllSatisfied: boolean
+  entries: FormattedSubmissionEntry[]
+}
+
+interface DisplayInfo {
+  name: string
+  locale?: string
+}
+
+export type CredentialSubjectRecord = Record<string, { display: DisplayInfo[] }>
+
+export enum OpenIDCredentialType {
+  W3cCredential,
+  SdJwtVc,
+  Mdoc,
+}
+
+export interface RefreshResponse {
+  /** New access token to use for credential requests */
+  access_token: string
+
+  /** New refresh token (may rotate on every call) */
+  refresh_token?: string
+
+  /** Type of the access token — usually "Bearer" */
+  token_type?: 'Bearer' | string
+
+  /** Lifetime of the access token in seconds */
+  expires_in?: number
+
+  /** Server-provided challenge for proof-of-possession */
+  c_nonce?: string
+
+  /** Time (seconds) the c_nonce remains valid */
+  c_nonce_expires_in?: number
+
+  /** Optional scope string from AS */
+  scope?: string
+
+  /** Optional authorization details (OID4VCI-specific) */
+  authorization_details?: Array<{
+    type: string
+    credential_configuration_id?: string
+    [key: string]: unknown
+  }>
+
+  /** Some ASs return a DPoP nonce (different naming conventions) */
+  dpop_nonce?: string
+  dpopNonce?: string
+
+  /** DPoP options used to bind the access token, if the issuer requires DPoP */
+  dpop?: OpenId4VciDpopRequestOptions
+}
+
+export interface SelectedCredentialsFormat {
+  [inputDescriptorId: string]: {
+    id: string
+    claimFormat: string
+  }
+}

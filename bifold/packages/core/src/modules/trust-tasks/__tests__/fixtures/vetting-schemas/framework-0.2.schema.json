@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/trust-task/0.2/framework",
+  "title": "Trust Tasks framework — reusable JSON Schema definitions",
+  "description": "Reusable $defs cross-referenced by individual Trust Task specifications. Not itself a Trust Task specification — the `_framework` directory is skipped by the registry build (folders starting with `_` are not discovered) and by the codegen (which only triggers on payload.schema.json). See SPEC.md §4.5.1 for the normative description of `ext`.",
+  "$defs": {
+    "Ext": {
+      "title": "Ext",
+      "description": "Vendor-namespaced extension object per SPEC.md §4.5.1. Each immediate key MUST be a reverse-DNS namespace; structure under each namespace is opaque to the framework.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": true,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$"
+      }
+    }
+  }
+}

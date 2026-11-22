@@ -1,0 +1,26 @@
+[
+  {
+    "note": "Unknown top-level member is rejected.",
+    "payload": {
+      "vp": {},
+      "__x__": true
+    }
+  },
+  {
+    "note": "`vp` is required.",
+    "payload": {
+      "registryConsent": true
+    }
+  },
+  {
+    "note": "`criterion` that is not a multibase digest — it names a criterion by its requirementsDigest.",
+    "payload": {
+      "vp": {
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "type": ["VerifiablePresentation"],
+        "holder": "did:key:z6MkApplicant"
+      },
+      "criterion": "membership"
+    }
+  }
+]

@@ -1,0 +1,123 @@
+{
+  "cardDigest": {
+    "card": {
+      "audience": "did:key:z6MkwaFoU4KPCio6fdD4wr6w8xY4B6S3h78J3HHgiCRkqtm3",
+      "cardVersion": 1,
+      "challenge": "QlScnBiVZptGM8oLBRk4S37fjuDCr381MUrrnd0cmHg",
+      "claims": [
+        {
+          "provenance": "selfAsserted",
+          "type": "name.legal",
+          "value": "Ada Lovelace"
+        }
+      ],
+      "commitmentSalt": "Bfm0baG9RJmTeDkIOUKQRkmc4mZZyQNT-CszHfWiCrQ",
+      "community": "did:webvh:QmCommunity:dids.example:community",
+      "domain": "did:webvh:QmCommunity:dids.example:community",
+      "expiresAt": "2026-09-25T05:41:46.157Z",
+      "id": "urn:uuid:340b89b2-157c-4ca4-a4ed-69f987cbdf1e",
+      "identityCommitment": "zQmdbgPVB3Z5b8EVDH5aEYjvfjfh4n8RaVTvpa5FAt38tNB",
+      "issuedAt": "2026-09-25T05:26:46.157Z",
+      "proof": {
+        "created": "2026-09-25T05:26:46.195Z",
+        "cryptosuite": "eddsa-jcs-2022",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z4ADhjN3DGyaUqUpUjWhdtZisG19mkoHrMFNPjjY6YpSPh7mEvFeQAH37kAGC1dxgdRAwJtmuggFWQH5uHrffPXm8",
+        "type": "DataIntegrityProof",
+        "verificationMethod": "did:key:z6MkiqTXqaVZGZSXmsb6wtWHvuiaXByP4iUeQDihXxF1XZBX#z6MkiqTXqaVZGZSXmsb6wtWHvuiaXByP4iUeQDihXxF1XZBX"
+      },
+      "publisher": "did:key:z6MkiqTXqaVZGZSXmsb6wtWHvuiaXByP4iUeQDihXxF1XZBX",
+      "type": ["VerifiableDataStructure", "RelationshipCard", "VettingCard"]
+    },
+    "expected": "zQmSLKtouTzKw1pCZu1RTs2UddtW5WoSYPBpWEzA9NdNvB1"
+  },
+  "identityCommitment": [
+    {
+      "claims": [
+        {
+          "provenance": "selfAsserted",
+          "type": "name.legal",
+          "value": "Ada Lovelace"
+        }
+      ],
+      "expected": "zQmdbgPVB3Z5b8EVDH5aEYjvfjfh4n8RaVTvpa5FAt38tNB",
+      "requiredClaims": ["name.legal"],
+      "salt": "Bfm0baG9RJmTeDkIOUKQRkmc4mZZyQNT-CszHfWiCrQ"
+    },
+    {
+      "claims": [
+        {
+          "provenance": "selfAsserted",
+          "type": "name.legal",
+          "value": "Ada Lovelace"
+        }
+      ],
+      "expected": "zQmcEM7ehgZC1MK9LVPhJx5ZTm9EK2egBq7eJ1fTtDQ2Jyx",
+      "requiredClaims": ["name.legal"],
+      "salt": "salt-1"
+    },
+    {
+      "claims": [
+        {
+          "provenance": "selfAsserted",
+          "type": "name.legal",
+          "value": "Ada Lovelace"
+        },
+        {
+          "provenance": "selfAsserted",
+          "type": "name.legal",
+          "value": "Someone Else"
+        }
+      ],
+      "expected": "zQmcEM7ehgZC1MK9LVPhJx5ZTm9EK2egBq7eJ1fTtDQ2Jyx",
+      "requiredClaims": ["name.legal"],
+      "salt": "salt-1"
+    }
+  ],
+  "matchCode": [
+    {
+      "expected": "AWE8-JZ12",
+      "sessionDocumentId": "urn:uuid:5b0e1c2a-7d4f-4a51-9c6e-2f1b8d3a9e70"
+    },
+    {
+      "expected": "3XA8-8KX8",
+      "sessionDocumentId": "urn:uuid:a"
+    },
+    {
+      "expected": "B50Z-S142",
+      "sessionDocumentId": "urn:uuid:session-conformance"
+    }
+  ],
+  "note": "Golden vectors computed by upstream code (wallet scripts/openvtc/card-verify vectors). Keyring's tests check its own functions against these; never regenerate them with Keyring's code.",
+  "sources": {
+    "cardDigest": "dtg-credentials digest_multibase_json (lib.rs:534), via vta-sdk vetting/mod.rs digest",
+    "identityCommitment": "vta-sdk vetting/card.rs identity_commitment",
+    "matchCode": "vta-sdk vetting/match_code.rs vetting_match_code",
+    "ticketUri": "vta-sdk vetting/ticket_uri.rs decode, encode"
+  },
+  "ticketUri": [
+    {
+      "decoded": {
+        "community": "did:webvh:QmCommunity:dids.example:community",
+        "presentation": {
+          "secret": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+          "ticketId": "tkt-0001"
+        },
+        "vetter": "did:webvh:QmVetter:dids.example:vetter"
+      },
+      "reencoded": "vetting-ticket:?v=1&community=did%3Awebvh%3AQmCommunity%3Adids.example%3Acommunity&vetter=did%3Awebvh%3AQmVetter%3Adids.example%3Avetter&ticket=tkt-0001&secret=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "uri": "vetting-ticket:?v=1&community=did%3Awebvh%3AQmCommunity%3Adids.example%3Acommunity&vetter=did%3Awebvh%3AQmVetter%3Adids.example%3Avetter&ticket=tkt-0001&secret=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+    },
+    {
+      "decoded": {
+        "community": "did:webvh:QmCommunity:dids.example:community",
+        "presentation": {
+          "code": "K7QF-2M9X"
+        },
+        "vetter": "did:key:z6MkVetter"
+      },
+      "reencoded": "vetting-ticket:?v=1&community=did%3Awebvh%3AQmCommunity%3Adids.example%3Acommunity&vetter=did%3Akey%3Az6MkVetter&code=K7QF-2M9X",
+      "uri": "vetting-ticket:?v=1&community=did%3Awebvh%3AQmCommunity%3Adids.example%3Acommunity&vetter=did%3Akey%3Az6MkVetter&code=K7QF-2M9X"
+    }
+  ]
+}

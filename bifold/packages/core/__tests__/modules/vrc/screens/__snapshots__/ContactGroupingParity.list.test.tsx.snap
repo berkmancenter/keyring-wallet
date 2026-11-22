@@ -1,0 +1,522 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`the Contacts list, several relationships per person, nothing linked 1`] = `
+<View
+  style={
+    Object {
+      "flex": 1,
+    }
+  }
+>
+  <RCTScrollView
+    ListEmptyComponent={[Function]}
+    contentContainerStyle={
+      Array [
+        Object {
+          "flexGrow": 1,
+        },
+        Object {
+          "paddingVertical": 8,
+        },
+      ]
+    }
+    data={
+      Array [
+        Object {
+          "hasHardwareAttestation": false,
+          "hasLocalityConfirmed": false,
+          "hasWitnessCredentials": false,
+          "issuer": Object {
+            "email": "alice@example.com",
+            "id": "did:peer:2.Ez6LSms58c862ddali",
+            "name": "Alice Smith",
+            "organization": undefined,
+            "photo": undefined,
+          },
+        },
+        Object {
+          "hasHardwareAttestation": false,
+          "hasLocalityConfirmed": false,
+          "hasWitnessCredentials": false,
+          "issuer": Object {
+            "email": "alice@example.com",
+            "id": "did:peer:2.Ez6LSms5910022dali",
+            "name": "Alice Smith",
+            "organization": undefined,
+            "photo": undefined,
+          },
+        },
+        Object {
+          "hasHardwareAttestation": false,
+          "hasLocalityConfirmed": true,
+          "hasWitnessCredentials": true,
+          "issuer": Object {
+            "email": undefined,
+            "id": "did:peer:2.Ez6LSms00017db5bob",
+            "name": "Bob Jones",
+            "organization": undefined,
+            "photo": undefined,
+          },
+        },
+      ]
+    }
+    getItem={[Function]}
+    getItemCount={[Function]}
+    keyExtractor={[Function]}
+    onContentSizeChange={[Function]}
+    onLayout={[Function]}
+    onMomentumScrollBegin={[Function]}
+    onMomentumScrollEnd={[Function]}
+    onScroll={[Function]}
+    onScrollBeginDrag={[Function]}
+    onScrollEndDrag={[Function]}
+    removeClippedSubviews={false}
+    renderItem={[Function]}
+    scrollEventThrottle={0.0001}
+    showsVerticalScrollIndicator={false}
+    stickyHeaderIndices={Array []}
+    style={
+      Object {
+        "backgroundColor": "#F5F5F5",
+        "flex": 1,
+      }
+    }
+    viewabilityConfigCallbackPairs={Array []}
+  >
+    <View>
+      <View
+        onFocusCapture={[Function]}
+        onLayout={[Function]}
+        style={null}
+      >
+        <View
+          accessibilityLabel="Contact: Alice Smith"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onClick={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "alignItems": "center",
+              "backgroundColor": "#F5F5F5",
+              "borderColor": "rgba(170, 170, 170, 0.4)",
+              "borderRadius": 12,
+              "borderWidth": 1,
+              "flexDirection": "row",
+              "height": 62,
+              "marginHorizontal": 14,
+              "marginVertical": 4,
+              "opacity": 1,
+              "paddingHorizontal": 14,
+              "paddingVertical": 0,
+              "shadowColor": "#000",
+              "shadowOffset": Object {
+                "height": 4,
+                "width": 0,
+              },
+              "shadowOpacity": 0.1,
+              "shadowRadius": 4,
+            }
+          }
+          testID="com.ariesbifold:id/ContactCard"
+        >
+          <View
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#E8E0E8",
+                "borderRadius": 18,
+                "height": 36,
+                "justifyContent": "center",
+                "marginRight": 12,
+                "overflow": "hidden",
+                "width": 36,
+              }
+            }
+          >
+            <Text
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": "#666666",
+                    "fontSize": 22,
+                  },
+                  undefined,
+                  Object {
+                    "fontFamily": "Material Design Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+            >
+              󰀓
+            </Text>
+          </View>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#010B13",
+                  "flex": 1,
+                  "fontFamily": "SourceSans3-Regular",
+                  "fontSize": 16,
+                },
+              ]
+            }
+          >
+            Alice Smith
+          </Text>
+          <View
+            style={
+              Object {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "marginLeft": 8,
+              }
+            }
+          />
+        </View>
+      </View>
+      <View
+        onFocusCapture={[Function]}
+        onLayout={[Function]}
+        style={null}
+      >
+        <View
+          accessibilityLabel="Contact: Alice Smith"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onClick={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "alignItems": "center",
+              "backgroundColor": "#F5F5F5",
+              "borderColor": "rgba(170, 170, 170, 0.4)",
+              "borderRadius": 12,
+              "borderWidth": 1,
+              "flexDirection": "row",
+              "height": 62,
+              "marginHorizontal": 14,
+              "marginVertical": 4,
+              "opacity": 1,
+              "paddingHorizontal": 14,
+              "paddingVertical": 0,
+              "shadowColor": "#000",
+              "shadowOffset": Object {
+                "height": 4,
+                "width": 0,
+              },
+              "shadowOpacity": 0.1,
+              "shadowRadius": 4,
+            }
+          }
+          testID="com.ariesbifold:id/ContactCard"
+        >
+          <View
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#E8E0E8",
+                "borderRadius": 18,
+                "height": 36,
+                "justifyContent": "center",
+                "marginRight": 12,
+                "overflow": "hidden",
+                "width": 36,
+              }
+            }
+          >
+            <Text
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": "#666666",
+                    "fontSize": 22,
+                  },
+                  undefined,
+                  Object {
+                    "fontFamily": "Material Design Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+            >
+              󰀓
+            </Text>
+          </View>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#010B13",
+                  "flex": 1,
+                  "fontFamily": "SourceSans3-Regular",
+                  "fontSize": 16,
+                },
+              ]
+            }
+          >
+            Alice Smith
+          </Text>
+          <View
+            style={
+              Object {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "marginLeft": 8,
+              }
+            }
+          />
+        </View>
+      </View>
+      <View
+        onFocusCapture={[Function]}
+        onLayout={[Function]}
+        style={null}
+      >
+        <View
+          accessibilityLabel="Contact: Bob Jones"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onClick={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "alignItems": "center",
+              "backgroundColor": "#F5F5F5",
+              "borderColor": "rgba(170, 170, 170, 0.4)",
+              "borderRadius": 12,
+              "borderWidth": 1,
+              "flexDirection": "row",
+              "height": 62,
+              "marginHorizontal": 14,
+              "marginVertical": 4,
+              "opacity": 1,
+              "paddingHorizontal": 14,
+              "paddingVertical": 0,
+              "shadowColor": "#000",
+              "shadowOffset": Object {
+                "height": 4,
+                "width": 0,
+              },
+              "shadowOpacity": 0.1,
+              "shadowRadius": 4,
+            }
+          }
+          testID="com.ariesbifold:id/ContactCard"
+        >
+          <View
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#E8E0E8",
+                "borderRadius": 18,
+                "height": 36,
+                "justifyContent": "center",
+                "marginRight": 12,
+                "overflow": "hidden",
+                "width": 36,
+              }
+            }
+          >
+            <Text
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": "#666666",
+                    "fontSize": 22,
+                  },
+                  undefined,
+                  Object {
+                    "fontFamily": "Material Design Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+            >
+              󰀓
+            </Text>
+          </View>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#010B13",
+                  "flex": 1,
+                  "fontFamily": "SourceSans3-Regular",
+                  "fontSize": 16,
+                },
+              ]
+            }
+          >
+            Bob Jones
+          </Text>
+          <View
+            style={
+              Object {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "marginLeft": 8,
+              }
+            }
+          >
+            <Text
+              accessibilityLabel="Witnessed"
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": "#A349A4",
+                    "fontSize": 18,
+                  },
+                  Object {
+                    "marginLeft": 4,
+                  },
+                  Object {
+                    "fontFamily": "Material Design Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+              testID="WitnessVerifiedBadge"
+            >
+              󰞑
+            </Text>
+            <Text
+              accessibilityLabel="Locality confirmed"
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": "#2E8540",
+                    "fontSize": 18,
+                  },
+                  Object {
+                    "marginLeft": 4,
+                  },
+                  Object {
+                    "fontFamily": "Material Design Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+              testID="LocalityConfirmedBadge"
+            >
+              󰲕
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  </RCTScrollView>
+</View>
+`;

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vetting/_shared/0.1/vetting",
+  "title": "Vetting — shared vocabulary",
+  "description": "The vocabularies every identity-vetting artifact is written in: how a vetter established who an applicant is (VettingMethod), what documentation is accepted or was relied on (VettingDocumentation), and how the vetter knows the applicant (VettingRelationship). Used by vtc/join-requests/manifest (what a community requires), the vetting/* peer tasks (what a vetter offers and does), and the identity-vetting statement's object value under the `vetted` predicate (what a vetter attested). One definition, so a community's requirement and a vetter's statement are compared value-for-value rather than by translation. Claim types are not redefined here: they are the persona family's ClaimType (persona/_shared/0.1/persona-record), because a Vetting Card is rendered from a persona. Not itself a Trust Task specification (the `_shared` folder is skipped by the registry build and the codegen).",
+  "$defs": {
+    "VettingMethod": {
+      "title": "VettingMethod",
+      "type": "string",
+      "enum": [
+        "inPerson",
+        "video",
+        "priorAcquaintance"
+      ],
+      "description": "How the vetter established that the person they checked is the person controlling the applicant's DID. `inPerson` — both people were physically together. `video` — a live, two-way video call. `priorAcquaintance` — the vetter has known or worked with this person over a period, and attests from that knowledge rather than from a document. A method is a description of what happened, not an assurance level: which methods count, and how many of each, is community policy."
+    },
+    "VettingDocumentation": {
+      "title": "VettingDocumentation",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-zA-Z0-9]*$",
+      "description": "A class of documentation, named in lowerCamelCase. Open rather than enumerated, because what documentation a vetter accepts is each vetter's own choice. Well-known values: `passport`, `nationalId`, `driverLicence`, and `none` — the vetter will attest without a document, which is the `priorAcquaintance` case. Only the class ever travels — never a document number, an image, an issuing authority or an expiry date. `none` states a policy (what a vetter accepts); a record of what was relied on expresses 'no document' as an empty list instead."
+    },
+    "VettingRelationship": {
+      "title": "VettingRelationship",
+      "type": "string",
+      "enum": [
+        "none",
+        "communityColleague",
+        "sameEmployer",
+        "family",
+        "otherPersonal"
+      ],
+      "description": "The vetter's own declaration of how they relate to the applicant. Declared, not verified: it exists so community policy can cap how much evidence comes from people close to the applicant, and a false declaration is the vetter's attributable act."
+    }
+  }
+}

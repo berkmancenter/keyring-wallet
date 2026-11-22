@@ -1,0 +1,125 @@
+import React from 'react'
+import { useWindowDimensions } from 'react-native'
+import Svg, { Circle, Defs, Ellipse, Mask, Path, Rect } from 'react-native-svg'
+
+export enum MaskType {
+  QR_CODE = 'qr-code',
+  OVAL = 'oval',
+  RECTANGLE = 'rectangle',
+  ID_CARD = 'id-card',
+  CUSTOM = 'custom',
+}
+
+interface ISVGOverlay {
+  maskType?: MaskType
+  customPath?: string
+  strokeColor?: string
+  strokeWidth?: number
+  overlayColor?: string
+  overlayOpacity?: number
+}
+
+const SVGOverlay: React.FC<ISVGOverlay> = ({
+  maskType = MaskType.OVAL,
+  customPath,
+  strokeColor = undefined,
+  strokeWidth = 2,
+  overlayColor = 'black',
+  overlayOpacity = 0.6,
+}) => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions()
+  const renderCutOutShape = (fill: string) => {
+    const centerX = screenWidth / 2
+    const centerY = screenHeight / 2
+
+    switch (maskType) {
+      case MaskType.OVAL:
+        return (
+          <Ellipse
+            cx={centerX}
+            cy={centerY - 30}
+            rx={screenWidth * 0.45}
+            ry={screenHeight * 0.28}
+            fill={fill}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+          />
+        )
+
+      case MaskType.RECTANGLE: {
+        const rectSize = screenWidth * 0.8
+        return (
+          <Rect x={centerX - rectSize / 2} y={centerY - rectSize / 2} width={rectSize} height={rectSize} fill={fill} />
+        )
+      }
+
+      case MaskType.ID_CARD: {
+        // ID card shape with rounded corners
+        const cardWidth = screenWidth * 0.9
+        const cardHeight = cardWidth / 1.6 // Common ID/ Credit card size ratio
+        return (
+          <Rect
+            x={centerX - cardWidth / 2}
+            y={centerY - cardHeight}
+            width={cardWidth}
+            height={cardHeight}
+            rx={15}
+            ry={15}
+            fill={fill}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+          />
+        )
+      }
+      case MaskType.QR_CODE: {
+        const qrSize = screenWidth * 0.9
+        return (
+          <Rect
+            x={centerX - qrSize / 2}
+            y={centerY - qrSize / 1.5}
+            width={qrSize}
+            height={qrSize}
+            fill={fill}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+          />
+        )
+      }
+      case MaskType.CUSTOM:
+        return customPath ? <Path d={customPath} fill={fill} /> : null
+
+      default:
+        return <Circle cx={centerX} cy={centerY} r={screenWidth / 2} fill={fill} />
+    }
+  }
+
+  const maskCutOutShape = renderCutOutShape('black')
+  const cutOutShape = renderCutOutShape('transparent')
+
+  return (
+    <Svg width={screenWidth} height={screenHeight} style={{ position: 'absolute' }}>
+      <Defs>
+        <Mask id="overlayMask">
+          {/* White background - visible area */}
+          <Rect width={screenWidth} height={screenHeight} fill="white" />
+          {/* Cutout  - transparent area */}
+          {maskCutOutShape}
+        </Mask>
+      </Defs>
+
+      {/* Semi-transparent overlay with cutout */}
+      <Rect
+        width={screenWidth}
+        height={screenHeight}
+        fill={overlayColor}
+        fillOpacity={overlayOpacity}
+        mask="url(#overlayMask)"
+      />
+
+      {/* Guide lines or decorations */}
+      {cutOutShape}
+    </Svg>
+  )
+}
+
+export default SVGOverlay

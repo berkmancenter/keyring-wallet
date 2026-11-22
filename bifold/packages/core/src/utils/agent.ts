@@ -1,0 +1,203 @@
+import {
+  AnonCredsDidCommCredentialFormatService,
+  AnonCredsDidCommProofFormatService,
+  AnonCredsModule,
+  DataIntegrityDidCommCredentialFormatService,
+  DidCommCredentialV1Protocol,
+  DidCommProofV1Protocol,
+  LegacyIndyDidCommCredentialFormatService,
+  LegacyIndyDidCommProofFormatService,
+} from '@credo-ts/anoncreds'
+
+import { AskarKeyManagementService, AskarModule } from '@credo-ts/askar'
+import {
+  Agent,
+  DcqlModule,
+  DidsModule,
+  JwkDidResolver,
+  KeyDidResolver,
+  Kms,
+  PeerDidResolver,
+  WebDidResolver,
+  X509Module,
+} from '@credo-ts/core'
+
+import {
+  DidCommAutoAcceptCredential,
+  DidCommAutoAcceptProof,
+  DidCommCredentialV2Protocol,
+  DidCommProofV2Protocol,
+  DidCommDifPresentationExchangeProofFormatService,
+  DidCommModule,
+  DidCommMediatorPickupStrategy,
+} from '@credo-ts/didcomm'
+
+import { IndyVdrAnonCredsRegistry, IndyVdrModule, IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
+import { useAgent } from '@bifold/react-hooks'
+import { OpenId4VcModule } from '@credo-ts/openid4vc'
+import { SecureEnvironmentKeyManagementService } from '@credo-ts/react-native'
+// import { PushNotificationsApnsModule, PushNotificationsFcmModule } from '@credo-ts/push-notifications'
+import { anoncreds } from '@hyperledger/anoncreds-react-native'
+import { askar } from '@openwallet-foundation/askar-react-native'
+import { indyVdr } from '@hyperledger/indy-vdr-react-native'
+import Config from 'react-native-config'
+import { EphemeralKeyManagementService } from '../modules/trust-tasks/module/EphemeralKeyManagementService'
+import { EPHEMERAL_KMS_BACKEND } from '../modules/trust-tasks/module/vtaKeys'
+import { WalletSecret } from '../types/security'
+import { RetryingWebVhDidResolver } from './RetryingWebVhDidResolver'
+import { WebsDidResolver } from './WebsDidResolver'
+
+interface GetAgentModulesOptions {
+  walletSecret: WalletSecret
+  indyNetworks: IndyVdrPoolConfig[]
+  mediatorInvitationUrl?: string
+  txnCache?: { capacity: number; expiryOffsetMs: number; path?: string }
+}
+
+export type BifoldAgentModules = ReturnType<typeof getAgentModules>
+
+export type BifoldAgent = Agent<BifoldAgentModules>
+
+const mdocTrustedCertificate = Config.MDOC_TRUSTED_CERTIFICATE_BASE64
+
+/**
+ * Constructs the modules to be used in the agent setup
+ * @param indyNetworks
+ * @param mediatorInvitationUrl determine which mediator to use
+ * @param txnCache optional local cache config for indyvdr
+ * @returns modules to be used in agent setup
+ */
+export function getAgentModules({
+  walletSecret,
+  indyNetworks,
+  mediatorInvitationUrl,
+  txnCache,
+}: GetAgentModulesOptions) {
+  const indyCredentialFormat = new LegacyIndyDidCommCredentialFormatService()
+  const indyProofFormat = new LegacyIndyDidCommProofFormatService()
+
+  if (txnCache) {
+    // TODO: Not a function?
+    // indyVdr.setLedgerTxnCache({
+    //   capacity: txnCache.capacity,
+    //   expiry_offset_ms: txnCache.expiryOffsetMs,
+    //   path: txnCache.path,
+    // })
+  }
+
+  return {
+    askar: new AskarModule({
+      enableKms: false,
+      askar,
+      store: { id: walletSecret.id, key: walletSecret.key },
+    }),
+    kms: new Kms.KeyManagementModule({
+      backends: [
+        // Persona key copies, held in memory only (#10). First, and the default:
+        // Credo sends an encrypt/decrypt whose key is a key agreement to the
+        // default backend when it supports the operation, else to the first
+        // that does. This one claims only operations naming its own keys, so
+        // everything else still reaches askar.
+        new EphemeralKeyManagementService(),
+        new AskarKeyManagementService(),
+        new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
+      ],
+      defaultBackend: EPHEMERAL_KMS_BACKEND,
+    }),
+    anoncreds: new AnonCredsModule({
+      anoncreds,
+      registries: [new IndyVdrAnonCredsRegistry(), new WebVhAnonCredsRegistry()],
+    }),
+    indyVdr: new IndyVdrModule({
+      indyVdr,
+      networks: indyNetworks as [IndyVdrPoolConfig],
+    }),
+    didcomm: new DidCommModule({
+      useDidSovPrefixWhereAllowed: true,
+      connections: {
+        autoAcceptConnections: true,
+      },
+      credentials: {
+        autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
+        credentialProtocols: [
+          new DidCommCredentialV1Protocol({ indyCredentialFormat }),
+          new DidCommCredentialV2Protocol({
+            credentialFormats: [
+              indyCredentialFormat,
+              new AnonCredsDidCommCredentialFormatService(),
+              new DataIntegrityDidCommCredentialFormatService(),
+            ],
+          }),
+        ],
+      },
+      proofs: {
+        autoAcceptProofs: DidCommAutoAcceptProof.ContentApproved,
+        proofProtocols: [
+          new DidCommProofV1Protocol({ indyProofFormat }),
+          new DidCommProofV2Protocol({
+            proofFormats: [
+              indyProofFormat,
+              new AnonCredsDidCommProofFormatService(),
+              new DidCommDifPresentationExchangeProofFormatService(),
+            ],
+          }),
+        ],
+      },
+      mediationRecipient: {
+        mediatorInvitationUrl: mediatorInvitationUrl,
+        // PickUpV2, not Implicit. Implicit is push-only: it issues no pickup
+        // requests and waits for the mediator to push. A mediator that queues
+        // instead of pushing (ours does) leaves such an agent able to send
+        // perfectly while receiving NOTHING, with no error on either side. This
+        // cost the witness-server every inbound message until 2026-08-31 — see
+        // docs/spikes/e2e-vrc-connect-findings.md ("fourth failure layer").
+        //
+        // Note for consumers of this module: unlike the wallet, nothing here
+        // re-starts pickup at runtime, so this value is what you get. If you do
+        // override it, pass the strategy explicitly to initiateMessagePickup —
+        // credo resolves `mediationRecord.pickupStrategy ?? thisConfig`, so a
+        // value persisted in the agent's wallet outranks this line.
+        mediatorPickupStrategy: DidCommMediatorPickupStrategy.PickUpV2,
+      },
+    }),
+    dcql: new DcqlModule(),
+    openid4vc: new OpenId4VcModule(),
+    ...(mdocTrustedCertificate
+      ? {
+          x509: new X509Module({
+            trustedCertificates: [mdocTrustedCertificate],
+          }),
+        }
+      : {}),
+    dids: new DidsModule({
+      resolvers: [
+        new RetryingWebVhDidResolver(),
+        new WebsDidResolver(),
+        new WebDidResolver(),
+        new JwkDidResolver(),
+        new KeyDidResolver(),
+        new PeerDidResolver(),
+      ],
+    }),
+  }
+}
+
+interface MyAgentContextInterface {
+  loading: boolean
+  agent: BifoldAgent
+}
+
+export const useAppAgent = useAgent as () => MyAgentContextInterface
+
+export const createLinkSecretIfRequired = async (agent: BifoldAgent) => {
+  // If we don't have any link secrets yet, we will create a
+  // default link secret that will be used for all anoncreds
+  // credential requests.
+  const linkSecretIds = await agent.modules.anoncreds.getLinkSecretIds()
+  if (linkSecretIds.length === 0) {
+    await agent.modules.anoncreds.createLinkSecret({
+      setAsDefault: true,
+    })
+  }
+}

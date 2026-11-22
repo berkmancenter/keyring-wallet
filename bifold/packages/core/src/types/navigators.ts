@@ -1,0 +1,422 @@
+import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord, W3cV2CredentialRecord } from '@credo-ts/core'
+import { NavigatorScreenParams } from '@react-navigation/native'
+import { StackNavigationOptions } from '@react-navigation/stack'
+import { OpenId4VPRequestRecord, OpenIDCredentialType } from '../modules/openid/types'
+import { LayoutProps } from '../layout/ScreenLayout'
+
+export enum Screens {
+  AttemptLockout = 'Temporarily Locked',
+  Splash = 'Splash',
+  Onboarding = 'Onboarding',
+  Terms = 'Terms',
+  Preface = 'Preface',
+  CreatePIN = 'Create a PIN',
+  ChangePIN = 'Change PIN',
+  ChangePINConfirmation = 'Change PIN Confirmation',
+  ChangePINSuccess = 'Change PIN Success',
+  EnterPIN = 'Enter PIN',
+  VerifyPIN = 'Verify PIN',
+  Home = 'Home',
+  Scan = 'Scan',
+  PasteUrl = 'Paste URL',
+  Credentials = 'Credentials',
+  CredentialDetails = 'Credential Details',
+  CredentialOffer = 'Credential Offer',
+  OpenIDCredentialDetails = 'Open ID Credential details',
+  OpenIDCredentialOffer = 'Open ID Credential offer',
+  OpenIDProofPresentation = 'Open ID Proof Presentation',
+  OpenIDProofCredentialSelect = 'Open ID Proof Credential Select',
+  OpenIDConnection = 'Open ID Connection',
+  ProofRequest = 'Proof Request',
+  ProofRequestDetails = 'Proof Request Details',
+  ProofRequestUsageHistory = 'Proof Request Usage History',
+  Settings = 'Settings',
+  Language = 'Language',
+  DataRetention = 'Data Retention',
+  Tours = 'Tours',
+  Contacts = 'Contacts',
+  Messages = 'Messages',
+  NewMessage = 'New Message',
+  ContactDetails = 'Contact Details',
+  WhatAreContacts = 'What Are Contacts',
+  WhatAreConnections = 'What Are Connections',
+  WitnessConnections = 'Witness Connections',
+  Chat = 'Chat',
+  Connection = 'Connection',
+  MobileVerifierLoading = 'Mobile Verifier Loading',
+  OnTheWay = 'On The Way',
+  Declined = 'Declined',
+  Biometry = 'Biometry',
+  ToggleBiometry = 'Toggle Biometry',
+  PushNotifications = 'Push Notifications',
+  RCardOnboarding = 'R-Card',
+  EditRCard = 'Edit Profile',
+  MyProfiles = 'My Profiles',
+  TogglePushNotifications = 'Toggle Push Notifications',
+  Developer = 'Developer',
+  CustomNotification = 'Custom Notification',
+  ProofChangeCredential = 'Choose a credential',
+  ProofRequests = 'Proof Requests',
+  ProofRequesting = 'Proof Requesting',
+  ProofDetails = 'Proof Details',
+  NameWallet = 'Name Wallet',
+  RenameWallet = 'Rename Wallet',
+  RenameContact = 'Rename Contact',
+  JSONDetails = 'JSON Details',
+  ScanHelp = 'Scan Help',
+  HistorySettings = 'History Settings',
+  HistoryPage = 'History',
+  HistoryDetails = 'History details',
+  AutoLock = 'AutoLock',
+  UpdateAvailable = 'Update Available',
+  ConfigureMediator = 'Configure Mediator',
+  ToggleHardwareAttestation = 'Toggle Hardware Attestation',
+  ToggleWitnessReporting = 'Toggle Witness Reporting',
+  ToggleWitnessing = 'Toggle Witnessing',
+  ToggleLocalityConfirmation = 'Toggle Locality Confirmation',
+  About = 'About',
+  ExportWallet = 'Export Wallet',
+  ImportWallet = 'Import Wallet',
+  MyAgent = 'My Agent',
+  VtiCommunity = 'Community',
+  VtiVetting = 'Vetting',
+  VtiHiddenVetting = 'Private vetting',
+  VtiHiddenVetter = 'Vouch privately',
+  VtaLink = 'Link your agent',
+  VtaCreateAgent = 'Claim your agent',
+  VtaDevices = 'Your devices',
+  VtaNewPhoneOffer = 'Your other phones',
+  VtaAgent = 'Your agent',
+  VtaRequests = 'Requests',
+  VtaAskMe = 'Ask me before',
+  VtaTrustedApprovers = 'Who approves',
+  // One person on Who approves: their detail and what can be done (design B, 11-14).
+  VtaApproverPerson = 'Approver',
+  VtaAgentSettings = 'Agent settings',
+  VtiInvited = 'Invited',
+  VtiJoin = 'Join',
+  SignIn = 'Sign in to a community',
+  VtaClaim = 'Set up your agent',
+  SharedConnect = 'Connect with someone',
+  GuardianCardReceive = 'Guardian card from a state office',
+  StateOfficeCodes = 'Your codes for a state office',
+  SharedConnectInvite = 'Show a code',
+  RoomsHome = 'Rooms',
+  Room = 'Room',
+  RoomOffer = 'Room offer',
+  Poll = 'Poll',
+  PollBallot = 'Poll ballot',
+  BadgeDetail = 'Badge detail',
+  RoomInfo = 'Room details',
+  RoomPart = 'Room part',
+  CommunityMembers = 'Community members',
+  CommunityCard = 'Your community card',
+  CommunityMemberCard = 'Member card',
+}
+
+export enum Stacks {
+  TabStack = 'Tab Stack',
+  HomeStack = 'Home Stack',
+  ConnectStack = 'Connect Stack',
+  CredentialStack = 'Credentials Stack',
+  SettingStack = 'Settings Stack',
+  ContactStack = 'Contacts Stack',
+  MessageStack = 'Messages Stack',
+  ProofRequestsStack = 'Proof Requests Stack',
+  NotificationStack = 'Notifications Stack',
+  ConnectionStack = 'Connection Stack',
+  HistoryStack = 'History Stack',
+  CustomNavStack1 = 'Custom Nav Stack 1',
+}
+
+export enum TabStacks {
+  MessageStack = 'Tab Message Stack',
+  ContactStack = 'Tab Contact Stack',
+  HomeStack = 'Tab Home Stack',
+  ConnectStack = 'Tab Connect Stack',
+  CredentialStack = 'Tab Credential Stack',
+  MyAgentStack = 'Tab My Agent Stack',
+  SettingStack = 'Tab Setting Stack',
+}
+
+export type RootStackParams = {
+  [Screens.Splash]: undefined
+  [Stacks.TabStack]: NavigatorScreenParams<TabStackParams>
+  [Screens.Chat]: { connectionId: string }
+  [Stacks.ConnectStack]: NavigatorScreenParams<ConnectStackParams>
+  [Stacks.ConnectionStack]: NavigatorScreenParams<DeliveryStackParams>
+  [Stacks.SettingStack]: NavigatorScreenParams<SettingStackParams>
+  [Stacks.ContactStack]: NavigatorScreenParams<ContactStackParams>
+  [Stacks.MessageStack]: NavigatorScreenParams<MessageStackParams>
+  [Stacks.ProofRequestsStack]: NavigatorScreenParams<ProofRequestsStackParams>
+  [Stacks.NotificationStack]: NavigatorScreenParams<NotificationStackParams>
+  [Stacks.HistoryStack]: NavigatorScreenParams<HistoryStackParams>
+  [Screens.CredentialDetails]: { credentialId: string }
+  [Screens.OpenIDCredentialDetails]: { credentialId: string; type: OpenIDCredentialType }
+  [Stacks.CustomNavStack1]: undefined
+}
+
+export type TabStackParams = {
+  [TabStacks.MessageStack]: NavigatorScreenParams<MessageStackParams>
+  [TabStacks.ContactStack]: NavigatorScreenParams<ContactStackParams>
+  [TabStacks.HomeStack]: NavigatorScreenParams<HomeStackParams>
+  [TabStacks.ConnectStack]: NavigatorScreenParams<ConnectStackParams>
+  [TabStacks.CredentialStack]: NavigatorScreenParams<CredentialStackParams>
+  [TabStacks.MyAgentStack]: NavigatorScreenParams<MyAgentStackParams>
+  [TabStacks.SettingStack]: NavigatorScreenParams<SettingStackParams>
+}
+
+/** My Agent: the wallet's VTI agent, the communities it reaches, applications. */
+export type MyAgentStackParams = {
+  [Screens.MyAgent]: undefined
+  [Screens.VtiCommunity]: { communityDid: string }
+  // A member's view of a community's directory: its members, and their own card there.
+  [Screens.CommunityMembers]: { communityDid: string }
+  [Screens.CommunityCard]: { communityDid: string }
+  // One poll, and its ballot: `communityDid` is the community the member reaches it through.
+  [Screens.Poll]: { communityDid: string; electionId: string }
+  [Screens.PollBallot]: { communityDid: string; electionId: string }
+  [Screens.BadgeDetail]: {
+    communityDid: string
+    badgeId: string
+    name: string
+    whose: 'mine' | 'theirs'
+    count?: number
+    since?: string
+    latestAt?: string
+  }
+  // Another member's card: by the entry the members list gave, or by a room author's DID.
+  [Screens.CommunityMemberCard]: { communityDid: string; entryId?: string; memberDid?: string; standIn?: string }
+  [Screens.VtiVetting]: undefined
+  /**
+   * `ticket`: a vetting ticket the person already pasted somewhere else — the
+   * named vetting screen hands one over when the criterion turns out to be
+   * hidden, and dropping it there would make them paste it twice.
+   */
+  [Screens.VtiHiddenVetting]: { communityDid: string; criterionId: string; ticket?: string }
+  [Screens.VtiHiddenVetter]: { communityDid: string; criterionId: string }
+  [Screens.VtaLink]: undefined
+  // `highlightCommunity`: a community just joined, picked out on its card for a moment (238).
+  [Screens.VtaAgent]: { highlightCommunity?: string } | undefined
+  [Screens.VtaRequests]: undefined
+  [Screens.VtaAskMe]: undefined
+  [Screens.VtaTrustedApprovers]: undefined
+  // One person on Who approves: `id` is the approver's DID for 'approver', else the relationship's connectionId.
+  [Screens.VtaApproverPerson]: { kind: 'approver' | 'yes' | 'setAside' | 'approving'; id: string }
+  [Screens.VtaAgentSettings]: { unlink?: boolean } | undefined
+  [Screens.VtiInvited]: undefined
+  [Screens.VtaCreateAgent]: { addDevice?: boolean; byAddress?: boolean } | undefined
+  [Screens.VtaDevices]: undefined
+  [Screens.VtaNewPhoneOffer]: undefined
+  [Screens.VtiJoin]: undefined
+  // The code, and the scan it came from (the route's id: each scan is its own screen).
+  [Screens.SignIn]: { link: string; scanId: string } | undefined
+  // The code, and the scan it came from (the route's id: each scan is its own screen).
+  [Screens.VtaClaim]: { link: string; scanId: string } | undefined
+  // A shared-connect link (developer flag), and the scan it came from.
+  [Screens.SharedConnect]: { link: string; scanId: string } | undefined
+  // A Guardian card link from a state office (SEDI switches), and the scan it came from.
+  [Screens.GuardianCardReceive]: { link: string; scanId: string } | undefined
+  // This phone's holder and ward codes for a state office (SEDI switches).
+  [Screens.StateOfficeCodes]: undefined
+  [Screens.EditRCard]: { profileId: string } | undefined
+  // Every room and offer the member has (rooms flag on only).
+  [Screens.RoomsHome]: undefined
+} & RoomScreenParams
+
+/** What a room opens on, in My Agent and in Messages alike (rooms in Messages, R2). */
+export type RoomScreenParams = {
+  // `attach`: a file asked for from the room's files, so the composer opens its "+" (a new number each time).
+  [Screens.Room]: { roomId: string; attach?: number }
+  // The room's details, and its files, notes and members, one part a screen.
+  [Screens.RoomInfo]: { roomId: string }
+  [Screens.RoomPart]: { roomId: string; part: 'files' | 'notes' | 'members' }
+  // One offer's consent screen. `offerRef` names the offer however it was reached: the offers list today, a join
+  // link or QR later.
+  [Screens.RoomOffer]: { offerRef: string }
+}
+
+export type OnboardingStackParams = {
+  [Screens.Preface]: undefined
+  [Screens.Onboarding]: undefined
+  [Screens.Terms]: undefined
+  [Screens.AttemptLockout]: undefined
+  [Screens.CreatePIN]: { setAuthenticated: (status: boolean) => void } | undefined
+  [Screens.EnterPIN]: { setAuthenticated: (status: boolean) => void } | undefined
+  [Screens.Biometry]: undefined
+  [Screens.NameWallet]: undefined
+  [Screens.PushNotifications]: undefined
+  [Screens.RCardOnboarding]: undefined
+}
+
+export interface ContactCredentialDetails {
+  issuer: {
+    id: string
+    name: string
+    email?: string
+    organization?: string
+    /** A data:image/jpeg;base64,... URI. Undefined when the contact's RCard carries no photo. */
+    photo?: string
+  }
+  hasWitnessCredentials?: boolean
+  hasHardwareAttestation?: boolean
+  hasLocalityConfirmed?: boolean
+}
+
+export type ContactStackParams = {
+  [Screens.Contacts]: undefined
+  [Screens.Chat]: { connectionId: string }
+  [Screens.ContactDetails]: { contact: ContactCredentialDetails }
+  [Screens.RenameContact]: { connectionId: string }
+  [Screens.WhatAreContacts]: undefined
+  [Screens.WhatAreConnections]: undefined
+  [Screens.WitnessConnections]: undefined
+  [Screens.CredentialDetails]: { credentialId: string }
+  [Screens.OpenIDCredentialDetails]: { credentialId: string; type: OpenIDCredentialType }
+  [Screens.CredentialOffer]: { credentialId: string }
+  [Screens.ProofDetails]: { recordId: string; isHistory?: boolean }
+  [Screens.ProofRequest]: { proofId: string }
+  [Screens.JSONDetails]: { jsonBlob: any }
+}
+
+export type MessageStackParams = {
+  [Screens.Messages]: undefined
+  [Screens.NewMessage]: undefined
+  [Screens.Chat]: { connectionId: string }
+  [Screens.ContactDetails]: { contact: ContactCredentialDetails }
+  [Screens.RenameContact]: { connectionId: string }
+  [Screens.WhatAreContacts]: undefined
+  [Screens.WhatAreConnections]: undefined
+  [Screens.CredentialDetails]: { credentialId: string }
+  [Screens.CredentialOffer]: { credentialId: string }
+  [Screens.ProofDetails]: { recordId: string; isHistory?: boolean }
+  [Screens.ProofRequest]: { proofId: string }
+  [Screens.JSONDetails]: { jsonBlob: any }
+} & RoomScreenParams
+
+export type ProofRequestsStackParams = {
+  [Screens.ProofRequests]: { connectionId?: string }
+  [Screens.ProofRequesting]: { templateId: string; predicateValues?: Record<string, Record<string, number>> }
+  [Screens.ProofDetails]: { recordId: string; isHistory?: boolean; senderReview?: boolean }
+  [Screens.ProofRequestDetails]: { templateId: string; connectionId?: string }
+  [Screens.MobileVerifierLoading]: { proofId: string; connectionId: string }
+  [Screens.ProofRequestUsageHistory]: { templateId: string }
+  [Screens.ProofChangeCredential]: {
+    selectedCred: string
+    altCredentials: string[]
+    proofId: string
+    onCredChange: (arg: string) => void
+  }
+}
+
+export type CredentialStackParams = {
+  [Screens.Credentials]: undefined
+  [Screens.JSONDetails]: { jsonBlob: string }
+}
+
+export type HomeStackParams = {
+  [Screens.Home]: undefined
+}
+
+export type ConnectStackParams = {
+  [Screens.Scan]: undefined
+  [Screens.RenameWallet]: undefined
+  [Screens.ScanHelp]: undefined
+  [Screens.PasteUrl]: undefined
+  [Screens.SharedConnectInvite]: undefined
+}
+
+export type SettingStackParams = {
+  [Screens.RenameWallet]: undefined
+  [Screens.Settings]: undefined
+  [Screens.Language]: undefined
+  [Screens.DataRetention]: undefined
+  [Screens.Tours]: undefined
+  [Screens.ToggleBiometry]: undefined
+  [Screens.ChangePIN]: undefined
+  [Screens.ChangePINSuccess]: undefined
+  [Screens.Terms]: undefined
+  [Screens.Onboarding]: undefined
+  [Screens.Developer]: undefined
+  [Screens.TogglePushNotifications]: undefined
+  [Screens.HistorySettings]: undefined
+  [Screens.AutoLock]: undefined
+  [Screens.ConfigureMediator]: { scannedMediatorUri: string } | undefined
+  [Screens.ToggleHardwareAttestation]: undefined
+  [Screens.ToggleWitnessReporting]: undefined
+  [Screens.ToggleWitnessing]: undefined
+  [Screens.ToggleLocalityConfirmation]: undefined
+  [Screens.About]: undefined
+  [Screens.ExportWallet]: undefined
+  [Screens.ImportWallet]: undefined
+  // profileId given: edit that profile. Omitted: create a new one.
+  [Screens.EditRCard]: { profileId: string } | undefined
+  [Screens.MyProfiles]: undefined
+}
+
+export type NotificationStackParams = {
+  [Screens.Home]: undefined
+  [Screens.CredentialDetails]: { credentialId: string }
+  [Screens.OpenIDCredentialDetails]: {
+    credential: SdJwtVcRecord | W3cCredentialRecord
+  }
+  [Screens.CredentialOffer]: { credentialId: string }
+  [Screens.ProofRequest]: { proofId: string }
+  [Screens.CustomNotification]: undefined
+  [Screens.ProofDetails]: { recordId: string }
+}
+
+export type DeliveryStackParams = {
+  [Screens.Connection]: {
+    oobRecordId?: string
+    proofId?: string
+    credentialId?: string
+    openIDUri?: string
+    openIDPresentationUri?: string
+  }
+  [Screens.OpenIDConnection]: {
+    openIDUri?: string
+    openIDPresentationUri?: string
+  }
+  [Screens.MobileVerifierLoading]: { proofId: string; connectionId: string }
+  [Screens.ProofDetails]: { recordId: string }
+  [Screens.CredentialOffer]: { credentialId: string }
+  [Screens.ProofRequest]: { proofId: string }
+  [Screens.OnTheWay]: { credentialId: string }
+  [Screens.Declined]: { credentialId: string }
+  [Screens.Chat]: { connectionId: string }
+  [Screens.OpenIDCredentialOffer]: {
+    credential: SdJwtVcRecord | W3cCredentialRecord | MdocRecord | W3cV2CredentialRecord
+  }
+  [Screens.OpenIDProofPresentation]: { credential: OpenId4VPRequestRecord }
+  [Screens.OpenIDProofCredentialSelect]: {
+    inputDescriptorID: string
+    selectedCredID: string
+    altCredIDs: {
+      id: string
+      claimFormat: string
+    }[]
+    onCredChange: ({
+      inputDescriptorID,
+      id,
+      claimFormat,
+    }: {
+      inputDescriptorID: string
+      id: string
+      claimFormat: string
+    }) => void
+  }
+}
+
+export type HistoryStackParams = {
+  [Screens.HistoryPage]: undefined
+}
+
+export type ScreenLayoutConfig = Partial<Record<Screens, LayoutProps>>
+
+export type ScreenOptionsType = Partial<Record<Screens, StackNavigationOptions>>
+
+export type OnboardingTask = {
+  name: Screens
+  completed: boolean
+}
