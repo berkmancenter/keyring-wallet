@@ -97,8 +97,9 @@ Metro and run `yarn start` from **this** worktree's `app/` before retrying.
 
 A fresh `git worktree` does **not** carry the untracked files a run needs, and
 each one fails differently and late. All three, in order (since the fold of
-2026-11 `bifold/` is part of the repository, so there is no submodule to
-initialise; `yarn install` at the root installs and builds it):
+2026-11 the framework is part of the repository, as the workspaces under
+`packages/`, so there is no submodule to initialise and no second install;
+`yarn install` at the root covers it):
 
 ```sh
 cp <primary>/app/.env app/.env                    # baked in at BUILD time
@@ -122,13 +123,13 @@ mediator and every exchange suite fails downstream of onboarding.
 pre-commit lint/format and pre-push test never run. Run the gates by hand
 before pushing from a worktree.
 
-**Stale worktrees lie about what compiles.** A worktree left for a few days can
-report `@bifold/core` "has no exported member" for symbols plainly present in
-the source — its `bifold/packages/core/lib/typescript/` artifact predates them.
-`yarn install` at the root may be a no-op, since yarn does not notice the
-framework's source changing under `bifold/`. Fix: `(cd bifold && yarn install)` then
-`yarn workspace @bifold/core run build`. Do **not** run bifold's root
-`yarn build` (see the root `CLAUDE.md`).
+**Stale builds lie about what runs.** `@bifold/core` and the other packages the
+app bundles are read from `src/` (their `main` is `src/index.ts`), so a worktree's
+framework source is always what compiles and what Metro bundles. The Node-side
+packages still have a `build/`: a worktree left for a few days can run the witness
+or the verifier against a `packages/trust-tasks/build/` that predates the source.
+`yarn install` at the root does not rebuild it. Fix: `yarn workspace
+@bifold/trust-tasks build` (or `yarn build:packages` at the root for all of them).
 
 ## Running several checkouts at once
 
@@ -611,7 +612,7 @@ ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
 Restarting the mediator mints a new tunnel URL each time, so a rebuild is
 needed again after any `yarn mediator` restart — same caveat as the
 plain-mediator "Restarting changes the address" note in
-`bifold/packages/mediator-server/README.md`.
+`packages/mediator-server/README.md`.
 
 ## VTI agent connect (`agent-connect`)
 
@@ -701,7 +702,7 @@ BASELINE_APK=/path/to/app-release.apk ANDROID_AVD2=Pixel_8_API_33_b \
 ## Witnessed exchange (`yarn e2e:vrc:witnessed:devices`) — attended
 
 Same hardware-attested exchange as `yarn e2e:vrc:devices`, but both wallets
-first connect to a locally-run witness server (`bifold/packages/witness-server`,
+first connect to a locally-run witness server (`packages/witness-server`,
 launched automatically), so the exchange auto-routes through the witness and
 each wallet ends up with a Verifiable Witness Credential (VWC) in addition to
 the peer VRC. See `docs/CRYPTO_SUITE_FOLLOWUP.md` for the DataIntegrityProof/
@@ -712,7 +713,7 @@ Prerequisites beyond the real-device setup above:
 - [`cloudflared`](https://github.com/cloudflare/cloudflared) installed — the
   harness spins up a quick HTTPS tunnel to the locally-run witness (mobile
   OSes block cleartext HTTP, and production witnesses are HTTPS).
-- `bifold/packages/witness-server` dependencies installed (it's launched via
+- the root `yarn install` done (the witness is a workspace, launched via
   `yarn ts-node --transpile-only src/index.ts` from that package).
 
 Same attended flow as `yarn e2e:vrc:devices` — watch for the `OPERATOR`
@@ -721,7 +722,7 @@ banners and authenticate on both phones. Override the witness's name with
 defaults collide with something else running locally.
 
 **The run is deterministic regardless of your local
-`bifold/packages/witness-server/.env`.** That file is gitignored and
+`packages/witness-server/.env`.** That file is gitignored and
 per-developer, and can (harmlessly, for interactive/manual witness use) commit
 to a mediator or a different transport. The harness always overrides the
 witness's transport (`MEDIATOR_INVITATION_URL`, forced to DIRECT unless you set
@@ -856,12 +857,12 @@ What that day taught, so the next run does not relearn it:
   DIDComm. A release build cannot be wallet A (the QR's `InvitationUrl` text is
   `__DEV__`-only) — run with `E2E_IOS_FIRST=1` so the debug-built iPhone
   generates the QR and the Android phone pastes it.
-- **The release APK bundles `@bifold/core` from its built `lib/`, not `src/`.**
-  After any bifold pointer move: `cd bifold && yarn workspace @bifold/core build`,
+- **The release APK bundles `@bifold/core` from `src/`; only `@bifold/trust-tasks` is read built.**
+  After a framework change: `yarn workspace @bifold/trust-tasks build`,
   then `./gradlew app:createBundleReleaseJsAndAssets --rerun-tasks`, then
   `assembleRelease`. Check the packager sourcemap
   (`app/build/intermediates/sourcemaps/react/release/…packager.map`) for
-  `packages/core/lib/commonjs` and a string from the change you expect.
+  `packages/core/src` and a string from the change you expect.
 - **Both pre-flight sheets are tapped by the harness** (every element lookup
   clears the sheet on a miss — its timing follows the witness discovery round
   trip, seconds to over a minute). You still authenticate at the biometric
@@ -887,7 +888,7 @@ Askar custody, CESR framing), same as `yarn e2e:vrc:tsp`.
 
 **The wallet-to-*witness* protocol is untouched by this flag.**
 Session-request/session-challenge/VP submission
-(`bifold/packages/core/src/modules/vrc/witnessed-vrc-manager.ts`) goes over
+(`packages/core/src/modules/vrc/witnessed-vrc-manager.ts`) goes over
 plain DIDComm basic messages, not the Trust Task carriage — that's a
 separate channel entirely, so this variant proves the TSP envelope carries
 the peer-to-peer VRC exchange correctly *alongside* an otherwise-unchanged
@@ -1067,7 +1068,7 @@ that ships, with the phones linked to an agent the gateway serves:
 | Turn notifications off: the next wake does not arrive | | |
 | Deny the permission: the app works as before and nothing registers | | |
 
-Record per-step timings and the wallet and bifold heads with the result. The
+Record per-step timings and the wallet head with the result. The
 rows are run on the build that ships (from TestFlight and Play internal
 testing). A rehearsal build made locally uses the dedicated test bundle id,
 never the store app's: installing over the store app keeps its data and takes

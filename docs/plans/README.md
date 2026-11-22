@@ -3,6 +3,11 @@
 Living planning documents for cross-cutting workstreams, and the lightweight
 protocol we use to agree on them.
 
+Paths: since Phase 2 of [single-codebase-plan.md](./single-codebase-plan.md) the framework's packages live at
+`packages/*` of this repository. A `bifold/packages/…` path in an older plan or companion names the same file as it
+stood before the move (and, before the fold of 2026-11-22, in the `keyring-bifold` repository); those documents are
+history and are not rewritten.
+
 | Plan | Scope | Status |
 |---|---|---|
 | [openvtc-integration-plan.md](./openvtc-integration-plan.md) | Making Keyring interoperable with the OpenVTC / First Person Project infrastructure — TSP as the message envelope, Trust Tasks as the operation layer, the VTA as the server-side counterpart | Active. Phase A/B complete, Phase C in progress |

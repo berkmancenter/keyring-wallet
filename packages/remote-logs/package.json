@@ -2,17 +2,11 @@
   "name": "@bifold/remote-logs",
   "version": "3.0.16",
   "description": "Remote logging for credo-ts agents",
-  "main": "build/index.js",
-  "types": "build/index.d.ts",
-  "source": "build/index.js",
-  "files": [
-    "build"
-  ],
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "source": "src/index.ts",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "echo 'building remote-logs 🏗️' && yarn run clean && yarn run compile && echo 'remote-logs built ✅'",
-    "clean": "rimraf ./build",
-    "compile": "tsc",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -56,16 +50,14 @@
     "react-native": "0.81.5",
     "react-native-logs": "~5.1.0"
   },
-  "installConfig": {
-    "hoistingLimits": "workspaces"
-  },
   "dependencies": {
-    "@bifold/core": "3.0.16",
+    "@bifold/core": "workspace:*",
     "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch",
     "axios": "~1.13.2",
     "buffer": "~6.0.3",
     "react": "~19.1.4",
     "react-native": "0.81.5",
     "react-native-logs": "~5.1.0"
-  }
+  },
+  "react-native": "src/index.ts"
 }

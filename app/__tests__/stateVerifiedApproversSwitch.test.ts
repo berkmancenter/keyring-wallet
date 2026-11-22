@@ -39,7 +39,7 @@ jest.mock('../src/utils/logger', () => {
     default: { startEventListeners: jest.fn(), info: log, warn: log, error: log, debug: log, trace: log },
   }
 })
-const bifoldCoreDir = path.resolve(__dirname, '../../bifold/packages/core')
+const bifoldCoreDir = path.resolve(__dirname, '../../packages/core')
 for (const from of [__dirname, bifoldCoreDir]) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires -- the copy that directory resolves
   const i18nModule = require(require.resolve('i18next', { paths: [from] }))
@@ -54,7 +54,7 @@ const load = async () => {
   const { app } = composeContainers(
     ((key: string) => key) as never,
     () => undefined,
-    () => undefined
+    () => undefined,
   )
   const dispatch = jest.fn()
   await app.resolve(TOKENS.LOAD_STATE)(dispatch)
@@ -157,7 +157,7 @@ describe('the state-verified approvers switch and the test-state setting', () =>
       allSaved()
       off()
       expect(await load()).toEqual({ stored: [true, true], on })
-    }
+    },
   )
 
   it('on load, saved "off"s win over defaults that are on', async () => {

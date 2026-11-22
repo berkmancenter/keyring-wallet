@@ -43,7 +43,7 @@ const fakeAgent = () => {
 // AppContainer.init() also registers the VRC module's translations through bifold's own copy of i18next, which is
 // a bare mock in jest: give that copy (resolved from bifold core, as its register.ts resolves it) the one call.
 // The directory app/jest.config.js maps @bifold/core into.
-const bifoldCoreDir = path.resolve(__dirname, '../../bifold/packages/core')
+const bifoldCoreDir = path.resolve(__dirname, '../../packages/core')
 for (const from of [__dirname, bifoldCoreDir]) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires -- the copy that directory resolves
   const i18nModule = require(require.resolve('i18next', { paths: [from] }))
@@ -72,11 +72,11 @@ describe('container composition', () => {
       await lifecycle.onForeground(agent)
       expect(recipient.initiateMessagePickup).toHaveBeenCalledWith(
         undefined,
-        DidCommMediatorPickupStrategy.PickUpV2LiveMode
+        DidCommMediatorPickupStrategy.PickUpV2LiveMode,
       )
       expect(recipient.initiateMessagePickup).not.toHaveBeenCalledWith(
         undefined,
-        DidCommMediatorPickupStrategy.PickUpV2
+        DidCommMediatorPickupStrategy.PickUpV2,
       )
     } finally {
       setLivePickupEnabled(false)

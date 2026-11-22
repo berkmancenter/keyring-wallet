@@ -21,30 +21,30 @@ const FP = { runners: { 'mini-prague': '0.65.0' }, pnm: { 'pins/gate-pnm3': 'aaa
 
 test('(a) the link rule: link screens, clients and harness count; tests and other files do not', () => {
   const files = [
-    'bifold/packages/core/src/modules/trust-tasks/module/VtaClient.ts',
-    'bifold/packages/core/src/modules/trust-tasks/module/vtaAgent.ts',
-    'bifold/packages/core/src/modules/trust-tasks/screens/VtaLink.tsx',
-    'bifold/packages/core/src/modules/trust-tasks/screens/MyAgent.tsx',
-    'bifold/packages/core/src/modules/trust-tasks/screens/linkFailureWords.ts',
+    'packages/core/src/modules/trust-tasks/module/VtaClient.ts',
+    'packages/core/src/modules/trust-tasks/module/vtaAgent.ts',
+    'packages/core/src/modules/trust-tasks/screens/VtaLink.tsx',
+    'packages/core/src/modules/trust-tasks/screens/MyAgent.tsx',
+    'packages/core/src/modules/trust-tasks/screens/linkFailureWords.ts',
     'e2e/run-vta-link.js', 'e2e/lib/aclCleanup.js', 'e2e/lib/pages/link.js',
     'e2e/gate/legs/linkfail.sh', 'e2e/gate/legs/linkwait.sh', 'e2e/gate/legs/pnmlink.sh',
   ];
   assert.deepEqual(linkFiles(files), files);
   assert.deepEqual(linkFiles([
-    'bifold/packages/core/src/modules/trust-tasks/__tests__/VtaClient.test.ts', 'e2e/lib/aclCleanup.test.mjs',
-    'bifold/packages/core/src/modules/chat/inbound.ts', 'app/src/screens/Developer.tsx', 'e2e/gate/legs/kk.sh',
+    'packages/core/src/modules/trust-tasks/__tests__/VtaClient.test.ts', 'e2e/lib/aclCleanup.test.mjs',
+    'packages/core/src/modules/chat/inbound.ts', 'app/src/screens/Developer.tsx', 'e2e/gate/legs/kk.sh',
   ]), []);
 });
 
 test('regression (ac on #874): #974\'s own files, inside the 278.7 pin bump, trigger through the trust-tasks package', () => {
   const pr974 = [
-    'bifold/packages/core/__tests__/modules/trust-tasks/sharedConnectRealKms.test.ts',
-    'bifold/packages/core/src/modules/trust-tasks/module/sharedConnect.ts',
-    'bifold/packages/core/src/modules/trust-tasks/module/sharedConnectCeremony.ts',
-    'bifold/packages/core/src/modules/trust-tasks/module/sharedConnectStore.ts',
-    'bifold/packages/trust-tasks/src/documentProof.ts',
+    'packages/core/__tests__/modules/trust-tasks/sharedConnectRealKms.test.ts',
+    'packages/core/src/modules/trust-tasks/module/sharedConnect.ts',
+    'packages/core/src/modules/trust-tasks/module/sharedConnectCeremony.ts',
+    'packages/core/src/modules/trust-tasks/module/sharedConnectStore.ts',
+    'packages/trust-tasks/src/documentProof.ts',
   ];
-  assert.deepEqual(linkFiles(pr974), ['bifold/packages/trust-tasks/src/documentProof.ts']);
+  assert.deepEqual(linkFiles(pr974), ['packages/trust-tasks/src/documentProof.ts']);
   assert.equal(decide({ files: pr974, prevFingerprint: FP, fingerprint: FP }).run, true);
 });
 
@@ -85,11 +85,12 @@ test('(b) end to end: the fingerprint is recorded, unchanged reads no trigger, a
 });
 
 /**
- * A wallet repo across the fold-in: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone), fold has
- * bifold/ as a tree, after changes x.ts and VtaClient.ts (a link path) under it, plain changes app/ only.
+ * A wallet repo across the fold and the move: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone),
+ * fold has the framework as a tree under bifold/, move renames it to packages/ (Phase 2), after changes x.ts and
+ * VtaClient.ts (a link path) under packages/, plain changes app/ only.
  */
-function foldRepo() {
-  const top = mkdtempSync(path.join(tmpdir(), 'fold-w-')), clone = mkdtempSync(path.join(tmpdir(), 'fold-b-'));
+function movedRepo() {
+  const top = mkdtempSync(path.join(tmpdir(), 'move-w-')), clone = mkdtempSync(path.join(tmpdir(), 'move-b-'));
   const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
   const commit = (dir, m) => { git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
   const put = (dir, rel, body) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), body); };
@@ -100,33 +101,30 @@ function foldRepo() {
   git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin1},bifold`); const gl1 = commit(top, 'gitlink pin1');
   git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin2},bifold`); const gl2 = commit(top, 'gitlink pin2');
   git(top, 'rm', '-q', '--cached', 'bifold'); put(top, 'bifold/packages/core/src/x.ts', '1'); put(top, `bifold/${VTA}`, '2'); put(top, 'bifold/packages/core/testids.json', '{}'); git(top, 'add', 'bifold'); const fold = commit(top, 'fold');
-  put(top, 'bifold/packages/core/src/x.ts', '3'); put(top, `bifold/${VTA}`, '3'); git(top, 'add', 'bifold'); const after = commit(top, 'change x and VtaClient');
+  git(top, 'mv', 'bifold/packages', 'packages'); const move = commit(top, 'move');
+  put(top, 'packages/core/src/x.ts', '3'); put(top, VTA, '3'); git(top, 'add', 'packages'); const after = commit(top, 'change x and VtaClient');
   put(top, 'app/src/a.ts', 'b'); git(top, 'add', 'app'); const plain = commit(top, 'app only');
-  return { top, clone, gl1, gl2, fold, after, plain, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
+  return { top, clone, gl1, gl2, fold, move, after, plain, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
 }
 
-test('(a) across the fold-in: a folded range reads bifold/ with no BIFOLD_GIT; a gitlink range still reads the clone; one crossing the fold runs the link legs', () => {
-  const r = foldRepo();
-  const saved = process.env.BIFOLD_GIT;
+test('(a) across the move: a packages/ range reads the framework from the wallet diff; one reaching back before the move runs the link legs', () => {
+  const r = movedRepo();
   try {
-    delete process.env.BIFOLD_GIT;
-    const folded = rangeFiles(`${r.fold}..${r.after}`, r.top);
-    assert.equal(folded.rangeKnown, true);
-    assert.match(decide({ ...folded, prevFingerprint: FP, fingerprint: FP }).why.join(), /link file changed: bifold\/packages\/core\/src\/modules\/trust-tasks\/module\/VtaClient\.ts/);
-    // Control: a folded range that touches no link file is a NO, so the fold did not make every night a run.
+    const moved = rangeFiles(`${r.move}..${r.after}`, r.top);
+    assert.equal(moved.rangeKnown, true);
+    assert.match(decide({ ...moved, prevFingerprint: FP, fingerprint: FP }).why.join(), /link file changed: packages\/core\/src\/modules\/trust-tasks\/module\/VtaClient\.ts/);
+    // Control: a packages/ range that touches no link file is a NO, so the move did not make every night a run.
     assert.equal(decide({ ...rangeFiles(`${r.after}..${r.plain}`, r.top), prevFingerprint: FP, fingerprint: FP }).run, false);
-    // Crossing (the gitlink at one end, the tree at the other): unknown, with the reason, so it runs.
-    const crossing = rangeFiles(`${r.gl2}..${r.fold}`, r.top);
-    assert.equal(crossing.rangeKnown, false);
-    assert.match(crossing.rangeWhy, /crosses the bifold fold-in/);
-    assert.equal(decide({ ...crossing, prevFingerprint: FP, fingerprint: FP }).run, true);
-    // Before the fold, as before: the clone's own range at the pins.
-    process.env.BIFOLD_GIT = r.clone;
-    const gitlinks = rangeFiles(`${r.gl1}..${r.gl2}`, r.top);
-    assert.equal(gitlinks.rangeKnown, true);
-    assert.equal(decide({ ...gitlinks, prevFingerprint: FP, fingerprint: FP }).run, true);
+    // Reaching back before the move (the folded tree, or the gitlink, at the base): unknown, with the reason, so it runs.
+    for (const base of [r.fold, r.gl2]) {
+      const crossing = rangeFiles(`${base}..${r.after}`, r.top);
+      assert.equal(crossing.rangeKnown, false);
+      assert.match(crossing.rangeWhy, /before the move of the framework into packages\//);
+      assert.equal(decide({ ...crossing, prevFingerprint: FP, fingerprint: FP }).run, true);
+    }
+    // Both ends before the move: unknown too (this tool reads the packages/ layout), never a quiet NO.
+    assert.equal(rangeFiles(`${r.gl1}..${r.gl2}`, r.top).rangeKnown, false);
   } finally {
-    if (saved === undefined) delete process.env.BIFOLD_GIT; else process.env.BIFOLD_GIT = saved;
     r.done();
   }
 });

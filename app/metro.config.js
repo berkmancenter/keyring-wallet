@@ -1,58 +1,20 @@
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config')
 const fs = require('fs')
 const path = require('path')
-const escape = require('escape-string-regexp')
 // metro 0.83+ moved internal files under exports "./private/*"
 const exclusionListModule = require('metro-config/private/defaults/exclusionList')
 const exclusionList = exclusionListModule.default ?? exclusionListModule
 const { isDemoProfilesBarrelImport } = require('./metro/isDemoProfilesImport')
 require('dotenv').config()
 
-const packageDirs = [
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/oca')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/remote-logs')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/core')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-locality-peripheral')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/dtg-vocab')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-hooks')),
-  // @bifold/trust-tasks: platform-neutral trust-task plumbing shared with the
-  // witness-server (document proofs, carriage message, payload validator)
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/trust-tasks')),
-  // @bifold/credo-tsp-adapter: Askar-backed implementations of trust-tasks's
-  // tsp-core ports (SigningKey/KeyAgreement/VidResolver)
-  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/credo-tsp-adapter')),
-]
-
-// In development, resolve these to source for hot reload; CI/production uses built output.
-const BIFOLD_SOURCE_PACKAGES = [
-  '@bifold/core',
-  '@bifold/verifier',
-  '@bifold/dtg-vocab',
-  '@bifold/vrc-contexts',
-  '@bifold/react-native-attestation',
-  '@bifold/react-native-locality-peripheral',
-  '@bifold/react-hooks',
-  '@bifold/trust-tasks',
-  '@bifold/credo-tsp-adapter',
-]
-const bifoldSourceDirByPackage = {}
-for (const dir of packageDirs) {
-  try {
-    const pak = require(path.join(dir, 'package.json'))
-    if (BIFOLD_SOURCE_PACKAGES.includes(pak.name)) {
-      bifoldSourceDirByPackage[pak.name] = dir
-    }
-  } catch (_) {
-    // ignore missing or invalid package.json
-  }
-}
-
-// bifold workspace deps hoist to bifold/node_modules; metro must watch it to
-// resolve them from bifold's built lib output (production bundles)
-const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', 'node_modules'))
+// The framework's packages (@bifold/*) are workspaces of this repository at packages/*, installed by the one
+// `yarn install` at the root (docs/plans/single-codebase-plan.md, Phase 2). Each resolves to its TypeScript source
+// through its `source` main field (resolverMainFields below puts it first), in development and release bundles
+// alike: there is no built lib/ to fall out of date, and no second install whose node_modules could hold a second
+// copy of anything. Metro only resolves files inside its watch folders, so the repository root is watched: it
+// covers packages/*, app/ and the hoisted node_modules.
+const repoRoot = fs.realpathSync(path.join(__dirname, '..'))
+const rootNodeModules = path.join(repoRoot, 'node_modules')
 
 // ACTIVE_DEMO_PROFILE=none already means "no demo profiles" at RUNTIME (see
 // src/demo-profiles/index.ts's selectDemoProfiles) — every installed
@@ -74,14 +36,11 @@ const demoProfilesStubPath = path.join(__dirname, 'metro', 'demoProfilesStub.ts'
 const stripRoomsSample = process.env.ROOMS_SAMPLE !== '1'
 const roomsSampleStubPath = path.join(__dirname, 'metro', 'roomsSampleStub.ts')
 // `useRoomsService` is the only file that imports the sample, as `./sample/sampleRooms`, from inside
-// bifold's modules/rooms (source in development, lib/ in a release build).
+// the framework's modules/rooms (packages/core/src/modules/rooms, resolved as source in every bundle).
 const isRoomsSampleImport = (moduleName, originModulePath) =>
   /^\.\/sample\/sampleRooms(\.[jt]sx?)?$/.test(moduleName) && /[\\/]modules[\\/]rooms[\\/]/.test(originModulePath ?? '')
 
-const watchFolders = [...packageDirs, bifoldNodeModules]
-
-const extraExclusionlist = []
-const extraNodeModules = {}
+const watchFolders = [repoRoot]
 
 // Module aliases for React Native compatibility
 const polyfillModules = {
@@ -94,24 +53,6 @@ const polyfillModules = {
   buffer: path.join(__dirname, 'node_modules', 'buffer'),
   // Force rdf-canonize to use our patched version from app's node_modules
   'rdf-canonize': path.join(__dirname, 'node_modules', 'rdf-canonize'),
-  // bifold workspace cross-deps hoist to bifold/node_modules, which metro
-  // doesn't watch; resolve them through the app's portals instead
-  '@bifold/react-hooks': path.join(__dirname, 'node_modules', '@bifold/react-hooks'),
-}
-
-for (const packageDir of packageDirs) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const pak = require(path.join(packageDir, 'package.json'))
-  const modules = Object.keys({
-    ...pak.peerDependencies,
-    ...pak.devDependencies,
-  })
-  extraExclusionlist.push(...modules.map((m) => path.join(packageDir, 'node_modules', m)))
-
-  modules.reduce((acc, name) => {
-    acc[name] = path.join(__dirname, 'node_modules', name)
-    return acc
-  }, extraNodeModules)
 }
 
 module.exports = (async () => {
@@ -145,18 +86,22 @@ module.exports = (async () => {
       },
     },
     resolver: {
-      blacklistRE: exclusionList(extraExclusionlist.map((m) => new RegExp(`^${escape(m)}\\/.*$`))),
-      extraNodeModules: {
-        ...extraNodeModules,
-        ...polyfillModules,
-      },
+      // The former framework-package exclusion list (their nested node_modules) is gone with the second install:
+      // one tree has nothing to exclude. exclusionList() with no entries is Metro's default block list.
+      blacklistRE: exclusionList([]),
+      extraNodeModules: polyfillModules,
       assetExts: assetExts.filter((ext) => ext !== 'svg'),
       sourceExts: [...sourceExts, 'svg', 'cjs'],
+      // `source` first: the @bifold/* workspaces name their src/index.ts there, so the bundle is built from the
+      // framework's TypeScript directly (no lib/ build step, in dev and release alike). Third-party packages
+      // rarely declare `source`; when one does it is its own TypeScript, which Metro transforms as it does ours.
+      resolverMainFields: ['source', 'react-native', 'browser', 'main'],
       // Prefer browser builds (e.g. nanoid) over node builds that require('crypto').
-      // Same setup as bifold samples/app.
       unstable_enablePackageExports: true,
       unstable_conditionNames: ['react-native', 'browser', 'require'],
-      nodeModulesPaths: [path.join(__dirname, 'node_modules'), bifoldNodeModules],
+      // The app's own node_modules (hoistingLimits keeps its dependencies there: the native projects hardcode
+      // app/node_modules paths), then the root's, where the packages/* dependencies hoist.
+      nodeModulesPaths: [path.join(__dirname, 'node_modules'), rootNodeModules],
       // Force specific module imports to use our polyfilled/patched versions
       resolveRequest: (context, moduleName, platform) => {
         // ACTIVE_DEMO_PROFILE=none: swap the demo-profiles barrel import for
@@ -176,8 +121,9 @@ module.exports = (async () => {
           return { filePath: roomsSampleStubPath, type: 'sourceFile' }
         }
         // Singleton packages: always resolve from the app's node_modules so
-        // bifold sources never load a second copy (bifold/node_modules is on
-        // nodeModulesPaths, which would otherwise win for react etc.)
+        // the framework's sources never load a second copy (the root's
+        // node_modules is on nodeModulesPaths, and a request from packages/*
+        // would otherwise find the root's copy of react etc. first)
         //
         // The native-binding families below are here for a sharper reason than
         // react's: each registers its native implementation on a MODULE-LEVEL
@@ -197,17 +143,19 @@ module.exports = (async () => {
         // that path, since nothing else needs native askar before the main
         // agent exists.
         //
-        // Two independent installs make the duplicates unavoidable: the root
-        // workspace, plus `yarn install` inside the bifold submodule (run by
-        // scripts/ensure-bifold-ready.js as preinstall). `resolutions` only
-        // dedupes within a single tree, so pinning has to happen here. Keep
-        // this list in sync when a new native-backed dependency reaches
-        // bifold/packages/*. bifold core's jest has the same pin for its own
-        // tests (moduleNameMapper for askar-shared in
-        // bifold/packages/core/jest.config.js); a dependency added here may
-        // belong there too. Changing this file runs the android-apk and
-        // ios-simulator builds (paths in .github/workflows/test-builds.yml),
-        // so a resolution mistake here is caught before merge.
+        // Since the fold there is one install, but still two places a copy can
+        // live: the app's node_modules (its `hoistingLimits: workspaces` keeps
+        // its dependencies there, because the native projects hardcode that
+        // path) and the root's, where the packages/* dependencies hoist. A
+        // package both sides depend on at the same version is installed
+        // twice, once in each, so pinning still has to happen here. Keep this
+        // list in sync when a new native-backed dependency reaches
+        // packages/*. core's jest has the same pin for its own tests
+        // (moduleNameMapper for askar-shared in packages/core/jest.config.js);
+        // a dependency added here may belong there too. Changing this file
+        // runs the android-apk and ios-simulator builds (paths in
+        // .github/workflows/test-builds.yml), so a resolution mistake here is
+        // caught before merge.
         const singletonPrefixes = [
           'react',
           'react-native',
@@ -231,7 +179,7 @@ module.exports = (async () => {
           'class-transformer',
           // Carries a keyring patch (utf8 always uses its pure-JS codec; the
           // built-in path breaks credo's first agent start in release bundles,
-          // 2026-09-21). bifold's own install has unpatched copies, so pin it.
+          // 2026-09-21). The root's copy may be unpatched, so pin it.
           '@scure/base',
         ]
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
@@ -241,7 +189,7 @@ module.exports = (async () => {
           return context.resolveRequest(
             { ...context, originModulePath: path.join(__dirname, 'index.js') },
             moduleName,
-            platform
+            platform,
           )
         }
         // Ensure js-sha256 is resolved from app's node_modules
@@ -258,10 +206,11 @@ module.exports = (async () => {
         // There is no `require` and no `default`, so under CommonJS resolution
         // nothing matches, Metro warns ("no match was resolved for this
         // request"), falls back to file-based resolution, and fails — the
-        // subpath only exists under dist/. Dev bundles never hit this because
-        // BIFOLD_SOURCE_PACKAGES resolves core to ESM source; the release
-        // bundle resolves core to lib/commonjs, which is why `assembleRelease`
-        // broke while every debug build was fine.
+        // subpath only exists under dist/. Before the fold, dev bundles never
+        // hit this because core resolved to ESM source while the release
+        // bundle resolved core to lib/commonjs, which is why `assembleRelease`
+        // broke while every debug build was fine; both resolve to source now,
+        // and the mirror below is what makes the subpaths resolve at all.
         // Mirror the map's `import` target explicitly. Adding `require` to
         // unstable_conditionNames does not help: the package declares no such
         // condition to match.
@@ -270,12 +219,8 @@ module.exports = (async () => {
           // export whose file is not dist/<path>.js. dist/_runtime/index.js exists in 0.9 as well.
           const requested = moduleName.slice('@openvtc/trust-tasks/'.length)
           const subPath = requested === 'runtime' ? '_runtime/index' : requested
-          const bases = [
-            path.join(__dirname, 'node_modules'),
-            path.join(__dirname, '..', 'bifold', 'packages', 'core', 'node_modules'),
-            path.join(__dirname, '..', 'bifold', 'node_modules'),
-            path.join(__dirname, '..', 'node_modules'),
-          ]
+          // The app's copy first, then the root's (where packages/* dependencies hoist).
+          const bases = [path.join(__dirname, 'node_modules'), rootNodeModules]
           for (const base of bases) {
             const candidate = path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)
             if (fs.existsSync(candidate)) {
@@ -287,7 +232,9 @@ module.exports = (async () => {
           // this block exists to work around. Fail loudly instead.
           throw new Error(
             `[metro.config] Could not resolve '${moduleName}': no dist/${subPath}.js found under any of:\n` +
-              bases.map((base) => `  ${path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)}`).join('\n')
+              bases
+                .map((base) => `  ${path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)}`)
+                .join('\n'),
           )
         }
         // Intercept rdf-canonize package requests to ensure patched version is used
@@ -320,17 +267,6 @@ module.exports = (async () => {
           if (fs.existsSync(resolvedPathNoExt)) {
             return {
               filePath: resolvedPathNoExt,
-              type: 'sourceFile',
-            }
-          }
-        }
-        // In development only: resolve bifold packages to source for hot reload
-        if (process.env.NODE_ENV !== 'production' && bifoldSourceDirByPackage[moduleName]) {
-          const packageDir = bifoldSourceDirByPackage[moduleName]
-          const sourceEntry = path.join(packageDir, 'src', 'index.ts')
-          if (fs.existsSync(sourceEntry)) {
-            return {
-              filePath: sourceEntry,
               type: 'sourceFile',
             }
           }

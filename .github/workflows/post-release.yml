@@ -106,13 +106,6 @@ jobs:
         if: ${{ steps.rerun.outputs.still_red == 'true' }}
         uses: ./.github/workflows/actions/setup-node
 
-      - name: Build bifold packages
-        if: ${{ steps.rerun.outputs.still_red == 'true' }}
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
-
       - name: Install dependencies
         if: ${{ steps.rerun.outputs.still_red == 'true' }}
         run: yarn install --immutable

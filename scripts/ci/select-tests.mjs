@@ -4,7 +4,13 @@
 //
 // The whole suite of every package, with coverage, takes 20 to 30 minutes. A PR
 // runs only what its change can reach. The whole suite runs on every push to main,
-// nightly, and on dispatch (.github/workflows/full-tests.yaml).
+// nightly, and on dispatch (.github/workflows/framework-full.yml).
+//
+// The framework's packages are packages/* of this repository, workspaces of the one
+// install at its root beside the app (docs/plans/single-codebase-plan.md, Phase 2):
+// the diff is the whole repository's, and the rules below say which of its paths
+// reach a framework suite (the root install does; app/, e2e/ and the wallet's own
+// scripts do not).
 //
 //   node scripts/ci/select-tests.mjs plan --base origin/main --out plan.json
 //   node scripts/ci/select-tests.mjs run --plan plan.json [--part 2/4] [--max-workers 4]
@@ -66,7 +72,10 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 export const RELATED = '@bifold/core'
 
 const EVERYTHING = [
+  // The one install: the root manifest, the lock, yarn's own files, and the app's manifest (a workspace of the
+  // same install, so a change to it moves what hoists where).
   /^package\.json$/,
+  /^app\/package\.json$/,
   /^yarn\.lock$/,
   /^\.yarnrc\.yml$/,
   /^\.yarn\//,
@@ -75,15 +84,24 @@ const EVERYTHING = [
   /^babel\.config\./,
   /^jest\.config\./,
   /^tsconfig[^/]*\.json$/,
-  /^\.github\/workflows\/quality\.yaml$/,
-  /^\.github\/actions\//,
-  /^scripts\/ci\//,
+  // The framework's shared setup under packages/ (not a workspace: no rule below knows it otherwise).
+  /^packages\/tsconfig-base\.json$/,
+  /^packages\/__mocks__\//,
+  /^\.github\/workflows\/framework[^/]*\.yml$/,
+  /^\.github\/workflows\/actions\//,
+  /^scripts\/ci\/select-tests/,
 ]
 
 const NO_JEST = [
   /\.md$/,
   /^docs\//,
   /^\.github\//,
+  // The wallet's own trees: no framework suite loads them (the app's suite runs in quality.yml).
+  /^app\//,
+  /^e2e\//,
+  /^scripts\//,
+  /^tsp-reference\//,
+  /^packages\/\.(prettierrc|prettierignore|gitignore)$/,
   /^\.changeset\//,
   /^LICENSE/,
   /^\.gitignore$/,
@@ -95,7 +113,6 @@ const NO_JEST = [
   /^\.husky\//,
   /^\.githooks\//,
   /^commitlint\./,
-  /^scripts\/tsc-ratchet/,
   /^packages\/[^/]+\/tsc-baseline\.txt$/,
 ]
 
@@ -296,9 +313,10 @@ export function setupClosure(entries, read, exists, depth = Infinity) {
   return seen
 }
 
+/** The framework's workspaces: packages/* (the app, a workspace of the same install, is not one of its suites). */
 export function readWorkspaces(root = repoRoot) {
   const out = []
-  for (const parent of ['packages', 'samples']) {
+  for (const parent of ['packages']) {
     const abs = path.join(root, parent)
     if (!existsSync(abs)) continue
     for (const dir of readdirSync(abs)) {
@@ -330,25 +348,23 @@ const output = (pairs) => {
 const summary = (text) => process.env.GITHUB_STEP_SUMMARY && appendFileSync(process.env.GITHUB_STEP_SUMMARY, text)
 
 /**
- * The PR's changes as this script's rules read them, with the empty-diff guard. --relative: the framework lives under
- * bifold/ of the wallet repository since the fold, and this script runs with that directory as its root, so the paths
- * come back relative to it (packages/core/…) and the diff is RESTRICTED to it. A wallet-only change leaves that list
- * empty, which is "no framework suite to run", not a failure; so the guard against a diff that GitHub says is not empty
- * reads the WHOLE repository's diff, never the relative one (the relative guard failed every wallet-only PR into the
- * integration branch until the fold's review caught it). `run` is git, injectable for the test; `listed` is GitHub's
- * changed-files count.
+ * The PR's changes as this script's rules read them, with the empty-diff guard. The diff is the whole repository's,
+ * from its root (since Phase 2 of the fold the framework's packages are workspaces of it; before, this script ran
+ * under bifold/ with a --relative diff, and a guard that compared that filtered list with GitHub's whole-PR count
+ * failed every wallet-only PR until the fold's review caught it). A change the rules read as wallet-only is "no
+ * framework suite to run", not a failure; an EMPTY diff while GitHub lists files is a broken checkout, and refused.
+ * `run` is git, injectable for the test; `listed` is GitHub's changed-files count.
  */
 export function changedAgainst(base, { run = git, listed = Number(process.env.PR_CHANGED_FILES || 0) } = {}) {
   run('merge-base', base, 'HEAD') // throws on a checkout too shallow to diff
-  const changes = run('diff', '--name-status', '--no-renames', '--relative', `${base}...HEAD`)
+  const changes = run('diff', '--name-status', '--no-renames', `${base}...HEAD`)
     .split('\n')
     .filter(Boolean)
     .map((line) => {
       const [status, p] = line.split('\t')
       return { status, path: p }
     })
-  const whole = run('diff', '--name-only', '--no-renames', `${base}...HEAD`).split('\n').filter(Boolean)
-  if (whole.length === 0 && listed > 0)
+  if (changes.length === 0 && listed > 0)
     throw new Error(
       `the diff against ${base} is empty, but GitHub lists ${listed} changed files; refusing to select nothing`
     )

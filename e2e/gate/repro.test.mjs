@@ -15,10 +15,10 @@ test('a slug from the report id and the first words of what the tester saw', () 
 
 test('unit tests go where this repo keeps them', () => {
   const p = (f) => unitTestPath(f, 's');
-  assert.equal(p('bifold/packages/core/src/modules/trust-tasks/module/VtaClient.ts'), 'bifold/packages/core/src/modules/trust-tasks/__tests__/s.test.ts');
-  assert.equal(p('bifold/packages/core/src/screens/PINEnter.tsx'), 'bifold/packages/core/__tests__/screens/s.test.tsx');
-  assert.equal(p('bifold/packages/react-hooks/src/x.ts'), 'bifold/packages/react-hooks/tests/s.test.ts');
-  assert.equal(p('bifold/packages/trust-tasks/src/proof.ts'), 'bifold/packages/core/src/modules/trust-tasks/__tests__/s.test.ts');
+  assert.equal(p('packages/core/src/modules/trust-tasks/module/VtaClient.ts'), 'packages/core/src/modules/trust-tasks/__tests__/s.test.ts');
+  assert.equal(p('packages/core/src/screens/PINEnter.tsx'), 'packages/core/__tests__/screens/s.test.tsx');
+  assert.equal(p('packages/react-hooks/src/x.ts'), 'packages/react-hooks/tests/s.test.ts');
+  assert.equal(p('packages/trust-tasks/src/proof.ts'), 'packages/core/src/modules/trust-tasks/__tests__/s.test.ts');
   assert.equal(p('app/src/screens/Home.tsx'), 'app/__tests__/screens/s.test.tsx');
 });
 
@@ -49,7 +49,7 @@ function fixture() {
   put('run-plain.mjs', 'import { pin } from "./lib/pages/pin.js";\nawait pin.enter(d);\n');
   put('gate/legs/smoke-x.sh', 'node run-pin.mjs\n');
   put('gate/legs/other.sh', 'node run-plain.mjs\n');
-  const manifests = [{ root: 'bifold/packages/core/', json: { keys: { EnterPIN: ['src/screens/PINEnter.tsx'] }, stems: {} } }];
+  const manifests = [{ root: 'packages/core/', json: { keys: { EnterPIN: ['src/screens/PINEnter.tsx'] }, stems: {} } }];
   const exists = (f) => !/Typo/.test(f);
   return { top, e2e, opts: { manifests, legsDir: path.join(e2e, 'gate/legs'), exists, repoRoot: top }, done: () => rmSync(top, { recursive: true, force: true }) };
 }
@@ -57,7 +57,7 @@ function fixture() {
 test('plan: a screen the gate reaches -> a row in a rows driver (not the one without createRows)', () => {
   const f = fixture();
   try {
-    const p = plan({ files: ['bifold/packages/core/src/screens/PINEnter.tsx'] }, f.opts);
+    const p = plan({ files: ['packages/core/src/screens/PINEnter.tsx'] }, f.opts);
     assert.equal(p.kind, 'row');
     assert.deepEqual(p.driver.leg, 'smoke-x');
     assert.match(p.driver.driver, /run-pin\.mjs$/);
@@ -69,24 +69,25 @@ test('plan: a screen the gate reaches -> a row in a rows driver (not the one wit
 test('plan: logic owning no testID -> a unit test, every unmapped file listed; a typo is missing, not logic', () => {
   const f = fixture();
   try {
-    const p = plan({ files: ['bifold/packages/core/src/modules/trust-tasks/module/VtaClient.ts', 'bifold/packages/core/src/modules/trust-tasks/module/vtaAgent.ts'] }, f.opts);
+    const p = plan({ files: ['packages/core/src/modules/trust-tasks/module/VtaClient.ts', 'packages/core/src/modules/trust-tasks/module/vtaAgent.ts'] }, f.opts);
     assert.equal(p.kind, 'unit');
     assert.equal(p.unmapped.length, 2);
     assert.match(p.unitPath, /trust-tasks\/__tests__\/<slug>\.test\.ts$/);
-    const t = plan({ files: ['bifold/packages/core/src/screens/Typo.tsx'] }, f.opts);
+    const t = plan({ files: ['packages/core/src/screens/Typo.tsx'] }, f.opts);
     assert.equal(t.kind, 'none');
-    assert.deepEqual(t.missing, ['bifold/packages/core/src/screens/Typo.tsx']);
+    assert.deepEqual(t.missing, ['packages/core/src/screens/Typo.tsx']);
   } finally {
     f.done();
   }
 });
 
 /**
- * A wallet repo across the fold-in: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone), fold has
- * bifold/ as a tree (x.ts, testids.json), after changes bifold/packages/core/src/x.ts.
+ * A wallet repo across the fold and the move: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone),
+ * fold has the framework as a tree under bifold/ (x.ts, testids.json), move renames it to packages/ (Phase 2), after
+ * changes packages/core/src/x.ts.
  */
-function foldRepo() {
-  const top = mkdtempSync(path.join(tmpdir(), 'fold-w-')), clone = mkdtempSync(path.join(tmpdir(), 'fold-b-'));
+function movedRepo() {
+  const top = mkdtempSync(path.join(tmpdir(), 'move-w-')), clone = mkdtempSync(path.join(tmpdir(), 'move-b-'));
   const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
   const commit = (dir, m) => { git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
   const put = (dir, rel, body) => { mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); writeFileSync(path.join(dir, rel), body); };
@@ -96,26 +97,27 @@ function foldRepo() {
   git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin1},bifold`); const gl1 = commit(top, 'gitlink pin1');
   git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin2},bifold`); const gl2 = commit(top, 'gitlink pin2');
   git(top, 'rm', '-q', '--cached', 'bifold'); put(top, 'bifold/packages/core/src/x.ts', '2'); put(top, 'bifold/packages/core/testids.json', '{"keys":{},"stems":{}}'); git(top, 'add', 'bifold'); const fold = commit(top, 'fold');
-  put(top, 'bifold/packages/core/src/x.ts', '3'); git(top, 'add', 'bifold'); const after = commit(top, 'change x');
-  return { top, clone, gl1, gl2, fold, after, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
+  git(top, 'mv', 'bifold/packages', 'packages'); const move = commit(top, 'move');
+  put(top, 'packages/core/src/x.ts', '3'); git(top, 'add', 'packages'); const after = commit(top, 'change x');
+  return { top, clone, gl1, gl2, fold, move, after, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
 }
 
-test('plan on a folded repo whose bifold/ is not on disk: a file in HEAD’s tree is present (a unit test), a typo under bifold/ is missing', () => {
-  const f = fixture(), r = foldRepo();
-  const saved = process.env.BIFOLD_GIT;
+test('plan on a moved repo whose packages/ is not on disk: a file in HEAD’s tree is present (a unit test); a typo under packages/, and a bifold/… path since the move, are missing', () => {
+  const f = fixture(), r = movedRepo();
   try {
-    delete process.env.BIFOLD_GIT;
-    rmSync(path.join(r.top, 'bifold'), { recursive: true, force: true });
+    rmSync(path.join(r.top, 'packages'), { recursive: true, force: true });
     const opts = { ...f.opts, exists: (p) => pathExists(p, r.top) };
-    const p = plan({ files: ['bifold/packages/core/src/x.ts'] }, opts);
+    const p = plan({ files: ['packages/core/src/x.ts'] }, opts);
     assert.equal(p.kind, 'unit');
     assert.deepEqual(p.missing, []);
-    assert.equal(p.unitPath, 'bifold/packages/core/__tests__/<slug>.test.ts');
-    const t = plan({ files: ['bifold/packages/core/src/screens/Typo.tsx'] }, opts);
+    assert.equal(p.unitPath, 'packages/core/__tests__/<slug>.test.ts');
+    const t = plan({ files: ['packages/core/src/screens/Typo.tsx'] }, opts);
     assert.equal(t.kind, 'none');
-    assert.deepEqual(t.missing, ['bifold/packages/core/src/screens/Typo.tsx']);
+    assert.deepEqual(t.missing, ['packages/core/src/screens/Typo.tsx']);
+    const old = plan({ files: ['bifold/packages/core/src/x.ts'] }, opts);
+    assert.equal(old.kind, 'none');
+    assert.deepEqual(old.missing, ['bifold/packages/core/src/x.ts']);
   } finally {
-    if (saved === undefined) delete process.env.BIFOLD_GIT; else process.env.BIFOLD_GIT = saved;
     f.done(); r.done();
   }
 });

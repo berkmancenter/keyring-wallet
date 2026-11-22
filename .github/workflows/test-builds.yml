@@ -24,7 +24,7 @@ name: Test builds
 #   gh workflow run test-builds.yml -R berkmancenter/keyring-wallet --ref <branch>
 #   gh run download <run-id> -R berkmancenter/keyring-wallet
 #
-# Every artifact is named after the wallet commit and the bifold commit it pins,
+# Every artifact is named after the wallet commit and the framework tree it carries (packages/, under the historical bf label),
 # and carries a manifest (commits, bundle SHA-256, native fingerprint), so a
 # check can prove which build it ran.
 
@@ -53,14 +53,12 @@ on:
       - "yarn.lock"
       - "app/patches/**"
       - ".yarn/patches/**"
-      # The bifold native modules and dependency manifests (bifold/ is part of this repository since the fold). The
+      # The framework's native modules and dependency manifests (packages/* are workspaces of this repository). The
       # react-native-* glob is the shape scripts/release/tier.mjs's "native module package" rule follows too. WARNING: a
       # native package named otherwise needs both places, and only this glob fails safe (tier.mjs would grade its specs
       # as JavaScript); tier.test.mjs reads this glob and fails when the two diverge.
-      - "bifold/packages/react-native-*/**"
-      - "bifold/packages/*/package.json"
-      - "bifold/package.json"
-      - "bifold/yarn.lock"
+      - "packages/react-native-*/**"
+      - "packages/*/package.json"
       - ".github/workflows/test-builds.yml"
       # Below: files that decide what the bundle and the native build resolve, none of
       # which any required check exercises. A wrong value here builds or boots a
@@ -74,12 +72,10 @@ on:
       - "app/babel.config.js"
       # Assets linked into the native projects (fonts).
       - "app/react-native.config.js"
-      # `preinstall` builds the bifold submodule and `postinstall` repairs the portal
-      # symlinks, so this file changes the install that every build starts from and
-      # yarn.lock does not record either hook.
+      # The root manifest: workspaces, resolutions and the install hooks, so this file
+      # changes the install that every build starts from.
       - "package.json"
-      - "scripts/ensure-bifold-ready.js"
-      - "scripts/fix-portal-symlinks.js"
+      - ".yarnrc.yml"
   workflow_dispatch:
     inputs:
       platform:
@@ -135,14 +131,17 @@ jobs:
         run: |
           set -euo pipefail
           wallet=$(git rev-parse --short=8 HEAD)
-          # The bifold tree at this commit (the submodule's pin before the fold; both name "bifold at this build").
-          bifold=$(git rev-parse --short=8 HEAD:bifold)
+          # The framework at this commit: the tree id of packages/ (the output keeps its historical name, `bifold`,
+          # which the manifests, the gate and the artifact names carry; before Phase 2 it was the bifold/ tree, before
+          # the fold the submodule's pin; all three name "the framework at this build").
+          bifold=$(git rev-parse --verify --quiet --short=8 HEAD:packages) || { echo "::error::no packages/ tree at HEAD"; exit 1; }
           # Everything that decides the native half of the app. If this is equal
-          # between two builds, their difference is JavaScript only. Before the fold the bifold paths below matched
-          # nothing in this index (a submodule's files are not in it), so the first folded build's id differs from
-          # every earlier one by design: no JS-only swap across the fold.
+          # between two builds, their difference is JavaScript only. The native packages are every
+          # packages/react-native-*/ (the glob the pull_request trigger above and tier.mjs follow). The move of
+          # Phase 2 changed every path below once, so the first one-tree build's id differs from every earlier
+          # one by design: no JS-only swap across it (as across the fold before).
           native=$( { git ls-files -s app/ios app/android app/package.json yarn.lock \
-                        bifold/packages/react-native-attestation/ios bifold/packages/react-native-attestation/android \
+                        'packages/react-native-*/ios' 'packages/react-native-*/android' \
                         | grep -vE '\.(md|txt)$'; } | sha256sum | cut -c1-12 )
           echo "wallet=$wallet" >> "$GITHUB_OUTPUT"
           echo "bifold=$bifold" >> "$GITHUB_OUTPUT"
@@ -198,17 +197,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
-
+      # One install for the whole repository (app and packages/* are its workspaces); the framework's
+      # packages bundle from source, so there is nothing to build before Metro.
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Verify bifold linking
-        run: node scripts/verify-bifold-linking.js
+      - name: Verify workspace linking
+        run: node scripts/verify-workspace-linking.js
 
       - name: Create .xcode.env.local file
         working-directory: app/ios
@@ -357,17 +352,13 @@ jobs:
           distribution: "zulu"
           java-version: 17
 
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
-
+      # One install for the whole repository (app and packages/* are its workspaces); the framework's
+      # packages bundle from source, so there is nothing to build before Metro.
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Verify bifold linking
-        run: node scripts/verify-bifold-linking.js
+      - name: Verify workspace linking
+        run: node scripts/verify-workspace-linking.js
 
       - name: Create environment settings (store configuration)
         working-directory: app

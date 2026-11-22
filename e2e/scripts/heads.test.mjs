@@ -1,5 +1,6 @@
 // node --test e2e/scripts/heads.test.mjs
-// heads.sh in both eras: a wallet that pins bifold as a submodule (release/255 and older), and the folded tree.
+// heads.sh in both eras: a wallet that pins bifold as a submodule (release/255 and older), and the one codebase with the
+// framework at packages/ (since the move, Phase 2 of docs/plans/single-codebase-plan.md).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -20,18 +21,18 @@ const wallet = (top) => {
 };
 const run = (w, env = {}) => spawnSync('bash', [path.join(w, 'e2e/scripts/heads.sh')], { encoding: 'utf8', env: { ...process.env, ...env } });
 
-test('folded tree: no pin, the wallet head scopes the result, exit 0', () => {
-  const top = mkdtempSync(path.join(tmpdir(), 'heads-fold-'));
+test('one codebase: no pin, "bifold" is the packages/ tree, the wallet head scopes the result, exit 0', () => {
+  const top = mkdtempSync(path.join(tmpdir(), 'heads-move-'));
   try {
     const w = wallet(top);
     writeFileSync(path.join(w, 'app.txt'), 'app\n');
-    mkdirSync(path.join(w, 'bifold/packages/core/src'), { recursive: true });
-    writeFileSync(path.join(w, 'bifold/packages/core/src/x.ts'), 'x\n');
-    const head = commit(w, 'folded');
-    const tree = git(w, 'rev-parse', 'HEAD:bifold');
+    mkdirSync(path.join(w, 'packages/core/src'), { recursive: true });
+    writeFileSync(path.join(w, 'packages/core/src/x.ts'), 'x\n');
+    const head = commit(w, 'moved');
+    const tree = git(w, 'rev-parse', 'HEAD:packages');
     const r = run(w);
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, new RegExp(`heads: wallet ${head.slice(0, 8)} · bifold tree ${tree.slice(0, 8)} \\(one codebase, no pin\\)`));
+    assert.match(r.stdout, new RegExp(`heads: wallet ${head.slice(0, 8)} · bifold tree ${tree.slice(0, 8)} \\(the packages/ tree: one codebase, no pin\\)`));
     assert.match(r.stdout, /heads: SUMMARY wallet .* \(one codebase: the wallet commit scopes the result\)/);
     assert.doesNotMatch(r.stdout + r.stderr, /this wallet tree pins|UNKNOWN|ALLOW_UNPINNED/);
   } finally {
@@ -70,16 +71,24 @@ test('submodule era: at the pin exit 0; behind the pin, the gap is named and the
   }
 });
 
-test('no bifold at all: refused, no SUMMARY, exit 1 (a plain rev-parse would have echoed "HEAD:bifold" as the tree)', () => {
+test('neither a gitlink nor packages/: refused, no SUMMARY, exit 1 (a plain rev-parse would have echoed "HEAD:packages" as the tree)', () => {
   const top = mkdtempSync(path.join(tmpdir(), 'heads-none-'));
   try {
     const w = wallet(top);
     writeFileSync(path.join(w, 'app.txt'), 'app\n');
-    commit(w, 'no bifold');
-    const r = run(w);
+    commit(w, 'no framework');
+    let r = run(w);
     assert.equal(r.status, 1);
-    assert.match(r.stderr, /HEAD has no bifold at all/);
-    assert.doesNotMatch(r.stdout, /SUMMARY|HEAD:bif/);
+    assert.match(r.stderr, /HEAD has neither a bifold gitlink nor a packages\/ tree/);
+    assert.doesNotMatch(r.stdout, /SUMMARY|HEAD:pack/);
+    // A checkout from between the fold and the move (the framework a tree at bifold/) is refused by this script too:
+    // that checkout's own heads.sh is the one that reads it.
+    mkdirSync(path.join(w, 'bifold/packages/core'), { recursive: true });
+    writeFileSync(path.join(w, 'bifold/packages/core/x.ts'), 'x\n');
+    commit(w, 'folded, not moved');
+    r = run(w);
+    assert.equal(r.status, 1);
+    assert.doesNotMatch(r.stdout, /SUMMARY/);
   } finally {
     rmSync(top, { recursive: true, force: true });
   }

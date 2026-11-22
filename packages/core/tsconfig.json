@@ -1,12 +1,29 @@
 {
-  "extends": "../../tsconfig-base.json",
+  "extends": "../tsconfig-base.json",
   "compilerOptions": {
     "baseUrl": "src",
     "outDir": "./lib",
     "paths": {
-      "@openvtc/trust-tasks": ["../node_modules/@openvtc/trust-tasks/dist/index.d.ts"],
-      "@openvtc/trust-tasks/runtime": ["../node_modules/@openvtc/trust-tasks/dist/_runtime/index.d.ts"],
-      "@openvtc/trust-tasks/*": ["../node_modules/@openvtc/trust-tasks/dist/*"]
+      // Since Phase 2 of the fold (one install at the repository root) a dependency only this package asks for
+      // hoists to the root's node_modules; a version the app pins differently nests here. Both are listed, in
+      // that order of likelihood, since tsc takes the first candidate that exists.
+      "@openvtc/trust-tasks": [
+        "../../../node_modules/@openvtc/trust-tasks/dist/index.d.ts",
+        "../node_modules/@openvtc/trust-tasks/dist/index.d.ts"
+      ],
+      "@openvtc/trust-tasks/runtime": [
+        "../../../node_modules/@openvtc/trust-tasks/dist/_runtime/index.d.ts",
+        "../node_modules/@openvtc/trust-tasks/dist/_runtime/index.d.ts"
+      ],
+      "@openvtc/trust-tasks/*": [
+        "../../../node_modules/@openvtc/trust-tasks/dist/*",
+        "../node_modules/@openvtc/trust-tasks/dist/*"
+      ],
+      // oca bundles from source (no build/ since Phase 2); its package.json "exports" serve the `build/legacy`
+      // spelling at runtime, and this mapping serves it to tsc, whose moduleResolution ignores exports.
+      "@bifold/oca/build/legacy": ["../../oca/src/legacy/index.ts"],
+      "@bifold/oca/build/legacy/*": ["../../oca/src/legacy/*"],
+      "@bifold/oca/build/*": ["../../oca/src/*"]
     }
   },
   "exclude": [

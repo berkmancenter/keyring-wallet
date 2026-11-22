@@ -21,7 +21,7 @@ jest.mock('../src/utils/logger', () => {
     default: { startEventListeners: jest.fn(), info: log, warn: log, error: log, debug: log, trace: log },
   }
 })
-const bifoldCoreDir = path.resolve(__dirname, '../../bifold/packages/core')
+const bifoldCoreDir = path.resolve(__dirname, '../../packages/core')
 for (const from of [__dirname, bifoldCoreDir]) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires -- the copy that directory resolves
   const i18nModule = require(require.resolve('i18next', { paths: [from] }))
@@ -44,7 +44,7 @@ describe('useAppContainer', () => {
       (props: { t: any }) => useAppContainer(props.t, navigate, setSurveyVisible),
       {
         initialProps: { t },
-      }
+      },
     )
     const first = result.current
     // A parent re-render with nothing changed, as HotUpdater's wrapper does when its update check finishes.
@@ -60,7 +60,7 @@ describe('useAppContainer', () => {
       (props: { t: any }) => useAppContainer(props.t, navigate, setSurveyVisible),
       {
         initialProps: { t },
-      }
+      },
     )
     const first = result.current
     rerender({ t: ((key: string) => key) as any })

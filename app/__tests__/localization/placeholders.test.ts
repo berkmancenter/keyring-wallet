@@ -14,12 +14,12 @@ import ptBr from '../../src/localization/pt-br'
 
 type Tree = { [key: string]: string | Tree }
 
-const BIFOLD = path.join(__dirname, '../../../bifold/packages/core/src/localization')
+const BIFOLD = path.join(__dirname, '../../../packages/core/src/localization')
 const bifold = (code: string): Tree => JSON.parse(fs.readFileSync(path.join(BIFOLD, code, `${code}.json`), 'utf8'))
 
 function leaves(tree: Tree, prefix = ''): [string, string][] {
   return Object.entries(tree).flatMap(([key, value]) =>
-    typeof value === 'string' ? [[`${prefix}${key}`, value]] : leaves(value, `${prefix}${key}.`)
+    typeof value === 'string' ? [[`${prefix}${key}`, value]] : leaves(value, `${prefix}${key}.`),
   )
 }
 const at = (tree: Tree, key: string): unknown =>
@@ -31,7 +31,7 @@ export function hiddenTranslations(
   walletEn: Tree,
   bifoldLanguage: Tree,
   bifoldEn: Tree,
-  tag: string
+  tag: string,
 ): string[] {
   const placeholder = (value: unknown) => typeof value === 'string' && value.endsWith(` (${tag})`)
   return leaves(wallet)
@@ -82,7 +82,7 @@ function sources(dir: string): string[] {
 }
 
 describe('a string the app shows is never a placeholder', () => {
-  const ROOTS = [path.join(__dirname, '../..'), path.join(__dirname, '../../../bifold/packages')]
+  const ROOTS = [path.join(__dirname, '../..'), path.join(__dirname, '../../../packages')]
   const corpus = ROOTS.flatMap(sources)
     .map((file) => fs.readFileSync(file, 'utf8'))
     .join('\n')

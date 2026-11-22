@@ -1,5 +1,16 @@
 process.env.TZ = 'UTC'
 
+const fs = require('fs')
+const path = require('path')
+
+// Where a dependency is installed, as a <rootDir> path to `file` inside it: this package's own node_modules when
+// the one install nested it there (a version only this package asks for), else the root's, where it hoists.
+// Both trees are one install since the fold (docs/plans/single-codebase-plan.md, Phase 2).
+const installed = (pkg, file) => {
+  const own = path.join(__dirname, 'node_modules', pkg)
+  return `${fs.existsSync(own) ? '<rootDir>' : '<rootDir>/../..'}/node_modules/${pkg}/${file}`
+}
+
 module.exports = {
   preset: 'react-native',
   testTimeout: 12000,
@@ -29,32 +40,28 @@ module.exports = {
     // subpath with only `import`/`types` conditions, which jest (CJS) will not
     // resolve. They are how the relationship-forming invite is checked against
     // upstream's own bytes, so the path is mapped rather than the check dropped.
-    '^@openvtc/vti-tsp-js/unsafe-testing$': '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/unsafe-testing.js',
+    '^@openvtc/vti-tsp-js/unsafe-testing$': installed('@openvtc/vti-tsp-js', 'dist/unsafe-testing.js'),
     // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
     // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
-    '^@verifiables/request-converter$': require('fs').existsSync(
-      __dirname + '/node_modules/@verifiables/request-converter'
-    )
-      ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
-      : '<rootDir>/../../node_modules/@verifiables/request-converter/dist/index.js',
+    '^@verifiables/request-converter$': installed('@verifiables/request-converter', 'dist/index.js'),
 
     // @openvtc/trust-tasks is ESM-only with an import-condition exports map,
     // which jest's require-based resolver cannot see through — map straight
     // to the dist files (babel transforms them; the package is allowlisted
-    // in transformIgnorePatterns).
-    '^@openvtc/trust-tasks$': '<rootDir>/node_modules/@openvtc/trust-tasks/dist/index.js',
+    // in transformIgnorePatterns). Since the fold the repository has one install, and a
+    // package only packages/* depend on hoists to the root's node_modules; one the app
+    // pins to another version lands nested here instead (installed(): whichever exists).
+    '^@openvtc/trust-tasks$': installed('@openvtc/trust-tasks', 'dist/index.js'),
     // ./runtime is the one export not at dist/<path>.js: it is the runtime without the prebuilt modules.
-    '^@openvtc/trust-tasks/runtime$': '<rootDir>/node_modules/@openvtc/trust-tasks/dist/_runtime/index.js',
-    '^@openvtc/trust-tasks/(.*)$': '<rootDir>/node_modules/@openvtc/trust-tasks/dist/$1.js',
+    '^@openvtc/trust-tasks/runtime$': installed('@openvtc/trust-tasks', 'dist/_runtime/index.js'),
+    '^@openvtc/trust-tasks/(.*)$': installed('@openvtc/trust-tasks', 'dist/$1.js'),
     // Same reason as @openvtc/trust-tasks above: ESM-only, import-condition-only exports map.
-    // Only @bifold/trust-tasks depends on it, so yarn hoists it to the bifold
-    // workspace root rather than into this package's own node_modules.
-    '^@openvtc/vti-tsp-js$': '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/index.js',
+    '^@openvtc/vti-tsp-js$': installed('@openvtc/vti-tsp-js', 'dist/index.js'),
     // tsp-js 0.4.0 (TSP 1.0) under a test-only alias: the 1.0 codec is
     // cross-checked against upstream's 1.0 packer and unpacker. A devDependency
     // of this package only; nothing the app bundles imports it.
-    '^@openvtc/vti-tsp-js-v1$': '<rootDir>/node_modules/@openvtc/vti-tsp-js-v1/dist/index.js',
-    '^@openvtc/vti-tsp-js-v1/unsafe-testing$': '<rootDir>/node_modules/@openvtc/vti-tsp-js-v1/dist/unsafe-testing.js',
+    '^@openvtc/vti-tsp-js-v1$': installed('@openvtc/vti-tsp-js-v1', 'dist/index.js'),
+    '^@openvtc/vti-tsp-js-v1/unsafe-testing$': installed('@openvtc/vti-tsp-js-v1', 'dist/unsafe-testing.js'),
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       '<rootDir>/__mocks__/file.js',
     '\\.(css|less)$': '<rootDir>/__mocks__/style.js',
@@ -62,6 +69,11 @@ module.exports = {
     'react-i18next': '<rootDir>/__mocks__/react-i18next.ts',
     '^uuid$': require.resolve('uuid'),
     '^@bifold/oca$': '<rootDir>/../oca/src/index.ts',
+    // The `build/legacy` spelling the framework kept from the days oca was built: oca's package.json exports serve it
+    // to Metro, and this line to jest, from oca's source (no build/ since Phase 2 of the fold).
+    '^@bifold/oca/build/legacy$': '<rootDir>/../oca/src/legacy/index.ts',
+    '^@bifold/oca/build/legacy/(.*)$': '<rootDir>/../oca/src/legacy/$1',
+    '^@bifold/oca/build/(.*)$': '<rootDir>/../oca/src/$1',
     '^@bifold/trust-tasks$': '<rootDir>/../trust-tasks/src/index.ts',
     // To its source, as for trust-tasks above: a worktree whose node_modules is shared with another
     // tree resolves the package to THAT tree's build, so a suite would test a tree nobody chose.

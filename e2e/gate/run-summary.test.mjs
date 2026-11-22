@@ -111,8 +111,9 @@ test('ancestry that cannot be told is "possibly regressed", which does not chang
 });
 
 /**
- * A wallet repo across the fold-in: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone), fold has
- * bifold/ as a tree, after changes a file under it.
+ * A wallet repo across the fold and the move: gl1, gl2 carry bifold as a gitlink (pins 1 and 2 of a stand-in clone),
+ * fold has the framework as a tree under bifold/, after changes a file under it, move renames the tree to packages/
+ * (Phase 2), moved changes a file under packages/.
  */
 function foldRepo() {
   const top = mkdtempSync(path.join(tmpdir(), 'fold-w-')), clone = mkdtempSync(path.join(tmpdir(), 'fold-b-'));
@@ -126,21 +127,28 @@ function foldRepo() {
   git(top, 'update-index', '--add', '--cacheinfo', `160000,${pin2},bifold`); const gl2 = commit(top, 'gitlink pin2');
   git(top, 'rm', '-q', '--cached', 'bifold'); put(top, 'bifold/packages/core/src/x.ts', '2'); put(top, 'bifold/packages/core/testids.json', '{}'); git(top, 'add', 'bifold'); const fold = commit(top, 'fold');
   put(top, 'bifold/packages/core/src/x.ts', '3'); git(top, 'add', 'bifold'); const after = commit(top, 'change x');
-  return { top, clone, pin1, pin2, gl1, gl2, fold, after, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
+  git(top, 'mv', 'bifold/packages', 'packages'); const move = commit(top, 'move');
+  put(top, 'packages/core/src/x.ts', '4'); git(top, 'add', 'packages'); const moved = commit(top, 'change x again');
+  return { top, clone, pin1, pin2, gl1, gl2, fold, after, move, moved, done: () => { rmSync(top, { recursive: true, force: true }); rmSync(clone, { recursive: true, force: true }); } };
 }
 
-test('with no bifold repo at hand, the wallet decides ancestry once its commit carries bifold/ as a tree; a gitlink commit still cannot tell', () => {
+test('with no bifold repo at hand, the wallet decides ancestry once its commit carries the framework as a tree (packages/, or bifold/ before the move); a gitlink commit still cannot tell', () => {
   const r = foldRepo();
   const run = (pin, bifold) => ({ older: { meta: `kind=gate\npin=${pin.older}\nbifold=${bifold.older}\nstarted=2026-10-10T09:00:00Z\n`, legs: [['waiting', 0, passed]] },
     newer: { meta: `kind=gate\npin=${pin.newer}\nbifold=${bifold.newer}\nstarted=2026-10-11T09:00:00Z\n`, legs: [['waiting', 0, tracked]] } });
   // Folded: bifold= still written (as the folded tree's or any id), no clone anywhere: the wallet ancestry answers.
   const folded = runs(run({ older: r.fold, newer: r.after }, { older: 'f0ld0001', newer: 'f0ld0002' }));
+  // Since the move the same, with bifold= the packages/ tree's id (what heads.sh and ota-deploy.mjs write there).
+  const packages = runs(run({ older: r.move, newer: r.moved }, { older: 'cafe0001', newer: 'cafe0002' }));
   // Before the fold, the same with the gitlink commits and no clone: unknown, so possibly regressed and no verdict change.
   const gitlinks = runs(run({ older: r.gl1, newer: r.gl2 }, { older: r.pin1, newer: r.pin2 }));
   try {
     const s = summarize(path.join(folded.root, 'newer'), { wallet: r.top, bifold: null });
     assert.deepEqual(s.legs[0].regressions, [{ row: 'in-257-dots', passedIn: 'older' }]);
     assert.equal(s.overall, 'fail');
+    const m = summarize(path.join(packages.root, 'newer'), { wallet: r.top, bifold: null });
+    assert.deepEqual(m.legs[0].regressions, [{ row: 'in-257-dots', passedIn: 'older' }]);
+    assert.equal(m.overall, 'fail');
     const g = summarize(path.join(gitlinks.root, 'newer'), { wallet: r.top, bifold: null });
     assert.equal(g.legs[0].regressions, undefined);
     assert.equal(g.legs[0].possiblyRegressed[0].row, 'in-257-dots');
@@ -149,7 +157,7 @@ test('with no bifold repo at hand, the wallet decides ancestry once its commit c
     const c = summarize(path.join(gitlinks.root, 'newer'), { wallet: r.top, bifold: r.clone });
     assert.deepEqual(c.legs[0].regressions, [{ row: 'in-257-dots', passedIn: 'older' }]);
   } finally {
-    folded.done(); gitlinks.done(); r.done();
+    folded.done(); packages.done(); gitlinks.done(); r.done();
   }
 });
 

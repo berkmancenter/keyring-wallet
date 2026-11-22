@@ -66,13 +66,13 @@ jobs:
           java-version: 17
 
       # One full install for the build and every publish: the fingerprint covers node_modules, and a skip-build
-      # install (no crypto native libraries) hashes differently.
-      - name: Install (full) and build bifold
+      # install (no crypto native libraries) hashes differently. The framework's packages are workspaces of this
+      # install and bundle from source: nothing to build before Metro.
+      - name: Install (full)
         shell: bash
         run: |
-          (cd bifold && yarn install --immutable && yarn build)
           yarn install --immutable
-          node scripts/verify-bifold-linking.js
+          node scripts/verify-workspace-linking.js
 
       - name: Update server behind a quick tunnel
         shell: bash

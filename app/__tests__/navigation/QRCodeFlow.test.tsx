@@ -3,7 +3,7 @@ import React from 'react'
 
 // Import directly from bifold submodule path
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-import QRCodeExchangeSlider from '../../../bifold/packages/core/src/components/modals/QRCodeExchangeSlider'
+import QRCodeExchangeSlider from '../../../packages/core/src/components/modals/QRCodeExchangeSlider'
 import { BasicAppContext } from '../../__mocks__/helpers/app'
 import { testIdWithKey } from '@bifold/core'
 
@@ -31,7 +31,7 @@ describe('QR Code Flow Integration', () => {
     const tree = render(
       <BasicAppContext>
         <QRCodeExchangeSlider visible={true} onDismiss={onDismiss} navigation={mockNavigation as any} />
-      </BasicAppContext>
+      </BasicAppContext>,
     )
 
     expect(tree).toMatchSnapshot()
@@ -44,7 +44,7 @@ describe('QR Code Flow Integration', () => {
     const { getByTestId, unmount } = render(
       <BasicAppContext>
         <QRCodeExchangeSlider visible={true} onDismiss={onDismiss} navigation={mockNavigation as any} />
-      </BasicAppContext>
+      </BasicAppContext>,
     )
 
     expect(getByTestId(testIdWithKey('ScanQRCode'))).toBeTruthy()
@@ -58,7 +58,7 @@ describe('QR Code Flow Integration', () => {
     const { getByTestId, unmount } = render(
       <BasicAppContext>
         <QRCodeExchangeSlider visible={true} onDismiss={onDismiss} navigation={mockNavigation as any} />
-      </BasicAppContext>
+      </BasicAppContext>,
     )
 
     const scanButton = getByTestId(testIdWithKey('ScanQRCode'))

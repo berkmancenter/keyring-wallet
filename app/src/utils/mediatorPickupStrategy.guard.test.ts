@@ -3,7 +3,7 @@
  * cannot receive, and no call site may leave the strategy implicit.
  *
  * The twin of the bifold guard in
- * `bifold/packages/witness-server/__tests__/unit/mediatorPickupStrategy.guard.test.ts`.
+ * `packages/witness-server/__tests__/unit/mediatorPickupStrategy.guard.test.ts`.
  * Two guards rather than one because the two trees ship and test separately —
  * bifold is a submodule consumed on its own, so a guard living only up here
  * would not protect it, and one living only down there would not protect
@@ -77,8 +77,8 @@ function scannedFiles(): Array<[string, string]> {
       (file) =>
         [relative(SRC_ROOT, file).replace(/\\/g, '/'), stripCommentsAndStrings(readFileSync(file, 'utf8'))] as [
           string,
-          string
-        ]
+          string,
+        ],
     )
     .filter(([rel]) => !ALLOWED.includes(rel))
 }
@@ -154,7 +154,7 @@ describe('mediator pickup strategy (app guard)', () => {
       let match: RegExpExecArray | null
       while ((match = pattern.exec(source)) !== null) {
         const value = match[1].replace(/['"]/g, '')
-        const name = value.includes('.') ? value.split('.').pop() ?? value : value
+        const name = value.includes('.') ? (value.split('.').pop() ?? value) : value
         if (UNRECEIVABLE.has(name)) {
           offenders.push(`${rel}: mediatorPickupStrategy: ${value}`)
         }
@@ -190,7 +190,7 @@ describe('mediator pickup strategy (app guard)', () => {
     // '/package.json' lookup would silently land there too.
     const api = readFileSync(
       join(dirname(require.resolve('@credo-ts/didcomm')), 'modules/routing/DidCommMediationRecipientApi.mjs'),
-      'utf8'
+      'utf8',
     )
     const start = api.indexOf('async initiateMessagePickup(')
     const explicitLoop = api.indexOf('return interval(mediatorPollingInterval)', start)
@@ -223,11 +223,11 @@ describe('mediator pickup strategy (app guard)', () => {
     expect(liveStartsWithoutStop(`async () => { await r.stopMessagePickup(); ${start} }`)).toEqual([])
     // A stop before an EARLIER start does not cover a later one.
     expect(liveStartsWithoutStop(`a = () => { r.stopMessagePickup(); ${start} }\nb = () => { ${start} }`)).toHaveLength(
-      1
+      1,
     )
     // Polling starts are not this check's business.
     expect(liveStartsWithoutStop('r.initiateMessagePickup(undefined, DidCommMediatorPickupStrategy.PickUpV2)')).toEqual(
-      []
+      [],
     )
   })
 
@@ -248,7 +248,7 @@ describe('mediator pickup strategy (app guard)', () => {
     // the mediator, bricking a fresh wallet on every launch (2026-09-14).
     const mod = readFileSync(
       join(dirname(require.resolve('@credo-ts/didcomm')), 'modules/routing/DidCommMediationRecipientModule.mjs'),
-      'utf8'
+      'utf8',
     )
     const fn = mod.indexOf('async getMediationConnection(')
     expect(fn).toBeGreaterThan(-1)
