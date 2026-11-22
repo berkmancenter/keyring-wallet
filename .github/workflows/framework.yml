@@ -96,7 +96,9 @@ jobs:
               echo "No formattable framework files changed; skipping prettier"
               exit 0
             fi
-            echo "$CHANGED" | xargs npx prettier --check
+            # One path per line: a framework file with a space in its name (docs/design-guidelines/design guidelines.md)
+            # word-split into two arguments and was never checked (review of the fold, 2026-11-22).
+            echo "$CHANGED" | xargs -d '\n' npx prettier --check
           else
             yarn prettier --check || echo "::warning::Repo-wide prettier check failed (known debt); not blocking main pushes yet"
           fi
@@ -111,7 +113,7 @@ jobs:
               exit 0
             fi
             # Through yarn: eslint is a workspace dev dependency, not on the runner's PATH.
-            echo "$CHANGED" | xargs yarn eslint --color
+            echo "$CHANGED" | xargs -d '\n' yarn eslint --color
           else
             yarn lint || echo "::warning::Full framework lint failed (known debt); not blocking main pushes yet"
           fi
