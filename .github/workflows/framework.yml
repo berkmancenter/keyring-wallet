@@ -73,12 +73,13 @@ jobs:
           # formatting debt is a decision of its own (the plan's §13), and a PR that only moves files must not meet it,
           # as Phase 2's move would have on every framework file at once. Only the framework's files (the pathspecs
           # are the push trigger's paths above): the app's are quality.yml's.
-          # -l: git's rename detection gives up above diff.renameLimit (1,000 files by default) and then reports a
-          # move as a delete plus an add, so the whole moved tree would be back in this list; Phase 2's move was
-          # 2,992 files.
+          # bifold/packages is in the pathspec although nothing lives there now: git pairs a rename only when BOTH
+          # its sides are inside the pathspec, so without the old place every file of Phase 2's move read as an
+          # addition (2,933 files for prettier; with it, 2,925 R100 and the few that really changed). -l raises the
+          # rename limit for a move with edits; the exact-rename pass does not need it.
           {
-            git diff -M -l20000 --name-only --diff-filter=ACMT "$BASE...HEAD" -- packages 'scripts/ci/select-tests*' 'scripts/tsc-ratchet*' eslint-rules eslint.config.mjs
-            git diff -M -l20000 --name-status --diff-filter=R "$BASE...HEAD" -- packages 'scripts/ci/select-tests*' 'scripts/tsc-ratchet*' eslint-rules eslint.config.mjs | awk -F'\t' '$1 != "R100" {print $3}'
+            git diff -M -l20000 --name-only --diff-filter=ACMT "$BASE...HEAD" -- packages bifold/packages 'scripts/ci/select-tests*' 'scripts/tsc-ratchet*' eslint-rules eslint.config.mjs
+            git diff -M -l20000 --name-status --diff-filter=R "$BASE...HEAD" -- packages bifold/packages 'scripts/ci/select-tests*' 'scripts/tsc-ratchet*' eslint-rules eslint.config.mjs | awk -F'\t' '$1 != "R100" {print $3}'
           } | sort -u > "$RUNNER_TEMP/changed-files.txt"
           echo "Framework files changed against $BASE ($(wc -l < "$RUNNER_TEMP/changed-files.txt" | tr -d ' ') to check):"
           cat "$RUNNER_TEMP/changed-files.txt"
