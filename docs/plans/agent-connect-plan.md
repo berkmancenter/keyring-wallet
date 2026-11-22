@@ -849,5 +849,6 @@ Decided and so not listed (where each now lives): number length four digits (§3
 | Rev | Companion |
 |---|---|
 | 1 | [`agent-connect-plan/2026-11-20-bam.md`](./agent-connect-plan/2026-11-20-bam.md): decisions with the owner and their reasoning, the precision check, the corrections that came from reading VTI, and the revision that typed the number, narrowed the VDC, set the plugin home, the notification path, "Answers other people", the member list and the measured mediator, and the resolution of the open questions (finding 20); then the independent review of the same day, what was verified against VTI and the DTG specification, what was fixed, the decision on the number's direction and the one reviewer point that was imprecise (finding 21) |
+| 2 | [`agent-connect-plan/2026-11-22-al.md`](./agent-connect-plan/2026-11-22-al.md): the product owner's review: the plan as the P0 of the lab's wider AI research and what that research adds; mentions as a demo requirement and the gap raised upstream; the one-codebase repository and the stale "paired bifold PRs" sentence; tests before implementing confirmed; the asks registered as VTI-Q26 to VTI-Q36 |
 
 The ledger of asks for upstream is [`agent-connect-plan/vti-asks.md`](./agent-connect-plan/vti-asks.md) (this plan's §10).
