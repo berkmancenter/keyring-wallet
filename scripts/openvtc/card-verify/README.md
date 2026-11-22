@@ -105,7 +105,7 @@ card-verify verify-tasks <tasks.json> <dir>
 **`verify-tasks`** runs `verify-task` on every `{ file, type, signer }` entry of the `tasks.json` that bifold's `cardConformance.test.ts` writes, with `file` relative to `<dir>`. For each document it prints one line: `OK`, `PAYLOAD-UNCHECKED` or `REFUSED` with the reason. Then it prints a count. It exits non-zero if any document is refused or the list is empty.
 
 ```sh
-cd bifold/packages/core && CARD_OUT=/some/dir TZ=GMT npx jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
+cd packages/core && CARD_OUT=/some/dir TZ=GMT npx jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
 card-verify verify-tasks /some/dir/tasks.json /some/dir
 ```
 

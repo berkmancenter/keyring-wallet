@@ -31,7 +31,7 @@ describe('QR Code Flow Integration', () => {
     const tree = render(
       <BasicAppContext>
         <QRCodeExchangeSlider visible={true} onDismiss={onDismiss} navigation={mockNavigation as any} />
-      </BasicAppContext>,
+      </BasicAppContext>
     )
 
     expect(tree).toMatchSnapshot()
@@ -44,7 +44,7 @@ describe('QR Code Flow Integration', () => {
     const { getByTestId, unmount } = render(
       <BasicAppContext>
         <QRCodeExchangeSlider visible={true} onDismiss={onDismiss} navigation={mockNavigation as any} />
-      </BasicAppContext>,
+      </BasicAppContext>
     )
 
     expect(getByTestId(testIdWithKey('ScanQRCode'))).toBeTruthy()
@@ -58,7 +58,7 @@ describe('QR Code Flow Integration', () => {
     const { getByTestId, unmount } = render(
       <BasicAppContext>
         <QRCodeExchangeSlider visible={true} onDismiss={onDismiss} navigation={mockNavigation as any} />
-      </BasicAppContext>,
+      </BasicAppContext>
     )
 
     const scanButton = getByTestId(testIdWithKey('ScanQRCode'))

@@ -19,7 +19,7 @@ const bifold = (code: string): Tree => JSON.parse(fs.readFileSync(path.join(BIFO
 
 function leaves(tree: Tree, prefix = ''): [string, string][] {
   return Object.entries(tree).flatMap(([key, value]) =>
-    typeof value === 'string' ? [[`${prefix}${key}`, value]] : leaves(value, `${prefix}${key}.`),
+    typeof value === 'string' ? [[`${prefix}${key}`, value]] : leaves(value, `${prefix}${key}.`)
   )
 }
 const at = (tree: Tree, key: string): unknown =>
@@ -31,7 +31,7 @@ export function hiddenTranslations(
   walletEn: Tree,
   bifoldLanguage: Tree,
   bifoldEn: Tree,
-  tag: string,
+  tag: string
 ): string[] {
   const placeholder = (value: unknown) => typeof value === 'string' && value.endsWith(` (${tag})`)
   return leaves(wallet)

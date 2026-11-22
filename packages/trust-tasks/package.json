@@ -4,6 +4,7 @@
   "description": "Trust Task plumbing shared by the Keyring wallet (React Native) and the witness-server (Node): document proofs and digests, the binding-0.2 DIDComm carriage message, and the payload validator. Platform-neutral by contract.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "react-native": "src/index.ts",
   "files": [
     "build"
   ],

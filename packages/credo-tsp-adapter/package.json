@@ -4,6 +4,7 @@
   "description": "Askar-backed implementations of @bifold/trust-tasks's tsp-core ports (SigningKey, KeyAgreement, VidResolver) — the credo-tsp-adapter package from the OpenVTC integration plan's Phase D.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "react-native": "src/index.ts",
   "files": [
     "build"
   ],

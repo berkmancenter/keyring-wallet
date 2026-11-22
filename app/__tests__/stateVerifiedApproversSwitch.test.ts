@@ -54,7 +54,7 @@ const load = async () => {
   const { app } = composeContainers(
     ((key: string) => key) as never,
     () => undefined,
-    () => undefined,
+    () => undefined
   )
   const dispatch = jest.fn()
   await app.resolve(TOKENS.LOAD_STATE)(dispatch)
@@ -157,7 +157,7 @@ describe('the state-verified approvers switch and the test-state setting', () =>
       allSaved()
       off()
       expect(await load()).toEqual({ stored: [true, true], on })
-    },
+    }
   )
 
   it('on load, saved "off"s win over defaults that are on', async () => {

@@ -72,11 +72,11 @@ describe('container composition', () => {
       await lifecycle.onForeground(agent)
       expect(recipient.initiateMessagePickup).toHaveBeenCalledWith(
         undefined,
-        DidCommMediatorPickupStrategy.PickUpV2LiveMode,
+        DidCommMediatorPickupStrategy.PickUpV2LiveMode
       )
       expect(recipient.initiateMessagePickup).not.toHaveBeenCalledWith(
         undefined,
-        DidCommMediatorPickupStrategy.PickUpV2,
+        DidCommMediatorPickupStrategy.PickUpV2
       )
     } finally {
       setLivePickupEnabled(false)

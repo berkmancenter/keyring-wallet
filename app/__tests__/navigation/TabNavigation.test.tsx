@@ -20,7 +20,7 @@ describe('Tab Navigation Integration', () => {
     const { getByTestId } = render(
       <BasicAppContext>
         <QRCodeExchangeSlider visible={true} onDismiss={onDismiss} navigation={mockNavigation as any} />
-      </BasicAppContext>,
+      </BasicAppContext>
     )
 
     // Verify the component renders and has expected elements
@@ -35,7 +35,7 @@ describe('Tab Navigation Integration', () => {
     const tree = render(
       <BasicAppContext>
         <QRCodeExchangeSlider visible={true} onDismiss={onDismiss} navigation={mockNavigation as any} />
-      </BasicAppContext>,
+      </BasicAppContext>
     )
 
     expect(tree).toMatchSnapshot()

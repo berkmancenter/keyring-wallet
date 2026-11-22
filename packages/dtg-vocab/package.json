@@ -4,6 +4,7 @@
   "description": "Predicate Handling (cred-spec C4) and a mirrored copy of the dtgwg-vsc-registry's predicate vocabulary — the accept-list a verifier configures itself with, never dereferenced at verification time. See README.md for the mirror's deletion trigger.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "react-native": "src/index.ts",
   "files": [
     "build",
     "vocab"

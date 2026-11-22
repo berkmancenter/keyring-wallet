@@ -44,7 +44,7 @@ describe('useAppContainer', () => {
       (props: { t: any }) => useAppContainer(props.t, navigate, setSurveyVisible),
       {
         initialProps: { t },
-      },
+      }
     )
     const first = result.current
     // A parent re-render with nothing changed, as HotUpdater's wrapper does when its update check finishes.
@@ -60,7 +60,7 @@ describe('useAppContainer', () => {
       (props: { t: any }) => useAppContainer(props.t, navigate, setSurveyVisible),
       {
         initialProps: { t },
-      },
+      }
     )
     const first = result.current
     rerender({ t: ((key: string) => key) as any })

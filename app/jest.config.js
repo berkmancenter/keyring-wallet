@@ -17,7 +17,7 @@ module.exports = {
     // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
     // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
     '^@verifiables/request-converter$': require('fs').existsSync(
-      __dirname + '/node_modules/@verifiables/request-converter',
+      __dirname + '/node_modules/@verifiables/request-converter'
     )
       ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
       : '<rootDir>/../node_modules/@verifiables/request-converter/dist/index.js',
@@ -53,6 +53,11 @@ module.exports = {
     '^@bifold/oca$': '<rootDir>/../packages/oca/src/index.ts',
     '^@bifold/react-hooks$': '<rootDir>/../packages/react-hooks/src/index.ts',
     '^@bifold/credo-tsp-adapter$': '<rootDir>/../packages/credo-tsp-adapter/src/index.ts',
+    // The other Node-consumed packages too: their `main` is a build (the witness and the e2e verifier load it), which
+    // this suite must not depend on; core's own jest maps the same three to src.
+    '^@bifold/trust-tasks$': '<rootDir>/../packages/trust-tasks/src/index.ts',
+    '^@bifold/dtg-vocab$': '<rootDir>/../packages/dtg-vocab/src/index.ts',
+    '^@bifold/vrc-contexts$': '<rootDir>/../packages/vrc-contexts/src/index.ts',
     '@bifold/remote-logs': '<rootDir>/__mocks__/@bifold/remote-logs.ts',
     '@openwallet-foundation/askar-react-native': require.resolve('@openwallet-foundation/askar-react-native'),
     // CRITICAL: Force Jest to use app's React instead of bifold's
@@ -64,7 +69,7 @@ module.exports = {
     // This ensures tests use app's versions with proper mocks from jestSetup.js
     '^react-native$': require.resolve('react-native'),
     // Also map react-native subpath imports (e.g. react-native/Libraries/...)
-    // so bifold sources can't drag in bifold/node_modules' second RN copy
+    // so the framework's sources never drag in the root node_modules' second RN copy
     '^react-native/(.*)$': `${require('path').dirname(require.resolve('react-native/package.json'))}/$1`,
     '^react-native-reanimated$': require.resolve('react-native-reanimated'),
     '^react-native-keyboard-controller$': require.resolve('react-native-keyboard-controller'),
@@ -81,7 +86,7 @@ module.exports = {
     // bifold's SwipeRow imports this subpath (bifold #788); without its own entry it resolves to bifold's nested
     // copy, which jestSetup's gesture-handler mock never reaches ('RNGestureHandlerModule' could not be found).
     '^react-native-gesture-handler/ReanimatedSwipeable$': require.resolve(
-      'react-native-gesture-handler/ReanimatedSwipeable',
+      'react-native-gesture-handler/ReanimatedSwipeable'
     ),
     '^react-native-keychain$': require.resolve('react-native-keychain'),
     '^react-native-fs$': require.resolve('react-native-fs'),

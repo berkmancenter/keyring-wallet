@@ -90,6 +90,8 @@ const EVERYTHING = [
   /^\.github\/workflows\/framework[^/]*\.yml$/,
   /^\.github\/workflows\/actions\//,
   /^scripts\/ci\/select-tests/,
+  // The framework's old place (bifold/, before the one-tree move): a range that still has it is the move itself.
+  /^bifold\//,
 ]
 
 const NO_JEST = [

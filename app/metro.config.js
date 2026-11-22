@@ -42,6 +42,23 @@ const isRoomsSampleImport = (moduleName, originModulePath) =>
 
 const watchFolders = [repoRoot]
 
+// Does the app have its own copy of the package a bare request names (`react`, `@scope/name`, or a subpath of
+// either)? Relative and absolute requests are not packages. Answers are cached: Metro asks once per import site.
+const appNodeModules = path.join(__dirname, 'node_modules')
+const appCopyCache = new Map()
+const appCopy = (moduleName) => {
+  if (moduleName.startsWith('.') || path.isAbsolute(moduleName)) return false
+  const parts = moduleName.split('/')
+  const pkg = moduleName.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+  if (!pkg || (moduleName.startsWith('@') && parts.length < 2)) return false
+  let has = appCopyCache.get(pkg)
+  if (has === undefined) {
+    has = fs.existsSync(path.join(appNodeModules, pkg, 'package.json'))
+    appCopyCache.set(pkg, has)
+  }
+  return has
+}
+
 // Module aliases for React Native compatibility
 const polyfillModules = {
   // js-sha256 is used by the patched rdf-canonize (RDFC SHA-256 on RN).
@@ -92,10 +109,12 @@ module.exports = (async () => {
       extraNodeModules: polyfillModules,
       assetExts: assetExts.filter((ext) => ext !== 'svg'),
       sourceExts: [...sourceExts, 'svg', 'cjs'],
-      // `source` first: the @bifold/* workspaces name their src/index.ts there, so the bundle is built from the
-      // framework's TypeScript directly (no lib/ build step, in dev and release alike). Third-party packages
-      // rarely declare `source`; when one does it is its own TypeScript, which Metro transforms as it does ours.
-      resolverMainFields: ['source', 'react-native', 'browser', 'main'],
+      // Metro's default main fields, deliberately: the framework's packages resolve to source through them. The
+      // React Native packages name src/index.ts as `main`; the Node-consumed ones (trust-tasks, dtg-vocab,
+      // credo-tsp-adapter, vrc-contexts) keep a build/ as `main` for Node and name src/index.ts in their
+      // `react-native` field, which Metro reads first. (A `source`-first list was tried and resolved third-party
+      // packages to sources they do not ship: html-parse-stringify's `source` is a file that is not in its tarball.)
+      resolverMainFields: ['react-native', 'browser', 'main'],
       // Prefer browser builds (e.g. nanoid) over node builds that require('crypto').
       unstable_enablePackageExports: true,
       unstable_conditionNames: ['react-native', 'browser', 'require'],
@@ -148,11 +167,18 @@ module.exports = (async () => {
         // its dependencies there, because the native projects hardcode that
         // path) and the root's, where the packages/* dependencies hoist. A
         // package both sides depend on at the same version is installed
-        // twice, once in each, so pinning still has to happen here. Keep this
-        // list in sync when a new native-backed dependency reaches
-        // packages/*. core's jest has the same pin for its own tests
-        // (moduleNameMapper for askar-shared in packages/core/jest.config.js);
-        // a dependency added here may belong there too. Changing this file
+        // twice, once in each, and a request from packages/* walks up to the
+        // root's copy first. So the rule is general: ANY package the app has
+        // under app/node_modules resolves from there, whoever asks (appCopy
+        // below; 35 shared packages at the move, among them safe-area-context,
+        // gesture-handler, screens and reanimated, whose providers and
+        // consumers must be one module). The list that follows is the set
+        // whose two copies have already broken the app or would break it
+        // silently; it is asserted present in app/node_modules at config
+        // load, so a dependency the app drops cannot leave a framework-only
+        // copy unnoticed. core's jest pins askar-shared and class-transformer
+        // the same way (moduleNameMapper in packages/core/jest.config.js); a
+        // dependency added here may belong there too. Changing this file
         // runs the android-apk and ios-simulator builds (paths in
         // .github/workflows/test-builds.yml), so a resolution mistake here is
         // caught before merge.
@@ -182,14 +208,22 @@ module.exports = (async () => {
           // 2026-09-21). The root's copy may be unpatched, so pin it.
           '@scure/base',
         ]
+        for (const pkg of singletonPrefixes) {
+          if (!fs.existsSync(path.join(__dirname, 'node_modules', pkg))) {
+            throw new Error(
+              `[metro.config] ${pkg} is pinned to the app's copy but app/node_modules has none: ` +
+                `every request for it would fall through to the root's copy (add it to app/package.json, or drop the pin)`
+            )
+          }
+        }
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
-        if (isSingleton && !context.originModulePath.startsWith(__dirname)) {
+        if ((isSingleton || appCopy(moduleName)) && !context.originModulePath.startsWith(__dirname + path.sep)) {
           // Re-resolve as if requested from the app root (keeps package
           // "exports" handling intact, unlike remapping to an absolute path)
           return context.resolveRequest(
             { ...context, originModulePath: path.join(__dirname, 'index.js') },
             moduleName,
-            platform,
+            platform
           )
         }
         // Ensure js-sha256 is resolved from app's node_modules
@@ -232,9 +266,7 @@ module.exports = (async () => {
           // this block exists to work around. Fail loudly instead.
           throw new Error(
             `[metro.config] Could not resolve '${moduleName}': no dist/${subPath}.js found under any of:\n` +
-              bases
-                .map((base) => `  ${path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)}`)
-                .join('\n'),
+              bases.map((base) => `  ${path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)}`).join('\n')
           )
         }
         // Intercept rdf-canonize package requests to ensure patched version is used

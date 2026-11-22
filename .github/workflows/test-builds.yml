@@ -197,10 +197,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      # One install for the whole repository (app and packages/* are its workspaces); the framework's
-      # packages bundle from source, so there is nothing to build before Metro.
+      # One install for the whole repository (app and packages/* are its workspaces). The packages Metro bundles
+      # resolve from source; the Node-consumed ones (trust-tasks, vrc-contexts, …) keep a build/ as their entry,
+      # made here so the linking check below sees every entry the install promises.
       - name: Install dependencies
         run: yarn install --immutable
+
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
 
       - name: Verify workspace linking
         run: node scripts/verify-workspace-linking.js
@@ -352,10 +356,14 @@ jobs:
           distribution: "zulu"
           java-version: 17
 
-      # One install for the whole repository (app and packages/* are its workspaces); the framework's
-      # packages bundle from source, so there is nothing to build before Metro.
+      # One install for the whole repository (app and packages/* are its workspaces). The packages Metro bundles
+      # resolve from source; the Node-consumed ones (trust-tasks, vrc-contexts, …) keep a build/ as their entry,
+      # made here so the linking check below sees every entry the install promises.
       - name: Install dependencies
         run: yarn install --immutable
+
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
 
       - name: Verify workspace linking
         run: node scripts/verify-workspace-linking.js

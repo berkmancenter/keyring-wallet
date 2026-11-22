@@ -54,6 +54,7 @@ test('the install, root setup, the workflow and this selector run everything', (
     'packages/tsconfig-base.json',
     'packages/__mocks__/react-native-keychain.ts',
     '.github/workflows/actions/setup-node/action.yml',
+    'bifold/packages/core/src/x.ts',
   ])
     assert.equal(run(M(p)).everything, true, p)
 })

@@ -74,6 +74,11 @@ jobs:
         working-directory: app
         run: yarn install --immutable
 
+      # The Node-consumed framework packages (trust-tasks, vrc-contexts, …) declare their types at build/; the app's
+      # typecheck resolves them there. The React Native packages typecheck from their source and need nothing.
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
       - name: Check style
         working-directory: app
         run: |
@@ -158,6 +163,11 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: yarn install --immutable
+
+      # app/jest.config.js maps every @bifold/* package to its source, so the suite needs no package build; one is made
+      # anyway, so a subpath import that no mapper covers resolves as it does at runtime rather than failing here only.
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
 
       - name: Automated testing
         run: yarn test

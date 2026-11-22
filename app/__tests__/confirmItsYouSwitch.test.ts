@@ -60,7 +60,7 @@ const load = async () => {
   const { app } = composeContainers(
     ((key: string) => key) as never,
     () => undefined,
-    () => undefined,
+    () => undefined
   )
   const dispatch = jest.fn()
   await app.resolve(TOKENS.LOAD_STATE)(dispatch)

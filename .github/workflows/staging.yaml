@@ -334,6 +334,9 @@ jobs:
         run: |
           yarn install --immutable
 
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
       - name: Verify workspace linking
         run: |
           node scripts/verify-workspace-linking.js
@@ -866,6 +869,9 @@ jobs:
         working-directory: ./
         run: |
           yarn install --immutable
+
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
 
       - name: Verify workspace linking
         run: |

@@ -9,8 +9,8 @@
 // no taskContext. This produces the shape the production trust-tasks path emits.
 import { writeFileSync } from 'node:fs'
 
-const ws = await import('../../bifold/packages/witness-server/dist/WitnessService.js')
-const tt = await import('../../bifold/packages/trust-tasks/dist/index.js').catch(() => null)
+const ws = await import('../../packages/witness-server/dist/WitnessService.js')
+const tt = await import('../../packages/trust-tasks/dist/index.js').catch(() => null)
 
 const { buildWitnessCredentialJson } = ws.default ?? ws
 
