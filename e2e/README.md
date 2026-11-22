@@ -62,8 +62,7 @@ message, in addition to the existing screenshot/log dumps.
 
 > **After pulling `feat/trust-tasks-integration`:** run `yarn install` at the
 > repo root (the lockfile and the `@bifold/*` portals changed — the app now
-> bundles `@bifold/trust-tasks`), `git submodule update --init` (the bifold
-> pointer advanced), restart Metro with `yarn start --reset-cache`, and
+> bundles `@bifold/trust-tasks`), restart Metro with `yarn start --reset-cache`, and
 > **rebuild the iOS device app** before any device run (it bundles its JS —
 > see "Real devices"). Android debug builds load JS from Metro and need no
 > rebuild for JS-only changes.
@@ -97,10 +96,11 @@ Metro and run `yarn start` from **this** worktree's `app/` before retrying.
 ## Running from a second worktree
 
 A fresh `git worktree` does **not** carry the untracked files a run needs, and
-each one fails differently and late. All four, in order:
+each one fails differently and late. All three, in order (since the fold of
+2026-11 `bifold/` is part of the repository, so there is no submodule to
+initialise; `yarn install` at the root installs and builds it):
 
 ```sh
-git submodule update --init --recursive          # or yarn install dies in ~90ms
 cp <primary>/app/.env app/.env                    # baked in at BUILD time
 cp <primary>/app/android/local.properties app/android/local.properties
 (cd e2e && npm install)                           # e2e is outside the workspaces
@@ -110,7 +110,6 @@ What each looks like when missing, because none of them says so plainly:
 
 | Missing | Symptom |
 | --- | --- |
-| submodule not initialised | `yarn install` fails in ~90ms: `@bifold/core@portal:…: Manifest not found` |
 | `app/.env` | app boots, onboards, then hangs at `configuring message pickup` and shows "Oops! Something went wrong" — no `MEDIATOR_URL` |
 | `local.properties` | `SDK location not found` from gradle |
 | `e2e/node_modules` | `ERR_MODULE_NOT_FOUND: webdriverio` |
@@ -126,8 +125,8 @@ before pushing from a worktree.
 **Stale worktrees lie about what compiles.** A worktree left for a few days can
 report `@bifold/core` "has no exported member" for symbols plainly present in
 the source — its `bifold/packages/core/lib/typescript/` artifact predates them.
-`yarn install` at the root may be a no-op, since yarn does not notice submodule
-content changing. Fix: `(cd bifold && yarn install)` then
+`yarn install` at the root may be a no-op, since yarn does not notice the
+framework's source changing under `bifold/`. Fix: `(cd bifold && yarn install)` then
 `yarn workspace @bifold/core run build`. Do **not** run bifold's root
 `yarn build` (see the root `CLAUDE.md`).
 

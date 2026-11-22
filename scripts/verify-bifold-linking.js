@@ -21,12 +21,13 @@ function log(message, type = 'info') {
 }
 
 function checkSubmoduleInitialized() {
-  log('Checking if bifold submodule is initialized...');
+  // bifold/ is a directory of this repository since the fold (no submodule); its absence is a broken checkout.
+  log('Checking that bifold/ is present...');
   if (!fs.existsSync(BIFOLD_DIR)) {
-    errors.push('Bifold submodule is not initialized (bifold/ directory missing)');
+    errors.push('bifold/ directory missing: the checkout is incomplete');
     return false;
   }
-  log('Bifold submodule is initialized', 'info');
+  log('bifold/ is present', 'info');
   return true;
 }
 

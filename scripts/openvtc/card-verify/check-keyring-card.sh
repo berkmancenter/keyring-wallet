@@ -12,7 +12,7 @@
 # check_against_session (what an openvtc applicant runs on a statement it
 # receives), and the vetter's eligibility presentation with its role VAC.
 #
-#   BIFOLD_DIR=<bifold checkout> …   # check a bifold other than the submodule
+#   BIFOLD_DIR=<bifold checkout> …   # check a bifold other than this repository's bifold/
 #
 # Exit 0 and the OK lines when both pass; non-zero otherwise.
 set -euo pipefail
