@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildSet, findGuards, parsePart, plan, setupClosure, sourceMapped } from './select-tests.mjs'
+import { buildSet, changedAgainst, findGuards, parsePart, plan, setupClosure, sourceMapped } from './select-tests.mjs'
 
 // The shape of this repo's graph: core loads oca and trust-tasks from src (mapped), the adapter from its build, and
 // the adapter loads trust-tasks; remote-logs loads core; witness-server is outside core's graph.
@@ -189,4 +189,48 @@ test('--part reads "i/n" and refuses anything else', () => {
   assert.deepEqual(parsePart(undefined), { part: 1, parts: 1 })
   assert.deepEqual(parsePart('2/4'), { part: 2, parts: 4 })
   for (const bad of ['0/4', '5/4', '2', 'a/b', '2/4/1']) assert.throws(() => parsePart(bad), /--part/, bad)
+})
+
+// The change reading since the fold: the framework's list is --relative to bifold/ (so restricted to it), and the
+// empty-diff guard reads the whole repository. A fake git answers each call from a table and records the arguments.
+const fakeGit = (answers) => {
+  const calls = []
+  const run = (...args) => {
+    calls.push(args)
+    if (args[0] === 'merge-base') return 'abc\n'
+    if (args.includes('--relative')) return answers.relative
+    return answers.whole
+  }
+  return { run, calls }
+}
+
+test('a wallet-only PR (empty relative diff, non-empty whole diff, GitHub lists files) selects nothing and does not throw', () => {
+  const { run, calls } = fakeGit({ relative: '', whole: 'app/src/x.ts\nscripts/y.mjs\n' })
+  assert.deepEqual(changedAgainst('origin/main', { run, listed: 2 }), [])
+  // The relative list carries --relative and the guard's list does not: the two populations are different on purpose.
+  const diffs = calls.filter((c) => c[0] === 'diff')
+  assert.equal(diffs.length, 2)
+  assert.ok(diffs[0].includes('--relative') && diffs[0].includes('--name-status'))
+  assert.ok(!diffs[1].includes('--relative') && diffs[1].includes('--name-only'))
+})
+
+test('control: a whole-repository diff that is empty while GitHub lists files still refuses to select nothing', () => {
+  const { run } = fakeGit({ relative: '', whole: '' })
+  assert.throws(
+    () => changedAgainst('origin/main', { run, listed: 1 }),
+    /GitHub lists 1 changed files; refusing to select nothing/
+  )
+  // and with nothing listed, an empty range is simply nothing to run
+  assert.deepEqual(changedAgainst('origin/main', { run: fakeGit({ relative: '', whole: '' }).run, listed: 0 }), [])
+})
+
+test('a framework change comes back relative to bifold/, status and path', () => {
+  const { run } = fakeGit({
+    relative: 'M\tpackages/core/src/x.ts\nA\tpackages/core/src/__tests__/x.test.ts\n',
+    whole: 'bifold/packages/core/src/x.ts\nbifold/packages/core/src/__tests__/x.test.ts\n',
+  })
+  assert.deepEqual(changedAgainst('origin/main', { run, listed: 2 }), [
+    { status: 'M', path: 'packages/core/src/x.ts' },
+    { status: 'A', path: 'packages/core/src/__tests__/x.test.ts' },
+  ])
 })

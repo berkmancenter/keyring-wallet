@@ -329,26 +329,36 @@ const output = (pairs) => {
 }
 const summary = (text) => process.env.GITHUB_STEP_SUMMARY && appendFileSync(process.env.GITHUB_STEP_SUMMARY, text)
 
-function planCommand(args) {
-  const base = args.base
-  if (!base) throw new Error('plan needs --base <ref>')
-  git('merge-base', base, 'HEAD') // throws on a checkout too shallow to diff
-  // --relative: the framework lives under bifold/ of the wallet repository since the fold, and this script runs with
-  // that directory as its root, so the paths come back relative to it (packages/core/…) and the diff is restricted to
-  // it. A wallet-only change leaves it empty, which is "no framework suite to run", not a failure.
-  const changes = git('diff', '--name-status', '--no-renames', '--relative', `${base}...HEAD`)
+/**
+ * The PR's changes as this script's rules read them, with the empty-diff guard. --relative: the framework lives under
+ * bifold/ of the wallet repository since the fold, and this script runs with that directory as its root, so the paths
+ * come back relative to it (packages/core/…) and the diff is RESTRICTED to it. A wallet-only change leaves that list
+ * empty, which is "no framework suite to run", not a failure; so the guard against a diff that GitHub says is not empty
+ * reads the WHOLE repository's diff, never the relative one (the relative guard failed every wallet-only PR into the
+ * integration branch until the fold's review caught it). `run` is git, injectable for the test; `listed` is GitHub's
+ * changed-files count.
+ */
+export function changedAgainst(base, { run = git, listed = Number(process.env.PR_CHANGED_FILES || 0) } = {}) {
+  run('merge-base', base, 'HEAD') // throws on a checkout too shallow to diff
+  const changes = run('diff', '--name-status', '--no-renames', '--relative', `${base}...HEAD`)
     .split('\n')
     .filter(Boolean)
     .map((line) => {
       const [status, p] = line.split('\t')
       return { status, path: p }
     })
-  const listed = Number(process.env.PR_CHANGED_FILES || 0)
-  const whole = git('diff', '--name-only', '--no-renames', `${base}...HEAD`).split('\n').filter(Boolean)
+  const whole = run('diff', '--name-only', '--no-renames', `${base}...HEAD`).split('\n').filter(Boolean)
   if (whole.length === 0 && listed > 0)
     throw new Error(
       `the diff against ${base} is empty, but GitHub lists ${listed} changed files; refusing to select nothing`
     )
+  return changes
+}
+
+function planCommand(args) {
+  const base = args.base
+  if (!base) throw new Error('plan needs --base <ref>')
+  const changes = changedAgainst(base)
 
   const workspaces = readWorkspaces()
   const mapped = sourceMapped(readFileSync(path.join(repoRoot, 'packages/core/jest.config.js'), 'utf8'))
