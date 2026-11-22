@@ -215,9 +215,11 @@ const realGh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuff
  * The whole post-release run. gh and sleep are injectable for tests. Every read that fails throws: the caller reports
  * an error, never a green smoke.
  */
-const gitOk = (...args) => { try { execFileSync('git', args, { stdio: 'ignore' }); return true } catch { return false } }
+// Replace refs (the fold's graft) are ignored by the ancestry and describe reads: they must see the real history.
+const NO_REPLACE = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' }
+const gitOk = (...args) => { try { execFileSync('git', args, { stdio: 'ignore', env: NO_REPLACE }); return true } catch { return false } }
 const realIsAncestor = (a, b) => gitOk('merge-base', '--is-ancestor', a, b)
-const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--match', 'staging-v*', '--abbrev=0', sha], { encoding: 'utf8' }).trim()
+const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--match', 'staging-v*', '--abbrev=0', sha], { encoding: 'utf8', env: NO_REPLACE }).trim()
 
 /**
  * What a failed gh call says: gh's own line from stderr (it names the HTTP status, e.g. "gh: Not Found (HTTP 404)"),

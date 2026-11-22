@@ -88,11 +88,16 @@ export function legRecord({ name, exit, start, end }, log, meta, passedBefore = 
   return { ...rec, result, verdict: 'app', reason: `${rec.pass} pass, ${rec.skip} skip` };
 }
 
+// The fold's graft (a refs/replace/* ref on the squash that folded bifold in, docs/plans/single-codebase-plan.md D1) is
+// honoured by git by default where it is present, which gives main's history 4,344 extra ancestors on this Mac and none
+// in CI. An ancestry or range WALK must read the real objects, so every walker here sets GIT_NO_REPLACE_OBJECTS.
+export const NO_REPLACE = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' };
+
 /** Is commit `a` an ancestor of (or equal to) `b` in the repo at `dir`? null when that can't be told. */
 export function isAncestor(dir, a, b) {
   if (!dir || !a || !b) return null;
   if (a === b || b.startsWith(a) || a.startsWith(b)) return true;
-  try { execFileSync('git', ['-C', dir, 'merge-base', '--is-ancestor', a, b], { stdio: 'ignore' }); return true; } catch (e) {
+  try { execFileSync('git', ['-C', dir, 'merge-base', '--is-ancestor', a, b], { stdio: 'ignore', env: NO_REPLACE }); return true; } catch (e) {
     return e.status === 1 ? false : null; // 1: not an ancestor; anything else: unknown commit or no repo
   }
 }

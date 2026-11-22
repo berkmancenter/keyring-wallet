@@ -84,7 +84,10 @@ const fail = (message) => {
 
 const appDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const repoDir = path.resolve(appDir, '..')
-const git = (...a) => execFileSync('git', a, { cwd: repoDir, encoding: 'utf8' }).trim()
+// Replace refs (the fold's graft, refs/replace/*) are ignored: a walk such as the base-is-ancestor check below must read
+// the real history, which has no such ref in CI and may have one in a local checkout.
+const NO_REPLACE = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' }
+const git = (...a) => execFileSync('git', a, { cwd: repoDir, encoding: 'utf8', env: NO_REPLACE }).trim()
 
 if (!args.build === !args.base) fail('give exactly one of --build <N> (the store build) or --base <commit>')
 // The release number names the bundle on the server, as it names the run: <store build>.<n>, of that store build.
@@ -141,7 +144,7 @@ try {
 } catch {
   fail(`cannot resolve ${baseRef}`)
 }
-const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', base, walletHead], { cwd: repoDir })
+const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', base, walletHead], { cwd: repoDir, env: NO_REPLACE })
 if (ancestor.status !== 0)
   fail(`${baseRef} (${base.slice(0, 8)}) is not an ancestor of HEAD; a bundle builds on its store build`)
 
