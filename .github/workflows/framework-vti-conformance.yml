@@ -18,6 +18,8 @@ name: Framework VTI conformance
 on:
   pull_request:
     # Any base branch, as Code Quality: a stacked PR into a feature branch gets the conformance check too.
+    # Deliberately no "edited": this check is not required and is path-filtered, so a retarget need not re-run it;
+    # the next push does.
     paths:
       - 'bifold/packages/core/src/modules/trust-tasks/**'
       - 'bifold/packages/trust-tasks/**'
