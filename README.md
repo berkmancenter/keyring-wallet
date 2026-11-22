@@ -277,10 +277,17 @@ git -C bifold stash list                         #    stashes live in .git/modul
 git -C bifold branch -r --contains HEAD | head   # 2. is bifold's HEAD on a remote? If this prints nothing:
 #    git -C bifold push origin HEAD:refs/heads/<your-branch>        (or save a patch: git -C bifold diff > /tmp/bifold.patch)
 #    an untracked file you want to keep (a lockfile, a note): copy it out, e.g. cp bifold/<file> /tmp/
-rm -rf bifold                                    # 3. the working folder only; NOT .git/modules/bifold
+rm -rf bifold                                    # 3. the working folder only; NOT .git/modules/bifold (and see the note below first)
 git checkout main && git pull                    # 4. bifold/ comes back as part of main
 yarn install                                     # 5. reinstalls and builds the framework (its node_modules went with the folder)
 ```
+
+Before step 3, on a machine where other worktrees borrow this checkout's
+`bifold/node_modules` by symlink (`<worktree>/node_modules -> <this checkout>/bifold/node_modules`
+or `…/bifold/packages/core/node_modules`), step 3 removes their target too and
+they stop resolving `@bifold/*` with no error that names the cause: list them
+first with `find <worktrees> -type l -lname '*<this checkout>/bifold*'`, and expect
+to re-install or re-point each one afterwards.
 
 Afterwards the old repository is still there: `git --git-dir=.git/modules/bifold
 --work-tree=. stash list` and `git --git-dir=.git/modules/bifold --work-tree=. log -1
