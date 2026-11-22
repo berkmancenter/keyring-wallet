@@ -1767,6 +1767,26 @@ export async function assertWitnessCredential(driver, peerName, timeout = 60000)
   );
 }
 
+/**
+ * One press of whichever back the screen has: its testID Back (a stacked screen's header back, e.g. the "Scan QR code"
+ * code screen), else BackButton, else (iOS) a header button labelled "Back". Returns whether it pressed one.
+ */
+export async function pressAnyBack(driver) {
+  if (await existsTestId(driver, "Back", 1000)) {
+    await tapTestId(driver, "Back", 3000).catch(() => undefined);
+    return true;
+  }
+  if (await existsTestId(driver, "BackButton", 1000)) {
+    await tapTestId(driver, "BackButton", 3000).catch(() => undefined);
+    return true;
+  }
+  if (driver.e2ePlatform !== "ios") return false;
+  const back = await driver.$('-ios predicate string:type == "XCUIElementTypeButton" AND label == "Back" AND visible == 1');
+  if (!(await back.isExisting())) return false;
+  await back.click();
+  return true;
+}
+
 export async function assertVrcReceived(driver, peerName, timeout = 120000) {
   const deadline = Date.now() + timeout;
   // we may still be on a stacked screen (chat) — pop back until the tab bar is reachable
@@ -1791,9 +1811,9 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
     // be in flight here, requesting biometric confirmation. No-op elsewhere.
     await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
-    if (await existsTestId(driver, "BackButton", 2000)) {
-      await tapTestId(driver, "BackButton");
-    }
+    // Whichever back the screen has: on a Release build the side that accepted the proposal can still be on the
+    // stacked code screen, whose header back is testID Back, not BackButton.
+    await pressAnyBack(driver);
   }
   // The contact row shows the peer's R-card name once the VRC is stored —
   // proves the credential (not just the connection) made it across.
