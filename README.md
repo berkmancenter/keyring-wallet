@@ -283,11 +283,13 @@ yarn install                                     # 5. reinstalls and builds the 
 ```
 
 Afterwards the old repository is still there: `git --git-dir=.git/modules/bifold
-stash list` and `git --git-dir=.git/modules/bifold log -1 <branch>` read it, and
-a change kept there is re-applied with `git am -p1 --directory=bifold` (a
+stash list` and `git --git-dir=.git/modules/bifold log -1 <branch>` read it. A
+change kept there is re-applied with `git am -p1 --directory=bifold` (a
 `format-patch` of the bifold commit) or `git apply --directory=bifold` (a plain
-diff). A worktree whose `bifold/` is an empty, never-initialised folder needs only
-step 4.
+diff); a stash has no worktree left to `stash apply` into, so take it as a patch
+first: `git --git-dir=.git/modules/bifold stash show -p stash@{0} > /tmp/bifold-stash.patch`,
+then `git apply --directory=bifold /tmp/bifold-stash.patch`. A worktree whose
+`bifold/` is an empty, never-initialised folder needs only step 4.
 
 ### The quick way: run a demo
 
