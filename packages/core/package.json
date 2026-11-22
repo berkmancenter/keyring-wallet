@@ -2,7 +2,6 @@
   "name": "@bifold/core",
   "version": "3.0.16",
   "main": "src/index.ts",
-  "module": "lib/module/index.js",
   "types": "src/index.ts",
   "react-native": "src/index.ts",
   "source": "src/index.ts",

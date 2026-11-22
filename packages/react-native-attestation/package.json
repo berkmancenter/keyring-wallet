@@ -3,7 +3,6 @@
   "version": "3.0.16",
   "description": "Mobile app attestation",
   "main": "src/index.ts",
-  "module": "build/module/index.js",
   "types": "src/index.ts",
   "source": "src/index.ts",
   "react-native": "src/index.ts",
