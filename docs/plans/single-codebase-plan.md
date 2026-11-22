@@ -284,7 +284,7 @@ Bifold's shared root files (`eslint-rules/`, `__mocks__/`) go to the repository 
 - Everything in Phase 1's list, on the new paths.
 - `du -sh node_modules app/node_modules` shows no `bifold/node_modules`, and `find . -name yarn.lock -not -path '*/node_modules/*'` finds one file.
 - `yarn workspaces list` shows `app` and every package; `yarn test` at the root runs the app's and each package's `test` script (a root script using `yarn workspaces foreach --topological run test`).
-- Release bundle sizes for both platforms are within 0.5 % of the Phase 0 record, and the e2e suites in §5.1 pass on Test builds.
+- Release bundle sizes for both platforms are within 0.5 % of the Phase 0 record **or every byte of the difference is accounted for** (Phase 2's are 15 % smaller: core had been bundled twice, as `lib/commonjs` and `lib/module`, and 62 dependencies came from both installs; the 2026-11-22 companion §8 has the account, both directions), and the e2e suites in §5.1 pass on Test builds.
 - The native fingerprint equals the Phase 0 record **or** the §5.3 rule is in force and recorded. *(Phase 2's move changes it on both platforms, by the two native packages' paths alone; the rule is in force, recorded in the 2026-11-22 companion §8.)*
 - `tier.mjs` grades the ten fixture ranges identically after the path rewrite (the fixtures' paths are rewritten `bifold/packages/` → `packages/`, nothing else).
 - `node packages/core/scripts/gen-testids.mjs --check` and `e2e/scripts/sync-testids.sh` (now reading `packages/core/testids.json`) pass with the manifest unchanged.
