@@ -283,12 +283,16 @@ yarn install                                     # 5. reinstalls and builds the 
 ```
 
 Afterwards the old repository is still there: `git --git-dir=.git/modules/bifold
-stash list` and `git --git-dir=.git/modules/bifold log -1 <branch>` read it. A
-change kept there is re-applied with `git am -p1 --directory=bifold` (a
-`format-patch` of the bifold commit) or `git apply --directory=bifold` (a plain
-diff); a stash has no worktree left to `stash apply` into, so take it as a patch
-first: `git --git-dir=.git/modules/bifold stash show -p stash@{0} > /tmp/bifold-stash.patch`,
-then `git apply --directory=bifold /tmp/bifold-stash.patch`. A worktree whose
+--work-tree=. stash list` and `git --git-dir=.git/modules/bifold --work-tree=. log -1
+<branch>` read it (`--work-tree=.` because the module's own `core.worktree` names the
+folder you removed; on the folded `main` a `bifold/` folder exists again, but this
+works in either state). A change kept there is re-applied with
+`git am -p1 --directory=bifold` (a `format-patch` of the bifold commit) or
+`git apply --directory=bifold` (a plain diff); a stash has no worktree left to
+`stash apply` into, so take it as a patch first:
+`git --git-dir=.git/modules/bifold --work-tree=. stash show -p stash@{0} > /tmp/bifold-stash.patch`,
+then `git apply --directory=bifold /tmp/bifold-stash.patch`. Rehearsed end to end
+on 2026-11-22 in a disposable clone (companion `2026-11-22-al.md`). A worktree whose
 `bifold/` is an empty, never-initialised folder needs only step 4.
 
 ### The quick way: run a demo
