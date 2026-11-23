@@ -42,10 +42,14 @@ if [ -e "$out" ]; then
 fi
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
 
+# The work dir receives mediator-secrets.json, the admin private key and the DID
+# log, so it stays private to this user (mktemp makes it 0700). The container
+# runs as this same uid/gid below, so it needs nothing wider; a wider mode would
+# let another local user swap or delete those files while the script runs.
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM HUP
+chmod 0700 "$work"
 sed "s#@MAILBOX_HOSTNAME@#$host#g" setup-recipe.toml > "$work/recipe.toml"
-chmod 0777 "$work"
 
 docker compose up -d --wait redis
 # mediator-setup prints the admin's private key "for operator bookkeeping".

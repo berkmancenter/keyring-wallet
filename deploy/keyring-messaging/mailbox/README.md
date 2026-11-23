@@ -25,7 +25,7 @@ share an upstream project and nothing else:
 | Identity | `did:peer:2` | `did:webvh` on `MAILBOX_HOSTNAME`, served with its `did:web` form |
 | Keys | a file synced to the VM | GCP Secret Manager, read by the mediator itself (`gcp_secrets://`) |
 | Rate limits | per-IP only | per-IP (with Caddy trusted for `X-Forwarded-For`) and per-DID |
-| Wake | none | `[processors.wake]` on, upstream defaults |
+| Wake | none | `[processors.wake]` as `mailbox.toml` sets it; in either setting no ring reaches a gateway off this mediator while `external_forwarding = "false"` (see Not measured here) |
 | Host | `kpush-gateway`, with the gateway | its own VM, `kpush-mailbox` |
 
 ## Files
@@ -160,7 +160,7 @@ send a routing/2.0 forward over the sender's own session). The harness is `evide
 | W1 `wake/set` | `wakeCapable: true` |
 | W2 CONTROL | recipient online: a send plus `wake/request` rings nothing |
 | W3 CONTROL | recipient offline with no handle: nothing |
-| W4 wake | recipient offline with a handle: ONE `push/wake/0.2` reaches the (stand-in) gateway, payload `{handle, mediator, urgency: "interactive", v: 1}`, issued and signed by the mediator (proof purpose authentication); no second ring. The sender's id (sha256 of the inner JWE's bytes, attached as `data.base64`) equals the mediator's stored id; attached as `data.json` it does not, since the mediator re-serialises it |
+| W4 wake | recipient offline with a handle: ONE `push/wake/0.2` reaches the (stand-in) gateway, payload `{handle, mediator, urgency: "interactive", v: 1}`, issued and signed by the mediator (proof purpose authentication); no second ring. The sender's id (sha256 of the inner JWE's bytes, attached as `data.base64`) equals the mediator's stored id; attached as `data.json` it does not, since the mediator re-serialises it. This proves the wake protocol, not the path to a real gateway: the stand-in was an account on this mediator, so the ring was stored as its mail |
 
 One line in `run-s2-main-f6ed8159.txt` is the harness's, not the mediator's: `(bob frame: Error deleting key …)` is
 printed by the harness's frame handler while bob's agent is shutting down after the last row (a frame arrived during
@@ -182,7 +182,16 @@ accepting anonymous messages": Credo's inner forward layer is anoncrypt, while t
 authenticated and gated by `SEND_FORWARDED`); `trust_task_verification = "enforce"` (every row's Trust Task is
 signed and accepted under it); `enable_inter_mediator_relay = "false"` (the lab ran closed).
 
-Not measured here: the real push-gateway path (the stand-in gateway was an account on the same mediator), TLS and
+Not measured here, and not reachable in this configuration: the real push-gateway path. At v0.53.0 `wake/set` accepts
+any gateway DID whose document has a DIDComm endpoint (`src/wake/set.rs`, `gateway_reachable`; there is no allowlist of
+gateways, only the gateway's own list of mediators it answers), and the ring leaves through `send_as_mediator`, whose
+next hop is classified `Local` for every DID while `external_forwarding = "false"` (`src/messages/protocols/routing.rs`,
+`classify_next_hop`) and then dropped because the gateway has no account here. So with this `mailbox.toml` a ring never
+reaches the push gateway's mediator, whatever `[processors.wake].enabled` says; with `enabled = "true"` phones are told
+`wakeCapable: true` all the same. Reaching the real gateway is a follow-up: it needs the mailbox DID to hold an account
+on the gateway's mediator (`explicit_allow`) and be allowed as a signer there, plus a route out that keeps the relay bound
+(`external_forwarding` is all-or-nothing at v0.53.0), then a wake check against the real gateway. Mail is unaffected: it
+queues and is picked up when the phone opens, as rows A to F show. Also not measured: TLS and
 the did:webvh identity, the soak (S5), refusal at the hard cap (S5b), mail from a contact on another mediator. This
 directory's `Dockerfile`, compose file and `setup-identity.sh` are exercised by the repository's "Mailbox mediator
 image" check (`.github/workflows/push-gateway-image.yml`, job `mailbox`), which runs on every pull request touching
