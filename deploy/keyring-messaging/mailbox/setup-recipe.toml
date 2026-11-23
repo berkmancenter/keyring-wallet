@@ -1,0 +1,47 @@
+# Recipe for upstream's mediator-setup (v0.53.0 key names: tools/mediator-setup/
+# examples/mediator-build.toml). Used only by setup-identity.sh, which fills in
+# @MAILBOX_HOSTNAME@. It makes the mailbox's own identity: a did:webvh on
+# MAILBOX_HOSTNAME (generated here, no VTA), its keys, its JWT signing key and
+# an admin did:key. The mediator.toml it also writes is discarded (ours is
+# mailbox.toml); the keys are kept and turned into the Secret Manager bundle.
+
+[deployment]
+type = "server"
+protocols = ["didcomm", "tsp"]
+use_vta = false
+
+[identity]
+# A web-hosted DID on the mailbox's own hostname. The mailbox serves its log
+# at /.well-known/did.jsonl and the did:web form of its document at
+# /.well-known/did.json (mailbox.toml did_web_self_hosted).
+did_method = "did:webvh"
+public_url = "https://@MAILBOX_HOSTNAME@"
+# Also write the did:web copy (did-web.json), for reference.
+save_did_web = true
+
+[secrets]
+# A scratch file in setup-identity.sh's temporary folder; converted to the
+# Secret Manager bundle and then deleted.
+storage = "file:///setup/mediator-secrets.json"
+allow_plaintext_file = true
+
+[security]
+ssl = "none"
+admin = "generate"
+jwt_mode = "generate"
+network_mode = "open"
+cors = "none"
+
+[database]
+url = "redis://redis:6379/"
+
+[storage]
+backend = "redis"
+
+[output]
+config_path = "/setup/mediator.toml"
+listen_address = "0.0.0.0:7037"
+api_prefix = "/mediator/v1/"
+
+[install]
+enabled = false
