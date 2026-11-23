@@ -25,7 +25,7 @@ share an upstream project and nothing else:
 | Identity | `did:peer:2` | `did:webvh` on `MAILBOX_HOSTNAME`, served with its `did:web` form |
 | Keys | a file synced to the VM | GCP Secret Manager, read by the mediator itself (`gcp_secrets://`) |
 | Rate limits | per-IP only | per-IP (with Caddy trusted for `X-Forwarded-For`) and per-DID |
-| Wake | none | `[processors.wake]` as `mailbox.toml` sets it; in either setting no ring reaches a gateway off this mediator while `external_forwarding = "false"` (see Not measured here) |
+| Wake | none | `[processors.wake]` off (`enabled = "false"`): phones are told `wakeCapable: false`; a ring could not reach a gateway off this mediator anyway while `external_forwarding = "false"` (see Not measured here) |
 | Host | `kpush-gateway`, with the gateway | its own VM, `kpush-mailbox` |
 
 ## Files
@@ -187,9 +187,10 @@ account on this mediator may send (`src/wake/set.rs` requires the `Local` capabi
 document has a DIDComm endpoint and a key-agreement key (`gateway_reachable`; there is no allowlist of gateways, only
 the gateway's own list of mediators it answers), and the ring leaves through `send_as_mediator`, whose
 next hop is classified `Local` for every DID while `external_forwarding = "false"` (`src/messages/protocols/routing.rs`,
-`classify_next_hop`) and then dropped because the gateway has no account here. So with this `mailbox.toml` a ring never
-reaches the push gateway's mediator, whatever `[processors.wake].enabled` says; with `enabled = "true"` phones are told
-`wakeCapable: true` all the same. Reaching the real gateway is a follow-up: it needs the mailbox DID to hold an account
+`classify_next_hop`) and then dropped because the gateway has no account here. So with `external_forwarding = "false"` a ring never
+reaches the push gateway's mediator, whatever `[processors.wake].enabled` says; with `enabled = "true"` phones would be
+told `wakeCapable: true` all the same. For that reason `mailbox.toml` ships wake off (decided 2026-11-23): phones are told
+`wakeCapable: false`, nothing rings, and mail waits for the next open. Reaching the real gateway is a follow-up: it needs the mailbox DID to hold an account
 on the gateway's mediator (`explicit_allow`) and be allowed as a signer there, plus a route out that keeps the relay bound
 (`external_forwarding` is all-or-nothing at v0.53.0), then a wake check against the real gateway. Mail is unaffected: it
 queues and is picked up when the phone opens, as rows A to F show. Also not measured: TLS and

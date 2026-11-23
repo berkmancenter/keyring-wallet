@@ -249,9 +249,16 @@ enabled = "true"
 
 [processors.wake]
 # A sender with mail queued for an offline phone may ask the mailbox to ring
-# that phone's own push gateway handle (messaging/wake/request). Upstream's
-# defaults, written out.
-enabled = "true"
+# that phone's own push gateway handle (messaging/wake/request). OFF for the
+# first tester build (decided 2026-11-23): with external_forwarding = "false"
+# above, a ring to a gateway that holds no account here is dropped at this
+# mediator (v0.53.0 routing.rs classify_next_hop), so "true" would tell phones
+# wakeCapable: true and never ring. Off, phones are told wakeCapable: false and
+# mail waits for the next open. Turning it on is a follow-up that needs the
+# mailbox DID to be an account and allowed signer on the gateway's mediator and
+# a route out that keeps the relay bound; see README "Not measured here". The
+# limits below are upstream's defaults, written out for that day.
+enabled = "false"
 pair_per_minute = "1"
 pair_per_day = "10"
 addressee_coalesce_seconds = "15"
