@@ -1,6 +1,6 @@
 # The UI/UX canvas, exported
 
-Exported from the UI/UX lane's canvas, artifact version `1795468233-bf27 (the UI/UX lane's canvas version 15, 2026-11-23)`, by `scripts/plans/export-canvas.py`.
+Exported from the UI/UX lane's canvas, artifact version `1795468652-652a (the UI/UX lane's canvas version 16, 2026-11-23)`, by `scripts/plans/export-canvas.py`.
 One PNG per artboard, in the canvas's order, rendered with headless Chrome at the board's size at twice the
 pixel density from the published artboard files and their shared stylesheet; `sheet.png` is all of them, three
 to a row. These are the visual target for the screens (the plan's section 8.5); the kit SVGs in `../mockups/`
@@ -18,10 +18,10 @@ remain the checked source for the copy. Re-export when a new canvas version is a
 | 8 | `08-connected.png` | 5b Connected | 390×844 |
 | 9 | `09-expired.png` | 18 Code expired | 390×844 |
 | 10 | `10-agent-list.png` | 6 AI agents: the My Agent tab's first screen | 390×844 |
-| 11 | `11-agent-list-states.png` | 6b Reference, not a real screen: every status a list row can show | 390×1040 |
+| 11 | `11-agent-list-states.png` | 6b Reference, not a real screen: every status a list row can show | 390×1190 |
 | 12 | `12-agent-sheet.png` | 7 Agent sheet, opened in a room: owner, Answers other people | 390×844 |
 | 13 | `13-answers-on.png` | 8 Turning Answers other people on (from the sheet or the details) | 390×844 |
-| 14 | `14-agent-details.png` | 11 Agent details (the whole scroll) | 390×1240 |
+| 14 | `14-agent-details.png` | 11 Agent details (the whole scroll) | 390×1090 |
 | 15 | `15-details-revoke-not-confirmed.png` | 11b Details: Revoke not confirmed | 390×844 |
 | 16 | `16-details-key-changed.png` | 11c Details: the agent changed its key | 390×844 |
 | 17 | `17-revoke.png` | 17 Revoke | 390×844 |

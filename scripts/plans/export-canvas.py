@@ -35,7 +35,10 @@ def static_page(dc_html: str) -> str:
     body = re.search(r"</helmet>(.*?)</x-dc>", dc_html, re.S)
     head = helmet.group(1) if helmet else ""
     inner = body.group(1) if body else dc_html
-    inner = re.sub(r"<a\b", "<span data-link", inner)  # links are navigation in the canvas, not content
+    # Links are navigation in the canvas, not content. A header's first link is its back arrow, which the
+    # stylesheet pins to the left edge through ".hd a, .hd .bk"; the replacement span keeps that rule by class.
+    inner = re.sub(r'(<div class="hd">)<a\b', r'\1<span class="bk" data-link', inner)
+    inner = re.sub(r"<a\b", "<span data-link", inner)
     inner = inner.replace("</a>", "</span>")
     return (
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
