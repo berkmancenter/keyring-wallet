@@ -54,15 +54,13 @@ flowchart LR
 | Nothing else regressed                                                   | Root `yarn lint`, `yarn typecheck`, `yarn test`, and `cd bifold/packages/core && yarn test`                                                                                                                                      | CI                           | Not started |
 | `sedi-demos` still builds and its tests pass                             | The same suites on that branch (§6, S7)                                                                                                                                                                                          | CI                           | Not started |
 
-**Where it stands:** a verified inventory of `main` at `800a44ba` (both companions). Decisions D1, D3 to D6 are taken and D2 is revised (§3). Nothing is written.
+**Where it stands:** a verified inventory of `main` at `800a44ba` (both companions). Decisions D1 to D7 are taken, D2 revised and D6, D7 added in review (§3); Alberto confirmed D7 and the parking of the KERI holder plan on 2026-11-23. Nothing is written.
 
 **Open decisions**
 
-| Question                                                                                                      | Recommendation                                                                                                  | Who decides            | By when, or what it blocks              |
-| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------- |
-| Does `sedi-demos` stay maintained against `main`, or is it an archive?                                        | Archive (§8, R1). The state office's server side is already scaled down, so nothing can run the demo end to end | Product owner          | Before S0; changes how much S8 promises |
-| Does "Confirm it's you" stay? It is on by default and independent of the demo and of trusted approvers (§2.7) | Keep it, minus the SEDI umbrella kill (§3, D7)                                                                  | Alberto                | Before S2; decides whether S2c runs     |
-| Is the KERI holder plan parked? D2 moves the code only it would use                                           | Park it: its code moves to `sedi-demos` and comes back from there if the plan resumes (§3, D2)                  | Alberto, product owner | Before S1                               |
+| Question                                                               | Recommendation                                                                                                  | Who decides   | By when, or what it blocks              |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------------------- |
+| Does `sedi-demos` stay maintained against `main`, or is it an archive? | Archive (§8, R1). The state office's server side is already scaled down, so nothing can run the demo end to end | Product owner | Before S0; changes how much S8 promises |
 
 **Not doing:** deleting `modules/sedi/cesr`, `guardian/kel.ts` or the `webs/{identifier,document,resolve}.ts` files; writing the KERI holder (that is its own plan, parked by D2); verifying the KEL on community sign-in (today and after this plan, `did:webs` sign-in reads `did.json` only; §8, R9); renaming the `sedi-vtc` DID strings or fixtures; adding a build-time flag or plug-in system to make the demo optional (§3, D5); making the demo a separate package (§3, D5). (§3, §9)
 
@@ -82,7 +80,7 @@ flowchart LR
 
 - Making the demo pluggable on `main`. The seam between trust-tasks and the demo is circular (§2.3), and untangling it for a demo that is leaving would be work for nothing (§3, D5).
 - Building the KERI holder or any new KERI feature. The holder plan is parked (D2).
-- Changing what ships to testers beyond the absence of the demo, guardianship and trusted approvers (and of "Confirm it's you", if D7 is reversed).
+- Changing what ships to testers beyond the absence of the demo, guardianship and trusted approvers "Confirm it's you" stays (D7).
 
 ## 2. Today
 
@@ -207,7 +205,7 @@ D1 and D3 to D5 were taken by the product owner on 2026-11-23. Alberto's review 
 
 - Constraint: Keyring no longer supports the guardianship flow (Alberto, 2026-11-23). Every importer of these four files is demo or guardian code (§2.1, §2.6); none is reached by join, sign-in, vetting or `did:webs` resolution.
 - Concretely: they move to `sedi-demos` with the demo. S1 no longer makes `chain.ts` schema-agnostic or decouples `controller.ts`. `cesr/*`, `guardian/kel.ts`, `webs/{identifier,document,resolve}.ts` stay, because `resolve.ts` loads them and `WebsDidResolver` needs `resolve.ts`.
-- The KERI holder plan, which would have been their consumer, is parked (Overview, open decisions). If it resumes, it takes the files from `sedi-demos`, where the `k0-utah-v2` fixtures it cites also live.
+- The KERI holder plan, which would have been their consumer, is parked (Alberto, 2026-11-23). If it resumes, it takes the files from `sedi-demos`, where the `k0-utah-v2` fixtures it cites also live.
 - Rejected: _keep both on `main`, made generic first_ (the earlier D2). It writes and maintains two refactors, and keeps two SEDI-shaped modules on `main`, for a plan that is not being built.
 
 **D3. The two unmerged SEDI branches move to `sedi-demos`.** They are rebased onto `sedi-demos` after the removal lands (§7), not onto `main`.
@@ -226,7 +224,7 @@ D1 and D3 to D5 were taken by the product owner on 2026-11-23. Alberto's review 
 - Precondition: no agent we run or a tester uses still holds a `keyring-trusted-approvers` set when the removal ships (S0b), because the removal leaves no way to answer or remove one (§2.7).
 - Rejected: _keep the approver's half (listing and answering relayed requests) for a release so held rules can still be answered._ It keeps the most entangled part (`vtaAgent.ts`'s inbound path) for a switch that only testers ever turned on; clearing the sets first (S0b) is cheaper and leaves nothing behind.
 
-**D7. "Confirm it's you" stays, without the SEDI umbrella kill.** _Open: Alberto confirms before S2._
+**D7. "Confirm it's you" stays, without the SEDI umbrella kill.** Confirmed by Alberto, 2026-11-23.
 
 - Constraint: it is on by default and in testers' hands, and it shares no code with the demo or trusted approvers (§2.8).
 - Concretely: only the `SEDI_KERI_REMOTE_OFF` clause is removed from `confirmItsYouFlag.ts`; its own `CONFIRM_ITS_YOU_REMOTE_OFF` stays. The contact page's "Safety" heading stays, holding only its row.

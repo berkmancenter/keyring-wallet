@@ -5,7 +5,7 @@
 Keyring receives, stores, verifies and presents ACDCs issued by a KERI
 identifier it does not control. It does not manage a KEL of its own.
 
-**Status:** a plan awaiting the KH-P0 Hermes spike. No code written; KH-P0 is a measurement, and nothing after it starts until its gates are recorded. Assumptions A1–A4 (§2) are unconfirmed, and the claims this plan rests on that have not been checked are listed with their resolution in §13.
+**Status:** **parked** (2026-11-23): Keyring no longer supports the SEDI guardianship flow, and the code this plan builds on (the ACDC chain, the holder controller, the KERI event builders, the `k0-utah-v2` fixtures) moves to the `sedi-demos` branch ([sedi-demos-move-plan.md](./sedi-demos-move-plan.md), D2); it comes back from there if this plan resumes. Before it was parked: a plan awaiting the KH-P0 Hermes spike. No code written; KH-P0 is a measurement, and nothing after it starts until its gates are recorded. Assumptions A1–A4 (§2) are unconfirmed, and the claims this plan rests on that have not been checked are listed with their resolution in §13.
 
 
 ## Needs input
