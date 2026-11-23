@@ -22,13 +22,13 @@
     <rect x="34" y="144" width="332" height="62" rx="12" fill="#F5F5F5" stroke="rgba(170, 170, 170, 0.4)" stroke-width="1"/>
     <circle cx="66" cy="175" r="18" fill="#E8E0E8"/>
     <g fill="none" stroke="#666666" stroke-width="1.6"><circle cx="66" cy="171" r="4"/><path d="M59 183 a7 6 0 0 1 14 0"/></g>
-    <text x="96" y="181" font-size="16" fill="#010B13">Ada Lovelace</text>
+    <text x="96" y="181" font-size="16" fill="#010B13">Ines Costa</text>
     <path d="M342 169 l6 6 l-6 6" fill="none" stroke="#666666" stroke-width="2"/>
     <rect x="34" y="220" width="332" height="62" rx="12" fill="#000000" fill-opacity="0.1" filter="url(#kr-card-shadow)"/>
     <rect x="34" y="216" width="332" height="62" rx="12" fill="#F5F5F5" stroke="rgba(170, 170, 170, 0.4)" stroke-width="1"/>
     <circle cx="66" cy="247" r="18" fill="#E8E0E8"/>
     <g fill="none" stroke="#666666" stroke-width="1.6"><circle cx="66" cy="243" r="4"/><path d="M59 255 a7 6 0 0 1 14 0"/></g>
-    <text x="96" y="253" font-size="16" fill="#010B13">Ben Okafor</text>
+    <text x="96" y="253" font-size="16" fill="#010B13">Jordan Sample</text>
     <path d="M342 241 l6 6 l-6 6" fill="none" stroke="#666666" stroke-width="2"/>
     <rect x="34" y="292" width="332" height="62" rx="12" fill="#000000" fill-opacity="0.1" filter="url(#kr-card-shadow)"/>
     <rect x="34" y="288" width="332" height="62" rx="12" fill="#F5F5F5" stroke="#622C62" stroke-width="2"/>
@@ -41,7 +41,7 @@
     <rect x="34" y="382" width="332" height="62" rx="12" fill="#F5F5F5" stroke="rgba(170, 170, 170, 0.4)" stroke-width="1"/>
     <circle cx="66" cy="413" r="18" fill="#E8E0E8"/>
     <g fill="none" stroke="#666666" stroke-width="1.6"><circle cx="66" cy="409" r="4"/><path d="M59 421 a7 6 0 0 1 14 0"/></g>
-    <text x="96" y="419" font-size="16" fill="#010B13">Priya Natarajan</text>
+    <text x="96" y="419" font-size="16" fill="#010B13">Noor Haddad</text>
     <path d="M342 407 l6 6 l-6 6" fill="none" stroke="#666666" stroke-width="2"/>
     <rect x="20" y="711" width="360" height="89" fill="#010B13"/>
     <g fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="47" cy="726" r="4"/><path d="M40 739 a7 6 0 0 1 14 0"/><path d="M52 720 a4 4 0 1 1 1 7.6 M56 731 a6 6 0 0 1 4 6"/></g>

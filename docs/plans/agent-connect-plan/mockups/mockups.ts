@@ -126,7 +126,7 @@ export const MOCKUPS: Mockup[] = [
       })
     },
     omits: { primary: 'the sheet’s actions are rows and a switch (§6); the plan defines no button for it.' },
-    notes: ['The bottom sheet is RoomIdentitySheet, extended; it opens from a member-list row, a record’s author or the agent list.', 'The setting is a switch, not drawn; its value is "Off" here. Owner "Ada" and the agent name are samples.', 'The fixed text is shown in the app’s language; the plugin sends it in the language Keyring tells it (§3.13).'],
+    notes: ['The bottom sheet is RoomIdentitySheet, extended; it opens from a member-list row or a record’s author in a room. The agent list and the contact row open the details (11), which carry the same rows.', 'The setting is a switch, not drawn; its value is "Off" here. Owner "Ada" and the agent name are samples.', 'The fixed text is shown in the app’s language; the plugin sends it in the language Keyring tells it (§3.13).'],
   },
   {
     file: '08-answers-others-confirm.svg',
@@ -148,11 +148,11 @@ export const MOCKUPS: Mockup[] = [
     title: `Contacts: the agent as a contact (${PLAN} §3.14, §6)`,
     draw: (s) => {
       s.header(undefined, { placeholder: '<title>', assumed: APP_TITLE })
-      let y = s.cardRow('Ada Lovelace', TOP, { trailing: 'chevron' }) + 10
-      y = s.cardRow('Ben Okafor', y, { trailing: 'chevron' }) + 10
+      let y = s.cardRow('Ines Costa', TOP, { trailing: 'chevron' }) + 10
+      y = s.cardRow('Jordan Sample', y, { trailing: 'chevron' }) + 10
       y = s.cardRow('Notes helper', y, { badge: 'AI', trailing: 'chevron', outline: AGENT_EDGE })
       y = s.label('AI agent · Your AI agent', y + 4) + 10
-      s.cardRow('Priya Natarajan', y, { trailing: 'chevron' })
+      s.cardRow('Noor Haddad', y, { trailing: 'chevron' })
       s.tabBar('contacts')
     },
     omits: { primary: 'the Contacts list has no main action; tapping a row opens the contact’s details, for an agent its details screen (11).' },
@@ -166,7 +166,7 @@ export const MOCKUPS: Mockup[] = [
       let y = s.cardRow('Campus notes', TOP, { badge: '#', trailing: 'chevron' }) + 10
       y = s.cardRow('Notes helper', y, { badge: 'AI', trailing: 'chevron', outline: AGENT_EDGE })
       y = s.label('AI agent', y + 4) + 10
-      y = s.cardRow('Ada Lovelace', y, { trailing: 'chevron' }) + 10
+      y = s.cardRow('Noor Haddad', y, { trailing: 'chevron' }) + 10
       s.placeholder(y + 6, [CONTENT_W * 0.6, CONTENT_W * 0.45])
       s.tabBar('messages')
     },
@@ -310,7 +310,7 @@ export const MOCKUPS: Mockup[] = [
       s.tabBar('menu')
     },
     omits: { primary: 'Settings is a list of rows; the plan defines no button for it.' },
-    notes: ['"My VTA" opens the whole stack that was the My Agent tab, unchanged, with "My VTA" as its header (D26, step 5a). The outline only points at the row; grey bars are the other rows.'],
+    notes: ['The app titles this screen "Menu" (its own string); the row sits in its "App Settings" group. "My VTA" opens the whole stack that was the My Agent tab, unchanged, with "My VTA" as its header (D26, step 5a). The outline only points at the row.'],
   },
 ]
 
