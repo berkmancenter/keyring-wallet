@@ -54,7 +54,7 @@ admin_did = ""
 # (docker-compose.yml, networks.edge). Its X-Forwarded-For is trusted only from
 # there, so each phone is charged to its own address for the per-IP limit, and
 # a client elsewhere cannot pick its own key. Keep in step with caddy's
-# ipv4_address. A catch-all range is refused at startup
+# ipv4_address, which stays outside the network's ip_range. A catch-all range is refused at startup
 # (mediator-config validate.rs, check_trust_xff_cidrs).
 trust_xff_cidrs = ["172.31.253.2/32"]
 # The mailbox serves its own DID: the did:webvh log as /.well-known/did.jsonl

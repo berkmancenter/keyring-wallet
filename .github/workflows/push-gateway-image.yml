@@ -411,6 +411,25 @@ jobs:
             file:///*) ;;
             *) echo "::error::the CI override does not switch the secrets backend to a file:/// URL: '$backend'"; exit 1 ;;
           esac
+          # A fixed address on `edge` must not be one Docker can hand out
+          # dynamically (the mediator starts first and takes the first free one,
+          # so Caddy would fail with "Address already in use"), and it is the
+          # address mailbox.toml trusts X-Forwarded-For from. CI does not start
+          # Caddy, so this is checked on the rendered config.
+          docker compose config --format json | jq -e '
+            def ip2n: split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+            def span($c): ($c | split("/")) as $p | ($p[0] | ip2n) as $b | (pow(2; 32 - ($p[1] | tonumber))) as $n
+              | {lo: ($b - ($b % $n)), hi: ($b - ($b % $n) + $n - 1)};
+            (.networks.edge.ipam.config[0]) as $c
+            | ($c.ip_range // error("edge has no ip_range")) as $r
+            | span($r) as $dyn | span($c.subnet) as $sub
+            | [.services[] | .networks.edge.ipv4_address? // empty]
+            | length > 0 and all(.[]; ip2n as $a
+                | $a >= $sub.lo and $a <= $sub.hi and ($a < $dyn.lo or $a > $dyn.hi))
+          ' >/dev/null || { echo "::error::a fixed ipv4_address on the edge network is outside its subnet or inside its dynamic ip_range"; exit 1; }
+          caddy_ip=$(docker compose config --format json | jq -r '.services.caddy.networks.edge.ipv4_address')
+          grep -Fq "\"$caddy_ip/32\"" mailbox.toml \
+            || { echo "::error::mailbox.toml trust_xff_cidrs does not name caddy's fixed address $caddy_ip/32"; exit 1; }
 
       - name: Build the mailbox mediator image
         run: docker compose build mediator

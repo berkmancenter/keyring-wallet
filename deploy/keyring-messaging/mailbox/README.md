@@ -39,7 +39,10 @@ share an upstream project and nothing else:
   Values still being measured in the lab say `PENDING S2` or `PENDING S5`.
 - `docker-compose.yml`: mediator, Redis (AOF on) and Caddy. Only Caddy
   publishes ports; Caddy sits at a fixed address on the `edge` network, the
-  only address whose `X-Forwarded-For` the mediator trusts.
+  only address whose `X-Forwarded-For` the mediator trusts. Other containers on
+  `edge` (the mediator) get dynamic addresses from `ip_range`, which excludes
+  Caddy's address; if it did not, the mediator could take Caddy's address
+  first and Caddy would fail to start with "Address already in use".
 - `Caddyfile`: one HTTPS site on `MAILBOX_HOSTNAME`, everything proxied
   (including sign-in and the WebSocket upgrade), `/mediator/v1/metrics` refused.
 - `setup-identity.sh` and `setup-recipe.toml`: make the mailbox's identity.

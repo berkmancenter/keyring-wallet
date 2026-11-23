@@ -103,7 +103,11 @@ services:
     networks:
       edge:
         # Fixed, so the mediator can trust X-Forwarded-For from Caddy alone
-        # (mailbox.toml trust_xff_cidrs = ["172.31.253.2/32"]).
+        # (mailbox.toml trust_xff_cidrs = ["172.31.253.2/32"]). It must stay
+        # OUTSIDE the network's ip_range below: Docker hands the mediator (which
+        # starts first, with no fixed address) a free address from that range,
+        # and if that were this one Caddy would not start ("Address already in
+        # use").
         ipv4_address: 172.31.253.2
     labels: *no-auto-update
 
@@ -114,7 +118,13 @@ networks:
         # Small and out of the way of Docker's defaults (172.17.0.0/16 and up)
         # and of the kpush VPC (10.60.0.0/24). Keep in step with caddy's
         # ipv4_address and mailbox.toml trust_xff_cidrs.
+        #
+        # .1 is the bridge, .2 is Caddy's fixed address, .3 is left unused, and
+        # ip_range gives every container without a fixed address (the mediator)
+        # .4-.7. Any other fixed address on this network must also sit outside
+        # ip_range; CI checks this.
         - subnet: 172.31.253.0/29
+          ip_range: 172.31.253.4/30
   # Redis only; no route to anything else.
   store:
     internal: true
