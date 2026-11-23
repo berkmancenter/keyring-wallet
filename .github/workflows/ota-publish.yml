@@ -288,17 +288,15 @@ jobs:
       - name: Setup NodeJS
         uses: ./.github/workflows/actions/setup-node
 
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
-
+      # One install for the whole repository (the framework's packages are its workspaces and bundle from source).
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Verify bifold linking
-        run: node scripts/verify-bifold-linking.js
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
+      - name: Verify workspace linking
+        run: node scripts/verify-workspace-linking.js
 
       # iOS: the store build's own steps before its fingerprint (staging.yaml,
       # build-ios-staging). pod install rewrites a podspec inside node_modules

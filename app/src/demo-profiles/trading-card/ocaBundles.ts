@@ -2,7 +2,7 @@ import { IBrandingOverlayData, IMetaOverlayData, IOverlayBundleData } from '@bif
 
 /**
  * The template id every R-Card is built from (`RCardTemplate`'s
- * `DEFAULT_TEMPLATE_ID` in `bifold/packages/core/src/modules/vrc/types/rcard.ts`).
+ * `DEFAULT_TEMPLATE_ID` in `packages/core/src/modules/vrc/types/rcard.ts`).
  *
  * `DefaultOCABundleResolver.resolve` looks a bundle up by credential
  * definition id, then schema id, then *template id* — and an R-Card has no

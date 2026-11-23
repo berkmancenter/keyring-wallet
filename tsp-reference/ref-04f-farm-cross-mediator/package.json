@@ -9,7 +9,7 @@
     "check": "node run.mjs --quiet"
   },
   "dependencies": {
-    "@openvtc/vti-tsp-js": "file:../../bifold/packages/trust-tasks/vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz",
+    "@openvtc/vti-tsp-js": "file:../../packages/trust-tasks/vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz",
     "@openvtc/vti-didcomm-js": "0.7.0",
     "@noble/curves": "^2.2.0",
     "ws": "^8.18.0"

@@ -17,7 +17,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-// ---------- constants (mirrors of bifold/packages/vrc-contexts; see CHECKS.md) ----------
+// ---------- constants (mirrors of packages/vrc-contexts; see CHECKS.md) ----------
 
 export const CTX_V2 = "https://www.w3.org/ns/credentials/v2";
 export const CTX_V1 = "https://www.w3.org/2018/credentials/v1";

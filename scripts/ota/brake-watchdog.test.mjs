@@ -229,9 +229,10 @@ test('withdraw only: the ota environment, no approval gate, no signing key, noth
 test('every brake step is gated on act, and the withdraw also on the re-run still being red', () => {
   const steps = code(watchdog).split(/\n {6}- /).slice(1)
   const brakeSteps = steps.filter((s) => !/^uses: actions\/(checkout|setup-node)@/.test(s) && !/name: Did the brake run\?/.test(s))
-  // Five since the fold: the "Check out the submodule for the install" step went with the submodule (bifold/ is a tree
-  // of this repository), and the build, the two brake.mjs calls and the rerun remain.
-  assert.ok(brakeSteps.length >= 5)
+  // Four since Phase 2 of the fold: the "Check out the submodule for the install" step went with the submodule, and
+  // the framework's build step with its nested install (packages/* bundle from source); the install, the two
+  // brake.mjs calls and the rerun remain.
+  assert.ok(brakeSteps.length >= 4)
   for (const s of brakeSteps) assert.match(s, /if: \$\{\{ steps\.check\.outputs\.act == 'true'/, s.split('\n')[0])
   assert.match(code(watchdog), /- name: Withdraw the release\n\s+if: \$\{\{ steps\.check\.outputs\.act == 'true' && steps\.rerun\.outputs\.still_red == 'true' \}\}\n/)
 })

@@ -1,6 +1,6 @@
 name: Framework VTI conformance
 
-# Ported from the former keyring-bifold repository's vti-conformance.yaml at the fold
+# Ported from the former keyring-bifold repository's vti-conformance.yaml at the fold (its files are packages/* since Phase 2)
 # (docs/plans/single-codebase-plan.md, Phase 3). The checkers it used to fetch from the
 # wallet repository are this repository's scripts/openvtc, so nothing is cloned.
 
@@ -17,27 +17,23 @@ name: Framework VTI conformance
 
 on:
   pull_request:
-    branches: [main, feat/one-codebase, 'fold/**']
+    branches: [main, feat/one-codebase, feat/one-tree, 'fold/**', 'fold2/**']
     paths:
-      - 'bifold/packages/core/src/modules/trust-tasks/**'
-      - 'bifold/packages/trust-tasks/**'
+      - 'packages/core/src/modules/trust-tasks/**'
+      - 'packages/trust-tasks/**'
       - 'scripts/openvtc/**'
       - '.github/workflows/framework-vti-conformance.yml'
   push:
     branches: [main]
     paths:
-      - 'bifold/packages/core/src/modules/trust-tasks/**'
-      - 'bifold/packages/trust-tasks/**'
+      - 'packages/core/src/modules/trust-tasks/**'
+      - 'packages/trust-tasks/**'
       - 'scripts/openvtc/**'
       - '.github/workflows/framework-vti-conformance.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-
-defaults:
-  run:
-    working-directory: bifold
 
 jobs:
   upstream-judges-keyring:
@@ -64,8 +60,8 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Build Workspace
-        run: yarn build
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
 
       - name: Fetch the prebuilt checkers at the VTI pins
         run: |
@@ -132,7 +128,7 @@ jobs:
           done
 
       - name: Keyring makes a card and a statement
-        working-directory: bifold/packages/core
+        working-directory: packages/core
         run: CARD_OUT="$RUNNER_TEMP/conformance" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
 
       # The same documents with every clock read on a whole second: each
@@ -141,7 +137,7 @@ jobs:
       # as-is, those were refused about once in a thousand documents, at
       # random; this run makes that case happen every time.
       - name: Keyring makes them again on a whole second
-        working-directory: bifold/packages/core
+        working-directory: packages/core
         run: CONFORMANCE_WHOLE_SECOND=1 CARD_OUT="$RUNNER_TEMP/conformance-whole-second" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
 
       - name: VTI SDK judges them

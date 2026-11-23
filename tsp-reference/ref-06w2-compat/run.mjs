@@ -3,7 +3,7 @@
 //
 //   Act 1  SHARED CORE — the REAL compiled witness-server functions
 //          (computeVrcDigest, buildWitnessCredentialJson from
-//          bifold/packages/witness-server/dist) driven from BOTH message
+//          packages/witness-server/dist) driven from BOTH message
 //          shapes produce a byte-identical VWC. Two dances, one crypto core,
 //          one artifact.
 //   Act 2  TRANSLATOR — a lossless old⇄new mapping for the three session
@@ -46,7 +46,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // The REAL compiled functions the production witness runs — not a copy.
 const req = createRequire(import.meta.url);
 const witnessCore = req(
-  resolve(here, "../../bifold/packages/witness-server/dist/WitnessService.js")
+  resolve(here, "../../packages/witness-server/dist/WitnessService.js")
 );
 const { computeVrcDigest, buildWitnessCredentialJson } = witnessCore;
 
