@@ -182,9 +182,10 @@ accepting anonymous messages": Credo's inner forward layer is anoncrypt, while t
 authenticated and gated by `SEND_FORWARDED`); `trust_task_verification = "enforce"` (every row's Trust Task is
 signed and accepted under it); `enable_inter_mediator_relay = "false"` (the lab ran closed).
 
-Not measured here, and not reachable in this configuration: the real push-gateway path. At v0.53.0 `wake/set` accepts
-any gateway DID whose document has a DIDComm endpoint (`src/wake/set.rs`, `gateway_reachable`; there is no allowlist of
-gateways, only the gateway's own list of mediators it answers), and the ring leaves through `send_as_mediator`, whose
+Not measured here, and not reachable in this configuration: the real push-gateway path. At v0.53.0 `wake/set`, which only an
+account on this mediator may send (`src/wake/set.rs` requires the `Local` capability), accepts any gateway DID whose
+document has a DIDComm endpoint and a key-agreement key (`gateway_reachable`; there is no allowlist of gateways, only
+the gateway's own list of mediators it answers), and the ring leaves through `send_as_mediator`, whose
 next hop is classified `Local` for every DID while `external_forwarding = "false"` (`src/messages/protocols/routing.rs`,
 `classify_next_hop`) and then dropped because the gateway has no account here. So with this `mailbox.toml` a ring never
 reaches the push gateway's mediator, whatever `[processors.wake].enabled` says; with `enabled = "true"` phones are told
