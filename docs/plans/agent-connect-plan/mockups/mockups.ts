@@ -126,7 +126,7 @@ export const MOCKUPS: Mockup[] = [
       })
     },
     omits: { primary: 'the sheet’s actions are rows and a switch (§6); the plan defines no button for it.' },
-    notes: ['The bottom sheet is RoomIdentitySheet, extended; it opens from a member-list row or a record’s author in a room. The agent list and the contact row open the details (11), which carry the same rows.', 'The setting is a switch, not drawn; its value is "Off" here. Owner "Ada" and the agent name are samples.', 'The fixed text is shown in the app’s language; the plugin sends it in the language Keyring tells it (§3.13).'],
+    notes: ['RoomIdentitySheet, extended; opens from a member-list row or a record’s author. The agent list opens the details (11) instead.', 'The switch is not drawn; "Off" here. Sample names.', 'The fixed text is in the app’s language (§3.13).', ROOMS_FROM_MESSAGES],
   },
   {
     file: '08-answers-others-confirm.svg',
