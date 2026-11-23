@@ -142,8 +142,9 @@ jemalloc, vta) and `mediator-setup` from the same commit. One local instance wit
 `mediator_acl_mode = "explicit_deny"` and this directory's values for the default ACL, external forwarding and the
 per-DID limit (`evidence/mediator-config-changes-f6ed8159.diff` is the whole difference from what `mediator-setup`
 wrote), with `[processors.wake]` enabled, which the shipped `mailbox.toml` no longer is: rows W1 to W4 show what the
-wake processor does when on, and the deployment answers `wakeCapable: false` instead. Deviations from the deployment: a did:peer identity naming `http://127.0.0.1` (the deployment's is on its
-hostname), file secrets, no TLS, no proxy except where row D says so. Clients: Node, Credo 0.7.1-pr-2704 for
+wake processor does when on, and the deployment answers `wakeCapable: false` instead. Deviations from the
+deployment: a did:peer identity naming `http://127.0.0.1` (the deployment's is on its hostname), file secrets, no
+TLS, no proxy except where row D says so. Clients: Node, Credo 0.7.1-pr-2704 for
 envelopes, the mailbox design of bifold `walletMailbox.ts` (one mailbox DID per phone, pairwise contact DIDs, every
 send a routing/2.0 forward over the sender's own session). The harness is `evidence/wallet-s2.mjs` and
 `evidence/rate-probe.mjs`; outputs are beside them, with lab DIDs shortened.
@@ -180,6 +181,9 @@ On how a row is read: a row that asserts a FIELD has to read the field. Row A2 a
 answer as text, which proved the right was on but not where the answer says so; the probe that watches the mailbox
 (the plan's interim watch) later read the field and found the realised view nested under `account`
 (`payload.account.acl.sendForwarded`), which the app's check had assumed flat. Rows W1 and W4 read their fields.
+Where an answer's shape is settled is upstream's own bundle for the task, at the pinned commit, in
+`crates/affinidi-messaging-mediator/trust-tasks/messaging/<task>/<op>/0.1.bundle.json` (its `responseSchema`); read
+that first, measure second.
 
 Findings applied to `mailbox.toml`: `ANON_RECEIVE` in the default (without it A3 was refused, "recipient is not
 accepting anonymous messages": Credo's inner forward layer is anoncrypt, while the forward's outer sender stays
@@ -191,11 +195,13 @@ account on this mediator may send (`src/wake/set.rs` requires the `Local` capabi
 document has a DIDComm endpoint and a key-agreement key (`gateway_reachable`; there is no allowlist of gateways, only
 the gateway's own list of mediators it answers), and the ring leaves through `send_as_mediator`, whose
 next hop is classified `Local` for every DID while `external_forwarding = "false"` (`src/messages/protocols/routing.rs`,
-`classify_next_hop`) and then dropped because the gateway has no account here. So with `external_forwarding = "false"` a ring never
-reaches the push gateway's mediator, whatever `[processors.wake].enabled` says; with `enabled = "true"` phones would be
+`classify_next_hop`) and then dropped because the gateway has no account here. So with
+`external_forwarding = "false"` a ring never reaches the push gateway's mediator, whatever `[processors.wake].enabled`
+says; with `enabled = "true"` phones would be
 told `wakeCapable: true` all the same. For that reason `mailbox.toml` ships wake off (decided 2026-11-23): phones are told
-`wakeCapable: false`, nothing rings, and mail waits for the next open. Reaching the real gateway is a follow-up: it needs the mailbox DID to hold an account
-on the gateway's mediator (`explicit_allow`) and be allowed as a signer there, plus a route out that keeps the relay bound
+`wakeCapable: false`, nothing rings, and mail waits for the next open. Reaching the real gateway is a follow-up: it
+needs the mailbox DID to hold an account on the gateway's mediator (`explicit_allow`) and be allowed as a signer
+there, plus a route out that keeps the relay bound
 (`external_forwarding` is all-or-nothing at v0.53.0), then a wake check against the real gateway. Mail is unaffected: it
 queues and is picked up when the phone opens, as rows A to F show. Also not measured: TLS and
 the did:webvh identity, the soak (S5), refusal at the hard cap (S5b), mail from a contact on another mediator. This
