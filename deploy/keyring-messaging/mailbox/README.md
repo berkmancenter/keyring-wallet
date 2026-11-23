@@ -138,7 +138,8 @@ Lab, 2026-11-21, `affinidi-messaging-mediator` v0.53.0 (`f6ed8159`), built from 
 jemalloc, vta) and `mediator-setup` from the same commit. One local instance with its own Redis (append-only on),
 `mediator_acl_mode = "explicit_deny"` and this directory's values for the default ACL, external forwarding and the
 per-DID limit (`evidence/mediator-config-changes-f6ed8159.diff` is the whole difference from what `mediator-setup`
-wrote). Deviations from the deployment: a did:peer identity naming `http://127.0.0.1` (the deployment's is on its
+wrote), with `[processors.wake]` enabled, which the shipped `mailbox.toml` no longer is: rows W1 to W4 show what the
+wake processor does when on, and the deployment answers `wakeCapable: false` instead. Deviations from the deployment: a did:peer identity naming `http://127.0.0.1` (the deployment's is on its
 hostname), file secrets, no TLS, no proxy except where row D says so. Clients: Node, Credo 0.7.1-pr-2704 for
 envelopes, the mailbox design of bifold `walletMailbox.ts` (one mailbox DID per phone, pairwise contact DIDs, every
 send a routing/2.0 forward over the sender's own session). The harness is `evidence/wallet-s2.mjs` and
