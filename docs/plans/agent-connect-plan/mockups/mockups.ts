@@ -112,8 +112,8 @@ export const MOCKUPS: Mockup[] = [
     file: '07-agent-sheet.svg',
     title: `Agent bottom sheet: owner and "Answers other people" (${PLAN} §3.6, §3.13, §6)`,
     draw: (s) => {
-      s.header('AI agents')
-      s.tabBar('myAgent')
+      s.header(undefined, { placeholder: ROOM_TITLE, assumed: NO_ROOM_TITLE })
+      s.tabBar('messages')
       s.bottomSheet((sheet, y) => {
         let yy = sheet.heading('Notes helper', y)
         yy = sheet.body('AI agent', yy + 4)
@@ -132,8 +132,8 @@ export const MOCKUPS: Mockup[] = [
     file: '08-answers-others-confirm.svg',
     title: `Turning "Answers other people" on (${PLAN} §3.13, §6)`,
     draw: (s) => {
-      s.header('AI agents')
-      s.tabBar('myAgent')
+      s.header(undefined, { placeholder: ROOM_TITLE, assumed: NO_ROOM_TITLE })
+      s.tabBar('messages')
       s.bottomSheet((sheet, y) => {
         let yy = sheet.heading('Let "Notes helper" answer other people?', y) + 10
         yy = sheet.body('Anyone in a room can then ask it to do things by mentioning it. It could be tricked into using your memory or posting for you, and your phone cannot prevent that.', yy) + 14
@@ -141,7 +141,7 @@ export const MOCKUPS: Mockup[] = [
         return sheet.secondaryButton('Keep it off', yy)
       })
     },
-    notes: ['Shown over the agent sheet each time the setting is turned on. Turning it off needs no confirmation.', '"Turn on" as the primary button is a mockup choice; the plan names the two buttons only.'],
+    notes: ['Shown over the agent sheet (07) or the details (11) each time the setting is turned on. Turning it off needs no confirmation.', '"Turn on" as the primary button is a mockup choice; the plan names the two buttons only.', ROOMS_FROM_MESSAGES],
   },
   {
     file: '09-contacts-agent-row.svg',
