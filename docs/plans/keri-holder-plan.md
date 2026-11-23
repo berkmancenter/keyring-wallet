@@ -5,7 +5,7 @@
 Keyring receives, stores, verifies and presents ACDCs issued by a KERI
 identifier it does not control. It does not manage a KEL of its own.
 
-**Status:** **parked** (2026-11-23): Keyring no longer supports the SEDI guardianship flow, and the code this plan builds on (the ACDC chain, the holder controller, the KERI event builders, the `k0-utah-v2` fixtures) moves to the `sedi-demos` branch ([sedi-demos-move-plan.md](./sedi-demos-move-plan.md), D2); it comes back from there if this plan resumes. Before it was parked: a plan awaiting the KH-P0 Hermes spike. No code written; KH-P0 is a measurement, and nothing after it starts until its gates are recorded. Assumptions A1–A4 (§2) are unconfirmed, and the claims this plan rests on that have not been checked are listed with their resolution in §13.
+**Status:** **parked** (2026-11-23): Keyring no longer supports the SEDI guardianship flow, and the code this plan builds on (the ACDC chain, the holder controller, the KERI event builders, the `k0-utah-v2` fixtures) live on the `sedi-demos` branch, archived, cut at `main` `e993b9818` ([sedi-demos-move-plan.md](./sedi-demos-move-plan.md), D2), not in the app; the plan resumes from there. Before it was parked: a plan awaiting the KH-P0 Hermes spike. No code written; KH-P0 is a measurement, and nothing after it starts until its gates are recorded. Assumptions A1–A4 (§2) are unconfirmed, and the claims this plan rests on that have not been checked are listed with their resolution in §13.
 
 
 ## Needs input
@@ -39,7 +39,7 @@ Decisions and confirmations a person must make before the work they gate can pro
 - [openvtc-integration-plan.md](./openvtc-integration-plan.md): the TSP and Trust Task carriage that IPEX messages ride in KH-P4.
 - [vsc-migration-plan.md](./vsc-migration-plan.md): the predicate-aware `credentialTypes.ts` pattern §9 builds on.
 - The Delegated Batch Issuance plan (PR #346, branch `docs/dbi-plan`, pinned at `425ad68`, `docs/plans/delegated-batch-issuance-plan.md`): the state-issued ACDC that is this plan's first concrete customer. This plan supplies the holder-side design DBI leaves unspecified (its §5.2, §5.3, §5.5, §7.3) and does not define a parallel design. Until #346 merges, read it on branch `docs/dbi-plan` at the commit this plan was written against (`425ad68`).
-- [sedi-demos-move-plan.md](./sedi-demos-move-plan.md): moves the SEDI demo and the guardianship flow off `main`. It keeps the CESR, KEL and `did:webs` code; the ACDC chain, the holder controller, the KERI event builders and the `k0-utah-v2` fixtures this plan builds on move to `sedi-demos` with the demo, and this plan is parked (that plan's D2).
+- [sedi-demos-move-plan.md](./sedi-demos-move-plan.md): moves the SEDI demo and the guardianship flow off `main`. It keeps the CESR, KEL and `did:webs` code; the ACDC chain, the holder controller, the KERI event builders and the `k0-utah-v2` fixtures this plan builds on live on `sedi-demos` with the demo, and this plan is parked (that plan's D2).
 
 **Identifiers.** Both plans number their own questions, phases and gates. Here ours carry a prefix: questions `KH-Q1`–`KH-Q13`, phases `KH-P0`–`KH-P7`, gates `G-H1`–`G-H7` (the Hermes gates, defined once in §6). DBI's are `DBI-Qn`, DBI Phases 0–5 and gates `DBI G0`–`DBI G2` (DBI's Phase 4, the phone-side prover, is unrelated to KH-P4, OOBI and IPEX). An unprefixed `Q`, `Phase` or `G` does not appear in this file; unnumbered DBI sections are cited as `DBI §n`. Assumptions are `A1`–`A4`, risks `R1`–`R10`, verification stages `S1`–`S8`.
 
