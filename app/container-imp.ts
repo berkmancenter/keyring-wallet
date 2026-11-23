@@ -27,11 +27,6 @@ import {
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
   setTrustedApproversEnabled,
-  setStateVerifiedApproversEnabled,
-  setTrustTestStateEnabled,
-  setStateCardEnabled,
-  setDemoStateHost,
-  setSediDemoSide,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -396,11 +391,6 @@ export class AppContainer implements Container {
         enableSharedConnect,
         enableSharedConnectInvite,
         enableTrustedApprovers,
-        enableStateVerifiedApprovers,
-        enableTrustTestState,
-        enableStateCard,
-        demoStateHost,
-        sediDemoSide,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -436,27 +426,9 @@ export class AppContainer implements Container {
         // As above: bifold's isTrustedApproversEnabled() (with its remote off) is this flag's only kill path, so every
         // reader goes through it, never the saved value.
         loadSwitch(BCLocalStorageKeys.EnableTrustedApprovers, (val) => (enableTrustedApprovers = val)),
-        // As above: isStateVerifiedApproversEnabled() and isTrustTestStateEnabled() (with the remote offs) are the
-        // only kill paths, so every reader goes through them, never the saved value.
-        loadSwitch(BCLocalStorageKeys.EnableStateVerifiedApprovers, (val) => (enableStateVerifiedApprovers = val)),
-        loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
-        // As above: isStateCardEnabled() (with STATE_CARD_REMOTE_OFF and SEDI_KERI_REMOTE_OFF) is the only kill path.
-        loadSwitch(BCLocalStorageKeys.EnableStateCard, (val) => (enableStateCard = val)),
         // "Confirm it's you" is not loaded here any more: it is part of the app, with no setting, and bifold's own
-        // switch decides it (on as shipped; CONFIRM_ITS_YOU_REMOTE_OFF or SEDI_KERI_REMOTE_OFF turns it off). The
+        // switch decides it (on as shipped; CONFIRM_ITS_YOU_REMOTE_OFF turns it off). The
         // value a phone saved while it was a Developer switch is left where it is and ignored.
-        // The saved Demo state host goes to bifold, which refuses a value that is not a bare public hostname and applies
-        // it only to demo roots and only while both switches hold: the saved text never redirects on its own.
-        (async () => {
-          const data = await this.storage.getValueForKey(BCLocalStorageKeys.DemoStateHost)
-          if (typeof data === 'string') demoStateHost = data
-        })(),
-        // Which SEDI demo side this phone took: anything but the two names reads as neither.
-        (async () => {
-          // Read as unknown: the store is typed for its whole state, and only the two names are taken.
-          const data: unknown = await this.storage.getValueForKey(BCLocalStorageKeys.SediDemoSide)
-          if (data === 'guardian' || data === 'ward') sediDemoSide = data
-        })(),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -486,11 +458,6 @@ export class AppContainer implements Container {
           enableSharedConnect,
           enableSharedConnectInvite,
           enableTrustedApprovers,
-          enableStateVerifiedApprovers,
-          enableTrustTestState,
-          enableStateCard,
-          demoStateHost,
-          sediDemoSide,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -502,14 +469,6 @@ export class AppContainer implements Container {
       setSharedConnectInviteEnabled(state.developer.enableSharedConnectInvite)
       // Before the agent's first message is read: an offer or an approver's request that arrives is dropped while off.
       setTrustedApproversEnabled(state.developer.enableTrustedApprovers)
-      // Before a Guardian card arrives or Who approves opens: both read these at each check.
-      setStateVerifiedApproversEnabled(state.developer.enableStateVerifiedApprovers)
-      setTrustTestStateEnabled(state.developer.enableTrustTestState)
-      // Before Credentials first draws: the state card reads it at each render.
-      setStateCardEnabled(state.developer.enableStateCard)
-      setDemoStateHost(state.developer.demoStateHost || null)
-      // Before the codes screen first opens: it shows only this side's code (both with no side).
-      setSediDemoSide(state.developer.sediDemoSide || null)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {

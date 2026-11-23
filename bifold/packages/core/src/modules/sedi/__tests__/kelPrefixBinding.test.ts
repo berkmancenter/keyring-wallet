@@ -10,10 +10,11 @@ import { join } from 'path'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { p256 } from '@noble/curves/nist.js'
 
-import { setStateVerifiedApproversEnabled } from '../../trust-tasks/module/stateVerifiedApproversFlag'
 import { b64Encode } from '../cesr/qb64'
 import { DUMMY, digest, replayKel } from '../guardian/kel'
-import { parseWebsDid, publishedDocument, resolveWebs, type WebsFetch, type WebsResponse } from '../webs'
+import { publishedDocument } from '../webs/document'
+import { parseWebsDid } from '../webs/identifier'
+import { resolveWebs, type WebsFetch, type WebsResponse } from '../webs/resolve'
 
 const te = new TextEncoder()
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
@@ -213,9 +214,6 @@ describe('the same inceptions through resolveWebs', () => {
       }),
     }
   }
-
-  beforeEach(() => setStateVerifiedApproversEnabled(true))
-  afterEach(() => setStateVerifiedApproversEnabled(false))
 
   it('a key-code did:webs whose icp names other keys is refused, never valid (control: its own key resolves)', async () => {
     const n = [digest('E', te.encode(carlNext.key))]

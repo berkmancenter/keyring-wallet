@@ -33,7 +33,6 @@ import {
   CONFIRM_ITS_YOU_REMOTE_OFF,
   setConfirmItsYouEnabled,
 } from '../../../src/modules/trust-tasks/module/confirmItsYouFlag'
-import { SEDI_KERI_REMOTE_OFF } from '../../../src/modules/trust-tasks/module/sediKeriRemoteOff'
 import { TrustTasksService } from '../../../src/modules/trust-tasks/services/TrustTasksService'
 import { memoryGenericRecords } from '../vrc/fixtures/memoryGenericRecords'
 import { readOneClock } from '../../helpers/oneClock'
@@ -159,7 +158,6 @@ beforeEach(() => {
   mockSent.length = 0
   confirmPromptStore.clear()
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
   setConfirmItsYouEnabled(true)
   ok.mockClear()
   pipeline = new TrustTasksService({ save: async () => undefined } as never)
@@ -651,7 +649,6 @@ describe('the switches', () => {
   test.each([
     ['the switch off', () => setConfirmItsYouEnabled(false)],
     ['its remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)],
-    ['the SEDI/KERI umbrella off', () => (SEDI_KERI_REMOTE_OFF.off = true)],
   ])('%s: nothing is sent, shown, brought back or answered (control: on, each works)', async (_name, switchOff) => {
     const sam = phone(SAM)
     const jordan = phone(JORDAN)

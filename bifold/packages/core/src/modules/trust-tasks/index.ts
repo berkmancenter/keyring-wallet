@@ -60,32 +60,7 @@ export {
   isTrustedApproversEnabled,
   TRUSTED_APPROVERS_REMOTE_OFF,
 } from './module/trustedApproversFlag'
-export {
-  setStateVerifiedApproversEnabled,
-  isStateVerifiedApproversEnabled,
-  STATE_VERIFIED_APPROVERS_REMOTE_OFF,
-} from './module/stateVerifiedApproversFlag'
-export { setTrustTestStateEnabled, isTrustTestStateEnabled } from './module/trustTestStateFlag'
-export {
-  holdK0TestGuardianCard,
-  holdK0RevokedOmittedCard,
-  holdK0RevokedTestCard,
-  becomeK0TestWard,
-  setUpSediDemo,
-  setUpSediDemoAsGuardian,
-  setUpSediDemoAsWard,
-  setUpSediDemoAsPerson,
-  turnOffSediDemo,
-  sediDemoHiddenByKill,
-  type TestStateActionResult,
-  type SediDemoSetupResult,
-  type SediDemoSideResult,
-  type SediDemoHiddenFeature,
-} from './developerTestState'
-export { SEDI_KERI_REMOTE_OFF } from './module/sediKeriRemoteOff'
-export { setSediDemoSide, sediDemoSide, type SediDemoSide } from './module/sediDemoSide'
 export { setConfirmItsYouEnabled, isConfirmItsYouEnabled, CONFIRM_ITS_YOU_REMOTE_OFF } from './module/confirmItsYouFlag'
-export { setDemoStateHost, demoStateHost, demoStateHostProblem } from '../sedi/webs/demoStateHost'
 
 // 228 writer: DTG Credentials v1 shapes are written only when this is on (default off).
 export {

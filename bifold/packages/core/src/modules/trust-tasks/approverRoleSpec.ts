@@ -203,7 +203,7 @@ export interface GuardianEvidencePayload {
   /** Each credential's proof: ACDC text followed by its state disclosure. */
   creds: string[]
   /**
-   * 0.2 only, optional: the host the card came with (a state office's QR; stateRoots K1_WEBS_HOST 'fromCard'), so the
+   * 0.2 only, optional: the host the card came with (a state office's QR; K1 'fromCard' host), so the
    * person's phone fetches the state from that host only, if the state names it.
    */
   stateHost?: string

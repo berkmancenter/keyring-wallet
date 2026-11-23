@@ -70,8 +70,8 @@ const table: [string, string, KeyringAgentLinkKind | undefined][] = [
   ['plain URL', 'https://example.org/', undefined],
   ['garbage', 'not a link at all', undefined],
   ['empty', '', undefined],
-  // The one row that is the SEDI demo's: claimed by its prefix before every other rule.
-  ['keyring://guardian-card', 'keyring://guardian-card?u=https%3A%2F%2Foffice.example%2Fcard', 'guardianCard'],
+  // Once claimed by prefix for the SEDI demo; with that claim gone it is no kind of ours (the plan's R2).
+  ['keyring://guardian-card', 'keyring://guardian-card?u=https%3A%2F%2Foffice.example%2Fcard', undefined],
 ]
 
 describe('the kind of each link', () => {

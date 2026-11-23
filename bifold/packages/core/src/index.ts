@@ -289,30 +289,9 @@ export {
   setTrustedApproversEnabled,
   isTrustedApproversEnabled,
   TRUSTED_APPROVERS_REMOTE_OFF,
-  setStateVerifiedApproversEnabled,
-  isStateVerifiedApproversEnabled,
-  STATE_VERIFIED_APPROVERS_REMOTE_OFF,
-  setTrustTestStateEnabled,
-  isTrustTestStateEnabled,
-  holdK0TestGuardianCard,
-  holdK0RevokedOmittedCard,
-  holdK0RevokedTestCard,
-  becomeK0TestWard,
-  setUpSediDemo,
-  setUpSediDemoAsGuardian,
-  setUpSediDemoAsWard,
-  setUpSediDemoAsPerson,
-  turnOffSediDemo,
-  sediDemoHiddenByKill,
-  setSediDemoSide,
-  sediDemoSide,
-  SEDI_KERI_REMOTE_OFF,
   setConfirmItsYouEnabled,
   isConfirmItsYouEnabled,
   CONFIRM_ITS_YOU_REMOTE_OFF,
-  setDemoStateHost,
-  demoStateHost,
-  demoStateHostProblem,
   setDidCommV2Enabled,
   setPeerLegCarriage,
   getPeerLegCarriage,
@@ -383,40 +362,6 @@ export {
   membershipFromVerdict,
   vtaAgent,
 } from './modules/trust-tasks'
-export { setStateCardEnabled, isStateCardEnabled, STATE_CARD_REMOTE_OFF } from './modules/sedi/holder/stateCardFlag'
-// The SEDI State roots' demo and test marks, for screens that show the "Demo" or "Test" label (Who approves, the
-// holder's state card).
-export {
-  isDemoStateRoot,
-  isTestStateRoot,
-  K0_TEST_ROOT,
-  K1_NAME,
-  K1_ROOT_AID,
-  K1_WEBS_HOST,
-  k1HostMode,
-  k1Root,
-  type K1WebsHost,
-  type StateRoot,
-} from './modules/sedi/guardian/stateRoots'
-// The phone's own KERI identifiers for a state office (K1), and receiving a Guardian card from one.
-export {
-  HOLDER_IDENTITY,
-  HolderSwitchedOff,
-  appendInteraction,
-  holderCodeOf,
-  holderKel,
-  holderSign,
-  type ControllerAgent,
-} from './modules/sedi/holder/controller'
-export { WARD_IDENTITY, becomeOwnWard, wardCodeOf } from './modules/sedi/identity/phoneIdentity'
-export { GUARDIAN_CARD_LINK, guardianCardUrlOf, isGuardianCardLink } from './modules/sedi/holder/guardianCardLink'
-export {
-  GUARDIAN_CARD_TYPE,
-  checkGuardianCard,
-  receiveGuardianCard,
-  type CardCheckFailure,
-  type ReceiveResult,
-} from './modules/sedi/holder/receiveGuardianCard'
 export type {
   TrustTaskRegistration,
   TrustTaskOrchestration,

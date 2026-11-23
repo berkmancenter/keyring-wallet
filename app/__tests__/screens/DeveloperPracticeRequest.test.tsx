@@ -1,16 +1,9 @@
 /**
  * Developer › Demos shows the practice request (B7, Alberto 11-12: "move the practice request to Developer"): bifold's
- * EnforcementCheckCard, the same card Who approves showed. Hidden with the trusted-approvers switch off and under the
- * SEDI/KERI remote off (the whole Demos section goes), each with on as the control. The probe itself is bifold's, tested
+ * EnforcementCheckCard, the same card Who approves showed. Hidden with the trusted-approvers switch off, with on as the control. The probe itself is bifold's, tested
  * there (enforcementCheckCard.test.tsx); here only that it is placed, and gated.
  */
-import {
-  AuthProvider,
-  EnforcementCheckIds,
-  SEDI_KERI_REMOTE_OFF,
-  setTrustedApproversEnabled,
-  testIdWithKey,
-} from '@bifold/core'
+import { AuthProvider, EnforcementCheckIds, setTrustedApproversEnabled, testIdWithKey } from '@bifold/core'
 import { act, render } from '@testing-library/react-native'
 import React from 'react'
 import { Alert } from 'react-native'
@@ -44,12 +37,10 @@ const ID = { place: testIdWithKey('DevPracticeRequest'), card: testIdWithKey(Enf
 beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => null)
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
-  SEDI_KERI_REMOTE_OFF.off = false
   setTrustedApproversEnabled(true)
 })
 afterEach(() => {
   jest.restoreAllMocks()
-  SEDI_KERI_REMOTE_OFF.off = false
   setTrustedApproversEnabled(false)
 })
 
@@ -66,16 +57,6 @@ describe('Developer › Demos: the practice request', () => {
     expect(on.queryByTestId(ID.card)).not.toBeNull()
     on.unmount()
     setTrustedApproversEnabled(false)
-    const off = await shown()
-    expect(off.queryByTestId(ID.place)).toBeNull()
-    expect(off.queryByTestId(ID.card)).toBeNull()
-  })
-
-  test('the SEDI/KERI remote off: neither (control: on, both)', async () => {
-    const on = await shown()
-    expect(on.queryByTestId(ID.place)).not.toBeNull()
-    on.unmount()
-    SEDI_KERI_REMOTE_OFF.off = true
     const off = await shown()
     expect(off.queryByTestId(ID.place)).toBeNull()
     expect(off.queryByTestId(ID.card)).toBeNull()
