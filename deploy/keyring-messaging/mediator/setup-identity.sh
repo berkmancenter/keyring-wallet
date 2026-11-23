@@ -25,10 +25,15 @@ if [ -e secrets/mediator/mediator-secrets.json ]; then
   exit 1
 fi
 
+# The work dir receives mediator-secrets.json and the admin private key, so it
+# stays private to the invoking user (mktemp makes it 0700). The container runs
+# as root (--user 0:0, this script runs under sudo) and reads it regardless of
+# mode; a wider mode would only let another local user swap or delete those
+# files while the script runs.
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM HUP
+chmod 0700 "$work"
 sed "s#@MEDIATOR_HOST@#$host#g" mediator/mediator-build.toml > "$work/recipe.toml"
-chmod 0777 "$work"
 
 docker compose up -d --wait redis
 # mediator-setup prints the admin's private key "for operator bookkeeping".
