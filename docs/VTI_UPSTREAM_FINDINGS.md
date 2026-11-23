@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.46 — 2026-11-22.** A living document: every finding here was measured
+**Version 1.48 — 2026-11-23.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -67,6 +67,19 @@ from a report or an issue always lands on the right entry.
 | [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | **Fixed upstream** in affinidi-tdk-rs #884 (SDK 0.26.27, 09-23) — the accept was posted to the wrong mediator. **Operator requirement remains:** the receiving mediator must admit the relayed hop (`enable_inter_mediator_relay`, or the sender in `relay_trusted_mediators`) — for the Farm, a Farm-side setting | F′ |
 | [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A DIDComm router that has never heard of verbs its own service dispatches (VTC and VTA) | **High** | **Resolved upstream** in VTI #1687 (09-23): the binding envelope is the intended — and now the only — DIDComm carriage for every verb, on both services; refusals of a task-typed message name the envelope and are threaded. Keyring sends it (keyring-bifold#76) | F′ |
 | [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | **Fixed upstream** in VTI #1675 (09-23): a relationship-control frame now completes before anything the same sender sent after it. Recurred on the Farm before the fix reached it (VTA 0.39.0) | F′ |
+
+## Findings by feature
+
+A plan that meets a gap in upstream registers it here, in the PR of the step
+that meets it, as a `VTI-QN` question until a measurement makes it a `VTI-NN`
+finding (`docs/plans/CLAUDE.md`, the completeness checklist's "Upstream gaps"
+item). This index groups what each feature asked or found, so a reader
+following one feature does not read the whole table. Features whose plans
+predate this index gain a row the next time their plan touches this file.
+
+| Feature | Plan | Questions and findings |
+| --- | --- | --- |
+| A person's own AI agent in Keyring (agent connect) | `docs/plans/agent-connect-plan.md`, ledger `agent-connect-plan/vti-asks.md` | VTI-Q26 (mentions in a room), VTI-Q27 (a VTA-side pairing flow), VTI-Q28 (consumer kind on `acl/grant`), VTI-Q29 (capabilities bound to a context), VTI-Q30 (member-side withdrawal of a leaf), VTI-Q31 (an `agents` room setting), VTI-Q32 (persona-issued credentials), VTI-Q33 (an author's chain with a record), VTI-Q34 (`acl/swap-key` and revoke by `deviceId`), VTI-Q35 (what `stepUp` gates), VTI-Q36 (three starter-mediator measurements), VTI-Q37 (a room-scoped context binding), VTI-Q38 (a `delegation` member on a room name record) |
 
 ## Stack under test
 
@@ -1884,6 +1897,8 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q34 | Could an administrator forbid, or require approval or step-up for, `acl/swap-key` on a delegate's entry; could `acl/revoke` address an entry by `deviceId`; and could an administrator session be told when an entry's subject changes? | `acl/swap-key` is self-service and moves the whole entry, device binding included, to a new DID the caller proves control of (`vta-service/src/operations/acl.rs`: "self-service write is the rotation (`acl/swap-key`)", at the pin; the copy of every member read at `71d524572`). An agent holding its key keeps every grant under a new DID while `acl/revoke` of the old one finds nothing, and the owner's wallet learns of the swap only when it lists. A client works around it with `device/list` and `deviceId`, at the cost of a listing and a re-list. |
 | VTI-Q35 | Which task types does an ACL entry's `stepUp` gate for an `application` entry, and what does `require` accept? | The SDK sends `stepUp` (`approver`, `require`; `vta-sdk/src/client/acl.rs`, at the pin) and `docs/02-vta/personal-ai-agents.md` Step 5 calls passkey step-up the guardrail, but neither says whether it gates memory writes and room tasks. Not measured. |
 | VTI-Q36 | Mediator: could the per-sender queue cap be documented, with a `Retry-After` on its refusal; is there a documented self-service ACL path for a `did:key` client on a closed mediator; and could a forward to a `did:peer` whose service names another host be refused at send rather than accepted and dropped? | Measured once on 2026-11-20 on the starter mediator image `e6e2c636` (0.48.0, DIDComm v2), not on the VTA Farm, and that image's digest differs from the starter's `pins.json`: the 50th queued message from one sender is refused HTTP 503 `e.p.limits.queue.peer` with no recovery hint; with `global_acl_default = DENY_ALL` the send is refused 403 `e.p.authorization.send` and the recipient's socket upgrade fails after authentication succeeded; a forward to another host returns 200 and is never delivered (`FORWARD_ABANDONED`, a problem report for the sender only). Belongs with the mediator's maintainers, as VTI-05 to VTI-07 do. A question until it is re-measured on a pinned image. |
+| VTI-Q37 | Could an ACL entry's context scope be bound to a room (an `act` that differs by the room the holder is acting in), or could a presenter leaf carry the contexts its holder may use, enforced on `vta/memory/*`? | A person who keeps several memory contexts (one for a college's room, one for a clinic's) and lets one agent into both rooms wants the agent to use only the matching context in each. Today `act` is per entry and covers each named context and its subtree (`vta-sdk/src/acl.rs`, `ActScope::covers`), and `vta/memory/*` is gated on `require_context` alone, so an entry that holds both contexts reads both from either room; the per-room choice can only be a rule the agent's software keeps. The enforced form today is one entry per room. Read at the pin `f7b78e29d` on 2026-11-23; details below. |
+| VTI-Q38 | Could `rooms/_shared` register a `delegation` member on the `memberProfile` record (the author's DTG delegation credential and its acceptance), so a room's profile can list it and any member can verify whose agent an author is? | A member's AI agent posts in a room as a presenter under its own DID. Another member who taps it sees a DID and, at most, the name the agent gave itself, which is "a claim, not a verified one" (`data-rooms.md`, "Names"). The record members a profile may list are a registered set, and none can carry the delegation; the leaf chain that records who equipped the presenter is checked by the host and not shown to members. So a client can show whose agent an author is only for its own agents, from local records. Read at the pin `f7b78e29d` on 2026-11-23. |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2215,10 +2230,45 @@ agent's full handle, the agent matches only its own whole handle, and a
 client says in its own screens that an agent added to a room can read all of
 it, not only the messages that mention it.
 
+**VTI-Q37 — a room-scoped context binding.**
+(a) A member's AI agent is admitted to rooms as a presenter and keeps its memory
+in the VTA's per-context store. The member may keep several contexts, one per
+subject, and want the agent to use only the matching one in each room. The
+authority model has no room in it: an entry's `act` names contexts "and their
+subtrees, and only these" and holds wherever the entry acts; `vta/memory/put`,
+`get`, `list` and `delete` check `require_context(contextId)` and the memory
+capabilities, nothing about where the caller is acting. So an entry that holds
+two contexts can read either from either room, and a client that offers a
+per-room choice can only pass it to the agent's software as a rule. Expected:
+either an `act` that can be qualified by room (which contexts the holder may use
+while acting in room R), or a presenter leaf that carries the contexts its holder
+may use, with `vta/memory/*` refusing a context the current leaf does not carry.
+
+(b) Read, not run: `vta-sdk/src/acl.rs` (`ActScope::covers`, "authority over a
+parent context covers its whole subtree"), `vta-sdk/src/context_path.rs`
+(`is_ancestor_or_self`, `MAX_CONTEXT_DEPTH` 8), `docs/02-vta/personal-ai-agents.md`
+Step 6 ("a context-A agent cannot read, write, or delete context-B memory"),
+`docs/02-vta/data-rooms.md` §7 (a presenter leaf is one action for 4 hours), all
+in `external/verifiable-trust-infrastructure` at the pin `f7b78e29d`. There is no
+runtime case: nothing in the model names a room beside a context. A hierarchy
+does not help: a child context under a parent is reachable by every holder of
+the parent, so a per-room child would be read from every room.
+
+(c) The same files; `vti-specs-vta/trust-tasks/vta/memory/list/0.2.bundle.json`
+("The VTA context the item is scoped to; the isolation boundary"; a key `prefix`
+narrows a read and gates nothing).
+
+(d) Meanwhile the client keeps one top-level context per memory, grants an agent
+each memory by its own path and never by a parent, sends the per-room list to
+the agent with the room offer, says in its own screens that the VTA cannot
+enforce the per-room choice, and offers one agent per room as the enforced form.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.48 | 2026-11-23 | **VTI-Q38** (new): a `delegation` member on the `memberProfile` record, the author's delegation credential and acceptance, so any member can verify whose agent an author is; today an author can say only its name about itself, and the leaf chain is not shown to members. Read at the pin `f7b78e29d`. |
+| 1.47 | 2026-11-23 | **VTI-Q37** (new): a room-scoped context binding, so an agent that holds several memory contexts uses only the matching one in each room; today `act` is per entry and `vta/memory/*` checks the context alone. Read at the pin `f7b78e29d`. **Findings by feature** (new section): an index from each feature's plan to its questions and findings, starting with agent connect (VTI-Q26 to VTI-Q37), with the rule that a plan registers each gap here in the PR of the step that meets it. |
 | 1.46 | 2026-11-22 | **VTI-Q26 to VTI-Q36** (new): eleven questions arising from the plan for a person's own AI agent in Keyring (`docs/plans/agent-connect-plan.md` and its ledger `agent-connect-plan/vti-asks.md`): a `mentions` record member and mention-scoped delivery (Q26, with details), a VTA-side pairing flow (Q27), the consumer kind on `acl/grant` (Q28), capabilities bound to a context (Q29), a member-side withdrawal of an agent's leaf (Q30), an `agents` room setting (Q31), persona-issued credentials (Q32), an author's chain with a record (Q33), control over `acl/swap-key` and revoke by `deviceId` (Q34), what `stepUp` gates (Q35), and three starter-mediator measurements recorded as a question until re-measured on a pinned image (Q36). Read at the pin `f7b78e29d` where each row says so, otherwise at `origin/main` `71d524572` on 2026-11-20. |
 | 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
 | 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
