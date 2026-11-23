@@ -19,6 +19,12 @@
 //
 // The default list is the framework's platform-neutral entry points and the core modules that first touch them at
 // agent start; a module that needs React Native's natives cannot be evaluated here and does not belong in it.
+//
+// What this does and does not prove: it catches a module that THROWS while evaluating (an import resolved to a copy
+// that lacks what the code reads, a half-evaluated cycle). It does not see a duplicated package that evaluates
+// quietly twice (two registries, two polyfills), and it does not see which VERSION a module came from: one copy of
+// the wrong version evaluates fine until the first call that needs what it lacks. The module table (the bundle's
+// source map) is the record for duplication; the version question is the resolver rule's in app/metro.config.js.
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 
