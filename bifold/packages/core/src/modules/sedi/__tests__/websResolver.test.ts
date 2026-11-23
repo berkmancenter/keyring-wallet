@@ -1,37 +1,21 @@
 /**
  * Verify-only did:webs (sedi/webs) over the K0 root's artifacts (fixtures/webs-k0-root, written by
- * webs-k0-root.gen.mjs from k0-utah-v2/kel-roy.cesr). Every row runs against an injected fetch; nothing touches the
- * network. Each refusal row has a control: the same request with the one thing it changes put back.
+ * webs-k0-root.gen.mjs from k0-utah-v2/kel-roy.cesr). Imports only webs/{identifier,document,resolve}, which stay when
+ * the SEDI demo moves off main; no approver flag is set anywhere, because resolveWebs has no gate. Every row runs
+ * against an injected fetch; nothing touches the network. Each refusal row has a control: the same request with the one thing it changes put back.
  */
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { SEDI_KERI_REMOTE_OFF } from '../../trust-tasks/module/sediKeriRemoteOff'
-import {
-  STATE_VERIFIED_APPROVERS_REMOTE_OFF,
-  setStateVerifiedApproversEnabled,
-} from '../../trust-tasks/module/stateVerifiedApproversFlag'
-import { verifyGuardian, type ChainMaterial } from '../guardian'
-import {
-  artifactUrl,
-  jwkOf,
-  parseWebsDid,
-  publishedDocument,
-  resolveWebs,
-  verifyGuardianWithWebs,
-  type WebsFetch,
-  type WebsResponse,
-} from '../webs'
+import { jwkOf, publishedDocument } from '../webs/document'
+import { artifactUrl, parseWebsDid } from '../webs/identifier'
+import { resolveWebs, type WebsFetch, type WebsResponse } from '../webs/resolve'
 
-const K0 = join(__dirname, 'fixtures', 'k0-utah-v2')
-const prov = JSON.parse(readFileSync(join(K0, 'PROVENANCE.json'), 'utf8')) as {
-  aids: Record<string, string>
-  trustedRoot: string
-  creds: Record<string, { said: string; states: string[] }>
-}
-const ROOT = prov.trustedRoot
+const ROOT = 'IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6' // the K0 State root (roy)
+const OTHER = 'IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ' // another AID served by the same fixture (deb)
 const DID = `did:webs:example.org:keyring-demo-state:${ROOT}`
-const SERVED = join(__dirname, 'fixtures', 'webs-k0-root', 'example.org', 'keyring-demo-state', ROOT)
+const served = (aid: string) => join(__dirname, 'fixtures', 'webs-k0-root', 'example.org', 'keyring-demo-state', aid)
+const SERVED = served(ROOT)
 const kelBytes = () => new Uint8Array(readFileSync(join(SERVED, 'keri.cesr')))
 const docText = () => readFileSync(join(SERVED, 'did.json'), 'utf8')
 const te = new TextEncoder()
@@ -79,13 +63,6 @@ const kelWith = (from: string, to: string) => {
   return te.encode(t.replace(from, to))
 }
 
-beforeEach(() => setStateVerifiedApproversEnabled(true))
-afterEach(() => {
-  setStateVerifiedApproversEnabled(false)
-  STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
-})
-
 describe('identifiers and the published document', () => {
   it('W01: did:webs maps to its two HTTPS artifact URLs, with %3A as a port (control: a malformed DID is refused)', () => {
     const id = parseWebsDid(DID)
@@ -128,20 +105,12 @@ describe('resolveWebs', () => {
     expect(fetch.asked).toEqual([KEL_URL, DOC_URL])
   })
 
-  it('W04: switched off, or killed for this feature or for SEDI/KERI, it refuses before fetching anything (control: on, W03)', async () => {
-    for (const off of [
-      () => setStateVerifiedApproversEnabled(false),
-      () => (STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = true),
-      () => (SEDI_KERI_REMOTE_OFF.off = true),
-    ]) {
-      setStateVerifiedApproversEnabled(true)
-      STATE_VERIFIED_APPROVERS_REMOTE_OFF.off = false
-      SEDI_KERI_REMOTE_OFF.off = false
-      off()
-      const fetch = good()
-      expect(reason(await resolveWebs(DID, { fetch }))).toBe('switchedOff')
-      expect(fetch.asked).toEqual([])
-    }
+  it('W04: with no approver flag set, anywhere, it resolves: not switchedOff, and both artifacts are fetched (control: W03 is the same call)', async () => {
+    const fetch = good()
+    const r = await resolveWebs(DID, { fetch })
+    expect(r.ok).toBe(true)
+    expect(r.ok === false && r.reason).not.toBe('switchedOff')
+    expect(fetch.asked).toEqual([KEL_URL, DOC_URL])
   })
 
   it('W05: a tampered KEL is refused as kelNotReplaying, even with a matching did.json (control: W03)', async () => {
@@ -150,7 +119,7 @@ describe('resolveWebs', () => {
   })
 
   it("W06: another AID's KEL served at this DID is refused as aidMismatch (control: W03)", async () => {
-    const sam = new Uint8Array(readFileSync(join(K0, 'kel-sam.cesr')))
+    const sam = new Uint8Array(readFileSync(join(served(OTHER), 'keri.cesr')))
     expect(reason(await resolveWebs(DID, { fetch: good({ kel: { body: sam } }) }))).toBe('aidMismatch')
   })
 
@@ -160,7 +129,7 @@ describe('resolveWebs', () => {
       (d) => ((d.verificationMethod as { publicKeyJwk: { kid: string } }[])[0].publicKeyJwk.kid = 'other'),
       (d) => (d.verificationMethod = []),
       (d) => (d.verificationMethod = [...(d.verificationMethod as unknown[]), ...(d.verificationMethod as unknown[])]),
-      (d) => (d.id = `did:web:example.org:keyring-demo-state:${prov.aids.sam}`),
+      (d) => (d.id = `did:web:example.org:keyring-demo-state:${OTHER}`),
       (d) => (d.keyAgreement = ['#x']),
       (d) => (d.service = [{ id: '#s', type: 'LinkedDomains', serviceEndpoint: 'https://evil.example' }]),
       (d) => (d.authentication = ['#somethingElse']),
@@ -174,7 +143,7 @@ describe('resolveWebs', () => {
   })
 
   it('W08: did:keri in alsoKnownAs for another AID is refused as aliasMismatch (control: its own did:keri, and an unverified did:web alias, pass)', async () => {
-    const other = withDoc((d) => (d.alsoKnownAs = [`did:keri:${prov.aids.sam}`]))
+    const other = withDoc((d) => (d.alsoKnownAs = [`did:keri:${OTHER}`]))
     expect(reason(await resolveWebs(DID, { fetch: good({ doc: { body: other } }) }))).toBe('aliasMismatch')
     const own = withDoc((d) => (d.alsoKnownAs = [`did:keri:${ROOT}`, 'did:web:elsewhere.example:x']))
     const r = await resolveWebs(DID, { fetch: good({ doc: { body: own } }) })
@@ -229,86 +198,5 @@ describe('resolveWebs', () => {
     expect(reason(await resolveWebs(DID, { fetch: good({ kel: { body: kelBytes().slice(0, 100) } }) }))).toBe(
       'malformedCesr'
     )
-  })
-})
-
-describe('the Guardian check with its root resolved from did:webs', () => {
-  const files = (re: RegExp) =>
-    require('fs')
-      .readdirSync(K0)
-      .filter((f: string) => re.test(f))
-      .sort() as string[]
-  const bytes = (f: string) => new Uint8Array(readFileSync(join(K0, f)))
-  const text = (f: string) => readFileSync(join(K0, f), 'utf8')
-  const material = (kels = files(/^kel-.*\.cesr$/).map(bytes)): ChainMaterial => {
-    const tels = files(/^tel-.*-rip\.json$/).map((f) => {
-      const stem = f.slice(4, -9)
-      return {
-        ripText: text(f),
-        updateTexts: ['issued', 'revoked']
-          .map((s) => `tel-${stem}-${s}.json`)
-          .filter((n) => files(/^tel-/).includes(n))
-          .map(text),
-      }
-    })
-    const creds = Object.entries(prov.creds).map(([n, c]) =>
-      text(c.states.includes('revoked') ? `acdc-${n}-revoked-proofed.cesr` : `acdc-${n}-issued-proofed.cesr`)
-    )
-    return { kels, tels, creds }
-  }
-  const G_OK = prov.creds['G-ok'].said
-  const expect_ = { holder: prov.aids.jordan, ward: prov.aids.sam }
-  const options = { trustedRoots: [ROOT], now: new Date('2026-11-11T12:00:00Z'), roots: [{ aid: ROOT, webs: DID }] }
-
-  it('W16: G-ok is valid with the root fetched (control: the same material checked without did:webs is valid too)', async () => {
-    expect(reason(await verifyGuardianWithWebs(material(), G_OK, expect_, { ...options, fetch: good() }))).toBe('valid')
-    expect(reason(verifyGuardian(material(), G_OK, expect_, options))).toBe('valid')
-  })
-
-  it("W17: if the root's did:webs does not resolve, it refuses as stateNotResolved, and never falls back to the presented copy (control: W16)", async () => {
-    const r = await verifyGuardianWithWebs(material(), G_OK, expect_, {
-      ...options,
-      fetch: good({ kel: { throws: 'offline' } }),
-    })
-    expect(r.ok === false && [r.reason, (r as { webs?: string }).webs, r.detail]).toEqual([
-      'stateNotResolved',
-      'unreachable',
-      expect.stringContaining("Couldn't reach the state"),
-    ])
-  })
-
-  it("W18: a presented root KEL cut short (2 of 3 events, or the icp alone) is read as the state's full one (control: W20, one that disagrees, refuses)", async () => {
-    const roy = new TextDecoder('latin1').decode(bytes('kel-roy.cesr'))
-    const starts = [...roy.matchAll(/\{"v":"/g)].map((m) => m.index ?? 0)
-    expect(starts).toHaveLength(3)
-    for (const end of [starts[2], starts[1]]) {
-      const kels = files(/^kel-.*\.cesr$/).map((f) => (f === 'kel-roy.cesr' ? te.encode(roy.slice(0, end)) : bytes(f)))
-      expect(reason(await verifyGuardianWithWebs(material(kels), G_OK, expect_, { ...options, fetch: good() }))).toBe(
-        'valid'
-      )
-      // The resolution is what made it valid: the same cut material checked on its own is refused.
-      expect(reason(verifyGuardian(material(kels), G_OK, expect_, options))).not.toBe('valid')
-    }
-  })
-
-  it('W19: a did:webs for a root whose AID differs from the listed one is refused (control: W16)', async () => {
-    const r = await verifyGuardianWithWebs(material(), G_OK, expect_, {
-      ...options,
-      roots: [{ aid: ROOT, webs: `did:webs:example.org:keyring-demo-state:${prov.aids.sam}` }],
-      fetch: good(),
-    })
-    expect(r.ok === false && [r.reason, (r as { webs?: string }).webs]).toEqual(['stateNotResolved', 'aidMismatch'])
-  })
-
-  it('W20: a resolved root history that disagrees with the presented one refuses the whole check (control: W16)', async () => {
-    // Serve, as the state's history, the root's icp only, while the holder presents all three events: the presented
-    // history is LONGER than the published one, which is a disagreement, never resolved by taking either.
-    const roy = new TextDecoder('latin1').decode(bytes('kel-roy.cesr'))
-    const icpOnly = te.encode(roy.slice(0, roy.indexOf('{"v":"', 1)))
-    const r = await verifyGuardianWithWebs(material(), G_OK, expect_, {
-      ...options,
-      fetch: good({ kel: { body: icpOnly } }),
-    })
-    expect(reason(r)).toBe('kelNotReplaying')
   })
 })

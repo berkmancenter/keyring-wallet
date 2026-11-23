@@ -170,10 +170,4 @@ describe('a host the State root designates', () => {
     expect((f as unknown as { asked: string[] }).asked).toEqual([])
   })
 
-  it('switched off: nothing is fetched and the answer is never designated (control: DESIGNATED)', async () => {
-    setStateVerifiedApproversEnabled(false)
-    const f = atA()
-    expect(await check(A, f)).toMatchObject({ result: 'unreachable', why: 'switchedOff' })
-    expect((f as unknown as { asked: string[] }).asked).toEqual([])
-  })
 })

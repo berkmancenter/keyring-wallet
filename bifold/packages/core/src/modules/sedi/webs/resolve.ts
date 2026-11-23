@@ -1,7 +1,7 @@
 /**
  * Verify-only did:webs key state: fetch a did:webs identifier's two published artifacts, replay its KEL with this
  * package's own reader (../cesr, ../guardian/kel: no second KEL verifier), and check that the published did.json
- * carries exactly the keys that KEL implies. Behind the state-verified approvers switch, like the Guardian check.
+ * carries exactly the keys that KEL implies.
  *
  * Fail closed, everywhere: any fetch problem, any limit, any mismatch is a refusal with its own reason, and nothing here
  * ever falls back to a copy held elsewhere. What it returns is the AID's verified key state as published at that
@@ -12,7 +12,6 @@
  *
  * @module sedi/webs/resolve
  */
-import { isStateVerifiedApproversEnabled } from '../../trust-tasks/module/stateVerifiedApproversFlag'
 import { readKelStream } from '../cesr/reader'
 import { digest, replayKel, type HistoryEntry, type KeyState } from '../guardian/kel'
 
@@ -44,7 +43,6 @@ export interface WebsLimits {
 export const WEBS_LIMITS: WebsLimits = { didJsonBytes: 64 * 1024, keriCesrBytes: 512 * 1024, timeoutMs: 10_000 }
 
 export type WebsRefusalReason =
-  | 'switchedOff'
   | 'notWebs'
   | 'notHttps'
   | 'redirectRefused'
@@ -135,7 +133,7 @@ export async function getArtifact(
 }
 
 /**
- * Resolve `did` to the verified key state of its AID, or refuse. In this order: the switch; the identifier; both
+ * Resolve `did` to the verified key state of its AID, or refuse. In this order: the identifier; both
  * artifacts (keri.cesr first, so a KEL problem is reported before a document one); witnesses (refused: receipts are not
  * read); the KEL replay; the AID; the published document against the replayed keys.
  */
@@ -143,7 +141,6 @@ export async function resolveWebs(
   did: string,
   options: { fetch: WebsFetch; limits?: Partial<WebsLimits> }
 ): Promise<WebsResolution | WebsRefusal> {
-  if (!isStateVerifiedApproversEnabled()) return refuse('switchedOff', 'state-verified approvers are switched off')
   const limits = { ...WEBS_LIMITS, ...options.limits }
   const parsed = parseWebsDid(did)
   if (!parsed.ok) return refuse('notWebs', parsed.detail)

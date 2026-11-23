@@ -32,7 +32,7 @@ export type HostDesignation = 'designated' | 'notDesignated' | 'unreachable' | '
  * - 'designated': listed;
  * - 'notDesignated': hostNotListed, revoked (the designation was withdrawn), notIssued, statusNotCurrent (a stale file:
  *   the root's KEL anchors a later registry event than the file shows), notPublished (404), badInput;
- * - 'unreachable': switchedOff, unreachable, timeout (nothing could be read, so nothing is decided);
+ * - 'unreachable': unreachable, timeout (nothing could be read, so nothing is decided);
  * - 'badFile': stateNotVerified (the root's own did:webs files at that host fail), tooLarge, redirect, notJson, shape,
  *   proof, acdc, saidMismatch, wrongIssuer, wrongSchema, tel, noIds, threw.
  */
@@ -71,7 +71,6 @@ export async function checkDesignation(
     // The root's LIVE key history at that host, verified (keri.cesr replayed, did.json against it).
     const root = await resolveWebs(did, { fetch: fetchImpl })
     if (!root.ok) {
-      if (root.reason === 'switchedOff') return answer('unreachable', 'switchedOff')
       if (root.reason === 'unreachable' || root.reason === 'timeout')
         return answer('unreachable', root.reason, root.detail)
       return answer('badFile', 'stateNotVerified', `${root.reason}: ${root.detail}`)
@@ -153,7 +152,7 @@ export async function checkDesignation(
 /**
  * Whether the demo State root `rootAid` designates `host`: its designated-aliases ACDC at that host verifies against
  * its live KEL there, is issued by the root with the State office's schema, is issued and current, and lists the
- * root's did:webs at that host. Behind the state-verified approvers switch (off: 'unreachable', nothing fetched).
+ * root's did:webs at that host.
  * Only 'designated' allows the host; every other answer withholds it. Never throws.
  */
 export async function hostDesignatedByRoot(
