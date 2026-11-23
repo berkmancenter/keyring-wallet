@@ -178,9 +178,9 @@ On how a row is read: a row that asserts a FIELD has to read the field. Row A2 a
 answer as text, which proved the right was on but not where the answer says so; the probe that watches the mailbox
 (the plan's interim watch) later read the field and found the realised view nested under `account`
 (`payload.account.acl.sendForwarded`), which the app's check had assumed flat. Rows W1 and W4 read their fields.
-Where an answer's shape is settled is upstream's own bundle for the task, `crates/affinidi-messaging-mediator/
-trust-tasks/messaging/<task>/<op>/0.1.bundle.json` at the pinned commit (its `responseSchema`); read that first,
-measure second.
+Where an answer's shape is settled is upstream's own bundle for the task, at the pinned commit, in
+`crates/affinidi-messaging-mediator/trust-tasks/messaging/<task>/<op>/0.1.bundle.json` (its `responseSchema`); read
+that first, measure second.
 
 Findings applied to `mailbox.toml`: `ANON_RECEIVE` in the default (without it A3 was refused, "recipient is not
 accepting anonymous messages": Credo's inner forward layer is anoncrypt, while the forward's outer sender stays
