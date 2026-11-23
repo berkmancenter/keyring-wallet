@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.44 — 2026-09-24.** A living document: every finding here was measured
+**Version 1.46 — 2026-11-22.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1873,6 +1873,17 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q23 | Could a client remove its own ACL entry when it stops using an agent, so unlinking leaves nothing behind? | `delete_acl` refuses the caller's own entry (409 *cannot delete your own ACL entry*) whatever its role, and no self-service verb removes one; `swap_acl` only rotates. Keyring's Unlink therefore forgets the key on the phone and says the entry stays until the agent's owner removes it. [Details](#question-details). |
 | VTI-Q24 | Could a vetter that refuses an applicant's Vetting Card tell the applicant, instead of only logging it? | openvtc's vetter logs *vetting card refused* and answers nothing, so the applicant reads "Card sent — the vetter is checking" and the vetter's screen stays on "waiting for their card". Neither side can see why. [Details](#question-details). |
 | VTI-Q25 | Can a community offer admission by invitation OR by vetting? And can an admin admit an applicant who is waiting for vetting? | A community that publishes any vetting criterion requires vetting of everyone. An invitation neither bypasses it nor can be chosen as the criterion, although the manifest lists both as if either would do. `decide` refuses a Deferred request, so an admin cannot admit that applicant either. [Details](#question-details). |
+| VTI-Q26 | Could a room record carry a registered `mentions` member (the DIDs it addresses), listable by a room profile, and could a presenter be given only the records that mention it, or a read leaf scoped to them? | A person's AI agent in a room is meant to act only when mentioned, but to see a mention it needs a read leaf, and so reads the whole room: mention-only is a client convention, not enforced. No such member or filter in `docs/02-vta/data-rooms.md` or `vti-specs-core/trust-tasks/rooms` at the pin `f7b78e29d`, nor at `origin/main` `71d524572`. Details below. |
+| VTI-Q27 | Is a VTA-side pairing flow for an agent wanted: an `agent/pair` task, or a registered trigger-link flow (a wallet proposes `agent-connect`) with its Trust Task type URIs? | Today an agent's setup is copy-and-paste: mint a `did:key`, run an `acl create` line where admin is held, rotate on connect (`vta-sdk/src/agent_connect.rs`; `docs/02-vta/examples/agent-memory-with-vta-mcp.md`). Nothing for "pairing" or "qr" in `vta-mcp/` or `docs/02-vta/vta-mcp.md` at the pin. A wallet that pairs an agent by QR has to carry the flow itself, with unregistered type URIs. |
+| VTI-Q28 | Could `acl/grant` carry the consumer kind, or could the VTA refuse `rooms/keys/act` to an `application` entry that has not registered a device? | A delegate is whoever's entry records consumer kind `ai-agent` or `mediator` (`vta-service/src/trust_tasks/room_act.rs`, `is_delegate`, at the pin), and the kind is set only by the agent's own `device/register`. Between the grant and that call the entry can act as the owner. A client works around it by adding room capabilities only after reading the kind back. |
+| VTI-Q29 | Could a capability be bound to one context (a resource-qualified grant the VTA enforces), or could room presentation not require the persona's context in `act`? | `rooms/keys/present` needs the agent to act in the persona's context, so adding a room widens the agent's memory capabilities to that context, and so for every other agent of the owner added to a room of it (`docs/02-vta/data-rooms.md` §7; `vta-service/src/operations/room_oracle.rs`; read at `71d524572`). Whether a resource-qualified `CapabilityGrant` is enforced is not measured. |
+| VTI-Q30 | Could a member withdraw, at the room's host, a credential its own VTA issued to its agent, so the 4-hour leaf tail can be closed without the room's owner? | A presenter's leaf lasts 4 hours and only the room's owner can withdraw it (`rooms/owner/revoke/0.1`; `docs/02-vta/data-rooms.md`, "Withdraw credentials without removing anyone", at the pin). `group/remove` does not apply: the agent has no leaf. A member who revokes their agent can only say "up to 4 hours". |
+| VTI-Q31 | Could a community's room record carry an `agents` setting (`allowed`, `notAllowed`), readable from the room profile? | No room-level setting says whether members may add their agents (nothing matching in `vti-specs-core/trust-tasks/rooms` or `docs/03-vtc` at the pin). A wallet-only check is advisory and binds no other client. |
+| VTI-Q32 | Which VTA task signs a W3C credential with the persona as issuer (a delegation credential a person issues to their agent), and is there a status-hosting path for it? | `docs/` and `vti-specs-core` carry VAC and VMC issuance and no VDC (nothing for "DelegationCredential" at the pin beyond a design-note HTML). A client falls back to a short validity re-issued while the entry is active. |
+| VTI-Q33 | Could a record's author chain, or the author's delegation credential, travel with a room record, or be a registered record kind (for example a member profile)? | A record carries its author DID only, and the community's member list is administrator-only, so another member's client cannot tell an agent from a person, nor show whose agent it is. Read at `71d524572`. |
+| VTI-Q34 | Could an administrator forbid, or require approval or step-up for, `acl/swap-key` on a delegate's entry; could `acl/revoke` address an entry by `deviceId`; and could an administrator session be told when an entry's subject changes? | `acl/swap-key` is self-service and moves the whole entry, device binding included, to a new DID the caller proves control of (`vta-service/src/operations/acl.rs`: "self-service write is the rotation (`acl/swap-key`)", at the pin; the copy of every member read at `71d524572`). An agent holding its key keeps every grant under a new DID while `acl/revoke` of the old one finds nothing, and the owner's wallet learns of the swap only when it lists. A client works around it with `device/list` and `deviceId`, at the cost of a listing and a re-list. |
+| VTI-Q35 | Which task types does an ACL entry's `stepUp` gate for an `application` entry, and what does `require` accept? | The SDK sends `stepUp` (`approver`, `require`; `vta-sdk/src/client/acl.rs`, at the pin) and `docs/02-vta/personal-ai-agents.md` Step 5 calls passkey step-up the guardrail, but neither says whether it gates memory writes and room tasks. Not measured. |
+| VTI-Q36 | Mediator: could the per-sender queue cap be documented, with a `Retry-After` on its refusal; is there a documented self-service ACL path for a `did:key` client on a closed mediator; and could a forward to a `did:peer` whose service names another host be refused at send rather than accepted and dropped? | Measured once on 2026-11-20 on the starter mediator image `e6e2c636` (0.48.0, DIDComm v2), not on the VTA Farm, and that image's digest differs from the starter's `pins.json`: the 50th queued message from one sender is refused HTTP 503 `e.p.limits.queue.peer` with no recovery hint; with `global_acl_default = DENY_ALL` the send is refused 403 `e.p.authorization.send` and the recipient's socket upgrade fails after authentication succeeded; a forward to another host returns 200 and is never delivered (`FORWARD_ABANDONED`, a problem report for the sender only). Belongs with the mediator's maintainers, as VTI-05 to VTI-07 do. A question until it is re-measured on a pinned image. |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2176,10 +2187,39 @@ vets. Keyring's harness checks the community's answer. The cause of Keyring
 showing "member" was ours, and it is fixed. This question is only about what a
 community can offer.
 
+**VTI-Q26 — mentions in a room.**
+(a) A member's AI agent, admitted to a room as a presenter (`rooms/keys/present`),
+is meant to act only when a member addresses it. There is no way to address it:
+`rooms/_shared` defines no `mentions` record member, no profile can list one,
+and nothing delivers to a presenter only the records that name it. So a client
+writes `@<handle>` in the body text and the agent's own software matches it,
+which means the agent holds a read leaf and reads every record in the room to
+find the ones meant for it. Expected: a registered `mentions` member (an array
+of DIDs), so a profile can list it and a record can address an agent
+structurally; and, so that "acts only when mentioned" can be enforced rather
+than promised, either delivery filtered to the records that mention the
+presenter or a read leaf scoped to them.
+
+(b) Read, not run: `git grep -i mention -- docs/02-vta/data-rooms.md
+vti-specs-core/trust-tasks/rooms` in `external/verifiable-trust-infrastructure`
+at the pin `f7b78e29d` finds nothing; the same search at `origin/main`
+`71d524572` found nothing. There is no runtime case: the member is absent.
+
+(c) `vti-specs-core/trust-tasks/rooms/_shared` (the record members a profile may
+list); `docs/02-vta/data-rooms.md` §5 ("Who the member is": a presenter is
+"never a member of the room") and §7 (a leaf of one action, 4 hours).
+
+(d) Meanwhile the client keeps the text convention: the composer inserts the
+agent's full handle, the agent matches only its own whole handle, and a
+`mentions` body member is written only where a room's profile lists it. The
+client says in its own screens that an agent added to a room can read all of
+it, not only the messages that mention it.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.46 | 2026-11-22 | **VTI-Q26 to VTI-Q36** (new): eleven questions arising from the plan for a person's own AI agent in Keyring (`docs/plans/agent-connect-plan.md` and its ledger `agent-connect-plan/vti-asks.md`): a `mentions` record member and mention-scoped delivery (Q26, with details), a VTA-side pairing flow (Q27), the consumer kind on `acl/grant` (Q28), capabilities bound to a context (Q29), a member-side withdrawal of an agent's leaf (Q30), an `agents` room setting (Q31), persona-issued credentials (Q32), an author's chain with a record (Q33), control over `acl/swap-key` and revoke by `deviceId` (Q34), what `stepUp` gates (Q35), and three starter-mediator measurements recorded as a question until re-measured on a pinned image (Q36). Read at the pin `f7b78e29d` where each row says so, otherwise at `origin/main` `71d524572` on 2026-11-20. |
 | 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
 | 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
 | 1.42 | 2026-09-24 | **VTI-25 resolved as ours.** Traced from source at `460e0ebb` and `a96fe02f`: the `allow` reply carries the card inline on every transport, and the two `credential-exchange/issue` pushes are awaited inside the submit, so they arrive *before* the reply. Keyring took the first message after a send as the reply until keyring-bifold `4eddfbd2` (09-17). No upstream change asked; not re-measured live. |

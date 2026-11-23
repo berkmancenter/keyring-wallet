@@ -2,7 +2,25 @@
 
 A running ledger for [`../agent-connect-plan.md`](../agent-connect-plan.md) (plan §10). One entry per limitation we hit that we would like upstream to extend, so the list can be passed on in one piece. It is a ledger, not a finding record: an entry is promoted into [`../../VTI_UPSTREAM_FINDINGS.md`](../../VTI_UPSTREAM_FINDINGS.md) only when it meets that file's proof rules (the `vti-lab-and-field` skill): measured on the lab and named by era, tried against the pinned upstream clone in `external/` and not disproved, classified as theirs rather than ours, and written in the generic register with no names. A promoted entry gets its `VTI-QN` or `VTI-NN` number noted in its Status. This file does not edit that one.
 
-Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a measurement); **extension we would want**; **severity** for P0 and P1 of the plan; **status**. Severity: *blocks* (cannot ship the item without it), *works around* (the plan builds around it, with a stated cost), *none*. Every status below is "not yet raised".
+Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a measurement); **extension we would want**; **severity** for P0 and P1 of the plan; **status**. Severity: *blocks* (cannot ship the item without it), *works around* (the plan builds around it, with a stated cost), *none*. Status is "not yet raised" unless an entry or the table below says otherwise.
+
+**Registered in the findings file on 2026-11-22** as questions (`VTI-QN`), each read against the pinned clone where its row there says so ([`2026-11-22-al.md`](./2026-11-22-al.md) finding 7):
+
+| Ledger | Findings file |
+|---|---|
+| AC-04 | VTI-Q26 |
+| AC-01, AC-16 | VTI-Q27 |
+| AC-02 | VTI-Q28 |
+| AC-03 | VTI-Q29 |
+| AC-05 | VTI-Q30 |
+| AC-06 | VTI-Q31 |
+| AC-07 | VTI-Q32 |
+| AC-08 | VTI-Q33 |
+| AC-21, AC-22 | VTI-Q34 |
+| AC-23 | VTI-Q35 |
+| AC-09, AC-10, AC-11 | VTI-Q36 |
+
+Not registered, with the reason: AC-12 and AC-13 (starter-image decisions, for openvti-starter), AC-14 (a question for the DTG working group, not for VTI), AC-15 (a cross-reference nit), AC-17 (a TypeScript library gap), AC-18 (a note on coexistence), AC-19 (a comparison of two sign-in forms), AC-20 (Anthropic, not VTI).
 
 Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale working tree), `external/dtgwg-cred-spec` `94af2d8` and the starter mediator `mediator-buildathon:e6e2c636` (0.48.0, DIDComm v2, built with `tsp,secrets-aws`, measured 2026-11-20 on the lab, not on the VTA Farm).
 
