@@ -80,7 +80,7 @@ Sources (SVG, generated from [`mockups.ts`](./<plan-name>/mockups/mockups.ts)):
 ## 7. Steps and acceptance criteria   <!-- one step = one PR in the stack (CLAUDE.md, "Implementing a plan: stacked PRs") -->
 ## 8. Testing
 ## 9. Security, privacy, migration and rollout
-## 10. Blocked, and on whom
+## 10. Blocked, and on whom   <!-- names each VTI-QN this plan registered in docs/VTI_UPSTREAM_FINDINGS.md under its feature (CLAUDE.md checklist, "Upstream gaps") -->
 ## 11. Open questions
 ## 12. Reviews
 
