@@ -177,6 +177,15 @@ Each item is either present or explicitly marked "not applicable" with a reason.
 - [ ] **Steps with acceptance criteria**, each checkable.
 - [ ] **Test plan** (below).
 - [ ] **Blocked on whom**, and **open questions** with an owner each.
+- [ ] **Upstream gaps.** Every gap in upstream (VTI, the mediator, a
+      specification) that the plan's flow meets is registered in
+      [`../VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md): as a
+      `VTI-QN` question once it has been read against the pinned clone, as a
+      `VTI-NN` finding once a lab measurement shows it, and in the PR of the step
+      that meets it, never kept in the plan alone. The findings file's "Findings
+      by feature" index carries one row per feature, so a plan's gaps are read
+      as that feature's sub-findings; the plan's blocked-on section names each
+      `VTI-QN` it depends on. A plan with no upstream contact says so.
 
 ### The test plan
 

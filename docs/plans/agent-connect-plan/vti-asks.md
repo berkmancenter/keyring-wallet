@@ -18,6 +18,7 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-08 | VTI-Q33 |
 | AC-21, AC-22 | VTI-Q34 |
 | AC-23 | VTI-Q35 |
+| AC-24 | VTI-Q37 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
 Not registered, with the reason: AC-12 and AC-13 (starter-image decisions, for openvti-starter), AC-14 (a question for the DTG working group, not for VTI), AC-15 (a cross-reference nit), AC-17 (a TypeScript library gap), AC-18 (a note on coexistence), AC-19 (a comparison of two sign-in forms), AC-20 (Anthropic, not VTI).
@@ -81,6 +82,13 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `bifold/packages/core/src/modules/rooms/capabilities.ts` (`listCommunityMembers`: `adminOnly`, "needs vtc.rooms.manage"); `types.ts` (`byAgent`, set from nothing real at baseline).
 - **Extension:** the author's chain, or the agent's VDC, available with a record or as a registered record kind (for example a `memberProfile`).
 - **Severity:** P0 works around (own agents only); P1 blocks the cross-client "who does this belong to".
+
+### AC-24 No room-scoped context binding: an entry's memory contexts apply in every room
+
+- **Hit:** the owner picks, per room, which memory contexts the agent uses there (plan §3.15). An entry's `act` names contexts "and their subtrees, and only these" and holds wherever the entry acts; `vta/memory/*` is gated on `require_context` and the memory capabilities only. An entry holding "Education" and "Healthcare" reads both from either room; a per-room child context does not help, since a parent's holder reaches every child.
+- **Evidence:** `vta-sdk/src/acl.rs` (`ActScope::covers`); `vta-sdk/src/context_path.rs`; `docs/02-vta/personal-ai-agents.md` Step 6; `docs/02-vta/data-rooms.md` §7; read at the pin `f7b78e29d` on 2026-11-23 (plan §2.1, step 0.1(o) measures the hierarchy rule).
+- **Extension:** an `act` qualified by room, or a presenter leaf that carries the contexts its holder may use, enforced on `vta/memory/*`.
+- **Severity:** P0 works around (the per-room list travels in the room offer and the plugin keeps to it; the copy says the VTA cannot enforce it; one agent per room is the enforced form); P1 enforced per-room memory needs it. Registered as VTI-Q37.
 
 ## Mediator (measured on the starter mediator)
 
