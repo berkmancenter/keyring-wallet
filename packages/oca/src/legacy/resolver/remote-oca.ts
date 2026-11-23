@@ -1,5 +1,5 @@
 import { getUnQualifiedDidIndyDid } from '@credo-ts/anoncreds'
-import axios from 'axios'
+import axios, { AxiosInstance } from 'axios'
 import { CachesDirectoryPath, readFile, writeFile, exists, mkdir, unlink } from 'react-native-fs'
 
 import {
@@ -46,7 +46,7 @@ type CacheDataFile = {
 
 export class RemoteOCABundleResolver extends DefaultOCABundleResolver {
   protected indexFile: BundleIndex = {}
-  private axiosInstance: axios.AxiosInstance
+  private axiosInstance: AxiosInstance
   private cacheDataFileName = ocaCacheDataFileName
   private indexFileName: string
   private _indexFileEtag?: string

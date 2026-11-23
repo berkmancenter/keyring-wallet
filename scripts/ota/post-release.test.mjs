@@ -151,18 +151,18 @@ test('it only ever dispatches Test builds and gate-smoke: never a publish, promo
   assert.equal(calls.some((c) => c[0] === 'workflow' && /ota-publish/.test(c[2])), false)
 })
 
-test('the changed screens: .tsx screens and components in the app and bifold, never tests', () => {
+test('the changed screens: .tsx screens and components in the app and the framework packages, never tests', () => {
   assert.deepEqual(
     screensOf([
-      'bifold/packages/core/src/modules/rooms/screens/Room.tsx',
-      'bifold/packages/core/src/modules/rooms/components/RoomNoteEditor.tsx',
-      'bifold/packages/core/src/modules/rooms/__tests__/Room.test.tsx',
-      'bifold/packages/core/src/modules/rooms/useRoomPosts.ts',
+      'packages/core/src/modules/rooms/screens/Room.tsx',
+      'packages/core/src/modules/rooms/components/RoomNoteEditor.tsx',
+      'packages/core/src/modules/rooms/__tests__/Room.test.tsx',
+      'packages/core/src/modules/rooms/useRoomPosts.ts',
       'app/src/screens/Home.tsx',
-      'bifold/packages/core/src/modules/rooms/components/roomsStatusText.ts',
+      'packages/core/src/modules/rooms/components/roomsStatusText.ts',
       'e2e/lib/testids.json',
     ]),
-    ['bifold/packages/core/src/modules/rooms/screens/Room.tsx', 'bifold/packages/core/src/modules/rooms/components/RoomNoteEditor.tsx', 'app/src/screens/Home.tsx']
+    ['packages/core/src/modules/rooms/screens/Room.tsx', 'packages/core/src/modules/rooms/components/RoomNoteEditor.tsx', 'app/src/screens/Home.tsx']
   )
 })
 
@@ -175,10 +175,10 @@ test('measured from the newest earlier publish that is an ancestor, else the sto
 
 test('a publish hands over the changed screens since the previous publish (dry runs are not publishes)', async () => {
   const ranges = []
-  const listChanged = (range) => (ranges.push(range), ['bifold/packages/core/src/modules/rooms/components/RoomNoteEditor.tsx', 'bifold/packages/core/src/modules/rooms/useRoomPosts.ts'])
+  const listChanged = (range) => (ranges.push(range), ['packages/core/src/modules/rooms/components/RoomNoteEditor.tsx', 'packages/core/src/modules/rooms/useRoomPosts.ts'])
   const r = await postRelease(opts(fakeGh({ publishJobs: [publishJob('ios'), publishJob('android')], smokeJobs: GREEN }).gh, { listChanged, isAncestor: (a) => a === PREV }))
   assert.deepEqual(ranges, [`${PREV}..${SHA}`])
-  assert.deepEqual([r.since, r.screens], [PREV, ['bifold/packages/core/src/modules/rooms/components/RoomNoteEditor.tsx']])
+  assert.deepEqual([r.since, r.screens], [PREV, ['packages/core/src/modules/rooms/components/RoomNoteEditor.tsx']])
 })
 
 test('screens it cannot work out are reported unknown, and the smoke still runs', async () => {

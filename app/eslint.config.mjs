@@ -60,7 +60,6 @@ export default [
       '**/jest.config.js',
       '**/metro.config.js',
       '.yarn/',
-      'bifold/**/*',
     ],
   },
   {

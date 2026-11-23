@@ -4,6 +4,7 @@
   "description": "JSON-LD context definitions for VRC/VWC credentials - single source of truth for mobile and server",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "react-native": "src/index.ts",
   "files": [
     "build"
   ],
@@ -31,5 +32,6 @@
   "devDependencies": {
     "rimraf": "~5.0.10",
     "typescript": "~5.5.4"
-  }
+  },
+  "source": "src/index.ts"
 }

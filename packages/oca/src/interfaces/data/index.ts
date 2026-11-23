@@ -10,7 +10,7 @@ import ILabelOverlayData from './semantic/LabelOverlayData.interface'
 import IMetaOverlayData from './semantic/MetaOverlayData.interface'
 import IStandardOverlayData from './semantic/StandardOverlayData.interface'
 
-export {
+export type {
   IBaseOverlayData,
   ICaptureBaseData,
   IOverlayBundleData,

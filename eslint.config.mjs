@@ -23,11 +23,14 @@ export default [
   ...tseslint.configs.recommended,
   {
     rules: {
-      '@typescript-eslint/no-unused-vars': ['error', {
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-        caughtErrorsIgnorePattern: '^_',
-      }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       // Prettier (semi: false) owns semicolon style and re-inserts the leading ';' before a
       // statement that starts with '(' or '['; the deprecated core rule flags those as extra.
       'no-extra-semi': 'off',
@@ -59,11 +62,14 @@ export default [
       'react/prop-types': 'off',
       'react-hooks/exhaustive-deps': 'error',
       'no-console': 'error',
-      '@typescript-eslint/no-unused-expressions': ['error', { 
-        allowShortCircuit: true, 
-        allowTernary: true,
-        allowTaggedTemplates: true 
-      }],
+      '@typescript-eslint/no-unused-expressions': [
+        'error',
+        {
+          allowShortCircuit: true,
+          allowTernary: true,
+          allowTaggedTemplates: true,
+        },
+      ],
     },
   },
   {
@@ -83,11 +89,7 @@ export default [
     },
   },
   {
-    files: [
-      'scripts/**/*.{js,ts}',
-      '*.config.{js,mjs,cjs,ts}',
-      'commitlint.config.js',
-    ],
+    files: ['scripts/**/*.{js,ts}', '*.config.{js,mjs,cjs,ts}', 'commitlint.config.js'],
     rules: {
       'no-console': 'off',
     },

@@ -44,17 +44,43 @@ test('the install, root setup, the workflow and this selector run everything', (
   for (const p of [
     'yarn.lock',
     'package.json',
+    'app/package.json',
     '.yarn/patches/x.patch',
-    '.github/workflows/quality.yaml',
+    '.github/workflows/framework.yml',
+    '.github/workflows/framework-full.yml',
     'scripts/ci/select-tests.mjs',
+    'scripts/ci/select-tests.test.mjs',
     'tsconfig.json',
-    '.github/actions/setup-node/action.yaml',
+    'packages/tsconfig-base.json',
+    'packages/__mocks__/react-native-keychain.ts',
+    '.github/workflows/actions/setup-node/action.yml',
+    'bifold/packages/core/src/x.ts',
   ])
     assert.equal(run(M(p)).everything, true, p)
 })
 
+test("the wallet's own trees run nothing: the app, the e2e harness, its scripts, the framework's dotfiles", () => {
+  for (const p of [
+    'app/src/screens/Home.tsx',
+    'app/__tests__/x.test.ts',
+    'app/metro.config.js',
+    'e2e/lib/flows.js',
+    'scripts/ota/post-release.mjs',
+    'scripts/ci/js-only.mjs',
+    'scripts/tsc-ratchet.mjs',
+    'tsp-reference/README.md',
+    'packages/.prettierrc',
+    'packages/.gitignore',
+  ]) {
+    const r = run(M(p))
+    assert.equal(r.everything, false, p)
+    assert.deepEqual(r.modes, {}, p)
+    assert.match(r.reasons.join('\n'), /nothing:/, p)
+  }
+})
+
 test('a path no rule knows runs everything: an unknown shape is never a skip', () => {
-  const r = run(M('scripts/refresh-ledgers.ts'))
+  const r = run(M('tools/refresh-ledgers.ts'))
   assert.equal(r.everything, true)
   assert.match(r.reasons.join('\n'), /no rule knows/)
   assert.equal(run(M('packages/not-a-workspace/src/a.ts')).everything, true)
@@ -191,46 +217,49 @@ test('--part reads "i/n" and refuses anything else', () => {
   for (const bad of ['0/4', '5/4', '2', 'a/b', '2/4/1']) assert.throws(() => parsePart(bad), /--part/, bad)
 })
 
-// The change reading since the fold: the framework's list is --relative to bifold/ (so restricted to it), and the
-// empty-diff guard reads the whole repository. A fake git answers each call from a table and records the arguments.
+// The change reading since Phase 2 of the fold: one diff, the whole repository's from its root (the former --relative
+// list under bifold/ is gone with that directory), and the empty-diff guard reads that same list. A fake git answers
+// each call from a table and records the arguments.
 const fakeGit = (answers) => {
   const calls = []
   const run = (...args) => {
     calls.push(args)
     if (args[0] === 'merge-base') return 'abc\n'
-    if (args.includes('--relative')) return answers.relative
     return answers.whole
   }
   return { run, calls }
 }
 
-test('a wallet-only PR (empty relative diff, non-empty whole diff, GitHub lists files) selects nothing and does not throw', () => {
-  const { run, calls } = fakeGit({ relative: '', whole: 'app/src/x.ts\nscripts/y.mjs\n' })
-  assert.deepEqual(changedAgainst('origin/main', { run, listed: 2 }), [])
-  // The relative list carries --relative and the guard's list does not: the two populations are different on purpose.
+test('a wallet-only PR comes back as its paths (the rules then select nothing), in one diff with no --relative', () => {
+  const { run: git, calls } = fakeGit({ whole: 'M\tapp/src/x.ts\nA\tscripts/y.mjs\n' })
+  assert.deepEqual(changedAgainst('origin/main', { run: git, listed: 2 }), [
+    { status: 'M', path: 'app/src/x.ts' },
+    { status: 'A', path: 'scripts/y.mjs' },
+  ])
   const diffs = calls.filter((c) => c[0] === 'diff')
-  assert.equal(diffs.length, 2)
-  assert.ok(diffs[0].includes('--relative') && diffs[0].includes('--name-status'))
-  assert.ok(!diffs[1].includes('--relative') && diffs[1].includes('--name-only'))
+  assert.equal(diffs.length, 1)
+  assert.ok(!diffs[0].includes('--relative') && diffs[0].includes('--name-status'))
+  assert.deepEqual(
+    run(M('app/src/x.ts', 'scripts/y.mjs')).modes,
+    {},
+    'and the rules read those paths as no framework suite'
+  )
 })
 
-test('control: a whole-repository diff that is empty while GitHub lists files still refuses to select nothing', () => {
-  const { run } = fakeGit({ relative: '', whole: '' })
+test('control: a diff that is empty while GitHub lists files refuses to select nothing', () => {
+  const { run: git } = fakeGit({ whole: '' })
   assert.throws(
-    () => changedAgainst('origin/main', { run, listed: 1 }),
+    () => changedAgainst('origin/main', { run: git, listed: 1 }),
     /GitHub lists 1 changed files; refusing to select nothing/
   )
   // and with nothing listed, an empty range is simply nothing to run
-  assert.deepEqual(changedAgainst('origin/main', { run: fakeGit({ relative: '', whole: '' }).run, listed: 0 }), [])
+  assert.deepEqual(changedAgainst('origin/main', { run: fakeGit({ whole: '' }).run, listed: 0 }), [])
 })
 
-test('a framework change comes back relative to bifold/, status and path', () => {
-  const { run } = fakeGit({
-    relative: 'M\tpackages/core/src/x.ts\nA\tpackages/core/src/__tests__/x.test.ts\n',
-    whole: 'bifold/packages/core/src/x.ts\nbifold/packages/core/src/__tests__/x.test.ts\n',
-  })
-  assert.deepEqual(changedAgainst('origin/main', { run, listed: 2 }), [
+test('a framework change comes back from the repository root, status and path', () => {
+  const { run: git } = fakeGit({ whole: 'M\tpackages/core/src/x.ts\nD\tpackages/oca/src/y.ts\n' })
+  assert.deepEqual(changedAgainst('origin/main', { run: git, listed: 2 }), [
     { status: 'M', path: 'packages/core/src/x.ts' },
-    { status: 'A', path: 'packages/core/src/__tests__/x.test.ts' },
+    { status: 'D', path: 'packages/oca/src/y.ts' },
   ])
 })

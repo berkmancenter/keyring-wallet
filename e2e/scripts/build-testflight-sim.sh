@@ -18,8 +18,9 @@
 #   TESTFLIGHT_ENV_ONLY=1 e2e/scripts/build-testflight-sim.sh
 #                                                  # → prints the .env it would build with, builds nothing
 #
-# Release bundles resolve @bifold/core from its built lib/, so core is built
-# first. app/.env is restored afterwards whatever happens.
+# Release bundles resolve @bifold/core from source (Metro); only the Node-consumed
+# @bifold/trust-tasks needs its build/ first. app/.env is restored afterwards
+# whatever happens.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP="$ROOT/app"
@@ -54,8 +55,7 @@ if [ "${TESTFLIGHT_ENV_ONLY:-}" = 1 ]; then
   exit 0
 fi
 
-(cd "$ROOT/bifold" && yarn workspace @bifold/core build >/dev/null)
-(cd "$ROOT/bifold/packages/trust-tasks" && yarn build >/dev/null)
+(cd "$ROOT/packages/trust-tasks" && yarn build >/dev/null)
 # A stale generated header keeps the old values (VETTING_RUNBOOK traps).
 find "$DD" -name GeneratedInfoPlistDotEnv.h -delete 2>/dev/null || true
 # TESTFLIGHT_SDK=iphoneos: the same Release build for a real device, signed

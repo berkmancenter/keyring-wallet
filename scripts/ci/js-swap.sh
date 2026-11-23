@@ -29,12 +29,11 @@ rm -rf "$OUT"/android/assets/* "$OUT"/ios/assets/* "$OUT"/android/js/*
 t0=$(date +%s); lap() { echo "  $1: $(( $(date +%s) - t0 ))s"; t0=$(date +%s); }
 sha() { shasum -a 256 "$1" | cut -c1-12; }
 hbcver() { xxd -s 8 -l 4 -p "$1"; }
-# bifold at this build: the folded tree's id (since the fold), the pin before it. Not `git -C bifold`: that is this repository.
-echo "heads wallet=$(git -C "$REPO" rev-parse --short HEAD) bifold=$(git -C "$REPO" rev-parse --short HEAD:bifold)"
+echo "heads wallet=$(git -C "$REPO" rev-parse --short HEAD)"
 
-# The bifold packages the app bundles from lib/ (a stale lib/ is shipped silently).
-( cd "$REPO/bifold/packages/trust-tasks" && yarn build ) > "$OUT/libs.log" 2>&1
-( cd "$REPO/bifold/packages/core" && rm -rf lib && npx bob build ) >> "$OUT/libs.log" 2>&1
+# The one package the bundle reads built: @bifold/trust-tasks keeps a build/ main (a stale build/ is shipped
+# silently). @bifold/core and the other React Native packages are bundled from src/ by Metro, no build.
+( cd "$REPO/packages/trust-tasks" && yarn build ) > "$OUT/libs.log" 2>&1
 lap "libs"
 
 cd "$REPO/app"

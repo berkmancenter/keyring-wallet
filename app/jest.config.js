@@ -4,8 +4,8 @@ module.exports = {
   setupFiles: ['<rootDir>/jestSetup.js'],
   setupFilesAfterEnv: ['@testing-library/jest-native/extend-expect'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  // Force Jest to resolve modules from app's node_modules first, not from bifold's
-  // This is necessary when using portal: with a submodule that has its own node_modules
+  // Resolve from app's node_modules first: the app keeps its own tree (its native builds read app/node_modules) while
+  // the framework packages' dependencies hoist to the root, so two copies of react and react-native exist on disk.
   modulePaths: ['<rootDir>/node_modules'],
   moduleNameMapper: {
     // class-transformer keeps its @Expose metadata in a MODULE-LOCAL store (0.5.1), and
@@ -25,10 +25,9 @@ module.exports = {
     // @openvtc/trust-tasks is ESM-only with an import-condition exports map
     // (reached through @bifold/core's portal source) — map to dist, as the
     // core package's own jest config does.
-    '^@openvtc/trust-tasks$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/index.js',
-    '^@openvtc/trust-tasks/runtime$':
-      '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/_runtime/index.js',
-    '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/$1.js',
+    '^@openvtc/trust-tasks$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/index.js',
+    '^@openvtc/trust-tasks/runtime$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/_runtime/index.js',
+    '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/$1.js',
     // Same reason as @openvtc/trust-tasks above: ESM-only, import-condition-only
     // exports map (reached through @bifold/trust-tasks, itself reached through
     // @bifold/core's portal source). Only @bifold/trust-tasks depends on it, so
@@ -46,12 +45,19 @@ module.exports = {
     '@credo-ts/didcomm': require.resolve('@credo-ts/didcomm'),
     // Use bifold sources directly (like bifold's own jest configs) to avoid
     // circular-require issues in the lib/commonjs build under jest
-    '^@bifold/core$': '<rootDir>/../bifold/packages/core/src/index.ts',
-    '^@bifold/verifier$': '<rootDir>/../bifold/packages/verifier/src/index.ts',
-    '^@bifold/oca/build/legacy$': '<rootDir>/../bifold/packages/oca/src/legacy/index.ts',
-    '^@bifold/oca$': '<rootDir>/../bifold/packages/oca/src/index.ts',
-    '^@bifold/react-hooks$': '<rootDir>/../bifold/packages/react-hooks/src/index.ts',
-    '^@bifold/credo-tsp-adapter$': '<rootDir>/../bifold/packages/credo-tsp-adapter/src/index.ts',
+    '^@bifold/core$': '<rootDir>/../packages/core/src/index.ts',
+    '^@bifold/verifier$': '<rootDir>/../packages/verifier/src/index.ts',
+    '^@bifold/oca/build/legacy$': '<rootDir>/../packages/oca/src/legacy/index.ts',
+    // and oca's other `build/…` spellings (its package.json exports serve them to Metro from src).
+    '^@bifold/oca/build/(.*)$': '<rootDir>/../packages/oca/src/$1',
+    '^@bifold/oca$': '<rootDir>/../packages/oca/src/index.ts',
+    '^@bifold/react-hooks$': '<rootDir>/../packages/react-hooks/src/index.ts',
+    '^@bifold/credo-tsp-adapter$': '<rootDir>/../packages/credo-tsp-adapter/src/index.ts',
+    // The other Node-consumed packages too: their `main` is a build (the witness and the e2e verifier load it), which
+    // this suite must not depend on; core's own jest maps the same three to src.
+    '^@bifold/trust-tasks$': '<rootDir>/../packages/trust-tasks/src/index.ts',
+    '^@bifold/dtg-vocab$': '<rootDir>/../packages/dtg-vocab/src/index.ts',
+    '^@bifold/vrc-contexts$': '<rootDir>/../packages/vrc-contexts/src/index.ts',
     '@bifold/remote-logs': '<rootDir>/__mocks__/@bifold/remote-logs.ts',
     '@openwallet-foundation/askar-react-native': require.resolve('@openwallet-foundation/askar-react-native'),
     // CRITICAL: Force Jest to use app's React instead of bifold's
@@ -63,7 +69,7 @@ module.exports = {
     // This ensures tests use app's versions with proper mocks from jestSetup.js
     '^react-native$': require.resolve('react-native'),
     // Also map react-native subpath imports (e.g. react-native/Libraries/...)
-    // so bifold sources can't drag in bifold/node_modules' second RN copy
+    // so the framework's sources never drag in the root node_modules' second RN copy
     '^react-native/(.*)$': `${require('path').dirname(require.resolve('react-native/package.json'))}/$1`,
     '^react-native-reanimated$': require.resolve('react-native-reanimated'),
     '^react-native-keyboard-controller$': require.resolve('react-native-keyboard-controller'),
@@ -99,12 +105,12 @@ module.exports = {
     '^react-native-tcp-socket$': require.resolve('react-native-tcp-socket'),
     '^react-native-vector-icons$': require.resolve('react-native-vector-icons'),
     // Expo modules used by bifold core - reuse bifold's jest mocks
-    'expo-crypto': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-crypto.js',
-    '@expo/app-integrity': '<rootDir>/../bifold/packages/core/__mocks__/@expo/app-integrity.js',
-    'expo-image-picker': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-image-picker.js',
-    'expo-image-manipulator': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-image-manipulator.js',
+    'expo-crypto': '<rootDir>/../packages/core/__mocks__/@expo/expo-crypto.js',
+    '@expo/app-integrity': '<rootDir>/../packages/core/__mocks__/@expo/app-integrity.js',
+    'expo-image-picker': '<rootDir>/../packages/core/__mocks__/@expo/expo-image-picker.js',
+    'expo-image-manipulator': '<rootDir>/../packages/core/__mocks__/@expo/expo-image-manipulator.js',
     // @openvtc/trust-tasks is ESM-only with an import-condition exports map,
-    // which Jest's CJS resolver can't follow — same fix as bifold/core's own
+    // which Jest's CJS resolver can't follow — same fix as packages/core's own
     // jest.config.js, pointed at the root-hoisted copy (this package isn't
     // nested under app/node_modules; modulePaths above only searches app's
     // own node_modules, so the mapping has to name the root path explicitly).

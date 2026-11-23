@@ -74,7 +74,7 @@ When enabled, all DIDComm messages are retained in the wallet for audit purposes
 ## Installation
 
 ```bash
-cd bifold/vrc_reference/witness-server
+cd packages/witness-server
 yarn install
 ```
 
@@ -83,7 +83,7 @@ yarn install
 A Docker Compose configuration is available for containerized deployment:
 
 ```bash
-cd bifold/packages/witness-server
+cd packages/witness-server
 
 # Build the Docker image
 docker-compose build

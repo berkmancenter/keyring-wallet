@@ -37,7 +37,7 @@ it is a standing request to upstream.
 
 ```sh
 node scripts/openvtc/setup-external.mjs          # at the wallet root: clones the upstream repos
-cd bifold/packages/trust-tasks
+cd packages/trust-tasks
 node vendor/build-vti-tsp-js.mjs ../../../external/vta-browser-plugin [<commit>]
 ```
 

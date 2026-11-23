@@ -2,17 +2,11 @@
   "name": "@bifold/oca",
   "version": "3.0.16",
   "description": "TypeScript implementation of Overlay Capture Architecture (OCA) for styling Aries Verifiable Credentials",
-  "main": "build/index.js",
-  "types": "build/index.d.ts",
-  "source": "build/index.js",
-  "files": [
-    "build"
-  ],
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "source": "src/index.ts",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "echo 'building oca 🏗️' && yarn run clean && yarn run compile && echo 'oca built ✅'",
-    "clean": "rimraf ./build",
-    "compile": "tsc",
     "test": "TZ=GMT jest --config ./jest.config.js",
     "test:watch": "TZ=GMT jest --config ./jest.config.js --watch",
     "coverage": "TZ=GMT jest --config ./jest.config.js --coverage"
@@ -49,5 +43,14 @@
     "axios": "~1.13.2",
     "lodash.startcase": "~4.4.0",
     "react-native-fs": "~2.20.0"
+  },
+  "react-native": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./legacy": "./src/legacy/index.ts",
+    "./legacy/*": "./src/legacy/*.ts",
+    "./build/legacy": "./src/legacy/index.ts",
+    "./build/legacy/*": "./src/legacy/*.ts",
+    "./build/*": "./src/*.ts"
   }
 }

@@ -18,7 +18,7 @@ const { existsSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 const repoRoot = join(__dirname, "..");
-const mediatorDir = join(repoRoot, "bifold", "packages", "mediator-server");
+const mediatorDir = join(repoRoot, "packages", "mediator-server");
 const envPath = join(repoRoot, "app", ".env");
 const envSamplePath = join(repoRoot, "app", ".env.sample");
 
