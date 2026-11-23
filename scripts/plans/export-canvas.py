@@ -37,7 +37,7 @@ def static_page(dc_html: str) -> str:
     inner = body.group(1) if body else dc_html
     # Links are navigation in the canvas, not content. A header's first link is its back arrow, which the
     # stylesheet pins to the left edge through ".hd a, .hd .bk"; the replacement span keeps that rule by class.
-    inner = re.sub(r'(<div class="hd">)<a\b', r'\1<span class="bk" data-link', inner)
+    inner = re.sub(r'(<div class="hd"[^>]*>)<a\b', r'\1<span class="bk" data-link', inner)
     inner = re.sub(r"<a\b", "<span data-link", inner)
     inner = inner.replace("</a>", "</span>")
     return (
