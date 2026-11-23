@@ -1,9 +1,9 @@
 # Moving the SEDI demos off `main`
 
-**Status:** Draft, 2026-11-23, reviewed the same day (scope widened, §3 D2, D6, D7). This plan changes no code; nothing is built.
+**Status:** Draft, 2026-11-23. This plan changes no code; nothing is built.
 **Reviewers:** Alberto Leon and the product owner.
-**Scope:** take every State-Endorsed Digital Identity (SEDI) _demo_ off `main` and onto a `sedi-demos` branch, together with the guardianship flow, the trusted approvers feature ("Who approves") and their Developer options rows, while keeping `did:webs` resolution and everything Keyring needs to join, sign in to and be vetted by a VTC community whose DID is a `did:webs`.
-**Companions:** [`sedi-demos-move-plan/`](sedi-demos-move-plan/): the inventory evidence and the reading of the earlier modularity note ([`2026-11-23-bam.md`](sedi-demos-move-plan/2026-11-23-bam.md)); the review that widened the scope and traced what join, sign-in and vetting reach ([`2026-11-23-al.md`](sedi-demos-move-plan/2026-11-23-al.md)); review index in §11.
+**Scope:** take every State-Endorsed Digital Identity (SEDI) _demo_ off `main` and onto a `sedi-demos` branch, together with the guardianship flow, the trusted approvers feature ("Who approves") and their Developer options rows, while keeping `did:webs` resolution and everything Keyring needs to join, sign in to and be vetted by a VTC community whose DID is a `did:webs`. **Principle:** everything removed from `main` (the demo, guardianship, trusted approvers, and every one of their Developer options rows, store fields, locale keys and test ids) is preserved on `sedi-demos`, which is cut first (S0); nothing removed is dropped. If `sedi-demos` is archived (R1) it is preserved but unmaintained.
+**Companions:** [`sedi-demos-move-plan/`](sedi-demos-move-plan/): the inventory evidence and the reading of the earlier modularity note ([`2026-11-23-bam.md`](sedi-demos-move-plan/2026-11-23-bam.md)); the review that traced what join, sign-in and vetting reach ([`2026-11-23-al.md`](sedi-demos-move-plan/2026-11-23-al.md)); the owner's requirements and the review findings applied ([`2026-11-23-bam-2.md`](sedi-demos-move-plan/2026-11-23-bam-2.md)); review index in §11.
 **Related plans:** [`keri-holder-plan.md`](keri-holder-plan.md) (the KERI holder work this keeps room for), [`delegated-batch-issuance-plan.md`](delegated-batch-issuance-plan.md) (the SEDI-motivated plan that assumes the KEL verifier), [`single-codebase-plan.md`](single-codebase-plan.md) (why `bifold/` paths are ordinary paths here).
 
 ## Overview
@@ -21,7 +21,7 @@ Two things in the same folder are not demo. The `did:webs` resolver is how Keyri
 
 This plan moves the demo to a `sedi-demos` branch and removes it from `main`. The same move takes the guardianship flow and the trusted approvers feature ("Who approves"): neither is supported any longer. Keyring keeps the `did:webs` resolution that community join and sign-in use and the CESR and KEL code that resolution loads, with the one gate that would otherwise leave the verifier dead taken out. The state office's server side is already scaled down, so the demo no longer runs end to end anywhere; the branch is a record. (§3, §4, §5)
 
-A person using Keyring from `main` sees no State card pass, no Guardian card link, no state-office screen, no "Who approves", no "Ask a contact to approve" row on a contact's page, and no SEDI, guardian or trusted-approver rows in Developer options. Joining, signing in to and being vetted by a community, `did:webs` communities included, work as before. Whether "Confirm it's you" stays is open (§3, D7).
+A person using Keyring from `main` sees no State card pass, no Guardian card link, no state-office screen, no "Who approves", no "Ask a contact to approve" row on a contact's page, and no SEDI, guardian or trusted-approver rows in Developer options. Joining, signing in to and being vetted by a community, `did:webs` communities included, work as before. "Confirm it's you" stays (§3, D7). Everything that is gone from `main` is on `sedi-demos`.
 
 What join, sign-in and vetting touch today is traced in §2.6: none of them needs the demo, but all three load trusted-approver code through the agent client, and one of them (join) can be blocked by trusted-approver rules a tester already holds on their agent. Removing that code safely is §6, S0b and S2b.
 
@@ -53,8 +53,9 @@ flowchart LR
 | No demo code remains on `main`                                           | `git grep -iw sedi` and the list in §6 S7 find only the kept paths and docs                                                                                                                                                      | CI, one command              | Not started |
 | Nothing else regressed                                                   | Root `yarn lint`, `yarn typecheck`, `yarn test`, and `cd bifold/packages/core && yarn test`                                                                                                                                      | CI                           | Not started |
 | `sedi-demos` still builds and its tests pass                             | The same suites on that branch (§6, S7)                                                                                                                                                                                          | CI                           | Not started |
+| Keyring can still join the live `sedi-vtc` community after the removal  | A Test build of the exact commit that lands on `main` scans or pastes the community's `did:webs` link, joins and signs in at `/members/`, fresh install and update-in-place (§6, S7b)                                             | Field: a third party's VTC   | Not started |
 
-**Where it stands:** a verified inventory of `main` at `800a44ba` (both companions). Decisions D1 to D7 are taken, D2 revised and D6, D7 added in review (§3); Alberto confirmed D7 and the parking of the KERI holder plan on 2026-11-23. Nothing is written.
+**Where it stands:** a verified inventory of `main` at `800a44ba` (both companions). Decisions D1 to D7 are taken (§3); D7 and the parking of the KERI holder plan are confirmed (Alberto, 2026-11-23). Nothing is written.
 
 **Open decisions**
 
@@ -74,13 +75,13 @@ flowchart LR
 
 ## 1. Goal and non-goals
 
-**Goal.** `main` contains no SEDI demo, guardianship or trusted-approver code, switches, screens, strings, test ids or tests, and keeps `did:webs` resolution and the CESR and KEL code it loads. Joining, signing in to and being vetted by a community behave exactly as before, for `did:webs` and `did:webvh` communities alike. A `sedi-demos` branch contains all of it as it is on `main` today.
+**Goal.** `main` contains no SEDI demo, guardianship or trusted-approver code, switches, screens, strings, test ids or tests, and keeps `did:webs` resolution and the CESR and KEL code it loads. Joining, signing in to and being vetted by a community behave exactly as before, for `did:webs` and `did:webvh` communities alike. A `sedi-demos` branch, cut before any removal, contains all of it as it is on `main` today: every file, Developer options row, store field, locale key and test id that leaves `main` stays there. Keyring can still join and sign in to the live `sedi-vtc` community (S7b).
 
 **Non-goals.**
 
 - Making the demo pluggable on `main`. The seam between trust-tasks and the demo is circular (§2.3), and untangling it for a demo that is leaving would be work for nothing (§3, D5).
 - Building the KERI holder or any new KERI feature. The holder plan is parked (D2).
-- Changing what ships to testers beyond the absence of the demo, guardianship and trusted approvers "Confirm it's you" stays (D7).
+- Changing what ships to testers beyond the absence of the demo, guardianship and trusted approvers. "Confirm it's you" stays (D7).
 
 ## 2. Today
 
@@ -104,9 +105,9 @@ Verified at `origin/main` `800a44ba` (details and the paths of every item are in
 | `S/holder/controller.ts`                                                                   | A holder KERI controller; imports `kel`, `keriEvents` and `phoneCodesOn` (`:34`, throws at `:67`). Importers: `C/index.ts:410` (a barrel export the app does not use) and demo files                                                                                               | Demo (D2)               |
 | `S/holder/*` (all other files)                                                             | State card pass and details, `stateCardFlag`, `useHeldStateCard`, `GuardianCardReceive`, `guardianCardLink`, `receiveGuardianCard`                                                                                                                                                 | Demo                    |
 
-### 2.2 The one runtime consumer of the keep set
+### 2.2 The runtime consumer of the keep set
 
-`C/utils/WebsDidResolver.ts` imports `S/webs/identifier` (`parseWebsDid`) and `S/webs/resolve` (`getArtifact`, `WEBS_LIMITS`, `WebsFetch`) at `:3-4`. It is registered unconditionally in `C/utils/agent.ts:176` and `app/src/utils/bc-agent-modules.ts:222`. `triggerLink.ts` and `oobSignIn.ts` do not import `S`; they reach did:webs only through that resolver. There is no KERI holder code yet, so `cesr` and `guardian/kel.ts` are the only KEL verifier, and `S/webs/README.md` states there is no second one.
+`C/utils/WebsDidResolver.ts` is the only demo-free file that consumes `modules/sedi` for a product feature. Other kept files also import `S` (`vtiLinks.ts`, `MyAgentStack.tsx`, `ListCredentials.tsx`, `C/index.ts`) but only for demo code, which S2 removes from them. It imports `S/webs/identifier` (`parseWebsDid`) and `S/webs/resolve` (`getArtifact`, `WEBS_LIMITS`, `WebsFetch`) at `:3-4`. It is registered unconditionally in `C/utils/agent.ts:176` and `app/src/utils/bc-agent-modules.ts:222`. `triggerLink.ts` and `oobSignIn.ts` do not import `S`; they reach did:webs only through that resolver. There is no KERI holder code yet, so `cesr` and `guardian/kel.ts` are the only KEL verifier, and `S/webs/README.md` states there is no second one.
 
 ### 2.3 Demo code outside `S`
 
@@ -145,7 +146,7 @@ Clean today, and must stay clean: `joinLink.ts`, `triggerLink.ts`, `oobSignIn.ts
 
 **The one choke point.** `vtaAgent.ts:42-43` imports `afterStepDown` (`mayApprove`) and `foreignApproval` (`approvedAgentOf`, `sendForeignDecision`, `takeForeignReply`). `takeForeignReply` runs on every inbound agent message (`:3848`) and returns early when it claims one; `approvedAgentOf` (`:3893`) and `sendForeignDecision` (`:3986`) answer requests relayed from another person's agent. Join, sign-in, vetting, agent connect and Bring back all go through this file, so S2b edits it with a test of its own.
 
-**Tests that use a `did:webs` community.** `WebsDidResolver.test.ts` (the `sedi-vtc.did.json` fixture), and in `TT/__tests__`: `oobSignIn.test.ts:309`, `triggerLink.test.ts:100`, `vtiLinks.test.ts:385`, `vtiJoinWatch.test.ts:17`, `vtiMediatorTspOnlyRoute.test.ts:21`, `communityName.test.ts:171`. None imports a removed file directly; several load one transitively (`resolve.ts` → the state-verified flag; `vtiLinks.ts:25-27`; `vtaAgent` → `foreignApproval`). **No vetting test uses a `did:webs` community** (§8, R10).
+**Tests that use a `did:webs` community.** `bifold/packages/core/__tests__/utils/WebsDidResolver.test.ts` (the `sedi-vtc.did.json` fixture; it imports `webs/resolve` only, which stays), and in `TT/__tests__`: `oobSignIn.test.ts:309`, `triggerLink.test.ts:100`, `vtiLinks.test.ts:385`, `vtiJoinWatch.test.ts:17`, `vtiMediatorTspOnlyRoute.test.ts:21`, `communityName.test.ts:171`. None imports a removed file directly; several load one transitively (`resolve.ts` → the state-verified flag; `vtiLinks.ts:25-27`; `vtaAgent` → `foreignApproval`). **No vetting test uses a `did:webs` community** (§8, R10).
 
 ### 2.7 Trusted approvers ("Who approves")
 
@@ -155,7 +156,7 @@ Clean today, and must stay clean: `joinLink.ts`, `triggerLink.ts`, `oobSignIn.ts
 
 | Area                   | Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Logic                  | `TT/approverRole.ts`, `TT/approverRoleSpec.ts` (whole file), `TT/module/trustedApprovers.ts`, `foreignApproval.ts`, `afterStepDown.ts`, `trustedApproversFlag.ts`, `TT/approverEnforcementCheck.ts`                                                                                                                                                                                                                                                                                           |
+| Logic                  | `TT/approverRole.ts`, `TT/approverRoleSpec.ts` (whole file), `TT/module/trustedApprovers.ts`, `foreignApproval.ts`, `afterStepDown.ts`, `trustedApproversFlag.ts`, `TT/screens/approverEnforcementCheck.ts`                                                                                                                                                                                                                                                                                           |
 | Screens and components | `TT/screens/VtaTrustedApprovers.tsx`, `ApproverAskRow.tsx`, `ApproverWaitNote.tsx`, `approver/ApproverZones.tsx`, `approver/EnforcementCheckCard.tsx`, `TT/components/ApproverOfferModal.tsx`, `DemoPill.tsx`                                                                                                                                                                                                                                                                                 |
 | Trust-task handlers    | `ceremony.ts:2101-2129`: `approver/role-offer/0.1` and its response, `role-step-down/0.1`, `role-removed/0.1`                                                                                                                                                                                                                                                                                                                                                                                 |
 | Agent client           | `vtaAgent.ts`: imports `:42-54`, `forAgent` `:162` and `:3893-3990`, `takeForeignReply` `:3848`, `approverDid` `:3039`, `acceptAsApprover` `:3050`, `trustedApprovers` `:3062`, `setTrustedApprovers` `:3077`                                                                                                                                                                                                                                                                                 |
@@ -191,7 +192,7 @@ There is no "Confirm it's you" row any more (`DeveloperConfirmItsYouRow.test.tsx
 
 ## 3. Decisions
 
-D1 and D3 to D5 were taken by the product owner on 2026-11-23. Alberto's review the same day revised D2 and added D6 and D7 (review companion). The reasoning behind each is standing rationale: an implementer must not re-open it without the constraint that rules the other option out.
+D1 to D7 were taken on 2026-11-23 (D1 and D3 to D5 by the product owner, D2, D6 and D7 by Alberto; reasoning in the companions). The reasoning behind each is standing rationale: an implementer must not re-open it without the constraint that rules the other option out.
 
 **D1. State-verified approvers are demo-only and are removed; `resolveWebs` loses its gate.**
 
@@ -206,7 +207,7 @@ D1 and D3 to D5 were taken by the product owner on 2026-11-23. Alberto's review 
 - Constraint: Keyring no longer supports the guardianship flow (Alberto, 2026-11-23). Every importer of these four files is demo or guardian code (§2.1, §2.6); none is reached by join, sign-in, vetting or `did:webs` resolution.
 - Concretely: they move to `sedi-demos` with the demo. S1 no longer makes `chain.ts` schema-agnostic or decouples `controller.ts`. `cesr/*`, `guardian/kel.ts`, `webs/{identifier,document,resolve}.ts` stay, because `resolve.ts` loads them and `WebsDidResolver` needs `resolve.ts`.
 - The KERI holder plan, which would have been their consumer, is parked (Alberto, 2026-11-23). If it resumes, it takes the files from `sedi-demos`, where the `k0-utah-v2` fixtures it cites also live.
-- Rejected: _keep both on `main`, made generic first_ (the earlier D2). It writes and maintains two refactors, and keeps two SEDI-shaped modules on `main`, for a plan that is not being built.
+- Rejected: _keep both on `main`, made generic first._ It writes and maintains two refactors, and keeps two SEDI-shaped modules on `main`, for a plan that is not being built.
 
 **D3. The two unmerged SEDI branches move to `sedi-demos`.** They are rebased onto `sedi-demos` after the removal lands (§7), not onto `main`.
 
@@ -224,7 +225,7 @@ D1 and D3 to D5 were taken by the product owner on 2026-11-23. Alberto's review 
 - Precondition: no agent we run or a tester uses still holds a `keyring-trusted-approvers` set when the removal ships (S0b), because the removal leaves no way to answer or remove one (§2.7).
 - Rejected: _keep the approver's half (listing and answering relayed requests) for a release so held rules can still be answered._ It keeps the most entangled part (`vtaAgent.ts`'s inbound path) for a switch that only testers ever turned on; clearing the sets first (S0b) is cheaper and leaves nothing behind.
 
-**D7. "Confirm it's you" stays, without the SEDI umbrella kill.** Confirmed by Alberto, 2026-11-23.
+**D7. "Confirm it's you" stays, without the SEDI umbrella kill.** Confirmed (Alberto, 2026-11-23).
 
 - Constraint: it is on by default and in testers' hands, and it shares no code with the demo or trusted approvers (§2.8).
 - Concretely: only the `SEDI_KERI_REMOTE_OFF` clause is removed from `confirmItsYouFlag.ts`; its own `CONFIRM_ITS_YOU_REMOTE_OFF` stays. The contact page's "Safety" heading stays, holding only its row.
@@ -234,6 +235,7 @@ D1 and D3 to D5 were taken by the product owner on 2026-11-23. Alberto's review 
 
 On `main` after S7:
 
+- Everything stripped from `main` is on `sedi-demos`, cut at S0 before any removal: the demo, the guardianship flow, trusted approvers, and every Developer options row, store field, locale key and test id that belonged to them. Removal from `main` is the only change made to those things; none is rewritten or dropped. If `sedi-demos` is archived (R1) that content is preserved but unmaintained, and no one is promised it builds against a later `main`.
 - `S` is not a demo module. The kept files live where §5 puts them: `modules/sedi/cesr/*`, `modules/sedi/guardian/kel.ts` and `modules/sedi/webs/{identifier,document,resolve}.ts`, in place. A rename of the folder is a separate follow-up, only if the product owner wants it, so the move stays a pure deletion plus one small refactor commit.
 - No code reads or writes `EnableStateCard`, `DemoStateHost`, `SediDemoSide`, `EnableStateVerifiedApprovers`, `EnableTrustTestState` or the trusted-approvers setting; orphaned values in storage, and the approver records in §2.7, are harmless and are not migrated.
 - `keyring://guardian-card` is not claimed by `vtiLinks.ts`; see R2. Every other link classifies exactly as before.
@@ -261,7 +263,7 @@ On `main` after S7:
 
 All implementation runs as subagents, one branch off `main` per step group. Heavy operations follow the rules of the machine they run on: on a developer's Mac, one heavy suite at a time with few workers, and full suites sent to CI. Commits are conventional, signed and carry `Signed-off-by`.
 
-**S0. Preserve.** Create `sedi-demos` from `origin/main` and push it.
+**S0. Preserve.** Create `sedi-demos` from `origin/main` and push it, before any removal commit exists. Everything the later steps strip from `main` stays on this branch, Developer options rows, store fields, locale keys and test ids included.
 
 - _Done when:_ `git rev-parse origin/sedi-demos` equals the `main` commit the removal branch starts from, and the branch name is recorded in §11 or the companion. Nothing else is changed.
 - _Needs:_ a decision on R1 (maintained or archive) so the PR description says which.
@@ -273,27 +275,27 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 - _Done when:_ a read of each listed agent's policies shows no `keyring-trusted-approvers` set, recorded with the agent names in the PR (roles only in this plan), and the testers' group has been told.
 - _Blocks:_ S2b's release, not S2b's code.
 
-**S1. Decouple while the demo still exists.** One commit, `refactor`: remove the `resolveWebs` gate (D1); point `WebsDidResolver.test.ts` at a path that survives.
+**S1. Decouple while the demo still exists.** One commit, `refactor`: remove the `resolveWebs` gate (D1). `WebsDidResolver.test.ts` imports only `webs/resolve`, which stays, and needs no change.
 
 - _Done when:_ a new test shows `resolveWebs` resolves a fixture (the `webs-k0-root` fixture) with no approver flag set; `websResolver.test.ts` is rewritten so it no longer imports `../guardian` or `webs/index.ts`; the demo still passes its own tests (the move has not started); `cd bifold/packages/core && yarn test` and root `yarn typecheck` pass.
 - D2 no longer asks S1 to touch `chain.ts` or `controller.ts`.
 
-**S2. Remove the demo from core.** One commit, `chore`. Delete the demo files in §2.1 and §2.3; remove the call sites: `ceremony.ts` registration, `approverRole.ts` lazy require, the `ApproverOfferModal.tsx` import, the `VtaTrustedApprovers.tsx` state-card sections and imports, the `guardianCard` kind and destination in `vtiLinks.ts`, the two screens in `MyAgentStack.tsx` and `types/navigators.ts`, the `ListCredentials.tsx` pass and its empty-list terms, the `index.ts` exports; remove the `SEDI_KERI_REMOTE_OFF` clause from `confirmItsYouFlag.ts` and from `trustedApproversFlag.ts` (which S2b then deletes whole), and delete the other demo flag files, `trustTestStateFlag.ts` included (§2.4); delete `chain.ts`, `controller.ts`, `keriEvents.ts`, `rootKel.ts` and `webs/index.ts` (D2) and the `C/index.ts:410` export; remove the demo `testids.json` entries and the en, fr and pt-br locale blocks. Leave trusted approvers to S2b.
+**S2. Remove the demo from core.** One commit, `chore`. Delete the demo files in §2.1 and §2.3; remove the call sites: `ceremony.ts` registration, `approverRole.ts` lazy require, the `ApproverOfferModal.tsx` import, the `VtaTrustedApprovers.tsx` state-card sections and imports, the `guardianCard` kind and destination in `vtiLinks.ts`, the two screens in `MyAgentStack.tsx` and `types/navigators.ts`, the `ListCredentials.tsx` pass and its empty-list terms, the `index.ts` exports; remove the `SEDI_KERI_REMOTE_OFF` clause from `confirmItsYouFlag.ts` and from `trustedApproversFlag.ts` (which S2b then deletes whole), and delete the other demo flag files, `trustTestStateFlag.ts` included (§2.4); delete `chain.ts`, `controller.ts`, `keriEvents.ts`, `rootKel.ts` and `webs/index.ts` (D2) and the `C/index.ts:410` export; remove the demo `testids.json` entries and the en, fr and pt-br locale blocks. The same commit edits the app, so it typechecks: `container-imp.ts` (the five demo loads and setters of §2.3), `store.tsx` (the five demo fields with their actions and storage keys), `Developer.tsx` (every demo row §2.9 marks "Goes", their handlers, and the umbrella reads at `:1325`, `:1341`; the "Demos" header and the practice request stay until S2b) and the app locale keys of §2.3. Leave trusted approvers to S2b.
 
 - _New test, written first, on `main` before any deletion:_ a table test of `keyringAgentLinkKind` over one example of every link kind it classifies today (trigger link, join link, `did:webs`, `did:webvh`, agent claim, OOB invitation, plain URL, garbage), recording each result. After S2 the same table passes with only the `keyring://guardian-card` row changed (R2).
-- _Done when:_ `git grep -n -E "guardianEvidence|socialAuthorization|developerTestState|sediDemoSide|sediKeriRemoteOff|stateVerifiedApproversFlag|trustTestStateFlag|StateCardPass|GuardianCardReceive|StateOfficeCodes|stateRoots|keriEvents|holder/controller|guardian/chain|rootKel"` under `bifold/` and `app/` finds nothing outside docs; core's `yarn test` and root `yarn typecheck` pass; the link table passes; "Confirm it's you" tests pass unchanged except for the deleted clause.
+- _Done when:_ `git grep -n -E "guardianEvidence|socialAuthorization|developerTestState|sediDemoSide|sediKeriRemoteOff|stateVerifiedApproversFlag|trustTestStateFlag|StateCardPass|GuardianCardReceive|StateOfficeCodes|stateRoots|keriEvents|holder/controller|guardian/chain|rootKel"` under `bifold/` and `app/` finds nothing outside docs; core's `yarn test`, root `yarn typecheck` and root `yarn test` pass (the app no longer imports anything S2 deletes); the link table passes; "Confirm it's you" tests pass unchanged except for the deleted clause.
 
-**S2b. Remove trusted approvers (D6).** One commit, `chore`, after S2 and only on a tree where S0b is under way.
+**S2b. Remove trusted approvers (D6).** One commit, `chore`, after S2 and only on a tree where S0b is under way. It carries the app-side edits for trusted approvers too, so that it typechecks alone.
 
-- Delete every file in §2.7's Logic, Screens and components rows; remove the handlers in `ceremony.ts` (`:2101-2129`) and the imports they need; remove the approver methods and the foreign-approval path from `vtaAgent.ts`; remove the trusted-approver lines from each host in §2.7; drop the flag and `forAgent` filter from `waitingRequests.ts`; remove the screens from `MyAgentStack.tsx`, `RootStack.tsx` and `types/navigators.ts`; remove the exports; move `Approver.UnnamedContact` to a shared block and repoint its users; then remove the `Approver` block, the `Screens.*`, `AskMe.Trusted*` and `Requests.ForAgent*` strings and the test ids in §2.7.
+- Delete every file in §2.7's Logic, Screens and components rows; remove the handlers in `ceremony.ts` (`:2101-2129`) and the imports they need; remove the approver methods and the foreign-approval path from `vtaAgent.ts`; remove the trusted-approver lines from each host in §2.7; drop the flag and `forAgent` filter from `waitingRequests.ts`; remove the screens from `MyAgentStack.tsx`, `RootStack.tsx` and `types/navigators.ts`; remove the exports; move `Approver.UnnamedContact` to a shared block and repoint its users; then remove the `Approver` block, the `Screens.*`, `AskMe.Trusted*` and `Requests.ForAgent*` strings and the core test ids in §2.7. In the app: the trusted-approvers load and setter in `container-imp.ts`, the trusted-approvers field in `store.tsx` with its action and storage key, the Trusted approvers row, the practice request and the now-empty "Demos" header in `Developer.tsx` (§2.9), and `Developer.EnableTrustedApprovers` in three languages.
 - _New test, written first, on `main` before the deletion:_ an inbound-reply test of `vtaAgent`: a reply to an ask the phone made resolves that ask; an unsolicited message is handed on as before. It must pass unchanged after `takeForeignReply` goes (R8).
-- _Done when:_ `git grep -n -E "approverRole|ApproverOffer|TrustedApprover|trustedApprovers|foreignApproval|afterStepDown|ApproverWaitNote|ApproverAskRow|forAgent|whoApproves|mayApprove"` under `bifold/` and `app/` finds nothing outside docs and `app/src/demo-profiles/approver/*`; the inbound-reply test passes; core's `yarn test` and root `yarn typecheck` pass; `VtaClient.relayConsentRequests` and `ownerConfirm.ts` are untouched.
+- _Done when:_ `git grep -n -E "approverRole|ApproverOffer|TrustedApprover|trustedApprovers|foreignApproval|afterStepDown|ApproverWaitNote|ApproverAskRow|forAgent|whoApproves|mayApprove"` under `bifold/` and `app/` finds nothing outside docs and `app/src/demo-profiles/approver/*`; the inbound-reply test passes; core's `yarn test`, root `yarn typecheck` and root `yarn test` pass; `VtaClient.relayConsentRequests` and `ownerConfirm.ts` are untouched.
 
 **S2c. Remove "Confirm it's you", only if D7 is reversed.** One commit, `chore`: every file and host line in §2.8, the "Safety" heading, the strings, test ids and tests. _Done when:_ the same checks as S2, with `confirmItsYou|ConfirmWithSheet|ConfirmChatCard|ConfirmItsYou` added to the grep.
 
-**S3. Remove the demo and trusted approvers from the app.** One commit, `chore`, after S2b. `container-imp.ts` (the five demo loads and setters of §2.3, plus the trusted-approvers load and setter of §2.7), `store.tsx` (the five demo fields and the trusted-approvers field, with their actions and storage keys), `Developer.tsx` (every row §2.9 marks "Goes", the "Demos" header included, their handlers, and the umbrella reads at `:1325`, `:1341`), the app locale keys of §2.3 and `Developer.EnableTrustedApprovers` in three languages, `e2e/lib/testids.json`, `e2e/lib/testids.app.json` (`ToggleEnableTrustedApprovers`, `DevPracticeRequest` and the demo ids); the comment at `e2e/lib/pages/link.js` that names the guardian card.
+**S3. Remove what is left outside the packages.** One commit, `chore`, after S2b. The app's source edits are done in S2 and S2b; this step covers `e2e/` and the checks that the whole is clean: `e2e/lib/testids.json` and `e2e/lib/testids.app.json` (`ToggleEnableTrustedApprovers`, `DevPracticeRequest` and the demo ids) and the comment at `e2e/lib/pages/link.js` that names the guardian card. It also checks every clock row: `E2EClockRows` and `e2eClocks.ts` (`SHORT_CONSENT_WAIT_MS` and `effectiveConsentWaitMs`, `:41`, `:48`) are read by `VtaClient.ts` and `clocks.ts`, so they stay unless reading shows a row serves only approver waits, in which case it moves to `sedi-demos` with the rest; the finding is stated in the PR either way.
 
-- _Done when:_ root `yarn lint`, `yarn typecheck`, `yarn test` pass; no `Developer*` test references a deleted row; the Developer screen shows only the rows §2.9 marks "Stays".
+- _Done when:_ root `yarn lint`, `yarn typecheck`, `yarn test` pass; no `Developer*` test references a deleted row; the Developer screen shows only the rows §2.9 marks "Stays"; `git grep` of the S2 and S2b patterns under `e2e/` finds nothing outside docs; the clock-row finding is recorded.
 
 **S4. Tests.** Classify each SEDI-named test by reading it. Delete demo tests; keep and fix the paths of the kept ones; rewrite the mixed ones.
 
@@ -314,11 +316,20 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 **S7. Verify.** On the removal branch: root `yarn lint`, `yarn typecheck`, `yarn test`; `cd bifold/packages/core && yarn test`; `git grep -n -iw sedi` and review each hit (kept paths, the `sedi-vtc` strings, docs); a second agent reads each call site named in §2.6 and §2.7 on the diff (R3).
 
 - _Devices:_ a Test build of the removal branch through the full release gate, compared row for row with the last gate on `main`: the join legs (`kk`, `waiting`, `refused`), `signin-ios`, `agents`, `update-android`, `update-ios`, `smoke-android`, `smoke-ios`, `pair-ios`, and `hv` (hidden vetting, applicant and vetter). The named-vetting rows inside them count as the vetting evidence.
-- _`did:webs` live:_ the lab's communities are `did:webvh`, so the gate does not exercise a `did:webs` community. One join and one sign-in to a `did:webs` VTC, if one is reachable (the VTC a state office ran, if its operator still serves it); otherwise the `did:webs` tests named in §2.6 are the evidence, and the PR says so (R10).
+- _`did:webs` live:_ the lab's communities are `did:webvh`, so the gate does not exercise a `did:webs` community. S7b does, against the `sedi-vtc` community.
 - On `sedi-demos`: the same suites, plus the demo's own tests.
-- _Done when:_ every command passes, the gate shows no row that passed on `main` failing on the branch, and the PR states the evidence for each claim in the Overview table, including anything not run.
+- _Done when:_ every command passes, the gate shows no row that passed on `main` failing on the branch, S7b has passed (or its "unreachable" record is waived), and the PR states the evidence for each claim in the Overview table, including anything not run.
 
-**S8. Merge and hand over.** Squash per the repository's `main` rules (signed, conventional). State in the PR body how to run the demo from `sedi-demos`.
+**S7b. Live join to the `sedi-vtc` community.** `https://sedi-vtc.openvti.net/` is a KERI and `did:webs` based VTC that a third party runs, so this is field evidence (the `vti-lab-and-field` skill), not lab evidence. It runs after S7's gate, on a Test build of the exact commit that lands on `main`, on a fresh install and on an update in place from the last store build.
+
+- Scan or paste the community's `did:webs` link; confirm `vtiLinks` classifies it as a join link; confirm the `WebsDidResolver` resolves it; join; sign in at `/members/`.
+- Run it twice: once with trusted approvers never set, and once on an agent S0b cleared.
+- Record the VTC's image versions and the date. The fixtures are dated 2026-11-17, so a different version is information, not failure.
+- If the VTC offers vetting, run it once and record it; that is the only thing that closes R10. If not, R10 stays open.
+- _Proves:_ the happy path of resolution, join and sign-in against the real server after the removal, and that removing `takeForeignReply` handling did not break inbound replies. _Does not prove:_ refusal paths, revocation, or KEL verification (R9: sign-in reads `did.json` only).
+- _Done when:_ both runs pass on both install paths and the record (build, commit, date, VTC versions, outcome) is in the PR. If the VTC is unreachable, "VTC unreachable" is recorded with the date instead. S7 and S8 are not done until one of the two exists, and the unreachable record blocks merge unless the product owner waives it.
+
+**S8. Merge and hand over.** After S7b. Squash per the repository's `main` rules (signed, conventional). State in the PR body how to run the demo from `sedi-demos`.
 
 - _Done when:_ `main` has the removal commit(s), `sedi-demos` exists on `origin`, and R1's choice is written where the next person will see it.
 
@@ -328,7 +339,7 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 
 ## 8. Risks
 
-- **R1. `sedi-demos` drifts from `main`.** It has no CI of its own and the kept code under it keeps changing. Recommendation: archive, with a note naming the `main` commit it was cut from and the command to rebase; the cost of a maintained branch is a standing merge chore for a demo with no scheduled use. Decided by the product owner.
+- **R1. `sedi-demos` drifts from `main`.** If it is archived it is preserved but unmaintained: it holds everything removed from `main`, and builds only against the `main` commit it was cut from. It has no CI of its own and the kept code under it keeps changing. Recommendation: archive, with a note naming the `main` commit it was cut from and the command to rebase; the cost of a maintained branch is a standing merge chore for a demo with no scheduled use. Decided by the product owner.
 - **R2. `keyring://guardian-card` changes behaviour.** With the `vtiLinks.ts:126` prefix claim gone the link falls through to the connection flow and gives a different error. Accepted: the link existed only for the demo, and the state office's server side is already scaled down. The check runs first on every link today, so its removal is guarded by S2's link-classification table: every other kind must classify exactly as before.
 - **R3. The circular seam hides a caller.** `ceremony.ts`, `approverRole.ts`, `ApproverOfferModal.tsx` and `VtaTrustedApprovers.tsx` each reach the demo differently (lazy require, static import, direct import), and trusted-approver code is hosted in ten screens (§2.7). S2 and S2b are reviewed by a second agent reading each call site, not by the grep alone; the greps are the floor.
 - **R4. `trustedStateRoots()` adds the K0 test root in any `__DEV__` build** (`S/guardian/stateRoots.ts:95-97`). It leaves with the demo; the S7 review checks nothing kept relied on it.
@@ -337,7 +348,7 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 - **R7. A held trusted-approver rule blocks a join after the removal.** The rule lives on the agent and holds `vta/webvh/dids/create/*`, which a community join uses, and `policy/upsert/*`, which removing the rule uses (§2.7). After S2b nothing on any phone can answer or delete it. Mitigation: S0b empties every set first, and the release notes for the build that carries S2b tell testers to remove their approvers on the build before. Residual: a tester who skips that build needs the agent's operator to delete the policy.
 - **R8. The agent client's inbound path changes.** `takeForeignReply` runs on every inbound agent message today (`vtaAgent.ts:3848`) and returns early when it claims one; join, sign-in, vetting, agent connect and Bring back all run through this file. Mitigation: S2b's inbound-reply test, written on `main` first, and the full gate in S7.
 - **R9. `did:webs` sign-in does not verify the KEL, before or after.** `WebsDidResolver` reads `did.json` through `getArtifact` and hands it to Credo; the verifying `resolveWebs` has no product caller. A `did:webs` community is therefore trusted as far as its web host is, like a `did:web`. This plan neither causes nor fixes that; it keeps `resolveWebs` ungated so that a later change can call it. Recorded so that nobody reads "keeps the KEL verifier" as "sign-in verifies the KEL".
-- **R10. Vetting against a `did:webs` community has no test.** Join and sign-in do (§2.6); vetting is proven only against the lab's `did:webvh` communities. Vetting does not reach `modules/sedi` except through `vtiLinks.ts`, so the removal is unlikely to change it, but nothing shows it. S7 runs one live check if a `did:webs` VTC is reachable; otherwise the gap is stated in the PR.
+- **R10. Vetting against a `did:webs` community has no test.** Join and sign-in do (§2.6); vetting is proven only against the lab's `did:webvh` communities. Vetting does not reach `modules/sedi` except through `vtiLinks.ts`, so the removal is unlikely to change it, but nothing shows it. S7b runs vetting once against `sedi-vtc` if that community offers it, and only then is R10 closed; if it does not, or the VTC is unreachable, R10 stays open and the PR says so.
 
 ## 9. Out of scope, recorded so they are not re-proposed
 
@@ -354,7 +365,8 @@ S1 is a refactor with its own tests and reverts alone. S2 to S4 are deletions th
 | Rev             | Companion                                                                                                                                                                                                                                                                     |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-11-23, BAM | [`2026-11-23-bam.md`](sedi-demos-move-plan/2026-11-23-bam.md): the inventory behind §2 against `main` `800a44ba`, and how it differs from the earlier modularity note                                                                                                         |
-| 2026-11-23, AL  | [`2026-11-23-al.md`](sedi-demos-move-plan/2026-11-23-al.md): review. The scope widened to the guardianship flow and trusted approvers; D2 revised, D6 and D7 added; what join, sign-in and vetting reach (§2.6); the corrections to §2.3; the upstream findings touched (§12) |
+| 2026-11-23, AL  | [`2026-11-23-al.md`](sedi-demos-move-plan/2026-11-23-al.md): review: the scope of guardianship and trusted approvers (D2, D6, D7), what join, sign-in and vetting reach (§2.6), the corrections to §2.3, the upstream findings touched (§12) |
+| 2026-11-23, BAM (second) | [`2026-11-23-bam-2.md`](sedi-demos-move-plan/2026-11-23-bam-2.md): the owner's two requirements (everything removed moves to `sedi-demos`; Keyring joins `sedi-vtc` afterwards), the S2 to S3 ordering fix, and the review findings applied |
 
 ## 12. Upstream findings touched
 
