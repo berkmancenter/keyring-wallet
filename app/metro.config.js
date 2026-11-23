@@ -43,21 +43,65 @@ const isRoomsSampleImport = (moduleName, originModulePath) =>
 
 const watchFolders = [repoRoot]
 
-// Does the app have its own copy of the package a bare request names (`react`, `@scope/name`, or a subpath of
-// either)? Relative and absolute requests are not packages. Answers are cached: Metro asks once per import site.
+// Should a bare request (`react`, `@scope/name`, or a subpath of either) made from OUTSIDE the app resolve to the
+// app's copy of that package? Yes when the requesting workspace lists it as a peer or dev dependency (the app
+// provides it: react, react-native, i18next, the navigation packages, …; this is the rule the pre-move config
+// applied through its per-package `extraNodeModules` map), and yes when the copy the requester would otherwise get
+// is the SAME VERSION as the app's (one copy in the bundle instead of two). No when the requester declares the
+// package as its own dependency and its resolution is another version: that version is what its code was written
+// against. Phase 2's first Test build died on exactly this: trust-tasks asks for ajv ^8.17 and imports
+// `{ Ajv2020 } from 'ajv/dist/2020'`, the app carries ajv 8.12 as a transitive dependency of something else, and a
+// rule of "the app's copy wins" handed trust-tasks the older copy, where that named export does not exist
+// (`new undefined`, "Cannot read property 'prototype' of undefined" on the device, at the first lazy require of
+// @bifold/trust-tasks). Relative and absolute requests are not packages. Answers are cached per
+// (requesting directory, package).
 const appNodeModules = path.join(__dirname, 'node_modules')
-const appCopyCache = new Map()
-const appCopy = (moduleName) => {
-  if (moduleName.startsWith('.') || path.isAbsolute(moduleName)) return false
+const packageNameOf = (moduleName) => {
+  if (moduleName.startsWith('.') || path.isAbsolute(moduleName)) return null
   const parts = moduleName.split('/')
-  const pkg = moduleName.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
-  if (!pkg || (moduleName.startsWith('@') && parts.length < 2)) return false
-  let has = appCopyCache.get(pkg)
-  if (has === undefined) {
-    has = fs.existsSync(path.join(appNodeModules, pkg, 'package.json'))
-    appCopyCache.set(pkg, has)
+  if (moduleName.startsWith('@')) return parts.length >= 2 ? parts.slice(0, 2).join('/') : null
+  return parts[0] || null
+}
+const readJson = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (_) {
+    return null
   }
-  return has
+}
+const versionAt = (dir, pkg) => readJson(path.join(dir, 'node_modules', pkg, 'package.json'))?.version ?? null
+// The version Node's own resolution would give `pkg` from `fromDir`: the nearest node_modules up the tree that has it.
+const resolvedVersion = (fromDir, pkg) => {
+  for (let dir = fromDir; ; dir = path.dirname(dir)) {
+    const v = versionAt(dir, pkg)
+    if (v) return v
+    if (dir === repoRoot || dir === path.dirname(dir)) return null
+  }
+}
+// The workspace package.json that owns a file under packages/<name>/…, or null (a file under node_modules, or the app).
+const workspaceManifestOf = (fromDir) => {
+  const rel = path.relative(repoRoot, fromDir)
+  const m = rel.match(/^packages\/([^/]+)(\/|$)/)
+  return m && !rel.includes('node_modules') ? readJson(path.join(repoRoot, 'packages', m[1], 'package.json')) : null
+}
+const appCopyCache = new Map()
+const appCopy = (moduleName, originModulePath) => {
+  const pkg = packageNameOf(moduleName)
+  if (!pkg) return false
+  const fromDir = path.dirname(originModulePath)
+  const key = `${fromDir}\u0000${pkg}`
+  let use = appCopyCache.get(key)
+  if (use === undefined) {
+    const appVersion = versionAt(__dirname, pkg)
+    if (!appVersion) use = false
+    else {
+      const manifest = workspaceManifestOf(fromDir)
+      const provided = !!(manifest?.peerDependencies?.[pkg] || manifest?.devDependencies?.[pkg])
+      use = provided || resolvedVersion(fromDir, pkg) === appVersion
+    }
+    appCopyCache.set(key, use)
+  }
+  return use
 }
 
 // Module aliases for React Native compatibility
@@ -218,7 +262,10 @@ module.exports = (async () => {
           }
         }
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
-        if ((isSingleton || appCopy(moduleName)) && !context.originModulePath.startsWith(__dirname + path.sep)) {
+        if (
+          !context.originModulePath.startsWith(__dirname + path.sep) &&
+          (isSingleton || appCopy(moduleName, context.originModulePath))
+        ) {
           // Re-resolve as if requested from the app root (keeps package
           // "exports" handling intact, unlike remapping to an absolute path)
           return context.resolveRequest(

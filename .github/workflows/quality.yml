@@ -172,6 +172,16 @@ jobs:
       - name: Automated testing
         run: yarn test
 
+      # The framework's platform-neutral module graph, evaluated out of a Metro bundle with the bundle's own resolution
+      # and lazily, as the device evaluates it (scripts/ci/bundle-evaluates.mjs says why: Phase 2's first Test build
+      # crashed at the first lazy require of @bifold/trust-tasks while every jest suite was green).
+      - name: Bundle evaluates
+        run: |
+          (cd app && npx react-native bundle --platform android --dev true --entry-file index.js \
+            --bundle-output "$RUNNER_TEMP/dev.bundle" --assets-dest "$RUNNER_TEMP/dev-assets" > "$RUNNER_TEMP/bundle.log" 2>&1) \
+            || { tail -40 "$RUNNER_TEMP/bundle.log"; echo "::error::the dev bundle did not build"; exit 1; }
+          node scripts/ci/bundle-evaluates.mjs "$RUNNER_TEMP/dev.bundle"
+
       # The OTA publishing scripts' own tests (node:test, Node built-ins only):
       # among them, which key each channel signs with (scripts/ota/signing-key.mjs).
       - name: OTA script tests
