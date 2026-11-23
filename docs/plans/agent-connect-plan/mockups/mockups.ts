@@ -126,7 +126,7 @@ export const MOCKUPS: Mockup[] = [
       })
     },
     omits: { primary: 'the sheet’s actions are rows and a switch (§6); the plan defines no button for it.' },
-    notes: ['RoomIdentitySheet, extended; opens from a member-list row or a record’s author. The agent list opens the details (11) instead.', 'The switch is not drawn; "Off" here. Sample names.', 'The fixed text is in the app’s language (§3.13).', ROOMS_FROM_MESSAGES],
+    notes: ['RoomIdentitySheet, extended; from a member-list row or a record’s author. The agent list opens the details (11).', 'Switch not drawn; "Off" here. Sample names.'],
   },
   {
     file: '08-answers-others-confirm.svg',
@@ -141,7 +141,7 @@ export const MOCKUPS: Mockup[] = [
         return sheet.secondaryButton('Keep it off', yy)
       })
     },
-    notes: ['Shown over the agent sheet (07) or the details (11) each time the setting is turned on. Turning it off needs no confirmation.', '"Turn on" as the primary button is a mockup choice; the plan names the two buttons only.', ROOMS_FROM_MESSAGES],
+    notes: ['Over the agent sheet (07) or the details (11), each time the setting is turned on; off needs no confirmation.', '"Turn on" as the primary button is a mockup choice.'],
   },
   {
     file: '09-contacts-agent-row.svg',
