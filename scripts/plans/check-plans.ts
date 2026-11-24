@@ -23,6 +23,16 @@
 //               links every SVG in it, and the sheet's manifest matches the SVGs and tokens (a hash compare: the
 //               check needs no browser; `kit.ts sheet` regenerates the sheet).
 //
+//   tiers:      a plan that carries `<!-- plan-format: tiers -->` in its header block (before `## Overview`) is also checked
+//               for the iterative-MVP format (docs/plans/CLAUDE.md, "Tiers, lanes and upstream asks"): §7 opens with
+//               `### 7.0 Tiers, lanes and order` holding a tiers table, a lanes table, a ```mermaid dependency graph and a
+//               stack table; every other `###` step heading ends in a tier `(P0)`, `(P1)` or `(P2)` and has an
+//               `**Owner:**` line; no step starts after a later-tier step; a step that names a `VTI-` id has a
+//               `**Fallback:**` line; the Overview has a `**Decisions made**` table; the upstream section is
+//               "Upstream asks and blocked on whom" with the table `Ask | Id | Blocks (step, tier) | Fallback meanwhile`;
+//               every `VTI-Q…` / `VTI-NN` the plan names is registered in docs/VTI_UPSTREAM_FINDINGS.md and every one
+//               named in §7 is in that table. The marker is opt-in, so plans written before it keep passing.
+//
 //   node --experimental-strip-types scripts/plans/check-plans.ts            → every plan under docs/plans/
 //   node --experimental-strip-types scripts/plans/check-plans.ts <file…>    → only these files
 //   (Node 22.6 or later; `bun scripts/plans/check-plans.ts` also works.) Exit 1 on any error.
@@ -575,6 +585,185 @@ const checkPlan = (hs: Heading[], lines: Line[], problem: (n: number, m: string)
   }
 }
 
+
+/** Opt-in marker (header block, before `## Overview`): the plan follows the tiers, lanes and upstream-asks format. */
+export const TIERS_MARKER = '<!-- plan-format: tiers -->'
+export const FINDINGS_FILE = 'docs/VTI_UPSTREAM_FINDINGS.md'
+const TIER = /\((P[012])\)\s*$/
+const VTI_ID = /\bVTI-(?:Q\d+|\d{2})\b/g
+
+/** The `|` cells of a table row, trimmed; null when the line is not a row. */
+const cells = (t: string): string[] | null => {
+  const s = t.trim()
+  if (!s.startsWith('|')) return null
+  return s
+    .replace(/^\||\|$/g, '')
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim())
+}
+
+interface Table {
+  n: number
+  header: string[]
+  rows: { n: number; cells: string[] }[]
+}
+
+/** Tables (header, separator, rows) among the lines given, outside fences. */
+const tablesIn = (ls: Line[]): Table[] => {
+  const out: Table[] = []
+  for (let i = 0; i + 1 < ls.length; i++) {
+    const h = ls[i].inFence ? null : cells(ls[i].text)
+    const sep = ls[i + 1].inFence ? null : cells(ls[i + 1].text)
+    if (!h || !sep || !sep.every((c) => /^:?-{3,}:?$/.test(c))) continue
+    const t: Table = { n: ls[i].n, header: h, rows: [] }
+    let j = i + 2
+    for (; j < ls.length; j++) {
+      const r = ls[j].inFence ? null : cells(ls[j].text)
+      if (!r) break
+      t.rows.push({ n: ls[j].n, cells: r })
+    }
+    out.push(t)
+    i = j - 1
+  }
+  return out
+}
+
+const headerIs = (t: Table, want: string[]): boolean =>
+  t.header.length === want.length && t.header.every((c, i) => c.toLowerCase().replace(/\s+/g, ' ') === want[i].toLowerCase())
+
+export const TIERS_COLUMNS = ['Tier', 'Exit criterion', 'Demo or test']
+export const LANES_COLUMNS = ['Lane', 'Owner', 'Steps']
+export const STACK_COLUMNS = ['PR n of N', 'Step', 'Tier', 'Base', 'Can start after']
+export const ASKS_COLUMNS = ['Ask', 'Id', 'Blocks (step, tier)', 'Fallback meanwhile']
+export const DECISIONS_COLUMNS = ['Decision', 'Who', 'When', 'Why']
+
+/** The lines of a `##` section: after its heading, up to the next `##`. */
+const sectionLines = (lines: Line[], h2: Heading[], at: Heading): Line[] => {
+  const next = h2.find((h) => h.n > at.n)
+  return lines.filter((l) => l.n > at.n && (!next || l.n < next.n))
+}
+
+const checkTiers = (
+  lines: Line[],
+  hs: Heading[],
+  exists: (p: string) => boolean,
+  read: (p: string) => string,
+  problem: (n: number, m: string) => void,
+): void => {
+  const h2 = hs.filter((h) => h.level === 2)
+  const missing = (what: string, n: number, how: string): void => problem(n, `${what}: ${how}`)
+
+  // The Overview carries a decisions register beside the open decisions.
+  const overview = h2.find((h) => h.title === 'Overview')
+  if (overview) {
+    const ov = sectionLines(lines, h2, overview)
+    const at = ov.findIndex((l) => !l.inFence && /^\*\*Decisions made\*\*\s*$/.test(l.text.trim()))
+    if (at === -1) missing('Overview', overview.n, 'add `**Decisions made**` with the table `| Decision | Who | When | Why |` beside the open decisions (one row "None yet" is fine)')
+    else {
+      const t = tablesIn(ov.slice(at))[0]
+      if (!t || !headerIs(t, DECISIONS_COLUMNS)) missing('Decisions made', ov[at].n, 'the table is `| Decision | Who | When | Why |`')
+    }
+  }
+
+  // §7: tiers, lanes, graph, stack table, and the steps.
+  const steps = h2.find((h) => /^7\.\s+Steps\b/.test(h.title))
+  if (!steps) problem(1, 'no `## 7. Steps and acceptance criteria` section')
+  else {
+    const body = sectionLines(lines, h2, steps)
+    const h3 = hs.filter((h) => h.level === 3 && body.some((l) => l.n === h.n))
+    const zero = h3.find((h) => /^7\.0\b/.test(h.title))
+    const stepHeads = h3.filter((h) => h !== zero)
+    const stepTier = new Map<string, string>() // "7.2" -> "P1"
+    if (!zero || !/^7\.0\s+Tiers, lanes and order\b/.test(zero.title)) {
+      problem(h3[0]?.n ?? steps.n, '§7 must open with `### 7.0 Tiers, lanes and order`')
+    }
+    for (const h of stepHeads) {
+      const m = TIER.exec(h.title)
+      if (!m) problem(h.n, `step "### ${h.title}" must end with its tier: \`(P0)\`, \`(P1)\` or \`(P2)\``)
+      else if (h.number) stepTier.set(h.number, m[1])
+      const end = h3.find((x) => x.n > h.n)?.n ?? Infinity
+      const sec = body.filter((l) => l.n > h.n && l.n < end && !l.inFence)
+      if (!sec.some((l) => /^\s*[-*]?\s*\*\*Owner:\*\*\s*\S/.test(l.text))) problem(h.n, `step "### ${h.title}" names no owner: add a line \`**Owner:** <name or role>\``)
+      const own = sec.map((l) => l.text).join('\n')
+      if (own.match(VTI_ID) && !sec.some((l) => /^\s*[-*]?\s*\*\*Fallback:\*\*\s*\S/.test(l.text))) {
+        problem(h.n, `step "### ${h.title}" depends on an upstream ask (${[...new Set(own.match(VTI_ID))].join(', ')}) and has no \`**Fallback:**\` that works in the same tier without it`)
+      }
+    }
+    if (zero) {
+      const end = h3.find((x) => x.n > zero.n)?.n ?? Infinity
+      const z = body.filter((l) => l.n > zero.n && l.n < end)
+      const tables = tablesIn(z)
+      const need: [string, string[]][] = [
+        ['tiers table', TIERS_COLUMNS],
+        ['lanes table', LANES_COLUMNS],
+      ]
+      for (const [what, cols] of need) {
+        if (!tables.some((t) => headerIs(t, cols))) problem(zero.n, `7.0 needs the ${what}: \`| ${cols.join(' | ')} |\``)
+      }
+      const tiersT = tables.find((t) => headerIs(t, TIERS_COLUMNS))
+      if (tiersT) {
+        const names = tiersT.rows.map((r) => r.cells[0].replace(/\W/g, ''))
+        for (const t of ['P0', 'P1', 'P2']) if (!names.includes(t)) problem(tiersT.n, `the tiers table has no row for ${t}`)
+        for (const r of tiersT.rows) if ((r.cells[1] ?? '') === '' || (r.cells[2] ?? '') === '') problem(r.n, 'every tier names an exit criterion and the demo or test that shows it')
+      }
+      const lanesT = tables.find((t) => headerIs(t, LANES_COLUMNS))
+      if (lanesT) for (const r of lanesT.rows) if ((r.cells[1] ?? '') === '') problem(r.n, `lane "${r.cells[0]}" has no owner`)
+      if (!z.some((l) => l.inFence && /^\s*`{3,}\s*mermaid\s*$/.test(l.text))) problem(zero.n, '7.0 needs a ```mermaid dependency graph with the critical path marked')
+      const stackT = tables.find((t) => headerIs(t, STACK_COLUMNS))
+      if (!stackT) problem(zero.n, `7.0 needs the stack table: \`| ${STACK_COLUMNS.join(' | ')} |\``)
+      else {
+        const byPr = new Map<number, { step: string; tier: string }>()
+        for (const r of stackT.rows) {
+          const pr = /^(\d+)\s+of\s+\d+$/.exec(r.cells[0])
+          if (!pr) problem(r.n, `"${r.cells[0]}" must read \`<n> of <N>\``)
+          else byPr.set(Number(pr[1]), { step: r.cells[1], tier: r.cells[2] })
+          if (!/^P[012]$/.test(r.cells[2])) problem(r.n, `tier "${r.cells[2]}" must be P0, P1 or P2`)
+          else if (stepTier.has(r.cells[1]) && stepTier.get(r.cells[1]) !== r.cells[2]) problem(r.n, `step ${r.cells[1]} is ${stepTier.get(r.cells[1])} in its heading but ${r.cells[2]} here`)
+        }
+        for (const r of stackT.rows) {
+          for (const m of r.cells[4].matchAll(/\bPR\s?(\d+)/g)) {
+            const dep = byPr.get(Number(m[1]))
+            if (!dep) problem(r.n, `"can start after" names PR ${m[1]}, which is not in the table`)
+            else if (dep.tier > r.cells[2]) problem(r.n, `step ${r.cells[1]} (${r.cells[2]}) cannot start after PR ${m[1]} (${dep.tier}): no tier depends on a later tier`)
+          }
+        }
+        for (const [num] of stepTier) if (!stackT.rows.some((r) => r.cells[1] === num)) problem(stackT.n, `step ${num} is not in the stack table`)
+      }
+    }
+  }
+
+  // §10: upstream asks, and every VTI id registered.
+  const asks = h2.find((h) => /^\d+\.\s+Upstream asks and blocked on whom\b/.test(h.title))
+  if (!asks) problem(h2[h2.length - 1]?.n ?? 1, 'the upstream section is titled `## N. Upstream asks and blocked on whom`')
+  else {
+    const t = tablesIn(sectionLines(lines, h2, asks)).find((x) => headerIs(x, ASKS_COLUMNS))
+    if (!t) problem(asks.n, `the upstream section needs the table \`| ${ASKS_COLUMNS.join(' | ')} |\` (an ask is recorded, not filed: no link, status or response columns)`)
+    else {
+      for (const r of t.rows) {
+        if (!/^VTI-(Q\d+|\d{2})$/.test(r.cells[1])) problem(r.n, `ask id "${r.cells[1]}" must be a VTI-Qn or VTI-NN registered in ${FINDINGS_FILE}`)
+        if (!/\bP[012]\b/.test(r.cells[2])) problem(r.n, 'say which step and tier the ask blocks, e.g. "7.3, P1"')
+        if ((r.cells[3] ?? '') === '') problem(r.n, 'every ask has a fallback that works meanwhile')
+      }
+      if (steps) {
+        const inSteps = new Set(sectionLines(lines, h2, steps).filter((l) => !l.inFence).flatMap((l) => l.text.match(VTI_ID) ?? []))
+        const listed = new Set(t.rows.map((r) => r.cells[1]))
+        for (const id of inSteps) if (!listed.has(id)) problem(t.n, `${id} is named in §7 but is not in the asks table`)
+      }
+    }
+  }
+
+  // Every id the plan names is registered upstream-findings-side.
+  const ids = new Map<string, number>()
+  for (const l of lines) if (!l.inFence) for (const m of l.text.matchAll(VTI_ID)) if (!ids.has(m[0])) ids.set(m[0], l.n)
+  if (ids.size > 0) {
+    if (!exists(FINDINGS_FILE)) problem([...ids.values()][0], `${FINDINGS_FILE} not found, so the plan's VTI ids cannot be checked`)
+    else {
+      const findings = read(FINDINGS_FILE)
+      for (const [id, n] of ids) if (!new RegExp(`\\b${id}\\b`).test(findings)) problem(n, `${id} is not registered in ${FINDINGS_FILE}: add it there under this plan's feature`)
+    }
+  }
+}
+
 /** Every problem in one file. `file` is the path used for messages and for resolving links. */
 export const checkText = (
   file: string,
@@ -596,6 +785,8 @@ export const checkText = (
     checkPlan(hs, lines, problem)
     if (h2[0]?.title === 'Overview') checkParts('plan', lines, h2, problem)
     checkSectionRefs(file, text, hs, problem)
+    const firstH2 = h2[0]?.n ?? Infinity
+    if (lines.some((l) => !l.inFence && l.n < firstH2 && l.text.trim() === TIERS_MARKER)) checkTiers(lines, hs, exists, read, problem)
   } else {
     if (h2.length === 0 || h2[0].title !== 'Summary') {
       problem(h2[0]?.n ?? 1, `a dated companion from ${FORMAT_START} on opens with \`## Summary\` as its first \`##\` heading`)
