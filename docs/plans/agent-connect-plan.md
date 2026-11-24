@@ -1,10 +1,12 @@
 # Agent connect — a person's own AI agent in Keyring
 
-**Status:** Draft. Nothing built. The transport question the design rested on is measured on the lab's starter mediator (§2.4). Phase 0 (§7) still checks the VTA Farm, the plugin's notification path and the VTA calls. One decision is open: where the plugin repository is hosted (§11). Decided on 2026-11-24: memories are created top-level by the owner's session after an `auth/whoami` check, a memory set may be widened after connect behind a biometric approval that names every room, and a memory's id is opaque and random (D32, D34, D35). The My Agent tab shows the AI agents, and the VTA's screens move under Settings as "My VTA" (§6, D26). The agent is a contact and a chat, drawn as the person's AI (§3.14, D27); it is added to a room from the composer's "+" (D28); its memories are slices, bound to it on the VTA at connect: a different set means another agent (§3.15, D31, rev 4).
+**Status:** Draft, revision 4. Nothing built. Tiers P0 to P2, each a working product on its own (§7.0). One decision is open (§11 Q1); the decisions already made, with who and when, are in the register in the Overview.
 **Roadmap epic:** none yet.
 **Scope:** A person connects their own agent (a Claude Code terminal session, with a small plugin of ours, that reaches their VTA through MCP) to Keyring by scanning a code, typing a number from their terminal, chats with it one to one, adds it to data rooms, and revokes it, with no change to the VTI stack. Anything that would need a VTI change is listed in §10, not built around.
 **Companions:** [`agent-connect-plan/`](./agent-connect-plan/) — review index in this plan's §12; running ledger of asks for VTI, OpenVTC and the working groups: [`agent-connect-plan/vti-asks.md`](./agent-connect-plan/vti-asks.md) (this plan's §10)
 **Parent / related:** [`openvtc-rooms-plan.md`](./openvtc-rooms-plan.md) (rooms; its R4 is the grant this plan builds), [`rooms-chat-plan.md`](./rooms-chat-plan.md) (the record format an agent writes), [`rich-messaging-plan.md`](./rich-messaging-plan.md) (the one-to-one chat message), [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) (Trust Tasks, VTA client), [`message-protection-plan.md`](./message-protection-plan.md) (queue limits when the agent is offline), [`peer-message-notifications-plan.md`](./peer-message-notifications-plan.md) (waking the phone for the agent's replies)
+
+<!-- plan-format: tiers -->
 
 ## Overview
 <!-- plan-part: human -->
@@ -77,7 +79,7 @@ Assumed in these mockups: the header title is a `<title>` stand-in on the room s
 
 Not drawn in the kit, because the screen is the layout of one above with its own line of copy: the locked state, the closed-mediator, version and "terminal refused" failures (the wrong-number layout), "Revoke not confirmed" and "changed its key" (the list and details layouts), the chat variant (its header is in 10's note), the community-setting refusals (the add sheet), the agent picker when more than one agent qualifies, and "Name this memory" (§6). Most of those are on the UI/UX canvas below.
 
-**The UI/UX canvas.** The same screens at full fidelity, drawn by the UI/UX lane from this copy, with the states the kit leaves out (the new-memory field, the connected screen, every list status, the agent chat and its waiting state, the Messages filters, the "+" where agents are not allowed, the agent picker, a room with a mention, what another member sees with and without proof, and the terminal). It is the visual target the built screens are checked against (this plan's §8.5 and step 10a); the kit SVGs above remain the checked source for the words. The frames are exported in [`agent-connect-plan/canvas/`](./agent-connect-plan/canvas/), one PNG each, and that folder's README names the canvas version.
+**The UI/UX canvas.** The same screens at full fidelity, drawn by the UI/UX lane from this copy, with the states the kit leaves out (the new-memory field, the connected screen, every list status, the agent chat and its waiting state, the Messages filters, the "+" where agents are not allowed, the agent picker, a room with a mention, what another member sees with and without proof, and the terminal). It is the visual target the built screens are checked against (this plan's §8.6 and step 10a); the kit SVGs above remain the checked source for the words. The frames are exported in [`agent-connect-plan/canvas/`](./agent-connect-plan/canvas/), one PNG each, and that folder's README names the canvas version.
 
 ![The UI/UX canvas, 34 frames in the canvas's order: the terminal; connect name and memories, new memory, scan, number, wrong number, approve, connected, expired; the agent list, every list status, the agent sheet, turning Answers other people on, the agent details, revoke not confirmed, changed its key, revoke, Settings with My VTA; Contacts, Messages under All, the agent chat, the agent chat waiting, Messages under People, Messages under a community; a room with a mention, the composer plus sheet, the plus where agents are not allowed, the agent picker, add to room, memory for this room, agents in this room, the member list with agents, another member's view with proof, and without proof](./agent-connect-plan/canvas/sheet.png)
 
@@ -207,6 +209,18 @@ Emulators and simulators cannot prove the biometric gate; the hardware-key appro
 | Question | Recommendation | Who decides | By when, or what it blocks |
 |---|---|---|---|
 | Where the plugin repository `keyring-agent-plugin` is hosted: the OpenVTC organisation or the owner's own | The owner's own organisation now, a transfer to OpenVTC later if they want it (§11) | Owner | Blocks step 10 (the repository is created there) |
+**Decisions made**
+
+| Decision | Who | When | Why |
+|---|---|---|---|
+| The My Agent tab is the AI agents; the VTA's stack moves under Settings as "My VTA" (D26) | Product owner | 2026-11-22 | A person meets the agent they talk to, not the server that holds their keys (§5) |
+| The agent is a contact and a chat, drawn as the person's AI (D27); added to a room from the composer's "+" (D28); any member can see whose it is (D30) | Product owner | 2026-11-23 | Agents are reached where people are, and never taken for one (§3.14, §3.16) |
+| An agent is bound on the VTA's ACL entry to a fixed memory set; a different set per room is another agent; a model never decides whether a memory is honoured (D31, replaces D29's per-room half) | Product owner | 2026-11-24 | Only the VTA's check is not driven by a model or a room's text (§3.15) |
+| Memories are created top-level after an `auth/whoami` check shows an unrestricted administrator; the parent-context route is a documented fallback only (D32) | Product owner | 2026-11-24 | A root context needs an unrestricted administrator (VTI-CTX-020), which the owner's phone is by design (§3.15) |
+| A memory's id is opaque and random, never derived from its name or the owner (D35, replaces D33) | Product owner | 2026-11-24 | A topic in an id would sit for good in ACL entries, audit rows, claims and logs (§3.15) |
+| An agent's memory set may be widened after connect behind a biometric approval that names every room; narrowing needs one confirmation (D34) | Product owner | 2026-11-24 | The set stays fixed against the agent and rooms without a new agent for each memory (§3.15) |
+| P0, P1 and P2 are iterative minimum products, each shipping and working alone (§7.0) | Product owner | 2026-11-24 | If work stops after any tier, what exists works |
+
 Everything else that was open is decided with the owner and now stated as design: a four-digit number typed into Keyring, with showing it in Keyring and typing it in the terminal recorded as a P1 option, the lockout and reply limits, the fr and pt-br review as a release gate, the repository name, the Farm check, the VDC signing route, the community setting's advisory status, the screen names and the working-group question (§5 D8, D14 to D24; reasoning in the companion).
 
 **Not doing:** `private` rooms (the VTA refuses them today); MyTerms or an "understanding" trust task (not in VTI; a P1 open design question); enforcing mention-only delivery; a "may use memory" switch per room (P1); the "only with VDCs to people in the room" setting (P1, needs VTI policy enforcement); a headless daemon (P1); presenting the VDC to a third party (P1); showing another party's agent in the member list (needs VTI); co-owning or operating rooms, including withdrawing an agent's credential at a room you own (P1); hosting the agent. Full list in §1.2.
@@ -896,32 +910,312 @@ Wireframes are in [`agent-connect-plan/mockups/`](./agent-connect-plan/mockups/)
 
 One step is one PR in the stack ([`CLAUDE.md`](./CLAUDE.md), "Implementing a plan: stacked PRs"). A step that changes `bifold/packages/*` is one PR in this repository: keyring-bifold is part of it since the one-codebase fold (#970), so there is no paired PR and no pin to bump. When the move of `bifold/packages/*` to `packages/*` (#978, #979) merges, every `bifold/packages/core/...` path in this plan reads `packages/core/...`. **Every step runs on the lab first, in full, before anything runs against the VTA Farm or another party's community** (D25): a limitation met on infrastructure we do not control cannot be instrumented, and a gap met on the lab is recorded in `docs/VTI_UPSTREAM_FINDINGS.md` in the PR of the step that meets it (step 0.2).
 
-### Phase 0: measure (no app change)
+### 7.0 Tiers, lanes and order
+
+**Policy.** P0, P1 and P2 are iterative minimum products: each tier is a complete, working, demonstrable product that builds on the one before, so if work stops after any tier what exists works. A tier's exit is "ships and works on its own", shown by a named demo and test, not "every item is done". No tier depends on a later one; within a tier steps are ordered so that stopping after any step leaves a coherent product, and steps that cannot be separated are one step. Every tier item that needs an upstream change has a stated fallback that works without it, in the same tier (each step's **Fallback** line, and the table below). Upstream asks are recorded in §10, not tracked.
+
+| Tier | Exit criterion | Demo or test |
+|---|---|---|
+| P0 | Ships and works alone: an owner connects a Claude Code session from Keyring (code, typed number, biometric approval), picks or creates the memories the VTA binds to it, sees it in Contacts and Messages as their AI agent, chats with it, changes its memories and revokes it, with the entry gone from the VTA; no room feature is on and no VTI change is needed | Demo `agent-connect-p0` on the lab and on a physical phone; test: the lab two-party run of step 11 (connect, chat, memory refused outside the bound set, revoke, key-swap evasion) and the §8 rows marked P0 |
+| P1 | Ships and works alone on P0: the owner adds the agent to an `open` or `attributed` room from the "+" or the room's info screen, it reads and writes records signed by itself, acts on the owner's mentions only, is shown in the member list and to other members, Revoke names the 4-hour tail, and a memory can be deleted with an explicit confirmation | Demo `agent-connect-p1`; test: the two-party lab run in a room (step 13) and the §8 rows marked P1 |
+| P2 | Each P2 step ships and works alone on P1; there is no all-or-nothing P2 exit (each step states its own exit) | Per step: the named demo or test in its entry |
+
+**What is in P2.** Genuinely later and each separable: "Also delete what it remembered" (7.18), the headless daemon front-end (7.19), presenting the VDC to a third party on the owner's decision (7.20), "Also cut its room access now" in a room the person owns (7.21) and a polish group (7.22: the portability display, grouping and per-agent notifications for many agents, the reverse number direction if testers need it, MyTerms). Candidates that wait on an upstream change and so have no step yet: mention enforcement (VTI-Q26), capabilities pinned to a context (VTI-Q29, D22), a room-scoped binding (VTI-Q37, a convenience), the third community setting (VTI-Q31), a private label for a context (VTI-Q45).
+
+**Re-tiering.** The first form of this section treated everything but the headless daemon as one P0. Rooms (7.13, 7.14, 7.15), "Answers other people" (§3.13, in 7.14) and the community setting (§3.8, in 7.13) now sit in P1, since an agent that is only chatted with needs none of them. Delete memory (7.16, P1) stands alone: it counts the items, names the agents and confirms, and does not need the wipe; "Also delete what it remembered" (7.18, P2) reuses 7.16's listing helper, so there is no backward dependency. Steps that straddled tiers were split: the "Answers other people" setting left the store-and-list step for 7.14, and the plugin's room, mention and hook parts became 7.15. Changing an agent's memories (D34) stays in P0, since a wrong grant must be reversible short of Revoke. Step labels in the titles ("Step 5") are the names the rest of this plan uses.
+
+**Lanes and owners.**
+
+| Lane | Owner | Steps |
+|---|---|---|
+| Keyring core | Keyring maintainers (Brendan Miller) | 7.1 to 7.5, 7.7, 7.9, 7.10, 7.13, 7.14, 7.16, 7.18, 7.20, 7.21 (the logic of each) |
+| UI/UX | UI/UX lane (the product owner's designer) | The screens of 7.7, 7.8, 7.11, 7.13, 7.14, 7.16; the canvas redraw (§6, "Canvas frames pending redraw") |
+| Plugin repository | Plugin maintainer, once §11 Q1 is decided | 7.6, 7.15, 7.19 |
+| VTA and upstream recording | Keyring maintainers | 7.1 (findings), this plan's §10 and `vti-asks.md`; the lab's VTA; no filing required |
+| Test and lab | Test lane (the lab owner) | 7.1, 7.11, 7.12, 7.17 |
+
+**Dependency graph** (the critical path is the thick red line: 7.1, 7.2, 7.5, 7.7, 7.9, 7.11, 7.12 for P0, then 7.13, 7.14 for P1).
+
+```mermaid
+flowchart LR
+  Q1["Q1 plugin host (open)"]
+  p1["7.1 measure"]
+  p2["7.2 link and pairing machine"]
+  p3["7.3 VDC"]
+  p4["7.4 VtaClient"]
+  p5["7.5 carriage"]
+  p6["7.6 plugin (P0)"]
+  p7["7.7 store, list, connect"]
+  p8["7.8 My Agent tab"]
+  p9["7.9 chat"]
+  p10["7.10 revoke"]
+  p11["7.11 screens vs mockups"]
+  p12["7.12 P0 lab and Farm"]
+  p13["7.13 add to room"]
+  p14["7.14 mentions, member list"]
+  p15["7.15 plugin rooms"]
+  p16["7.16 delete memory"]
+  p17["7.17 P1 validation"]
+  p18["7.18 wipe (P2)"]
+  p19["7.19 daemon (P2)"]
+  p20["7.20 present VDC (P2)"]
+  p21["7.21 cut room access (P2)"]
+  p22["7.22 polish (P2)"]
+  p1 --> p2
+  p2 --> p5
+  p5 --> p7
+  p7 --> p9
+  p9 --> p11
+  p11 --> p12
+  p3 --> p7
+  p4 --> p7
+  p7 --> p10
+  p10 --> p11
+  p8 --> p11
+  p5 --> p6
+  p6 --> p12
+  Q1 --> p6
+  p12 --> p13
+  p13 --> p14
+  p13 --> p15
+  p6 --> p15
+  p12 --> p16
+  p14 --> p17
+  p15 --> p17
+  p16 --> p17
+  p16 --> p18
+  p14 --> p20
+  p14 --> p21
+  p17 --> p22
+  p12 --> p19
+  linkStyle 0,1,2,3,4,5,14,15,19 stroke:#c00,stroke-width:4px
+```
+
+**The stack, and what runs in parallel.** One step is one PR. Steps 7.2 to 7.4 (pure logic) and 7.8 (the UI shell) can run in parallel; 7.7 to 7.10 need the logic; the plugin repository host (§11 Q1) blocks 7.6 and 7.15 and nothing else, and the harness of 7.5 lets Keyring's side of P0 finish without it.
+
+| PR n of N | Step | Tier | Base | Can start after |
+|---|---|---|---|---|
+| 1 of 22 | 7.1 | P0 | main | none |
+| 2 of 22 | 7.2 | P0 | PR 1 | PR 1 |
+| 3 of 22 | 7.3 | P0 | main | none |
+| 4 of 22 | 7.4 | P0 | main | none |
+| 5 of 22 | 7.5 | P0 | PR 2 | PR 2 |
+| 6 of 22 | 7.6 | P0 | keyring-agent-plugin (own repository) | PR 5 |
+| 7 of 22 | 7.7 | P0 | PR 5 | PR 3, PR 4, PR 5 |
+| 8 of 22 | 7.8 | P0 | main | none |
+| 9 of 22 | 7.9 | P0 | PR 7 | PR 7 |
+| 10 of 22 | 7.10 | P0 | PR 7 | PR 7 |
+| 11 of 22 | 7.11 | P0 | PR 10 | PR 7, PR 8, PR 9, PR 10 |
+| 12 of 22 | 7.12 | P0 | PR 11 | PR 6, PR 11 |
+| 13 of 22 | 7.13 | P1 | PR 12 | PR 12 |
+| 14 of 22 | 7.14 | P1 | PR 13 | PR 13 |
+| 15 of 22 | 7.15 | P1 | keyring-agent-plugin (own repository) | PR 6, PR 13 |
+| 16 of 22 | 7.16 | P1 | PR 12 | PR 12 |
+| 17 of 22 | 7.17 | P1 | PR 14 | PR 14, PR 15, PR 16 |
+| 18 of 22 | 7.18 | P2 | PR 16 | PR 16 |
+| 19 of 22 | 7.19 | P2 | PR 12 | PR 12 |
+| 20 of 22 | 7.20 | P2 | PR 14 | PR 14 |
+| 21 of 22 | 7.21 | P2 | PR 14 | PR 14 |
+| 22 of 22 | 7.22 | P2 | PR 17 | PR 17 |
+
+**Upstream dependencies in P0 and P1, and the real fallback** (checked against this plan on 2026-11-24).
+
+| Item | Tier | Needs | Fallback that works without it |
+|---|---|---|---|
+| Structured mentions | P1 | `mentions` record member (VTI-Q26) | The `@handle` in the body text, matched whole (§3.6) |
+| Layer 2 of an agent seen by another member | P1 | `delegation` member (VTI-Q38) | Layers 1 and 3 only for other parties' agents; layer 2 for the owner's own agents from local records (§3.16) |
+| Community setting for agents | P1 | `agents` room setting (VTI-Q31) | Advisory; not stated counts as no (§3.8, D15) |
+| VDC signing as the persona | P0 | A task that signs it (VTI-Q32) | The VDC in a Trust Task envelope the VTA signs (D19), step 0.1(f) |
+| Revoke by `deviceId` | P0 | Owner control of `acl/swap-key` (VTI-Q34) | `device/list` by `deviceId`, up to three rounds (§3.9) |
+| Creating a memory | P0 | An unrestricted administrator phone session (step 0.1(p), D32; VTI-Q39) | "New memory" absent; existing memories can be picked (§3.15). **Plan defect 1, below** |
+| Closed mediator | P0 | The mediator's administrator admits the phone and the agent's did:keys (VTI-Q36) | **None in the product.** An open mediator works. **Plan limit 2, below** |
+
+**Plan defects and limits found in this audit (for the owner).** (1) *A memoryless agent on a phone that is not an unrestricted administrator.* §3.3 gives an agent with no memory a new empty context that Keyring creates, which that phone cannot do (VTI-CTX-020), and an entry must name at least one context; no fallback is written. A candidate, not adopted: name the persona's context with the memory capabilities set to `none`. The owner decides after step 0.1(p) shows whether such a phone exists. (2) *A closed mediator.* P0 has no in-product fallback; its precondition is an action by the mediator's administrator (the Farm operators for the Farm's mediator, the lab's own for ours), recorded in §10.
+
+### 7.1 Steps 0.1 to 0.3: measure, no app change (P0)
+
+**Owner:** Test lane (the lab owner)
+
+**Fallback:** every item here is a measurement; a result that differs changes this plan, not the claim (§2.3).
 
 **0.1 Reference rung `tsp-reference/ref-25-agent-pairing`** (§2.2: the directory does not exist; the number follows the sign-in code's citations and may change) against the local lab (`scripts/openvtc/local-vti-stack/`). It is the **real, tested TypeScript probe** that replaces the 2026-11-20 throwaway (§2.4): it runs under Node with `ws` (never Bun), is laid out like `ref-04-mediator`, uses the current `@openvtc/vti-didcomm-js` (the throwaway used 0.6.2), and carries unit tests for its own packing, forward and refusal handling, with the cases of §2.4 as its first tests (delivery to a live and to an offline `did:key`, no account for the sender, anoncrypt refused, a `did:peer` naming another host, the 50th message refused, a closed mediator). *Acceptance:* (a) the §2.4 cases reproduce against the current image, and the rung records the image digest it ran on (the local `RepoDigest` and `pins.json` differ, ledger "Not for upstream"); (b) the agent registers `aiAgent` (`serviceKind`, camelCase on the wire) with `device/register` on an `application` entry and then `rooms/keys/act` is refused with `permissionDenied`, while the same entry before registration is not refused; (c) `acl/swap-key` by the entry's own subject keeps `expiresAt`, capabilities, purposes and kind, or the rung records which it drops; (d) `acl/grant/0.3` with `listed` memory capabilities and `purposes` listed is accepted; capability names as spelled; (e) after `acl/revoke`, `present`, `open` and `memory/get` are refused at the next request and an already minted leaf still reads an `open` room until it expires, with the observed time; (f) which VTA task signs a W3C VC as the persona (§2.3 item 5); (g) whether `rooms/keys/present` mints `write` and `read` for one entry; (h) the byte length of the `agent-connect` link with a real `did:key` is **at most 251** and a QR of it at level M scans, and, recorded for the design, the length of one with a `did:peer:2` pairing contact (expected over the limit, §3.2); (i) on a mediator with a deny default, whether a `did:key` agent can admit itself through the self-service ACL path (§2.3 item 10); (j) whether the refusals carry `Retry-After` (§2.3 item 11); (k) whether the VTA enforces a resource-qualified capability grant, so memory can be pinned to its context at room add (§3.3, D21); (l) the agent calls `acl/swap-key` on itself and Keyring's revoke by `deviceId` (§3.9) removes the entry under the new key, with `device/list` and a re-list showing none, and the same with two swaps in a row; also whether `device/disable` by `deviceId` makes the VTA refuse the device's authentication; (m) two agents in rooms of one persona: whether each can read and write the other's memory in the persona's context (the §3.3 overlap), whether a context can be created for one agent alone and `rooms/keys/present` still works with the persona's context plus that one (D22); (n) whether an entry's `stepUp` gates `vta/memory/put` and the room tasks for an `application` entry (§3.13, §2.3 item 12); (o) the hierarchy rule as measured (§3.15): an entry naming `a` reads and writes memory in `a/b`; an entry naming `a/b` is refused `a`; a context created under the persona's context is readable by an entry that holds only the persona's context; `vta/contexts/create` by Keyring's administrator session with a top-level id succeeds and `vta/contexts/list` returns it with its `name`.
+
 **0.1(p) Memory binding and creation, on the lab (rev 4, §3.15, D31, D32).** (1) `auth/whoami` as the phone's session: role `admin` with no contexts is an unrestricted administrator; record what the lab's and a Farm VTA's phone sessions are. (2) `vta/contexts/create` of a top-level `keyring-memory-<10 random base32 characters>` from that session, and from a scoped administrator (expected: refused, VTI-CTX-020); `Conflict` on a second create of the same id, and the redraw that follows. (3) An `application` entry whose `act` names one memory is refused `contextForbidden` on `vta/memory/*` for a second memory, with the second named by a room offer, by chat text and by a room record; and refused when `act` names a context that does not exist (`require_contexts_exist`). (4) After a room add, the entry's `act` is exactly the bound set plus the persona's context. (5) `acl/update` removing a memory from `act` refuses the agent's next memory call on it. (6) `vta/memory/list/0.3` with `includeValues: false` for counts; delete of a context holding memory and no other resource succeeds without `force` and purges the items. (7) Two identities (two `did:key`s, two entries, two memory sets) side by side, each reaching only its own set. *Acceptance:* each measured and recorded in the rung's README and §2.1; a result that differs changes this plan, not the claim.
+
 **0.2 Findings recorded.** Each item in this plan's §10 is an entry in [`agent-connect-plan/vti-asks.md`](./agent-connect-plan/vti-asks.md). An entry read from source and tried against the pinned clone in `external/` is registered as a `VTI-QN` question in [`docs/VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md) (the first eleven are VTI-Q26 to VTI-Q36; the ledger's header maps them), and becomes a `VTI-NN` finding when a lab measurement shows a defect, under that file's proof rules (measured, era named, classified as theirs, generic register). **During execution, every gap met on the lab is recorded there in the PR of the step that meets it**, not kept in the ledger alone (D25). *Acceptance:* every ledger entry names its `VTI-QN` or says why it is not registered; every gap met in a later step has an entry in the findings file in that step's PR; each measured one names the command that produced it.
+
 **0.3 Notification checks** (§3.12). A trivial channel with the development flag on the installed Claude Code. *Acceptance:* recorded results for (a) idle wake, (b) a channel with `claude --bg`, (c) the minimum Claude Code version and the authentication, (d) `asyncRewake` on an idle prompt, (e) the Monitor fallback on an idle session including a re-arm, (f) a plugin `PreToolUse` hook that denies every tool but `reply` blocks them in a session in auto mode and with `vta-mcp` tools pre-allowed, and the `Stop` hold-back of owner events works when events arrive during a busy turn; the plugin's design (§3.12) is changed if (a) fails, and if (f) fails the "Answers other people" switch is not offered in P0 (§3.13, D23).
 
-### Phase 1: P0
+### 7.2 Step 1: link flow and pairing machine (P0)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** none needed; no upstream change is required.
 
 **1. Link flow and pairing machine.** `triggerLink.ts` gains `agent-connect` (draft, `expRequired`, `allowedVidTypes: ['did:key']` (extending the flow config if it cannot yet accept a `did:key` contact), `maxLifetimeSeconds: 300`, at most 251 bytes, behind a developer flag); `modules/connected-agents/pairing.ts` is a pure state machine (§3.2) with injected clock, resolver and transport. *Acceptance:* jest covers every step and every refusal in §3.10; a link over 251 bytes or with a lifetime over 300 s is refused; every message carries `version`, another major is refused with `unsupportedVersion` and a higher minor with extra members is accepted; a handle is spent on cancel, wrong number, expiry and first claim; the number is the same on both sides for the same inputs and differs when `K_t` changes; a wrong number allows no second attempt; the number is four digits, zero-padded, the same on both sides and a four-digit entry is required; three wrong numbers in 60 minutes lock the flow for 15 minutes, a wrong number while three are still inside the window renews the lock, and the lock survives a restart; Keyring never renders the number.
-**2. Pairing carriage.** `claim`, `hello`, `approved`, `rotated`, `vdcAccepted`, `cancel` over DIDComm v2 with document proofs, sent as authcrypt inside an authcrypt forward to the recipient's mediator with no account at it; a fake session harness (`connected-agents/__tests__/fakeSession.ts`) plays the other half. *Acceptance:* the full pairing runs between Keyring's code and the harness against the lab mediator; a forged `hello` or `rotated` (bad signature, wrong continuity) is refused; an anoncrypt outer forward is never sent; the 403 and 503 refusals of §2.4 map to the copy of §6; `claim` carries the VTA, persona and name and `approved` carries `vtaDid`, `chatDid` and `ownerPersonaDid`, signed by `K_k`; `cancel` with `otherVta` or `declined` shows "Your terminal refused this pairing. Nothing was connected." and does not count toward the lockout; `unsupportedVersion` shows its copy.
-**3. VTA client additions.** `VtaClient`: `grantApplication` (0.3 shape, `act` contexts, `listed` capabilities, `keys: none`, `purposes`), `narrowOrWidenCapabilities` (`acl/update`), `entryKind` and `devicesByKind` (`device/list`, every page: `deviceId`, `consumerDid`, kind), `setStepUp` (conditional on 0.1(n)). *Acceptance:* unit tests with the older-version fallbacks and with paged `device/list` answers; an entry is found by `deviceId` after its subject changed; the rung's measurements agree (0.1).
+
+### 7.3 Step 4: VDC (P0)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** if no VTA task signs a credential as the persona (VTI-Q32), the VDC is carried in a Trust Task envelope the VTA signs (D19, step 0.1(f)).
+
 **4. VDC.** `connected-agents/vdc.ts`: build, sign (through the VTA, per 0.1(f)), verify, acceptance, status. *Acceptance:* the grant and acceptance verify, with `@context` `[credentials v2, DTG v1]` in that order, `type` `["VerifiableCredential","DTGCredential","DelegationCredential"]`, `issuerScope` `directed`, `validUntil` the earlier of `validFrom` plus 7 days and the entry's expiry; refused: a VDC without `DTGCredential` in `type`, with a missing or other-valued `issuerScope`, without `validUntil`, with a missing or empty `scope`, a grant carrying `accepts`, an acceptance carrying `scope`, an acceptance whose `accepts` is a different digest, and a wrong `@context` order; the issuer is the persona. Re-issue: a grant is re-issued when 48 hours or less remain, at app start and on Extend, only while the entry is confirmed present; never for a `revoking`, `revoked` or `expired` connection; a VDC that lapsed while the phone was offline leaves `active` unchanged and is replaced at the next opportunity.
-**5. Store and list screens.** `AgentConnection` record; "AI agents" list; Connect, number-entry and Approve screens, with the memory picker and "New memory" (`VtaClient.createContext` and `listContexts`, which exist and are called by nothing yet; `createContext` gains an optional `parent` and the whoami check of §3.15); agent details with effective access and its fixed memories (§3.3, §3.15); the "Answers other people" setting and its confirmation (§3.13); **the agent as a contact** (§3.14): `AgentContactCard` behind its token, the second source in `ListContacts.tsx`, and a tap opening the details. *Acceptance:* jest and render tests; the Contacts list shows one row per agent not `pairing` or `notFinished`, sorted among the people by name, drawn with the dashed edge, "AI agent" and "Your AI agent", with no badge and no photo, and its accessibility label contains "AI agent"; the row opens the agent details, whose first action is "Message"; the people rows and `ContactCard` render byte-identically to today where there is no agent; a memory created from the picker is top level (`keyring-memory-<slug>`, its `name` the typed one) and appears in the next listing; a context that is an ancestor of another is greyed and cannot be picked; a memory is never granted by an ancestor path (a test asserts every `act` path is one the owner picked); the number field is labelled and announces digits; turning the setting on needs the confirmation and off does not, and the switch is absent when the hook check (0.3(f)) failed; the Approve screen shows "Only continue if you ran the command in your own terminal just now."; every string and key in §6 present in the en, fr and pt-br locale files.
+
+### 7.4 Step 3: VTA client additions (P0)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** revoke and find by `deviceId` through `device/list` where the VTA does not control `acl/swap-key` (VTI-Q34, §3.9).
+
+**3. VTA client additions.** `VtaClient`: `grantApplication` (0.3 shape, `act` contexts, `listed` capabilities, `keys: none`, `purposes`), `narrowOrWidenCapabilities` (`acl/update`), `entryKind` and `devicesByKind` (`device/list`, every page: `deviceId`, `consumerDid`, kind), `setStepUp` (conditional on 0.1(n)). *Acceptance:* unit tests with the older-version fallbacks and with paged `device/list` answers; an entry is found by `deviceId` after its subject changed; the rung's measurements agree (0.1).
+
+### 7.5 Step 2: pairing carriage (P0)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** the plugin pairs through the owner's VTA's mediator with Keyring's own message types, since no VTA pairing task exists (VTI-Q27, D3).
+
+**2. Pairing carriage.** `claim`, `hello`, `approved`, `rotated`, `vdcAccepted`, `cancel` over DIDComm v2 with document proofs, sent as authcrypt inside an authcrypt forward to the recipient's mediator with no account at it; a fake session harness (`connected-agents/__tests__/fakeSession.ts`) plays the other half. *Acceptance:* the full pairing runs between Keyring's code and the harness against the lab mediator; a forged `hello` or `rotated` (bad signature, wrong continuity) is refused; an anoncrypt outer forward is never sent; the 403 and 503 refusals of §2.4 map to the copy of §6; `claim` carries the VTA, persona and name and `approved` carries `vtaDid`, `chatDid` and `ownerPersonaDid`, signed by `K_k`; `cancel` with `otherVta` or `declined` shows "Your terminal refused this pairing. Nothing was connected." and does not count toward the lockout; `unsupportedVersion` shows its copy.
+
+### 7.6 Step 10: plugin, pairing and chat (P0)
+
+**Owner:** Plugin maintainer (plugin repository lane; needs §11 Q1)
+
+**Fallback:** the plugin repository's host is open (§11 Q1); until decided, 7.5's harness lets Keyring's side finish; without the channel (VTI-Q35 does not apply here) the `inbox` and Monitor fallback delivers messages (step 0.3).
+
+**10. Plugin** (own repository, §3.12, D12). *Acceptance:* the repository has the layout of §3.12 with its unit tests in the same change; with the harness replaced by the real plugin, a pairing completes against Keyring on the lab; `vta-mcp` runs as `K_a`; the plugin pins the owner's VTA and refuses a `claim` or an `approved` naming another (nothing is enrolled), asks "Pair with ...? [y/N]" before `hello` and any number and refuses to run without a TTY, accepts chat only from `chatDid` and room records only from `ownerPersonaDid`, checks the VDC's issuer against `ownerPersonaDid`, signs the acceptance of a re-issued grant only from `chatDid`; it refuses another pairing major with the terminal message and keeps its last `settings` on an unknown `settings` version; the channel and the `inbox` plus Monitor fallback both deliver a message to an idle session (step 0.3).
+
+### 7.7 Step 5: store, list and connect screens, the agent as a contact (P0)
+
+**Owner:** Keyring core and the UI/UX lane
+
+**Fallback:** if the phone is not an unrestricted administrator (VTI-Q39), "New memory" is absent and existing memories can be picked; no memory quota, label privacy or storage-mode field exists (VTI-Q41, VTI-Q45, VTI-Q44), so Keyring counts items, keeps the label in `name` and makes no encryption claim (§3.15).
+
+**5. Store and list screens.** `AgentConnection` record; "AI agents" list; Connect, number-entry and Approve screens, with the memory picker and "New memory" (`VtaClient.createContext` and `listContexts`, which exist and are called by nothing yet; `createContext` gains an optional `parent` and the whoami check of §3.15); agent details with effective access and its fixed memories (§3.3, §3.15); **the agent as a contact** (§3.14): `AgentContactCard` behind its token, the second source in `ListContacts.tsx`, and a tap opening the details. *Acceptance:* jest and render tests; the Contacts list shows one row per agent not `pairing` or `notFinished`, sorted among the people by name, drawn with the dashed edge, "AI agent" and "Your AI agent", with no badge and no photo, and its accessibility label contains "AI agent"; the row opens the agent details, whose first action is "Message"; the people rows and `ContactCard` render byte-identically to today where there is no agent; a memory created from the picker is top level (`keyring-memory-<10 random base32 characters>`, its `name` the typed one; collision is a redraw, §3.15) and appears in the next listing; a context that is an ancestor of another is greyed and cannot be picked; a memory is never granted by an ancestor path (a test asserts every `act` path is one the owner picked); the number field is labelled and announces digits; the Approve screen shows "Only continue if you ran the command in your own terminal just now."; every string and key in §6 present in the en, fr and pt-br locale files.
+
+### 7.8 Step 5a: the My Agent tab opens on the AI agents; the VTA's stack moves under Settings (P0)
+
+**Owner:** Keyring core and the UI/UX lane
+
+**Fallback:** none needed; no upstream change is required.
+
 **5a. The My Agent tab opens on the AI agents; the VTA's stack moves under Settings as "My VTA".** `TabStack.tsx`'s `MyAgentStack` route opens on `AiAgents.tsx`; today's `MyAgentStack.tsx` screens are registered, unchanged, as a stack reached from one `Settings` row, "My VTA" (header title "My VTA"); `roomLinks.ts` `openInMyAgent` and `TabStack.tsx`'s `myAgentLinkParams` target the moved stack; the "AI agents" card on `MyAgent.tsx` is removed (D26, §6). *Acceptance:* render tests show the My Agent tab's first screen is the AI agents list and Settings has a "My VTA" row that opens the VTA home; every link that opened a VTA screen before (link flow, devices, a room's community, a member card, the profile, deep links through `myAgentLinkParams`) opens the same screen in the moved stack (the existing navigator tests pass with their targets updated); a room opened from Messages is unchanged (`MessageStack.test.tsx`); no screen in the moved stack calls the VTA "your agent" without also saying "My VTA" in its header (a copy test over the stack's titles); en, fr and pt-br carry "My VTA" (`ConnectedAgents.MyVta`).
+
+### 7.9 Step 6: one-to-one chat (P0)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** on a mediator that queues at most 50 messages per sender (VTI-Q36) Keyring stops at 20 and honours the 503.
+
 **6. One-to-one chat.** A carrier adapter so `modules/chat/` runs over the VTI mediator transport (§3.5); the chat variant for an agent peer, with the header "AI agent" and "Belongs to <owner>"; the agent chat as a `kind: 'agent'` row in Messages (§3.14); send limit and refusal handling. *Acceptance:* a message to an offline harness queues and stops after 20 with "Waiting for your session"; a 503 `e.p.limits.queue.peer` is paced, not retried at once; the existing chat tests over Credo connections still pass; the Messages list shows the agent chat under "all" and "people" with the mark, ordered by its last event among the people and rooms, and `mergeByTime`'s existing tests pass unchanged; the header never shows a person's verification badges for an agent.
-**7. Add an agent to a room.** `RoomInfo.tsx` section, add sheet, first-room capability widening through `grantAgentAccess`, "What it remembers here" (read-only, §3.15), the room offer (its `contexts` informational), the community setting (§3.8); the composer's "+" sheet with "Add a file" and "Add my agent" (§3.15, D28). *Acceptance:* refused when kind is not `ai-agent`; the add sheet shows the read-access notice, and the memory notice with the persona's context name whenever the add widens `act`, before the button is focusable, and the effective-access lines show the persona's context for every agent added to a room; `no` and not stated both disable the action and only `yes` allows it, from the info screen and from the "+" sheet alike; the "+" picks a file at once when the owner has no `active` agent and opens the sheet when they have one, with "Add my agent" absent when every agent is in the room; the add sheet carries "Members of this room will see that this agent belongs to you." before the button is focusable; there is no per-room memory choice: the sheet "What it remembers here" shows the agent's bound set read-only and offers "Connect another agent"; the entry's `act` after the add is exactly the bound memories plus the persona's context (never anything else), checked by reading the entry back; "Agents in this room" rows show "Memory: <names>" and open the sheet.
-**8. Mentions, mark, member list, agent sheet.** Composer insertion; `mentions` written where the profile lists it, text fallback otherwise; `byAgent` set from the local `AgentConnection` so the existing mark shows; the "Agents" section of the member list (§3.6); the agent bottom sheet reads the issuer of the VDC and shows "Answers other people". The handle is name plus a DID-derived suffix, fixed at step 10 of the pairing, and the composer inserts it whole. *Acceptance:* the handle for fixed vectors (name and `K_a`) is the same in Keyring and the plugin; two agents with one name get different handles and a suffix collision extends to six characters; the composer inserts `@notes-helper-7f3k`-style text, never the bare name; the body is byte-identical to today's where the profile does not list `mentions` apart from the `@<handle>` text; the mark shows for own agents and for no other author; the Agents section lists the owner's agents for the room, appears when `listCommunityMembers` is unavailable, never adds an agent to the community's list, and opens the sheet with the owner and the setting; the sheet names the owner from the VDC. **An agent seen by another member (§3.16):** `delegationRecord.ts` writes the agent's `memberProfile` with `delegation` only where the room's profile lists it (a test with a profile that does and one that does not; the body is byte-identical to a plain name record where it does not); a reader verifies the pair (issuer a persona DID, subject the author, acceptance signed by the author, `accepts` the grant's digest) and refuses a pair whose subject is not the author, whose acceptance is unsigned or by another key, or whose grant is a VDC that §7 step 4 refuses; with a verified pair the sheet shows the mark, "Belongs to <owner>", "Verified from its delegation credential", "Not a member of this community…", the handle and "Its identity"; without one it shows the DID, "calls itself <name>" where a name exists, "Keyring can't tell who this belongs to." and no mark; a `did:webvh` author with a verified agent name shows it and a `did:key` shows "No verified name"; the member list's Agents section includes a verified other agent with the second caption and never on a claim alone.
+
+### 7.10 Step 9: revoke (P0)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** `device/list` by `deviceId` and up to three rounds (VTI-Q34, §3.9).
+
 **9. Revoke.** `revoke.ts` per §3.9. *Acceptance:* order is ACL entry first; the agent is found by `deviceId` after it swapped its key (once and twice), and its entry under the new key is revoked; an empty `revokeSubject` answer is never reported as success; a partial or failed listing leaves the connection `revoking` with "Revoke not confirmed", which survives a restart and clears only after a full listing shows no entry; the app-start reconcile records a changed key (`keyChanged`, "<name> changed its key") without moving the chat; a failed ACL call leaves `revoking` and retries; the sheet says "up to 4 hours" and the string "instant" appears nowhere in the locale files (a test greps).
-**10. Plugin** (own repository, §3.12, D12). *Acceptance:* the repository has the layout of §3.12 with its unit tests in the same change; with the harness replaced by the real plugin, a pairing completes against Keyring on the lab; `vta-mcp` runs as `K_a`; the plugin pins the owner's VTA and refuses a `claim` or an `approved` naming another (nothing is enrolled), asks "Pair with ...? [y/N]" before `hello` and any number and refuses to run without a TTY, accepts chat only from `chatDid` and room records only from `ownerPersonaDid`, checks the VDC's issuer against `ownerPersonaDid`, signs the acceptance of a re-issued grant only from `chatDid`; it refuses another pairing major with the terminal message and keeps its last `settings` on an unknown `settings` version; it matches only its own whole handle; it drops a message not authored by the owner's persona (gated on the author, not the room), fences room content, and does not declare `claude/channel/permission`; with the setting on and the hook check passed, the hook denies every tool but `reply` while the marker is `other` and owner events wait for `Stop`; with "Answers other people" off a non-owner mention gets the fixed reply of §3.13 once per author per room per 60 minutes and no more than 20 per hour, the model sees nothing; the channel and the `inbox` plus Monitor fallback both deliver a message to an idle session (step 0.3). **Release gate:** the fr and pt-br wording of §3.13 has been reviewed and approved by a native reader of each language, the reviewer's name and date are recorded in the plugin repository's release checklist, and the plugin's release step fails while either is missing (D16).
-**10a. Every screen on an emulator, against the mockups.** After steps 5 to 9 have merged and before step 11: the app is run on the Android emulator and the iOS simulator with the lab stack, the flows of §6 are walked by hand (connect, approve, the list, the details, Contacts and Messages, the "+" sheet, add to room, What it remembers here, the member list, the identity sheet, Revoke, Settings "My VTA", and the failure states that can be reached without a device), and **every screen and state in §6 is screenshotted** and placed beside its mockup: the kit SVG and, where one exists, the UI/UX canvas frame (§8.5). *Acceptance:* a dated companion holds the pairs (screenshot, mockup, platform, app and plan commit) for every screen in §6's "States covered by mockups" list and every state the walk reached; every difference between a screenshot and its mockup is listed with one of three dispositions, **fixed** (the app changed, with the PR), **mockup updated** (the copy or layout changed for a stated reason; §6, the kit spec and the canvas change in the same PR), or **accepted** (platform rendering only: fonts, safe areas, system controls), and a difference with no disposition is a defect that blocks step 11; a screen, button or state that exists in the app and not in §6 is listed as such with the reason it was needed, and §6 and the mockups gain it in the same PR, or it is removed; a screen or control in §6 that the app lacks is a defect; the brief tests are the step's own jest suites plus the single-device smoke e2e (`yarn e2e:smoke`) on the same build. Hardware attestation and biometrics are not proven here (§8.4).
+
+### 7.11 Step 10a: every screen on an emulator, against the mockups (P0)
+
+**Owner:** Test lane (the lab owner)
+
+**Fallback:** none needed; no upstream change is required.
+
+**10a. Every screen on an emulator, against the mockups.** After steps 5 to 9 have merged and before step 11: the app is run on the Android emulator and the iOS simulator with the lab stack, the flows of §6 are walked by hand (connect, approve, the list, the details, Contacts and Messages, the "+" sheet, add to room, What it remembers here, the member list, the identity sheet, Revoke, Settings "My VTA", and the failure states that can be reached without a device), and **every screen and state in §6 is screenshotted** and placed beside its mockup: the kit SVG and, where one exists, the UI/UX canvas frame (§8.6). *Acceptance:* a dated companion holds the pairs (screenshot, mockup, platform, app and plan commit) for every screen in §6's "States covered by mockups" list and every state the walk reached; every difference between a screenshot and its mockup is listed with one of three dispositions, **fixed** (the app changed, with the PR), **mockup updated** (the copy or layout changed for a stated reason; §6, the kit spec and the canvas change in the same PR), or **accepted** (platform rendering only: fonts, safe areas, system controls), and a difference with no disposition is a defect that blocks step 11; a screen, button or state that exists in the app and not in §6 is listed as such with the reason it was needed, and §6 and the mockups gain it in the same PR, or it is removed; a screen or control in §6 that the app lacks is a defect; the brief tests are the step's own jest suites plus the single-device smoke e2e (`yarn e2e:smoke`) on the same build. Hardware attestation and biometrics are not proven here (§8.4).
+
+### 7.12 Step 11: P0 lab and Farm validation (P0)
+
+**Owner:** Test lane (the lab owner)
+
+**Fallback:** the lab pass is the P0 exit; the Farm pass is recorded when its image versions and mediator ACL allow (§10, not VTI).
+
 **11. Lab and Farm validation.** Two-party lab run (owner and agent), including the refusal cases and the 4-hour tail run, then one pass of the delivery and happy-path cases on the VTA Farm (§8.3, D18). *Acceptance:* §8 rows marked lab and Farm pass; the long-running tail measurement is recorded; physical-phone run done (§8.4).
 
-### Phase 2: P1
+**Exit: the `agent-connect-p0` demo on the lab and a physical phone (§7.0).**
 
-The headless daemon front-end (§3.12); presenting the VDC to a third party on the owner's decision; the third community setting (when VTI enforces it); the portability display ("this agent can combine memory X and room Y"); MyTerms (D21); multi-agent polish (grouping, per-agent notifications); "Also cut its room access now" where the person owns the room (§3.9); the reverse number direction, if testers need it (D8); per-agent memory contexts pinned by `resource` (D22); mention enforcement (when VTI delivers it); "Also delete what it remembered"; presenting the VDC outside the rooms the agent is in (§3.16 covers the rooms in P0). Each gets its own steps when scheduled.
+### 7.13 Step 7: add an agent to a room (P1)
+
+**Owner:** Keyring core and the UI/UX lane
+
+**Fallback:** the community's `agents` setting is advisory and not stated counts as no (VTI-Q31, §3.8); room capabilities are added only after Keyring reads the consumer kind back (VTI-Q28, §3.3).
+
+**7. Add an agent to a room.** `RoomInfo.tsx` section, add sheet, first-room capability widening through `grantAgentAccess`, "What it remembers here" (read-only, §3.15), the room offer (its `contexts` informational), the community setting (§3.8); the composer's "+" sheet with "Add a file" and "Add my agent" (§3.15, D28). *Acceptance:* refused when kind is not `ai-agent`; the add sheet shows the read-access notice, and the memory notice with the persona's context name whenever the add widens `act`, before the button is focusable, and the effective-access lines show the persona's context for every agent added to a room; `no` and not stated both disable the action and only `yes` allows it, from the info screen and from the "+" sheet alike; the "+" picks a file at once when the owner has no `active` agent and opens the sheet when they have one, with "Add my agent" absent when every agent is in the room; the add sheet carries "Members of this room will see that this agent belongs to you." before the button is focusable; there is no per-room memory choice: the sheet "What it remembers here" shows the agent's bound set read-only and offers "Connect another agent"; the entry's `act` after the add is exactly the bound memories plus the persona's context (never anything else), checked by reading the entry back; "Agents in this room" rows show "Memory: <names>" and open the sheet.
+
+### 7.14 Step 8: mentions, mark, member list, agent sheet, "Answers other people" (P1)
+
+**Owner:** Keyring core and the UI/UX lane
+
+**Fallback:** the `@handle` text convention and layers 1 and 3 of the identity sheet where no `mentions` or `delegation` member exists (VTI-Q26, VTI-Q38, §3.6, §3.16).
+
+**8. Mentions, mark, member list, agent sheet.** Composer insertion; `mentions` written where the profile lists it, text fallback otherwise; `byAgent` set from the local `AgentConnection` so the existing mark shows; the "Agents" section of the member list (§3.6); the agent bottom sheet reads the issuer of the VDC and shows "Answers other people", the setting and its confirmation (§3.13: turning it on needs the confirmation and off does not, and the switch is absent when the hook check (0.3(f)) failed). The handle is name plus a DID-derived suffix, fixed at step 10 of the pairing, and the composer inserts it whole. *Acceptance:* the handle for fixed vectors (name and `K_a`) is the same in Keyring and the plugin; two agents with one name get different handles and a suffix collision extends to six characters; the composer inserts `@notes-helper-7f3k`-style text, never the bare name; the body is byte-identical to today's where the profile does not list `mentions` apart from the `@<handle>` text; the mark shows for own agents and for no other author; the Agents section lists the owner's agents for the room, appears when `listCommunityMembers` is unavailable, never adds an agent to the community's list, and opens the sheet with the owner and the setting; the sheet names the owner from the VDC. **An agent seen by another member (§3.16):** `delegationRecord.ts` writes the agent's `memberProfile` with `delegation` only where the room's profile lists it (a test with a profile that does and one that does not; the body is byte-identical to a plain name record where it does not); a reader verifies the pair (issuer a persona DID, subject the author, acceptance signed by the author, `accepts` the grant's digest) and refuses a pair whose subject is not the author, whose acceptance is unsigned or by another key, or whose grant is a VDC that §7 step 4 refuses; with a verified pair the sheet shows the mark, "Belongs to <owner>", "Verified from its delegation credential", "Not a member of this community…", the handle and "Its identity"; without one it shows the DID, "calls itself <name>" where a name exists, "Keyring can't tell who this belongs to." and no mark; a `did:webvh` author with a verified agent name shows it and a `did:key` shows "No verified name"; the member list's Agents section includes a verified other agent with the second caption and never on a claim alone.
+
+### 7.15 Step 10b: plugin, rooms, mentions and "Answers other people" (P1)
+
+**Owner:** Plugin maintainer (plugin repository lane; needs §11 Q1)
+
+**Fallback:** the plugin's hook is the primary control where the VTA's step-up gate is undocumented (VTI-Q35, §3.13).
+
+**10b. Plugin: rooms, mentions and "Answers other people"** (own repository, §3.12, §3.13). *Acceptance:* the plugin it matches only its own whole handle; it drops a message not authored by the owner's persona (gated on the author, not the room), fences room content, and does not declare `claude/channel/permission`; with the setting on and the hook check passed, the hook denies every tool but `reply` while the marker is `other` and owner events wait for `Stop`; with "Answers other people" off a non-owner mention gets the fixed reply of §3.13 once per author per room per 60 minutes and no more than 20 per hour, the model sees nothing. **Release gate:** the fr and pt-br wording of §3.13 has been reviewed and approved by a native reader of each language, the reviewer's name and date are recorded in the plugin repository's release checklist, and the plugin's release step fails while either is missing (D16).
+
+### 7.16 Step 12: delete memory (P1)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** Keyring counts memory items itself because the VTA's delete preview omits them (VTI-Q40, §3.15).
+
+**12. Delete memory** (memory management, §3.15). A memories list in the agent details and Settings with each memory's item count and last change; "Delete" counts the items itself (`vta/memory/list/0.3`, `includeValues: false`), names the agents bound to it, asks "Delete "<memory>"?" and sends `force` only after the confirmation. *Acceptance:* a memory holding only items is never deleted without the confirmation; the agents named are those whose `act` names the id; the count warning shows above the configured count; stand-alone: it needs no wipe and no room. **Exit: a memory can be deleted safely on a P0 product.**
+
+### 7.17 Step 13: P1 lab validation (P1)
+
+**Owner:** Test lane (the lab owner)
+
+**Fallback:** none needed; no upstream change is required.
+
+**13. P1 lab validation.** The two-party lab run in a room (owner, agent, a second member): add from the "+", read, write, a mention by the owner and by another member (fixed reply), the member list and the identity sheet, Revoke with the 4-hour tail named, the VTA Farm pass of the delivery cases (§8.3). *Acceptance:* §8 rows marked P1 pass. **Exit: `agent-connect-p1` demo.**
+
+### 7.18 Step 14: also delete what it remembered (P2)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** a client-side loop where no bulk clear exists (VTI-Q43, §3.15).
+
+**14. Also delete what it remembered** (§3.15). The client-side wipe loop on Revoke and on "Change memories": list, delete per key, re-run, complete on an empty final listing; builds on step 12's listing helper. *Acceptance:* a failure on page two and on one delete leaves a re-runnable state; the copy says "erases", never "no trace". **Exit: Revoke can also erase what the agent wrote.**
+
+### 7.19 Step 15: headless daemon front-end (P2)
+
+**Owner:** Plugin maintainer (plugin repository lane; needs §11 Q1)
+
+**Fallback:** none needed; no upstream change is required.
+
+**15. Headless daemon front-end** (§3.12). *Acceptance:* the plugin's core runs without a terminal session and pairs and chats as in P0; the TTY question is answered by an approved non-interactive path the owner enables. **Exit: an agent that runs without Claude Code open.**
+
+### 7.20 Step 16: present the VDC to a third party (P2)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** short validity stands in for status (VTI-Q32, D19).
+
+**16. Present the VDC to a third party on the owner's decision** (§3.4, §3.16). *Acceptance:* a consent screen, one presentation, a copy that says the credential stays valid to its `validUntil` after Revoke. **Exit: whose-agent evidence outside the rooms the agent is in.**
+
+### 7.21 Step 17: also cut its room access now (P2)
+
+**Owner:** Keyring maintainers (Keyring core lane)
+
+**Fallback:** the room's owner can withdraw it today; where the person is not the owner nothing closes the 4-hour tail (VTI-Q30, §3.9).
+
+**17. "Also cut its room access now"** in a room the person owns (§3.9): `rooms/owner/revoke`. *Acceptance:* offered only where the person owns the room; the 4-hour tail ends. **Exit: Revoke closes the tail where the person owns the room.**
+
+### 7.22 Step 18: polish and later ideas (P2)
+
+**Owner:** Keyring core and the UI/UX lane
+
+**Fallback:** none needed; no upstream change is required.
+
+**18. Polish and later ideas** (each alone): the portability display ("this agent can combine memory X and room Y"); grouping and per-agent notifications for many agents; the reverse number direction if testers need it (D8); MyTerms (D21). Candidates waiting on an upstream change are in §7.0.
+
 
 ## 8. Testing
 
@@ -945,7 +1239,7 @@ Biometric approval (hardware key), the scan path with a real camera, and backgro
 
 None were specified for this plan. The tier choices above are the plan's own.
 
-### 8.5 Screens against the mockups
+### 8.6 Screens against the mockups
 
 Two sets of mockups describe the screens, and the implementation is checked against both (step 10a):
 
@@ -965,38 +1259,45 @@ Two sets of mockups describe the screens, and the implementation is checked agai
 - **Rollout.** The `agent-connect` flow and the "AI agents" screens are behind a developer flag until Phase 0 and step 11 pass; then on for testers, then default. **Rollback:** the flag off hides the screens and the flow; existing connected agents keep working at the VTA and are revocable from `pnm`; their records stay.
 - **Retention.** Revoked and expired records and chats stay until the owner deletes them.
 
-## 10. Blocked, and on whom (VTI changes and findings)
+## 10. Upstream asks and blocked on whom
 
-Each is an entry in the running ledger [`agent-connect-plan/vti-asks.md`](./agent-connect-plan/vti-asks.md) (ids AC-01 and on; items 13 to 15 are AC-21 to AC-23), which also holds the mediator limits measured in this plan's §2.4 and the narrower VDC question (AC-14). Entries are registered in `docs/VTI_UPSTREAM_FINDINGS.md` as `VTI-QN` questions once read against the pinned clone, and become `VTI-NN` findings when a lab measurement shows a defect (this plan's §7 step 0.2, D25); the first thirteen are VTI-Q26 to VTI-Q38, mapped in the ledger's header, and that file's "Findings by feature" index lists them under this plan's feature. Nothing is built around a gap by sending a different message than the VTA expects. The table below is the plan's own numbering of the ones the design depends on.
+Asks are **recorded** here and in the running ledger [`agent-connect-plan/vti-asks.md`](./agent-connect-plan/vti-asks.md) (ids AC-01 and on), which also holds the mediator limits measured in this plan's §2.4. Nothing is required to be filed or tracked, and no step waits on an answer: each ask names what it blocks and what works meanwhile. An ask read from source and tried against the pinned clone is registered as a `VTI-QN` question in [`docs/VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md). "Item N" keeps the numbers other sections cite.
 
-| # | Needed | Why | Blocks |
+| Ask | Id | Blocks (step, tier) | Fallback meanwhile |
 |---|---|---|---|
-| 1 | `acl/grant` (or the entry) carries the consumer kind, or the VTA refuses `rooms/keys/act` for an `application` entry that has not registered | Closes the window before `device/register`; today a delegate is only what the agent says it is (`room_act.rs`) | Nothing in P0 (mitigated by §3.3 and D6) |
-| 2 | Capabilities that can be bound to one context (resource-qualified grants), or room presentation that does not need the persona's context in `act` | Adding a room widens memory to the persona's context (§3.3) | P1 memory-per-room and the portability display |
-| 3 | Deliver to an agent only the records that mention it (mention filtering), or a mention-scoped read leaf | Today the agent can read the whole room to see mentions; mention-only is behaviour, not enforced | Mention enforcement (P1). Not P0 |
-| 4 | Register `mentions` as a room record member (`rooms/_shared`) and let a profile list it | Structured mentions are not a registered member (§3.6) | Structured mentions; the text fallback ships first |
-| 5 | The author's chain, or the agent's VDC, available with a record or as a registered record kind | So other clients can show an agent's owner and tell agents from members (§3.6) | The cross-client "who does this belong to" (P1) |
-| 6 | A room-level setting for whether agents may be added (`agents`), in the community's room record and the room profile; and policy enforcement for "only with VDCs to people in the room" | No setting exists; a Keyring-only check is advisory (§3.8) | The community setting (P0 is advisory); the third setting (P1) |
-| 7 | A VTA pairing task (`agent/pair`), or the `agent-connect` trigger flow registered in the links specification; and its Trust Task type URIs | Pairing is built from existing parts but names unregistered types; a VTA-side flow would remove the plugin's pairing code | Production use of the flow |
-| 8 | A member-side way to withdraw an agent's leaf at a host (a `rooms/keys` task, or a revocation the member can sign for a credential it issued) | Only the room's owner can withdraw it today (§3.9); a member has no way to close the 4-hour tail | Closing the tail in rooms the person does not own |
-| 9 | Document: `vta-mcp.md` §2.3 says per-entry capability overrides are deferred; they are shipped | Reduces the next reader's confusion | Nothing |
-| 10 | A status-list hosting path for a persona-issued VDC (or a statement that short validity is the norm) | §3.4, D19 | The VDC's `credentialStatus` |
-| 11 | Mediator: a documented per-sender queue cap (50 on the starter, 503 `e.p.limits.queue.peer`) with a `Retry-After`; a documented self-service ACL path for a `did:key` on a closed mediator; a refusal at send, not a silent loss, for a `did:peer` that names another host | Measured §2.4; ledger AC-09, AC-10, AC-11 | Nothing in P0 (Keyring stops at 20 and the plugin prints only a safe `did:peer`); the closed-mediator case needs the mediator's administrator |
-| 12 | The narrower VDC question: may a VDC carry ownership without attributing acts to the owner, and is the VAC chain, as provenance only, the better record (ledger AC-14) | §3.4 | Nothing. Presenting the VDC to third parties (P1) |
-| 13 | An owner's control over `acl/swap-key` for an agent entry (an administrator may forbid or require approval for a swap of a delegate's entry), and `acl/revoke` addressed by `deviceId` | A swap is self-service and copies the whole entry, so an agent can evade a revoke by subject (§3.9); Keyring works around it with `device/list`, which costs a listing and up to three rounds | Nothing in P0 (§3.9) |
-| 14 | An owner-visible signal when an entry's subject changes (a notification or an event Keyring can subscribe to; the VTA writes an `acl.swap` audit row but nothing delivers it) | Keyring learns of a swap only at app start or when it lists (§3.9) | Nothing in P0 |
-| 15 | Documentation of which task types an entry's `stepUp` gates, and what `require` accepts, for an `application` entry | §3.13 would use it while "Answers other people" is on; today it is unmeasured (§2.3 item 12) | Nothing in P0; the hook is the primary control |
-| 17 | Register **`delegation`** as a `memberProfile` record member (`rooms/_shared`): the author's VDC grant and acceptance, so a room's profile can list it and any client can verify whose agent an author is (ledger AC-25, VTI-Q38) | A member who taps an agent should see whose it is and what it is (§3.16); today nothing an author writes about itself can carry it, and the leaf chain is not shown to members (item 5) | Layer 2 of §3.16 for another party's agents (own agents show it from local records) |
-| 16 | A **room-scoped context binding**: an entry whose `act` can differ by room (which contexts the holder may use while acting in room R), or a presenter leaf that carries the contexts its holder may use, enforced on `vta/memory/*` (ledger AC-24, VTI-Q37) | **A convenience, not the boundary (rev 4, D31).** The boundary is one ACL entry per distinct memory set, which the VTA enforces today (§3.15). This ask would let one agent identity hold different sets in different rooms | Nothing, in P0 or P1 |
-| 18 | A way for a **non-super-admin** session to create top-level contexts, for example a `context-create` entry allowed to create roots under a reserved prefix, and a way for a scoped administrator to rename a context's display `name` (ledger AC-26, VTI-Q39) | A root context needs unrestricted act authority (VTI-CTX-020; `operations/contexts.rs:125-126`) and `vta/contexts/update` is super-admin only (`:238`) | Nothing if the owner's phone is a super-admin (§3.15, D32). A phone that is not needs the fallback |
-| 19 | `vta/contexts/preview-delete` and `delete` count **memory items** with the rest of what a context holds (ledger AC-27, VTI-Q40) | `NotEmpty` and the preview count sub-contexts, keys, DIDs, ACL entries and templates, not memory; `purge_context` deletes memory anyway (`:1487`) | Nothing: Keyring counts items itself and confirms explicitly (§3.15) |
-| 20 | A per-context **memory quota and item lifetime**: optional `max_items` and `max_bytes` in the context policy, per-context counters updated in the same write batch as `put` and `delete`, a `quotaExceeded` error, a server-wide default cap, a heavier `put-many` weight and an optional `ttl` (ledger AC-28, VTI-Q41) | None is documented or enforced beyond 64 KiB per item and 512 bytes per key; the context policy's `quotas` count operations and are never applied to memory | Nothing: client-side monitoring (§3.15) |
-| 23 | The VTA's **storage protection mode** (plain, hardened or TEE) readable by a client, for example in a status or `whoami` answer (ledger AC-31, VTI-Q44) | Memory is encrypted at rest only where the VTA holds a storage key; a client cannot tell, so it cannot say what protects a person's memory | Nothing: the copy makes no claim (§3.15) |
-| 24 | A **private or sealed label for a context**, so the topic a memory is named for need not be stored in plaintext in `name` for every administrator to read (ledger AC-32, VTI-Q45; deferred, not requested now) | `name` (1 to 256 characters) and `description` (1,024) are plaintext in the context record, shown to anyone who reaches the context, and mutable by a super-admin only | Nothing: the label is stored in `name` for now (§3.15, D35) |
-| 21 | **Larger or binary memory values**, for example a referenced blob store, so a file can be remembered (ledger AC-29, VTI-Q42) | Values are UTF-8 text up to 64 KiB | Nothing: files are not memory in P0 (§3.15) |
-| 22 | A **bulk clear** of a context or key prefix, and a statement of what a tombstone keeps (ledger AC-30, VTI-Q43) | A wipe is one `vta/memory/delete` per key and leaves tombstones that keep each key for a retention period (default 30 days) | Nothing: a client-side loop (§3.15) |
+| Item 1: `acl/grant` (or the entry) carries the consumer kind, or the VTA refuses `rooms/keys/act` for an `application` entry that has not registered | VTI-Q28 | 7.13, P1 | Room capabilities are added only after Keyring reads the kind back (§3.3, D6) |
+| Item 2: capabilities that can be bound to one context (resource-qualified grants), or room presentation that does not need the persona's context in `act` | VTI-Q29 | 7.13, P1 | The persona's context exposure is stated and shown; one memory set per agent (D22, D31) |
+| Items 3 and 4: deliver to an agent only the records that mention it; register `mentions` as a room record member | VTI-Q26 | 7.14, P1 | The `@handle` in the body text, matched whole; mention-only is behaviour (§3.6) |
+| Item 5: the author's chain, or the agent's VDC, available with a record | VTI-Q33 | 7.14, P1 | Layers 1 and 3 of the identity sheet; the owner's own agents from local records (§3.16) |
+| Item 6: a room-level `agents` setting (and policy enforcement for the third value) | VTI-Q31 | 7.13, P1 | Advisory; not stated counts as no (§3.8, D10, D15) |
+| Item 7: a VTA pairing task, or the `agent-connect` flow registered in the links specification | VTI-Q27 | 7.5, P0 | The plugin pairs through the owner's VTA's mediator with Keyring's own placeholder types (D3) |
+| Item 8: a member-side way to withdraw an agent's leaf at a host | VTI-Q30 | 7.21, P2 | The room's owner can withdraw it; Revoke says up to 4 hours (§3.9) |
+| Item 9: `vta-mcp.md` §2.3 still says per-entry capability overrides are a deferred gap; they are shipped (a documentation correction; ledger AC-33) | VTI-Q46 | 7.1, P0 | Code and the later `personal-ai-agents.md` are taken as current (this plan's §2.1) |
+| Item 10: a task that signs a credential as the persona, and status hosting for it | VTI-Q32 | 7.3, P0 | The VDC in a Trust Task envelope the VTA signs; short validity, no status entry (D19) |
+| Item 11: a documented per-sender queue cap with `Retry-After`; a documented self-service ACL path for a `did:key` on a closed mediator; a refusal at send for a `did:peer` naming another host | VTI-Q36 | 7.9, P0 | Keyring stops at 20 messages and honours the 503; the plugin prints only a safe `did:peer`. **A closed mediator has no in-product fallback: it needs the mediator's administrator (see below)** |
+| Items 13 and 14: an owner's control over `acl/swap-key` and `acl/revoke` by `deviceId`; an owner-visible signal when an entry's subject changes | VTI-Q34 | 7.10, P0 | `device/list` by `deviceId` and up to three rounds; reconcile at app start (§3.9) |
+| Item 15: which task types an entry's `stepUp` gates for an `application` entry | VTI-Q35 | 7.15, P1 | The plugin's tool-denying hook is the primary control (§3.13) |
+| Item 16: a room-scoped context binding (a convenience since rev 4) | VTI-Q37 | 7.13, P1 | Not needed: one agent per distinct memory set (D31) |
+| Item 17: register `delegation` as a `memberProfile` record member | VTI-Q38 | 7.14, P1 | The owner's own agents from local records; other parties' agents show layers 1 and 3 (§3.16) |
+| Item 18: a non-super-admin session creating top-level contexts, and renaming a context's `name` | VTI-Q39 | 7.7, P0 | Direct creation after the `auth/whoami` check; otherwise "New memory" is absent (§3.15, D32). **Plan defect 1 in §7.0** |
+| Item 19: memory items counted in the context delete preview | VTI-Q40 | 7.16, P1 | Keyring counts items itself and confirms explicitly (§3.15) |
+| Item 20: a per-context memory quota and item lifetime | VTI-Q41 | 7.7, P0 | Client-side count, a warning and Revoke (§3.15) |
+| Item 21: larger or binary memory values | VTI-Q42 | 7.7, P0 | A short text note; files are not memory (§3.15) |
+| Item 22: a bulk clear of a context or prefix, and what a tombstone keeps | VTI-Q43 | 7.18, P2 | A client-side loop (§3.15) |
+| Item 23: the VTA's storage protection mode readable by a client | VTI-Q44 | 7.7, P0 | The copy makes no claim of encryption (§3.15) |
+| Item 24: a private or sealed label for a context (deferred, not requested now) | VTI-Q45 | 7.7, P0 | The label is stored in `name`; administrators see it (§3.15, D35) |
 
-Blocked on someone else (not VTI): the Farm's image versions and its mediator's ACL treatment of a `did:key` (§8.3); Anthropic's allowlist for a channel plugin (ledger AC-20; no P0 block, the development flag and the fallback cover it).
+**Blocked on someone else (not VTI).**
+
+| Item | Owner | Blocks (step, tier) | Fallback meanwhile |
+|---|---|---|---|
+| The narrower VDC question: may a VDC carry ownership without attributing acts to the owner, and is the VAC chain the better provenance record (ledger AC-14, a question for the DTG working group) | The product owner, to the DTG working group | 7.20, P2 (presenting the VDC); nothing in P0 or P1 | The VDC is the owner's record and is shown only in the rooms the agent is in (§3.4, D4) |
+| Anthropic's allowlist for a custom channel plugin (ledger AC-20) | Anthropic | 7.6, P0 (none in practice) | The development flag, and the `inbox` plus Monitor fallback (§3.12, D13) |
+| The Farm's image versions | The Farm operators | 7.12, P0 (the Farm pass only) | The lab pass is the P0 exit; the Farm pass is recorded when the versions allow (§8.3, D18) |
+| The Farm mediator's ACL treatment of a `did:key` third party | The Farm operators (the mediator's administrator) | 7.12, P0 (the Farm delivery cases) | The lab's starter mediator measured it (§2.4); the Farm is measured when its administrator allows |
+| **The mediator administrator's action for a closed mediator:** the mediator's default ACL denies, so its administrator must admit the phone's pairing key and the agent's did:keys before pairing works (§3.2, "Closed mediators"; VTI-Q36) | The mediator's administrator (the Farm operators for the Farm's; the lab's own for ours) | 7.5, P0 (a closed mediator only) | **None in the product**; an open mediator works. Plan limit 2 in §7.0 |
+
+**No asks exist** to `dtgwg-trust-tasks-tf` or to `bifold`: Keyring and bifold are one codebase (#970), and the message type URIs of the pairing are Keyring's own placeholders, whose registration is a request to the links specification (VTI-Q27, in the table above).
 
 ## 11. Open questions
 
