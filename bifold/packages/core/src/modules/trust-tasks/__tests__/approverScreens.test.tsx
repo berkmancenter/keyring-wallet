@@ -18,8 +18,6 @@ import * as approverRole from '../approverRole'
 import { ROLE_ACTIONS } from '../approverRoleSpec'
 import ApproverOfferModal, { ApproverOfferIds, resetPutOff } from '../components/ApproverOfferModal'
 import { trustedApproversView } from '../module/trustedApprovers'
-import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
-import { setStateVerifiedApproversEnabled } from '../module/stateVerifiedApproversFlag'
 import { TRUSTED_APPROVERS_REMOTE_OFF, setTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent, type TrustedApproversState } from '../module/vtaAgent'
 import { DeviceActionRefused } from '../module/vtaOwner'
@@ -126,7 +124,6 @@ beforeEach(() => {
   // The list, unless a row opens a person's page.
   ;(useRoute as jest.Mock).mockReturnValue({ params: {} })
   TRUSTED_APPROVERS_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
   setTrustedApproversEnabled(true)
   approverRole.roleOfferPromptStore.clear()
   resetPutOff()
@@ -235,23 +232,6 @@ describe("the contact's row", () => {
     read.mockResolvedValue(ask({ state: 'closed', acceptedAs: JORDAN, written: true }))
     tree = await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)
     expect(tree.queryByTestId(id(ApproverAskRowIds.steppedDown))).toBeNull()
-  })
-
-  test('the SEDI/KERI umbrella alone hides it: its own switch on and not killed (control: umbrella off, it is there)', async () => {
-    // Off for a reason other than the feature's own switch: the lane-wide kill. #1013's rows pass with the feature
-    // switch off; this one passes only if the umbrella reaches the screen through isTrustedApproversEnabled.
-    jest.spyOn(approverRole, 'roleOfferAskOn').mockResolvedValue(undefined)
-    linked(SAM_AGENT)
-    setTrustedApproversEnabled(true)
-    TRUSTED_APPROVERS_REMOTE_OFF.off = false
-    SEDI_KERI_REMOTE_OFF.off = true
-    expect(
-      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).queryByTestId(id(ApproverAskRowIds.row))
-    ).toBeNull()
-    SEDI_KERI_REMOTE_OFF.off = false
-    expect(
-      (await show(<ApproverAskRow connectionId={CONN} name="Jordan" />)).getByTestId(id(ApproverAskRowIds.row))
-    ).toBeTruthy()
   })
 
   test('is not there with the switch off, turned off remotely, or with no linked agent (control: on and linked, it is)', async () => {
@@ -1263,20 +1243,16 @@ describe('Who approves', () => {
     beforeEach(() => {
       navigate().mockClear()
       goBack().mockClear()
-      setStateVerifiedApproversEnabled(true)
     })
-    afterEach(() => setStateVerifiedApproversEnabled(false))
 
     test("the list is rows only: no person's boxes or buttons on it (control: their page has them)", async () => {
       everyone()
       const tree = await show(<VtaTrustedApprovers />)
       expect(tree.getByTestId(id(TrustedApproversIds.row('yes', CONN)))).toBeTruthy()
       expect(tree.getByTestId(id(TrustedApproversIds.row('approver', AMY)))).toBeTruthy()
-      expect(tree.getByTestId(id(TrustedApproversIds.pill(AMY)))).toBeTruthy()
       for (const key of [
         TrustedApproversIds.approver(AMY),
         TrustedApproversIds.needsBox(AMY),
-        TrustedApproversIds.noCard(AMY),
         TrustedApproversIds.remove(AMY),
         TrustedApproversIds.accepted(CONN),
         TrustedApproversIds.needsBox(JORDAN),
@@ -1289,7 +1265,6 @@ describe('Who approves', () => {
       expectPage(page, 'approver', AMY)
       expect(page.getByTestId(id(TrustedApproversIds.person))).toBeTruthy()
       expect(page.getByTestId(id(TrustedApproversIds.needsBox(AMY)))).toBeTruthy()
-      expect(page.getByTestId(id(TrustedApproversIds.noCard(AMY)))).toBeTruthy()
       expect(page.getByTestId(id(TrustedApproversIds.remove(AMY)))).toBeTruthy()
       expect(page.queryByTestId(id(TrustedApproversIds.row('approver', AMY)))).toBeNull()
     })

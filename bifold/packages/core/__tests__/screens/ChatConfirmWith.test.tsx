@@ -18,7 +18,6 @@ import {
   CONFIRM_ITS_YOU_REMOTE_OFF,
   setConfirmItsYouEnabled,
 } from '../../src/modules/trust-tasks/module/confirmItsYouFlag'
-import { SEDI_KERI_REMOTE_OFF } from '../../src/modules/trust-tasks/module/sediKeriRemoteOff'
 import { ConfirmItsYouRowIds } from '../../src/modules/trust-tasks/screens/ConfirmItsYouRow'
 import { useWitnessConnection } from '../../src/modules/vrc/context/WitnessConnectionProvider'
 import Chat from '../../src/screens/Chat'
@@ -87,7 +86,6 @@ beforeEach(() => {
   jest.spyOn(Toast, 'show').mockImplementation(() => undefined)
   ;(useChatMessagesByConnection as jest.Mock).mockReturnValue([])
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
   setConfirmItsYouEnabled(true)
   can = jest.spyOn(confirmItsYou, 'canConfirmWith').mockResolvedValue(true)
   jest.spyOn(confirmItsYou, 'confirmAsksOn').mockResolvedValue([])
@@ -95,7 +93,6 @@ beforeEach(() => {
 afterEach(() => {
   can.mockRestore()
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
 })
 afterAll(() => setConfirmItsYouEnabled(false))
 
@@ -124,7 +121,6 @@ describe('"Confirm with <name>" in the chat\'s "+"', () => {
   test.each([
     ['the switch off', () => setConfirmItsYouEnabled(false)],
     ['its remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)],
-    ['the SEDI/KERI umbrella off', () => (SEDI_KERI_REMOTE_OFF.off = true)],
   ])('%s: not offered, nothing read, and the other entries unchanged (control: on, above)', async (_name, off) => {
     off()
     const send = jest.spyOn(confirmItsYou, 'sendConfirmRequest')
@@ -172,7 +168,6 @@ describe('the sheet itself carries the gate', () => {
   test.each([
     ['the switch off', () => setConfirmItsYouEnabled(false)],
     ['its remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)],
-    ['the SEDI/KERI umbrella off', () => (SEDI_KERI_REMOTE_OFF.off = true)],
   ])('%s: opened by a parent anyway, it shows nothing and reads nothing', async (_name, off) => {
     off()
     const read = jest.spyOn(confirmItsYou, 'confirmAsksOn').mockResolvedValue([])

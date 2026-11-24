@@ -22,7 +22,6 @@ import { Text } from 'react-native'
 import { ChatEventRepository } from '../../modules/chat/records/ChatEventRepository'
 import * as confirmItsYou from '../../modules/trust-tasks/confirmItsYou'
 import { CONFIRM_ITS_YOU_REMOTE_OFF, setConfirmItsYouEnabled } from '../../modules/trust-tasks/module/confirmItsYouFlag'
-import { SEDI_KERI_REMOTE_OFF } from '../../modules/trust-tasks/module/sediKeriRemoteOff'
 import { vrcFlowStore } from '../../modules/vrc/witnessStatusStore'
 import { Screens, Stacks, TabStacks } from '../../types/navigators'
 import { setActiveChatConnectionId } from '../activeChatTracker'
@@ -324,7 +323,6 @@ describe("a tap for a Confirm it's you request", () => {
   }
   beforeEach(() => {
     CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-    SEDI_KERI_REMOTE_OFF.off = false
     setConfirmItsYouEnabled(true)
   })
   afterEach(() => {

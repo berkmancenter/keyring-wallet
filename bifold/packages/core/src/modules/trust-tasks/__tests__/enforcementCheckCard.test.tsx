@@ -10,7 +10,6 @@ import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
-import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import { TRUSTED_APPROVERS_REMOTE_OFF, setTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import * as enforcement from '../screens/approverEnforcementCheck'
 import { EnforcementCheckCard, EnforcementCheckIds } from '../screens/approver/EnforcementCheckCard'
@@ -32,7 +31,6 @@ beforeEach(() => {
   jest.restoreAllMocks()
   ;(useAgent as jest.Mock).mockReturnValue({ agent: AGENT })
   TRUSTED_APPROVERS_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
   setTrustedApproversEnabled(true)
   enforcement.forgetEnforcementChecks()
   probe = jest.spyOn(enforcement, 'checkEnforcement').mockResolvedValue({ kind: 'held' } as never)
@@ -51,7 +49,6 @@ describe('the shared practice-request card', () => {
   test.each([
     ['the trusted-approvers switch off', () => setTrustedApproversEnabled(false)],
     ['the trusted-approvers remote off', () => (TRUSTED_APPROVERS_REMOTE_OFF.off = true)],
-    ['the SEDI/KERI remote off', () => (SEDI_KERI_REMOTE_OFF.off = true)],
   ])('%s: renders nothing, wherever it is placed (control: on, it shows)', async (_, off) => {
     const on = await show()
     expect(on.queryByTestId(id(EnforcementCheckIds.check))).not.toBeNull()

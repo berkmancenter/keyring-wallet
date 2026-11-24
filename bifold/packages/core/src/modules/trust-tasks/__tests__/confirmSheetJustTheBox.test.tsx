@@ -21,7 +21,6 @@ import * as confirmItsYou from '../confirmItsYou'
 import { NOTE_MAX } from '../confirmItsYouSpec'
 import ConfirmWithSheet, { ConfirmWithSheetIds } from '../components/ConfirmWithSheet'
 import { CONFIRM_ITS_YOU_REMOTE_OFF, setConfirmItsYouEnabled } from '../module/confirmItsYouFlag'
-import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import ConfirmItsYouRow, { ConfirmItsYouRowIds as Ids, SHEET_COUNTER_FROM } from '../screens/ConfirmItsYouRow'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -65,7 +64,6 @@ beforeEach(() => {
   jest.restoreAllMocks()
   ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
   setConfirmItsYouEnabled(true)
 })
 afterAll(() => setConfirmItsYouEnabled(false))

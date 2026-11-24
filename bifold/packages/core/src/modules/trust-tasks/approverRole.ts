@@ -40,7 +40,6 @@ import {
 import { signDocumentProof, verifyDocumentProof } from './documentProof'
 import { trustedKeyOf, writableKeys } from './module/trustedApprovers'
 import { isTrustedApproversEnabled } from './module/trustedApproversFlag'
-import type { GuardianOnAsk } from './guardianEvidence'
 import type { InboundContext } from './registry'
 import { respondWith, type TrustTasksService } from './services/TrustTasksService'
 
@@ -91,14 +90,14 @@ interface Relationship {
   counterpartyRelationshipDid?: string
 }
 
-/** The relationship on `connectionId`, with both relationship DIDs, if any (shared with guardianEvidence.ts). */
+/** The relationship on `connectionId`, with both relationship DIDs, if any. */
 export async function relationshipOn(agent: Agent, connectionId: string): Promise<Relationship | undefined> {
   const all: Relationship[] = await agent.dependencyManager.resolve(RelationshipDidRepository).getAll(agent.context)
   const found = all.find((record) => record.connectionId === connectionId)
   return found?.myRelationshipDid && found.counterpartyRelationshipDid ? found : undefined
 }
 
-/** A proof policy: the document is signed under `controller` (shared with guardianEvidence.ts). */
+/** A proof policy: the document is signed under `controller`. */
 export const proofUnder = (agent: Agent, controller: string) => ({
   kind: 'verify' as const,
   verify: { verify: (doc: unknown) => verifyDocumentProof(agent, doc as Record<string, unknown>, controller) },
@@ -156,11 +155,6 @@ export interface RoleOfferAsk {
    * phone writes them off, which the person confirms on Who approves.
    */
   steppedDown?: string
-  /**
-   * The state Guardian card the contact sent after their yes, and its last verdict (guardianEvidence.ts). Shown only
-   * beside the DID it was sent as.
-   */
-  guardian?: GuardianOnAsk
 }
 
 /** The DID written on the agent for this contact, if any (a record from before writtenAs: its acceptedAs). */
@@ -224,8 +218,6 @@ export async function offerApproverRole(
     ...(before && inForce
       ? { written: true, writtenAs: inForce, writtenActions: writtenActionsOf(before), steppedDown: before.steppedDown }
       : {}),
-    // The card sent as the approver in force stays with them; a card sent as anyone else answers nothing now.
-    ...(before?.guardian && inForce && before.guardian.approver === inForce ? { guardian: before.guardian } : {}),
   }
   await keepOn(agent, ROLE_OFFER_ASK, connectionId, ask)
   const { getTrustTasksService, sendTrustTaskDocument } = ceremony()
@@ -724,23 +716,6 @@ export async function respondToRoleOffer(
   // Told only once the answer is kept: People I approve for reads the kept records on this event, and told before,
   // it read the yes from before (a first yes not listed, a wider one with the old actions) until left and opened again.
   approverRoleEvents.emit('promptCleared', { connectionId })
-  // After the yes, and only after it is sent and kept: this phone's state Guardian card, if it holds one and its person
-  // said yes to sending it to this contact; never asked, they are asked and nothing goes (guardianEvidence.ts; nothing
-  // with either switch off). The yes stands whatever happens to the card, a no to sending it included.
-  if (accept)
-    await guardianEvidence()
-      .guardianCardAfterYes(agent, prompt, approverDid as string)
-      .catch((error: unknown) =>
-        agent.config?.logger?.warn(
-          `${LOG_PREFIX} could not send the guardian card: ${(error as Error)?.message ?? error}`
-        )
-      )
-}
-
-/** The Guardian card module, reached lazily: it reads this module's records, so importing it at the top is a cycle. */
-function guardianEvidence(): typeof import('./guardianEvidence') {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  return require('./guardianEvidence')
 }
 
 /**
@@ -760,9 +735,9 @@ export async function listeningFor(agent: Pick<Agent, 'genericRecords'>): Promis
 
 /**
  * The people this phone's person said yes to and has not stepped down from, newest first. Only what this phone
- * answered: whether the asker then wrote the rule on their agent is theirs to say. A Guardian card goes only to these
- * (guardianEvidence.ts). Deliberately NOT {@link listeningFor}: a step-down stops the card at once, while the phone
- * keeps listening; and a removal the asker told this phone about ends it here too.
+ * answered: whether the asker then wrote the rule on their agent is theirs to say. Deliberately NOT
+ * {@link listeningFor}: a step-down ends it here at once, while the phone keeps listening; and a removal the asker
+ * told this phone about ends it here too.
  */
 export async function approvingFor(agent: Pick<Agent, 'genericRecords'>): Promise<RoleOfferPrompt[]> {
   const records = (await agent.genericRecords.findAllByQuery({ recordType: ROLE_OFFER_PROMPT })) ?? []

@@ -8,12 +8,8 @@
  * Not now sends nothing and hides that one offer until the app starts again (it is kept, and comes back then). A
  * later offer from the same contact (a re-offer with other actions, say) is a new question and shows its own sheet.
  *
- * After a yes, if this phone holds a state Guardian card and its person was never asked about this contact, the same
- * sheet asks once: "Also send your Guardian card to <asker>?" (guardianEvidence.ts). Send keeps the answer and sends
- * the card; Don't send keeps a no, and nothing goes. The yes already stands either way.
- *
  * Self-contained: mounted once at the root beside ContinuityCheckModal. With the trusted-approvers switch off it shows
- * nothing and brings nothing back; with state-verified approvers off it asks nothing about a card.
+ * nothing and brings nothing back.
  */
 import { useAgent } from '@bifold/react-hooks'
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
@@ -33,11 +29,8 @@ import {
   roleOfferPromptStore,
   type RoleOfferPrompt,
 } from '../approverRole'
-import { cardQuestions, guardianCardEvents, shareGuardianCard, type CardQuestion } from '../guardianEvidence'
-import { DemoPill } from './DemoPill'
 import { releaseWarn } from '../module/releaseLog'
 import { ownerLockKind, type OwnerLockKind } from '../module/ownerConfirm'
-import { isStateVerifiedApproversEnabled } from '../module/stateVerifiedApproversFlag'
 import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { vtaAgent } from '../module/vtaAgent'
 import { OwnerNotConfirmed } from '../module/vtaOwner'
@@ -51,10 +44,6 @@ export const ApproverOfferIds = {
   needsAgent: 'ApproverOfferNeedsAgent',
   failed: 'ApproverOfferFailed',
   faceId: 'ApproverOfferFaceId',
-  cardAsk: 'ApproverOfferCardAsk',
-  cardAskDemo: 'ApproverOfferCardAskDemo',
-  cardSend: 'ApproverOfferCardSend',
-  cardDont: 'ApproverOfferCardDont',
 } as const
 
 /**
@@ -96,7 +85,6 @@ const ApproverOfferModal: React.FC = () => {
       live = false
     }
   }, [])
-  const [question, setQuestion] = useState<CardQuestion | undefined>(() => (on ? cardQuestions.first() : undefined))
   const linked = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().link.kind === 'linked')
 
   useEffect(() => {
@@ -105,32 +93,6 @@ const ApproverOfferModal: React.FC = () => {
       releaseWarn(`[VTI] approver offers not brought back: ${(error as Error)?.message ?? error}`)
     )
   }, [agent, on])
-
-  useEffect(() => {
-    if (!on) return
-    const ask = () => setQuestion(cardQuestions.first())
-    guardianCardEvents.on('question', ask)
-    return () => {
-      guardianCardEvents.off('question', ask)
-    }
-  }, [on])
-
-  const share = useCallback(
-    async (send: boolean) => {
-      if (!agent || !question || busy) return
-      setBusy(true)
-      try {
-        await shareGuardianCard(agent, question.connectionId, send)
-        releaseWarn(`[VTI] guardian card answer: ${send ? 'send' : "don't send"}`)
-      } catch (error) {
-        releaseWarn(`[VTI] guardian card answer not kept (${(error as Error)?.name ?? 'error'})`)
-      } finally {
-        setBusy(false)
-        setQuestion(cardQuestions.first())
-      }
-    },
-    [agent, question, busy]
-  )
 
   useEffect(() => {
     if (!on) return
@@ -180,9 +142,7 @@ const ApproverOfferModal: React.FC = () => {
     setPrompt(firstShown())
   }, [prompt])
 
-  // An offer comes first; a card question shows when no offer is open, and only with state-verified approvers on.
-  const asking = !prompt && question && isStateVerifiedApproversEnabled() ? question : undefined
-  if (!on || (!prompt && !asking)) return null
+  if (!on || !prompt) return null
 
   const words = {
     asker: prompt?.asker || t('Approver.UnnamedContact'),
@@ -211,50 +171,6 @@ const ApproverOfferModal: React.FC = () => {
             contentContainerStyle={styles.container}
             testID={testIdWithKey(ApproverOfferIds.sheet)}
           >
-            {asking ? (
-              <>
-                <ThemedText
-                  variant="headingThree"
-                  style={styles.centred}
-                  accessibilityRole="header"
-                  testID={testIdWithKey(ApproverOfferIds.cardAsk)}
-                >
-                  {asking.state
-                    ? t('Approver.CardAskTitle', {
-                        state: asking.state,
-                        asker: asking.asker || t('Approver.UnnamedContact'),
-                        interpolation: { escapeValue: false },
-                      })
-                    : t('Approver.CardAskTitleNoState', {
-                        asker: asking.asker || t('Approver.UnnamedContact'),
-                        interpolation: { escapeValue: false },
-                      })}
-                </ThemedText>
-                {asking.state && asking.demo ? (
-                  <DemoPill testID={ApproverOfferIds.cardAskDemo} test={asking.test === true} />
-                ) : null}
-                <ThemedText>
-                  {t('Approver.CardAskBody', {
-                    asker: asking.asker || t('Approver.UnnamedContact'),
-                    interpolation: { escapeValue: false },
-                  })}
-                </ThemedText>
-                <Button
-                  title={t('Approver.CardAskSend')}
-                  buttonType={ButtonType.Primary}
-                  onPress={() => void share(true)}
-                  disabled={busy}
-                  testID={testIdWithKey(ApproverOfferIds.cardSend)}
-                />
-                <Button
-                  title={t('Approver.CardAskDont')}
-                  buttonType={ButtonType.Secondary}
-                  onPress={() => void share(false)}
-                  disabled={busy}
-                  testID={testIdWithKey(ApproverOfferIds.cardDont)}
-                />
-              </>
-            ) : null}
             {prompt ? (
               <>
                 <ThemedText variant="headingThree" style={styles.centred} accessibilityRole="header">

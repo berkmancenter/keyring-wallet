@@ -22,7 +22,6 @@ import ConfirmItsYouModal, {
 } from '../components/ConfirmItsYouModal'
 import { CONFIRM_ITS_YOU_REMOTE_OFF, setConfirmItsYouEnabled } from '../module/confirmItsYouFlag'
 import * as ownerConfirm from '../module/ownerConfirm'
-import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import ConfirmItsYouRow, { ConfirmItsYouRowIds } from '../screens/ConfirmItsYouRow'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -66,14 +65,12 @@ const prompt = (over: Partial<confirmItsYou.ConfirmPrompt> = {}): confirmItsYou.
 const OFFS: [string, () => void][] = [
   ['the switch off', () => setConfirmItsYouEnabled(false)],
   ['its remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)],
-  ['the SEDI/KERI umbrella off', () => (SEDI_KERI_REMOTE_OFF.off = true)],
 ]
 
 beforeEach(() => {
   jest.restoreAllMocks()
   ;(useAgent as jest.Mock).mockReturnValue({ agent: AGENT })
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
   setConfirmItsYouEnabled(true)
   confirmItsYou.confirmPromptStore.clear()
   resetConfirmPutOff()

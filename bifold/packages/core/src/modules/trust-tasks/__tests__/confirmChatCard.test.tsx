@@ -19,7 +19,6 @@ import { testIdWithKey } from '../../../utils/testable'
 import * as confirmItsYou from '../confirmItsYou'
 import { CONFIRM_ITS_YOU_REMOTE_OFF, setConfirmItsYouEnabled } from '../module/confirmItsYouFlag'
 import * as ownerConfirm from '../module/ownerConfirm'
-import { SEDI_KERI_REMOTE_OFF } from '../module/sediKeriRemoteOff'
 import ConfirmChatCard, {
   ConfirmChatCardIds,
   setConfirmChatOwnerCheckForTests,
@@ -61,7 +60,6 @@ const prompt = (over: Partial<confirmItsYou.ConfirmPrompt> = {}): confirmItsYou.
 const OFFS: [string, () => void][] = [
   ['the switch off', () => setConfirmItsYouEnabled(false)],
   ['its remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)],
-  ['the SEDI/KERI umbrella off', () => (SEDI_KERI_REMOTE_OFF.off = true)],
 ]
 
 const show = async (entry: ConfirmChatEntry, onChanged?: () => void) => {
@@ -111,7 +109,6 @@ beforeEach(() => {
   findAllByQuery.mockReset().mockResolvedValue([])
   ;(useAgent as jest.Mock).mockReturnValue({ agent: AGENT })
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
   setConfirmItsYouEnabled(true)
   confirmItsYou.confirmPromptStore.clear()
   setConfirmChatOwnerCheckForTests(null)
@@ -130,7 +127,6 @@ describe('hidden when off', () => {
     expect(read).not.toHaveBeenCalled()
 
     CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-    SEDI_KERI_REMOTE_OFF.off = false
     setConfirmItsYouEnabled(true)
     const on = renderHook(() => useConfirmChatItems(CONN, 'Jordan'))
     await act(async () => undefined)
@@ -148,7 +144,6 @@ describe('hidden when off', () => {
       expect(tree.queryByTestId(id(ConfirmChatCardIds.itsMe))).toBeNull()
     }
     CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-    SEDI_KERI_REMOTE_OFF.off = false
     setConfirmItsYouEnabled(true)
     expect((await show({ side: 'theirs', prompt: prompt() })).getByTestId(id(ConfirmChatCardIds.itsMe))).toBeTruthy()
   })

@@ -5,8 +5,8 @@
  *
  * So the app no longer has a say: at start-up it neither reads the old key nor sets bifold's switch, whatever a phone
  * saved while it was a demo. A phone that saved "off" comes out as bifold ships it, like one that saved nothing.
- * Turning it off for everyone is bifold's CONFIRM_ITS_YOU_REMOTE_OFF (or the SEDI_KERI_REMOTE_OFF umbrella), and those
- * are now the only way it goes off. So these rows use bifold's real switch, not a mock, and read it the way every
+ * Turning it off for everyone is bifold's CONFIRM_ITS_YOU_REMOTE_OFF, and that is
+ * now the only way it goes off. So these rows use bifold's real switch, not a mock, and read it the way every
  * screen does, through isConfirmItsYouEnabled().
  *
  * Deliberately not asserted: that bifold's switch starts on. That is bifold's (its sediKeriSwitches.test.ts), and it
@@ -15,7 +15,6 @@
 import {
   CONFIRM_ITS_YOU_REMOTE_OFF,
   PersistentStorage,
-  SEDI_KERI_REMOTE_OFF,
   TOKENS,
   isConfirmItsYouEnabled,
   setConfirmItsYouEnabled,
@@ -32,7 +31,7 @@ jest.mock('@bifold/core', () => ({
   // The loader also reads the login attempts from the keychain, whose native module isn't in jest.
   loadLoginAttempt: async () => undefined,
 }))
-// The same stubs stateVerifiedApproversSwitch.test.ts uses to build the app container under jest.
+// The stubs needed to build the app container under jest.
 jest.mock('react-native-webview', () => ({ WebView: () => null }))
 jest.mock('../src/utils/logger', () => {
   const log = jest.fn()
@@ -69,7 +68,6 @@ const load = async () => {
 
 const kills = () => {
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
 }
 
 beforeEach(() => {
@@ -118,14 +116,14 @@ describe('"Confirm it\'s you" has no setting in the app', () => {
     expect((await load()).on).toBe(false)
   })
 
-  it.each([
-    ['its own remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)],
-    ['the SEDI/KERI umbrella', () => (SEDI_KERI_REMOTE_OFF.off = true)],
-  ])('%s still turns it off after a load, whatever was saved (control: without it, on)', async (_, off) => {
-    saved.set(OLD_KEY, true)
-    setConfirmItsYouEnabled(true)
-    expect((await load()).on).toBe(true)
-    off()
-    expect((await load()).on).toBe(false)
-  })
+  it.each([['its own remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)]])(
+    '%s still turns it off after a load, whatever was saved (control: without it, on)',
+    async (_, off) => {
+      saved.set(OLD_KEY, true)
+      setConfirmItsYouEnabled(true)
+      expect((await load()).on).toBe(true)
+      off()
+      expect((await load()).on).toBe(false)
+    }
+  )
 })

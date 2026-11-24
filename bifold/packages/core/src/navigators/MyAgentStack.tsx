@@ -24,8 +24,6 @@ import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiHiddenVetter from '../modules/trust-tasks/screens/VtiHiddenVetter'
 import VtiHiddenVetting from '../modules/trust-tasks/screens/VtiHiddenVetting'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
-import GuardianCardReceive from '../modules/sedi/holder/GuardianCardReceive'
-import StateOfficeCodes from '../modules/sedi/identity/StateOfficeCodes'
 import SharedConnect from '../modules/trust-tasks/screens/SharedConnect'
 import SignIn from '../modules/trust-tasks/screens/SignIn'
 import VtaClaim from '../modules/trust-tasks/screens/VtaClaim'
@@ -236,19 +234,6 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         component={SharedConnect as React.FC}
         getId={({ params }) => params?.scanId}
         options={{ title: t('Screens.SharedConnect'), ...ScreenOptionsDictionary[Screens.SharedConnect] }}
-      />
-      {/* A state office's Guardian card link, and this phone's codes for one: reached only with the SEDI switches on, and
-          each screen checks them again itself. */}
-      <Stack.Screen
-        name={Screens.GuardianCardReceive}
-        component={GuardianCardReceive as React.FC}
-        getId={({ params }) => params?.scanId}
-        options={{ title: t('Screens.GuardianCardReceive'), ...ScreenOptionsDictionary[Screens.GuardianCardReceive] }}
-      />
-      <Stack.Screen
-        name={Screens.StateOfficeCodes}
-        component={StateOfficeCodes}
-        options={{ title: t('Screens.StateOfficeCodes'), ...ScreenOptionsDictionary[Screens.StateOfficeCodes] }}
       />
       {/* Rooms: reached only from the entry points the rooms flag shows. */}
       <Stack.Screen

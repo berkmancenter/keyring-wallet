@@ -10,13 +10,12 @@
  * With it off, nothing is offered on a contact's page or in a chat, no request is sent, and one that arrives is
  * dropped unread (and logged).
  *
- * THE KILLS, for a release (an OTA included): {@link CONFIRM_ITS_YOU_REMOTE_OFF} turns it off for everyone, and
- * SEDI_KERI_REMOTE_OFF turns off every SEDI/KERI feature at once, this one with them. Either beats whatever was set.
- * Neither turns it on. Each is read at every check, so it takes effect at the next start with nothing to migrate.
+ * THE KILL, for a release (an OTA included): {@link CONFIRM_ITS_YOU_REMOTE_OFF} turns it off for everyone and beats
+ * whatever was set. It never turns it on. It is read at every check, so it takes effect at the next start with nothing
+ * to migrate.
  *
  * @module trust-tasks/module/confirmItsYouFlag
  */
-import { SEDI_KERI_REMOTE_OFF } from './sediKeriRemoteOff'
 
 /** Set to true in a release to turn "Confirm it's you" off for everyone, whatever was saved. */
 export const CONFIRM_ITS_YOU_REMOTE_OFF: { off: boolean } = { off: false }
@@ -35,7 +34,7 @@ export function setConfirmItsYouEnabled(enabled: boolean): void {
   confirmItsYouEnabled = enabled
 }
 
-/** On (as shipped, unless this run turned it off), and turned off neither for this feature nor for SEDI/KERI as a whole. */
+/** On (as shipped, unless this run turned it off), and not turned off by the release kill. */
 export function isConfirmItsYouEnabled(): boolean {
-  return confirmItsYouEnabled && !CONFIRM_ITS_YOU_REMOTE_OFF.off && !SEDI_KERI_REMOTE_OFF.off
+  return confirmItsYouEnabled && !CONFIRM_ITS_YOU_REMOTE_OFF.off
 }

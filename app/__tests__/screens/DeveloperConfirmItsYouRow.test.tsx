@@ -6,7 +6,6 @@
 import {
   AuthProvider,
   CONFIRM_ITS_YOU_REMOTE_OFF,
-  SEDI_KERI_REMOTE_OFF,
   isConfirmItsYouEnabled,
   setConfirmItsYouEnabled,
   testIdWithKey,
@@ -41,12 +40,10 @@ const shown = () =>
 beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => null)
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
 })
 afterEach(() => {
   jest.restoreAllMocks()
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
-  SEDI_KERI_REMOTE_OFF.off = false
   setConfirmItsYouEnabled(false)
 })
 
