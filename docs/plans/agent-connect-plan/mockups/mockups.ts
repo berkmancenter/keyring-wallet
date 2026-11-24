@@ -316,7 +316,7 @@ export const MOCKUPS: Mockup[] = [
   },
   {
     file: '20-change-memories.svg',
-    title: `Change memories: widening asks first (${PLAN} §3.15, §6, §11 Q4)`,
+    title: `Change memories: widening asks first (${PLAN} §3.15, §6, D34)`,
     draw: (s) => {
       s.header(undefined, { placeholder: '<title>', assumed: 'the header title of the agent details screen; the plan defines none (§6).' })
       s.tabBar('myAgent')
@@ -327,7 +327,7 @@ export const MOCKUPS: Mockup[] = [
         return sheet.secondaryButton('Not now', yy)
       })
     },
-    notes: ['From "Change memories" on the details (11), after the owner ticks a memory the agent lacks. It names every room, because widening applies at once in all of them (§3.15). "Allow" asks for face or fingerprint.', 'Narrowing is this sheet with its own copy ("Stop "Notes helper" using "Healthcare"?", "Stop using", "Keep"): one confirmation, no biometric.', 'Widening after connect is the open decision Q4; this is the recommended form.'],
+    notes: ['From "Change memories" on the details (11), after the owner ticks a memory the agent lacks. It names every room, because widening applies at once in all of them (§3.15). "Allow" asks for face or fingerprint.', 'Narrowing is this sheet with its own copy ("Stop "Notes helper" using "Healthcare"?", "Stop using", "Keep"): one confirmation, no biometric.', 'Widening after connect is decided (D34): the approval names every room.'],
   },
   {
     file: '21-delete-memory.svg',
@@ -361,7 +361,7 @@ export const MOCKUPS: Mockup[] = [
   },
   {
     file: '23-new-memory-not-allowed.svg',
-    title: `Connect an agent: a phone that cannot create memories (${PLAN} §3.15, §11 Q2)`,
+    title: `Connect an agent: a phone that cannot create memories (${PLAN} §3.15, D32)`,
     draw: (s) => {
       s.header('Connect an agent')
       let y = s.body('Name this agent', TOP)
@@ -373,7 +373,7 @@ export const MOCKUPS: Mockup[] = [
       s.primaryButton('Continue', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['The "New memory" row is absent when `auth/whoami` shows the phone is not an unrestricted administrator (a root context needs one, VTI-CTX-020). The existing memories can still be picked.', 'Which route replaces this for such a phone, if any, is the owner’s open decision Q2.'],
+    notes: ['The "New memory" row is absent when `auth/whoami` shows the phone is not an unrestricted administrator (a root context needs one, VTI-CTX-020). The existing memories can still be picked.', 'Decided (D32): no other route is built; the parent-context fallback is documented only.'],
   },
 ]
 

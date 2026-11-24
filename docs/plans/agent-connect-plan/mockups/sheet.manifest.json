@@ -7,7 +7,7 @@
   "height": 6936,
   "sheet": {
     "file": "sheet.png",
-    "sha256": "ca1bd15b7a84b78e2e38331c1b426fa9440a3f8be95fd44c50fc402a3b9bbd1a"
+    "sha256": "50f477e64c69a7de13ae4e1ded3124c477a49d44135e08ae2fa635201773e659"
   },
   "svgs": {
     "01-connect-name.svg": "053a1a5d2a4357c235f05442926b464aff1ca201ca69793b0ee825118d57d92b",
@@ -29,9 +29,9 @@
     "17-revoke.svg": "7be7030e75a9f56431288ca4841006862e62b7224f6ced4713e6d80411e5ec5d",
     "18-pairing-expired.svg": "ccbafd195586fed80c59ea7571c7b4e6621be87f398b1b85c69bb65e3f91876b",
     "19-settings-my-vta.svg": "eafe7922e0d820f73cead8317d9ecda0060e6fd38dc1cacf7b01312b4a372f58",
-    "20-change-memories.svg": "d5816662c4a70612cd68cbdb39fb106d9af15748b2f548292c93311cc15a0ef1",
+    "20-change-memories.svg": "7fd38a9ba1ab24be6fa9397c7fab08d8f6ee41889c5734972ca49b9cdbe9a83b",
     "21-delete-memory.svg": "a219558ea02ac31896b70396a6b632b1c24d852bc50e6fb254704a98577d5d88",
     "22-memory-drift.svg": "bcf217eac6c556a1b1cde50c165df05058cd0dc65cf5929fdb83bb22ec321c6d",
-    "23-new-memory-not-allowed.svg": "a983c64738834b5514b446fe0a1c3876d2e60355f9b56e91bb367173bb2ad128"
+    "23-new-memory-not-allowed.svg": "5e2ec6fca62530dc4f0e3e87bede316f654362659b4e8ace104fefd0a2846e6b"
   }
 }
