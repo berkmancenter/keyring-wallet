@@ -25,6 +25,7 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-29 | VTI-Q42 |
 | AC-30 | VTI-Q43 |
 | AC-31 | VTI-Q44 |
+| AC-32 | VTI-Q45 |
 | AC-25 | VTI-Q38 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
@@ -262,3 +263,10 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `vta-service/src/server.rs:597-602,650`; `main.rs:2544-2558,2622-2640,2672`; `restore.rs:30-35`, 2026-11-24.
 - **Extension:** the mode in `auth/whoami` or a status answer.
 - **Severity:** P0 works around (the copy makes no claim of encryption). Registered as VTI-Q44.
+
+### AC-32 No private label for a context (deferred)
+
+- **Hit:** the owner's label for a memory is stored in the context's `name`, plaintext to every administrator who reaches the context; `name` is changeable by a super-admin only.
+- **Evidence:** `vti-specs-vta/trust-tasks/vta/contexts/create/1.0` and `update/1.0`; `operations/contexts.rs:216-238`, 2026-11-24.
+- **Extension:** a label shown only to its owner, or a documented place for a client-sealed label.
+- **Severity:** none; P0 works around (label in `name`, accepted; plan D35). Deferred, not requested now. Registered as VTI-Q45.
