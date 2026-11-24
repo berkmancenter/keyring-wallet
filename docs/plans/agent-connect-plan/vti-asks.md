@@ -2,7 +2,7 @@
 
 A running ledger for [`../agent-connect-plan.md`](../agent-connect-plan.md) (plan §10). One entry per limitation we hit that we would like upstream to extend, so the list can be passed on in one piece. It is a ledger, not a finding record: an entry is promoted into [`../../VTI_UPSTREAM_FINDINGS.md`](../../VTI_UPSTREAM_FINDINGS.md) only when it meets that file's proof rules (the `vti-lab-and-field` skill): measured on the lab and named by era, tried against the pinned upstream clone in `external/` and not disproved, classified as theirs rather than ours, and written in the generic register with no names. A promoted entry gets its `VTI-QN` or `VTI-NN` number noted in its Status. This file does not edit that one.
 
-Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a measurement); **extension we would want**; **severity** for P0 and P1 of the plan; **status**. Severity: *blocks* (cannot ship the item without it), *works around* (the plan builds around it, with a stated cost), *none*. Status is "not yet raised" unless an entry or the table below says otherwise.
+Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a measurement); **extension we would want**; **severity** for the plan's tiers (P0, P1, P2; plan §7.0); **status**. Severity: *blocks* (cannot ship the item without it), *works around* (the plan builds around it, with a stated cost), *none*. Status is "not yet raised" unless an entry or the table below says otherwise.
 
 **Registered in the findings file on 2026-11-22** as questions (`VTI-QN`), each read against the pinned clone where its row there says so ([`2026-11-22-al.md`](./2026-11-22-al.md) finding 7):
 
@@ -48,53 +48,53 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** an entry is a delegate only once its consumer kind is `ai-agent`, set by the agent's own `device/register`. Between grant and registration the entry could `rooms/keys/act` as the owner.
 - **Evidence:** `vta-service/src/trust_tasks/room_act.rs` (`is_delegate`); `vti-specs-core/trust-tasks/acl/grant/0.3.bundle.json` has no kind member.
 - **Extension:** the kind as a member of `acl/grant`, or a VTA that refuses `rooms/keys/act` for an `application` entry that has not registered.
-- **Severity:** P0 works around (room capabilities are added only after Keyring reads the kind back, plan §3.3); P1 none.
+- **Severity:** P1 works around (room capabilities are added only after Keyring reads the kind back, plan §3.3); P2 none.
 
 ### AC-03 Contexts and capabilities are not bound to each other
 
 - **Hit:** `rooms/keys/present` needs the agent to act in the persona's context, so adding a room adds that context to `act` and widens `memory-read` and `memory-write` to it. It reaches every agent of the owner added to a room of that persona, and any other session holding a memory capability there, so one injected agent can read or poison memory another agent or the owner keeps (plan §3.3, §9 threat 8).
 - **Evidence:** `docs/02-vta/data-rooms.md` §7; `vta-service/src/operations/room_oracle.rs` ("Another member's standing"). Whether a resource-qualified `CapabilityGrant` pins a capability to one context is not measured (plan §2.3).
 - **Extension:** capabilities bound to one context (resource-qualified grants that the VTA enforces), or room presentation that does not need the persona's context in `act`.
-- **Severity:** P0 works around (Keyring shows the effective set and the add sheet says so; per-agent contexts are the recommended mitigation, plan D22); P1 blocks the per-room "may use memory" switch and the portability display.
+- **Severity:** P1 works around (Keyring shows the effective set and the add sheet says so; per-agent contexts are the recommended mitigation, plan D22); P2 blocks the per-room "may use memory" switch and the portability display.
 
 ### AC-04 Rooms have no mention feature
 
 - **Hit:** no `mentions` record member, no delivery filtered by mention. To see a mention the agent needs a read leaf, so it can read the whole room.
 - **Evidence:** `docs/02-vta/data-rooms.md`; `rooms/_shared` in `vti-specs-core/trust-tasks`; `git grep` for "mention" finds nothing relevant.
 - **Extension:** register `mentions` as a record member a profile can list; deliver to an agent only the records that mention it, or mint a mention-scoped read leaf.
-- **Severity:** P0 works around (text `@<handle>` and a behavioural rule); P1 blocks mention enforcement.
+- **Severity:** P1 works around (text `@<handle>` and a behavioural rule); P2 blocks mention enforcement.
 
 ### AC-05 A member cannot withdraw an agent's leaf
 
 - **Hit:** a leaf lasts 4 hours and only the room's owner can withdraw it (`rooms/owner/revoke`). `group/remove` does not apply because the agent has no leaf in the group.
 - **Evidence:** `docs/02-vta/data-rooms.md` §7 and "Withdraw credentials without removing anyone".
 - **Extension:** a member-side withdrawal for a credential the member's VTA issued.
-- **Severity:** P0 works around (copy says "up to 4 hours"); P1 blocks closing the tail in rooms the person does not own.
+- **Severity:** P1 works around (copy says "up to 4 hours"); P2 blocks closing the tail in rooms the person does not own.
 
 ### AC-06 No setting for whether agents may be added to a community's rooms
 
 - **Hit:** no room-level setting, and no policy enforcement based on the VDCs of people in a room. A Keyring-only check is advisory.
 - **Evidence:** `docs/02-vta/data-rooms.md`, `docs/03-vtc/`, `vti-specs-core/trust-tasks/rooms`: no matching member.
 - **Extension:** an `agents` member (`allowed`, `notAllowed`) in the community's room record and the room profile; later, enforcement for "only with VDCs to people in the room".
-- **Severity:** P0 works around (advisory; "not stated" counts as no, plan §3.8); P1 blocks the third setting.
+- **Severity:** P1 works around (advisory; "not stated" counts as no, plan §3.8); P2 blocks the third setting.
 
 ### AC-07 No task signs a VDC as the persona, and no status hosting for it
 
 - **Hit:** `docs/` and `vti-specs*` carry VAC and VMC issuance, no VDC.
 - **Evidence:** search of `docs/` and `vti-specs*` at `origin/main`; plan §2.3 item 5.
 - **Extension:** a persona-issuing task for a W3C credential (or a Trust Task envelope the VTA signs) and a status-list hosting path for it.
-- **Severity:** P0 works around (7-day validity re-issued while the entry is active, no status entry; a revoked agent's VDC can stay valid up to 7 days and P0 shows it to no one; Phase 0 step 0.1(f) measures what exists); P1 blocks presenting the VDC with a revocation guarantee.
+- **Severity:** P0 works around (7-day validity re-issued while the entry is active, no status entry; a revoked agent's VDC can stay valid up to 7 days and nothing shows it in P0 and P1 shows it only in the agent's profile record in rooms; Phase 0 step 0.1(f) measures what exists); P1 blocks presenting the VDC with a revocation guarantee.
 
 ### AC-08 Rooms cannot show whose agent a record's author is
 
 - **Hit:** a record carries its author, not the author's chain or VDC, and the community's member list is administrator-only, so another party's agent cannot be told from a person.
 - **Evidence:** `bifold/packages/core/src/modules/rooms/capabilities.ts` (`listCommunityMembers`: `adminOnly`, "needs vtc.rooms.manage"); `types.ts` (`byAgent`, set from nothing real at baseline).
 - **Extension:** the author's chain, or the agent's VDC, available with a record or as a registered record kind (for example a `memberProfile`).
-- **Severity:** P0 works around (own agents only); P1 blocks the cross-client "who does this belong to".
+- **Severity:** P1 works around (own agents only); P2 blocks the cross-client "who does this belong to".
 
 ### AC-24 No room-scoped context binding: an entry's memory contexts apply in every room
 
-- **Hit:** the owner picks, per room, which memory contexts the agent uses there (plan §3.15). An entry's `act` names contexts "and their subtrees, and only these" and holds wherever the entry acts; `vta/memory/*` is gated on `require_context` and the memory capabilities only. An entry holding "Education" and "Healthcare" reads both from either room; a per-room child context does not help, since a parent's holder reaches every child.
+- **Hit:** a design that let the owner pick, per room, which memory contexts one agent uses (withdrawn in rev 4, plan D31, §3.15). An entry's `act` names contexts "and their subtrees, and only these" and holds wherever the entry acts; `vta/memory/*` is gated on `require_context` and the memory capabilities only. An entry holding "Education" and "Healthcare" reads both from either room; a per-room child context does not help, since a parent's holder reaches every child.
 - **Evidence:** `vta-sdk/src/acl.rs` (`ActScope::covers`); `vta-sdk/src/context_path.rs`; `docs/02-vta/personal-ai-agents.md` Step 6; `docs/02-vta/data-rooms.md` §7; read at the pin `f7b78e29d` on 2026-11-23 (plan §2.1, step 0.1(o) measures the hierarchy rule).
 - **Extension:** an `act` qualified by room, or a presenter leaf that carries the contexts its holder may use, enforced on `vta/memory/*`.
 - **Severity:** **A convenience since rev 4** (2026-11-24, plan D31): the boundary is one ACL entry per distinct memory set, enforced by the VTA today, and the per-room list the plugin kept is withdrawn; this ask would let one agent identity hold different sets per room. Nothing blocks. Registered as VTI-Q37.
@@ -104,7 +104,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** a member who taps an agent in a room should see whose it is and what it is (plan §3.16). The only thing an author may say about itself in a room is its name (`memberProfile`, the name in `title`, "a claim, not a verified one"); the record members a profile may list are a registered set, and none carries a delegation credential. The leaf chain, which records who equipped a presenter, is checked by the host and never shown to members (AC-08).
 - **Evidence:** `docs/02-vta/data-rooms.md` "Names" and "Which name is an author's" (`rooms/_shared/0.3` `MemberProfileRecord`); the recordMembers rule the plan already meets for `mentions` (AC-04); read at the pin `f7b78e29d` on 2026-11-23.
 - **Extension:** register `delegation` as a `memberProfile` member: the author's VDC grant and its acceptance, so a profile can list it and any reader can verify issuer, subject and acceptance against the record's author.
-- **Severity:** P0 works around (own agents show the owner from local records; another party's agent shows its DID and its claimed name with "Keyring can't tell who this belongs to."); layer 2 of plan §3.16 for other parties' agents needs it. Registered as VTI-Q38.
+- **Severity:** P1 works around (own agents show the owner from local records; another party's agent shows its DID and its claimed name with "Keyring can't tell who this belongs to."); layer 2 of plan §3.16 for other parties' agents needs it. Registered as VTI-Q38.
 
 ## Mediator (measured on the starter mediator)
 
@@ -193,7 +193,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** a channel not on Anthropic's allowlist loads only with `--dangerously-load-development-channels`, interactively; the Agent SDK and `-p` ignore it. Not for VTI.
 - **Evidence:** the channels reference (code.claude.com/docs/en/channels-reference, "Test during the research preview", read 2026-11-20).
 - **Extension:** an allowlist path for a plugin not from a partner.
-- **Severity:** P0 works around (stated limit, plus the `inbox` tool and Monitor fallback, plan §3.12); P1 headless daemon removes it.
+- **Severity:** P0 works around (stated limit, plus the `inbox` tool and Monitor fallback, plan §3.12); the P2 headless daemon (7.19) removes it.
 
 ## Added after the independent review (2026-11-20)
 
@@ -256,7 +256,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** wiping what an agent remembered is one delete per key and leaves tombstones kept 30 days.
 - **Evidence:** `operations/memory.rs:104`; `app_state.rs:120`, 2026-11-24.
 - **Extension:** a clear by context or prefix; say what a tombstone keeps.
-- **Severity:** P0 none; P1 works around (client loop). Registered as VTI-Q43.
+- **Severity:** P0 and P1 none; P2 works around (client loop, step 7.18). Registered as VTI-Q43.
 
 ### AC-31 A client cannot read the VTA's storage protection mode
 
