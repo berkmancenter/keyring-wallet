@@ -7,7 +7,7 @@
   "height": 6936,
   "sheet": {
     "file": "sheet.png",
-    "sha256": "50f477e64c69a7de13ae4e1ded3124c477a49d44135e08ae2fa635201773e659"
+    "sha256": "b432bef210786969a7e78479dc20650d5d6f65b479451e4cf96a5ed5f1f06134"
   },
   "svgs": {
     "01-connect-name.svg": "053a1a5d2a4357c235f05442926b464aff1ca201ca69793b0ee825118d57d92b",
@@ -32,6 +32,6 @@
     "20-change-memories.svg": "7fd38a9ba1ab24be6fa9397c7fab08d8f6ee41889c5734972ca49b9cdbe9a83b",
     "21-delete-memory.svg": "a219558ea02ac31896b70396a6b632b1c24d852bc50e6fb254704a98577d5d88",
     "22-memory-drift.svg": "bcf217eac6c556a1b1cde50c165df05058cd0dc65cf5929fdb83bb22ec321c6d",
-    "23-new-memory-not-allowed.svg": "5e2ec6fca62530dc4f0e3e87bede316f654362659b4e8ace104fefd0a2846e6b"
+    "23-not-an-administrator.svg": "0a035f2b394d7a76d3e513941389bd9b9822cabe9476c5cc8dfb735385e1cda0"
   }
 }

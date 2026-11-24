@@ -360,20 +360,15 @@ export const MOCKUPS: Mockup[] = [
     notes: ['Shown at app start and on opening the list or details when the entry holds a context beyond the agent’s memories and its rooms’ (§3.15 step 5). "Restore" narrows the entry back after one confirmation; "Revoke" opens 17.', '"Lost access to <memory>" is the opposite case, a memory the agent should have and no longer does; drawn here as its line. The body line under the title is a mockup choice (the plan defines the title only).'],
   },
   {
-    file: '23-new-memory-not-allowed.svg',
-    title: `Connect an agent: a phone that cannot create memories (${PLAN} §3.15, D32)`,
+    file: '23-not-an-administrator.svg',
+    title: `Connect an agent: the guard for a phone that is not an unrestricted administrator (${PLAN} §1.5, §3.15, D32)`,
     draw: (s) => {
       s.header('Connect an agent')
-      let y = s.body('Name this agent', TOP)
-      y = s.placeholder(y + 4, [CONTENT_W * 0.55]) + 14
-      y = s.body('Memory it can use', y)
-      y = s.layerRow('Education', y + 2)
-      y = s.layerRow('Healthcare', y) + 8
-      y = s.errorNotice("Your VTA doesn't let this phone create memories. Pick one that exists, or ask the VTA's administrator.", y)
-      s.primaryButton('Continue', BOTTOM)
+      s.errorNotice("This phone can't connect an agent. Connecting needs full administrator access to your VTA.", TOP)
+      s.primaryButton('Close', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['The "New memory" row is absent when `auth/whoami` shows the phone is not an unrestricted administrator (a root context needs one, VTI-CTX-020). The existing memories can still be picked.', 'Decided (D32): no other route is built; the parent-context fallback is documented only.'],
+    notes: ['Shown when `auth/whoami` at connect time says the session is not an unrestricted administrator. Keyring assumes it always is (§1.5); this is that assumption being enforced, not a degraded mode: nothing is created and no other role is tried.', 'Step 0.1(p) confirms the assumption live; a scoped phone reopens D32.'],
   },
 ]
 
