@@ -33,10 +33,8 @@ import { useRCardCredential } from '../hooks/useRCardCredential'
 import { formInputFromTemplate, profileLabel } from '../types/rcard'
 import { testIdWithKey } from '../../../utils/testable'
 import { DidDetails } from '../../trust-tasks/screens/DidDetails'
-import ApproverAskRow from '../../trust-tasks/screens/ApproverAskRow'
 import ConfirmItsYouRow from '../../trust-tasks/screens/ConfirmItsYouRow'
 import { isConfirmItsYouEnabled } from '../../trust-tasks/module/confirmItsYouFlag'
-import { isTrustedApproversEnabled } from '../../trust-tasks/module/trustedApproversFlag'
 import { ContactLinks, loadContactLinks, relationshipsOfContact } from '../contacts/contactLinks'
 import { separateContact } from '../contacts/mergeContacts'
 import { connectionToOpen } from '../contacts/messageRows'
@@ -407,7 +405,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
             <ConfirmItsYouRow
               variant="button"
               connectionId={connectionId}
-              name={displayName || t('Approver.UnnamedContact')}
+              name={displayName || t('Contacts.AContact')}
             />
           </View>
         ) : null}
@@ -481,15 +479,13 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           </View>
         </View>
 
-        {/* Safety (mock GVGac4je… frame 1): confirming a call or message is really this contact, then asking them to
-            approve for me. Each row is shown only with its own switch on; the heading only when one of them is. */}
-        {isConfirmItsYouEnabled() || isTrustedApproversEnabled() ? (
+        {/* Safety (mock GVGac4je… frame 1): confirming a call or message is really this contact. */}
+        {isConfirmItsYouEnabled() ? (
           <View style={styles.section} testID={testIdWithKey('ContactSafety')}>
             <ThemedText style={styles.sectionLabel} accessibilityRole="header">
               {t('ConfirmItsYou.SafetyTitle')}
             </ThemedText>
-            <ConfirmItsYouRow connectionId={connectionId} name={displayName || t('Approver.UnnamedContact')} />
-            <ApproverAskRow connectionId={connectionId} name={displayName || t('Approver.UnnamedContact')} />
+            <ConfirmItsYouRow connectionId={connectionId} name={displayName || t('Contacts.AContact')} />
           </View>
         ) : null}
 

@@ -1,7 +1,7 @@
 /**
  * "Confirm it's you", both phones, through the REAL Trust Task pipeline (TrustTasksService.consume: schema, identity
  * cross-check, recipient check, proof required). The signature is a stand-in that verifies only under the DID that
- * made it, over the document as it was signed (as in approverRole.test.ts), so what is tested is the protocol's own
+ * made it, over the document as it was signed, so what is tested is the protocol's own
  * decisions: what is refused unverified, what answer counts, what the owner must confirm, when a request lapses, and
  * what each switch turns off.
  */
@@ -281,7 +281,7 @@ describe('the round trip', () => {
 
   test('nothing in the flow reaches for an agent or a VTA', () => {
     const source = fs.readFileSync(path.join(__dirname, '../../../src/modules/trust-tasks/confirmItsYou.ts'), 'utf8')
-    expect(source).not.toMatch(/vtaAgent|VtaClient|vtiAgent|trustedApprovers/)
+    expect(source).not.toMatch(/vtaAgent|VtaClient|vtiAgent/)
   })
 })
 

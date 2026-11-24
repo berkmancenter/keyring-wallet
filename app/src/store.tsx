@@ -41,11 +41,6 @@ export interface Developer {
    * setSharedConnectInviteEnabled. Only takes effect while enableSharedConnect is on too.
    */
   enableSharedConnectInvite: boolean
-  /**
-   * Trusted approvers (docs/plans/trusted-approver-plan.md): naming someone to approve sensitive actions on this
-   * person's agent, and approving for someone else's. bifold's setTrustedApproversEnabled.
-   */
-  enableTrustedApprovers: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -67,7 +62,6 @@ enum DeveloperDispatchAction {
   TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
   TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
   TOGGLE_SHARED_CONNECT_INVITE = 'developer/toggleSharedConnectInvite',
-  TOGGLE_TRUSTED_APPROVERS = 'developer/toggleTrustedApprovers',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -142,9 +136,6 @@ const developerState: Developer = {
   // A saved choice wins on load, so someone who switched it off keeps it off. To turn it off for everyone, use
   // bifold's SHARED_CONNECT_REMOTE_OFF.invite, which beats a saved "on"; changing this default cannot.
   enableSharedConnectInvite: true,
-  // Off by default. A saved choice wins on load. To turn it off for everyone, whatever was saved, use bifold's
-  // TRUSTED_APPROVERS_REMOTE_OFF, which beats a saved "on"; changing this default cannot.
-  enableTrustedApprovers: false,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -166,7 +157,9 @@ export enum BCLocalStorageKeys {
   EnableLivePickup = 'EnableLivePickup',
   EnableSharedConnect = 'EnableSharedConnect',
   EnableSharedConnectInvite = 'EnableSharedConnectInvite',
-  EnableTrustedApprovers = 'EnableTrustedApprovers',
+  // The Developer switch for the approvers feature (key spelled out in removedApproversSwitch.test.ts) was here. The
+  // feature is gone, so the key is no longer read or written; a phone that saved it keeps the value, orphaned and
+  // ignored, never migrated.
   // 'EnableConfirmItsYou' was here: the Developer switch for "Confirm it's you" while it was a demo. It is part of the
   // app now, with no setting (Alberto, 2026-11-18), so the key is no longer read or written. A phone that saved it
   // keeps the value; it is left and ignored, never migrated: a saved "off" cannot be told from one never touched.
@@ -278,17 +271,6 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       PersistentStorage.storeValueForKey<boolean>(
         BCLocalStorageKeys.EnableSharedConnectInvite,
         developer.enableSharedConnectInvite
-      )
-
-      return { ...state, developer }
-    }
-    case DeveloperDispatchAction.TOGGLE_TRUSTED_APPROVERS: {
-      const enableTrustedApprovers: boolean = (action?.payload || []).pop() || false
-      const developer = { ...state.developer, enableTrustedApprovers }
-
-      PersistentStorage.storeValueForKey<boolean>(
-        BCLocalStorageKeys.EnableTrustedApprovers,
-        developer.enableTrustedApprovers
       )
 
       return { ...state, developer }

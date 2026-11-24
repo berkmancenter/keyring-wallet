@@ -51,12 +51,12 @@ describe('Developer: "Confirm it\'s you" is not a setting here', () => {
   test.each([
     ['on', true],
     ['off', false],
-  ])('with the feature %s, there is no row for it (control: the Demos section is shown)', (_, on) => {
+  ])('with the feature %s, there is no row for it (control: the Diagnostics section is shown)', (_, on) => {
     setConfirmItsYouEnabled(on)
     const tree = shown()
     expect(tree.queryByTestId(ROW)).toBeNull()
     expect(tree.queryByText('Developer.EnableConfirmItsYou')).toBeNull()
-    expect(tree.getByText('Developer.Demos')).toBeTruthy()
+    expect(tree.getByText('Diagnostics')).toBeTruthy()
   })
 
   test('showing the screen changes nothing about the feature: on stays on, off stays off', () => {

@@ -101,7 +101,7 @@ describe('"Confirm it\'s you" has no setting in the app', () => {
     expect(read.mock.calls.map(([key]) => key)).not.toContain(OLD_KEY)
     expect(Object.keys(developer)).not.toContain('enableConfirmItsYou')
     // Control: the loader did read its other switches, so "not read" is not "nothing was read".
-    expect(read.mock.calls.map(([key]) => key)).toContain(BCLocalStorageKeys.EnableTrustedApprovers)
+    expect(read.mock.calls.map(([key]) => key)).toContain(BCLocalStorageKeys.EnableSharedConnectInvite)
   })
 
   it.each([

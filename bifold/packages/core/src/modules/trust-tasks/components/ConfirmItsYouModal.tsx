@@ -15,7 +15,7 @@
  * asker's phone (confirmItsYou.ts cancelConfirmRequest sends nothing), so a cancelled request still reads as open here
  * until its time runs out, and only then as expired. A request that ran out while no sheet was up is not shown at all.
  *
- * Self-contained: mounted once at the root beside ApproverOfferModal. With the switch off it shows nothing and brings
+ * Self-contained: mounted once at the root. With the switch off it shows nothing and brings
  * nothing back; the switch is read at every render.
  *
  * @module trust-tasks/components/ConfirmItsYouModal
@@ -166,7 +166,7 @@ const ConfirmItsYouModal: React.FC = () => {
       if (!agent || !prompt || busy) return
       setBusy(true)
       setSaid(null)
-      const words = { asker: prompt.asker || t('Approver.UnnamedContact'), interpolation: { escapeValue: false } }
+      const words = { asker: prompt.asker || t('Contacts.AContact'), interpolation: { escapeValue: false } }
       try {
         // Read at answer time, not from state: the state starts 'unknown' until the probe resolves, and a quick tap must
         // not send that. An unknown kind is left out of the answer (namedLock), never sent as a claim.
@@ -281,7 +281,7 @@ const ConfirmItsYouModal: React.FC = () => {
     </>
   ) : expired ? (
     (() => {
-      const words = { asker: expired.asker || t('Approver.UnnamedContact'), interpolation: { escapeValue: false } }
+      const words = { asker: expired.asker || t('Contacts.AContact'), interpolation: { escapeValue: false } }
       return (
         <>
           <ThemedText style={styles.muted}>{t('ConfirmItsYou.From', words)}</ThemedText>
@@ -308,7 +308,7 @@ const ConfirmItsYouModal: React.FC = () => {
     })()
   ) : prompt ? (
     (() => {
-      const words = { asker: prompt.asker || t('Approver.UnnamedContact'), interpolation: { escapeValue: false } }
+      const words = { asker: prompt.asker || t('Contacts.AContact'), interpolation: { escapeValue: false } }
       return (
         <>
           <ThemedText style={styles.muted}>{t('ConfirmItsYou.From', words)}</ThemedText>

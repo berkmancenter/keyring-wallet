@@ -100,9 +100,7 @@ afterEach(() => {
 
 describe('the switches found', () => {
   it('include the ones known today (a floor, so a scan that finds nothing fails)', () => {
-    expect(SWITCHES.map((s) => s.exports[0])).toEqual(
-      expect.arrayContaining(['TRUSTED_APPROVERS_REMOTE_OFF', 'CONFIRM_ITS_YOU_REMOTE_OFF'])
-    )
+    expect(SWITCHES.map((s) => s.exports[0])).toEqual(expect.arrayContaining(['CONFIRM_ITS_YOU_REMOTE_OFF']))
   })
 
   it('every switch said to ship on is one of them (the list is not stale)', () => {
@@ -124,14 +122,19 @@ describe('the switches found', () => {
   )
 })
 
-describe.each(SWITCHES.filter((s) => !s.shipsOn))('the $name switch, which ships off', (s) => {
-  it('is off as a start-up finds it, until the app turns it on', () => {
-    const shipped = asShipped(s.file, s.kill)
-    expect(shipped.is()).toBe(false)
-    shipped.set(true)
-    expect(shipped.is()).toBe(true)
+// No switch ships off today (the one left ships on); the rows below run for the first one that is added without
+// being named in SHIPS_ON, which is what the guard is for.
+const SHIPS_OFF = SWITCHES.filter((s) => !s.shipsOn)
+if (SHIPS_OFF.length > 0) {
+  describe.each(SHIPS_OFF)('the $name switch, which ships off', (s) => {
+    it('is off as a start-up finds it, until the app turns it on', () => {
+      const shipped = asShipped(s.file, s.kill)
+      expect(shipped.is()).toBe(false)
+      shipped.set(true)
+      expect(shipped.is()).toBe(true)
+    })
   })
-})
+}
 
 describe.each(SWITCHES.filter((s) => s.shipsOn))('the $name switch, which ships on', (s) => {
   it('is on as a start-up finds it, with nothing having set it (control: a run can still turn it off)', () => {

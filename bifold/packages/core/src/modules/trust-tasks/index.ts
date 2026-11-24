@@ -55,11 +55,6 @@ export {
   setSharedConnectInviteEnabled,
   isSharedConnectInviteEnabled,
 } from './module/sharedConnectFlag'
-export {
-  setTrustedApproversEnabled,
-  isTrustedApproversEnabled,
-  TRUSTED_APPROVERS_REMOTE_OFF,
-} from './module/trustedApproversFlag'
 export { setConfirmItsYouEnabled, isConfirmItsYouEnabled, CONFIRM_ITS_YOU_REMOTE_OFF } from './module/confirmItsYouFlag'
 
 // 228 writer: DTG Credentials v1 shapes are written only when this is on (default off).
@@ -149,7 +144,6 @@ export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook, VtaAclEntry 
 // effect as much as its symbol.
 export { registerHiddenVettingModules } from './hiddenVettingModules'
 export { registerHiddenVetting, hiddenVettingSeam } from './screens/hiddenVettingSeam'
-export { EnforcementCheckCard, EnforcementCheckIds } from './screens/approver/EnforcementCheckCard'
 export type {
   HiddenVettingSeam,
   HiddenVettingCheck,

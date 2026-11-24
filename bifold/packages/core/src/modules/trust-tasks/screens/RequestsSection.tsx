@@ -31,11 +31,9 @@ export interface RequestsSectionProps {
   waiting: VtiApproval[]
   onOpen: () => void
   onAskMe: () => void
-  /** Who approves for this person: shown only when given (the trusted-approvers switch is on). */
-  onWhoApproves?: () => void
 }
 
-export const RequestsSection: React.FC<RequestsSectionProps> = ({ waiting, onOpen, onAskMe, onWhoApproves }) => {
+export const RequestsSection: React.FC<RequestsSectionProps> = ({ waiting, onOpen, onAskMe }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   // Who asked is named from what this phone knows of the agent's devices.
@@ -123,17 +121,6 @@ export const RequestsSection: React.FC<RequestsSectionProps> = ({ waiting, onOpe
         <View style={{ width: 22 }} />
         <ThemedText style={styles.link}>{t('Requests.AskMeRow')}</ThemedText>
       </Pressable>
-      {onWhoApproves ? (
-        <Pressable
-          onPress={onWhoApproves}
-          accessibilityRole="link"
-          style={styles.row}
-          testID={testIdWithKey('AgentWhoApprovesRow')}
-        >
-          <View style={{ width: 22 }} />
-          <ThemedText style={styles.link}>{t('Screens.VtaTrustedApprovers')}</ThemedText>
-        </Pressable>
-      ) : null}
     </View>
   )
 }
