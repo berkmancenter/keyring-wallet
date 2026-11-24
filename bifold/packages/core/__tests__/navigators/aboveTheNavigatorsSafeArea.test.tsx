@@ -55,15 +55,12 @@ jest.mock('../../src/contexts/auth', () => ({
 
 import { ActivityProvider } from '../../src/contexts/activity'
 import { BiometricConfirmationProvider } from '../../src/contexts/biometric-confirmation'
-import ApproverOfferModal from '../../src/modules/trust-tasks/components/ApproverOfferModal'
 import ConfirmItsYouModal from '../../src/modules/trust-tasks/components/ConfirmItsYouModal'
 import CredentialExchangeQueryModal from '../../src/modules/trust-tasks/components/CredentialExchangeQueryModal'
 import ContinuityCheckModal from '../../src/modules/vrc/components/ContinuityCheckModal'
 import LateStepReadyModal from '../../src/modules/vrc/components/LateStepReadyModal'
 import LocalityPreflightModal from '../../src/modules/vrc/components/LocalityPreflightModal'
 import RelationshipProposalModal from '../../src/modules/vrc/components/RelationshipProposalModal'
-import { roleOfferPromptStore } from '../../src/modules/trust-tasks/approverRole'
-import { setTrustedApproversEnabled } from '../../src/modules/trust-tasks/module/trustedApproversFlag'
 import { confirmPromptStore } from '../../src/modules/trust-tasks/confirmItsYou'
 import { setConfirmItsYouEnabled } from '../../src/modules/trust-tasks/module/confirmItsYouFlag'
 
@@ -76,7 +73,6 @@ import { setConfirmItsYouEnabled } from '../../src/modules/trust-tasks/module/co
 const ABOVE_THE_NAVIGATORS = [
   'ActivityProvider',
   'AgentProvider',
-  'ApproverOfferModal',
   'BiometricConfirmationProvider',
   'ConfirmItsYouModal',
   'ContinuityCheckModal',
@@ -129,7 +125,6 @@ describe('what RootStack mounts above the navigators', () => {
     ['ContinuityCheckModal', ContinuityCheckModal],
     ['LocalityPreflightModal', LocalityPreflightModal],
     ['CredentialExchangeQueryModal', CredentialExchangeQueryModal],
-    ['ApproverOfferModal', ApproverOfferModal],
     ['ConfirmItsYouModal', ConfirmItsYouModal],
   ])('%s', (_name, Component) => {
     it('mounts with no safe-area provider in scope', () => {
@@ -153,36 +148,6 @@ describe('what RootStack mounts above the navigators', () => {
         )
       ).not.toThrow()
     })
-  })
-
-  it('mounts ApproverOfferModal SHOWING an offer with no safe-area provider in scope', () => {
-    // Its row above renders nothing (the switch is off by default), so that row alone says nothing about the sheet.
-    // Here the switch is on and an offer waits, so the sheet itself is what mounts.
-    setTrustedApproversEnabled(true)
-    roleOfferPromptStore.set({
-      open: true,
-      connectionId: 'conn-guard',
-      asker: 'Sam',
-      agentDid: 'did:webvh:agent.example',
-      actions: ['shareCredential'],
-      request: { payload: { challenge: 'x'.repeat(43) } },
-      receivedAt: new Date().toISOString(),
-    })
-    try {
-      const view = render(
-        <BasicAppContext>
-          <ActivityProvider>
-            <ApproverOfferModal />
-          </ActivityProvider>
-        </BasicAppContext>
-      )
-      // The real safe-area module's provider renders no children under jest (it waits for native insets), so the
-      // sheet's words are not reachable here; what is, is that the sheet's modal mounted (switched off, there is none).
-      expect(view.UNSAFE_root.findAllByType(Modal).length).toBeGreaterThan(0)
-    } finally {
-      roleOfferPromptStore.clear()
-      setTrustedApproversEnabled(false)
-    }
   })
 
   it('mounts ConfirmItsYouModal SHOWING a request with no safe-area provider in scope', () => {

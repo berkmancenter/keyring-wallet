@@ -67,8 +67,6 @@ import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
 import * as continuitySpec from '../vrc/contacts/continuitySpec'
 import { handleContinuityRequest, handleContinuityResponse } from '../vrc/contacts/continuity'
-import * as approverRoleSpec from './approverRoleSpec'
-import { handleRoleOfferRequest, handleRoleOfferResponse, handleRoleRemoved, handleRoleStepDown } from './approverRole'
 import * as confirmItsYouSpec from './confirmItsYouSpec'
 import { handleConfirmRequest, handleConfirmResponse } from './confirmItsYou'
 import type { VwcPresentationBundle } from './outcomeEvidence'
@@ -2097,35 +2095,6 @@ function registerBuiltinTrustTasks(): void {
     orchestration: { requiresDiscovery: false },
     handleRequest: handleContinuityRequest,
     handleResponse: handleContinuityResponse,
-  })
-
-  // Keyring's own type (private authority): one person asks a contact to be their trusted approver. Its handlers do
-  // nothing while the trusted-approvers switch is off.
-  trustTaskRegistry.register({
-    typeUri: approverRoleSpec.TYPE_URI,
-    spec: approverRoleSpec.SPEC as never,
-    responseSpec: approverRoleSpec.RESPONSE_SPEC as never,
-    orchestration: { requiresDiscovery: false },
-    handleRequest: handleRoleOfferRequest,
-    handleResponse: handleRoleOfferResponse,
-  })
-
-  // Keyring's own type (private authority): an approver tells the person they no longer approve for them. One way,
-  // nothing answers it; its handler does nothing while the trusted-approvers switch is off.
-  trustTaskRegistry.register({
-    typeUri: approverRoleSpec.STEP_DOWN_TYPE_URI,
-    spec: approverRoleSpec.STEP_DOWN_SPEC as never,
-    orchestration: { requiresDiscovery: false },
-    handleRequest: handleRoleStepDown,
-  })
-
-  // Keyring's own type (private authority): the person tells an approver it took them off its agent's approvers, which
-  // ends the approver's listening after a step-down. One way; its handler does nothing while the switch is off.
-  trustTaskRegistry.register({
-    typeUri: approverRoleSpec.REMOVED_TYPE_URI,
-    spec: approverRoleSpec.REMOVED_SPEC as never,
-    orchestration: { requiresDiscovery: false },
-    handleRequest: handleRoleRemoved,
   })
 
   // Keyring's own type (private authority): one person asks a contact to confirm, with their phone's lock, that a call

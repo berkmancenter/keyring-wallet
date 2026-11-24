@@ -176,8 +176,6 @@ const translation = {
     "EnableV2Mailbox": "Caixa de correio DIDComm v2 (convites v2)",
     "EnableSharedConnect": "Conectar com um código compartilhado (experimental)",
     "EnableSharedConnectInvite": "Mostrar um código para outras pessoas escanearem (experimental; precisa da opção acima)",
-    "EnableTrustedApprovers": "Aprovadores de confiança: alguém de confiança aprova por você (experimental). Ative nos dois telefones: enquanto estiver desativado, os pedidos para ser aprovador são ignorados.",
-    "Demos": "Demos",
     "EnableLivePickup": "Recebimento de mensagens ao vivo (WebSocket)",
     "Mediator": "Mediador",
     "CopyValue": "Copiar",

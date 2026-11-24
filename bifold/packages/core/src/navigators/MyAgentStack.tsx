@@ -17,7 +17,6 @@ import VtaRequests from '../modules/trust-tasks/screens/VtaRequests'
 import VtaCreateAgent from '../modules/trust-tasks/screens/VtaCreateAgent'
 import VtaDevices from '../modules/trust-tasks/screens/VtaDevices'
 import VtaAskMe from '../modules/trust-tasks/screens/VtaAskMe'
-import VtaTrustedApprovers from '../modules/trust-tasks/screens/VtaTrustedApprovers'
 import VtaAgentSettings from '../modules/trust-tasks/screens/VtaAgentSettings'
 import VtaNewPhoneOffer from '../modules/trust-tasks/screens/VtaNewPhoneOffer'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
@@ -189,23 +188,6 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.VtaAskMe}
         component={VtaAskMe}
         options={{ title: t('Screens.VtaAskMe'), ...ScreenOptionsDictionary[Screens.VtaAskMe] }}
-      />
-      <Stack.Screen
-        name={Screens.VtaTrustedApprovers}
-        component={VtaTrustedApprovers}
-        options={{
-          title: t('Screens.VtaTrustedApprovers'),
-          ...ScreenOptionsDictionary[Screens.VtaTrustedApprovers],
-        }}
-      />
-      {/* One person from Who approves (design B): the same screen, opened on them. */}
-      <Stack.Screen
-        name={Screens.VtaApproverPerson}
-        component={VtaTrustedApprovers}
-        options={{
-          title: t('Screens.VtaApproverPerson'),
-          ...ScreenOptionsDictionary[Screens.VtaApproverPerson],
-        }}
       />
       {/* Opened from the gear in "Your agent"'s header. */}
       <Stack.Screen

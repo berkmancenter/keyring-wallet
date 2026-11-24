@@ -26,7 +26,6 @@ import {
   setPeerLegCarriage,
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
-  setTrustedApproversEnabled,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -390,7 +389,6 @@ export class AppContainer implements Container {
         enableLivePickup,
         enableSharedConnect,
         enableSharedConnectInvite,
-        enableTrustedApprovers,
       } = initialState.developer
       let witness = initialState.witness
 
@@ -423,9 +421,6 @@ export class AppContainer implements Container {
         // A saved "on" outlives any default, so bifold's isSharedConnectInviteEnabled() (with its remote off) is this
         // flag's only kill path: keep the read going through it, never inline the saved value.
         loadSwitch(BCLocalStorageKeys.EnableSharedConnectInvite, (val) => (enableSharedConnectInvite = val)),
-        // As above: bifold's isTrustedApproversEnabled() (with its remote off) is this flag's only kill path, so every
-        // reader goes through it, never the saved value.
-        loadSwitch(BCLocalStorageKeys.EnableTrustedApprovers, (val) => (enableTrustedApprovers = val)),
         // "Confirm it's you" is not loaded here any more: it is part of the app, with no setting, and bifold's own
         // switch decides it (on as shipped; CONFIRM_ITS_YOU_REMOTE_OFF turns it off). The
         // value a phone saved while it was a Developer switch is left where it is and ignored.
@@ -457,7 +452,6 @@ export class AppContainer implements Container {
           enableLivePickup,
           enableSharedConnect,
           enableSharedConnectInvite,
-          enableTrustedApprovers,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
@@ -467,8 +461,6 @@ export class AppContainer implements Container {
       setSharedConnectEnabled(state.developer.enableSharedConnect)
       // Before the QR sheet first opens: it offers "Show a code" only while this is on.
       setSharedConnectInviteEnabled(state.developer.enableSharedConnectInvite)
-      // Before the agent's first message is read: an offer or an approver's request that arrives is dropped while off.
-      setTrustedApproversEnabled(state.developer.enableTrustedApprovers)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {

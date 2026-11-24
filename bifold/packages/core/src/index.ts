@@ -280,15 +280,11 @@ export type {
   ChatEventKey,
   ChatMessageIds,
 } from './modules/chat'
-export { EnforcementCheckCard, EnforcementCheckIds } from './modules/trust-tasks'
 export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
-  setTrustedApproversEnabled,
-  isTrustedApproversEnabled,
-  TRUSTED_APPROVERS_REMOTE_OFF,
   setConfirmItsYouEnabled,
   isConfirmItsYouEnabled,
   CONFIRM_ITS_YOU_REMOTE_OFF,

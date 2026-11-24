@@ -33,7 +33,6 @@ import { communitiesSharing, healSharedIdentities } from '../module/sharedIdenti
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { agentTransition, vtaAgent } from '../module/vtaAgent'
-import { isTrustedApproversEnabled } from '../module/trustedApproversFlag'
 import { loadCardStanding } from '../module/vtiCardStanding'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useCommunityJourneysOf } from '../module/communityJourney'
@@ -1030,7 +1029,6 @@ const VtaAgentHome: React.FC = () => {
           waiting={waiting}
           onOpen={() => go(Screens.VtaRequests)}
           onAskMe={() => go(Screens.VtaAskMe)}
-          onWhoApproves={isTrustedApproversEnabled() ? () => go(Screens.VtaTrustedApprovers) : undefined}
         />
 
         <SectionRule />

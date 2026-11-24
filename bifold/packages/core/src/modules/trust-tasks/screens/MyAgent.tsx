@@ -43,14 +43,12 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 import { ApprovalDetails } from './ApprovalDetails'
 import { MyAgentIds } from './MyAgent.ids'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
-import { mayApprove } from '../module/afterStepDown'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { ownVetterGrantState } from '../module/vtiGrantState'
 import { useCommunityChanged } from '../module/communityChanged'
 import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
-import { shownApprovals } from '../module/waitingRequests'
 
 import { openScanner } from './openScanner'
 import { useChosenCommunityDid } from './useCommunity'
@@ -58,7 +56,6 @@ import { useVtaDid } from './VtaStatus'
 import { sayFailure, type Said } from './plainError'
 import SaidFailure from './SaidFailure'
 import { localDate, localDateTime } from './localTime'
-import ApproverWaitNote from './ApproverWaitNote'
 
 /**
  * Where an agent comes from, for a person with none yet: a hosting service
@@ -466,16 +463,14 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               </Text>
             </View>
           ) : null}
-          {/* Which of this person's approvers it waits on, when it is theirs to approve; hidden otherwise. */}
-          <ApproverWaitNote />
-          {shownApprovals(vta.approvals).length === 0 ? (
+          {vta.approvals.length === 0 ? (
             <Text style={styles.value} testID={testIdWithKey(MyAgentIds.noApprovals)}>
               {vta.status === 'connected'
                 ? `${t('MyAgent.NoApprovals')} ${t('MyAgent.AgentListening')}`
                 : t('MyAgent.NoApprovals')}
             </Text>
           ) : (
-            shownApprovals(vta.approvals).map((approval) => (
+            vta.approvals.map((approval) => (
               <View key={approval.id} style={styles.card} testID={testIdWithKey(MyAgentIds.approvalCard)}>
                 <Text style={styles.value}>
                   {t('MyAgent.ApprovalAsks', {
@@ -490,17 +485,15 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 <ApprovalDetails approval={approval} />
                 {approval.status === 'pending' ? (
                   <View style={styles.row}>
-                    {mayApprove(approval) ? (
-                      <Pressable
-                        style={[styles.button, { flex: 1 }]}
-                        testID={testIdWithKey(MyAgentIds.approveConsentButton)}
-                        accessibilityRole="button"
-                        disabled={deciding !== undefined}
-                        onPress={() => onDecide(approval.id, 'approve')}
-                      >
-                        <Text style={styles.buttonText}>{t('MyAgent.Approve')}</Text>
-                      </Pressable>
-                    ) : null}
+                    <Pressable
+                      style={[styles.button, { flex: 1 }]}
+                      testID={testIdWithKey(MyAgentIds.approveConsentButton)}
+                      accessibilityRole="button"
+                      disabled={deciding !== undefined}
+                      onPress={() => onDecide(approval.id, 'approve')}
+                    >
+                      <Text style={styles.buttonText}>{t('MyAgent.Approve')}</Text>
+                    </Pressable>
                     <Pressable
                       style={[styles.button, { flex: 1, backgroundColor: ColorPalette.grayscale.mediumGrey }]}
                       testID={testIdWithKey(MyAgentIds.denyConsentButton)}

@@ -16,7 +16,6 @@ jest.mock('@credo-ts/askar', () => ({ AskarStoreManager: class AskarStoreManager
 jest.mock('../MainStack', () => () => null)
 jest.mock('../../modules/vrc/components/RelationshipProposalModal', () => () => null)
 jest.mock('../../modules/vrc/components/ContinuityCheckModal', () => () => null)
-jest.mock('../../modules/trust-tasks/components/ApproverOfferModal', () => () => null)
 jest.mock('../../modules/trust-tasks/components/ConfirmItsYouModal', () => () => null)
 jest.mock('../../modules/vrc/components/LocalityPreflightModal', () => () => null)
 jest.mock('../../modules/trust-tasks/components/CredentialExchangeQueryModal', () => () => null)

@@ -39,19 +39,10 @@ import { classifyDid, type DidResolverAgent } from './classifyDid'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { setCurrentAgentDid } from './currentAgent'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
-import { mayApprove } from './afterStepDown'
-import { approvedAgentOf, sendForeignDecision, takeForeignReply } from './foreignApproval'
 import { isKeyCopiesTogetherOn, KEY_COPIES_AT_ONCE, sweepKeyCopies } from './keyCopySweep'
 import type { StepUpRequest } from './stepUp'
 import { releaseWarn } from './releaseLog'
 import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
-import {
-  TrustedRuleRefused,
-  trustedApproversView,
-  withTrustedApprovers,
-  type TrustedApproversView,
-  type TrustedKey,
-} from './trustedApprovers'
 import { isUnsupportedVersionRefusal } from './taskVersions'
 import { VtiRefusal, vtiAgent } from './vtiAgent'
 import {
@@ -133,13 +124,6 @@ export interface ApprovalRulesState {
   canChange: boolean
 }
 
-/** Who approves for this person, as the agent holds it (trusted-approver plan §4). */
-export interface TrustedApproversState {
-  view: TrustedApproversView
-  /** The row's version, as read or as written. */
-  version: number
-}
-
 export interface VtiApproval extends VtaConsentRequest {
   /** The request document's id. */
   id: string
@@ -155,11 +139,6 @@ export interface VtiApproval extends VtaConsentRequest {
    * not. Log-only for now — a request that fails is still listed.
    */
   requestCheck?: 'verified' | string
-  /**
-   * Set when the request is from another person's agent, one this phone agreed to approve for (foreignApproval.ts):
-   * that agent, and the person who asked. The decision goes to that agent, not to this phone's own.
-   */
-  forAgent?: { agentDid: string; asker: string; stopAsked?: true }
 }
 
 export interface VtaAgentState {
@@ -3030,81 +3009,6 @@ export class VtaAgentController {
     })
   }
 
-  /**
-   * The DID this phone approves as when it says yes to being someone's
-   * approver: its manager DID on its own linked agent, where that agent's
-   * consent requests reach it. Signs in if it must. Refuses with
-   * {@link DeviceActionRefused} `notLinked` when there is none.
-   */
-  async approverDid(agent: Agent): Promise<string> {
-    const client = await this.signedIn(agent, this.linkedAgent())
-    if (!client.managerDid) throw new DeviceActionRefused('notLinked')
-    return client.managerDid
-  }
-
-  /**
-   * Saying yes to being someone's approver (the offer sheet's Accept): an owner act, so Face ID, a fingerprint or the
-   * passcode first, with `reason` (already in the person's language) on the prompt; then the DID this phone approves
-   * as. Not confirmed, it throws {@link OwnerNotConfirmed} before anything is read or sent.
-   */
-  async acceptAsApprover(agent: Agent, reason: string): Promise<string> {
-    await this.confirmOwner(reason)
-    return this.approverDid(agent)
-  }
-
-  /**
-   * Who approves for this person, read from the agent's approvals row
-   * (trustedApprovers.ts). Signs in if it must. Refuses with
-   * {@link DeviceActionRefused}.
-   */
-  async trustedApprovers(agent: Agent): Promise<TrustedApproversState> {
-    const client = await this.signedIn(agent, this.linkedAgent())
-    const model = await client.readApprovals().catch((error: unknown) => {
-      throw this.refused(error)
-    })
-    return { view: trustedApproversView(model), version: model.version }
-  }
-
-  /**
-   * Set who approves for this person and for what (trusted-approver plan §4
-   * step 3), on the row as the agent holds it now: read, change only the
-   * trusted rules, write against the version read, and on a clash read and
-   * apply once more, as {@link setApprovalRule} does. Empty `approvers` or
-   * `keys` removes them. Asks the person to confirm first; nothing is sent
-   * without it. If the agent holds rule changes for the approver's yes, the
-   * write waits for it like any held task.
-   */
-  async setTrustedApprovers(
-    agent: Agent,
-    approvers: readonly string[],
-    keys: readonly TrustedKey[]
-  ): Promise<TrustedApproversState> {
-    const vtaDid = this.linkedAgent()
-    await this.confirmOwner('Change who approves for you')
-    releaseWarn('[VTI] trusted approvers: owner confirmed; writing the rules')
-    return this.withinOwnerDeadline(async () => {
-      const client = await this.signedIn(agent, vtaDid)
-      const served = await client.supportedTypes()
-      for (let attempt = 0; ; attempt++) {
-        try {
-          const model = await client.readApprovals()
-          if (model.unreadable)
-            throw new DeviceActionRefused('failed', 'the approval rules hold something Keyring cannot read')
-          const next = withTrustedApprovers(model, approvers, keys, served)
-          const version = await client.writeApprovals(next, model.version)
-          releaseWarn(`[VTI] trusted approvers: rules written, version ${model.version} → ${version}`)
-          return { view: trustedApproversView(next), version }
-        } catch (error) {
-          if (error instanceof TrustedRuleRefused)
-            throw new DeviceActionRefused(error.reason === 'not-served' ? 'notServed' : 'failed', error.message)
-          const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
-          if (details?.reason === 'conflict' && attempt === 0) continue
-          throw this.refused(error)
-        }
-      }
-    })
-  }
-
   /** "Send me a test request" ({@link VtaClient.sendTestRequest}). Signs in if it must. */
   async sendTestRequest(agent: Agent): Promise<Awaited<ReturnType<VtaClient['sendTestRequest']>>> {
     const client = await this.signedIn(agent, this.linkedAgent())
@@ -3844,8 +3748,6 @@ export class VtaAgentController {
   }
 
   private inbound(plaintext: DidCommV2PlaintextMessage) {
-    // The answer to a decision sent to another person's agent is that wait's, never a request.
-    if (takeForeignReply(plaintext)) return
     const body = plaintext.body as { type?: unknown; payload?: unknown } | undefined
     if (body?.type === VTA_TASK.roomsKeysChanged) {
       const payload = body.payload
@@ -3888,31 +3790,14 @@ export class VtaAgentController {
     approval: VtiApproval,
     doc: Record<string, unknown>
   ) {
-    // From another person's agent that this phone approves for: checked against that agent, as its issuer. Any other
-    // request is checked against the agent it arrived through, as before.
-    const other = await approvedAgentOf(current.agent, doc).catch(() => undefined)
-    const issuer = other?.agentDid ?? current.vtaDid
-    const ok = await this.passesCheck(current.agent, issuer, current.client.managerDid, approval.id, doc)
+    const ok = await this.passesCheck(current.agent, current.vtaDid, current.client.managerDid, approval.id, doc)
     if (!ok || this.current?.vtaDid !== current.vtaDid) return
     if (this.state.approvals.some((a) => a.id === approval.id)) return
     const listed: VtiApproval = {
       ...approval,
       requestCheck: 'verified',
-      ...(other
-        ? {
-            forAgent: {
-              agentDid: other.agentDid,
-              asker: other.asker,
-              ...(other.stopAsked ? { stopAsked: true as const } : {}),
-            },
-          }
-        : {}),
     }
     this.set({ approvals: [listed, ...this.state.approvals] })
-    if (other) {
-      releaseWarn(`[VTI] approval asked by ${didPrefix(other.agentDid)}, an agent this phone approves for`)
-      return
-    }
     // Asked by a device this phone has not seen named: read the list once,
     // in the background, so the card can say which device asked.
     const agent = this.agent
@@ -3963,13 +3848,6 @@ export class VtaAgentController {
     const client = this.current?.client
     const approval = this.state.approvals.find((a) => a.id === id)
     if (!client || !approval) return
-    // After a step-down only a change to who approves can be approved (afterStepDown.ts); the card shows no Approve.
-    if (decision === 'approve' && !mayApprove(approval)) {
-      releaseWarn(
-        '[VTI] approve refused: this phone asked to stop approving for that agent, and it is not a change to who approves'
-      )
-      return
-    }
     // Approving lets the agent do what was asked, so it is an owner act, as
     // removing or renaming a device is: Face ID, a fingerprint or the
     // passcode first (Alberto's iPhone, 10-06: Approve asked for nothing).
@@ -3978,27 +3856,12 @@ export class VtaAgentController {
     if (decision === 'approve') await this.confirmOwner(APPROVE_REASON)
     try {
       const ms = this.deps.decisionDeadlineMs ?? DECISION_DEADLINE_MS
-      const other = approval.forAgent
-      const managerDid = client.managerDid
-      // Asked by another person's agent: the decision goes to that agent (foreignApproval.ts), as this phone.
-      const sending = other
-        ? managerDid && this.current
-          ? sendForeignDecision(
-              { agent: this.current.agent, managerDid, sendTo: (peer, plaintext) => client.sendTo(peer, plaintext) },
-              { issuer: other.agentDid, challenge: approval.challenge, payloadDigest: approval.payloadDigest },
-              decision,
-              reason,
-              ms
-            )
-          : Promise.reject(new DeviceActionRefused('notLinked'))
-        : client.decideConsent(approval, decision, reason)
+      const sending = client.decideConsent(approval, decision, reason)
       if (!(await withDeadline(sending, ms))) {
-        // Name the agent the decision went to: for someone else's, that is the asking agent, never this phone's own.
-        throw new Error(`${other ? 'the asking agent' : 'the VTA'} did not take the decision within ${ms / 1000} s`)
+        throw new Error(`the VTA did not take the decision within ${ms / 1000} s`)
       }
       this.update(id, { status: decision === 'approve' ? 'approved' : 'denied' })
-      // What this phone's own agent did; a decision for someone else's agent is not that.
-      if (!other) this.note(decision === 'approve' ? 'approved' : 'denied')
+      this.note(decision === 'approve' ? 'approved' : 'denied')
     } catch (error) {
       this.update(id, { status: 'failed', error: error instanceof Error ? error.message : String(error) })
       throw error

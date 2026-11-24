@@ -1373,7 +1373,7 @@ export class VtaClient {
 
   /**
    * Seal `plaintext` as this phone's manager identity and forward it to `peerDid` over the open session: how this
-   * phone answers another agent that asks it to approve (foreignApproval.ts). Nothing is waited for here.
+   * phone answers a peer over its session. Nothing is waited for here.
    */
   async sendTo(peerDid: string, plaintext: DidCommV2PlaintextMessage): Promise<void> {
     const session = this.session

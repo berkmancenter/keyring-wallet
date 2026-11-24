@@ -1,6 +1,6 @@
 /**
- * No "{{…}}" on screen. The approver's request card read "{{asker}}'s phone shows the same code:" (a6's K1 run,
- * 11-13): ApprovalDetails called t('Requests.ForAgentMatchCode') with no params, live since 11-10. The other request
+ * No "{{…}}" on screen. The approver's request card read "{{requester}}'s phone shows the same code:" (a6's K1 run,
+ * 11-13): ApprovalDetails called t('Requests.AsksTo') with no params, live since 11-10. The other request
  * rows render through the mock `t` that returns the key, so they could not see it; these render real i18next.
  *
  * The scan below is a net, not a proof: it reads `t('Key')` and `t(cond ? 'A' : 'B')` calls with no second argument,
@@ -47,7 +47,6 @@ const approval = {
   taskType: `${SPEC}vta/contexts/create/1.0`,
   subject: 'keyring-demo',
 }
-const forSam = { ...approval, forAgent: { agentDid: 'did:webvh:sams-agent.example', asker: 'Sam' } }
 
 type Node = { children?: Array<Node | string> | null } | string | null
 /** Every text on screen, one line each (the strings in the tree, never its props). */
@@ -67,19 +66,7 @@ describe.each(Object.keys(LOCALES))('the request card, in %s', (lng) => {
     mockT = (key, options) => i18n.t(key, options) as string
   })
 
-  it("for someone else's agent: the code's label names them, and no {{…}} shows anywhere", () => {
-    for (const card of [forSam, { ...forSam, taskType: `${SPEC}vta/something/new/0.1` }]) {
-      const tree = render(
-        <BasicAppContext>
-          <ApprovalDetails approval={card} />
-        </BasicAppContext>
-      )
-      expect(tree.getByTestId(testIdWithKey('ApprovalMatchCodeLabel'))).toHaveTextContent(/Sam/)
-      expect(allText(tree)).not.toMatch(/\{\{|\}\}/)
-    }
-  })
-
-  it("control: this phone's own agent keeps its own label, with no name in it, and no {{…}}", () => {
+  it("this phone's own agent keeps its own label, with no name in it, and no {{…}}", () => {
     const tree = render(
       <BasicAppContext>
         <ApprovalDetails approval={approval} />
@@ -178,12 +165,12 @@ describe("every t() call in core's src that leaves a {{…}} unfilled", () => {
 
   it('control: the scan sees a one-argument call with a placeholder, a ternary one, and lets a filled one pass', () => {
     const src = [
-      "t('Requests.ForAgentMatchCode')",
-      "t(x ? 'MyAgent.ApprovalMatchCode' : 'Requests.ForAgentMatchCode',)",
-      "t('Requests.ForAgentMatchCode', forWords)",
-      "at('Requests.ForAgentMatchCode')",
+      "t('Requests.AsksTo')",
+      "t(x ? 'MyAgent.ApprovalMatchCode' : 'Requests.AsksTo',)",
+      "t('Requests.AsksTo', words)",
+      "at('Requests.AsksTo')",
     ].join('\n')
     expect(oneArgCalls(src).map((c) => c.line)).toEqual([1, 2])
-    expect(String(lookup('Requests.ForAgentMatchCode'))).toMatch(/\{\{asker\}\}/)
+    expect(String(lookup('Requests.AsksTo'))).toMatch(/\{\{requester\}\}/)
   })
 })

@@ -692,7 +692,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         ? [
             {
               text: t('ConfirmItsYou.Title', {
-                name: theirLabel || t('Approver.UnnamedContact'),
+                name: theirLabel || t('Contacts.AContact'),
                 interpolation: { escapeValue: false },
               }),
               testID: ChatIds.confirmWith,
@@ -813,7 +813,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         {showActionSlider && <ActionSlider onDismiss={onDismiss} actions={actions} />}
         <ConfirmWithSheet
           connectionId={connectionId}
-          name={theirLabel || t('Approver.UnnamedContact')}
+          name={theirLabel || t('Contacts.AContact')}
           visible={confirmSheet && confirmOn}
           onClose={() => setConfirmSheet(false)}
         />
