@@ -169,5 +169,4 @@ describe('a host the State root designates', () => {
     expect((await checkDesignation('nope', A, f)).result).toBe('notDesignated')
     expect((f as unknown as { asked: string[] }).asked).toEqual([])
   })
-
 })
