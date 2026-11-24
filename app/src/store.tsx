@@ -26,8 +26,12 @@ export interface Developer {
   remoteDebugging: RemoteDebuggingState
   enableProxy: boolean
   enableAppToAppPersonFlow: boolean
+  /** Wallet-to-wallet TSP carriage, to contacts that read it (bifold contactTspCapability.ts). On unless opted out. */
   enableTspCarriage: boolean
+  /** Accept DIDComm v2 (the agent's didcommVersions ['v1','v2']). On unless opted out. */
   enableDidCommV2: boolean
+  /** The v2 mailbox (Coordinate Mediation 2.0 + its Pickup 4.0 loop), needed to mint v2 invitations. Off by default. */
+  enableV2Mailbox: boolean
   /** Mediator pickup over a live WebSocket instead of polling (utils/livePickup.ts). */
   enableLivePickup: boolean
   /** Connecting from a code someone shared (shared-connect, keyring-wallet #853): bifold's setSharedConnectEnabled. */
@@ -60,11 +64,6 @@ export interface Developer {
   /** Developer "Demo state host": where a demo state root's did:webs is fetched while testing; '' for none. */
   demoStateHost: string
   /**
-   * "Confirm it's you": ask a contact to confirm, with their phone's lock, that it's really them.
-   * bifold's setConfirmItsYouEnabled; CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
-   */
-  enableConfirmItsYou: boolean
-  /**
    * Developer › Demos: which side of the SEDI demo this phone takes ('' for neither). bifold's setSediDemoSide at
    * start-up, so the codes screen shows this side's code after a restart.
    */
@@ -86,6 +85,7 @@ enum DeveloperDispatchAction {
   TOGGLE_APP_TO_APP_PERSON_FLOW = 'developer/toggleAppToAppPersonFlow',
   TOGGLE_TSP_CARRIAGE = 'developer/toggleTspCarriage',
   TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
+  TOGGLE_V2_MAILBOX = 'developer/toggleV2Mailbox',
   TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
   TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
   TOGGLE_SHARED_CONNECT_INVITE = 'developer/toggleSharedConnectInvite',
@@ -93,7 +93,6 @@ enum DeveloperDispatchAction {
   TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
   TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
   TOGGLE_STATE_CARD = 'developer/toggleStateCard',
-  TOGGLE_CONFIRM_ITS_YOU = 'developer/toggleConfirmItsYou',
   SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
   SET_SEDI_DEMO_SIDE = 'developer/setSediDemoSide',
 }
@@ -154,8 +153,12 @@ const developerState: Developer = {
   environment: iasEnvironments[0],
   remoteDebugging: remoteDebuggingState,
   enableAppToAppPersonFlow: false,
-  enableTspCarriage: false,
-  enableDidCommV2: false,
+  // On for everyone. The saved opt-outs live under new keys (below), so a value saved while these were opt-in
+  // switches, off by default, is never read: a false saved against an unfinished experiment is not an opt-out of what
+  // now ships.
+  enableTspCarriage: true,
+  enableDidCommV2: true,
+  enableV2Mailbox: false,
   // Off unless the build says otherwise: LIVE_MESSAGE_PICKUP=true in app/.env
   // turns it on for a review build with no code change. A value saved from
   // Developer options wins over this at startup (container-imp.ts).
@@ -176,8 +179,6 @@ const developerState: Developer = {
   // Off by default: STATE_CARD_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on"; changing this default cannot.
   enableStateCard: false,
   demoStateHost: '',
-  // Off by default, as above: CONFIRM_ITS_YOU_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
-  enableConfirmItsYou: false,
   sediDemoSide: '',
 }
 
@@ -192,8 +193,11 @@ export enum BCLocalStorageKeys {
   RemoteDebugging = 'RemoteDebugging',
   EnableProxy = 'EnableProxy',
   EnableAppToAppPersonFlow = 'EnableAppToAppPersonFlow',
-  EnableTspCarriage = 'EnableTspCarriage',
-  EnableDidCommV2 = 'EnableDidCommV2',
+  // New keys for switches that are now on by default. The old 'EnableTspCarriage' and 'EnableDidCommV2' values a phone
+  // saved while they were opt-in are left where they are and ignored (container-imp.ts).
+  EnableTspCarriage = 'TspCarriageOnByDefault',
+  EnableDidCommV2 = 'DidCommV2OnByDefault',
+  EnableV2Mailbox = 'EnableV2Mailbox',
   EnableLivePickup = 'EnableLivePickup',
   EnableSharedConnect = 'EnableSharedConnect',
   EnableSharedConnectInvite = 'EnableSharedConnectInvite',
@@ -201,7 +205,9 @@ export enum BCLocalStorageKeys {
   EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
   EnableTrustTestState = 'EnableTrustTestState',
   EnableStateCard = 'EnableStateCard',
-  EnableConfirmItsYou = 'EnableConfirmItsYou',
+  // 'EnableConfirmItsYou' was here: the Developer switch for "Confirm it's you" while it was a demo. It is part of the
+  // app now, with no setting (Alberto, 2026-11-18), so the key is no longer read or written. A phone that saved it
+  // keeps the value; it is left and ignored, never migrated: a saved "off" cannot be told from one never touched.
   DemoStateHost = 'DemoStateHost',
   SediDemoSide = 'SediDemoSide',
 }
@@ -281,6 +287,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
 
       return { ...state, developer }
     }
+    case DeveloperDispatchAction.TOGGLE_V2_MAILBOX: {
+      const enableV2Mailbox: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableV2Mailbox }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableV2Mailbox, developer.enableV2Mailbox)
+
+      return { ...state, developer }
+    }
     case DeveloperDispatchAction.TOGGLE_LIVE_PICKUP: {
       const enableLivePickup: boolean = (action?.payload || []).pop() || false
       const developer = { ...state.developer, enableLivePickup }
@@ -346,14 +360,6 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableStateCard }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableStateCard, developer.enableStateCard)
-
-      return { ...state, developer }
-    }
-    case DeveloperDispatchAction.TOGGLE_CONFIRM_ITS_YOU: {
-      const enableConfirmItsYou: boolean = (action?.payload || []).pop() || false
-      const developer = { ...state.developer, enableConfirmItsYou }
-
-      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableConfirmItsYou, developer.enableConfirmItsYou)
 
       return { ...state, developer }
     }

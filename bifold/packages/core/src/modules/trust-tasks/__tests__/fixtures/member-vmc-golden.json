@@ -1,0 +1,43 @@
+{
+  "acknowledgement": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialSubject": {
+      "digestMultibase": "zQmUo2uEnP4Uda1xAH5fqm77mewu1YcRo88JhLDiBPojooK",
+      "id": "did:webvh:QmCommunity:vtc.example:test-vtc"
+    },
+    "id": "urn:uuid:ack-1",
+    "issuer": "did:webvh:QmPersona:dids.example:column-hobby",
+    "issuerScope": "directed",
+    "type": ["VerifiableCredential", "DTGCredential", "MembershipCredential"],
+    "validFrom": "2026-10-11T18:00:00Z",
+    "validUntil": "2027-10-11T17:00:00Z"
+  },
+  "digestMultibase": "zQmUo2uEnP4Uda1xAH5fqm77mewu1YcRo88JhLDiBPojooK",
+  "grant": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialStatus": {
+      "statusListCredential": "https://vtc.example/v1/status-lists/revocation",
+      "statusListIndex": "9",
+      "statusPurpose": "revocation",
+      "type": "BitstringStatusListEntry"
+    },
+    "credentialSubject": {
+      "id": "did:webvh:QmPersona:dids.example:column-hobby"
+    },
+    "id": "urn:uuid:grant-1",
+    "issuer": "did:webvh:QmCommunity:vtc.example:test-vtc",
+    "issuerScope": "public",
+    "proof": {
+      "created": "2026-10-11T17:00:00Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "zFixture",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:webvh:QmCommunity:vtc.example:test-vtc#key-0"
+    },
+    "type": ["VerifiableCredential", "DTGCredential", "MembershipCredential"],
+    "validFrom": "2026-10-11T17:00:00Z",
+    "validUntil": "2027-10-11T17:00:00Z"
+  },
+  "library": "dtg-credentials 0.13.0"
+}

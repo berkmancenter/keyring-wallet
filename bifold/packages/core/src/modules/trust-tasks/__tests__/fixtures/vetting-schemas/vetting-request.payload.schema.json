@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vetting/request/0.1",
+  "title": "Vetting Request — payload",
+  "description": "An applicant asks one vetter to vet them for one community. The applicant is the document's issuer, and `joinDid` repeats that DID: it is the DID the applicant is applying with, and every card and statement that follows names it. Carries a ticket the vetter issued or an introduction, never both. The vetter's response accepts the request and proves the vetter is currently eligible to vet for that community.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "community",
+    "joinDid"
+  ],
+  "dependentSchemas": {
+    "ticket": {
+      "not": {
+        "required": [
+          "introduction"
+        ]
+      }
+    }
+  },
+  "properties": {
+    "community": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "The community the applicant is applying to and asks to be vetted for."
+    },
+    "requirementsDigest": {
+      "$ref": "../../../_framework/0.3/framework.schema.json#/$defs/DigestMultibase",
+      "description": "The `requirementsDigest` of the community's manifest criterion the applicant is gathering for, recorded when the application started. RECOMMENDED; a community that publishes no digest leaves the applicant nothing to cite."
+    },
+    "joinDid": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "The DID the applicant will join the community with. MUST equal the document's `issuer`. Every card and statement this request leads to names it, and it is the holder of the presentation the applicant eventually submits."
+    },
+    "ticket": {
+      "$ref": "#/$defs/Ticket"
+    },
+    "introduction": {
+      "type": "object",
+      "description": "A verifiable invitation credential for `community` whose subject is the applicant's DID, issued by the community or a member (opaque here). An alternative to a ticket for vetters who accept introductions."
+    },
+    "preferredMethod": {
+      "$ref": "../../_shared/0.1/vetting.schema.json#/$defs/VettingMethod",
+      "description": "The method the applicant would prefer. A preference: the vetter chooses the session's method."
+    },
+    "languages": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 35,
+        "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+      },
+      "description": "BCP 47 language tags the applicant can hold a session in, most preferred first."
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "OPTIONAL applicant-authored text for the vetter — typically how they know each other. Untrusted: read by the vetter, attributed to the applicant on every surface that renders it, never shown to the community."
+    },
+    "availability": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "OPTIONAL applicant-authored free text on when they can meet. Scheduling is out of band; this is a hint, attributed to the applicant."
+    },
+    "ext": {
+      "$ref": "../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Ticket": {
+      "title": "Ticket",
+      "description": "A ticket the vetter issued: the short code a person reads or types, or the full-entropy QR form.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ShortCodeTicket"
+        },
+        {
+          "$ref": "#/$defs/QrTicket"
+        }
+      ]
+    },
+    "ShortCodeTicket": {
+      "title": "ShortCodeTicket",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$",
+          "description": "Eight Crockford base32 characters, grouped four and four (40 bits). A secret the vetter handed over; not derived from anything."
+        }
+      }
+    },
+    "QrTicket": {
+      "title": "QrTicket",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ticketId",
+        "secret"
+      ],
+      "properties": {
+        "ticketId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        "secret": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "description": "32 random bytes, base64url without padding."
+        }
+      }
+    },
+    "EligibilityPresentation": {
+      "title": "EligibilityPresentation",
+      "description": "OPTIONAL. A W3C Verifiable Presentation by which the vetter shows the applicant that it currently holds the community's vetter role. Bound to this request by `nonce` (the vetting/request document's `id`, which the applicant chose) and to this applicant by `domain` (its `joinDid`), so it cannot be replayed to another request or another applicant. The applicant's check is advisory; the community evaluates eligibility again, authoritatively, when it decides. Members other than those defined here are permitted, as the VC data model allows.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "@context",
+        "type",
+        "holder",
+        "verifiableCredential",
+        "nonce",
+        "domain",
+        "proof"
+      ],
+      "properties": {
+        "@context": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "description": "JSON-LD contexts. The first item MUST be `https://www.w3.org/ns/credentials/v2` (stated here rather than as `prefixItems`, which the Rust generator cannot express)."
+        },
+        "type": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": "MUST include `VerifiablePresentation` (stated here rather than as `contains`, which the Rust generator cannot express)."
+        },
+        "holder": {
+          "type": "string",
+          "pattern": "^did:",
+          "description": "The vetter's DID — the response's `issuer`."
+        },
+        "verifiableCredential": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object"
+          },
+          "description": "Credentials presented (opaque here). MUST include the vetter role credential: a Verifiable Authority Credential (`type` including `AuthorityCredential`) issued by the community, whose `credentialSubject.id` is `holder`, whose `authority.scope` is the community's DID, and whose `authority.actions` include `role:<role>` for the manifest's `eligibleVetters.role` — see vtc/vetting/vetters/grant/0.1. MAY include others, such as the membership credential."
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The `id` of the vetting/request document this responds to."
+        },
+        "domain": {
+          "type": "string",
+          "pattern": "^did:",
+          "description": "The applicant's `joinDid` from that request."
+        },
+        "proof": {
+          "$ref": "#/$defs/EligibilityPresentationProof"
+        }
+      }
+    },
+    "EligibilityPresentationProof": {
+      "title": "EligibilityPresentationProof",
+      "description": "A W3C Data Integrity proof by `holder` over the presentation, `nonce` and `domain` included.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type",
+        "cryptosuite",
+        "verificationMethod",
+        "proofPurpose",
+        "proofValue"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "DataIntegrityProof"
+        },
+        "cryptosuite": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9-]+$",
+          "description": "e.g. `eddsa-jcs-2022`."
+        },
+        "verificationMethod": {
+          "type": "string",
+          "pattern": "^did:",
+          "description": "A verification method of `holder`, authorized for `authentication`."
+        },
+        "proofPurpose": {
+          "type": "string",
+          "const": "authentication"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "proofValue": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+        }
+      }
+    },
+    "Response": {
+      "$anchor": "response",
+      "title": "Vetting Request — response payload",
+      "description": "The vetter accepts the request. A refusal is a trust-task-error, never a response document.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The vetter's handle for this accepted request, carried by the session and any decline."
+        },
+        "eligibilityVp": {
+          "$ref": "#/$defs/EligibilityPresentation"
+        },
+        "acceptsDocumentation": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../_shared/0.1/vetting.schema.json#/$defs/VettingDocumentation"
+          },
+          "description": "RECOMMENDED. What this vetter will rely on, so the applicant brings it — the vetter's own choice. `none` means the vetter attests from prior acquaintance."
+        },
+        "sessionHint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "OPTIONAL vetter-authored free text on how and when the session will happen. Attributed to the vetter."
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

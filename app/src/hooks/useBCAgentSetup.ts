@@ -18,9 +18,8 @@ import {
   type Container,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
-  findV2MediationRecord,
-  provisionV2Mediation,
-  startV2MessagePickup,
+  openWalletMailbox,
+  vtaAgent,
 } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
 import {
@@ -36,9 +35,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
+import { appWakeHandles } from '@/push/pushDefaults'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
-import { disarmLivePickup, isLivePickupEnabled, livePickupFor, trackingWebSocketClass } from '@/utils/livePickup'
+import {
+  appRestartsPickupOnReturn,
+  disarmLivePickup,
+  isLivePickupEnabled,
+  livePickupFor,
+  trackingWebSocketClass,
+} from '@/utils/livePickup'
 import BCLogger from '@/utils/logger'
 import { chooseMediator } from '@/utils/mediatorPreference'
 import { singleFlight } from '@/utils/singleFlight'
@@ -117,53 +123,77 @@ export const configureMessagePickup = async (agent: Agent): Promise<void> => {
       DidCommMediatorPickupStrategy.PickUpV2
     )
   }
-
-  // Second loop, Pickup 4.0 against the v2 mediator when one is provisioned
-  // (didcomm_v2_subtask.md V2 step 4). AFTER the v1 start: that start stops
-  // every running loop (the anti-stacking guard in the credo patch), the v4
-  // start does not, so this order leaves exactly one loop per mediator.
-  await startV2MessagePickup(agent)
 }
 
 /**
- * Provision Coordinate Mediation 2.0 with the mediator named by
- * MEDIATOR_V2_URL (a second deployment beside the v1 mediator — §7.1 of the
- * subtask plan; the production v1 mediator is never upgraded in place).
- * Idempotent, and a failure is logged rather than fatal: the wallet keeps
- * working over v1, and v2 invitations fall back to unmediated routing.
- *
- * Exported (only) for the de-dup regression test — see
- * useBCAgentSetup.test.ts. Not otherwise part of this module's public API.
+ * Restart message pickup on a return to the foreground: a stop first, so a
+ * resumed loop never stacks on a stale one, then the app's own start, in live
+ * mode or polling. Never throws. Run once per return, by whichever handler owns
+ * it (livePickup.ts appRestartsPickupOnReturn).
  */
-export const provisionV2MediationIfConfigured = async (agent: Agent, enabled: boolean): Promise<void> => {
-  const invitationUrl = Config.MEDIATOR_V2_URL
-  if (!enabled || !invitationUrl) {
-    // Logged so a device run shows WHY v2 mediation did not start: the flag
-    // (persisted developer setting) or the build (MEDIATOR_V2_URL in .env).
+export const restartPickupOnReturn = async (
+  agent: Agent,
+  logger: { info(message: string): void; warn(message: string): void }
+): Promise<void> => {
+  try {
+    await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
+    await configureMessagePickup(agent)
+    logger.info('Message pickup restarted after returning to the foreground')
+  } catch (error) {
+    logger.warn(`Could not restart message pickup on foreground: ${(error as Error).message}`)
+  }
+}
+
+/** The saved DIDComm switches (store.tsx Developer): what bifold is told at every agent start. */
+export interface DidCommSwitches {
+  enableTspCarriage?: boolean
+  enableDidCommV2?: boolean
+  enableV2Mailbox?: boolean
+}
+
+/** The v2 mailbox is used only with DIDComm v2 accepted: its own switch (off as shipped) AND v2 on. */
+export const v2MailboxOn = (switches: DidCommSwitches): boolean =>
+  !!switches.enableDidCommV2 && !!switches.enableV2Mailbox
+
+/**
+ * Tell bifold the saved switches, before the agent's inbound handlers start: setupTrustTasksInbound reads the carriage
+ * setting. TSP and v2 are on as shipped. The v2 mailbox switch is not bifold's to know: it decides only whether this
+ * app opens the wallet mailbox (openWalletMailboxIfConfigured).
+ */
+export const applyDidCommSwitches = (switches: DidCommSwitches): void => {
+  setTspCarriageEnabled(!!switches.enableTspCarriage)
+  setDidCommV2Enabled(!!switches.enableDidCommV2)
+}
+
+/**
+ * Open the wallet mailbox (bifold walletMailbox.ts): one mailbox DID per phone at an Affinidi mediator, through which
+ * this phone mints and answers DIDComm v2 invitations. Testers first: only with the Developer "DIDComm v2 mailbox"
+ * switch on (off as shipped) and a mediator named by MAILBOX_MEDIATOR_DID, which is blank until Keyring's own
+ * Affinidi mediator is deployed. Without both, nothing opens and the phone mints v1 invitations. Never throws: a
+ * mediator that cannot be reached is one warning, and the phone carries on over v1.
+ */
+export const openWalletMailboxIfConfigured = async (agent: Agent, enabled: boolean): Promise<void> => {
+  const mediatorDid = Config.MAILBOX_MEDIATOR_DID
+  if (!enabled || !mediatorDid) {
     agent.config.logger.info(
-      `[TrustTasks:V2Mediation] not provisioning: flag=${enabled ? 'on' : 'off'}, MEDIATOR_V2_URL=${
-        invitationUrl ? 'set' : 'unset'
+      `[WalletMailbox] not opening: switch=${enabled ? 'on' : 'off'}, MAILBOX_MEDIATOR_DID=${
+        mediatorDid ? 'set' : 'unset'
       }`
     )
     return
   }
   try {
-    // configureMessagePickup (called before this, unconditionally) already
-    // started the v4 loop when a v2 mediation record pre-existed from a
-    // previous launch. Only start it here for a record THIS call newly
-    // provisions — startV2MessagePickup's PickUpV4 start has no anti-stacking
-    // guard (unlike the patched v1/v2 start), so calling it again on an
-    // already-provisioned record subscribed a second polling loop on every
-    // launch after the first.
-    const alreadyProvisioned = !!(await findV2MediationRecord(agent))
-    await provisionV2Mediation(agent, invitationUrl)
-    if (!alreadyProvisioned) {
-      await startV2MessagePickup(agent)
-    }
+    await openWalletMailbox(agent, mediatorDid, {
+      // The push handle this phone already holds for its linked agent, left at the mailbox's mediator too, so a
+      // sender's wake request there rings the phone (pushWake.ts leaves it as well whenever the handle changes).
+      wakeHandle: async () => {
+        const agentDid = vtaAgent.agentAddress()
+        const kept = agentDid ? await appWakeHandles.get(agentDid) : undefined
+        return kept?.handle
+      },
+    })
   } catch (error) {
-    agent.config.logger.warn(
-      `[TrustTasks:V2Mediation] provisioning failed, continuing on v1 only: ${(error as Error).message}`
-    )
+    agent.config.logger.warn(`[WalletMailbox] could not open, continuing on v1 only: ${(error as Error).message}`)
   }
 }
 
@@ -236,6 +266,10 @@ const useBCAgentSetup = () => {
           indyNetworks: ledgers,
           mediatorInvitationUrl: mediatorUrl,
           enableDidCommV2: !!store.developer.enableDidCommV2,
+          enableV2Mailbox: v2MailboxOn({
+            enableDidCommV2: store.developer.enableDidCommV2,
+            enableV2Mailbox: store.developer.enableV2Mailbox,
+          }),
           txnCache: {
             capacity: 1000,
             expiryOffsetMs: 1000 * 60 * 60 * 24 * 7,
@@ -253,7 +287,7 @@ const useBCAgentSetup = () => {
 
       return newAgent
     },
-    [logger, store.developer.enableDidCommV2]
+    [logger, store.developer.enableDidCommV2, store.developer.enableV2Mailbox]
   )
 
   const migrateIfRequired = useCallback(
@@ -337,6 +371,12 @@ const useBCAgentSetup = () => {
         dispatch({ type: DispatchAction.RESET_MEDIATORS })
       }
       const mediatorUrl = mediator.url
+      const didcommSwitches = {
+        enableTspCarriage: store.developer.enableTspCarriage,
+        enableDidCommV2: store.developer.enableDidCommV2,
+        enableV2Mailbox: store.developer.enableV2Mailbox,
+      }
+      applyDidCommSwitches(didcommSwitches)
       logger.info('Checking for existing agent...')
       if (agentInstanceRef.current) {
         const restartedAgent = await restartExistingAgent(agentInstanceRef.current)
@@ -386,7 +426,8 @@ const useBCAgentSetup = () => {
 
       logger.info(`configuring message pickup for ${mediatorUrl}`)
       await configureMessagePickup(newAgent)
-      await provisionV2MediationIfConfigured(newAgent, !!store.developer.enableDidCommV2)
+      // Not awaited: an unreachable mailbox mediator must never hold up start-up (a sign-in is several round trips).
+      void openWalletMailboxIfConfigured(newAgent, v2MailboxOn(didcommSwitches))
 
       logger.info('Warming up cache...')
       await warmUpCache(newAgent, cachedLedgers)
@@ -397,14 +438,8 @@ const useBCAgentSetup = () => {
       logger.info('Setting up VRC connection handler...')
       setupVrcConnectionHandler(newAgent)
 
-      // Dev/test-only carriage selection (docs/plans/openvtc-integration-plan
-      // §5.4's TSP scope correction) — must be set before setupTrustTasksInbound
-      // registers the inbound handler(s), since that registration only happens
-      // once per agent. Toggling Developer > Enable TSP envelope carriage takes
-      // effect on outbound sends immediately, but needs a restart for inbound.
-      setTspCarriageEnabled(!!store.developer.enableTspCarriage)
-      setDidCommV2Enabled(!!store.developer.enableDidCommV2)
-
+      // The carriage switches were applied at the top (applyDidCommSwitches). The TSP envelope's handler is
+      // registered whatever they say; what a send uses follows the setting and the contact's own answer.
       logger.info('Setting up Trust Tasks inbound handler (binding 0.2)...')
       setupTrustTasksInbound(newAgent)
 
@@ -427,6 +462,7 @@ const useBCAgentSetup = () => {
       dispatch,
       store.developer.enableTspCarriage,
       store.developer.enableDidCommV2,
+      store.developer.enableV2Mailbox,
       logger,
       indyLedgers,
       createNewAgent,
@@ -470,28 +506,26 @@ const useBCAgentSetup = () => {
   // and a fresh agent re-initiated pickup. Observed on device 2026-08-26; a
   // 24-minute stall that drained instantly on restart.
   //
-  // stopMessagePickup() first so a resumed loop never stacks on a stale one.
-  // This is the ONLY foreground restart. bifold core's ActivityProvider used to
-  // restart pickup on the same transition, always as polling; both handlers
-  // racing their stop→start once left a Galaxy A03s with two loops and 50 s of
-  // inbound lag (2026-09-13), and its hard-coded PickUpV2 would undo live mode.
-  // It now hands the transition to TOKENS.UTIL_MESSAGE_PICKUP, which this app
-  // registers with background handling only (livePickup.ts,
-  // appMessagePickupLifecycle). In live mode this restart is also the check on
-  // return: it closes the socket, which may have died while suspended, and
-  // starts on a fresh one.
+  // ONE restart per return (restartPickupOnReturn). bifold core's
+  // ActivityProvider used to restart pickup on the same transition, always as
+  // polling; both handlers racing their stop→start once left a Galaxy A03s with
+  // two loops and 50 s of inbound lag (2026-09-13), and its hard-coded PickUpV2
+  // would undo live mode. It now hands the transition to
+  // TOKENS.UTIL_MESSAGE_PICKUP, the app's own lifecycle (livePickup.ts), and a
+  // return it handles is its: a restart through the same function, or a lock-out
+  // (appRestartsPickupOnReturn). This handler covers the returns it doesn't see,
+  // while onboarding. In live mode the restart is also the check on return: it
+  // closes the socket, which may have died while suspended, and starts on a
+  // fresh one.
   useEffect(() => {
+    let last = AppState.currentState
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState !== 'active') return
+      const from = last
+      last = nextAppState
+      if (!appRestartsPickupOnReturn(from, nextAppState)) return
       const activeAgent = agentInstanceRef.current
       if (!activeAgent?.isInitialized) return
-      try {
-        await activeAgent.modules.didcomm.mediationRecipient.stopMessagePickup()
-        await configureMessagePickup(activeAgent)
-        logger.info('Message pickup restarted after returning to the foreground')
-      } catch (error) {
-        logger.warn(`Could not restart message pickup on foreground: ${(error as Error).message}`)
-      }
+      await restartPickupOnReturn(activeAgent, logger)
     })
 
     return () => subscription.remove()

@@ -126,6 +126,13 @@ const keepState = () => process.env.E2E_KEEP_STATE === '1'
 const keepStateCaps = () =>
   keepState() ? { "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false } : {}
 
+// UiAutomator2's on-device server is reached through a host port (default 8200).
+// Two checkouts driving Android at once collide there; set ANDROID_SYSTEM_PORT
+// per checkout (see README, "Running several checkouts at once").
+const systemPortCaps = () => ({
+  "appium:systemPort": Number(process.env.ANDROID_SYSTEM_PORT || 8200),
+});
+
 export function androidCaps(avd = ANDROID_AVD) {
   return {
     platformName: "Android",
@@ -145,6 +152,7 @@ export function androidCaps(avd = ANDROID_AVD) {
     "appium:autoGrantPermissions": process.env.E2E_NO_AUTOGRANT !== "1",
     "appium:adbExecTimeout": 120000,
     "appium:uiautomator2ServerLaunchTimeout": 120000,
+    ...systemPortCaps(),
     ...ANDROID_SETTINGS,
     ...keepStateCaps(),
   };
@@ -165,6 +173,7 @@ export function androidDeviceCaps(udid) {
     "appium:autoGrantPermissions": true,
     "appium:adbExecTimeout": 120000,
     "appium:uiautomator2ServerLaunchTimeout": 120000,
+    ...systemPortCaps(),
     ...ANDROID_SETTINGS,
   };
 }
@@ -254,8 +263,9 @@ export function iosDeviceCaps(udid, ports = {}) {
     //     PRODUCT_BUNDLE_IDENTIFIER=asml.bkc.harvard.WebDriverAgentRunner \
     //     -allowProvisioningUpdates build-for-testing
     "appium:allowProvisioningDeviceRegistration": true,
-    // default 8100 can be taken by other tooling on the host
-    "appium:wdaLocalPort": ports.wdaLocalPort ?? 8123,
+    // default 8100 can be taken by other tooling on the host; WDA_LOCAL_PORT
+    // moves it for a second checkout (a caller's own ports.wdaLocalPort wins)
+    "appium:wdaLocalPort": ports.wdaLocalPort ?? Number(process.env.WDA_LOCAL_PORT || 8123),
     ...(ports.mjpegServerPort ? { "appium:mjpegServerPort": ports.mjpegServerPort } : {}),
     ...prebuiltWdaCaps("device", ports.derivedDataPath),
     "appium:newCommandTimeout": 600,

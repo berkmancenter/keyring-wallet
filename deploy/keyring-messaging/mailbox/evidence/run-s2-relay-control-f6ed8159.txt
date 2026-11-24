@@ -1,0 +1,9 @@
+wallet-s2 PHASE=relay — affinidi-messaging-mediator v0.53.0 f6ed8159 CONTROL: SEND_FORWARDED in the default, mediator did:peer:2.Vz6Mkq9…RzcCJ9
+      HTTP 400 {"sessionId":"ANON-INBOUND","httpCode":400,"errorCode":50,"errorCodeStr":"DIDCommProblemReport","message":"{\"code\":\"w.m.message.anonymous\",\"comment\":\"Mediator is not allowing anonymous messages (no authcrypt or JW
+  ✗ R1 UNAUTHENTICATED POST /inbound: an anoncrypt routing/2.0 forward, next = a phone's mailbox DID: expected accepted
+      refused
+      HTTP 403 {"sessionId":"ANON-INBOUND","httpCode":403,"errorCode":50,"errorCodeStr":"DIDCommProblemReport","message":"{\"code\":\"w.m.message.anonymous\",\"comment\":\"Anonymous direct delivery is not allowed by this mediator\"}"}
+  ✗ R2 UNAUTHENTICATED POST /inbound: an anoncrypt message addressed straight to the mailbox DID: expected accepted
+      refused
+
+wallet-s2 relay: 0 passed, 2 failed

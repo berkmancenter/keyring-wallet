@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/_shared/0.4/pcs-engine",
+  "title": "PCS engine — shared definitions for the vta/pcs/* tasks",
+  "description": "A VTA can act as the hidden-vetting (PCS) engine of its principal: it holds the principal's PCS secret keys, and runs every member-side PCS operation — a vetter's enrolment, token drip and attestation, and an applicant's receipt of attestations and its proof — so that the client carrying the messages never holds a PCS key. These definitions describe the inputs the engine takes and the wire forms it produces. The normative rules (custody, one key per vetter and community, authorization, audit) are in CONVENTIONS.md beside this file. Not itself a Trust Task specification: the `_shared` folder is skipped by the registry build and the codegen.",
+  "$defs": {
+    "Multibase": {
+      "title": "Multibase",
+      "description": "A binary value, multibase base58btc over the suite's canonical encoding.",
+      "type": "string",
+      "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+    },
+    "AttestationMeta": {
+      "title": "AttestationMeta",
+      "description": "The metadata of one attestation: what a Vetting Statement would have said, minus its issuer, as vetting/attestation/0.1 defines it.",
+      "$ref": "../../../vetting/_shared/0.1/hidden-vetting.schema.json#/$defs/StatementMeta"
+    },
+    "CommunityParameters": {
+      "title": "CommunityParameters",
+      "description": "The community's hidden-vetting parameters exactly as its join manifest publishes them, under the criterion's `vetting.ext`. The caller copies them in verbatim on every call that needs them, because the community rotates labels and the engine keeps no copy of its own: a stale copy costs the caller a refused proof, never a mistaken one.",
+      "$ref": "../../../vetting/_shared/0.1/hidden-vetting.schema.json#/$defs/PublishedConfig"
+    },
+    "AttestationToken": {
+      "title": "AttestationToken",
+      "description": "The attestation token spent on one attestation: the label it was drawn under, the serial its spend reveals, and its re-randomised signature. The same members as `token` in vetting/attestation/0.1.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "serial",
+        "shown"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The token label spent under."
+        },
+        "serial": {
+          "$ref": "#/$defs/Multibase",
+          "description": "The serial revealed by the spend."
+        },
+        "shown": {
+          "$ref": "#/$defs/Multibase",
+          "description": "The re-randomised token signature, verifiable under the published token key."
+        }
+      }
+    },
+    "Attestation": {
+      "title": "Attestation",
+      "description": "An attestation as a vetter hands it to an applicant: the payload of vetting/attestation/0.1, without its `ext`. The engine produces it from vta/pcs/attest and takes it into vta/pcs/verify-attestation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite",
+        "attestation",
+        "meta",
+        "token"
+      ],
+      "properties": {
+        "suite": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The suite the attestation was made under, as the community publishes it."
+        },
+        "attestation": {
+          "$ref": "#/$defs/Multibase",
+          "description": "The attestation: a tag, a shown class credential and a proof. It names no vetter."
+        },
+        "meta": {
+          "$ref": "../../../vetting/_shared/0.1/hidden-vetting.schema.json#/$defs/StatementMeta"
+        },
+        "token": {
+          "$ref": "#/$defs/AttestationToken"
+        }
+      }
+    },
+    "SubmittedStatement": {
+      "title": "SubmittedStatement",
+      "description": "One attestation as a submission carries it: its metadata and its token. The attestation itself is inside the submission's `proof`, in the same order.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meta",
+        "token"
+      ],
+      "properties": {
+        "meta": {
+          "$ref": "../../../vetting/_shared/0.1/hidden-vetting.schema.json#/$defs/StatementMeta"
+        },
+        "token": {
+          "$ref": "#/$defs/AttestationToken"
+        }
+      }
+    },
+    "HiddenVettingSubmission": {
+      "title": "HiddenVettingSubmission",
+      "description": "The applicant's proof that distinct eligible vetters of the community vetted it, as a join submission carries it under `extensions.hiddenVetting`. Built by vta/pcs/prove, verified by the community.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suite",
+        "id",
+        "joinDid",
+        "idBinding",
+        "challenge",
+        "statements",
+        "proof"
+      ],
+      "properties": {
+        "suite": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The suite the proof is built in."
+        },
+        "id": {
+          "$ref": "#/$defs/Multibase",
+          "description": "The applicant's PCS identifier for this application."
+        },
+        "joinDid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The DID the applicant joins as. Bound to `id` by `idBinding`."
+        },
+        "idBinding": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The binding of `id` to `joinDid`, the community and the requirements digest, so a proof cannot be carried to another join: lowercase hex of a SHA-256 over the four values, each length-prefixed. The proof commits to it, and the community recomputes it."
+        },
+        "challenge": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The community's single-use challenge, as vtc/vetting/pcs-challenge issued it."
+        },
+        "statements": {
+          "type": "array",
+          "minItems": 1,
+          "description": "One entry per attestation the proof carries, in the proof's order.",
+          "items": {
+            "$ref": "#/$defs/SubmittedStatement"
+          }
+        },
+        "proof": {
+          "$ref": "#/$defs/Multibase",
+          "description": "The issuance proof, which carries the attestations."
+        }
+      }
+    },
+    "TokenDraw": {
+      "title": "TokenDraw",
+      "description": "One draw of the token drip: a label and a tick.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "tick"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ApplicationSummary": {
+      "title": "ApplicationSummary",
+      "description": "An applicant engine as the VTA holds it, without its key.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "contextId",
+        "community",
+        "joinDid",
+        "suite",
+        "id",
+        "attestations",
+        "createdAt"
+      ],
+      "properties": {
+        "applicationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The VTA's handle for this application. Opaque; never sent to the community."
+        },
+        "contextId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The context the application's key is derived in."
+        },
+        "community": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The community's DID."
+        },
+        "joinDid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The DID the application joins as."
+        },
+        "suite": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "id": {
+          "$ref": "#/$defs/Multibase",
+          "description": "The applicant's PCS identifier: what a vetter attests to, carried in a vetting/request's `ext`."
+        },
+        "attestations": {
+          "type": "array",
+          "description": "The metadata of each attestation held, in the order received. Metadata names no vetter.",
+          "items": {
+            "$ref": "../../../vetting/_shared/0.1/hidden-vetting.schema.json#/$defs/StatementMeta"
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "VetterSummary": {
+      "title": "VetterSummary",
+      "description": "A vetter engine as the VTA holds it, without its key, its credentials or its tokens.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contextId",
+        "community",
+        "memberDid",
+        "suite",
+        "id",
+        "enrolledLabels",
+        "pendingLabels",
+        "tokensFree",
+        "tokensHeld",
+        "drawsInFlight",
+        "attested"
+      ],
+      "properties": {
+        "contextId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "community": {
+          "type": "string",
+          "minLength": 1
+        },
+        "memberDid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The member DID the engine draws tokens as. Bound into every token request."
+        },
+        "suite": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "id": {
+          "$ref": "#/$defs/Multibase",
+          "description": "The vetter's PCS identifier for this community."
+        },
+        "enrolledLabels": {
+          "type": "array",
+          "description": "Class labels this vetter holds a credential under, newest first.",
+          "items": {
+            "type": "string",
+            "pattern": "^vetter/[0-9]{4}-[0-9]{2}$"
+          }
+        },
+        "pendingLabels": {
+          "type": "array",
+          "description": "Class labels requested and not yet accepted.",
+          "items": {
+            "type": "string",
+            "pattern": "^vetter/[0-9]{4}-[0-9]{2}$"
+          }
+        },
+        "tokensFree": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tokens held and not reserved."
+        },
+        "tokensHeld": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tokens held in all."
+        },
+        "drawsInFlight": {
+          "type": "array",
+          "description": "Draws requested and not yet accepted or abandoned.",
+          "items": {
+            "$ref": "#/$defs/TokenDraw"
+          }
+        },
+        "attested": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Attestations made through this engine."
+        }
+      }
+    }
+  }
+}

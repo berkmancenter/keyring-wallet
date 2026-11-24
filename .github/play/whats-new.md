@@ -1,8 +1,5 @@
 # Google Play release notes for the next build (at most 500 characters).
 # Lines starting with # are ignored.
 
-• Build 260: private vouching draws tokens and counts.
-• Private vetting: apply and vouch in communities that use it, with the same vetting steps; your vetters stay private. Needs your agent on 0.60+.
-• Vetters: enrolment and vouching tokens are automatic.
-• New DTG credential formats for relationships and witnessing.
-• Community identities keep signing in after an update.
+• Confirm it's you (Developer switch): the "Confirm with" sheet opens clean, with just the note and Send. Answers in the chat are now short cards; tap one for the note and what to do. "Wasn't them" stays a red warning.
+• If someone says it wasn't them, contact them using details you already have, never ones the request gave you.

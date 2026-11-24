@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/pcs/verify-attestation/0.1",
+  "title": "VTA PCS — Verify Attestation — payload",
+  "description": "A client hands its VTA an attestation a vetter sent; the VTA checks it and its token against the community's parameters and keeps it for the application's proof.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "applicationId",
+    "parameters",
+    "attestation"
+  ],
+  "properties": {
+    "applicationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "parameters": {
+      "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/CommunityParameters",
+      "description": "The community's published hidden-vetting parameters, copied verbatim from its join manifest."
+    },
+    "attestation": {
+      "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/Attestation"
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA PCS — Verify Attestation — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "application",
+        "accepted"
+      ],
+      "properties": {
+        "application": {
+          "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/ApplicationSummary"
+        },
+        "accepted": {
+          "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/AttestationMeta",
+          "description": "The metadata of the attestation taken."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

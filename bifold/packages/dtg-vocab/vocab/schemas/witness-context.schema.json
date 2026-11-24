@@ -1,0 +1,10 @@
+{
+  "$comment": "The dtg:witnessed profile's witnessContext additional member: three OPTIONAL strings. The registry's predicate.jsonld does not state whether other members are allowed inside witnessContext; this schema declares nothing either way (JSON Schema's default: allowed) — matching ref-07f/ref-07i's own reading.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "event": { "type": "string" },
+    "sessionId": { "type": "string" },
+    "method": { "type": "string" }
+  }
+}

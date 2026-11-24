@@ -70,7 +70,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { acceptSystemAlertIfPresent, byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
-import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, restartApp, returnToContacts, unlockIfLocked } from "./lib/flows.js";
+import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, pressAnyBack, restartApp, returnToContacts, unlockIfLocked } from "./lib/flows.js";
 import { appLogged } from "./lib/appLog.js";
 import { exifConcerns } from "./lib/exifTags.mjs";
 import { jpegMetadata } from "./lib/jpegMetadata.mjs";
@@ -204,19 +204,13 @@ async function typeDraft(d, text) {
 
 /**
  * Back out of stacked screens (a chat, its Contact Details) toward the tabs: up to four presses of whichever back the
- * screen has, its testID Back or BackButton, or a header button labelled "Back". returnToContacts knows BackButton only,
+ * screen has (pressAnyBack, lib/flows.js). returnToContacts knows BackButton only,
  * and a chat opened through Contact Details sits two screens deep behind headers without it.
  */
 async function backOut(d) {
   for (let i = 0; i < 4; i++) {
     if (await existsTestId(d, "Contacts", 1000)) return;
-    if (await existsTestId(d, "Back", 1000)) await tapTestId(d, "Back", 3000).catch(() => undefined);
-    else if (await existsTestId(d, "BackButton", 1000)) await tapTestId(d, "BackButton", 3000).catch(() => undefined);
-    else {
-      const back = await d.$('-ios predicate string:type == "XCUIElementTypeButton" AND label == "Back" AND visible == 1');
-      if (!(await back.isExisting())) return;
-      await back.click();
-    }
+    if (!(await pressAnyBack(d))) return;
     await sleep(1000);
   }
 }

@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/pcs/attest/0.1",
+  "title": "VTA PCS — Attest — payload",
+  "description": "A vetter's client asks its VTA to attest, after the human check, that an applicant was vetted: the VTA spends a token and makes an attestation that names no vetter.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contextId",
+    "community",
+    "parameters",
+    "applicantId",
+    "meta"
+  ],
+  "properties": {
+    "contextId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The context the engine belongs to. Its key is derived from this context's base."
+    },
+    "community": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The community's DID: the helper whose parameters the engine runs under."
+    },
+    "parameters": {
+      "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/CommunityParameters",
+      "description": "The community's published hidden-vetting parameters, copied verbatim from its join manifest."
+    },
+    "applicantId": {
+      "type": "string",
+      "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+      "description": "The applicant's PCS identifier, from its vetting/request."
+    },
+    "meta": {
+      "$ref": "#/$defs/AttestMeta"
+    },
+    "preferLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "A token label to spend under in preference — an event label the vetter is attesting at."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "AttestMeta": {
+      "title": "AttestMeta",
+      "description": "What the vetter checked in the session, as vetting/attestation/0.1's StatementMeta states it, without the token members: the engine fills those from the token it spends.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "community",
+        "requirementsDigest",
+        "method",
+        "claimsVerified",
+        "livenessConfirmed",
+        "declaredRelationship",
+        "identityCommitment",
+        "cardDigestMultibase",
+        "validFrom",
+        "validUntil"
+      ],
+      "properties": {
+        "community": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requirementsDigest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "inPerson",
+            "video",
+            "priorAcquaintance"
+          ]
+        },
+        "claimsVerified": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "livenessConfirmed": {
+          "type": "boolean"
+        },
+        "declaredRelationship": {
+          "type": "string",
+          "enum": [
+            "none",
+            "family",
+            "sameEmployer",
+            "closeFriend",
+            "other"
+          ]
+        },
+        "identityCommitment": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+        },
+        "cardDigestMultibase": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+        },
+        "validFrom": {
+          "type": "string",
+          "format": "date"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA PCS — Attest — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attestation"
+      ],
+      "properties": {
+        "attestation": {
+          "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/Attestation"
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

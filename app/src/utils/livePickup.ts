@@ -31,6 +31,7 @@
 import { MessagePickupLifecycle, defaultMessagePickupLifecycle } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
 import { DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
+import { AppStateStatus } from 'react-native'
 
 export const LIVE_CHECK_INTERVAL_MS = 60_000
 export const LIVE_CHECK_TIMEOUT_MS = 5_000
@@ -201,17 +202,50 @@ export const livePickupFor = (agent: Agent, logger: LivePickupDeps['logger']): L
 /** Stops the live check, if any (the app is switching to polling). */
 export const disarmLivePickup = (): void => current?.pickup.disarm()
 
+// --- who restarts pickup on a return to the foreground ---
+
+// Set when ActivityProvider handles a trip to the background; taken by the
+// app's own handler on the return (appRestartsPickupOnReturn).
+let activitySawBackground = false
+
+/**
+ * Whether the app's own foreground handler (useBCAgentSetup) restarts pickup
+ * on this app-state change. Exactly one restart per return:
+ *
+ * - When ActivityProvider saw the trip to the background (it is mounted with
+ *   the main stack), the return is ITS: it restarts pickup through
+ *   onForeground below, or, after the auto-lock time, locks the app. A lock-out
+ *   shuts the agent down (RootStack), and the start after unlock sets pickup up
+ *   again (configureMessagePickup). A restart of ours there would run on the
+ *   agent whose store is being closed: "Invalid store handle" (ZAF5-PR5N).
+ * - Otherwise (onboarding, where the agent already runs but ActivityProvider
+ *   is not mounted), the app restarts pickup itself.
+ * - Only a return from the background, as ActivityProvider counts one: an
+ *   inactive→active flip (a Face ID sheet, Control Center) suspends nothing.
+ */
+export const appRestartsPickupOnReturn = (from: AppStateStatus, to: AppStateStatus): boolean => {
+  if (from !== 'background' || (to !== 'active' && to !== 'inactive')) return false
+  const owned = activitySawBackground
+  activitySawBackground = false
+  return !owned
+}
+
 /**
  * Bifold's ActivityProvider hands background and foreground here
  * (TOKENS.UTIL_MESSAGE_PICKUP). Background: live pauses; polling stops as
- * before. Foreground: nothing here, because the app's own foreground handler
- * (useBCAgentSetup) restarts pickup in either mode, also after a lock-out,
- * which ActivityProvider skips. Two restarts would race.
+ * before. Foreground (called only when the return does not lock the app):
+ * the app's own restart, `restartOnReturn` (useBCAgentSetup
+ * restartPickupOnReturn), in either mode, never bifold's polling restart.
  */
-export const appMessagePickupLifecycle = (logger: LivePickupDeps['logger']): MessagePickupLifecycle => ({
+export const appMessagePickupLifecycle = (
+  logger: LivePickupDeps['logger'],
+  restartOnReturn: (agent: Agent) => Promise<void>
+): MessagePickupLifecycle => ({
   onBackground: async (agent) => {
+    // First, so a failing pause below still leaves the return to ActivityProvider.
+    activitySawBackground = true
     if (isLivePickupEnabled()) await livePickupFor(agent, logger).pause()
     else await defaultMessagePickupLifecycle.onBackground(agent)
   },
-  onForeground: async () => undefined,
+  onForeground: (agent) => restartOnReturn(agent),
 })

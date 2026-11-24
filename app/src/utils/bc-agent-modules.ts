@@ -47,8 +47,10 @@ interface GetBCAgentModulesOptions {
   indyNetworks: IndyVdrPoolConfig[]
   mediatorInvitationUrl?: string
   txnCache?: { capacity: number; expiryOffsetMs: number; path?: string }
-  /** Developer flag: enable DIDComm v2 beside v1 (didcomm_v2_subtask.md C12). */
+  /** Accept DIDComm v2 beside v1 (didcomm_v2_subtask.md C12): on as shipped. */
   enableDidCommV2?: boolean
+  /** The v2 mailbox (Coordinate Mediation 2.0), needed to mint v2 invitations: off as shipped, and only with v2 on. */
+  enableV2Mailbox?: boolean
 }
 
 /**
@@ -64,7 +66,10 @@ export function getBCAgentModules({
   mediatorInvitationUrl,
   txnCache,
   enableDidCommV2 = false,
+  enableV2Mailbox = false,
 }: GetBCAgentModulesOptions) {
+  // Minting v2 invitations, and so being their inviter, needs the v2 mailbox (bifold canMintV2Invitation).
+  const mintsV2 = enableDidCommV2 && enableV2Mailbox
   const indyCredentialFormat = new LegacyIndyDidCommCredentialFormatService()
   const indyProofFormat = new LegacyIndyDidCommProofFormatService()
 
@@ -117,8 +122,9 @@ export function getBCAgentModules({
         // DIDComm v2 OOB has no handshake: the inviter's connection record is
         // created by Credo when the invitee's first authenticated message
         // arrives on one of our v2 invitations (ref-15 finding 1 was this
-        // option's default, false). Off with the flag: v1 never needs it.
-        autoCreateConnectionOnFirstMessage: enableDidCommV2,
+        // option's default, false). Only an inviter of v2 invitations needs it, and only a phone with the v2
+        // mailbox mints them: v1, and accepting someone else's v2 invitation, never need it.
+        autoCreateConnectionOnFirstMessage: mintsV2,
       },
       credentials: {
         autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
@@ -153,7 +159,8 @@ export function getBCAgentModules({
         // (Credo's default is ['v1']): without it the v2 mediator's
         // mediate-grant is answered with "message type is not supported" and
         // provisionV2Mediation times out (didcomm_v2_subtask.md V2 step 4).
-        mediationProtocolVersions: enableDidCommV2 ? ['v1', 'v2'] : ['v1'],
+        // Only with the v2 mailbox: without it no phone provisions Coordinate Mediation 2.0.
+        mediationProtocolVersions: mintsV2 ? ['v1', 'v2'] : ['v1'],
         // PickUpV2, matching the runtime start in configureMessagePickup. This
         // said Implicit until 2026-08-31 — harmless here only because the runtime
         // override happened to correct it, but it meant the declared config was a
@@ -212,6 +219,7 @@ export function getBCAgentModules({
     dids: new DidsModule({
       resolvers: [
         new BifoldCore.RetryingWebVhDidResolver(),
+        new BifoldCore.WebsDidResolver(),
         new WebDidResolver(),
         new JwkDidResolver(),
         new KeyDidResolver(),

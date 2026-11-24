@@ -299,13 +299,26 @@ static NSString *KeyringOtaTrialBundleId(NSURL *bundleURL)
                                                                   inDomains:NSUserDomainMask] firstObject];
     NSURL *folderURL = [documentsURL URLByAppendingPathComponent:folderName];
 
-    // Check if the directory exists
-    BOOL isDir;
-    BOOL fileExists = [[NSFileManager defaultManager] fileExistsAtPath:[folderURL path]
-                                                           isDirectory:&isDir];
-    if (!fileExists || !isDir) {
-      NSLog(@"Directory %@ does not exist. Skipping backup exclusion.", folderName);
+    // On a first launch the folder is not there yet: Credo makes it later in that launch, after this has run, and it
+    // would stay without the exclusion until the next launch. Made here, empty, it is excluded from the start, and
+    // what Credo then writes inside it is covered by the folder's own exclusion.
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    BOOL isDir = NO;
+    BOOL fileExists = [fileManager fileExistsAtPath:[folderURL path] isDirectory:&isDir];
+    if (fileExists && !isDir) {
+      // Something else by that name: left as it is.
+      NSLog(@"%@ is not a directory. Skipping backup exclusion.", folderName);
       return;
+    }
+    if (!fileExists) {
+      NSError *createError = nil;
+      if (![fileManager createDirectoryAtURL:folderURL
+                 withIntermediateDirectories:YES
+                                  attributes:nil
+                                       error:&createError]) {
+        NSLog(@"Could not create folder %@: %@. Skipping backup exclusion.", folderName, createError);
+        return;
+      }
     }
 
     // Exclude the folder from backup

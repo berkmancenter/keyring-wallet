@@ -46,7 +46,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           fetch-depth: 0
           persist-credentials: false
 
@@ -113,7 +112,7 @@ jobs:
           npx hot-updater keys generate -o "$RUNNER_TEMP/keys"
           npx hot-updater keys export-public -i "$RUNNER_TEMP/keys/private-key.pem" -y
           npx hot-updater channel set "$OTA_CHANNEL"
-          { echo "MEDIATOR_URL=${MEDIATOR_URL}"; echo "MEDIATOR_V2_URL="; echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}"; echo "OTA_UPDATE_URL=${OTA_PUBLIC_URL}/hot-updater"; } > .env
+          { echo "MEDIATOR_URL=${MEDIATOR_URL}"; echo "MAILBOX_MEDIATOR_DID="; echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}"; echo "OTA_UPDATE_URL=${OTA_PUBLIC_URL}/hot-updater"; } > .env
           npx hot-updater fingerprint create
           cd ..
           git config user.email ota-ci@example.invalid; git config user.name "OTA CI"; git config commit.gpgsign false

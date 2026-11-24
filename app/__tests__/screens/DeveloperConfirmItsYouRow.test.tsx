@@ -1,6 +1,7 @@
 /**
- * The Developer row "Confirm it's you", under Demos: off by default, shown unless its own remote off or the SEDI/KERI
- * umbrella is set (a saved "on" can't bring it back), and toggling it turns bifold's switch on, read live.
+ * The Developer screen no longer has a "Confirm it's you" row. It was a switch under Demos while the feature was a
+ * demo; the feature is part of the app now and has no setting (Alberto, 2026-11-18), so nothing on this screen can
+ * turn it on or off. The Demos section itself stays, for the Guardian and ward demos.
  */
 import {
   AuthProvider,
@@ -10,7 +11,7 @@ import {
   setConfirmItsYouEnabled,
   testIdWithKey,
 } from '@bifold/core'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { render } from '@testing-library/react-native'
 import React from 'react'
 
 import Developer from '../../src/screens/Developer'
@@ -41,7 +42,6 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => null)
   CONFIRM_ITS_YOU_REMOTE_OFF.off = false
   SEDI_KERI_REMOTE_OFF.off = false
-  setConfirmItsYouEnabled(false)
 })
 afterEach(() => {
   jest.restoreAllMocks()
@@ -50,29 +50,24 @@ afterEach(() => {
   setConfirmItsYouEnabled(false)
 })
 
-describe('Developer: the "Confirm it\'s you" row', () => {
-  test('shows under Demos with everything off, and is off (control: the kills below hide it)', () => {
-    const tree = shown()
-    expect(tree.queryByTestId(ROW)).not.toBeNull()
-    expect(isConfirmItsYouEnabled()).toBe(false)
-  })
-
+describe('Developer: "Confirm it\'s you" is not a setting here', () => {
   test.each([
-    ['its own remote off', () => (CONFIRM_ITS_YOU_REMOTE_OFF.off = true)],
-    ['the SEDI/KERI umbrella', () => (SEDI_KERI_REMOTE_OFF.off = true)],
-  ])('%s hides the row, even with the switch saved on, and the feature reads off', (_, off) => {
-    setConfirmItsYouEnabled(true)
-    off()
-    expect(shown().queryByTestId(ROW)).toBeNull()
-    expect(isConfirmItsYouEnabled()).toBe(false)
+    ['on', true],
+    ['off', false],
+  ])('with the feature %s, there is no row for it (control: the Demos section is shown)', (_, on) => {
+    setConfirmItsYouEnabled(on)
+    const tree = shown()
+    expect(tree.queryByTestId(ROW)).toBeNull()
+    expect(tree.queryByText('Developer.EnableConfirmItsYou')).toBeNull()
+    expect(tree.getByText('Developer.Demos')).toBeTruthy()
   })
 
-  test("tapping the row turns bifold's switch on, and again turns it off (control: before the tap, off)", async () => {
-    const tree = shown()
-    expect(isConfirmItsYouEnabled()).toBe(false)
-    await act(async () => fireEvent.press(tree.getByTestId(ROW)))
+  test('showing the screen changes nothing about the feature: on stays on, off stays off', () => {
+    setConfirmItsYouEnabled(true)
+    shown()
     expect(isConfirmItsYouEnabled()).toBe(true)
-    await act(async () => fireEvent.press(tree.getByTestId(ROW)))
+    setConfirmItsYouEnabled(false)
+    shown()
     expect(isConfirmItsYouEnabled()).toBe(false)
   })
 })

@@ -1,0 +1,48 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`HighlightTextBox Component Renders correctly 1`] = `
+<View
+  style={
+    Object {
+      "backgroundColor": "#000000",
+      "flexDirection": "row",
+    }
+  }
+>
+  <View
+    style={
+      Object {
+        "backgroundColor": "#FCBA19",
+        "marginRight": 10,
+        "width": 8,
+      }
+    }
+  />
+  <Text
+    maxFontSizeMultiplier={2}
+    style={
+      Array [
+        Object {
+          "color": "#FFFFFF",
+          "fontSize": 18,
+          "fontWeight": "normal",
+        },
+        Array [
+          Object {
+            "color": "#FFFFFF",
+            "flexShrink": 1,
+            "fontSize": 18,
+            "fontWeight": "normal",
+          },
+          Object {
+            "paddingBottom": 10,
+            "paddingTop": 10,
+          },
+        ],
+      ]
+    }
+  >
+    Hello World
+  </Text>
+</View>
+`;

@@ -1,0 +1,68 @@
+{
+  "id": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a",
+  "alsoKnownAs": [
+    "did:web:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a",
+    "did:keri:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a"
+  ],
+  "verificationMethod": [
+    {
+      "id": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#DBLgOvrvi8_sMvATX1icIL4fHcK_kSLuaXWQo21LH5bt",
+      "type": "JsonWebKey",
+      "controller": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a",
+      "publicKeyJwk": {
+        "crv": "Ed25519",
+        "kid": "DBLgOvrvi8_sMvATX1icIL4fHcK_kSLuaXWQo21LH5bt",
+        "kty": "OKP",
+        "x": "EuA6-u-Lz-wy8BNfWJwgvh8dwr-RIu5pdZCjbUsflu0"
+      }
+    },
+    {
+      "id": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#CEb2px4Zx72Okzu-IsJAG9BoQ3-gSnfCMjhrAZAG-7Yo",
+      "type": "JsonWebKey",
+      "controller": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a",
+      "publicKeyJwk": {
+        "crv": "X25519",
+        "kid": "CEb2px4Zx72Okzu-IsJAG9BoQ3-gSnfCMjhrAZAG-7Yo",
+        "kty": "OKP",
+        "x": "RvanHhnHvY6TO74iwkAb0GhDf6BKd8IyOGsBkAb7tig"
+      }
+    }
+  ],
+  "authentication": [
+    "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#DBLgOvrvi8_sMvATX1icIL4fHcK_kSLuaXWQo21LH5bt"
+  ],
+  "assertionMethod": [
+    "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#DBLgOvrvi8_sMvATX1icIL4fHcK_kSLuaXWQo21LH5bt"
+  ],
+  "keyAgreement": [
+    "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#CEb2px4Zx72Okzu-IsJAG9BoQ3-gSnfCMjhrAZAG-7Yo"
+  ],
+  "service": [
+    {
+      "id": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#tsp",
+      "type": ["TSPTransport"],
+      "serviceEndpoint": "did:webvh:QmR5xGk8pkd3ymu7xpfkjr7XZmwDALA5ZJmgG7qcrD2mKA:webvh.storm.ws:mediator"
+    },
+    {
+      "id": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#vtc-rest",
+      "type": ["VTCRest"],
+      "serviceEndpoint": "https://sedi-vtc.openvti.net/v1"
+    },
+    {
+      "id": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#vtc-status-list",
+      "type": ["VTCStatusList"],
+      "serviceEndpoint": "https://sedi-vtc.openvti.net/v1/status-lists"
+    },
+    {
+      "id": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#trust-tasks",
+      "type": ["TrustTaskHTTPS"],
+      "serviceEndpoint": "https://sedi-vtc.openvti.net/v1"
+    },
+    {
+      "id": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a#sign-in-portal",
+      "type": ["SignInPortal"],
+      "serviceEndpoint": "https://sedi-vtc.openvti.net/members/"
+    }
+  ],
+  "controller": "did:webs:webvh.storm.ws:sedi-vtc:EN7G2PZkzjb3TTWBrG3-oE5-A71XwLeX4et38jeh0C-a"
+}

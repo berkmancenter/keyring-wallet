@@ -1,0 +1,358 @@
+import { render, fireEvent, waitFor } from '@testing-library/react-native'
+import React from 'react'
+import { StyleSheet } from 'react-native'
+import { Bubble, MessageImage, MessageProps } from 'react-native-gifted-chat'
+
+import {
+  ChatMessage,
+  CallbackType,
+  ExtendedChatMessage,
+  MessageIconType,
+  bubbleImageSize,
+} from '../../src/components/chat/ChatMessage'
+import { Role } from '../../src/types/chat'
+import { ChatIds } from '../../src/components/chat/Chat.ids'
+import { testIdWithKey } from '../../src/utils/testable'
+
+const onDetailsMock = jest.fn()
+const user = {
+  _id: Role.me,
+}
+const currentMessage: ExtendedChatMessage = {
+  _id: '1',
+  user,
+  messageOpensCallbackType: CallbackType.CredentialOffer,
+  onDetails: onDetailsMock,
+  renderEvent: jest.fn(),
+  text: 'test',
+  createdAt: new Date('2024-01-01T00:00:00.000Z'),
+}
+const props: MessageProps<ExtendedChatMessage> = {
+  user,
+  currentMessage: currentMessage,
+  position: 'left',
+}
+
+describe('ChatMessage', () => {
+  // Set timezone to UTC for consistent date formatting across environments
+  const originalTZ = process.env.TZ
+
+  beforeAll(() => {
+    process.env.TZ = 'UTC'
+  })
+
+  afterAll(() => {
+    process.env.TZ = originalTZ
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  test('Credential offer renders correctly', () => {
+    props.currentMessage!.messageOpensCallbackType = CallbackType.CredentialOffer
+    const tree = render(<ChatMessage messageProps={props} />)
+
+    // The new UI shows inline "View offer" link for credential offers
+    // The link is rendered directly without expand/collapse for offers
+    expect(tree).toMatchSnapshot()
+  })
+
+  test('Proof request renders correctly', () => {
+    props.currentMessage!.messageOpensCallbackType = CallbackType.ProofRequest
+    const tree = render(<ChatMessage messageProps={props} />)
+
+    // The new UI uses expand/collapse for proof requests
+    expect(tree).toMatchSnapshot()
+  })
+
+  test('Sent presentation renders correctly', () => {
+    props.currentMessage!.messageOpensCallbackType = CallbackType.PresentationSent
+    const tree = render(<ChatMessage messageProps={props} />)
+
+    // The new UI uses expand/collapse for presentations
+    expect(tree).toMatchSnapshot()
+  })
+
+  test('Reporting DID renders correctly', () => {
+    const reportingMessage: ExtendedChatMessage = {
+      _id: 'reporting-1',
+      user,
+      messageOpensCallbackType: undefined,
+      iconType: MessageIconType.ReportingDID,
+      onDetails: onDetailsMock,
+      renderEvent: jest.fn(),
+      text: 'Your Reporting DID',
+      // collapsedContent shows the bold title + live status badge (collapsed view)
+      collapsedContent: jest.fn(),
+      // relationshipDid carries the actual DID value for the expanded view
+      relationshipDid: 'did:peer:0zAbc123TestReportingDid',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    }
+    const reportingProps: MessageProps<ExtendedChatMessage> = {
+      user,
+      currentMessage: reportingMessage,
+      key: 'reporting-1',
+      position: 'left',
+    }
+    const tree = render(<ChatMessage messageProps={reportingProps} />)
+
+    // Reporting DID uses expand/collapse like RelationshipDID
+    expect(tree).toMatchSnapshot()
+  })
+})
+
+describe('CredentialOfferActions - Decline Flow', () => {
+  const originalTZ = process.env.TZ
+  const CONFIRM_DECLINE_ID = 'com.ariesbifold:id/ConfirmDeclineButton'
+  const CANCEL_DECLINE_ID = 'com.ariesbifold:id/CancelDeclineButton'
+
+  beforeAll(() => {
+    process.env.TZ = 'UTC'
+  })
+
+  afterAll(() => {
+    process.env.TZ = originalTZ
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  const makeCredOfferMessage = (overrides: Partial<ExtendedChatMessage> = {}): ExtendedChatMessage => ({
+    _id: 'offer-1',
+    user: { _id: Role.them },
+    messageOpensCallbackType: CallbackType.CredentialOffer,
+    iconType: MessageIconType.Credential,
+    onDetails: jest.fn(),
+    onDecline: jest.fn(),
+    renderEvent: () => null as unknown as JSX.Element,
+    text: 'offered you a credential',
+    createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    ...overrides,
+  })
+
+  test('YES button calls onDetails', () => {
+    const message = makeCredOfferMessage()
+    const messageProps: MessageProps<ExtendedChatMessage> = {
+      user: { _id: Role.them },
+      currentMessage: message,
+      key: 'offer-1',
+      position: 'left',
+    }
+
+    const { getByText } = render(<ChatMessage messageProps={messageProps} />)
+    fireEvent.press(getByText('YES'))
+
+    expect(message.onDetails).toHaveBeenCalledTimes(1)
+    expect(message.onDecline).not.toHaveBeenCalled()
+  })
+
+  test('NO button opens the decline confirmation modal', () => {
+    const message = makeCredOfferMessage()
+    const messageProps: MessageProps<ExtendedChatMessage> = {
+      user: { _id: Role.them },
+      currentMessage: message,
+      key: 'offer-1',
+      position: 'left',
+    }
+
+    const { getByText, queryByTestId } = render(<ChatMessage messageProps={messageProps} />)
+
+    fireEvent.press(getByText('NO'))
+
+    expect(queryByTestId(CONFIRM_DECLINE_ID)).not.toBeNull()
+    expect(message.onDecline).not.toHaveBeenCalled()
+  })
+
+  test('Confirming decline in modal calls onDecline', async () => {
+    const message = makeCredOfferMessage()
+    const messageProps: MessageProps<ExtendedChatMessage> = {
+      user: { _id: Role.them },
+      currentMessage: message,
+      key: 'offer-1',
+      position: 'left',
+    }
+
+    const { getByText, getByTestId } = render(<ChatMessage messageProps={messageProps} />)
+
+    fireEvent.press(getByText('NO'))
+
+    const confirmButton = getByTestId(CONFIRM_DECLINE_ID)
+    fireEvent.press(confirmButton)
+
+    await waitFor(() => {
+      expect(message.onDecline).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  test('Canceling decline modal does not call onDecline', () => {
+    const message = makeCredOfferMessage()
+    const messageProps: MessageProps<ExtendedChatMessage> = {
+      user: { _id: Role.them },
+      currentMessage: message,
+      key: 'offer-1',
+      position: 'left',
+    }
+
+    const { getByText, getByTestId } = render(<ChatMessage messageProps={messageProps} />)
+
+    fireEvent.press(getByText('NO'))
+
+    const cancelButton = getByTestId(CANCEL_DECLINE_ID)
+    fireEvent.press(cancelButton)
+
+    expect(message.onDecline).not.toHaveBeenCalled()
+  })
+
+  test('No decline actions when onDetails is missing', () => {
+    const message = makeCredOfferMessage({ onDetails: undefined })
+    const messageProps: MessageProps<ExtendedChatMessage> = {
+      user: { _id: Role.them },
+      currentMessage: message,
+      key: 'offer-1',
+      position: 'left',
+    }
+
+    const { queryByText } = render(<ChatMessage messageProps={messageProps} />)
+
+    expect(queryByText('YES')).toBeNull()
+    expect(queryByText('NO')).toBeNull()
+  })
+
+  test('No YES/NO buttons for non-CredentialOffer types', () => {
+    const message = makeCredOfferMessage({
+      messageOpensCallbackType: CallbackType.ProofRequest,
+      iconType: MessageIconType.Proof,
+    })
+    const messageProps: MessageProps<ExtendedChatMessage> = {
+      user: { _id: Role.them },
+      currentMessage: message,
+      key: 'offer-1',
+      position: 'left',
+    }
+
+    const { queryByText } = render(<ChatMessage messageProps={messageProps} />)
+
+    expect(queryByText('YES')).toBeNull()
+    expect(queryByText('NO')).toBeNull()
+  })
+})
+
+describe('chat lines and replies', () => {
+  const chatItem = (overrides: Partial<ExtendedChatMessage>): MessageProps<ExtendedChatMessage> => ({
+    user,
+    position: 'left',
+    currentMessage: {
+      _id: 'item',
+      user: { _id: Role.them },
+      renderEvent: () => <></>,
+      text: '',
+      createdAt: new Date('2026-10-25T12:00:00.000Z'),
+      ...overrides,
+    },
+  })
+
+  test('a line about the chat itself is its words, not a bubble', () => {
+    const tree = render(
+      <ChatMessage messageProps={chatItem({ kind: 'system', text: 'Ana set messages to disappear after 1 hour' })} />
+    )
+    expect(tree.getByText('Ana set messages to disappear after 1 hour')).toBeTruthy()
+  })
+
+  // Under jest, gesture-handler's mocked TouchableOpacity renders no children, so gifted-chat's own <Image> never
+  // appears: what this file decides is checked on the MessageImage it renders (on a device, that Image carries them).
+  test('a photo is drawn in the bubble at its own shape, no larger than the bubble allows', () => {
+    const uri = 'file:///lib/Application%20Support/chat-media/A/01JB3XKX6F8Q2W4E5R6T7Y8Z9P.jpg'
+    const tree = render(
+      <ChatMessage
+        messageProps={chatItem({ text: 'Chat.Photo', image: uri, imageSize: { width: 1600, height: 1200 } })}
+      />
+    )
+    const image = tree.UNSAFE_getByType(MessageImage)
+    expect(image.props.currentMessage.image).toBe(uri)
+    expect(image.props.imageProps).toEqual({
+      testID: 'com.ariesbifold:id/ChatMessageImage',
+      accessibilityLabel: 'Chat.Photo',
+    })
+    expect(StyleSheet.flatten(image.props.imageStyle)).toMatchObject({ width: 220, height: 165 })
+  })
+
+  // A photo is stored only once it really went (send.ts), so a stored photo of this phone's says Sent beside its time.
+  test('a photo this phone sent says Sent beside its time; one received does not (control)', () => {
+    const time = (overrides: Partial<ExtendedChatMessage>) => {
+      const bubble = render(<ChatMessage messageProps={chatItem(overrides)} />).UNSAFE_getByType(Bubble)
+      return render(bubble.props.renderTime())
+    }
+    const photo = { image: 'file:///chat-media/A/p.jpg', chatEventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9P' }
+    const mine = time({ ...photo, user: { _id: Role.me } })
+    expect(mine.getByTestId(testIdWithKey(ChatIds.photoSent))).toBeTruthy()
+    expect(mine.getByText('✓ Chat.PhotoSent')).toBeTruthy()
+    expect(time({ ...photo, user: { _id: Role.them } }).queryByTestId(testIdWithKey(ChatIds.photoSent))).toBeNull()
+    expect(
+      time({ text: 'hi', chatEventId: photo.chatEventId, user: { _id: Role.me } }).queryByText(/PhotoSent/)
+    ).toBeNull()
+  })
+
+  test('a photo on its way is its pending bubble, not a sent one', () => {
+    const tree = render(
+      <ChatMessage
+        messageProps={chatItem({
+          user: { _id: Role.me },
+          image: 'file:///cache/IMG.jpg',
+          imageSize: { width: 400, height: 300 },
+          photoSending: { stage: 'sending' },
+        })}
+      />
+    )
+    expect(tree.getByTestId(testIdWithKey(ChatIds.pendingPhoto))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey(ChatIds.photoSent))).toBeNull()
+    expect(tree.UNSAFE_queryByType(Bubble)).toBeNull()
+  })
+
+  test('a tall photo is bounded by height, and a missing size draws a square', () => {
+    expect(bubbleImageSize({ width: 1200, height: 1600 })).toEqual({ width: 210, height: 280 })
+    expect(bubbleImageSize({ width: 100, height: 50 })).toEqual({ width: 100, height: 50 })
+    expect(bubbleImageSize(undefined)).toEqual({ width: 220, height: 220 })
+  })
+
+  test('a message with no photo draws no image', () => {
+    const tree = render(<ChatMessage messageProps={chatItem({ text: 'hello' })} />)
+    expect(tree.UNSAFE_queryByType(MessageImage)).toBeNull()
+  })
+
+  test('a reply quotes its original, or says it expired, or that it is not on this phone, or nothing yet', () => {
+    const quote = (replyTo: ExtendedChatMessage['replyTo']) =>
+      render(<ChatMessage messageProps={chatItem({ text: 'the answer', inReplyTo: 'orig', replyTo })} />)
+    expect(quote({ text: 'the question' }).getByText('the question')).toBeTruthy()
+    expect(quote({ expired: true }).getByText('Chat.ReplyExpired')).toBeTruthy()
+    expect(quote({ unavailable: true }).getByText('Chat.ReplyUnavailable')).toBeTruthy()
+    const reading = quote({ unread: true })
+    expect(reading.queryByText('Chat.ReplyExpired')).toBeNull()
+    expect(reading.queryByText('Chat.ReplyUnavailable')).toBeNull()
+  })
+})
+
+// The day's marker is gifted-chat's to draw (Chat.tsx renderDay, above each day's first message); a message draws
+// none of its own, or the day shows twice (272's second date line, and the doubled pill a simulator run caught).
+describe('a message names no day of its own', () => {
+  const at = (iso: string, overrides: Partial<ExtendedChatMessage> = {}): ExtendedChatMessage => ({
+    _id: iso,
+    user: { _id: Role.them },
+    renderEvent: () => <></>,
+    text: 'hello',
+    createdAt: new Date(iso),
+    ...overrides,
+  })
+  const show = (message: ExtendedChatMessage, previousMessage?: ExtendedChatMessage) =>
+    render(<ChatMessage messageProps={{ user, position: 'left', currentMessage: message, previousMessage }} />)
+
+  test.each([
+    ['a bubble', {}],
+    ['a line about the chat itself', { kind: 'system' as const, text: 'Timer set' }],
+  ])('%s on a new day: no pill and no date line', (_what, overrides) => {
+    const tree = show(at('2026-10-16T09:00:00.000Z', overrides), at('2026-10-15T16:01:00.000Z'))
+    expect(tree.queryByTestId(testIdWithKey(ChatIds.dayPill))).toBeNull()
+    expect(tree.queryByText(/October 1[56], 2026|\d{4} \d{1,2}:\d{2} [AP]M/)).toBeNull()
+  })
+})

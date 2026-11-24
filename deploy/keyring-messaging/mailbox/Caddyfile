@@ -1,0 +1,28 @@
+# One site: the phones' wallet mailbox on MAILBOX_HOSTNAME. With SITE_SCHEME=https
+# (the default) Caddy obtains and renews its certificate automatically; the
+# hostname needs a public DNS A record pointing at this server, and ports 80 and
+# 443 open. Environment placeholders are substituted before parsing.
+#
+# Unlike ../Caddyfile (the push gateway's mediator), the sign-in endpoint
+# /mediator/v1/authenticate... is NOT fenced off: it is how phones sign in.
+# reverse_proxy carries the WebSocket upgrade (/mediator/v1/ws) as is.
+#
+# Caddy sets X-Forwarded-For to the client's address (it does not trust one a
+# client sends, as no trusted_proxies is configured), and the mediator trusts
+# that header only from Caddy's fixed address (mailbox.toml trust_xff_cidrs).
+#
+# No access log is configured, on purpose: a browser-style WebSocket sign-in
+# carries the session token in Sec-WebSocket-Protocol, which must not be logged
+# (upstream docs/cors-and-origin.md, "Proxy logging"). Do not add a `log`
+# directive here without excluding that header.
+#
+# No ACME contact email is set; add a global `{ email ops@example.org }` block
+# at the top of this file if you want expiry notices.
+
+{$SITE_SCHEME:https}://{$MAILBOX_HOSTNAME} {
+	# The mediator serves /metrics only to private addresses already
+	# (metrics_allow_cidrs default); the explicit 404 keeps it off the public
+	# site whatever that default becomes.
+	respond /mediator/v1/metrics* 404
+	reverse_proxy mediator:7037
+}

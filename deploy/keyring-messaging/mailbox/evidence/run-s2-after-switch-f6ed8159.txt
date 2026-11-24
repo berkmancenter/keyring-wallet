@@ -1,0 +1,6 @@
+wallet-s2 PHASE=after-switch — affinidi-messaging-mediator v0.53.0 f6ed8159, mediator did:peer:2.Vz6Mkq9…RzcCJ9
+  ✓ E1 after open → enrolled across a restart: alice's existing account signs in again
+      refusal: challenge HTTP 403 {"sessionId":"…","httpCode":403,"errorCode":25,"errorCodeStr":"DIDCommProblemReport","message":"{\"code\":\"e.p.authentication.blocked\",\"comment\":\"DID is blocked\"}"}
+  ✓ E2 a new DID is refused at sign-in
+
+wallet-s2 after-switch: 2 passed, 0 failed

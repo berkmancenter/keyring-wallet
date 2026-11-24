@@ -62,8 +62,7 @@ message, in addition to the existing screenshot/log dumps.
 
 > **After pulling `feat/trust-tasks-integration`:** run `yarn install` at the
 > repo root (the lockfile and the `@bifold/*` portals changed — the app now
-> bundles `@bifold/trust-tasks`), `git submodule update --init` (the bifold
-> pointer advanced), restart Metro with `yarn start --reset-cache`, and
+> bundles `@bifold/trust-tasks`), restart Metro with `yarn start --reset-cache`, and
 > **rebuild the iOS device app** before any device run (it bundles its JS —
 > see "Real devices"). Android debug builds load JS from Metro and need no
 > rebuild for JS-only changes.
@@ -97,10 +96,11 @@ Metro and run `yarn start` from **this** worktree's `app/` before retrying.
 ## Running from a second worktree
 
 A fresh `git worktree` does **not** carry the untracked files a run needs, and
-each one fails differently and late. All four, in order:
+each one fails differently and late. All three, in order (since the fold of
+2026-11 `bifold/` is part of the repository, so there is no submodule to
+initialise; `yarn install` at the root installs and builds it):
 
 ```sh
-git submodule update --init --recursive          # or yarn install dies in ~90ms
 cp <primary>/app/.env app/.env                    # baked in at BUILD time
 cp <primary>/app/android/local.properties app/android/local.properties
 (cd e2e && npm install)                           # e2e is outside the workspaces
@@ -110,7 +110,6 @@ What each looks like when missing, because none of them says so plainly:
 
 | Missing | Symptom |
 | --- | --- |
-| submodule not initialised | `yarn install` fails in ~90ms: `@bifold/core@portal:…: Manifest not found` |
 | `app/.env` | app boots, onboards, then hangs at `configuring message pickup` and shows "Oops! Something went wrong" — no `MEDIATOR_URL` |
 | `local.properties` | `SDK location not found` from gradle |
 | `e2e/node_modules` | `ERR_MODULE_NOT_FOUND: webdriverio` |
@@ -126,10 +125,46 @@ before pushing from a worktree.
 **Stale worktrees lie about what compiles.** A worktree left for a few days can
 report `@bifold/core` "has no exported member" for symbols plainly present in
 the source — its `bifold/packages/core/lib/typescript/` artifact predates them.
-`yarn install` at the root may be a no-op, since yarn does not notice submodule
-content changing. Fix: `(cd bifold && yarn install)` then
+`yarn install` at the root may be a no-op, since yarn does not notice the
+framework's source changing under `bifold/`. Fix: `(cd bifold && yarn install)` then
 `yarn workspace @bifold/core run build`. Do **not** run bifold's root
 `yarn build` (see the root `CLAUDE.md`).
+
+## Running several checkouts at once
+
+Several checkouts (or worktrees) can run on one machine, each with its own Metro,
+mediator and Appium, if no two share a port. Give checkout *N* (0 for the first)
+an offset of `10 × N` from the defaults:
+
+| What | Default | Checkout *N* | How to set it |
+| --- | --- | --- | --- |
+| Metro | 8081 | 8081 + 10N | `yarn demo --metro-port <n>` (or `yarn start --port <n>`) |
+| Local mediator | 3010 | 3010 + 10N | `yarn demo --port <n>`, or `yarn mediator --port <n> --endpoint http://10.0.2.2:<n>` (`http://localhost:<n>` for an iOS simulator) |
+| Witness server | 9002 / 9003 | +10N each | `WITNESS_PORT`, `WITNESS_WEB_PORT` |
+| Appium | 4723 | 4723 + 10N | `APPIUM_PORT` |
+| WebDriverAgent (iOS simulator, real device) | 8100 / 8123 | 8100 + 10N | `WDA_LOCAL_PORT` |
+| UiAutomator2 server (Android) | 8200 | 8200 + 10N | `ANDROID_SYSTEM_PORT` |
+
+Keep the values in a gitignored file per checkout (for example `ports.local.env`,
+listed in `.git/info/exclude`) and `source` it in each shell, so the numbers live
+in one place. Runners that already pick their own WDA ports
+(`E2E_WDA_PORT_BASE`, `WDA_LOCAL_PORT` in `run-vti-invite.js` and
+`run-vta-link.js`) take the same variables.
+
+Two things the ports do not fix:
+
+- **One device, one app.** Every checkout builds the same application id
+  (`asml.bkc.harvard.wallet`), so installing from two of them onto one emulator or
+  phone replaces the app and its data. Give each checkout its own emulator or
+  device (`adb -s <serial>`), or build all but one as the `.pushtest` variant and
+  run it with `E2E_APP_ID=asml.bkc.harvard.wallet.pushtest`.
+- **`app/.env` is baked in at build time** (see the section above). A checkout
+  whose `app/.env` was copied from another points at that checkout's mediator
+  until you rebuild after its own `yarn mediator` run rewrites it.
+
+Another service on the host may already hold a port in the table (9003 has been
+seen). If a run reports an address in use, check with `ss -ltn` and move that
+checkout's value.
 
 ## Keeping an AVD's state across a restart
 
