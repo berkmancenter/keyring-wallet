@@ -6,8 +6,6 @@ published `did.json` carries exactly the keys that KEL implies. It is the "go fe
 missing: `verifyGuardianWithWebs` reads each listed root's KEL from where the state publishes it, instead of from the
 holder's presentation, so a holder cannot show the root's history cut short.
 
-It is behind the state-verified approvers switch (and so the SEDI/KERI remote kill), like the Guardian check.
-
 ## One seam: `resolveRootKel(did)`
 
 The Guardian check and the screens call only `resolveRootKel(did)` (`./rootKel.ts`), which returns the verified bytes
@@ -62,7 +60,6 @@ Every refusal has its own reason:
 - `aidMismatch`
 - `didDocMismatch`
 - `aliasMismatch`
-- `switchedOff`
 
 `verifyGuardianWithWebs` turns any of them into `stateNotResolved` and never falls back to a presented or stored copy.
 

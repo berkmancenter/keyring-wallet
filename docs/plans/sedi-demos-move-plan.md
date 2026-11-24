@@ -275,7 +275,7 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 - _Done when:_ a read of each listed agent's policies shows no `keyring-trusted-approvers` set, recorded with the agent names in the PR (roles only in this plan), and the testers' group has been told.
 - _Blocks:_ S2b's release, not S2b's code.
 
-**S1. Decouple while the demo still exists.** One commit, `refactor`: remove the `resolveWebs` gate (D1). `WebsDidResolver.test.ts` imports only `webs/resolve`, which stays, and needs no change.
+**S1. Decouple while the demo still exists.** One commit, `refactor`: remove the `resolveWebs` gate (D1), the `switchedOff` refusal reason and the two places that handled it (`webs/guardian.ts`, which fell back to the presented copy, and `webs/designatedAliases.ts`), and the `switched off` row of `designatedAliases.test.ts`. `WebsDidResolver.test.ts` imports only `webs/resolve`, which stays, and needs no change. `websResolver.test.ts` keeps its did:webs rows (W01 to W15, W04 now asserting resolution with no flag set) and loses the Guardian rows (W16 to W20, which test `verifyGuardianWithWebs` and stay on `sedi-demos`); it no longer reads `k0-utah-v2`.
 
 - _Done when:_ a new test shows `resolveWebs` resolves a fixture (the `webs-k0-root` fixture) with no approver flag set; `websResolver.test.ts` is rewritten so it no longer imports `../guardian` or `webs/index.ts`; the demo still passes its own tests (the move has not started); `cd bifold/packages/core && yarn test` and root `yarn typecheck` pass.
 - D2 no longer asks S1 to touch `chain.ts` or `controller.ts`.

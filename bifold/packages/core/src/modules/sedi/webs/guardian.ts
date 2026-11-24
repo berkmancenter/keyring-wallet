@@ -47,10 +47,7 @@ export async function verifyGuardianWithWebs(
       fetch: options.fetch,
       ...(options.limits ? { limits: options.limits } : {}),
     })
-    if (!r.ok)
-      return r.reason === 'switchedOff'
-        ? verifyGuardian(material, guardianSaid, expect, options)
-        : notResolved(r.reason, r.detail)
+    if (!r.ok) return notResolved(r.reason, r.detail)
     resolvedKels.push(r.kel)
   }
   return verifyGuardian(material, guardianSaid, expect, { ...options, resolvedKels })
