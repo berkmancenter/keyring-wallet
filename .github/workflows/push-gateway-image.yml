@@ -10,6 +10,10 @@ name: Push gateway image
 #
 # One job per architecture on a native runner: arm64 for Apple-silicon Macs,
 # amd64 for servers. Emulated Rust builds take far longer.
+#
+# The `mediator` jobs do the same for the gateway's mediator (mediator/), and
+# the `mailbox` jobs for the phones' wallet mailbox (mailbox/), a separate
+# package with its own upstream, image, identity script and compose file.
 
 on:
   pull_request:
@@ -332,5 +336,174 @@ jobs:
         with:
           name: messaging-mediator-image-${{ matrix.arch }}
           path: deploy/keyring-messaging/messaging-mediator.tar
+          retention-days: 14
+          if-no-files-found: error
+
+  mailbox:
+    # The phones' wallet mailbox (deploy/keyring-messaging/mailbox/), as an
+    # operator brings it up: build the image from source at the pinned commit,
+    # create its identity with setup-identity.sh, start it with Redis, and
+    # check it is alive, ready and not an open door. CI has no GCP and no
+    # public hostname, so the mediator reads the keys setup-identity.sh made
+    # from the file secrets backend instead of Secret Manager, Caddy is not
+    # started, and the probes reach the mediator through a port published on
+    # the runner's loopback: mailbox/docker-compose.ci.yml, and nothing else,
+    # is the difference from the deployment.
+    name: Mailbox mediator image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: deploy/keyring-messaging/mailbox
+    env:
+      # A hostname setup-identity.sh accepts (it refuses *example.* and
+      # *.invalid). Nothing in this job resolves it: the identity's DID is
+      # made on it and served from the mounted DID log.
+      CI_HOSTNAME: mailbox-ci.keyring.test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned mediator commit and image tag
+        id: pin
+        run: |
+          commit=$(sed -n 's/^MEDIATOR_COMMIT=//p' .env.example)
+          if ! printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::MEDIATOR_COMMIT in mailbox/.env.example is not a full SHA: '$commit'"; exit 1
+          fi
+          # The tag is <commit>-pN (README "Updating"): N moves with every
+          # rebuild of the same commit, so a host never keeps an older image
+          # under the tag it is told to run.
+          tag=$(sed -n 's/^MAILBOX_IMAGE_TAG=//p' .env.example)
+          case "$tag" in
+            "$commit"-p[1-9]*) ;;
+            *) echo "::error::MAILBOX_IMAGE_TAG in mailbox/.env.example is '$tag': it must be '$commit-pN'"; exit 1 ;;
+          esac
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=keyring-messaging/mailbox-mediator:$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Compose files are valid, and name the image by its tag
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+        run: |
+          cp .env.example .env
+          # The two placeholders the operator fills in. GCP_PROJECT only has to
+          # interpolate: the CI override replaces the secrets backend.
+          sed -i 's/^MAILBOX_HOSTNAME=$/MAILBOX_HOSTNAME='"$CI_HOSTNAME"'/; s/^GCP_PROJECT=$/GCP_PROJECT=ci-unused/' .env
+          grep -q "^MAILBOX_HOSTNAME=$CI_HOSTNAME\$" .env || { echo "::error::MAILBOX_HOSTNAME in .env.example is not the empty placeholder"; exit 1; }
+          grep -q '^GCP_PROJECT=ci-unused$' .env || { echo "::error::GCP_PROJECT in .env.example is not the empty placeholder"; exit 1; }
+          docker compose config --quiet
+          got=$(docker compose config --format json | jq -r '.services.mediator.image')
+          if [ "$got" != "$IMAGE" ]; then
+            echo "::error::compose names the mediator image '$got', expected '$IMAGE'"; exit 1
+          fi
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml config --quiet
+          backend=$(docker compose -f docker-compose.yml -f docker-compose.ci.yml config --format json \
+            | jq -r '.services.mediator.environment.MEDIATOR_SECRETS_BACKEND')
+          case "$backend" in
+            file:///*) ;;
+            *) echo "::error::the CI override does not switch the secrets backend to a file:/// URL: '$backend'"; exit 1 ;;
+          esac
+          # A fixed address on `edge` must not be one Docker can hand out
+          # dynamically (the mediator starts first and takes the first free one,
+          # so Caddy would fail with "Address already in use"), and it is the
+          # address mailbox.toml trusts X-Forwarded-For from. CI does not start
+          # Caddy, so this is checked on the rendered config.
+          docker compose config --format json | jq -e '
+            def ip2n: split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+            def span($c): ($c | split("/")) as $p | ($p[0] | ip2n) as $b | (pow(2; 32 - ($p[1] | tonumber))) as $n
+              | {lo: ($b - ($b % $n)), hi: ($b - ($b % $n) + $n - 1)};
+            (.networks.edge.ipam.config[0]) as $c
+            | ($c.ip_range // error("edge has no ip_range")) as $r
+            | span($r) as $dyn | span($c.subnet) as $sub
+            | [.services[] | .networks.edge.ipv4_address? // empty]
+            | length > 0 and all(.[]; ip2n as $a
+                | $a >= $sub.lo and $a <= $sub.hi and ($a < $dyn.lo or $a > $dyn.hi))
+          ' >/dev/null || { echo "::error::a fixed ipv4_address on the edge network is outside its subnet or inside its dynamic ip_range"; exit 1; }
+          caddy_ip=$(docker compose config --format json | jq -r '.services.caddy.networks.edge.ipv4_address')
+          grep -Fq "\"$caddy_ip/32\"" mailbox.toml \
+            || { echo "::error::mailbox.toml trust_xff_cidrs does not name caddy's fixed address $caddy_ip/32"; exit 1; }
+
+      - name: Build the mailbox mediator image
+        run: docker compose build mediator
+
+      - name: Create the mailbox's identity (setup-identity.sh)
+        run: |
+          ./setup-identity.sh | tee setup.out
+          grep "^MAILBOX_MEDIATOR_DID=did:webvh:.*:$CI_HOSTNAME\$" setup.out >> .env
+          grep '^MAILBOX_ADMIN_DID=did:key:z' setup.out >> .env
+          ls -ln secrets/mailbox-identity did
+          if ./setup-identity.sh; then
+            echo "::error::setup-identity.sh overwrote an existing identity"; exit 1
+          fi
+
+      - name: Write the CI secret store from the identity's bundle
+        run: |
+          # setup-identity.sh writes the Secret Manager bundle, {version, kind,
+          # data: {entries}}. The file backend's store is the bare entries map
+          # (docker-compose.ci.yml, point 1), so the same keys go into it
+          # unwrapped. The names are printed, never the values.
+          bundle=secrets/mailbox-identity/mediator-secrets-bundle.json
+          jq -e '.version == 1 and .kind == "secrets-bundle"' "$bundle" >/dev/null \
+            || { echo "::error::$bundle is not a version-1 secrets-bundle envelope"; exit 1; }
+          mkdir -p ci-secrets
+          jq '{entries: .data.entries}' "$bundle" > ci-secrets/secrets.json
+          chmod 0644 ci-secrets/secrets.json
+          jq -r '.entries | keys[]' ci-secrets/secrets.json
+          # What the mediator needs to start on a self-hosted DID (upstream
+          # docs/secrets-backend.md, "Entry schemas": jwt-secret always,
+          # operating-secrets for self-hosted DIDs).
+          jq -e '.entries | has("mediator_jwt_secret") and has("mediator_operating_secrets")' ci-secrets/secrets.json >/dev/null \
+            || { echo "::error::the bundle lacks mediator_jwt_secret or mediator_operating_secrets"; exit 1; }
+
+      - name: Boot the mailbox mediator with Redis (CI override, no Caddy)
+        run: |
+          compose() { docker compose -f docker-compose.yml -f docker-compose.ci.yml "$@"; }
+          if ! compose up -d --wait --wait-timeout 150 redis mediator; then
+            compose logs mediator; exit 1
+          fi
+          base=http://127.0.0.1:7037/mediator/v1
+          live=$(curl -sS -w '\n%{http_code}' "$base/livez")
+          echo "livez: $live"
+          if [ "$(printf '%s' "$live" | tail -n 1)" != 200 ] || ! printf '%s' "$live" | head -n 1 | grep -q alive; then
+            echo "::error::livez did not answer 200 with alive"; compose logs mediator | tail -n 60; exit 1
+          fi
+          # Readiness covers Redis and the secrets backend. The infrastructure's
+          # uptime check matches this exact text.
+          ready=$(curl -sS "$base/readyz")
+          echo "readyz: $ready"
+          if ! printf '%s' "$ready" | grep -Fq '"status":"ready"'; then
+            echo "::error::readyz does not report \"status\":\"ready\""; compose logs mediator | tail -n 60; exit 1
+          fi
+          compose logs mediator | tail -n 60
+
+      - name: Not an open door (README rows R1, R2)
+        run: |
+          compose() { docker compose -f docker-compose.yml -f docker-compose.ci.yml "$@"; }
+          # mailbox.toml keeps SEND_FORWARDED out of the default ACL and
+          # enable_inter_mediator_relay off, so there is no anonymous inbound
+          # session: a POST with no token is refused before its body is read.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7037/mediator/v1/inbound \
+            -H 'content-type: application/json' -d '{"ci":"unauthenticated"}')
+          echo "unauthenticated POST /inbound: HTTP $code"
+          if [ "$code" != 401 ]; then
+            echo "::error::an unauthenticated POST /inbound was answered $code, not 401"; compose logs mediator | tail -n 40; exit 1
+          fi
+          compose down -v
+
+      - name: Save the image
+        run: docker save -o mailbox-mediator.tar "${{ steps.pin.outputs.image }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mailbox-mediator-image-${{ matrix.arch }}
+          path: deploy/keyring-messaging/mailbox/mailbox-mediator.tar
           retention-days: 14
           if-no-files-found: error

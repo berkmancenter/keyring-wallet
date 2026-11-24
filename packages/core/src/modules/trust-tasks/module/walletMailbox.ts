@@ -288,13 +288,24 @@ export async function openWalletMailbox(
       : new VtiMediatorSession(agent, identity, mediator, {
           onMessage,
           onError: (error) => agent.config.logger.warn(`${LOG_PREFIX} mailbox session: ${error.message}`),
+          // A mailbox listens; a socket that closes under it is reopened on its own, not on the next send
+          // (there may never be one: measured 2026-11-24, a peer's offer sat queued for the rest of the run).
+          keepOpen: true,
         })
-    await session.start()
     const mailbox: WalletMailbox = { did, mediatorDid: mediator.did, session }
-    // The account's forwarding right first, bounded (ASK_TIMEOUT_MS): until it is answered the mailbox does not count
-    // as open, so nothing mints a v2 invitation or sends through it while a send would still be refused. A refusal
-    // does not stop the open: receiving works, and a send then fails with the mediator's own words.
-    await ensureMailboxForwarding(agent, mailbox)
+    try {
+      await session.start()
+      // The account's forwarding right first, bounded (ASK_TIMEOUT_MS): until it is answered the mailbox does not
+      // count as open, so nothing mints a v2 invitation or sends through it while a send would still be refused. A
+      // refusal does not stop the open: receiving works, and a send then fails with the mediator's own words.
+      await ensureMailboxForwarding(agent, mailbox)
+    } catch (error) {
+      // An open that failed leaves no session behind: only `closeWalletMailbox` ever stops one, and it reads
+      // `openMailboxes`, which this one never reaches. Unstopped, a `keepOpen` session would bring back a listening
+      // socket for the mailbox DID that nothing holds, beside the one the next open makes.
+      await session.stop().catch(() => undefined)
+      throw error
+    }
     openMailboxes.set(agent, mailbox)
     if (!transports.has(agent)) {
       const transport = new WalletMailboxOutboundTransport(agent)

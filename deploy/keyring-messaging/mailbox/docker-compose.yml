@@ -1,0 +1,130 @@
+# Keyring's wallet mailbox: the Affinidi messaging mediator phones sign in to,
+# with its Redis and Caddy (automatic HTTPS). A separate stack from
+# ../docker-compose.yml (the push gateway and its closed mediator), meant for
+# its own host. See README.md.
+#
+#   cp .env.example .env   # then fill it in
+#   docker compose config  # static check
+#   docker compose up -d
+#
+# Only Caddy publishes ports. The mediator reads its keys from GCP Secret
+# Manager with the host's Application Default Credentials (on a GCE VM: the
+# instance service account, through the metadata server), so no secret file is
+# mounted here.
+
+name: keyring-mailbox
+
+x-no-auto-update: &no-auto-update
+  # Every image here is pinned; updates are deliberate (README "Updating").
+  com.centurylinklabs.watchtower.enable: "false"
+
+services:
+  mediator:
+    # Affinidi messaging mediator v0.53.0, built from source at a pinned commit
+    # (Dockerfile). The tag is MAILBOX_IMAGE_TAG, <MEDIATOR_COMMIT>-pN: a new
+    # build of the same commit (other features, a new base) gets a new N, so a
+    # host never keeps running an older image under the same tag.
+    build:
+      context: .
+      args:
+        MEDIATOR_COMMIT: ${MEDIATOR_COMMIT:-f6ed8159a761344a96b5256e09c10e36cd2359d7}
+        MEDIATOR_FEATURES: ${MEDIATOR_FEATURES:-didcomm,tsp,redis-backend,jemalloc,vta,secrets-gcp}
+    image: keyring-messaging/mailbox-mediator:${MAILBOX_IMAGE_TAG:-f6ed8159a761344a96b5256e09c10e36cd2359d7-p1}
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["-c", "/etc/keyring-mailbox/mailbox.toml"]
+    environment:
+      # The identity, made by setup-identity.sh after MAILBOX_HOSTNAME is chosen.
+      # Empty until then; the host's start script refuses to start the stack
+      # while they are empty (the mediator would exit at once).
+      MEDIATOR_DID: did://${MAILBOX_MEDIATOR_DID:-}
+      ADMIN_DID: did://${MAILBOX_ADMIN_DID:-}
+      # Secret Manager: <MAILBOX_SECRET_PREFIX>mediator_secrets_bundle in GCP_PROJECT.
+      MEDIATOR_SECRETS_BACKEND: gcp_secrets://${GCP_PROJECT:?set GCP_PROJECT in .env}/${MAILBOX_SECRET_PREFIX:-kpush-mailbox-}
+      DATABASE_URL: redis://redis:6379/
+      # Forwards addressed to this mailbox's own URL are delivered locally.
+      LOCAL_ENDPOINTS: https://${MAILBOX_HOSTNAME:?set MAILBOX_HOSTNAME in .env}
+      # The Origin a phone's WebSocket upgrade carries (mailbox.toml, [security]).
+      CORS_ALLOW_ORIGIN: https://${MAILBOX_HOSTNAME:?set MAILBOX_HOSTNAME in .env}
+    volumes:
+      - ./mailbox.toml:/etc/keyring-mailbox/mailbox.toml:ro
+      # The mailbox's public DID log (did.jsonl), written by the host from
+      # instance metadata (or by setup-identity.sh on a local run).
+      - ./did:/etc/keyring-mailbox/did:ro
+    healthcheck:
+      # Liveness only (upstream's own image healthcheck): a Redis blip must not
+      # get a healthy mediator restarted. Readiness is /mediator/v1/readyz.
+      test: ["CMD", "/usr/local/bin/mediator", "-c", "/etc/keyring-mailbox/mailbox.toml", "healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks: [edge, store]
+    labels: *no-auto-update
+
+  redis:
+    # The mailbox's store: accounts, sessions and every waiting message. AOF
+    # persistence on (appendonly yes, fsync every second), on the data disk, so
+    # a restart loses at most about a second of accepted mail.
+    # PENDING S5: maxmemory and its policy, from the soak.
+    image: redis:7.4.6-alpine@sha256:3b73847e72874be07e6657b129a94761662b79bc0f679273757d4218573b2a98
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [store]
+    labels: *no-auto-update
+
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    restart: unless-stopped
+    depends_on:
+      - mediator
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      MAILBOX_HOSTNAME: ${MAILBOX_HOSTNAME:?set MAILBOX_HOSTNAME in .env}
+      # https (default) = automatic certificates. http = plain HTTP, for a local
+      # run or behind a tunnel that terminates TLS itself.
+      SITE_SCHEME: ${SITE_SCHEME:-https}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config
+    networks:
+      edge:
+        # Fixed, so the mediator can trust X-Forwarded-For from Caddy alone
+        # (mailbox.toml trust_xff_cidrs = ["172.31.253.2/32"]). It must stay
+        # OUTSIDE the network's ip_range below: Docker hands the mediator (which
+        # starts first, with no fixed address) a free address from that range,
+        # and if that were this one Caddy would not start ("Address already in
+        # use").
+        ipv4_address: 172.31.253.2
+    labels: *no-auto-update
+
+networks:
+  edge:
+    ipam:
+      config:
+        # Small and out of the way of Docker's defaults (172.17.0.0/16 and up)
+        # and of the kpush VPC (10.60.0.0/24). Keep in step with caddy's
+        # ipv4_address and mailbox.toml trust_xff_cidrs.
+        #
+        # .1 is the bridge, .2 is Caddy's fixed address, .3 is left unused, and
+        # ip_range gives every container without a fixed address (the mediator)
+        # .4-.7. Any other fixed address on this network must also sit outside
+        # ip_range; CI checks this.
+        - subnet: 172.31.253.0/29
+          ip_range: 172.31.253.4/30
+  # Redis only; no route to anything else.
+  store:
+    internal: true

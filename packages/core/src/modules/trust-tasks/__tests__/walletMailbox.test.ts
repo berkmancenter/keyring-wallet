@@ -558,3 +558,28 @@ describe('after a mailbox send, the recipient’s mediator is asked for a wake',
     await closeWalletMailbox(agent)
   })
 })
+
+describe('an open whose session fails to start leaves no session running', () => {
+  const deps = (s: ReturnType<typeof session>) => ({
+    resolveMediator: async (_a: unknown, did: string) => ({ did, wsEndpoint: 'wss://m.example/ws' }) as never,
+    makeSession: () => s,
+  })
+
+  test('the session is stopped and the open rejects: a keepOpen session nothing holds must not bring itself back', async () => {
+    const { agent } = fakeAgent()
+    const s = session()
+    s.start.mockRejectedValueOnce(new Error('socket failed to open'))
+    await expect(openWalletMailbox(agent, MEDIATOR, deps(s))).rejects.toThrow('socket failed to open')
+    expect(s.stop).toHaveBeenCalledTimes(1)
+    expect(walletMailboxOf(agent)).toBeUndefined()
+  })
+
+  test('CONTROL: an open that succeeds never stops its session', async () => {
+    const { agent } = fakeAgent()
+    const s = session()
+    await openWalletMailbox(agent, MEDIATOR, deps(s))
+    expect(s.stop).not.toHaveBeenCalled()
+    expect(walletMailboxOf(agent)?.session).toBe(s)
+    await closeWalletMailbox(agent)
+  })
+})
