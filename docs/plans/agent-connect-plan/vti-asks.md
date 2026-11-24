@@ -19,6 +19,11 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-21, AC-22 | VTI-Q34 |
 | AC-23 | VTI-Q35 |
 | AC-24 | VTI-Q37 |
+| AC-26 | VTI-Q39 |
+| AC-27 | VTI-Q40 |
+| AC-28 | VTI-Q41 |
+| AC-29 | VTI-Q42 |
+| AC-30 | VTI-Q43 |
 | AC-25 | VTI-Q38 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
@@ -89,7 +94,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** the owner picks, per room, which memory contexts the agent uses there (plan §3.15). An entry's `act` names contexts "and their subtrees, and only these" and holds wherever the entry acts; `vta/memory/*` is gated on `require_context` and the memory capabilities only. An entry holding "Education" and "Healthcare" reads both from either room; a per-room child context does not help, since a parent's holder reaches every child.
 - **Evidence:** `vta-sdk/src/acl.rs` (`ActScope::covers`); `vta-sdk/src/context_path.rs`; `docs/02-vta/personal-ai-agents.md` Step 6; `docs/02-vta/data-rooms.md` §7; read at the pin `f7b78e29d` on 2026-11-23 (plan §2.1, step 0.1(o) measures the hierarchy rule).
 - **Extension:** an `act` qualified by room, or a presenter leaf that carries the contexts its holder may use, enforced on `vta/memory/*`.
-- **Severity:** P0 works around (the per-room list travels in the room offer and the plugin keeps to it; the copy says the VTA cannot enforce it; one agent per room is the enforced form); P1 enforced per-room memory needs it. Registered as VTI-Q37.
+- **Severity:** **A convenience since rev 4** (2026-11-24, plan D31): the boundary is one ACL entry per distinct memory set, enforced by the VTA today, and the per-room list the plugin kept is withdrawn; this ask would let one agent identity hold different sets per room. Nothing blocks. Registered as VTI-Q37.
 
 ### AC-25 Nothing an author writes about itself can carry whose agent it is
 
@@ -214,3 +219,38 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 
 - **Image digest mismatch in openvti-starter.** The local `mediator-buildathon:e6e2c636` has `RepoDigest` `ghcr.io/bmiller59/mediator-buildathon@sha256:2e916d18…`, while `pins.json` records the index digest `sha256:69ef5649…` (a manifest-against-index difference is the likely reason; `images:verify` was not re-run). To resolve in openvti-starter, not in this plan.
 - **The probe is throwaway.** `/srv/dev/scratch/2026-11-20-bam-agent-mediator-probe.ts` runs only under Node with `ws` (Bun's WebSocket is refused with close 1002, "Mismatch client protocol", on the subprotocol). The real probe is built with tests in the pairing rung (plan §7 step 0.1).
+
+### AC-26 A wallet that is not a super-admin cannot create a top-level context or rename one
+
+- **Hit:** Keyring creates a context per memory (plan §3.15, D32). A root context needs unrestricted act authority (VTI-CTX-020) and `vta/contexts/update` is super-admin only.
+- **Evidence:** `vta-service/src/operations/contexts.rs:54-146,231-238`; `vti-common/src/acl/mod.rs:405-428`; VTI `4e5861d95`, 2026-11-24.
+- **Extension:** roots creatable under a granted reserved prefix; a scoped administrator may rename what it created.
+- **Severity:** P0 works around (the phone is a super-admin on its own VTA by design; otherwise a Keyring-owned parent). Registered as VTI-Q39.
+
+### AC-27 The context delete preview does not count memory items
+
+- **Hit:** `delete_context` purges memory but `NotEmpty` and the preview omit it, so a memory-only context deletes without `force` and shows no loss.
+- **Evidence:** `operations/contexts.rs:578,1009,1487`, 2026-11-24.
+- **Extension:** count memory items in the preview and the refusal.
+- **Severity:** P0 works around (Keyring counts items and confirms). Registered as VTI-Q40.
+
+### AC-28 No memory quota and no item lifetime
+
+- **Hit:** one item is capped (64 KiB), a context is not; `vta/memory/put/0.3` has no `ttl`.
+- **Evidence:** `operations/app_state.rs:94`; `put/0.3.bundle.json`, 2026-11-24.
+- **Extension:** a per-context quota and an optional `ttl`.
+- **Severity:** P0 works around (client-side count and warning). Registered as VTI-Q41.
+
+### AC-29 Memory values are UTF-8 text of at most 64 KiB
+
+- **Hit:** a file or image cannot be remembered.
+- **Evidence:** `operations/app_state.rs:94`; `MemoryValue` in `put/0.3`, 2026-11-24.
+- **Extension:** larger values or a reference to a blob store.
+- **Severity:** P0 works around (a text note; files are not memory). Registered as VTI-Q42.
+
+### AC-30 No bulk clear of a context's memory; tombstones keep keys
+
+- **Hit:** wiping what an agent remembered is one delete per key and leaves tombstones kept 30 days.
+- **Evidence:** `operations/memory.rs:104`; `app_state.rs:120`, 2026-11-24.
+- **Extension:** a clear by context or prefix; say what a tombstone keeps.
+- **Severity:** P0 none; P1 works around (client loop). Registered as VTI-Q43.

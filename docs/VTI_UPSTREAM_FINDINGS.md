@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.48 — 2026-11-23.** A living document: every finding here was measured
+**Version 1.49 — 2026-11-24.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -79,7 +79,7 @@ predate this index gain a row the next time their plan touches this file.
 
 | Feature | Plan | Questions and findings |
 | --- | --- | --- |
-| A person's own AI agent in Keyring (agent connect) | `docs/plans/agent-connect-plan.md`, ledger `agent-connect-plan/vti-asks.md` | VTI-Q26 (mentions in a room), VTI-Q27 (a VTA-side pairing flow), VTI-Q28 (consumer kind on `acl/grant`), VTI-Q29 (capabilities bound to a context), VTI-Q30 (member-side withdrawal of a leaf), VTI-Q31 (an `agents` room setting), VTI-Q32 (persona-issued credentials), VTI-Q33 (an author's chain with a record), VTI-Q34 (`acl/swap-key` and revoke by `deviceId`), VTI-Q35 (what `stepUp` gates), VTI-Q36 (three starter-mediator measurements), VTI-Q37 (a room-scoped context binding), VTI-Q38 (a `delegation` member on a room name record) |
+| A person's own AI agent in Keyring (agent connect) | `docs/plans/agent-connect-plan.md`, ledger `agent-connect-plan/vti-asks.md` | VTI-Q26 (mentions in a room), VTI-Q27 (a VTA-side pairing flow), VTI-Q28 (consumer kind on `acl/grant`), VTI-Q29 (capabilities bound to a context), VTI-Q30 (member-side withdrawal of a leaf), VTI-Q31 (an `agents` room setting), VTI-Q32 (persona-issued credentials), VTI-Q33 (an author's chain with a record), VTI-Q34 (`acl/swap-key` and revoke by `deviceId`), VTI-Q35 (what `stepUp` gates), VTI-Q36 (three starter-mediator measurements), VTI-Q37 (a room-scoped context binding, a convenience since rev 4), VTI-Q38 (a `delegation` member on a room name record), VTI-Q39 (top-level context creation without a super-admin), VTI-Q40 (memory items in the context delete preview), VTI-Q41 (a memory quota and item lifetime), VTI-Q42 (large or binary memory values), VTI-Q43 (a bulk memory clear) |
 
 ## Stack under test
 
@@ -1897,8 +1897,13 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q34 | Could an administrator forbid, or require approval or step-up for, `acl/swap-key` on a delegate's entry; could `acl/revoke` address an entry by `deviceId`; and could an administrator session be told when an entry's subject changes? | `acl/swap-key` is self-service and moves the whole entry, device binding included, to a new DID the caller proves control of (`vta-service/src/operations/acl.rs`: "self-service write is the rotation (`acl/swap-key`)", at the pin; the copy of every member read at `71d524572`). An agent holding its key keeps every grant under a new DID while `acl/revoke` of the old one finds nothing, and the owner's wallet learns of the swap only when it lists. A client works around it with `device/list` and `deviceId`, at the cost of a listing and a re-list. |
 | VTI-Q35 | Which task types does an ACL entry's `stepUp` gate for an `application` entry, and what does `require` accept? | The SDK sends `stepUp` (`approver`, `require`; `vta-sdk/src/client/acl.rs`, at the pin) and `docs/02-vta/personal-ai-agents.md` Step 5 calls passkey step-up the guardrail, but neither says whether it gates memory writes and room tasks. Not measured. |
 | VTI-Q36 | Mediator: could the per-sender queue cap be documented, with a `Retry-After` on its refusal; is there a documented self-service ACL path for a `did:key` client on a closed mediator; and could a forward to a `did:peer` whose service names another host be refused at send rather than accepted and dropped? | Measured once on 2026-11-20 on the starter mediator image `e6e2c636` (0.48.0, DIDComm v2), not on the VTA Farm, and that image's digest differs from the starter's `pins.json`: the 50th queued message from one sender is refused HTTP 503 `e.p.limits.queue.peer` with no recovery hint; with `global_acl_default = DENY_ALL` the send is refused 403 `e.p.authorization.send` and the recipient's socket upgrade fails after authentication succeeded; a forward to another host returns 200 and is never delivered (`FORWARD_ABANDONED`, a problem report for the sender only). Belongs with the mediator's maintainers, as VTI-05 to VTI-07 do. A question until it is re-measured on a pinned image. |
-| VTI-Q37 | Could an ACL entry's context scope be bound to a room (an `act` that differs by the room the holder is acting in), or could a presenter leaf carry the contexts its holder may use, enforced on `vta/memory/*`? | A person who keeps several memory contexts (one for a college's room, one for a clinic's) and lets one agent into both rooms wants the agent to use only the matching context in each. Today `act` is per entry and covers each named context and its subtree (`vta-sdk/src/acl.rs`, `ActScope::covers`), and `vta/memory/*` is gated on `require_context` alone, so an entry that holds both contexts reads both from either room; the per-room choice can only be a rule the agent's software keeps. The enforced form today is one entry per room. Read at the pin `f7b78e29d` on 2026-11-23; details below. |
+| VTI-Q37 | Could an ACL entry's context scope be bound to a room (an `act` that differs by the room the holder is acting in), or could a presenter leaf carry the contexts its holder may use, enforced on `vta/memory/*`? | A person who keeps several memory contexts (one for a college's room, one for a clinic's) and lets one agent into both rooms wants the agent to use only the matching context in each. Today `act` is per entry and covers each named context and its subtree (`vta-sdk/src/acl.rs`, `ActScope::covers`), and `vta/memory/*` is gated on `require_context` alone, so an entry that holds both contexts reads both from either room; the per-room choice can only be a rule the agent's software keeps. The enforced form today is one entry per distinct memory set, and since 2026-11-24 it is the design: Keyring binds an agent to a fixed set on its entry and uses another agent for another set, so this ask is a convenience, not the boundary. Read at the pin `f7b78e29d` on 2026-11-23; details below. |
 | VTI-Q38 | Could `rooms/_shared` register a `delegation` member on the `memberProfile` record (the author's DTG delegation credential and its acceptance), so a room's profile can list it and any member can verify whose agent an author is? | A member's AI agent posts in a room as a presenter under its own DID. Another member who taps it sees a DID and, at most, the name the agent gave itself, which is "a claim, not a verified one" (`data-rooms.md`, "Names"). The record members a profile may list are a registered set, and none can carry the delegation; the leaf chain that records who equipped the presenter is checked by the host and not shown to members. So a client can show whose agent an author is only for its own agents, from local records. Read at the pin `f7b78e29d` on 2026-11-23. |
+| VTI-Q39 | Could a session that is not an unrestricted administrator create **top-level** contexts, for example a `context-create` entry allowed to create roots under a reserved prefix, and could a scoped administrator rename the display `name` of a context it created? | A person's wallet creates one context per memory an AI agent is given. A root context needs unrestricted act authority (VTI-CTX-020), the `context-create` capability reaches sub-contexts only, and `vta/contexts/update` is super-admin only, so a wallet that is not a super-admin cannot make a memory at the root or rename one. The workaround is a parent made once by a super-admin. Read at `4e5861d95` on 2026-11-24; details below. |
+| VTI-Q40 | Could `vta/contexts/preview-delete` and the `delete` refusal count **memory items** with what a context holds? | `delete_context` purges a context's memory (`purge_context_rows`), but the preview and the not-empty refusal count sub-contexts, keys, DIDs, ACL entries and templates only, so a context holding only memory deletes without `force` and the person is shown no loss. A client has to count items itself. Read at `4e5861d95` on 2026-11-24. |
+| VTI-Q41 | Could a context's memory have a **quota** (items, total bytes) and could `vta/memory/put` take a **time to live**? | One item is capped at 64 KiB and one key at 512 bytes; no cap on the number or total size of items and no expiry was found, so an AI agent can grow a person's VTA store without limit and nothing ages out. A client can only count and warn. Read at `4e5861d95` on 2026-11-24. |
+| VTI-Q42 | Could memory hold **larger or binary values**, or a reference to a blob store? | A memory value is a UTF-8 string of at most 65,536 bytes, so a file or an image cannot be remembered; an agent keeps a text note instead. Read at `4e5861d95` on 2026-11-24. |
+| VTI-Q43 | Could a client **clear a context's memory, or a key prefix,** in one call, and could the specification say what a tombstone keeps? | "Also delete what it remembered" is one `vta/memory/delete` per key, not atomic, and each leaves a tombstone that keeps the key for a retention period (30 days by default), so a wiped memory's keys stay listable. Read at `4e5861d95` on 2026-11-24. |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2263,10 +2268,43 @@ each memory by its own path and never by a parent, sends the per-room list to
 the agent with the room offer, says in its own screens that the VTA cannot
 enforce the per-room choice, and offers one agent per room as the enforced form.
 
+**VTI-Q39 — top-level context creation without a super-admin.**
+(a) A person's wallet administers their personal VTA and creates a context for
+each memory an AI agent is given. `create_context` first needs the admin role or
+`context-create`, then `require_super_admin` for a root and reach to the parent
+for a sub-context (VTI-CTX-020); `context-create` is additive and only a
+super-admin can grant it; `vta/contexts/update` (the display `name`) is
+super-admin only. Expected: a way for a scoped session to create roots under a
+reserved prefix it is granted, and to rename what it created.
+
+(b) Read, not run: `vta-service/src/operations/contexts.rs:54-146,231-238`,
+`vti-common/src/acl/mod.rs:405-428`, spec `03-trust-contexts.md` VTI-CTX-020
+(dtgwg-vti-spec `416899c`), at VTI `4e5861d95` on 2026-11-24. (c) The same files.
+(d) Meanwhile the wallet creates memories directly when `auth/whoami` shows an
+unrestricted administrator, which is how a phone is linked to its own VTA, and
+otherwise uses a parent context a super-admin made once.
+
+**VTI-Q40 to VTI-Q43 — memory lifecycle.**
+(a) VTI-Q40: a context delete preview that counts memory items. VTI-Q41: a
+per-context quota and an item `ttl`. VTI-Q42: values beyond 64 KiB of UTF-8
+text. VTI-Q43: a bulk clear and a statement of what a tombstone keeps.
+
+(b) Read, not run, at VTI `4e5861d95` on 2026-11-24:
+`vta-service/src/operations/contexts.rs:578,1009,1487` (`NotEmpty`, the `force`
+gate, `memory::purge_context`); `vta-service/src/operations/app_state.rs:94,120,155`
+(64 KiB, 30-day tombstone retention, 512-byte key);
+`vti-specs-vta/trust-tasks/vta/memory/put/0.3.bundle.json` (no `ttl`).
+No quota in the memory operations was found; that is a search, not a proof.
+(c) The same files. (d) Meanwhile the wallet counts items itself, confirms a
+delete explicitly, warns above a count it chooses, wipes memory with a re-runnable
+client loop, and tells the person memory is text on their VTA, not a secret or
+file store.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.49 | 2026-11-24 | **VTI-Q39 to VTI-Q43** (new), from the agent-connect plan's revision 4: top-level context creation without a super-admin (Q39), memory items in the context delete preview (Q40), a memory quota and item lifetime (Q41), large or binary values (Q42), a bulk clear and what a tombstone keeps (Q43). **VTI-Q37** reframed: an agent is now bound to a fixed memory set on its own entry and another set means another agent, so a room-scoped binding is a convenience, not the boundary. Read at VTI `4e5861d95`, spec `416899c`. |
 | 1.48 | 2026-11-23 | **VTI-Q38** (new): a `delegation` member on the `memberProfile` record, the author's delegation credential and acceptance, so any member can verify whose agent an author is; today an author can say only its name about itself, and the leaf chain is not shown to members. Read at the pin `f7b78e29d`. |
 | 1.47 | 2026-11-23 | **VTI-Q37** (new): a room-scoped context binding, so an agent that holds several memory contexts uses only the matching one in each room; today `act` is per entry and `vta/memory/*` checks the context alone. Read at the pin `f7b78e29d`. **Findings by feature** (new section): an index from each feature's plan to its questions and findings, starting with agent connect (VTI-Q26 to VTI-Q37), with the rule that a plan registers each gap here in the PR of the step that meets it. |
 | 1.46 | 2026-11-22 | **VTI-Q26 to VTI-Q36** (new): eleven questions arising from the plan for a person's own AI agent in Keyring (`docs/plans/agent-connect-plan.md` and its ledger `agent-connect-plan/vti-asks.md`): a `mentions` record member and mention-scoped delivery (Q26, with details), a VTA-side pairing flow (Q27), the consumer kind on `acl/grant` (Q28), capabilities bound to a context (Q29), a member-side withdrawal of an agent's leaf (Q30), an `agents` room setting (Q31), persona-issued credentials (Q32), an author's chain with a record (Q33), control over `acl/swap-key` and revoke by `deviceId` (Q34), what `stepUp` gates (Q35), and three starter-mediator measurements recorded as a question until re-measured on a pinned image (Q36). Read at the pin `f7b78e29d` where each row says so, otherwise at `origin/main` `71d524572` on 2026-11-20. |
