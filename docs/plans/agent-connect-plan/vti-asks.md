@@ -24,6 +24,7 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-28 | VTI-Q41 |
 | AC-29 | VTI-Q42 |
 | AC-30 | VTI-Q43 |
+| AC-31 | VTI-Q44 |
 | AC-25 | VTI-Q38 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
@@ -236,9 +237,9 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 
 ### AC-28 No memory quota and no item lifetime
 
-- **Hit:** one item is capped (64 KiB), a context is not; `vta/memory/put/0.3` has no `ttl`.
+- **Hit:** one item is capped (64 KiB), a context is not; `vta/memory/put/0.3` has no `ttl`; the context policy's `quotas` count operations a day and are applied only to signing and vault presentation (`operations/keys/sign.rs:193`, `trust_tasks/vault.rs:1588`); the operation budget is a rate (100 operations a second per client).
 - **Evidence:** `operations/app_state.rs:94`; `put/0.3.bundle.json`, 2026-11-24.
-- **Extension:** a per-context quota and an optional `ttl`.
+- **Extension:** an optional `max_items` and `max_bytes` in `ContextPolicy`, per-context counters kept in the same write batch as `put` and `delete`, a `quotaExceeded` error, a server-wide default cap, a heavier `put-many` weight, an optional `ttl`.
 - **Severity:** P0 works around (client-side count and warning). Registered as VTI-Q41.
 
 ### AC-29 Memory values are UTF-8 text of at most 64 KiB
@@ -254,3 +255,10 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `operations/memory.rs:104`; `app_state.rs:120`, 2026-11-24.
 - **Extension:** a clear by context or prefix; say what a tombstone keeps.
 - **Severity:** P0 none; P1 works around (client loop). Registered as VTI-Q43.
+
+### AC-31 A client cannot read the VTA's storage protection mode
+
+- **Hit:** memory is encrypted at rest only when the VTA holds a storage key; the standard mode has none (plaintext), hardened derives it from the master seed, a TEE in the enclave. No read-only task returns the mode.
+- **Evidence:** `vta-service/src/server.rs:597-602,650`; `main.rs:2544-2558,2622-2640,2672`; `restore.rs:30-35`, 2026-11-24.
+- **Extension:** the mode in `auth/whoami` or a status answer.
+- **Severity:** P0 works around (the copy makes no claim of encryption). Registered as VTI-Q44.
