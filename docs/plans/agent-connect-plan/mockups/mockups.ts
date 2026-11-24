@@ -91,7 +91,7 @@ export const MOCKUPS: Mockup[] = [
       s.primaryButton('Approve', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['Shown after the right number was typed. "Approve" asks for the phone’s face or fingerprint check (§3.2 step 6).', 'With no memory picked the second line reads "It will have no memory." The date and the memories are samples.'],
+    notes: ['Shown after the right number was typed. "Approve" asks for the phone’s face or fingerprint check (§3.2 step 6).', 'With no memory picked the second line reads "It will have no memory." The date and the memories are samples.', 'The line "It can read a room only after you add it to one." is the P1 form; P0, with no rooms, omits it.'],
   },
   {
     file: '06-agent-list.svg',

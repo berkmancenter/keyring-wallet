@@ -7,14 +7,14 @@
   "height": 6936,
   "sheet": {
     "file": "sheet.png",
-    "sha256": "7f274d0e999b53919ea5a1224c661f02fdd5d0f9010cd76eb5b7e163d8586c9d"
+    "sha256": "514e8fb58ba4861174e5541dab3d929a2a116c47b8e36a8651aa36d41b0cbcb2"
   },
   "svgs": {
     "01-connect-name.svg": "053a1a5d2a4357c235f05442926b464aff1ca201ca69793b0ee825118d57d92b",
     "02-connect-scan.svg": "d11f03a17261a9fc73ff0d9ada66e7cf5134386177dc5f112b1628c9005c4149",
     "03-connect-number.svg": "ecba88d37fa76406bc7af42b5f302630e0e299d9e2a3b96de0147820e6edaf5b",
     "04-connect-wrong-number.svg": "37c064111cfc15b06c24fd273b12e85ce9f2a991407d517369fadb3674b363a6",
-    "05-approve.svg": "cfe794e782ff8b268820820eb07e0f79799cf1ef0464bd5652d6af9416dd2e02",
+    "05-approve.svg": "822f7466f9f575bd4ca0ece26807fac87fc8c6ed5690ef8601df79f80cb5f9f3",
     "06-agent-list.svg": "536428c6ca6ddb85dfaec0e72616baec9f1186335a15300cfda4c4ea07c746a8",
     "07-agent-sheet.svg": "1aae930663395b1a14426cc4407503c269a74c47289b4067a8f02bff2723c40b",
     "08-answers-others-confirm.svg": "8adb6acaaf8a4c2137ff96bc1bf9dbb8a9632037cdfe7aa1aa0b22eb2c56dd47",
