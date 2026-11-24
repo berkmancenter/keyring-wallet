@@ -16,7 +16,7 @@
     <text x="200" y="110" font-family="system-ui, sans-serif" font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="middle">Connect an agent</text>
     <text font-size="26" font-weight="700" fill="#4A4A4A"><tspan x="36" y="170">Connect &quot;Notes helper&quot;?</tspan></text>
     <text font-size="18" fill="#4A4A4A"><tspan x="36" y="204">It will be able to chat with you.</tspan></text>
-    <text font-size="18" fill="#4A4A4A"><tspan x="36" y="228">It will be able to use the memories</tspan><tspan x="36" dy="24">Education, Healthcare.</tspan></text>
+    <text font-size="18" fill="#4A4A4A"><tspan x="36" y="228">It will be able to use the memories</tspan><tspan x="36" dy="24">Education, Healthcare, and no others.</tspan></text>
     <text font-size="18" fill="#4A4A4A"><tspan x="36" y="276">Until 23 December 2026.</tspan></text>
     <text font-size="18" fill="#4A4A4A"><tspan x="36" y="300">It can read a room only after you add it</tspan><tspan x="36" dy="24">to one.</tspan></text>
     <text font-size="18" fill="#4A4A4A"><tspan x="36" y="358">Only continue if you ran the command in</tspan><tspan x="36" dy="24">your own terminal just now.</tspan></text>

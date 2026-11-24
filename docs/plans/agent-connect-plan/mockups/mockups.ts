@@ -30,13 +30,14 @@ export const MOCKUPS: Mockup[] = [
       y = s.body('Memory it can use', y)
       y = s.layerRow('Education', y + 2)
       y = s.layerRow('Healthcare', y)
-      y = s.layerRow('New memory', y) + 6
+      y = s.layerRow('New memory', y)
+      y = s.label('Your VTA keeps this agent to these memories. To use different ones in a room, connect another agent for it.', y + 2) + 6
       y = s.layerRow('Connected for', y, { muted: '7 days, 30 days, 90 days' }) + 6
       s.label("You'll run a command in a terminal on the computer where Claude Code runs. It shows a code to scan.", y)
       s.primaryButton('Continue', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['The grey bar stands for the name field.', '"Memory it can use" is the memory picker (§3.15): checkbox rows (boxes not drawn), any number or none, and "New memory". Sample memories.', 'Expiry: 7, 30 or 90 days, 30 by default; drawn as one line.'],
+    notes: ['The grey bar stands for the name field.', '"Memory it can use" is the memory picker (§3.15): checkbox rows (boxes not drawn), any number or none, and "New memory". Sample memories.', 'The line under the rows is the binding (§3.15): the VTA keeps the agent to the picked set; a different set in a room is another agent.', 'Expiry: 7, 30 or 90 days, 30 by default; drawn as one line.'],
   },
   {
     file: '02-connect-scan.svg',
@@ -83,7 +84,7 @@ export const MOCKUPS: Mockup[] = [
       s.header('Connect an agent')
       let y = s.heading('Connect "Notes helper"?', TOP) + 10
       y = s.body('It will be able to chat with you.', y)
-      y = s.body('It will be able to use the memories Education, Healthcare.', y)
+      y = s.body('It will be able to use the memories Education, Healthcare, and no others.', y)
       y = s.body('Until 23 December 2026.', y)
       y = s.body('It can read a room only after you add it to one.', y) + 10
       s.body('Only continue if you ran the command in your own terminal just now.', y)
@@ -185,14 +186,14 @@ export const MOCKUPS: Mockup[] = [
       y = s.primaryButton('Message', y) + 12
       y = s.layerRow('Answers other people', y, { muted: 'Off' }) + 4
       y = s.body('Memories: Education, Healthcare.', y)
-      y = s.label('In Campus notes: uses Education.', y + 2)
-      y = s.label('In Clinic team: uses Healthcare.', y)
-      y = s.label('For your VTA to enforce this, use one agent per room.', y + 2) + 6
+      y = s.label('Can use memory Education, Healthcare in every room it is in.', y + 2)
+      y = s.label('Your VTA keeps it to these memories.', y)
+      y = s.layerRow('Change memories', y + 4) + 6
       const e = s.tertiaryButton('Extend', y)
       s.tertiaryButton('Revoke', e)
       s.tabBar('myAgent')
     },
-    notes: ['Reached from the contact row (09) and the agent list (06). "Message" opens the agent chat (§3.14).', 'The memory lines are §3.15’s; the last shows because the agent has more than one memory. Samples.', 'Tertiary "Extend" and "Revoke" are a mockup choice; Revoke opens 17.'],
+    notes: ['Reached from the contact row (09) and the agent list (06). "Message" opens the agent chat (§3.14).', 'The memory lines are §3.15’s: one line for every room, since the VTA binds the set to the agent, not to a room. "Change memories" opens 20. Samples.', 'Tertiary "Extend" and "Revoke" are a mockup choice; Revoke opens 17.'],
   },
   {
     file: '12-composer-add-sheet.svg',
@@ -208,7 +209,7 @@ export const MOCKUPS: Mockup[] = [
       })
     },
     omits: { primary: 'the sheet’s rows are the actions; the plan defines no button for it (§6).' },
-    notes: ['Opened by the "+" next to the message field once the person has an agent; with none the "+" picks a file at once, as today (§3.15).', '"Add my agent" runs the add (13, then 14); where the community says no, or nothing, the row is disabled with that line (§3.8).', ROOMS_FROM_MESSAGES],
+    notes: ['Opened by the "+" next to the message field once the person has an agent; with none the "+" picks a file at once, as today (§3.15).', '"Add my agent" runs the add (13, ending at the read-only sheet 14); where the community says no, or nothing, the row is disabled with that line (§3.8).', ROOMS_FROM_MESSAGES],
   },
   {
     file: '13-room-add-agent.svg',
@@ -219,30 +220,29 @@ export const MOCKUPS: Mockup[] = [
       s.bottomSheet((sheet, y) => {
         let yy = sheet.heading('Add "Notes helper" to this room?', y) + 10
         yy = sheet.body('Adding an agent gives it read access to this room. It is asked to act only when you mention it, but nothing in the room enforces that.', yy) + 10
-        yy = sheet.body('It can also read and change your memory "Personal", as can any other agent you add to a room.', yy) + 14
+        yy = sheet.body('It can also read and change your memory "Personal", as can any other agent you add to a room.', yy) + 10
+        yy = sheet.body('Members of this room will see that this agent belongs to you.', yy) + 14
         yy = sheet.primaryButton('Add to room', yy) + 12
         return sheet.secondaryButton('Not now', yy)
       })
     },
-    notes: ['From "Agents in this room" (15) or the "+" sheet (12). Both notices are read before "Add to room" is focusable; it confirms both, then 14 follows. "Personal" is a sample context.', 'A community room that says no, or nothing, never reaches this sheet (§3.8).', ROOMS_FROM_MESSAGES],
+    notes: ['From "Agents in this room" (15) or the "+" sheet (12). Both notices are read before "Add to room" is focusable; it confirms both, then the read-only sheet 14 follows (there is no memory to pick). "Personal" is a sample context.', 'A community room that says no, or nothing, never reaches this sheet (§3.8).', ROOMS_FROM_MESSAGES],
   },
   {
-    file: '14-memory-for-room.svg',
-    title: `Memory for this room: which memories the agent uses here (${PLAN} §3.15, §6)`,
+    file: '14-what-it-remembers.svg',
+    title: `What the agent remembers: read-only (${PLAN} §3.15, §6)`,
     draw: (s) => {
       s.header(undefined, { placeholder: ROOM_TITLE, assumed: NO_ROOM_TITLE })
       s.tabBar('messages')
       s.bottomSheet((sheet, y) => {
-        let yy = sheet.heading('Memory for this room', y) + 8
-        yy = sheet.body('Pick what Notes helper may remember and use here. Keyring asks the agent to keep to these in this room. Your VTA cannot enforce it.', yy) + 8
-        yy = sheet.layerRow('Education', yy)
-        yy = sheet.layerRow('Healthcare', yy)
-        yy = sheet.layerRow('New memory', yy) + 10
+        let yy = sheet.heading('What Notes helper remembers', y) + 8
+        yy = sheet.body('Notes helper can use only these memories, in every room it is in: Education, Healthcare. Your VTA keeps it to them.', yy) + 8
+        yy = sheet.body('Memory is stored as text on your VTA. It is not a place for secrets.', yy) + 10
         yy = sheet.primaryButton('Done', yy) + 12
-        return sheet.secondaryButton('No memory here', yy)
+        return sheet.secondaryButton('Connect another agent', yy)
       })
     },
-    notes: ['Follows 13; opens again from the agent’s row in 15 or its details (11). Checkbox rows, boxes not drawn; any number or none. "New memory" opens "Name this memory" and "Create".', 'The body states the limit (§3.15): the agent’s software keeps the per-room choice; the VTA gates memory on the entry only.', ROOMS_FROM_MESSAGES],
+    notes: ['Follows 13; opens again from the agent’s row in 15 or its details (11). Read-only: the owner picks nothing here, because the VTA binds the memories to the agent and not to a room (§3.15, D31).', '"Connect another agent" starts the connect flow (01) for a different set; "Change memories" is on the details (11, 20). With no memory the body reads "Notes helper has no memory."', ROOMS_FROM_MESSAGES],
   },
   {
     file: '15-room-agents-section.svg',
@@ -251,13 +251,14 @@ export const MOCKUPS: Mockup[] = [
       s.header(undefined, { placeholder: ROOM_TITLE, assumed: NO_ROOM_TITLE })
       s.tabBar('messages')
       let y = s.heading('Agents in this room', TOP)
-      y = s.layerRow('Notes helper', y + 4, { muted: 'AI agent. Uses: Education' })
+      y = s.layerRow('Notes helper', y + 4, { muted: 'AI agent. Memory: Education' })
+      y = s.layerRow('Study buddy', y, { muted: 'AI agent. No memory' })
       y = s.layerRow('Add an agent', y)
       y = s.label('Agents added here can read everything in this room, not only messages that mention them.', y + 4) + 20
       s.placeholder(y, [CONTENT_W * 0.5, CONTENT_W * 0.7])
     },
-    omits: { primary: 'the section’s rows are the actions: an agent’s row opens "Memory for this room" (14) and "Add an agent" starts the add (13).' },
-    notes: ['A section of the room’s info screen. "Uses: Education" is the room’s memory list for that agent; with none, "Uses no memory here". Grey bars: the rest of the screen.', ROOMS_FROM_MESSAGES],
+    omits: { primary: 'the section’s rows are the actions: an agent’s row opens "What it remembers here" (14, read-only) and "Add an agent" starts the add (13).' },
+    notes: ['A section of the room’s info screen. "Memory: Education" is the agent’s bound set, the same in every room; an agent with none reads "No memory". Grey bars: the rest of the screen.', ROOMS_FROM_MESSAGES],
   },
   {
     file: '16-room-members-agents.svg',
@@ -281,12 +282,13 @@ export const MOCKUPS: Mockup[] = [
       s.tabBar('myAgent')
       s.bottomSheet((sheet, y) => {
         let yy = sheet.heading('Revoke "Notes helper"?', y) + 10
-        yy = sheet.body('It loses access to your memory and rooms. A room permission it already holds can work for up to 4 hours. Past messages stay.', yy) + 14
+        yy = sheet.body('It loses access to your memory and rooms. A room permission it already holds can work for up to 4 hours. Past messages stay.', yy) + 8
+        yy = sheet.layerRow('Also delete what it remembered', yy) + 8
         yy = sheet.primaryButton('Revoke', yy) + 12
         return sheet.secondaryButton('Keep', yy)
       })
     },
-    notes: ['Opened from the agent details (11). Never says "instant". If the VTA cannot be reached the agent stays connected and Keyring says "We couldn’t reach your VTA, so "<name>" is still connected."', 'Revoke is also how the agent leaves Contacts and Messages; there is no second removal (§3.14).'],
+    notes: ['Opened from the agent details (11). Never says "instant". If the VTA cannot be reached the agent stays connected and Keyring says "We couldn’t reach your VTA, so "<name>" is still connected."', '"Also delete what it remembered" is the P1 row (§3.15): it erases the items, the memory stays; never "no trace". P0 has no such row.', 'Revoke is also how the agent leaves Contacts and Messages (§3.14).'],
   },
   {
     file: '18-pairing-expired.svg',
@@ -311,6 +313,67 @@ export const MOCKUPS: Mockup[] = [
     },
     omits: { primary: 'Settings is a list of rows; the plan defines no button for it.' },
     notes: ['The app titles this screen "Menu" (its own string); the row sits in its "App Settings" group. "My VTA" opens the whole stack that was the My Agent tab, unchanged, with "My VTA" as its header (D26, step 5a). The outline only points at the row.'],
+  },
+  {
+    file: '20-change-memories.svg',
+    title: `Change memories: widening asks first (${PLAN} §3.15, §6, §11 Q4)`,
+    draw: (s) => {
+      s.header(undefined, { placeholder: '<title>', assumed: 'the header title of the agent details screen; the plan defines none (§6).' })
+      s.tabBar('myAgent')
+      s.bottomSheet((sheet, y) => {
+        let yy = sheet.heading('Let "Notes helper" use "Work"?', y) + 10
+        yy = sheet.body('This also applies in Campus notes, Clinic team. It will be able to read and change it.', yy) + 14
+        yy = sheet.primaryButton('Allow', yy) + 12
+        return sheet.secondaryButton('Not now', yy)
+      })
+    },
+    notes: ['From "Change memories" on the details (11), after the owner ticks a memory the agent lacks. It names every room, because widening applies at once in all of them (§3.15). "Allow" asks for face or fingerprint.', 'Narrowing is this sheet with its own copy ("Stop "Notes helper" using "Healthcare"?", "Stop using", "Keep"): one confirmation, no biometric.', 'Widening after connect is the open decision Q4; this is the recommended form.'],
+  },
+  {
+    file: '21-delete-memory.svg',
+    title: `Delete a memory: explicit confirm, P1 (${PLAN} §3.15, §6)`,
+    draw: (s) => {
+      s.header(undefined, { placeholder: '<title>', assumed: 'the header title of a memory screen; the plan defines none and no memory-management screen is in P0 (§3.15).' })
+      s.tabBar('myAgent')
+      s.bottomSheet((sheet, y) => {
+        let yy = sheet.heading('Delete "Education"?', y) + 10
+        yy = sheet.body('This destroys the 214 items it remembers and removes the memory from Notes helper. This can\u2019t be undone.', yy) + 14
+        yy = sheet.primaryButton('Delete', yy) + 12
+        return sheet.secondaryButton('Keep', yy)
+      })
+    },
+    notes: ['P1, with the memory-management screen. The count (214 is a sample) is Keyring’s own: the VTA’s delete warning does not count memory items, so a memory holding only items would delete without asking (§3.15).', 'The agents bound to it are named. Keyring sends the delete with `force` only after this sheet. The copy says "destroys", never "no trace".'],
+  },
+  {
+    file: '22-memory-drift.svg',
+    title: `Agent details: its memory access changed (${PLAN} §3.15, §6)`,
+    draw: (s) => {
+      s.header(undefined, { placeholder: '<title>', assumed: 'the header title of the agent details screen; the plan defines none (§6).' })
+      let y = s.heading('Notes helper', TOP)
+      y = s.body('AI agent', y + 2) + 8
+      y = s.errorNotice('Its memory access changed.', y, 'Something other than you changed what it can use.') + 8
+      y = s.primaryButton('Restore', y) + 12
+      y = s.tertiaryButton('Revoke', y) + 8
+      y = s.label('Lost access to Healthcare.', y + 4)
+      s.tabBar('myAgent')
+    },
+    notes: ['Shown at app start and on opening the list or details when the entry holds a context beyond the agent’s memories and its rooms’ (§3.15 step 5). "Restore" narrows the entry back after one confirmation; "Revoke" opens 17.', '"Lost access to <memory>" is the opposite case, a memory the agent should have and no longer does; drawn here as its line. The body line under the title is a mockup choice (the plan defines the title only).'],
+  },
+  {
+    file: '23-new-memory-not-allowed.svg',
+    title: `Connect an agent: a phone that cannot create memories (${PLAN} §3.15, §11 Q2)`,
+    draw: (s) => {
+      s.header('Connect an agent')
+      let y = s.body('Name this agent', TOP)
+      y = s.placeholder(y + 4, [CONTENT_W * 0.55]) + 14
+      y = s.body('Memory it can use', y)
+      y = s.layerRow('Education', y + 2)
+      y = s.layerRow('Healthcare', y) + 8
+      y = s.errorNotice("Your VTA doesn't let this phone create memories. Pick one that exists, or ask the VTA's administrator.", y)
+      s.primaryButton('Continue', BOTTOM)
+      s.tabBar('myAgent')
+    },
+    notes: ['The "New memory" row is absent when `auth/whoami` shows the phone is not an unrestricted administrator (a root context needs one, VTI-CTX-020). The existing memories can still be picked.', 'Which route replaces this for such a phone, if any, is the owner’s open decision Q2.'],
   },
 ]
 
