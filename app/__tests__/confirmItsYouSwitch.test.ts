@@ -9,7 +9,7 @@
  * now the only way it goes off. So these rows use bifold's real switch, not a mock, and read it the way every
  * screen does, through isConfirmItsYouEnabled().
  *
- * Deliberately not asserted: that bifold's switch starts on. That is bifold's (its sediKeriSwitches.test.ts), and it
+ * Deliberately not asserted: that bifold's switch starts on. That is bifold's (its remoteOffSwitches.test.ts), and it
  * depends on the bifold this app is pinned to; what is held here is that the app leaves it alone.
  */
 import {

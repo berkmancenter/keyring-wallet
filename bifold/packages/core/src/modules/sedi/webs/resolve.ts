@@ -79,7 +79,7 @@ export type Got = { ok: true; bytes: Uint8Array } | (WebsRefusal & { status?: nu
 
 /**
  * One artifact: HTTPS only, no redirect off the identifier's origin, a timeout and a size cap, 2xx only. Exported for
- * the one other file read the same way, beside them (./designatedAliases).
+ * `WebsDidResolver`, which reads `did.json` through it.
  */
 export async function getArtifact(
   fetchFn: WebsFetch,

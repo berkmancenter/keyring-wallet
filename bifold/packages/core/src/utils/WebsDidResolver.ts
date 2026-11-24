@@ -12,7 +12,7 @@ import { getArtifact, WEBS_LIMITS, type WebsFetch } from '../modules/sedi/webs/r
  *
  * NOT KEL-verified: keri.cesr is not replayed here, so the keys are "what the host publishes over HTTPS", the same
  * trust as a did:web, which Credo already resolves unverified. The verifying path is sedi/webs/resolve.ts
- * `resolveWebs` (KEL replay, document checked against the replayed keys), behind the state-verified approvers switch.
+ * `resolveWebs` (KEL replay, document checked against the replayed keys), which nothing in the product calls yet.
  * The fetch guards are that file's own (`getArtifact`): HTTPS only, no redirect off the identifier's origin, a 64 KiB
  * cap and a 10 s timeout. The document's `id` must be the DID asked for; anything else, its did:web twin included, is
  * refused.
