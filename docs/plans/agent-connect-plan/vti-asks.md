@@ -228,7 +228,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** Keyring creates a context per memory (plan §3.15, D32). A root context needs unrestricted act authority (VTI-CTX-020) and `vta/contexts/update` is super-admin only.
 - **Evidence:** `vta-service/src/operations/contexts.rs:54-146,231-238`; `vti-common/src/acl/mod.rs:405-428`; VTI `4e5861d95`, 2026-11-24.
 - **Extension:** roots creatable under a granted reserved prefix; a scoped administrator may rename what it created.
-- **Severity:** P0 works around (the phone is a super-admin on its own VTA by design; otherwise a Keyring-owned parent). Registered as VTI-Q39.
+- **Severity:** P0 needs no workaround: Keyring is assumed to be an unrestricted administrator (plan §1.5, D32) and an `auth/whoami` guard stops the connect otherwise; a Keyring-owned parent is a documented, unbuilt fallback. Registered as VTI-Q39.
 
 ### AC-27 The context delete preview does not count memory items
 
