@@ -288,7 +288,7 @@ export const MOCKUPS: Mockup[] = [
         return sheet.secondaryButton('Keep', yy)
       })
     },
-    notes: ['Opened from the agent details (11). Never says "instant". If the VTA cannot be reached the agent stays connected and Keyring says "We couldn’t reach your VTA, so "<name>" is still connected."', '"Also delete what it remembered" is the P1 row (§3.15): it erases the items, the memory stays; never "no trace". P0 has no such row.', 'Revoke is also how the agent leaves Contacts and Messages (§3.14).'],
+    notes: ['Opened from the agent details (11). Never says "instant". If the VTA cannot be reached the agent stays connected and Keyring says "We couldn’t reach your VTA, so "<name>" is still connected."', '"Also delete what it remembered" is the P2 row (§3.15, step 7.18): it erases the items, the memory stays; never "no trace". P0 and P1 have no such row.', 'Revoke is also how the agent leaves Contacts and Messages (§3.14).'],
   },
   {
     file: '18-pairing-expired.svg',
