@@ -14,6 +14,7 @@
      Format: docs/plans/CLAUDE.md, "Implementing a plan: stacked PRs". -->
 
 Stack: <n> of <m>. Base: <branch> (#<PR below>), at <sha8>.
+Tier: <P0 | P1 | P2>. Lane and owner: <lane>, <owner>. Can start after: <PRs, as in the plan's stack table>
 Plan section: <docs/plans/…-plan.md §N, at a commit permalink if the plan may move>
 Above / below: <#PR above>, <#PR below>
 

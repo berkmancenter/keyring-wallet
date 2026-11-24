@@ -82,6 +82,12 @@ invisible to an agent reading the codebase. So:
    the Plan structure workflow on PRs touching `docs/plans/`. Legacy plans are
    skipped until they migrate ([`CLAUDE.md`](./CLAUDE.md), "Checking a plan's
    structure").
+8. **Tiers, lanes and asks.** A new plan carries `<!-- plan-format: tiers -->`:
+   P0, P1 and P2 are iterative MVPs (each works on its own; none depends on a
+   later tier), steps have owners and sit in lanes with a stack table showing
+   what can run in parallel, and upstream asks are recorded with the step and
+   tier they block and a fallback, not filed ([`CLAUDE.md`](./CLAUDE.md), "Tiers,
+   lanes and upstream asks").
 
 ## Working on this workstream
 

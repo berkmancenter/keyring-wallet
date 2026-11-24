@@ -174,9 +174,16 @@ Each item is either present or explicitly marked "not applicable" with a reason.
       main action, or that it has none), where each screen sits in the
       navigation (in a tab or above the tabs), and accessibility. The mockups
       are drawn from this, not the other way round.
-- [ ] **Steps with acceptance criteria**, each checkable.
+- [ ] **Steps with acceptance criteria**, each checkable, each in a tier and
+      with an owner (next item).
+- [ ] **Tiers, lanes and order** (§7.0): P0, P1 and P2 are iterative MVPs, each
+      with an exit criterion and a named demo or test; the lanes with their
+      owners; a Mermaid dependency graph with the critical path marked; and the
+      stack table (below, "Tiers, lanes and upstream asks").
+- [ ] **Decisions made**, a register beside the open decisions: decision, who,
+      when, why.
 - [ ] **Test plan** (below).
-- [ ] **Blocked on whom**, and **open questions** with an owner each.
+- [ ] **Upstream asks and blocked on whom**, and **open questions** with an owner each.
 - [ ] **Upstream gaps.** Every gap in upstream (VTI, the mediator, a
       specification) that the plan's flow meets is registered in
       [`../VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md): as a
@@ -185,7 +192,8 @@ Each item is either present or explicitly marked "not applicable" with a reason.
       that meets it, never kept in the plan alone. The findings file's "Findings
       by feature" index carries one row per feature, so a plan's gaps are read
       as that feature's sub-findings; the plan's blocked-on section names each
-      `VTI-QN` it depends on. A plan with no upstream contact says so.
+      `VTI-QN` it depends on, with the step and tier it blocks and the fallback
+      used meanwhile. A plan with no upstream contact says so.
 
 ### The test plan
 
@@ -493,7 +501,9 @@ this applies").
 - **The description says where it sits.** It links the plan section it
   implements (path and `§`, at a commit permalink when the plan may move), and
   gives its place in the stack: `Stack: 2 of 5. Base: <branch> (#N), at <sha8>.`,
-  plus the PRs above and below it. The `Base:` line is the form already used on
+  plus the PRs above and below it, and its tier, lane, owner and "can start
+  after" from the plan's stack table. PRs that do not depend on each other
+  proceed in parallel; a PR never waits on a later tier. The `Base:` line is the form already used on
   stacked PRs in this repo (e.g. #931).
 - **Checks before opening each PR, and no PR if any fail.** Run, as the change
   needs: `yarn lint`, `yarn prettier` and `yarn typecheck` at the root; the
@@ -573,6 +583,55 @@ A plan is done when its feature branch has merged into `main`, and that PR
 
 Until both are in, the plan is "Accepted, building", however much has merged.
 
+## Tiers, lanes and upstream asks
+
+A plan with `<!-- plan-format: tiers -->` in its header block (every new plan
+carries it; it is opt-in so older plans keep passing until their next
+substantive edit) follows these rules, and the checker enforces what it can.
+
+**P0, P1 and P2 are iterative MVPs.**
+
+- Each tier is a complete, working, demonstrable product that builds on the
+  previous one: if time runs out after any tier, what exists works. A tier's
+  exit criterion is "ships and works on its own", shown by a named demo or test
+  (the tiers table in §7.0), never "all its items are done".
+- **No later-tier dependency.** No tier, and no step, depends on a later tier.
+  The stack table's "can start after" never names a PR of a later tier
+  (checked).
+- Within a tier, steps are ordered so that stopping after any step leaves a
+  coherent product; steps that cannot be separated are merged into one.
+- **Fallback for upstream-dependent items.** A tier item that needs an upstream
+  change states, in the same step (`**Fallback:**`), what works in the same tier
+  without it. The upstream change improves a later tier (checked: a step that
+  names a `VTI-` id has a `**Fallback:**` line).
+
+**Upstream asks are recorded, not filed.** The plan records each ask in §10,
+"Upstream asks and blocked on whom", as `| Ask | Id | Blocks (step, tier) |
+Fallback meanwhile |`: the id (`VTI-Qn` or `VTI-NN`, registered in
+[`../VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md) under the plan's
+feature, per the checklist), what it blocks, and the fallback. The plan does
+not have to file it upstream or track a response, and has no filed, link,
+status or response columns. The checker fails a `VTI-` id the findings file
+does not contain, a step's id missing from the table, and a row with no tier
+or fallback.
+
+**Lanes, owners and the graph.** §7.0, `### 7.0 Tiers, lanes and order`, opens
+§7 with: the tiers table `| Tier | Exit criterion | Demo or test |` (rows P0,
+P1, P2); the lanes table `| Lane | Owner | Steps |` (parallel workstreams such
+as UI/UX, core, plugin or another repo, upstream, test); a ` ```mermaid `
+dependency graph with the critical path marked; and the stack table
+`| PR n of N | Step | Tier | Base | Can start after |`, one row per step, cells
+like `3 of 7`, `7.3`, `P1`, and `PR 1, PR 2` or `none`. Two steps can proceed
+in parallel when neither is in the other's "can start after". Every other
+`###` heading in §7 is a step ending in its tier, `### 7.3 Step title (P1)`,
+and has a `**Owner:** <name or role>` line. The stack table's tier must agree
+with the heading's, and every step has a row.
+
+**Decisions made.** The Overview carries `**Decisions made**` beside the open
+decisions: `| Decision | Who | When | Why |` (one row "None yet" is allowed).
+Open decisions move there when decided; the argument stays in a dated
+companion.
+
 ## Checking a plan's structure
 
 `scripts/plans/check-plans.ts` checks the mechanical parts of the two-part
@@ -597,6 +656,9 @@ format, so a reviewer can spend their time on the content:
   `sheet.manifest.json` matches the SVGs' hashes, the token fingerprint and the
   sheet layout; otherwise it fails with the regeneration command. This is a
   hash compare: the check needs no browser, and regenerating is a local step.
+
+- **Plans with `<!-- plan-format: tiers -->`:** the extra rules in "Tiers, lanes
+  and upstream asks" above. Plans without the marker are not asked for them.
 
 **Which files it checks.** A plan or subtask plan is checked once it has a
 `## Overview` heading, which is exactly what migrating it adds; a dated
