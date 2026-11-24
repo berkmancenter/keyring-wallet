@@ -122,6 +122,13 @@ export const ASK_TIMEOUT_MS = 15_000
  */
 export const REOPEN_BACKOFF_MIN_MS = 1000
 export const REOPEN_BACKOFF_MAX_MS = 60_000
+/**
+ * A socket of a `keepOpen` session that lived this long before it closed counts as a working connection: the next
+ * reopen waits the minimum again. A shorter life (opened, maybe heard, closed at once: a mediator in a crash loop,
+ * a balancer draining, a token accepted then revoked) keeps the wait doubling. Hearing the mediator is not the
+ * measure: every reopen is answered with a Pickup `status` before such a mediator drops the socket again.
+ */
+export const REOPEN_STABLE_MS = 60_000
 
 /** The `exp` (seconds) of a JWT access token, or undefined when it cannot be read. */
 export function accessTokenExpiry(token: string | undefined): number | undefined {
@@ -615,6 +622,14 @@ export class VtiMediatorSession {
   /** The reopen a `keepOpen` session has scheduled for its closed socket, and how long the next one waits. */
   private reopenTimer?: ReturnType<typeof setTimeout>
   private reopenDelayMs = REOPEN_BACKOFF_MIN_MS
+  /** When the current socket opened: a close after `REOPEN_STABLE_MS` of life puts the wait back to the start. */
+  private socketOpenedAt = 0
+  /**
+   * A `start()` is running (the first one, or one inside a reopen). A socket that closes meanwhile is start's own
+   * to deal with (it retries once or throws to its caller), never a reason to arm a reopen: one armed here would
+   * close the socket start's retry just opened, or bring back a session whose open failed and that nothing holds.
+   */
+  private starting = false
 
   constructor(
     private readonly agent: Agent,
@@ -778,6 +793,15 @@ export class VtiMediatorSession {
   }
 
   async start(): Promise<void> {
+    this.starting = true
+    try {
+      await this.startOnce()
+    } finally {
+      this.starting = false
+    }
+  }
+
+  private async startOnce(): Promise<void> {
     // A token the mediator will no longer honour is the one failure this
     // transport could not talk its way out of. `accessToken` is cached and
     // every reopen path goes through here, so once the mediator stopped
@@ -905,33 +929,39 @@ export class VtiMediatorSession {
       if (!this.stopped && this.socket === socket) {
         const code = (event as { code?: unknown } | undefined)?.code
         const closed = `${LOG_PREFIX} socket for ${didPrefix(this.identity.did)} on ${this.where} closed (${String(code ?? '?')}${reason ? ` ${reason.slice(0, 80)}` : ''})`
-        if (this.options.keepOpen) {
+        if (!this.options.keepOpen) {
+          releaseWarn(`${closed}; it reopens on the next send`)
+        } else if (this.starting) {
+          // Closed under the start that opened it: start retries once or throws; nothing is armed here.
+          releaseWarn(`${closed}; while starting`)
+        } else {
+          if (Date.now() - this.socketOpenedAt >= REOPEN_STABLE_MS) this.reopenDelayMs = REOPEN_BACKOFF_MIN_MS
           releaseWarn(`${closed}; reopening in ${this.reopenDelayMs} ms`)
           this.scheduleReopen()
-        } else {
-          releaseWarn(`${closed}; it reopens on the next send`)
         }
       }
     })
     this.socket = socket
+    this.socketOpenedAt = Date.now()
   }
 
   /**
-   * Reopen the socket of a `keepOpen` session that closed under it: once, after the current backoff; never while a
-   * reopen is running or already scheduled, never once stopped. A reopen that fails (the phone offline, the mediator
-   * down) is reported, doubles the wait and schedules the next; the wait goes back to the start once the mediator is
-   * heard on the new socket (`handleFrame`), not merely once it opened, so a socket the mediator closes at once does
-   * not reopen it once a second for ever.
+   * Reopen the socket of a `keepOpen` session that closed under it: once, after the current wait; never while a
+   * start or reopen is running or one is already scheduled, never once stopped. Each reopen armed doubles the wait
+   * for the next, up to the cap, whether this one fails (the phone offline, the mediator down: reported, and the
+   * next is scheduled) or opens a socket that closes again before `REOPEN_STABLE_MS`. Only a socket that lived
+   * that long puts the wait back to the start (the close listener), so a mediator that answers and then drops every
+   * socket is not reconnected once a second for ever.
    */
   private scheduleReopen(): void {
-    if (this.stopped || this.reopenTimer || this.opening) return
+    if (this.stopped || this.starting || this.reopenTimer || this.opening) return
     const delay = this.reopenDelayMs
+    this.reopenDelayMs = Math.min(delay * 2, REOPEN_BACKOFF_MAX_MS)
     this.reopenTimer = setTimeout(() => {
       this.reopenTimer = undefined
       if (this.stopped) return
       this.reopen().catch((error) => {
         this.options.onError?.(error as Error)
-        this.reopenDelayMs = Math.min(delay * 2, REOPEN_BACKOFF_MAX_MS)
         this.scheduleReopen()
       })
     }, delay)
@@ -1118,8 +1148,6 @@ export class VtiMediatorSession {
     // Anything at all from the mediator: the socket is alive.
     this.unansweredPolls = 0
     this.heardSinceCheck = true
-    // The mediator is heard on this socket: a `keepOpen` session's next reopen, if one is ever needed, starts short.
-    this.reopenDelayMs = REOPEN_BACKOFF_MIN_MS
     try {
       // TSP demux, before any JSON is parsed: the mediator delivers a stored
       // TSP message as base64url(qb2) text, and a JWE never starts with `-E`.
@@ -1244,7 +1272,7 @@ export class VtiMediatorSession {
    * Runs a message's consumer unless a copy of the same message is being taken right now (`taking`), in which case
    * nothing runs and the copy is left for that one to acknowledge. Returns whether the consumer ran.
    */
-  private async takeOnce(queueId: string | undefined, consume: () => Promise<void>): Promise<boolean> {
+  private async takeOnce(queueId: string | undefined, consume: () => void | Promise<void>): Promise<boolean> {
     if (queueId && this.taking.has(queueId)) return false
     if (queueId) this.taking.add(queueId)
     try {

@@ -19,6 +19,7 @@ import {
   DELIVERY_POLL_MS,
   REOPEN_BACKOFF_MAX_MS,
   REOPEN_BACKOFF_MIN_MS,
+  REOPEN_STABLE_MS,
   VtiMediatorSession,
   type VtiClientIdentity,
   type VtiMediatorEndpoints,
@@ -182,6 +183,87 @@ describe('VtiMediatorSession — a socket that closes under a listening session'
     expect(warn.mock.calls).toHaveLength(saidBeforeClose)
     // The one "reopening in" is the first session's, said at its close and cancelled by its stop.
     expect(said().match(/reopening in/g)).toHaveLength(1)
+  })
+
+  test('CONTROL: a socket that closes under start() itself arms no reopen; start throws and nothing comes back', async () => {
+    const m = mediatorSockets()
+    // The mediator drops the socket as soon as the first frame (live-delivery-change) is sent on it: the 1006 of
+    // the 281 run, here before start() has returned. A failed start leaves no session running.
+    const Dropping = class extends m.FakeSocket {
+      send(frame: unknown) {
+        this.serverClose(1006, 'dropped on the first frame')
+        super.send(frame)
+      }
+    }
+    global.WebSocket = Dropping as never
+    stubLogin(jwt('t', 900))
+    const session = new VtiMediatorSession(agent, identity, mediator, { keepOpen: true })
+    await expect(session.start()).rejects.toThrow()
+    expect(said()).toMatch(/closed \(1006 dropped on the first frame\); while starting/)
+    expect(said()).not.toMatch(/reopening in/)
+    await sleep(REOPEN_BACKOFF_MIN_MS + 300)
+    expect(m.opened).toHaveLength(1)
+    expect(session.isOpen).toBe(false)
+    await session.stop()
+  })
+})
+
+describe('VtiMediatorSession — a mediator that answers and then drops every socket', () => {
+  const realWebSocket = global.WebSocket
+  const realFetch = global.fetch
+  let warn: jest.SpyInstance
+  beforeEach(() => {
+    jest.useFakeTimers()
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+  afterEach(() => {
+    warn.mockRestore()
+    jest.useRealTimers()
+    global.WebSocket = realWebSocket
+    global.fetch = realFetch
+  })
+  const said = () => warn.mock.calls.map(([line]) => String(line)).join('\n')
+
+  test('the waits double on every short-lived socket, and a socket that lived REOPEN_STABLE_MS resets them', async () => {
+    const m = mediatorSockets()
+    global.WebSocket = m.FakeSocket as never
+    stubLogin(jwt('t', 900))
+    const session = new VtiMediatorSession(agent, identity, mediator, { keepOpen: true })
+    const started = session.start()
+    await jest.advanceTimersByTimeAsync(10)
+    await started
+    expect(m.opened).toHaveLength(1)
+
+    // Each socket is heard (the mediator's status answering live-delivery-change arrives) and then dropped at once.
+    const live = () => m.live[m.live.length - 1]
+    const hear = () => {
+      const socket = live() as unknown as { onmessage?: (e: { data: string }) => void }
+      socket.onmessage?.({ data: JSON.stringify({ type: 'https://didcomm.org/messagepickup/3.0/status', body: {} }) })
+    }
+
+    hear()
+    live().serverClose()
+    expect(said()).toMatch(/reopening in 1000 ms/)
+    await jest.advanceTimersByTimeAsync(REOPEN_BACKOFF_MIN_MS + 10)
+    expect(m.opened).toHaveLength(2)
+    hear()
+    live().serverClose()
+    expect(said()).toMatch(/reopening in 2000 ms/)
+    await jest.advanceTimersByTimeAsync(REOPEN_BACKOFF_MIN_MS * 2 + 10)
+    expect(m.opened).toHaveLength(3)
+    hear()
+    live().serverClose()
+    expect(said()).toMatch(/reopening in 4000 ms/)
+    await jest.advanceTimersByTimeAsync(REOPEN_BACKOFF_MIN_MS * 4 + 10)
+    expect(m.opened).toHaveLength(4)
+
+    // This socket lives a minute (its open time set back by REOPEN_STABLE_MS, standing in for the minute: advancing
+    // the clock that far would run the poll's own silent-poll reopen, which no fake mediator answers here), then
+    // closes: the wait is back at the start.
+    ;(session as unknown as { socketOpenedAt: number }).socketOpenedAt -= REOPEN_STABLE_MS
+    live().serverClose()
+    expect(said().match(/reopening in 1000 ms/g)).toHaveLength(2)
+    await session.stop()
   })
 })
 
