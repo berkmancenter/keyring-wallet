@@ -288,6 +288,9 @@ export async function openWalletMailbox(
       : new VtiMediatorSession(agent, identity, mediator, {
           onMessage,
           onError: (error) => agent.config.logger.warn(`${LOG_PREFIX} mailbox session: ${error.message}`),
+          // A mailbox listens; a socket that closes under it is reopened on its own, not on the next send
+          // (there may never be one: measured 2026-11-24, a peer's offer sat queued for the rest of the run).
+          keepOpen: true,
         })
     await session.start()
     const mailbox: WalletMailbox = { did, mediatorDid: mediator.did, session }

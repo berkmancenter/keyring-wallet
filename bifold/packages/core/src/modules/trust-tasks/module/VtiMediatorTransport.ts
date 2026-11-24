@@ -71,7 +71,7 @@ const FORWARD = 'https://didcomm.org/routing/2.0/forward'
 const LIVE_DELIVERY_CHANGE = 'https://didcomm.org/messagepickup/3.0/live-delivery-change'
 const MESSAGES_RECEIVED = 'https://didcomm.org/messagepickup/3.0/messages-received'
 const DELIVERY_REQUEST = 'https://didcomm.org/messagepickup/3.0/delivery-request'
-const DELIVERY_POLL_MS = 15000
+export const DELIVERY_POLL_MS = 15000
 /**
  * Backstop polls in a row that heard nothing back before the socket is taken for dead and reopened. The mediator
  * answers every delivery-request (a `delivery`, or a `status` for an empty queue), so silence means the socket reads
@@ -113,6 +113,15 @@ export const REOPEN_BOUND_MS = 45000
 
 /** How long {@link VtiMediatorSession.ask} waits for the mediator's answer before it gives up. */
 export const ASK_TIMEOUT_MS = 15_000
+
+/**
+ * A session that keeps listening (`keepOpen`, the wallet mailbox) reopens a socket that closed under it after this
+ * long, doubling on each reopen that fails up to {@link REOPEN_BACKOFF_MAX_MS}, and from the start again once the
+ * mediator is heard. Measured 2026-11-24 (281's live mailbox check): a mailbox socket closed with 1006 and, with
+ * nothing left to send on it, was never reopened; the peer's offer sat queued at the mediator for the rest of the run.
+ */
+export const REOPEN_BACKOFF_MIN_MS = 1000
+export const REOPEN_BACKOFF_MAX_MS = 60_000
 
 /** The `exp` (seconds) of a JWT access token, or undefined when it cannot be read. */
 export function accessTokenExpiry(token: string | undefined): number | undefined {
@@ -592,8 +601,20 @@ export class VtiMediatorSession {
   private stopped = false
   private opening?: Promise<void>
   private readonly seen = new Set<string>()
+  /**
+   * Queue ids whose consumer is running right now. A message is remembered in `seen` only once its consumer has
+   * settled, so until then a second copy of it is not caught there — and a second copy does come: the live copy
+   * and the first drain's copy of the same forward arrive 80 ms apart on every open (measured 2026-11-24, 281's
+   * live mailbox check, where a relationship-DID message was handed to the VRC module twice). A copy of a message
+   * being taken is left alone, unacknowledged: the copy that is being taken acknowledges the id when it settles,
+   * and if that consumer throws, the message is still queued for the next drain, as before.
+   */
+  private readonly taking = new Set<string>()
   private accessToken?: string
   private renewTimer?: ReturnType<typeof setTimeout>
+  /** The reopen a `keepOpen` session has scheduled for its closed socket, and how long the next one waits. */
+  private reopenTimer?: ReturnType<typeof setTimeout>
+  private reopenDelayMs = REOPEN_BACKOFF_MIN_MS
 
   constructor(
     private readonly agent: Agent,
@@ -619,6 +640,13 @@ export class VtiMediatorSession {
        * queued rather than acknowledged blind.
        */
       onTspFrame?: (bytes: Uint8Array) => void | Promise<void>
+      /**
+       * A session whose job is to listen (the wallet mailbox): a socket that closes while the session is not stopped
+       * is reopened on its own, after {@link REOPEN_BACKOFF_MIN_MS} and backing off to {@link REOPEN_BACKOFF_MAX_MS},
+       * and the backstop poll reopens a closed socket instead of skipping it. Off (every VTA session): a closed
+       * socket reopens on the next send, as it always has, since those sessions are driven by what they ask.
+       */
+      keepOpen?: boolean
     } = {}
   ) {}
 
@@ -872,15 +900,41 @@ export class VtiMediatorSession {
     socket.addEventListener('close', (event: unknown) => {
       const reason = String((event as { reason?: unknown } | undefined)?.reason ?? '')
       if (/token expired|expired/i.test(reason) && this.socket === socket) this.accessToken = undefined
-      // A socket that ends while the session wants it is the receive leg gone: said, so a report shows it.
+      // A socket that ends while the session wants it is the receive leg gone: said, so a report shows it. A
+      // listening session gets it back on its own; any other on its next send.
       if (!this.stopped && this.socket === socket) {
         const code = (event as { code?: unknown } | undefined)?.code
-        releaseWarn(
-          `${LOG_PREFIX} socket for ${didPrefix(this.identity.did)} on ${this.where} closed (${String(code ?? '?')}${reason ? ` ${reason.slice(0, 80)}` : ''}); it reopens on the next send`
-        )
+        const closed = `${LOG_PREFIX} socket for ${didPrefix(this.identity.did)} on ${this.where} closed (${String(code ?? '?')}${reason ? ` ${reason.slice(0, 80)}` : ''})`
+        if (this.options.keepOpen) {
+          releaseWarn(`${closed}; reopening in ${this.reopenDelayMs} ms`)
+          this.scheduleReopen()
+        } else {
+          releaseWarn(`${closed}; it reopens on the next send`)
+        }
       }
     })
     this.socket = socket
+  }
+
+  /**
+   * Reopen the socket of a `keepOpen` session that closed under it: once, after the current backoff; never while a
+   * reopen is running or already scheduled, never once stopped. A reopen that fails (the phone offline, the mediator
+   * down) is reported, doubles the wait and schedules the next; the wait goes back to the start once the mediator is
+   * heard on the new socket (`handleFrame`), not merely once it opened, so a socket the mediator closes at once does
+   * not reopen it once a second for ever.
+   */
+  private scheduleReopen(): void {
+    if (this.stopped || this.reopenTimer || this.opening) return
+    const delay = this.reopenDelayMs
+    this.reopenTimer = setTimeout(() => {
+      this.reopenTimer = undefined
+      if (this.stopped) return
+      this.reopen().catch((error) => {
+        this.options.onError?.(error as Error)
+        this.reopenDelayMs = Math.min(delay * 2, REOPEN_BACKOFF_MAX_MS)
+        this.scheduleReopen()
+      })
+    }, delay)
   }
 
   /** Ask for live delivery, drain what was queued, and start the backstop poll. */
@@ -914,7 +968,12 @@ export class VtiMediatorSession {
     if (this.pollTimer) clearInterval(this.pollTimer)
     this.unansweredPolls = 0
     this.pollTimer = setInterval(() => {
-      if (this.socket?.readyState !== 1) return
+      if (this.socket?.readyState !== 1) {
+        // A listening session's socket found closed here (its close event never fired, or a reopen failed and
+        // nothing else was due): reopened from here too. Any other session leaves it for its next send.
+        if (this.options.keepOpen) this.scheduleReopen()
+        return
+      }
       if (this.unansweredPolls >= SILENT_POLLS_BEFORE_REOPEN) {
         this.silentReopen(`${this.unansweredPolls} delivery-requests in a row heard nothing back`)
         return
@@ -1059,6 +1118,8 @@ export class VtiMediatorSession {
     // Anything at all from the mediator: the socket is alive.
     this.unansweredPolls = 0
     this.heardSinceCheck = true
+    // The mediator is heard on this socket: a `keepOpen` session's next reopen, if one is ever needed, starts short.
+    this.reopenDelayMs = REOPEN_BACKOFF_MIN_MS
     try {
       // TSP demux, before any JSON is parsed: the mediator delivers a stored
       // TSP message as base64url(qb2) text, and a JWE never starts with `-E`.
@@ -1131,7 +1192,8 @@ export class VtiMediatorSession {
         // Awaited, and remembered only once taken: a consumer that throws has
         // not taken the message, so it is neither acknowledged nor marked seen,
         // and the mediator's redelivery is handled afresh.
-        await this.options.onMessage(plaintext)
+        const onMessage = this.options.onMessage
+        if (!(await this.takeOnce(queueId, () => onMessage(plaintext)))) return
         this.remember(queueId)
         await this.acknowledge([queueId])
       } else {
@@ -1164,14 +1226,33 @@ export class VtiMediatorSession {
       return
     }
     const bytes = tsp.fromBase64Url(text)
-    try {
-      await this.options.onTspFrame(bytes)
-    } catch (error) {
-      if (!isTspFrameUnopenable(error)) throw error
-      this.dropped(queueId, error.reason, error.message)
-    }
+    const onTspFrame = this.options.onTspFrame
+    const taken = await this.takeOnce(queueId, async () => {
+      try {
+        await onTspFrame(bytes)
+      } catch (error) {
+        if (!isTspFrameUnopenable(error)) throw error
+        this.dropped(queueId, error.reason, error.message)
+      }
+    })
+    if (!taken) return
     this.remember(queueId)
     await this.acknowledge([queueId])
+  }
+
+  /**
+   * Runs a message's consumer unless a copy of the same message is being taken right now (`taking`), in which case
+   * nothing runs and the copy is left for that one to acknowledge. Returns whether the consumer ran.
+   */
+  private async takeOnce(queueId: string | undefined, consume: () => Promise<void>): Promise<boolean> {
+    if (queueId && this.taking.has(queueId)) return false
+    if (queueId) this.taking.add(queueId)
+    try {
+      await consume()
+    } finally {
+      if (queueId) this.taking.delete(queueId)
+    }
+    return true
   }
 
   /**
@@ -1219,6 +1300,7 @@ export class VtiMediatorSession {
     const attachments = delivery.attachments ?? []
     const acknowledged: string[] = []
     const droppedBefore = this.droppedCount
+    let mediatorsOwn = 0
     for (const attachment of attachments) {
       const data = attachment.data
       // A queued TSP frame comes as its base64url text in either slot; a JWE
@@ -1237,12 +1319,17 @@ export class VtiMediatorSession {
             continue
           }
           // As the live path: a handler may answer synchronously, so the call is awaited inside the try, never `.catch`ed.
-          try {
-            await this.options.onTspFrame(tsp.fromBase64Url(tspText))
-          } catch (error) {
-            if (!isTspFrameUnopenable(error)) throw error
-            this.dropped(attachment.id ?? '?', error.reason, error.message)
-          }
+          const onTspFrame = this.options.onTspFrame
+          const taken = await this.takeOnce(attachment.id, async () => {
+            try {
+              await onTspFrame(tsp.fromBase64Url(tspText))
+            } catch (error) {
+              if (!isTspFrameUnopenable(error)) throw error
+              this.dropped(attachment.id ?? '?', error.reason, error.message)
+            }
+          })
+          // A copy of a frame being taken on the other path: left queued, its taker acknowledges it.
+          if (!taken) continue
           if (attachment.id) {
             this.remember(attachment.id)
             acknowledged.push(attachment.id)
@@ -1267,8 +1354,27 @@ export class VtiMediatorSession {
           acknowledged.push(attachment.id)
           continue
         }
+        // A copy of a message being taken on the live path (the first drain's copy of a forward that was just
+        // pushed live, measured 80 ms apart): left queued and not opened; its taker acknowledges it.
+        if (attachment.id && this.taking.has(attachment.id)) continue
         const plaintext = await this.unpack(jwe as DidCommV2EncryptedMessage)
-        if (!isPickup(plaintext.type)) await this.options?.onMessage?.(plaintext)
+        if (plaintext.from === this.mediator.did) {
+          // The mediator's own, queued: its answer to an `ask` of this session, whose live copy the asker took and
+          // which handleFrame deliberately never acknowledges, so the stored copy comes back on the next drain.
+          // As on the live path: the asker takes it if still waiting, a problem-report is said, nothing is handed
+          // on. Acknowledged here, so it stops coming back. Measured 2026-11-24 (281's live mailbox check): the
+          // first poll after every open re-delivered the account/update and wake/set answers, and the mailbox
+          // logged each as an envelope dropped, which read as lost mail.
+          if (!this.answeredAsk(plaintext) && isProblemReport(plaintext))
+            releaseWarn(
+              `${LOG_PREFIX} ${this.where} sent a problem-report for ${didPrefix(this.identity.did)}: ${problemReportWords(plaintext)}`
+            )
+          mediatorsOwn += 1
+        } else if (!isPickup(plaintext.type)) {
+          const onMessage = this.options?.onMessage
+          // The live copy may have started while this one was unpacked: then this copy is left queued too.
+          if (!(await this.takeOnce(attachment.id, async () => onMessage?.(plaintext)))) continue
+        }
         if (attachment.id) this.remember(attachment.id)
         if (attachment.id) acknowledged.push(attachment.id)
       } catch (error) {
@@ -1276,12 +1382,13 @@ export class VtiMediatorSession {
       }
     }
     if (acknowledged.length > 0) await this.acknowledge(acknowledged)
-    // What a drain found, as three counts that add up to it: opened and taken, dropped as never openable (also
-    // acknowledged, so they stop coming back), and left queued for another try.
+    // What a drain found, as counts that add up to it: opened and taken, dropped as never openable (also
+    // acknowledged, so they stop coming back), left queued for another try, and (only when there were any) the
+    // mediator's own answers, acknowledged and not handed on.
     if (attachments.length > 0) {
       const dropped = this.droppedCount - droppedBefore
       releaseWarn(
-        `${LOG_PREFIX} drained ${attachments.length} queued for ${didPrefix(this.identity.did)} on ${this.where}: ${acknowledged.length - dropped} taken, ${dropped} dropped as never openable, ${attachments.length - acknowledged.length} left queued`
+        `${LOG_PREFIX} drained ${attachments.length} queued for ${didPrefix(this.identity.did)} on ${this.where}: ${acknowledged.length - dropped - mediatorsOwn} taken, ${dropped} dropped as never openable, ${attachments.length - acknowledged.length} left queued${mediatorsOwn > 0 ? `, ${mediatorsOwn} the mediator's own answers` : ''}`
       )
     }
   }
@@ -1605,6 +1712,8 @@ export class VtiMediatorSession {
     this.stopped = true
     if (this.renewTimer) clearTimeout(this.renewTimer)
     this.renewTimer = undefined
+    if (this.reopenTimer) clearTimeout(this.reopenTimer)
+    this.reopenTimer = undefined
     if (this.pollTimer) clearInterval(this.pollTimer)
     this.pollTimer = undefined
     if (this.aliveTimer) clearTimeout(this.aliveTimer)
