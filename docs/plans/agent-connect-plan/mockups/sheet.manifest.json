@@ -7,7 +7,7 @@
   "height": 6936,
   "sheet": {
     "file": "sheet.png",
-    "sha256": "b432bef210786969a7e78479dc20650d5d6f65b479451e4cf96a5ed5f1f06134"
+    "sha256": "7f274d0e999b53919ea5a1224c661f02fdd5d0f9010cd76eb5b7e163d8586c9d"
   },
   "svgs": {
     "01-connect-name.svg": "053a1a5d2a4357c235f05442926b464aff1ca201ca69793b0ee825118d57d92b",
@@ -15,21 +15,21 @@
     "03-connect-number.svg": "ecba88d37fa76406bc7af42b5f302630e0e299d9e2a3b96de0147820e6edaf5b",
     "04-connect-wrong-number.svg": "37c064111cfc15b06c24fd273b12e85ce9f2a991407d517369fadb3674b363a6",
     "05-approve.svg": "cfe794e782ff8b268820820eb07e0f79799cf1ef0464bd5652d6af9416dd2e02",
-    "06-agent-list.svg": "2ccb1e80ecc3e623fd06691043e2a6ccd7a01d07c4226b6c7b7fcda6bce39964",
-    "07-agent-sheet.svg": "c228e04d222a708dab7e51cd076bc75eb9415d6054c5bef8fe29836a238a29fc",
-    "08-answers-others-confirm.svg": "ae7dfe189f40926381927b3cbcfb86eb0b2c6f0064ca3f928b5aaa6cbe9d8c79",
+    "06-agent-list.svg": "536428c6ca6ddb85dfaec0e72616baec9f1186335a15300cfda4c4ea07c746a8",
+    "07-agent-sheet.svg": "1aae930663395b1a14426cc4407503c269a74c47289b4067a8f02bff2723c40b",
+    "08-answers-others-confirm.svg": "8adb6acaaf8a4c2137ff96bc1bf9dbb8a9632037cdfe7aa1aa0b22eb2c56dd47",
     "09-contacts-agent-row.svg": "827df1d798366fa4ba06177c13332082d0adcbaf1d65ed53a7bfda647587ec1d",
     "10-messages-agent-row.svg": "10ad7ce75423be65d6a0315c95e5ae1d9d9a1c31470c9cae5b99fbb2fd5d607c",
-    "11-agent-details.svg": "dec6a5d80a29f9191aa804defa059197c5875d5c1737306e47dd258b8c80625b",
+    "11-agent-details.svg": "e36b2cabc23ccf2b2e77b5142db3b2d9a95fdc8e77d8e66832463f03b6ba82f1",
     "12-composer-add-sheet.svg": "e78753bd0d276e9b671a739649d870391679ceffe383414ba2dc61bbca737ba0",
     "13-room-add-agent.svg": "3c87f386db1357d61f02d26c2ea93c2525ac22187a0121b66e81ff32181f2fdf",
     "14-what-it-remembers.svg": "0949df7f7fd205a8e3dd3c94d0d1bab22a81a7ef8750fa37250fcdcc7db24f59",
     "15-room-agents-section.svg": "98726d66047d555b65b82389a08e00d977ce6148069b61208cc9257a2d27949d",
     "16-room-members-agents.svg": "1c7fb904a42b1dd9f34f74373f0e3e6befd721bd0525990bd459a9aec5e44798",
-    "17-revoke.svg": "7be7030e75a9f56431288ca4841006862e62b7224f6ced4713e6d80411e5ec5d",
+    "17-revoke.svg": "dbe0bd1f584f797afead71cba4d7be6285e28616828c07fb31f2e7eb41ef0a9b",
     "18-pairing-expired.svg": "ccbafd195586fed80c59ea7571c7b4e6621be87f398b1b85c69bb65e3f91876b",
     "19-settings-my-vta.svg": "eafe7922e0d820f73cead8317d9ecda0060e6fd38dc1cacf7b01312b4a372f58",
-    "20-change-memories.svg": "7fd38a9ba1ab24be6fa9397c7fab08d8f6ee41889c5734972ca49b9cdbe9a83b",
+    "20-change-memories.svg": "551cadeb475b5f8b5c82f973ec8702d66fff0d00fa27295ed8a99453e9341130",
     "21-delete-memory.svg": "a219558ea02ac31896b70396a6b632b1c24d852bc50e6fb254704a98577d5d88",
     "22-memory-drift.svg": "bcf217eac6c556a1b1cde50c165df05058cd0dc65cf5929fdb83bb22ec321c6d",
     "23-not-an-administrator.svg": "0a035f2b394d7a76d3e513941389bd9b9822cabe9476c5cc8dfb735385e1cda0"

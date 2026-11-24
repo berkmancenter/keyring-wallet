@@ -95,7 +95,7 @@ export const MOCKUPS: Mockup[] = [
   },
   {
     file: '06-agent-list.svg',
-    title: `AI agents: the list, the My Agent tab’s first screen (${PLAN} §3.5, §3.13, §6, D26)`,
+    title: `AI agents: the list, the My Agent tab’s first screen (${PLAN} §3.5, §6, D26)`,
     draw: (s) => {
       s.header('AI agents')
       let y = s.layerRow('Notes helper', TOP, { muted: 'Connected' })
@@ -107,11 +107,11 @@ export const MOCKUPS: Mockup[] = [
       s.primaryButton('Connect an agent', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['The My Agent tab opens here (D26); the VTA’s screens are under Settings as "My VTA" (19).', 'Sample names. Status is one of Connected, Not connected right now, Expires in <n> days, Expired, Not finished, Revoke not confirmed, Revoked, plus "<name> changed its key" (not drawn).', 'A row opens the agent details (11); "Extend" and "Revoke" not drawn. The primary button is a mockup choice.'],
+    notes: ['The My Agent tab opens here (D26); the VTA’s screens are under Settings as "My VTA" (19).', 'P1 line: the "Answers other people" lines appear from step 7.14; P0 draws the rows without them.', 'Sample names. Status is one of Connected, Not connected right now, Expires in <n> days, Expired, Not finished, Revoke not confirmed, Revoked, plus "<name> changed its key" (not drawn).', 'A row opens the agent details (11); "Extend" and "Revoke" not drawn. The primary button is a mockup choice.'],
   },
   {
     file: '07-agent-sheet.svg',
-    title: `Agent bottom sheet: owner and "Answers other people" (${PLAN} §3.6, §3.13, §6)`,
+    title: `Agent bottom sheet (P1): owner and "Answers other people" (${PLAN} §3.6, §3.13, §6)`,
     draw: (s) => {
       s.header(undefined, { placeholder: ROOM_TITLE, assumed: NO_ROOM_TITLE })
       s.tabBar('messages')
@@ -131,7 +131,7 @@ export const MOCKUPS: Mockup[] = [
   },
   {
     file: '08-answers-others-confirm.svg',
-    title: `Turning "Answers other people" on (${PLAN} §3.13, §6)`,
+    title: `(P1) Turning "Answers other people" on (${PLAN} §3.13, §6)`,
     draw: (s) => {
       s.header(undefined, { placeholder: ROOM_TITLE, assumed: NO_ROOM_TITLE })
       s.tabBar('messages')
@@ -193,7 +193,7 @@ export const MOCKUPS: Mockup[] = [
       s.tertiaryButton('Revoke', e)
       s.tabBar('myAgent')
     },
-    notes: ['Reached from the contact row (09) and the agent list (06). "Message" opens the agent chat (§3.14).', 'The memory lines are §3.15’s: one line for every room, since the VTA binds the set to the agent, not to a room. "Change memories" opens 20. Samples.', 'Tertiary "Extend" and "Revoke" are a mockup choice; Revoke opens 17.'],
+    notes: ['P1 line: "Answers other people", "Mention it as" and "in every room it is in" are the P1 form; P0 omits them (no rooms).', 'From 09 and 06. "Message" opens the chat (§3.14); "Change memories" opens 20. One memory line for every room: the VTA binds the set to the agent (§3.15). Samples.', '"Extend" and "Revoke" are a mockup choice; Revoke opens 17.'],
   },
   {
     file: '12-composer-add-sheet.svg',
@@ -288,7 +288,7 @@ export const MOCKUPS: Mockup[] = [
         return sheet.secondaryButton('Keep', yy)
       })
     },
-    notes: ['Opened from the agent details (11). Never says "instant". If the VTA cannot be reached the agent stays connected and Keyring says "We couldn’t reach your VTA, so "<name>" is still connected."', '"Also delete what it remembered" is the P2 row (§3.15, step 7.18): it erases the items, the memory stays; never "no trace". P0 and P1 have no such row.', 'Revoke is also how the agent leaves Contacts and Messages (§3.14).'],
+    notes: ['From the details (11). Never says "instant". If the VTA cannot be reached the agent stays connected and Keyring says so.', '"Also delete what it remembered" is the P2 row (7.18); never "no trace". P0 has no rooms: the body reads "It loses access to your memory. Past messages stay."'],
   },
   {
     file: '18-pairing-expired.svg',
@@ -327,7 +327,7 @@ export const MOCKUPS: Mockup[] = [
         return sheet.secondaryButton('Not now', yy)
       })
     },
-    notes: ['From "Change memories" on the details (11), after the owner ticks a memory the agent lacks. It names every room, because widening applies at once in all of them (§3.15). "Allow" asks for face or fingerprint.', 'Narrowing is this sheet with its own copy ("Stop "Notes helper" using "Healthcare"?", "Stop using", "Keep"): one confirmation, no biometric.', 'Widening after connect is decided (D34): the approval names every room.'],
+    notes: ['From "Change memories" on the details (11), after the owner ticks a memory the agent lacks. It names every room, because widening applies at once in all of them (§3.15). "Allow" asks for face or fingerprint.', 'Narrowing is this sheet with its own copy ("Stop "Notes helper" using "Healthcare"?", "Stop using", "Keep"): one confirmation, no biometric.', 'Widening is decided (D34). The rooms sentence is the P1 form; P0 omits it.'],
   },
   {
     file: '21-delete-memory.svg',
