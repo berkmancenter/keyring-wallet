@@ -26,6 +26,7 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-30 | VTI-Q43 |
 | AC-31 | VTI-Q44 |
 | AC-32 | VTI-Q45 |
+| AC-33 | VTI-Q46 |
 | AC-25 | VTI-Q38 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
@@ -270,3 +271,10 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `vti-specs-vta/trust-tasks/vta/contexts/create/1.0` and `update/1.0`; `operations/contexts.rs:216-238`, 2026-11-24.
 - **Extension:** a label shown only to its owner, or a documented place for a client-sealed label.
 - **Severity:** none; P0 works around (label in `name`, accepted; plan D35). Deferred, not requested now. Registered as VTI-Q45.
+
+### AC-33 `vta-mcp.md` calls per-entry capability overrides a deferred gap
+
+- **Hit:** `docs/02-vta/vta-mcp.md` §2.3 says per-entry capability overrides are "still a deferred gap"; `personal-ai-agents.md` and `vta-sdk/src/acl.rs` show them shipped (plan §2.1, §10 item 9).
+- **Evidence:** `docs/02-vta/vta-mcp.md` lines 116 to 117 at `4e5861d95`, 2026-11-24.
+- **Extension:** correct the sentence.
+- **Severity:** none; a documentation correction. Registered as VTI-Q46.
