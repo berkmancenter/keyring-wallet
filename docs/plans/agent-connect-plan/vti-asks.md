@@ -120,7 +120,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** with `global_acl_default = DENY_ALL` authentication still succeeds, then the send is refused (HTTP 403 `e.p.authorization.send`) and the recipient's WebSocket upgrade fails (close 1006). A `did:key` client needs its own ACL step on a closed mediator; `vta-sdk/src/acl_setup.rs` does this for the VTA and PNM. The self-service path for an agent was not tested.
 - **Evidence:** lab measurement, case ACL; `vta-sdk/src/acl_setup.rs`.
 - **Extension:** a documented self-service ACL path for an agent or a phone identity, and an error that says why the socket closed.
-- **Severity:** P0 works around (a stated precondition on the mediator; tested on the lab and the Farm); P1 none.
+- **Severity:** P0 works around (a stated precondition on the mediator; tested on the lab; the Farm is a recorded validation when its operators allow); P1 none.
 
 ### AC-11 A `did:peer` mailbox must name the mediator it is registered on
 
@@ -150,7 +150,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** the plan uses a VDC as the owner's delegation and responsibility record, not as a room credential. The specification defines a VDC as attributing the delegate's acts to the delegator, defines neither a pure ownership record nor an agent holding both a VDC and a VAC, and says which an agent's grant is "is a governance determination".
 - **Evidence:** `external/dtgwg-cred-spec` `94af2d8`, `spec/terms-definitions/verifiable_delegation_credential.md` (attribution); `spec/body.md` "Which one an agent's grant is", privacy item 15 ("Personhood laundering via delegation").
 - **Question:** may a VDC carry a responsibility meaning without making a verifier attribute the agent's acts to the owner? Or is the better record the VAC chain itself, used as provenance only ("the chain records only who equipped it"), or another statement type? Is an agent holding both a VDC and a VAC for the same owner defined?
-- **Severity:** P0 none (the VDC is never presented with room acts, plan §3.4); P1 relevant if the VDC is shown to third parties.
+- **Severity:** P0 none (the VDC is never presented with room acts, plan §3.4); P2 relevant (7.20) if the VDC is shown to third parties.
 - **Status:** not yet raised. To be raised with the DTG working group as a question; it gates no phase (plan D4).
 
 ### AC-15 "Delegate" means two things
@@ -185,7 +185,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 
 - **Hit:** `vtc-mcp` §3.0 has the wallet show a match number and the person approve "only if the two agree". The browser sign-in has the person type the number, with one proof attempt per request. Comparing lets a reflexive approval succeed for a session the person is not looking at.
 - **Evidence:** `docs/03-vtc/vtc-mcp.md` §3.0; `vti-oob-server/src/tasks.rs` (`numberMismatch`, "One proof attempt per request").
-- **Extension:** the typed form for an assistant's sign-in too. The reverse direction (the wallet shows the number and the person types it into the displayer) is what `vtc-mcp` has; Keyring records it as a P1 option for its own pairing (plan D8).
+- **Extension:** the typed form for an assistant's sign-in too. The reverse direction (the wallet shows the number and the person types it into the displayer) is what `vtc-mcp` has; Keyring records it as a P2 option (plan 7.22) for its own pairing (plan D8).
 - **Severity:** none for this plan (Keyring's pairing types the number, plan §3.2).
 
 ### AC-20 Anthropic: custom channels need the development flag
@@ -216,7 +216,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** an ACL entry has `stepUp` (`approver`, `require`) and `personal-ai-agents.md` Step 5 describes passkey step-up as "the guardrail", but not whether it gates memory writes and room tasks for an `application` entry, or what `require` accepts.
 - **Evidence:** `vta-sdk/src/client/acl.rs` (`stepUp`); `docs/02-vta/personal-ai-agents.md` Step 5; unmeasured (plan §2.3 item 12, step 0.1(n)).
 - **Extension:** document the gated task types and the `require` values.
-- **Severity:** P0 works around (the plugin's hook is the primary control; step-up is used only if measured to gate); P1 none.
+- **Severity:** P1 works around (the plugin's hook is the primary control; step-up is used only if measured to gate); P2 none.
 
 ## Not for upstream: local items to resolve elsewhere
 
@@ -235,7 +235,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Hit:** `delete_context` purges memory but `NotEmpty` and the preview omit it, so a memory-only context deletes without `force` and shows no loss.
 - **Evidence:** `operations/contexts.rs:578,1009,1487`, 2026-11-24.
 - **Extension:** count memory items in the preview and the refusal.
-- **Severity:** P0 works around (Keyring counts items and confirms). Registered as VTI-Q40.
+- **Severity:** P1 works around (Keyring counts items and confirms). Registered as VTI-Q40.
 
 ### AC-28 No memory quota and no item lifetime
 
