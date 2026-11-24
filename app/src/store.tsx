@@ -30,7 +30,7 @@ export interface Developer {
   enableTspCarriage: boolean
   /** Accept DIDComm v2 (the agent's didcommVersions ['v1','v2']). On unless opted out. */
   enableDidCommV2: boolean
-  /** The v2 mailbox (Coordinate Mediation 2.0 + its Pickup 4.0 loop), needed to mint v2 invitations. Off by default. */
+  /** The wallet mailbox (bifold walletMailbox.ts), needed to mint v2 invitations. On unless opted out (281.2). */
   enableV2Mailbox: boolean
   /** Mediator pickup over a live WebSocket instead of polling (utils/livePickup.ts). */
   enableLivePickup: boolean
@@ -158,7 +158,9 @@ const developerState: Developer = {
   // now ships.
   enableTspCarriage: true,
   enableDidCommV2: true,
-  enableV2Mailbox: false,
+  // On for everyone from 281.2, once the two-phone mailbox test passed on 281.1. Same rule as the two above: a false
+  // saved under the old key, while the mailbox was testers-only, is not an opt-out of what now ships.
+  enableV2Mailbox: true,
   // Off unless the build says otherwise: LIVE_MESSAGE_PICKUP=true in app/.env
   // turns it on for a review build with no code change. A value saved from
   // Developer options wins over this at startup (container-imp.ts).
@@ -197,7 +199,8 @@ export enum BCLocalStorageKeys {
   // saved while they were opt-in are left where they are and ignored (container-imp.ts).
   EnableTspCarriage = 'TspCarriageOnByDefault',
   EnableDidCommV2 = 'DidCommV2OnByDefault',
-  EnableV2Mailbox = 'EnableV2Mailbox',
+  // The same for the mailbox: 'EnableV2Mailbox' held the testers-only switch and is ignored from 281.2.
+  EnableV2Mailbox = 'V2MailboxOnByDefault',
   EnableLivePickup = 'EnableLivePickup',
   EnableSharedConnect = 'EnableSharedConnect',
   EnableSharedConnectInvite = 'EnableSharedConnectInvite',
