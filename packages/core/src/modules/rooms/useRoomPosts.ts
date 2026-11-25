@@ -473,12 +473,26 @@ export function useRoomPosts(
   const newest = listing ? newestVersion(listing.notes) : undefined
   useEffect(() => {
     if (!service?.watchRoom || !enabled || !live || newest === undefined) return
-    service.watchRoom(roomId, newest)
+    // On screen: watched live where the room's host allows it (roomWatches), one signal at a time elsewhere.
+    service.watchRoom(roomId, newest, { live: true })
   }, [service, roomId, enabled, live, newest])
+  // Out of view (another screen, the app left, the room closed): the screen lets go, and the room's one-shot watch is
+  // armed again from the newest version held, which ends a live one. Not in the effect above: that one runs again at
+  // each new post, and letting go there would end the live watch at every message.
+  const newestHeld = useRef(newest)
+  newestHeld.current = newest
+  useEffect(() => {
+    if (!service?.watchRoom || !enabled || !live) return
+    return () => {
+      if (newestHeld.current !== undefined) service.watchRoom?.(roomId, newestHeld.current, { live: false })
+    }
+  }, [service, roomId, enabled, live])
   useEffect(() => {
     if (!service || !enabled || !live || !listed) return
     let current = true
     const tick = () => {
+      // Before anything that skips a tick: a live watch not renewed lapses at its host within two minutes.
+      service.renewRoomWatch?.(roomId)
       if (skips.current > 0) {
         skips.current--
         return

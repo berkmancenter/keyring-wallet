@@ -80,6 +80,7 @@ import {
 
 import type { ConsentHolds } from './consentHolds'
 import { RoomWatches } from './roomWatches'
+import { isRoomLiveWatchOn } from '../liveWatchSwitch'
 import { OPEN_FILE_BYTES, openRoomFile, type OpenFileCopy } from './files/open'
 import { checkSender, type ResolveSender } from './files/sender'
 import { TextSenderCount } from './files/textSenderCount'
@@ -546,6 +547,7 @@ export class AgentRoomsService implements RoomsService {
       warn: (line) => this.backend.warn(line),
       logRef,
       on: () => this.backend.liveDelivery === true,
+      liveOn: isRoomLiveWatchOn,
     })
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
     // Before any room can open: a killed app's copy of a file does not wait for the next file to be opened. Once per
@@ -1422,10 +1424,14 @@ export class AgentRoomsService implements RoomsService {
   }
 
   /** Drop every opened record and listed version (the wallet locked, or the person logged out). */
-  public watchRoom(roomId: string, sinceVersion: number): void {
+  public watchRoom(roomId: string, sinceVersion: number, options?: { live?: boolean }): void {
     const room = this.rooms.get(roomId)
     if (!room?.community || !room.host || room.standing !== 'member') return
-    this.watches.want(roomId, room.community.personaDid, room.host, sinceVersion)
+    this.watches.want(roomId, room.community.personaDid, room.host, sinceVersion, options)
+  }
+
+  public renewRoomWatch(roomId: string): void {
+    this.watches.renew(roomId)
   }
 
   public roomWatched(roomId: string): boolean {

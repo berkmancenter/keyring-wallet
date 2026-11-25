@@ -553,8 +553,16 @@ export interface RoomsService {
   /**
    * Ask to hear when `roomId` moves past `sinceVersion` (the newest version read), instead of polling it: where the
    * agent and the room's host can watch, the room is armed at its host. Returns at once; nothing is said if it can't.
+   *
+   * `live: true` says the room is on screen: where its host allows it, every change is then told, with no arming
+   * between them, until `live: false` says the screen let go of it. Without `live` the room stays as it is held.
    */
-  watchRoom?(roomId: string, sinceVersion: number): void
+  watchRoom?(roomId: string, sinceVersion: number, options?: { live?: boolean }): void
+  /**
+   * For the room on screen, at each tick: keeps its live watch from lapsing (a host leases one for two minutes), and
+   * asks for one again after a wait where the host had none to give. Sends nothing otherwise.
+   */
+  renewRoomWatch?(roomId: string): void
   /** True while `roomId` has a watch armed: its timed poll can wait, and a change comes through `onRoomChanged`. */
   roomWatched?(roomId: string): boolean
   /** Hear each room a watch said changed: read it once. Returns the way to stop hearing. */
