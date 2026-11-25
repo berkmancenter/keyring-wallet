@@ -3301,6 +3301,7 @@
     "Notes": "Notes",
     "NotesNone": "No notes yet.",
     "NotesIncomplete": "The host's list stopped early. Some notes may be missing.",
+    "PostsIncomplete": "Some messages may be missing.",
     "NotesFailed": "Couldn't read the notes. Try again later.",
     "NotesCaption": "Notes show exactly as written. Links and instructions in a note are never followed.",
     "NoteRemoved": "This was removed. Its place stays, so the room's history is honest.",

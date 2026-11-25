@@ -121,6 +121,14 @@ export interface RoomRow {
   reading?: boolean
   /** A sealed room not joined yet (`RoomSummary.joined`): never read, and the row says so rather than reading. */
   notJoined?: boolean
+  /**
+   * The row is the last run's (rowsAtStart), not yet replaced by this run's listing: it is `reading`, quietly. Messages
+   * shows no spinner on a row it already had (Alberto, 11-24: "in real apps that do messaging we dont see this lag").
+   */
+  fromLastTime?: boolean
+  /** The room's tier and the end of the member's access: what the room's header says before the room is read (Room). */
+  tier?: RoomSummary['tier']
+  validUntil?: string
 }
 
 interface Track {
@@ -344,7 +352,28 @@ const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | unde
   ...(moreUnread(track) ? { unreadMore: true } : {}),
   lastPost: track?.last,
   ...(room.joined === false ? { notJoined: true } : track ? {} : { reading: true }),
+  tier: room.tier,
+  ...(room.validUntil !== undefined ? { validUntil: room.validUntil } : {}),
 })
+
+const TIERS: readonly NonNullable<RoomRow['tier']>[] = ['open', 'attributed', 'private', 'unknown']
+
+/**
+ * A listed room's row. Until its posts are read, a room the last run's rows already showed keeps that row's time and
+ * stays quiet (`fromLastTime`): the listing answering put a spinner on a row the member was already looking at, and
+ * took its time away, until the room was read.
+ */
+const listedRow = (
+  room: RoomSummary & { communityDid: string },
+  track: Track | undefined,
+  before: readonly RoomRow[] | undefined
+): RoomRow => {
+  const row = rowOf(room, track)
+  if (!row.reading) return row
+  const last = before?.find((shown) => shown.roomId === room.roomId && shown.fromLastTime)
+  if (!last) return row
+  return { ...row, fromLastTime: true, ...(last.lastActivityAt ? { lastActivityAt: last.lastActivityAt } : {}) }
+}
 
 const NAMES_FROM: readonly RoomRow['nameFrom'][] = ['community', 'personal', 'roomId']
 
@@ -358,6 +387,8 @@ const keptRowOf = (row: RoomRow): RowAtStart => ({
   ...(row.communityName !== undefined ? { communityName: row.communityName } : {}),
   ...(row.lastActivityAt ? { lastActivityAt: row.lastActivityAt.toISOString() } : {}),
   ...(row.notJoined ? { notJoined: true } : {}),
+  ...(row.tier !== undefined ? { tier: row.tier } : {}),
+  ...(row.validUntil !== undefined ? { validUntil: row.validUntil } : {}),
 })
 
 /** A row kept by the last run, shown as reading until the first listing replaces it. Its words read as inert again. */
@@ -372,6 +403,10 @@ const rowFromKept = (kept: RowAtStart): RoomRow => ({
   // None until the first listing reads the room: a count kept from the last run is not this run's (Alberto, 11-18).
   unread: 0,
   ...(kept.notJoined ? { notJoined: true } : { reading: true }),
+  fromLastTime: true,
+  // A tier this build does not name is no tier: the header shows no badge, as for a room whose tier is unknown.
+  ...(TIERS.some((tier) => tier === kept.tier) ? { tier: kept.tier as RoomRow['tier'] } : {}),
+  ...(kept.validUntil !== undefined ? { validUntil: kept.validUntil } : {}),
 })
 
 /**
@@ -431,6 +466,9 @@ const sameRow = (a: RoomRow, b: RoomRow): boolean =>
   a.communityName === b.communityName &&
   a.nameFrom === b.nameFrom &&
   !!a.reading === !!b.reading &&
+  !!a.fromLastTime === !!b.fromLastTime &&
+  a.tier === b.tier &&
+  a.validUntil === b.validUntil &&
   !!a.notJoined === !!b.notJoined &&
   a.unread === b.unread &&
   !!a.unreadMore === !!b.unreadMore &&
@@ -695,7 +733,7 @@ async function readAll(service: RoomsService): Promise<void> {
       const { rooms: answeredRooms, answered } = partial
       const ids = new Set(answeredRooms.map((room) => room.roomId))
       const waiting = (feed.all ?? []).filter((row) => !answered.has(row.communityDid) && !ids.has(row.roomId))
-      const next = [...answeredRooms.map((room) => rowOf(room, known.get(room.roomId))), ...waiting]
+      const next = [...answeredRooms.map((room) => listedRow(room, known.get(room.roomId), feed.all)), ...waiting]
       const before = feed.all
       if (before && next.length === before.length && next.every((row, i) => sameRow(row, before[i]))) return
       feed.all = next
@@ -749,7 +787,7 @@ async function readAll(service: RoomsService): Promise<void> {
     const show = () => {
       const kept = (feed.all ?? []).filter((row) => skipped.has(row.communityDid) && !listedIds.has(row.roomId))
       feed.keptRooms = new Set(kept.map((row) => row.roomId))
-      const next = [...rooms.map((room) => rowOf(room, known.get(room.roomId))), ...kept]
+      const next = [...rooms.map((room) => listedRow(room, known.get(room.roomId), feed.all)), ...kept]
       const before = feed.all
       feed.failed = false
       if (before && next.length === before.length && next.every((row, i) => sameRow(row, before[i]))) return

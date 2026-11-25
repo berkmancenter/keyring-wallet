@@ -16,6 +16,7 @@ import type { RoomsService } from '../types'
 let mockService: RoomsService | undefined
 let mockUnconfirmed: boolean | undefined
 let mockPollFailed = false
+let mockIncomplete = false
 let mockParams: Record<string, string> = { roomId: 'did:webvh:sample:planning' }
 const mockPollNow = jest.fn()
 jest.mock('../useRoomsService', () => ({ useRoomsService: () => mockService }))
@@ -34,6 +35,8 @@ jest.mock('../useRoomPosts', () => {
       ...(mockUnconfirmed === undefined ? {} : { unconfirmed: mockUnconfirmed }),
       pollFailed: mockPollFailed,
       pollNow: mockPollNow,
+      // A listing that stopped early with nothing older to load: where the chat says so.
+      ...(mockIncomplete ? { incomplete: true, hasOlder: false } : {}),
     }),
   }
 })
@@ -57,6 +60,7 @@ beforeEach(() => {
   mockService = createSampleRoomsService()
   mockUnconfirmed = undefined
   mockPollFailed = false
+  mockIncomplete = false
   mockPollNow.mockReset()
   mockParams = { roomId: 'did:webvh:sample:planning' }
 })
@@ -87,6 +91,25 @@ describe("posts from the phone's copy, before the room's first listing answers",
     )
     await waitFor(() => expect(tree.queryByTestId(id('RoomFromLastTime'))).toBeNull())
     expect(tree.getAllByTestId(/RoomPost_/).length).toBeGreaterThan(0)
+  })
+
+  // 281.2 (Alberto's video, 11-24): the phone's own copy is held as not complete, and the chat said "The host's list
+  // stopped early. Some notes may be missing." above it until the room answered.
+  test("the phone's copy is never said to be a listing that stopped early", async () => {
+    mockUnconfirmed = true
+    mockIncomplete = true
+    const tree = show()
+    await shown(tree)
+    expect(tree.getByTestId(id('RoomFromLastTime'))).toBeTruthy()
+    expect(tree.queryByTestId(id('RoomPostsIncomplete'))).toBeNull()
+  })
+
+  test("control: the room's own listing that stopped early says so, calmly, in the chat's words", async () => {
+    mockUnconfirmed = false
+    mockIncomplete = true
+    const tree = show()
+    await shown(tree)
+    expect(tree.getByTestId(id('RoomPostsIncomplete'))).toHaveTextContent('Rooms.PostsIncomplete')
   })
 
   test('control: confirmed posts say nothing', async () => {

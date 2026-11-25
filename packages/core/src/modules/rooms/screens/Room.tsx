@@ -27,6 +27,11 @@
  * members, each a screen of its own. The files' "Add a file" comes back here with `attach`, and the composer's "+"
  * opens. Reached only while the rooms flag is on.
  *
+ * The screen is drawn at once from what this phone already has, before the room itself is read (a cold start waits
+ * for the first rooms listing): the header card from the room's row on Messages, the posts from the wallet's kept
+ * copy, their senders' kept names, and the composer, where the member may type while Send waits for the room. It is
+ * one layout and one list before and after the room arrives, so nothing on it is drawn again or moves when it does.
+ *
  * @module rooms/screens/Room
  */
 import { useAgent } from '@bifold/react-hooks'
@@ -76,7 +81,7 @@ import { permanentRefusal, postRefusalWhy } from '../postRefusal'
 import { isChatPost, isNoteMarker, reactionValueOfBody, type RoomPost } from '../roomPosts'
 import { byArrival, drawnInChat, quotedWords, type RoomReactionTally } from '../roomThread'
 import { openInMyAgent } from '../roomLinks'
-import type { Identity, RecordFeatures, RoomFile } from '../types'
+import type { Identity, RecordFeatures, RoomFile, RoomSummary } from '../types'
 import { useMyName } from '../useMyName'
 import { usePetnames } from '../usePetname'
 import { useInViewAndActive } from '../useInViewAndActive'
@@ -219,8 +224,29 @@ const Room: React.FC = () => {
   // The posts drawn are the phone's own copy from before (the kept copy, or this run's last listing), and the room's
   // first listing has not answered yet (useRoomPosts `unconfirmed`). Said under the newest post until it has.
   const unconfirmed = isUnconfirmed(feed)
-  // The room's name as Messages' row has it, for the posts drawn before the room is known (below).
-  const rowName = useRoomRows().rows.find((row) => row.roomId === roomId)?.roomName
+  // The room as Messages' row has it (kept across runs, rowsAtStart): what the header card is drawn from until the room
+  // itself is read. Never a room not joined: that one says so in place of its posts, once read.
+  const row = useRoomRows().rows.find((shownRow) => shownRow.roomId === roomId)
+  const lastKnown = useMemo<RoomSummary | undefined>(
+    () =>
+      row && !row.notJoined
+        ? {
+            roomId: row.roomId,
+            name: row.roomName,
+            nameFrom: row.nameFrom,
+            source: 'community',
+            communityDid: row.communityDid,
+            ...(row.communityName !== undefined ? { communityName: row.communityName } : {}),
+            // No badge for a row kept before the tier was (a build before 282), as for a room whose tier is unknown.
+            tier: row.tier ?? 'unknown',
+            ...(row.validUntil !== undefined ? { validUntil: row.validUntil } : {}),
+            standing: 'member',
+          }
+        : undefined,
+    [row]
+  )
+  // The community the names on this screen are read by: the room's, and the row's until the room is read.
+  const communityDid = room?.communityDid ?? lastKnown?.communityDid
   // A reaction, edit or withdrawal the member just asked for, laid over the posts until the room's list carries it.
   const pendingWrites = usePendingWrites(feed.posts)
   // The member's own writes that succeeded but have not landed in the posts: the room keeps its 10 s poll for them, so a
@@ -257,16 +283,16 @@ const Room: React.FC = () => {
   const [openedFile, setOpenedFile] = useState<RoomFile>()
   // Whose sheet is open: the member's own, from the composer, or another member's, from their name.
   const [sheetFor, setSheetFor] = useState<Identity>()
-  const me = useMyName(room?.communityDid)
+  const me = useMyName(communityDid)
   // The member's own names for the community's members, read once for every label on this screen.
-  const petnames = usePetnames(room?.communityDid)
+  const petnames = usePetnames(communityDid)
   // The names other authors wrote on their own directory cards, where they show them to members.
   const directory = useDirectoryService()
   const authors = useMemo(
     () => (feed.posts ?? []).flatMap((p) => (!p.mine && p.author ? [p.author.did] : [])),
     [feed.posts]
   )
-  const directoryNames = useDirectoryNames(directory, room?.communityDid, authors)
+  const directoryNames = useDirectoryNames(directory, communityDid, authors)
   const { reload } = state
   // A room that could not be read is read again while it is in view, at the posts' pace: nothing else reads it (the
   // posts poll waits for the room). useRoom reads it again the moment the agent's session opens; this is the fallback
@@ -427,7 +453,6 @@ const Room: React.FC = () => {
     list: { paddingHorizontal: 12, paddingBottom: 16, gap: 2 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     centered: { padding: 16, gap: 8 },
-    beforeName: { paddingHorizontal: 16, paddingVertical: 8, fontWeight: 'bold' },
     floatingDay: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
     warn: {
       flexDirection: 'row',
@@ -453,54 +478,17 @@ const Room: React.FC = () => {
       </SafeAreaView>
     )
 
-  // Before the room is known (a cold start waits for the first rooms listing to say which identity acts here), its kept
-  // posts are drawn read-only, under the name Messages' row has, with nothing to post from until the room arrives
-  // (useRoomPosts `seedBeforeRoom`). Until 279.5 this branch drew only a spinner, so the copy #1146 drew in the feed
-  // never reached the screen (YJPT-6WC8).
-  const drawnBefore =
-    !room && unconfirmed && !state.unreachable
-      ? withDayPills(byArrival(thread.posts.filter((post) => drawnInChat(post, thread, thread.held.get(post.key)))))
-      : []
-  if (!room || !roomCapabilities)
+  // The room read, with what may be done in it. Before that (a cold start waits for the first rooms listing to say which
+  // identity acts here), the screen is drawn from what the phone has: the row's header card, the kept posts read-only
+  // (useRoomPosts `seedBeforeRoom`) and the composer with Send held. Until 279.5 this drew only a spinner (YJPT-6WC8);
+  // until 282 the posts under a plain name, with no header card, composer or sender names, for the ~3 s the room took.
+  const known = room && roomCapabilities ? { room, capabilities: roomCapabilities } : undefined
+  const drawnEarly = !known && !state.unreachable && (!!lastKnown || (unconfirmed && !!feed.posts?.length))
+  if (!known && !drawnEarly)
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomScreen')}>
         <SampleDataBanner service={service} />
-        {drawnBefore.length > 0 ? (
-          <View style={{ flex: 1 }} testID={testIdWithKey('RoomBeforeKnown')}>
-            {rowName ? (
-              <ThemedText style={[styles.muted, styles.beforeName]} numberOfLines={1}>
-                {String(rowName)}
-              </ThemedText>
-            ) : null}
-            <FlatList
-              testID={testIdWithKey('RoomPosts')}
-              data={drawnBefore}
-              keyExtractor={(item) => item.key}
-              inverted
-              initialNumToRender={POSTS_PAGE * 2}
-              contentContainerStyle={styles.list}
-              renderItem={({ item }) =>
-                item.kind === 'day' ? (
-                  <DayPill date={item.date} />
-                ) : isNoteMarker(item.post) ? (
-                  <RoomNoteMarker
-                    title={item.post.title ?? firstLineOf(item.post.text)}
-                    onOpen={() => navigation.navigate(Screens.RoomPart, { roomId, part: 'notes' })}
-                  />
-                ) : (
-                  <RoomThreadPost thread={thread} post={item.post} />
-                )
-              }
-              ListHeaderComponent={<RoomFromLastTime />}
-              // Laid out with posts: they are on the screen, and only now is the opening said (useRoomPosts `painted`).
-              // `h > 0` alone is enough here only because this list exists only while `drawnBefore.length > 0` (above):
-              // a list drawn with no posts must guard on them too, as the room's own list below does (ac).
-              onContentSizeChange={(_w, h) => {
-                if (h > 0) feed.painted()
-              }}
-            />
-          </View>
-        ) : state.unreachable ? (
+        {state.unreachable ? (
           <View style={styles.centered}>
             <ThemedText testID={testIdWithKey('RoomReadFailed')}>{t('Rooms.AgentUnknown')}</ThemedText>
             <Button
@@ -519,6 +507,8 @@ const Room: React.FC = () => {
         )}
       </SafeAreaView>
     )
+  const headerRoom = known?.room ?? lastKnown
+  const capabilities = known?.capabilities
 
   // The member's value on the post the sheet is for, in the form the quick reactions are written in.
   const myValue = actionFor ? thread.mine.get(actionFor.key)?.[0]?.value : undefined
@@ -546,12 +536,11 @@ const Room: React.FC = () => {
   const editable = changing && changing.files.length === 0 ? changing : undefined
   // A file with no words: with no reply or reaction to offer, the sheet would be empty, so it says why instead.
   const nothingToOffer = !!actionFor && !hasWords(actionFor) && !records.replies && !records.reactions
-  const unavailable = roomsStatusText(t, roomCapabilities.listNotes, 'listNotes')
-  const cannotPost = roomsStatusText(t, roomCapabilities.write, 'write')
+  const unavailable = capabilities ? roomsStatusText(t, capabilities.listNotes, 'listNotes') : undefined
+  const cannotPost = capabilities ? roomsStatusText(t, capabilities.write, 'write') : undefined
   // A file is posted from the composer, so "Add a file" is offered only where the room takes one (`uploadFile`) and
   // its files can be listed, so a posted file is seen.
-  const canAttach =
-    roomCapabilities.uploadFile.status === 'available' && roomCapabilities.listFiles.status === 'available'
+  const canAttach = capabilities?.uploadFile.status === 'available' && capabilities.listFiles.status === 'available'
   // Titled records and removed ones are the room's notes, on their own screen; the chat shows the rest.
   const chatPosts = posts?.filter(isChatPost)
   // The notes the chat leaves out, said under an empty chat: a note from the web page read as an empty room (IN-434).
@@ -566,8 +555,15 @@ const Room: React.FC = () => {
     : []
   const shown = unavailable ? [] : items
 
-  const empty = isComingSoon(roomCapabilities.listNotes) ? (
-    <RoomFeatureCard status={roomCapabilities.listNotes} feature="notes" />
+  const empty = !capabilities ? (
+    // The room not read yet and nothing kept to draw: its posts are being read, under the header the phone already has.
+    <ActivityIndicator
+      style={styles.centered}
+      color={ColorPalette.brand.primary}
+      testID={testIdWithKey('RoomPostsReading')}
+    />
+  ) : isComingSoon(capabilities.listNotes) ? (
+    <RoomFeatureCard status={capabilities.listNotes} feature="notes" />
   ) : unavailable ? (
     <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsUnavailable')}>
       {unavailable}
@@ -601,7 +597,9 @@ const Room: React.FC = () => {
     <PetnamesProvider names={petnames} directoryNames={directoryNames}>
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']} testID={testIdWithKey('RoomScreen')}>
         <SampleDataBanner service={service} />
-        <RoomHeader room={room} onPress={() => navigation.navigate(Screens.RoomInfo, { roomId })} />
+        {headerRoom ? (
+          <RoomHeader room={headerRoom} onPress={() => navigation.navigate(Screens.RoomInfo, { roomId })} />
+        ) : null}
         {feed.check?.verdict === 'conflict' ? (
           <View style={styles.warn} accessibilityRole="alert" testID={testIdWithKey('RoomHostConflict')}>
             <Icon name="alert-outline" size={22} color={ColorPalette.notification.warnText} />
@@ -609,8 +607,8 @@ const Room: React.FC = () => {
           </View>
         ) : null}
         {/* Not joined yet: nothing here can be read or sent, and trying again cannot help. Said in place of all of it. */}
-        {room.joined === false ? (
-          <RoomNotJoined room={room} />
+        {known?.room.joined === false ? (
+          <RoomNotJoined room={known.room} />
         ) : (
           /* keyboard-controller's view, which lifts on Android too: the app draws under the system bars there. */
           <KeyboardAvoidingView
@@ -620,6 +618,8 @@ const Room: React.FC = () => {
             behavior="padding"
             keyboardVerticalOffset={keyboard.offset}
           >
+            {/* One list, before the room is read and after: its posts stay where they are when the room arrives. */}
+            {known ? null : <View testID={testIdWithKey('RoomBeforeKnown')} />}
             <FlatList
               ref={list}
               testID={testIdWithKey('RoomPosts')}
@@ -651,7 +651,8 @@ const Room: React.FC = () => {
                   <RoomThreadPost
                     thread={thread}
                     post={item.post}
-                    onLongPress={canActOn(item.post) ? () => setActionFor(item.post) : undefined}
+                    // Read-only until the room is read: nothing to act on a post with, and no sheet for its author.
+                    onLongPress={known && canActOn(item.post) ? () => setActionFor(item.post) : undefined}
                     onOpenReactions={() => setReactionsFor(thread.reactions.get(item.post.key))}
                     onRetry={
                       item.post.delivery === 'failed'
@@ -660,7 +661,7 @@ const Room: React.FC = () => {
                     }
                     onCancel={item.post.files.length > 0 ? () => outbox.cancel(item.post.key) : undefined}
                     onOpenFile={canOpenFiles ? setOpenedFile : undefined}
-                    onOpenAuthor={setSheetFor}
+                    onOpenAuthor={known ? setSheetFor : undefined}
                   />
                 )
               }
@@ -668,7 +669,7 @@ const Room: React.FC = () => {
               // Only while there are no posts, where it is the way to try again. Drawn bottom up, a list would put the
               // control at the bottom; with posts, the room is read again every few seconds while it is in view.
               refreshControl={
-                unavailable || shown.length > 0 ? undefined : (
+                !known || unavailable || shown.length > 0 ? undefined : (
                   <RefreshControl
                     refreshing={feed.refreshing}
                     onRefresh={feed.refresh}
@@ -720,9 +721,11 @@ const Room: React.FC = () => {
                     accessibilityLabel={t('Rooms.Reading')}
                     testID={testIdWithKey('RoomLoadingOlder')}
                   />
-                ) : feed.incomplete && !feed.hasOlder ? (
+                ) : feed.incomplete && !feed.hasOlder && !unconfirmed ? (
+                  // Only of the room's own listing: the phone's copy from last time is never a listing that stopped
+                  // early, and said so above its posts until the room answered (281.2).
                   <ThemedText style={[styles.muted, styles.centered]} testID={testIdWithKey('RoomPostsIncomplete')}>
-                    {t('Rooms.NotesIncomplete')}
+                    {t('Rooms.PostsIncomplete')}
                   </ThemedText>
                 ) : null
               }
@@ -737,8 +740,8 @@ const Room: React.FC = () => {
                 <DayPill date={floating.day} />
               </Animated.View>
             ) : null}
-            {unavailable ? null : isComingSoon(roomCapabilities.write) ? (
-              <RoomFeatureCard status={roomCapabilities.write} feature="write" strip />
+            {unavailable ? null : capabilities && isComingSoon(capabilities.write) ? (
+              <RoomFeatureCard status={capabilities.write} feature="write" strip />
             ) : (
               <RoomComposer
                 // A screen reused for another room (navigating to a room already in the stack updates its params)
@@ -753,10 +756,13 @@ const Room: React.FC = () => {
                     : (t('Rooms.PostingAsAddName') as string)
                 }
                 postingAsName={me.name}
-                onPressPostingAs={() => setSheetFor(room.actingAs)}
+                onPressPostingAs={known ? () => setSheetFor(known.room.actingAs) : undefined}
                 canAttach={canAttach}
                 maxFileBytes={fileLimit}
-                attachRequest={params?.attach}
+                // Asked once the room is read: a request the composer saw before it could attach would be spent.
+                attachRequest={known ? params?.attach : undefined}
+                // The member may type before the room is read; nothing is sent until it is.
+                waiting={!known}
                 draft={draft.saved}
                 onTextChange={draft.onTextChange}
               />
@@ -844,26 +850,28 @@ const Room: React.FC = () => {
           onKeep={() => setWithdrawing(undefined)}
         />
         <RoomThreadReactions tallies={reactionsFor} onClose={() => setReactionsFor(undefined)} />
-        <RoomIdentitySheet
-          identity={sheetFor}
-          communityDid={room.communityDid}
-          mine={sheetFor?.did === room.actingAs.did}
-          me={me}
-          onClose={() => setSheetFor(undefined)}
-          onOpenProfile={(profileId) => openInMyAgent(navigation, Screens.EditRCard, profileId ? { profileId } : {})}
-          onViewCard={
-            room.communityDid
-              ? (memberDid, standIn) => {
-                  setSheetFor(undefined)
-                  openInMyAgent(navigation, Screens.CommunityMemberCard, {
-                    communityDid: room.communityDid,
-                    memberDid,
-                    standIn,
-                  })
-                }
-              : undefined
-          }
-        />
+        {known ? (
+          <RoomIdentitySheet
+            identity={sheetFor}
+            communityDid={known.room.communityDid}
+            mine={sheetFor?.did === known.room.actingAs.did}
+            me={me}
+            onClose={() => setSheetFor(undefined)}
+            onOpenProfile={(profileId) => openInMyAgent(navigation, Screens.EditRCard, profileId ? { profileId } : {})}
+            onViewCard={
+              known.room.communityDid
+                ? (memberDid, standIn) => {
+                    setSheetFor(undefined)
+                    openInMyAgent(navigation, Screens.CommunityMemberCard, {
+                      communityDid: known.room.communityDid,
+                      memberDid,
+                      standIn,
+                    })
+                  }
+                : undefined
+            }
+          />
+        ) : null}
       </SafeAreaView>
     </PetnamesProvider>
   )

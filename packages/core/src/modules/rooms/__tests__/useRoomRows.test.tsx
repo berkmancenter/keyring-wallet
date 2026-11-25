@@ -1265,6 +1265,100 @@ describe("the last run's rows at a start", () => {
     await flush()
     expect(list.result.current.rows).toEqual([])
   })
+
+  // Alberto (11-24, 281.2): Messages spun on every row of a cold start, and the room screen had no header card until
+  // the room was read. A row from the last run says so (Messages draws it quietly), and carries its room's tier and the
+  // end of the member's access, which the room's header card is drawn from.
+  test('are marked from last time, with the tier and access end kept; what is not as written is left off', async () => {
+    const wallet = walletWith(
+      lastRun([
+        keptRow('planning', { tier: 'attributed', validUntil: '2027-02-01T00:00:00.000Z' }),
+        keptRow('odd', { tier: 'gold', validUntil: 'soon' }),
+        keptRow('older', {}),
+      ])
+    )
+    const { s } = waitingService([room('garden')], wallet)
+    renderHook(() => useRoomRowsPoll(s, true))
+    const list = renderHook(() => useRoomRows())
+    await flush()
+    const [planning, odd, older] = list.result.current.rows
+    expect(planning).toMatchObject({
+      roomId: 'planning',
+      reading: true,
+      fromLastTime: true,
+      tier: 'attributed',
+      validUntil: '2027-02-01T00:00:00.000Z',
+    })
+    // A tier this build does not name, a date that is none, a row kept before either was: the row, without them.
+    expect(odd).toMatchObject({ roomId: 'odd', fromLastTime: true })
+    expect([odd.tier, odd.validUntil, older.tier, older.validUntil]).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ])
+  })
+
+  test('the listing answering leaves such a row its time and its quiet mark until its room is read', async () => {
+    const wallet = walletWith(lastRun([keptRow('planning')]))
+    const { s, answer } = waitingService(
+      [room('planning', { tier: 'attributed', validUntil: '2027-02-01T00:00:00.000Z' }), room('garden')],
+      wallet
+    )
+    // The rooms are listed, and their posts are still being read.
+    let read: () => void = () => undefined
+    const held = new Promise<void>((resolve) => {
+      read = resolve
+    })
+    const listNotes = s.listNotes.getMockImplementation()!
+    s.listNotes.mockImplementation(async (roomId, options) => {
+      await held
+      return listNotes(roomId, options)
+    })
+    renderHook(() => useRoomRowsPoll(s, true))
+    const list = renderHook(() => useRoomRows())
+    await flush()
+    await answer()
+    await flush()
+    const rowOf = (roomId: string) => list.result.current.rows.find((r) => r.roomId === roomId)
+    expect(rowOf('planning')).toMatchObject({
+      reading: true,
+      fromLastTime: true,
+      lastActivityAt: new Date('2026-11-17T20:00:00.000Z'),
+      tier: 'attributed',
+      validUntil: '2027-02-01T00:00:00.000Z',
+    })
+    // Control: a room this run met for the first time has no row to keep quiet: it reads, with the spinner.
+    expect(rowOf('garden')).toMatchObject({ reading: true })
+    expect(rowOf('garden')?.fromLastTime).toBeUndefined()
+
+    await act(async () => read())
+    await flush()
+    // Read: the row is this run's own.
+    expect(rowOf('planning')?.reading).toBeUndefined()
+    expect(rowOf('planning')?.fromLastTime).toBeUndefined()
+    expect(rowOf('planning')?.lastPost).toBeDefined()
+  })
+
+  test("keeps a room's tier and access end for the next start", async () => {
+    const wallet = walletWith()
+    const s = serviceWith(
+      [room('planning', { tier: 'attributed', validUntil: '2027-02-01T00:00:00.000Z' }), room('garden')],
+      { planning: [note('n1', 1)] }
+    )
+    Object.assign(s, { runsOn: wallet })
+    renderHook(() => useRoomRowsPoll(s, true))
+    await flush()
+    await step(ROWS_KEEP_DELAY_MS)
+    const rows = wallet.state.record?.content.rows as Record<string, unknown>[]
+    expect(rows.find((r) => r.roomId === 'planning')).toMatchObject({
+      tier: 'attributed',
+      validUntil: '2027-02-01T00:00:00.000Z',
+    })
+    expect(rows.find((r) => r.roomId === 'garden')).toMatchObject({ tier: 'open' })
+    expect(rows.find((r) => r.roomId === 'garden')).not.toHaveProperty('validUntil')
+    expect(JSON.stringify(rows)).not.toContain('fromLastTime')
+  })
 })
 
 // 11-17: a new invite showed only at the offers poll's next two-minute ask; Messages coming into focus asks again.

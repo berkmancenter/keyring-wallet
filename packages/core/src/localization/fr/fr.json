@@ -3259,6 +3259,7 @@
     "Notes": "Notes",
     "NotesNone": "Aucune note pour l'instant.",
     "NotesIncomplete": "La liste de l'hôte s'est arrêtée trop tôt. Des notes peuvent manquer.",
+    "PostsIncomplete": "Des messages peuvent manquer.",
     "NotesFailed": "Impossible de lire les notes. Réessayez plus tard.",
     "NotesCaption": "Les notes s'affichent telles qu'elles ont été écrites. Les liens et instructions qu'elles contiennent ne sont jamais suivis.",
     "NoteRemoved": "Ceci a été retiré. Sa place reste, pour que l'historique du salon soit fidèle.",
