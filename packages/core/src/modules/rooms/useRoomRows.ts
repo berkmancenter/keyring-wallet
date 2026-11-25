@@ -461,6 +461,9 @@ let previews: ReadonlyMap<string, RowPreview> = new Map()
 let previewsAsked = new Set<string>()
 /** Rooms whose copies were emptied this run: a read of one already out draws nothing (the review of #1011). */
 let previewsDropped = new Set<string>()
+/** How many times each room's copy failed to be read this run, and how many tries a room gets. */
+let previewTries = new Map<string, number>()
+const PREVIEW_TRIES = 2
 /** Moves on when every preview comes down and when the service changes: a read already out draws nothing after it. */
 let previewGen = 0
 /** One room's copy read at a time, so the room screen's own read of its copy waits behind one of these at most. */
@@ -511,30 +514,48 @@ function lookForPreviews(service: RoomsService): void {
   previewChain = previewChain.then(async () => {
     let found = 0
     let drawn = 0
+    let failed = 0
+    let failure = ''
     let first: number | undefined
-    try {
-      const read = await reader(service)
-      for (const roomId of due) {
-        if (!read || !current()) return
-        if (!stillReading(roomId)) continue
-        const preview = await read(roomId)
-        if (!preview || !current() || previewsDropped.has(roomId)) continue
-        found++
-        previews = new Map(previews).set(roomId, preview)
-        if (!stillReading(roomId)) continue
-        showRows(service)
-        publish()
-        drawn++
-        first ??= Date.now() - RUN_STARTED_AT
-      }
-    } catch (e) {
-      log?.(`[Rooms:rows] the saved copies' newest posts were not read: ${failureCategory(e)}`)
-    } finally {
-      if (found > 0)
-        log?.(
-          `[Rooms:rows] ${found} of ${due.length} rooms' newest posts read from the saved copies, ${drawn} rows drawn, the first ${first ?? '-'} ms and the last ${Date.now() - RUN_STARTED_AT} ms after launch`
-        )
+    // A read that fails gives its room back, to be looked at again at the rows' next drawing, twice at most this run;
+    // the rooms after it are still read (the review of #1011).
+    const failedOn = (roomId: string, e: unknown) => {
+      failed++
+      failure ||= failureCategory(e)
+      const tries = (previewTries.get(roomId) ?? 0) + 1
+      previewTries.set(roomId, tries)
+      if (tries < PREVIEW_TRIES) previewsAsked.delete(roomId)
     }
+    let read: ((roomId: string) => Promise<RowPreview | undefined>) | undefined
+    try {
+      read = await reader(service)
+    } catch (e) {
+      for (const roomId of due) failedOn(roomId, e)
+    }
+    for (const roomId of due) {
+      if (!read || !current()) break
+      if (!stillReading(roomId)) continue
+      let preview: RowPreview | undefined
+      try {
+        preview = await read(roomId)
+      } catch (e) {
+        failedOn(roomId, e)
+        continue
+      }
+      if (!preview || !current() || previewsDropped.has(roomId)) continue
+      found++
+      previews = new Map(previews).set(roomId, preview)
+      if (!stillReading(roomId)) continue
+      showRows(service)
+      publish()
+      drawn++
+      first ??= Date.now() - RUN_STARTED_AT
+    }
+    if (failed > 0) log?.(`[Rooms:rows] ${failed} saved copies' newest posts were not read: ${failure}`)
+    if (found > 0)
+      log?.(
+        `[Rooms:rows] ${found} of ${due.length} rooms' newest posts read from the saved copies, ${drawn} rows drawn, the first ${first ?? '-'} ms and the last ${Date.now() - RUN_STARTED_AT} ms after launch`
+      )
   })
 }
 
@@ -555,6 +576,7 @@ export function dropRowPreviews(roomIds?: Iterable<string>): void {
       next.delete(roomId)
     }
   }
+  // Only after the rooms are marked: a room whose read is still out has no preview yet, and the mark is what stops it.
   if (next.size === previews.size) return
   previews = next
   const service = feed.service
@@ -568,6 +590,7 @@ function resetPreviews(): void {
   previews = new Map()
   previewsAsked = new Set()
   previewsDropped = new Set()
+  previewTries = new Map()
   previewGen++
 }
 

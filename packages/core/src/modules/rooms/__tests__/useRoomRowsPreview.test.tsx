@@ -125,12 +125,16 @@ const preview = (text: string): RowPreview => ({
 /** A reader of the copies whose reads the test answers, one room at a time, as the real one is asked. */
 function heldReader() {
   const asked: string[] = []
-  const answers = new Map<string, (p: RowPreview | undefined) => void>()
+  const answers = new Map<string, { resolve: (p: RowPreview | undefined) => void; reject: (e: Error) => void }>()
   readRowPreviewsWith(async () => async (roomId) => {
     asked.push(roomId)
-    return new Promise<RowPreview | undefined>((resolve) => answers.set(roomId, resolve))
+    return new Promise<RowPreview | undefined>((resolve, reject) => answers.set(roomId, { resolve, reject }))
   })
-  return { asked, answer: (roomId: string, p: RowPreview | undefined) => act(async () => answers.get(roomId)?.(p)) }
+  return {
+    asked,
+    answer: (roomId: string, p: RowPreview | undefined) => act(async () => answers.get(roomId)?.resolve(p)),
+    fail: (roomId: string) => act(async () => answers.get(roomId)?.reject(new Error('wallet busy'))),
+  }
 }
 
 let biometry = true
@@ -246,6 +250,24 @@ describe("a row's newest post from the saved copy", () => {
     await held.answer(held.asked[1], preview('second in'))
     await flush()
     expect(notYet()?.lastPost?.text).toBe('second in')
+  })
+
+  test('a copy that fails to be read still lets the next rooms be read, and is looked at again', async () => {
+    const s = setup(undefined, [summary, other])
+    const held = heldReader()
+    const rowOf = await mount(s.service)
+    const [failing] = held.asked
+    const next = failing === ROOM ? OTHER : ROOM
+    await held.fail(failing)
+    await flush()
+    expect(held.asked).toEqual([failing, next])
+    await held.answer(next, preview('the next room'))
+    await flush()
+    expect(rowOf(next)?.lastPost?.text).toBe('the next room')
+    expect(held.asked).toEqual([failing, next, failing])
+    await held.answer(failing, preview('read the second time'))
+    await flush()
+    expect(rowOf(failing)?.lastPost?.text).toBe('read the second time')
   })
 
   test('a room that reads as empty takes its preview down', async () => {
