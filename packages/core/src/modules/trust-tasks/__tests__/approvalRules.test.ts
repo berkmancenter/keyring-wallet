@@ -308,6 +308,7 @@ describe('the phone never sends an offered task', () => {
   const INDIRECT: Record<string, string> = {
     'this.browseType()': 'the newest ROOMS_TASK.keysBrowse* the agent serves',
     oneShot: 'the newest ROOMS_TASK.keysWatch* the agent serves (roomWatches.ts oneShotType)',
+    setType: 'the newest ROOMS_TASK.keysReadMarkerSet* the agent serves (readMarkers.ts setType)',
     get: 'ROOMS_TASK.vaultGet02 or vaultGet01',
     type: "agentStep's own type, each named at its caller",
     act: 'the newest ROOMS_TASK.keysAct* the agent serves (actType)',
@@ -348,6 +349,13 @@ describe('the phone never sends an offered task', () => {
 
   it('a signal the agent pushes is not on the list: the phone receives rooms/keys/changed, it never sends it', () => {
     expect(PHONE_SENDS.filter((uri) => uri.includes('/rooms/keys/changed/'))).toEqual([])
+  })
+
+  it('nor is its notice that a read marker moved: the phone receives rooms/keys/read-marker/moved, it sends only the set', () => {
+    expect(PHONE_SENDS.filter((uri) => uri.includes('/rooms/keys/read-marker/moved/'))).toEqual([])
+    expect(PHONE_SENDS.filter((uri) => uri.includes('/rooms/keys/read-marker/'))).toEqual([
+      'https://trusttasks.org/spec/rooms/keys/read-marker/set/0.1',
+    ])
   })
 
   it('the app has no caller of createContext', () => {

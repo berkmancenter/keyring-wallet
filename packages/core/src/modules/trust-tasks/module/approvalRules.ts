@@ -162,6 +162,7 @@ export const PHONE_SENDS: readonly string[] = [
   // listed ahead of the code that sends them, so that code cannot arrive without them.
   'rooms/keys/list/0.1',
   'rooms/keys/list/0.2',
+  'rooms/keys/list/0.3',
   'rooms/keys/browse/0.1',
   'rooms/keys/browse/0.3',
   'rooms/keys/browse/0.4',
@@ -171,6 +172,7 @@ export const PHONE_SENDS: readonly string[] = [
   'rooms/keys/read/0.2',
   'rooms/keys/watch/0.1',
   'rooms/keys/watch/0.2',
+  'rooms/keys/read-marker/set/0.1',
   'rooms/keys/key-package/0.2',
   'rooms/keys/welcome/0.1',
   'rooms/keys/backfill/0.2',

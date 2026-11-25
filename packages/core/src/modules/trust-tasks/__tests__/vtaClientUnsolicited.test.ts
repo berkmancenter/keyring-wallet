@@ -87,6 +87,18 @@ describe('a message the agent sends of its own accord, while a task waits for it
     expect(internals.pendings.size).toBe(1)
   })
 
+  it('so does its notice that a read marker moved on another device: no answer to anything', () => {
+    const { onInbound, resolve, deliver, internals } = waitingClient()
+    const notice = message({
+      type: VTA_TASK.roomsKeysReadMarkerMoved,
+      payload: { roomId: 'did:webvh:room:a', member: 'did:key:me', readMarker: { version: 9 } },
+    })
+    deliver(notice)
+    expect(onInbound).toHaveBeenCalledWith(notice)
+    expect(resolve).not.toHaveBeenCalled()
+    expect(internals.pendings.size).toBe(1)
+  })
+
   it('an answer is still the answer', () => {
     const { onInbound, resolve, deliver } = waitingClient()
     const answer = reply({ type: 'https://trusttasks.org/spec/acl/list/0.1', payload: { entries: [] } })

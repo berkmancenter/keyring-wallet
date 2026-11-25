@@ -10,7 +10,7 @@ import type {
   RoomVerb,
 } from './types'
 
-import { KEYS_ACT_TYPES } from './real/wire'
+import { KEYS_ACT_TYPES, KEYS_LIST_TYPES } from './real/wire'
 
 const SPEC = 'https://trusttasks.org/spec/'
 
@@ -41,8 +41,9 @@ type Requirement =
  * @versionCoverage rooms/keys/list rooms/keys/browse
  */
 export const ROOMS_REQUIREMENTS: Record<RoomsOperation, Requirement> = {
-  listMyRooms: { from: 'agent', anyOf: [`${SPEC}rooms/keys/list/0.2`, `${SPEC}rooms/keys/list/0.1`] },
-  getRoom: { from: 'agent', anyOf: [`${SPEC}rooms/keys/list/0.2`, `${SPEC}rooms/keys/list/0.1`] },
+  // The set is the ladder itself, as for `write` below: a version added there is asked for here too.
+  listMyRooms: { from: 'agent', anyOf: KEYS_LIST_TYPES },
+  getRoom: { from: 'agent', anyOf: KEYS_LIST_TYPES },
   listNotes: {
     from: 'agent',
     anyOf: [

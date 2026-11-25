@@ -144,6 +144,8 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     consentHolds: storedConsentHolds(() => vtaAgent.agentAddress()),
     // A watched room's change, pushed by the linked agent on this phone's own channel: no identity switch to hear it.
     onRoomSignal: (listener) => vtaAgent.onRoomSignal(listener),
+    // A read marker moved on another of the person's devices, pushed the same way.
+    onRoomReadMarkerMoved: (listener) => vtaAgent.onRoomReadMarkerMoved(listener),
     // The agent's last answer, asked again behind the session's first work (agentLastKnownSwitch.ts); the stamp
     // moves when asking again found a different one.
     agentServedTypes: () => vtaAgent.servedTypes(agent),

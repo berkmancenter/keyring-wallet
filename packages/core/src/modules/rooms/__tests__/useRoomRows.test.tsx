@@ -1399,3 +1399,166 @@ describe('Messages asks for room offers again', () => {
     expect(offers.listOffers).toHaveBeenCalledTimes(1)
   })
 })
+
+// Where the person's agent keeps read markers (real/readMarkers.ts): what the room screen shows is told to it, and
+// what it holds is taken here, so a phone and a browser count the same posts as unread.
+describe("read markers kept by the person's agent", () => {
+  type Heard = (roomId: string, marker: { version: number }, how: 'further' | 'moved') => void
+  const withMarkers = (s: RoomsService, markers: Record<string, { version: number }> = {}) => {
+    const heard: Heard[] = []
+    const markRoomRead = jest.fn()
+    Object.assign(s, {
+      markRoomRead,
+      roomReadMarker: (roomId: string) => markers[roomId],
+      onRoomReadMarker: (listener: Heard) => {
+        heard.push(listener)
+        return () => void heard.splice(heard.indexOf(listener), 1)
+      },
+    })
+    /** The agent says where the person has read `roomId` to. */
+    const tell = (roomId: string, version: number, how: 'further' | 'moved') =>
+      act(() => {
+        markers[roomId] = { version }
+        heard.forEach((listener) => listener(roomId, { version }, how))
+      })
+    return { markRoomRead, tell }
+  }
+  const keptSeen = async () => Object.values(JSON.parse((await AsyncStorage.getItem(ROOMS_SEEN_KEY)) ?? '{}'))
+
+  test('what the room screen shows is told to the agent, with the time the host gave it, even when it is no news here', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1), note('n2', 2)] })
+    const { markRoomRead } = withMarkers(s)
+    mount(s)
+    await flush()
+    // Met first, so seen up to 2 here already: the agent may not hold it, and is told all the same.
+    act(() => markRoomSeen(s, 'planning', 2, '2026-10-30T09:02:00.000Z'))
+    act(() => markRoomSeen(s, 'planning', 2))
+    expect(markRoomRead.mock.calls).toEqual([
+      ['planning', { version: 2, createdAt: '2026-10-30T09:02:00.000Z' }],
+      ['planning', { version: 2 }],
+    ])
+  })
+
+  test('a service that keeps no markers is asked nothing (control: the sample, an older backend)', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1)] })
+    mount(s)
+    await flush()
+    expect(() => act(() => markRoomSeen(s, 'planning', 1))).not.toThrow()
+  })
+
+  test('a room first met on this phone starts from where the person had read it elsewhere, not as all read', async () => {
+    const posts = [note('n1', 1), note('n2', 2), note('n3', 3), note('n4', 4)]
+    const s = serviceWith([room('planning'), room('other')], { planning: posts, other: posts })
+    withMarkers(s, { planning: { version: 2 } })
+    const { list } = mount(s)
+    await flush()
+    const unread = Object.fromEntries(list.result.current.rows.rows.map((r) => [r.roomId, r.unread]))
+    // Control: `other` has no marker, and starts seen up to its newest post, as before.
+    expect(unread).toEqual({ planning: 2, other: 0 })
+  })
+
+  test('read further on another device: the row counts from there; one behind what is seen here changes nothing', async () => {
+    const notes: Record<string, NoteSummary[]> = { planning: [note('n1', 1)] }
+    const s = serviceWith([room('planning')], notes)
+    const { tell } = withMarkers(s)
+    const { list } = mount(s)
+    await flush()
+    notes.planning.push(note('n2', 2), note('n3', 3), note('n4', 4))
+    await act(async () => refreshRoomRows())
+    expect(list.result.current.rows.rows[0].unread).toBe(3)
+    tell('planning', 3, 'further')
+    expect(list.result.current.rows.rows[0].unread).toBe(1)
+    expect(list.result.current.unread).toBe(1)
+    tell('planning', 1, 'further')
+    expect(list.result.current.rows.rows[0].unread).toBe(1)
+    expect(await keptSeen()).toEqual([3])
+  })
+
+  test('the marker in force, further on than here: taken as read further is', async () => {
+    const notes: Record<string, NoteSummary[]> = { planning: [note('n1', 1)] }
+    const s = serviceWith([room('planning')], notes)
+    const { tell } = withMarkers(s)
+    const { list } = mount(s)
+    await flush()
+    notes.planning.push(note('n2', 2), note('n3', 3))
+    await act(async () => refreshRoomRows())
+    tell('planning', 3, 'moved')
+    expect(list.result.current.rows.rows[0].unread).toBe(0)
+  })
+
+  test('marked unread elsewhere with the room still open here: its screen does not clear the count, or tell the agent, until the room is entered again', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1), note('n2', 2), note('n3', 3)] })
+    const { tell, markRoomRead } = withMarkers(s)
+    let held = false
+    Object.assign(s, { roomMarkedUnread: () => held })
+    const { list } = mount(s)
+    await flush()
+    held = true
+    tell('planning', 1, 'moved')
+    await flush()
+    expect(list.result.current.rows.rows[0].unread).toBe(2)
+    // The open screen's next listing says what it shows again.
+    act(() => markRoomSeen(s, 'planning', 3))
+    expect(list.result.current.rows.rows[0].unread).toBe(2)
+    expect(markRoomRead).not.toHaveBeenCalled()
+    expect(await keptSeen()).toEqual([1])
+    // Entered again (control: the same call now counts).
+    held = false
+    act(() => markRoomSeen(s, 'planning', 3))
+    expect(list.result.current.rows.rows[0].unread).toBe(0)
+    expect(markRoomRead).toHaveBeenCalledWith('planning', { version: 3 })
+  })
+
+  test('marked unread on another device: seen only up to there, and the room is read afresh to count what came after', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1), note('n2', 2), note('n3', 3)] })
+    const { tell } = withMarkers(s)
+    const { list } = mount(s)
+    await flush()
+    expect(list.result.current.rows.rows[0].unread).toBe(0)
+    const reads = s.listNotes.mock.calls.length
+    tell('planning', 1, 'moved')
+    await flush()
+    expect(list.result.current.rows.rows[0].unread).toBe(2)
+    expect(await keptSeen()).toEqual([1])
+    // Read as a room met for the first time is, not from the newest version held: those posts were never counted.
+    expect(s.listNotes.mock.calls).toHaveLength(reads + 1)
+    expect(s.listNotes.mock.calls[reads][1]?.sinceVersion).toBeUndefined()
+  })
+
+  // Review of #1007 (the review lane's probe): a read of the room already out when the mark arrived carried the track
+  // from before it, and put back the "seen" the mark had taken away. Unread went to 0 where it should have been 2.
+  const markedWhileReading = async (withRead: boolean) => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1), note('n2', 2), note('n3', 3)] })
+    const { tell } = withMarkers(s)
+    const { list } = mount(s)
+    await flush()
+    expect(list.result.current.rows.rows[0].unread).toBe(0)
+    let release: () => void = () => undefined
+    if (withRead) {
+      // The next listing of the room, from the newest version held, is held until after the mark.
+      s.listNotes.mockImplementationOnce(
+        () =>
+          new Promise<NoteList>(
+            (resolve) =>
+              (release = () => resolve({ notes: [], complete: true, check: { verdict: 'consistent', detail: '' } }))
+          )
+      )
+      act(() => refreshRoomRows())
+      await flush()
+    }
+    tell('planning', 1, 'moved')
+    await flush()
+    await act(async () => release())
+    await flush()
+    await flush()
+    return list.result.current.rows.rows[0].unread
+  }
+
+  test('marked unread while a read of the room is out: that read does not put back what the mark took away', async () => {
+    expect(await markedWhileReading(true)).toBe(2)
+  })
+
+  test('marked unread with no read out (control: the same answer either way)', async () => {
+    expect(await markedWhileReading(false)).toBe(2)
+  })
+})

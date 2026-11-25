@@ -23,6 +23,10 @@
  * new. A room met for the first time starts seen up to its newest post: nothing written before Messages showed rooms
  * counts as unread. The member's own posts never count.
  *
+ * Where the person's agent keeps read markers (real/readMarkers.ts, readMarkerSwitch.ts), what the room screen shows is
+ * told to it too, and what it holds is taken here: a room read in the person's browser is read here, a room first met
+ * on this phone starts from where they had read it elsewhere, and one marked unread elsewhere is unread here.
+ *
  * A room can be hidden from Messages until someone posts in it again ({@link hideRoom}), or until the member shows it
  * again ({@link showRoom}); that is kept on this phone the same way.
  *
@@ -209,6 +213,8 @@ let tracks = new WeakMap<RoomsService, Map<string, Track>>()
 
 const hashOf = (roomId: string) => bytesToHex(sha256(utf8ToBytes(roomId))).slice(0, 16)
 
+/** How many times each room was marked unread on another device this run (adoptReadMarker): a read out across one is stale. */
+const markedBack = new Map<string, number>()
 let seenVersions: Record<string, number> | undefined
 let hiddenUntil: Record<string, number> | undefined
 let seenRead: Promise<void> | undefined
@@ -279,6 +285,7 @@ const rowPostOf = (note: NoteSummary, actingAs: Identity | undefined): RoomRowPo
 
 /** Reads one room: what came after the newest post already read, and the newest post in full when it changed. */
 async function readRoom(service: RoomsService, room: RoomSummary, track: Track | undefined): Promise<Track> {
+  const marksBefore = markedBack.get(room.roomId) ?? 0
   const actingAs = track?.actingAs ?? (await service.getRoom(room.roomId)).actingAs
   // A first read is a window of the newest records while rooms/newestFirstSwitch is on; off, the whole room, asked
   // exactly as before. Later reads ask only what came after the newest held, as before.
@@ -287,11 +294,25 @@ async function readRoom(service: RoomsService, room: RoomSummary, track: Track |
     : isRoomsNewestFirstOn()
       ? await service.listNotes(room.roomId, { head: ROOM_HEAD_WINDOW })
       : await service.listNotes(room.roomId)
+  // The room was marked unread on another device while this read was out: the track carried in is from before the
+  // mark, and building on it would put back the "seen" the mark took away. Read it afresh, as a room met for the first
+  // time is. Asked by the count of marks, not by whether the track is there now: adoptReadMarker drops it and starts a
+  // read that refills it at once, so a slower read out across both found a track and put the stale one back. Found in
+  // review of #1007.
+  if (track && (markedBack.get(room.roomId) ?? 0) !== marksBefore) return readRoom(service, room, undefined)
   // A first listing that stopped early with nothing in it says nothing about the room: still unread, not empty. Only a
   // first read: a listing asked with `sinceVersion` is never complete (types.ts), so this on a refresh would leave every
   // room unread for ever. readAll catches it per room, so the other rooms read on.
   if (!track && listing.notes.length === 0 && !listing.complete) throw new Error('first listing stopped early')
-  const kept = seenVersions?.[hashOf(room.roomId)]
+  // What this phone kept, or what the person's agent says they have read on any device, whichever is further on: a
+  // phone that never opened the room starts from the marker, not from "all read" (real/readMarkers.ts).
+  const here = seenVersions?.[hashOf(room.roomId)]
+  const marker = service.roomReadMarker?.(room.roomId)?.version
+  const kept = here === undefined ? marker : marker === undefined ? here : Math.max(here, marker)
+  if (kept !== undefined && kept !== here) {
+    seenVersions = { ...(seenVersions ?? {}), [hashOf(room.roomId)]: kept }
+    void keepSeen()
+  }
   const next: Track = track
     ? { ...track, unread: new Map(track.unread) }
     : { newest: 0, seen: kept ?? Number.MAX_SAFE_INTEGER, unread: new Map(), actingAs }
@@ -1021,8 +1042,23 @@ export function refreshRoomRows(floor = 0): void {
  * The room screen tells the rows the newest post it has shown: the posts up to it are seen. Kept on this phone, so
  * the count is right after a relaunch too.
  */
-export function markRoomSeen(service: RoomsService | undefined, roomId: string, version: number): void {
+export function markRoomSeen(
+  service: RoomsService | undefined,
+  roomId: string,
+  version: number,
+  createdAt?: string
+): void {
   if (!service || service !== feed.service) return
+  // Marked unread on another device, and not looked at again here: a screen left open on the room says nothing.
+  if (service.roomMarkedUnread?.(roomId)) return
+  // The person's agent is told too, so their other devices count the same posts as read. Before the check below: a
+  // room already seen this far here may not be at the agent yet, and the service sends nothing the agent already holds.
+  service.markRoomRead?.(roomId, { version, ...(createdAt ? { createdAt } : {}) })
+  seenTo(service, roomId, version)
+}
+
+/** `roomId` is seen up to `version`: kept on this phone, and the row counts only what came after. Forward only. */
+function seenTo(service: RoomsService, roomId: string, version: number): void {
   const track = tracks.get(service)?.get(roomId)
   const before = seenVersions?.[hashOf(roomId)] ?? 0
   if (version <= before && (!track || version <= track.seen)) return
@@ -1032,6 +1068,27 @@ export function markRoomSeen(service: RoomsService | undefined, roomId: string, 
   track.seen = Math.max(track.seen, version)
   for (const [key, v] of [...track.unread]) if (v <= track.seen) track.unread.delete(key)
   recount(service, roomId, track)
+}
+
+/**
+ * Where the person's agent says they have read `roomId` to (real/readMarkers.ts). Further on than this phone holds, or
+ * told as `further`: the room is seen up to it, as if its screen here had shown it. Behind, and told as `moved`: the
+ * room was marked unread on another device, so it is seen only up to there, and read afresh, since the posts between
+ * the two were never counted here.
+ */
+function adoptReadMarker(service: RoomsService, roomId: string, version: number, how: 'further' | 'moved'): void {
+  if (service !== feed.service) return
+  const hash = hashOf(roomId)
+  const track = tracks.get(service)?.get(roomId)
+  const before = Math.max(seenVersions?.[hash] ?? 0, track?.seen ?? 0)
+  if (how === 'further' || version >= before) return seenTo(service, roomId, version)
+  seenVersions = { ...(seenVersions ?? {}), [hash]: version }
+  void keepSeen()
+  // Counted whether or not a track is held: a read out now carries the track from before this, and must not keep it.
+  markedBack.set(roomId, (markedBack.get(roomId) ?? 0) + 1)
+  if (!track) return
+  tracks.get(service)?.delete(roomId)
+  refreshRoomRows()
 }
 
 function recount(service: RoomsService, roomId: string, track: Track): void {
@@ -1177,6 +1234,12 @@ export function useRoomRowsPoll(
   useEffect(() => {
     if (!service || !linked) return
     return service.onRoomChanged?.((roomId) => void readOneOnSignal(service, roomId))
+  }, [service, linked])
+
+  // Where the person has read a room to on another device, told by their agent: the row counts from there.
+  useEffect(() => {
+    if (!service || !linked) return
+    return service.onRoomReadMarker?.((roomId, marker, how) => adoptReadMarker(service, roomId, marker.version, how))
   }, [service, linked])
 
   useEffect(() => {

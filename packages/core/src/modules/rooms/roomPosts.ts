@@ -14,7 +14,7 @@ import { CHAT_PROFILE, type ChatMessageEvent, parseChatEvent } from '../chat/cha
 
 import { toInertText, type InertText } from './inertText'
 import type { PostRefusal } from './postRefusal'
-import type { Identity, Note, NoteSummary, RecordUnopenedReason, RoomFile } from './types'
+import type { Identity, Note, NoteSummary, RecordUnopenedReason, RoomFile, RoomReadMarker } from './types'
 
 export interface RoomPost {
   key: string
@@ -218,6 +218,26 @@ export const isNoteMarker = (post: Placed): boolean => isNote(post) && !post.ret
  * Whether a record carries members this client's note editor would lose: it writes `{title, body}`, and a new version
  * must keep what the one it rewrites says it is. Until it keeps them, such a record isn't offered for editing.
  */
+/**
+ * Where the posts on screen take the member to: the highest room version among them, and the host's `createdAt` of the
+ * newest of them, exactly as the host returned it (`rooms/keys/read-marker/set/0.1` `ReadMarker`). No `createdAt`
+ * where no post carries one.
+ */
+export const readMarkerOf = (posts: readonly Pick<RoomPost, 'version' | 'createdAt'>[]): RoomReadMarker => {
+  let version = 0
+  let createdAt: string | undefined
+  let newest = Number.NEGATIVE_INFINITY
+  for (const post of posts) {
+    version = Math.max(version, post.version)
+    const at = post.createdAt ? Date.parse(post.createdAt) : Number.NaN
+    if (at > newest) {
+      newest = at
+      createdAt = post.createdAt
+    }
+  }
+  return { version, ...(createdAt ? { createdAt } : {}) }
+}
+
 export const carriesRecordMembers = (post: Pick<RoomPost, 'kind' | 'inReplyTo' | 'writtenAt' | 'editedAt'>): boolean =>
   !!(post.kind || post.inReplyTo || post.writtenAt || post.editedAt)
 

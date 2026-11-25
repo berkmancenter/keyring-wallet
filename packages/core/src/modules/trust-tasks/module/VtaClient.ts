@@ -183,6 +183,13 @@ export const VTA_TASK = {
    * and nothing about what changed. Its type is matched here and only here; rooms reads the payload (wire.ts parseChanged).
    */
   roomsKeysChanged: 'https://trusttasks.org/spec/rooms/keys/changed/0.1',
+  /**
+   * Pushed by the agent, never sent: the member's read marker for a room moved on another of their devices (vta-service
+   * `room_read_marker.rs`, trust-tasks-tf #1086). It goes to a client watching the room as that member, and names the
+   * room, the member and the marker in force, nothing about which device or when. Matched here; rooms reads the payload
+   * (wire.ts parseReadMarkerMoved).
+   */
+  roomsKeysReadMarkerMoved: 'https://trusttasks.org/spec/rooms/keys/read-marker/moved/0.1',
   aclSwapKey: 'https://trusttasks.org/spec/acl/swap-key/0.1',
   // The canonical ACL family (vta-sdk trust_tasks.rs:222-260), each gated by
   // `require_manage()` (vta-service trust_tasks/acl.rs:27-55, 57-84, 207-234).
@@ -890,6 +897,8 @@ export const UNSOLICITED: ReadonlySet<string> = new Set<string>([
   VTA_TASK.consentGranted,
   // A room's change signal can arrive while a task is out: it is that room's, never the task's answer.
   VTA_TASK.roomsKeysChanged,
+  // A read marker moved on another of the person's devices: a notice with no answer, never a task's.
+  VTA_TASK.roomsKeysReadMarkerMoved,
   ...STEP_UP_REQUEST_TYPES,
 ])
 
