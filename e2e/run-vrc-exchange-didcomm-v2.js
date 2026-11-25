@@ -1,23 +1,26 @@
 /**
  * Two-wallet VRC exchange E2E over DIDComm v2 (didcomm_v2_subtask.md C14):
  *   fresh install → onboarding on both devices →
- *   enable the "DIDComm v2" developer setting on both (restarts each app:
- *   the agent comes back with didcommVersions ['v1','v2'] and provisions
- *   Coordinate Mediation 2.0 with the build's MEDIATOR_V2_URL) →
+ *   make sure the "DIDComm v2" and "wallet mailbox" developer settings are on
+ *   (both on by default; a switch found off is tapped and the app restarted) →
+ *   each wallet's mailbox is open at Keyring's mailbox mediator (log marker) →
  *   wallet A generates an out-of-band/2.0 relationship invitation on
- *   did:peer:2 → wallet B pastes the URL → the relationship Trust Task runs
- *   over the binding/didcomm 0.2 envelope on a v2 connection, through the v2
- *   mediator (Pickup 4.0) → both wallets hold a VRC.
+ *   did:peer:2 whose service is its mailbox → wallet B pastes the URL → the
+ *   relationship Trust Task runs over the binding/didcomm 0.2 envelope on a
+ *   v2 connection, through the two mailboxes → both wallets hold a VRC.
  *
  * What it proves: the wallet's DIDComm v2 stack live on devices — OOB 2.0,
- * did:peer:2, ECDH-1PU envelopes, Coordinate Mediation 2.0 + Pickup 4.0 —
- * carrying the same Trust Task documents the v1 carriage carries
- * (tsp-reference/ref-16: byte-identical). Not an ecosystem-interop claim:
- * the mediator is Keyring's own mediator-server in v2 mode, not the VTI
- * mediator (ref-18 covers that leg in Node).
+ * did:peer:2, ECDH-1PU envelopes, one mailbox per phone at the mailbox
+ * mediator (wallet-to-wallet forwarding, live socket + pickup) — carrying the
+ * same Trust Task documents the v1 carriage carries (tsp-reference/ref-16:
+ * byte-identical). Not an ecosystem-interop claim: the Farm's VTI mediator is
+ * never asked by the phone (ref-18 covers that leg in Node).
  *
  * Both devices must be Android (logcat markers). Needs two AVDs and an APK
- * built against `yarn mediator --didcomm-v2` (MEDIATOR_V2_URL baked in).
+ * whose app/.env carries MAILBOX_MEDIATOR_DID (the store configuration; Test
+ * and OTA-gate builds write it blank and open no mailbox) and MEDIATOR_URL
+ * for the v1 fallback. Coordinate Mediation 2.0 and MEDIATOR_V2_URL are gone
+ * (#1166): `yarn mediator --didcomm-v2` is no longer a prerequisite.
  *
  * Usage:
  *   ANDROID_AVD2=<second-avd> node run-vrc-exchange-didcomm-v2.js
@@ -35,10 +38,11 @@ import {
   acceptRelationshipProposalOnEitherSide,
   assertDidCommV2CarriageMarkers,
   assertTrustTaskExchangeMarkers,
-  assertV2MediationMarker,
+  assertWalletMailboxOpen,
   assertVrcReceived,
   completeOnboarding,
   enableDidCommV2,
+  enableV2Mailbox,
   showRelationshipInvitation,
 } from "./lib/flows.js";
 import { androidCaps, ANDROID_AVD2 } from "./lib/config.js";
@@ -67,11 +71,13 @@ try {
 
   // Both sides: the inviter needs v2 to mint an OOB 2.0 invitation, the
   // invitee needs v2 to accept one (a v1-only agent rejects it outright).
+  // Both are on by default; this only taps a switch found off.
   await Promise.all([enableDidCommV2(a), enableDidCommV2(b)]);
+  await Promise.all([enableV2Mailbox(a), enableV2Mailbox(b)]);
 
-  // Mediation 2.0 must be granted before the invitation is minted, or the
+  // The mailbox must be open before the invitation is minted, or the
   // invitation routes unmediated and the mediated claim below is hollow.
-  await Promise.all([assertV2MediationMarker(a), assertV2MediationMarker(b)]);
+  await Promise.all([assertWalletMailboxOpen(a), assertWalletMailboxOpen(b)]);
 
   const invitationUrl = await showRelationshipInvitation(a);
   if (!/[?&]_oob=/.test(invitationUrl)) {
