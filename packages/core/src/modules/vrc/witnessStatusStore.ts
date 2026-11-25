@@ -37,6 +37,7 @@ export type VrcFlowErrorType =
   | 'biometric-failed' // Biometric authentication failed
   | 'stale-witness' // Witness connection expired
   | 'network-error' // General network error
+  | 'send-failed' // This phone could not send its document to the other phone (mailbox refused, connection down); retry re-sends it
   | 'event-not-started' // Request arrived before event start time
   | 'event-ended' // Request arrived after event end time
 
