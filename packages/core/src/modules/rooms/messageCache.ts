@@ -298,18 +298,17 @@ async function coveredBy(agent: CacheWallet, entry: JournalEntry): Promise<Recor
 }
 
 async function emptyRecords(agent: CacheWallet, records: RecordLike[]): Promise<number> {
+  const due = records.filter((record) => record.content?.emptied !== true)
+  if (due.length === 0) return 0
+  // Messages' previews of these rooms come down, and a read of one already out draws nothing, before the first copy is
+  // emptied (the review of #1011). A copy that does not say its room takes them all down.
+  const rooms = due.map((record) => record.content?.roomId)
+  dropRowPreviews(rooms.every(isText) ? rooms : undefined)
   let n = 0
-  try {
-    for (const record of records) {
-      if (record.content?.emptied === true) continue
-      // Messages' previews drawn from the copies come down before the first copy is emptied, whichever it is.
-      if (n === 0) dropRowPreviews()
-      record.content = { ...EMPTIED }
-      await agent.genericRecords.update(record)
-      n++
-    }
-  } finally {
-    if (n > 0) dropRowPreviews()
+  for (const record of due) {
+    record.content = { ...EMPTIED }
+    await agent.genericRecords.update(record)
+    n++
   }
   return n
 }
@@ -470,28 +469,6 @@ export async function readRoomPostsBeforeRoom(
   return readRoomPosts(agent, mine[0].personaDid, roomId, now)
 }
 
-/**
- * Each kept room's newest post, by room, for Messages' rows at launch (useRoomRows `withPreview`): read through
- * {@link readRoomPostsBeforeRoom}, so a copy is drawn only by the one identity this phone acts as in its community, and
- * under every check that read makes. Nothing when the cache is not allowed.
- */
-export async function readKeptNewestPosts(
-  agent: CacheWallet,
-  communities: ReadonlyArray<{ did: string; personaDid: string }>,
-  now = Date.now()
-): Promise<Map<string, { personaDid: string; post: CachedPost }>> {
-  const out = new Map<string, { personaDid: string; post: CachedPost }>()
-  if (!(await messageCacheAllowed())) return out
-  const records = await agent.genericRecords.findAllByQuery({ type: RECORD_TYPE })
-  const roomIds = new Set(records.map((record) => contentOf(record)?.roomId).filter(isText))
-  for (const roomId of roomIds) {
-    const copy = await readRoomPostsBeforeRoom(agent, roomId, communities, now)
-    const newest = copy?.posts[0]
-    if (copy && newest) out.set(roomId, { personaDid: copy.room.personaDid, post: newest })
-  }
-  return out
-}
-
 /** A kept post as Messages' row draws its newest post: its words inert again, the member's own said as theirs. */
 function previewOf(personaDid: string, post: CachedPost): RowPreview {
   return {
@@ -505,12 +482,24 @@ function previewOf(personaDid: string, post: CachedPost): RowPreview {
   }
 }
 
-/** What Messages reads its rows' previews with: the bound agent's kept copies, for the service built on it. */
-async function rowPreviews(service: RoomsService): Promise<ReadonlyMap<string, RowPreview>> {
+/**
+ * What Messages reads its rows' previews with (useRoomRows `withPreview`): for the service built on the bound agent, the
+ * communities it acts in read once, then each room's copy as its row comes due, through
+ * {@link readRoomPostsBeforeRoom}, so a copy is drawn only by the one identity this phone acts as in its community, and
+ * under every check that read makes. Nothing when the cache is not allowed.
+ */
+async function rowPreviews(
+  service: RoomsService
+): Promise<((roomId: string) => Promise<RowPreview | undefined>) | undefined> {
   const agent = bound
-  if (!agent || service.runsOn !== agent || !service.localCommunities) return new Map()
-  const newest = await readKeptNewestPosts(agent, await service.localCommunities())
-  return new Map([...newest].map(([roomId, { personaDid, post }]) => [roomId, previewOf(personaDid, post)]))
+  if (!agent || service.runsOn !== agent || !service.localCommunities) return undefined
+  const communities = await service.localCommunities()
+  return async (roomId) => {
+    if (bound !== agent) return undefined
+    const copy = await readRoomPostsBeforeRoom(agent, roomId, communities)
+    const newest = copy?.posts[0]
+    return copy && newest ? previewOf(copy.room.personaDid, newest) : undefined
+  }
 }
 
 function readInTurn(

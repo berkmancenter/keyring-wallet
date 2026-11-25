@@ -21,7 +21,15 @@ import {
 } from '../messageCache'
 import { chatMessageBody } from '../roomPosts'
 import type { Note, NoteList, NoteSummary, RoomsService, RoomSummary } from '../types'
-import { resetRoomRows, ROOMS_HIDDEN_KEY, ROOMS_SEEN_KEY, useRoomRows, useRoomRowsPoll } from '../useRoomRows'
+import {
+  readRowPreviewsWith,
+  resetRoomRows,
+  ROOMS_HIDDEN_KEY,
+  ROOMS_SEEN_KEY,
+  type RowPreview,
+  useRoomRows,
+  useRoomRowsPoll,
+} from '../useRoomRows'
 import { cacheWallet } from './fixtures/cacheWallet'
 
 jest.mock('../../trust-tasks/module/vtaAgent', () => ({
@@ -32,6 +40,7 @@ const ME = 'did:peer:2.me'
 const SAM = 'did:key:z6MkSaddle'
 const LAB = 'did:webvh:QmLab:lab.example'
 const ROOM = 'did:webvh:QmRoom:planning'
+const OTHER = 'did:webvh:QmRoom:garden'
 const summary: RoomSummary = {
   roomId: ROOM,
   name: toInertText('planning'),
@@ -59,20 +68,24 @@ const live: NoteSummary = {
   pinned: false,
 }
 
-/** A real wallet's kept copies, and a room whose listing waits until the test answers it. */
-function setup(communities = [{ did: LAB, personaDid: ME }]) {
+const other: RoomSummary = { ...summary, roomId: OTHER, name: toInertText('garden') }
+
+/** A real wallet's kept copies, and rooms whose listings wait until the test answers them. */
+function setup(communities = [{ did: LAB, personaDid: ME }], rooms = [summary]) {
   const wallet = cacheWallet()
-  let answer: (() => void) | undefined
+  const answers = new Map<string, (notes: NoteSummary[]) => void>()
   const service = {
     isSample: false,
     runsOn: wallet,
     localCommunities: async () => communities,
-    listMyRooms: jest.fn(async () => [summary]),
-    getRoom: jest.fn(async () => ({ ...summary, actingAs: { did: ME } })),
+    listMyRooms: jest.fn(async () => rooms),
+    getRoom: jest.fn(async (roomId: string) => ({ ...rooms.find((r) => r.roomId === roomId), actingAs: { did: ME } })),
     listNotes: jest.fn(
-      () =>
+      (roomId: string) =>
         new Promise<NoteList>((resolve) => {
-          answer = () => resolve({ notes: [live], complete: true, check: { verdict: 'consistent', detail: '' } })
+          answers.set(roomId, (notes) =>
+            resolve({ notes, complete: true, check: { verdict: 'consistent', detail: '' } })
+          )
         })
     ),
     readNote: jest.fn(
@@ -87,10 +100,11 @@ function setup(communities = [{ did: LAB, personaDid: ME }]) {
   return {
     wallet,
     service: service as unknown as RoomsService,
-    keep: (posts: CachedPost[]) => keepRoomPosts(wallet, { personaDid: ME, roomId: ROOM, communityDid: LAB }, posts),
+    keep: (posts: CachedPost[], roomId = ROOM) =>
+      keepRoomPosts(wallet, { personaDid: ME, roomId, communityDid: LAB }, posts),
     bind: () =>
       bindMessageCache(wallet, async () => communities.map((c) => ({ communityDid: c.did, personaDid: c.personaDid }))),
-    readRoom: () => act(async () => answer?.()),
+    readRoom: (roomId = ROOM, notes = [live]) => act(async () => answers.get(roomId)?.(notes)),
   }
 }
 
@@ -101,7 +115,22 @@ const mount = async (service: RoomsService) => {
   renderHook(() => useRoomRowsPoll(service, true))
   const list = renderHook(() => useRoomRows())
   await flush()
-  return () => list.result.current.rows?.[0]
+  return (roomId = ROOM) => list.result.current.rows?.find((row) => row.roomId === roomId)
+}
+
+const preview = (text: string): RowPreview => ({
+  post: { by: { did: SAM }, mine: false, text, kind: 'chat' },
+  at: new Date(),
+})
+/** A reader of the copies whose reads the test answers, one room at a time, as the real one is asked. */
+function heldReader() {
+  const asked: string[] = []
+  const answers = new Map<string, (p: RowPreview | undefined) => void>()
+  readRowPreviewsWith(async () => async (roomId) => {
+    asked.push(roomId)
+    return new Promise<RowPreview | undefined>((resolve) => answers.set(roomId, resolve))
+  })
+  return { asked, answer: (roomId: string, p: RowPreview | undefined) => act(async () => answers.get(roomId)?.(p)) }
 }
 
 let biometry = true
@@ -169,6 +198,66 @@ describe("a row's newest post from the saved copy", () => {
     })
     expect(row()?.lastPost).toBeUndefined()
     expect(row()?.reading).toBe(true)
+  })
+
+  test('an emptying while the copy is still being read draws nothing from it', async () => {
+    const s = setup()
+    await s.keep([kept('newest', 5)])
+    const held = heldReader()
+    const row = await mount(s.service)
+    expect(held.asked).toEqual([ROOM])
+    await act(async () => {
+      await emptyMessageCache(s.wallet, { room: ROOM }, 'removed')
+    })
+    await held.answer(ROOM, preview('the words read before the emptying'))
+    await flush()
+    expect(row()?.reading).toBe(true)
+    expect(row()?.lastPost).toBeUndefined()
+  })
+
+  test("control: another room's copy emptied meanwhile does not keep this one from being drawn", async () => {
+    const s = setup()
+    await s.keep([kept('newest', 5)], OTHER)
+    const held = heldReader()
+    const row = await mount(s.service)
+    await act(async () => {
+      await emptyMessageCache(s.wallet, { room: OTHER }, 'removed')
+    })
+    await held.answer(ROOM, preview('the words of this room'))
+    await flush()
+    expect(row()?.lastPost?.text).toBe('the words of this room')
+  })
+
+  test('each row is drawn as its own copy is read, one copy read at a time', async () => {
+    const s = setup(undefined, [summary, other])
+    const held = heldReader()
+    const rowOf = await mount(s.service)
+    const first = () => rowOf(ROOM)
+    const second = () => rowOf(OTHER)
+    expect(held.asked).toHaveLength(1)
+    const [readFirst] = held.asked
+    await held.answer(readFirst, preview('first in'))
+    await flush()
+    const drawnFirst = readFirst === ROOM ? first : second
+    const notYet = readFirst === ROOM ? second : first
+    expect(drawnFirst()?.lastPost?.text).toBe('first in')
+    expect(notYet()?.lastPost).toBeUndefined()
+    expect(held.asked).toHaveLength(2)
+    await held.answer(held.asked[1], preview('second in'))
+    await flush()
+    expect(notYet()?.lastPost?.text).toBe('second in')
+  })
+
+  test('a room that reads as empty takes its preview down', async () => {
+    const s = setup()
+    await s.keep([kept('newest', 5)])
+    await s.bind()
+    const row = await mount(s.service)
+    expect(row()?.lastPost?.text).toBe('the words of newest')
+    await s.readRoom(ROOM, [])
+    await flush()
+    expect(row()?.reading).toBeUndefined()
+    expect(row()?.lastPost).toBeUndefined()
   })
 
   test('control: without biometric unlock, nothing is drawn', async () => {

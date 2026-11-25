@@ -440,6 +440,7 @@ function showRows(service: RoomsService): void {
     })
     .map(withPreview)
   if (back) void keepHidden()
+  lookForPreviews(service)
 }
 
 /** A row's newest post as the wallet's kept copy of its room holds it (rooms/messageCache), and when it was written. */
@@ -447,19 +448,30 @@ export interface RowPreview {
   post: RoomRowPost
   at: Date
 }
-/** Reads the kept copies' newest posts, by room: given by rooms/messageCache when it is bound (no import cycle). */
-export type RowPreviewReader = (service: RoomsService) => Promise<ReadonlyMap<string, RowPreview>>
+/**
+ * Reads a kept copy's newest post for a room, given by rooms/messageCache when it is bound (no import cycle): what
+ * `service`'s agent holds of the member's communities is read once, then each room as its row comes due.
+ */
+export type RowPreviewReader = (
+  service: RoomsService
+) => Promise<((roomId: string) => Promise<RowPreview | undefined>) | undefined>
 let previewReader: RowPreviewReader | undefined
 let previews: ReadonlyMap<string, RowPreview> = new Map()
-/** Whether this run (and service) looked for the previews: once, at its first read of the rooms. */
-let previewsLooked = false
+/** The rooms whose copies this run (and service) looked at: each once, when its row first reads. */
+let previewsAsked = new Set<string>()
+/** Rooms whose copies were emptied this run: a read of one already out draws nothing (the review of #1011). */
+let previewsDropped = new Set<string>()
+/** Moves on when every preview comes down and when the service changes: a read already out draws nothing after it. */
+let previewGen = 0
+/** One room's copy read at a time, so the room screen's own read of its copy waits behind one of these at most. */
+let previewChain: Promise<void> = Promise.resolve()
 
 /**
  * A row not read yet this run shows its room's newest post from the wallet's kept copy, at once, instead of an empty
  * line until the room is read (Alberto, 11-25: "Yes, show it at once"). It reads message words at launch, which the
  * rows themselves never keep (rowsAtStart keeps names and times only, 11-17): only what the copy holds, under every
  * check the copy's own read makes (its switch, biometric unlock, the journal, the room's end, the copy's age, one
- * identity). The room's read replaces it, and any emptying of a copy takes every preview down
+ * identity). The room's read replaces it, and an emptying of a room's copy takes its preview down
  * ({@link dropRowPreviews}).
  */
 function withPreview(row: RoomRow): RoomRow {
@@ -477,32 +489,86 @@ export function readRowPreviewsWith(reader: RowPreviewReader | undefined): void 
   if (reader && feed.service) lookForPreviews(feed.service)
 }
 
+const stillReading = (roomId: string): boolean =>
+  (feed.rows ?? []).some((row) => row.roomId === roomId && row.reading && !row.notJoined)
+
+/**
+ * Looks at the copies of the rows reading now and not looked at yet, the most recently active first (Messages' own
+ * order, so the rows on screen fill first), and draws each row as soon as its own copy is read (the review of #1011): no row
+ * waits for another's. A row read meanwhile is passed by.
+ */
 function lookForPreviews(service: RoomsService): void {
-  if (previewsLooked || !previewReader) return
-  previewsLooked = true
-  previewReader(service).then(
-    (found) => {
-      if (feed.service !== service || found.size === 0) return
-      previews = found
-      showRows(service)
-      publish()
-      const drawn = (feed.rows ?? []).filter((row) => row.reading && previews.has(row.roomId)).length
-      log?.(
-        `[Rooms:rows] ${found.size} rooms' newest posts read from the saved copies, ${drawn} rows drawn, ${Date.now() - RUN_STARTED_AT} ms after launch`
-      )
-    },
-    (e: unknown) => log?.(`[Rooms:rows] the saved copies' newest posts were not read: ${failureCategory(e)}`)
-  )
+  const reader = previewReader
+  if (!reader || feed.service !== service) return
+  const due = (feed.rows ?? [])
+    .filter((row) => row.reading && !row.lastPost && !row.notJoined && !previewsAsked.has(row.roomId))
+    .sort((a, b) => (b.lastActivityAt?.getTime() ?? 0) - (a.lastActivityAt?.getTime() ?? 0))
+    .map((row) => row.roomId)
+  if (due.length === 0) return
+  for (const roomId of due) previewsAsked.add(roomId)
+  const gen = previewGen
+  const current = () => gen === previewGen && feed.service === service
+  previewChain = previewChain.then(async () => {
+    let found = 0
+    let drawn = 0
+    let first: number | undefined
+    try {
+      const read = await reader(service)
+      for (const roomId of due) {
+        if (!read || !current()) return
+        if (!stillReading(roomId)) continue
+        const preview = await read(roomId)
+        if (!preview || !current() || previewsDropped.has(roomId)) continue
+        found++
+        previews = new Map(previews).set(roomId, preview)
+        if (!stillReading(roomId)) continue
+        showRows(service)
+        publish()
+        drawn++
+        first ??= Date.now() - RUN_STARTED_AT
+      }
+    } catch (e) {
+      log?.(`[Rooms:rows] the saved copies' newest posts were not read: ${failureCategory(e)}`)
+    } finally {
+      if (found > 0)
+        log?.(
+          `[Rooms:rows] ${found} of ${due.length} rooms' newest posts read from the saved copies, ${drawn} rows drawn, the first ${first ?? '-'} ms and the last ${Date.now() - RUN_STARTED_AT} ms after launch`
+        )
+    }
+  })
 }
 
-/** A kept copy was emptied: every preview drawn from the copies comes down at once (rooms/messageCache). */
-export function dropRowPreviews(): void {
-  if (previews.size === 0) return
-  previews = new Map()
+/**
+ * A kept copy is being emptied (rooms/messageCache): those rooms' previews come down at once, and a read of one already
+ * out draws nothing. Without the rooms (a copy that does not say its room), every preview comes down, and nothing more
+ * is drawn from the copies this run.
+ */
+export function dropRowPreviews(roomIds?: Iterable<string>): void {
+  let next: Map<string, RowPreview>
+  if (roomIds === undefined) {
+    previewGen++
+    next = new Map()
+  } else {
+    next = new Map(previews)
+    for (const roomId of roomIds) {
+      previewsDropped.add(roomId)
+      next.delete(roomId)
+    }
+  }
+  if (next.size === previews.size) return
+  previews = next
   const service = feed.service
   if (!service) return
   showRows(service)
   publish()
+}
+
+/** Every preview, its rooms looked at and its reads out, gone: at a change of service and for tests. */
+function resetPreviews(): void {
+  previews = new Map()
+  previewsAsked = new Set()
+  previewsDropped = new Set()
+  previewGen++
 }
 
 const shown = (room: RoomSummary): room is RoomSummary & { communityDid: string } =>
@@ -921,9 +987,9 @@ export function resetRoomRows(): void {
   log = undefined
   firstRowsSaid = false
   rowsAtStartLooked = false
-  previews = new Map()
-  previewsLooked = false
+  resetPreviews()
   previewReader = undefined
+  previewChain = Promise.resolve()
   if (keepTimer) clearTimeout(keepTimer)
   keepTimer = undefined
   tracks = new WeakMap()
@@ -957,8 +1023,7 @@ export function useRoomRowsPoll(
     if (feed.service === next) return
     feed.service = next
     // Another agent's rooms: none of the last one's previews, and its own looked for at its first read.
-    previews = new Map()
-    previewsLooked = false
+    resetPreviews()
     stopRetrying()
     feed.all = undefined
     feed.rows = undefined
