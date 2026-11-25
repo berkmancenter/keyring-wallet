@@ -313,6 +313,26 @@ export function postKey(idempotencyKey: string): string {
  */
 const SEALED_WRITE_ATTEMPTS = 4
 
+/**
+ * How long the agent's key list, as last read, answers a write's question "which epoch is this room at?"
+ * (recordFeaturesIn) without asking again. An epoch moves only when the room's membership does. A write that fails
+ * forgets the list (writeSealed), so the next asks afresh. Each list asked for any reason refreshes it. A key list on
+ * every write was one of five trips in a row for each message in a room that takes records (IN-776).
+ */
+export const HELD_FRESH_MS = 5 * 60_000
+
+/**
+ * How long a room's newest version, as a listing of the service found it, stands for the room's head when a sealed
+ * write is sent, in place of a listing of the whole room (writeSealed). Only while the room is watched, so a change
+ * since would have been signalled; not always read: a signal that comes while a failed poll still owes its skipped
+ * ticks is not read early (useRoomPosts), and a room left and come back to may have moved between its watches. A
+ * wrong guess is a version race: the host stores the record at its next
+ * version, sealed for another, so it does not open until the write seals and puts it again at the version the host
+ * gave (SEALED_WRITE_ATTEMPTS); if the app stops between the two, that record stays unopenable. Two minutes is the
+ * watched room's own poll.
+ */
+export const HEAD_FRESH_MS = 120_000
+
 /** How many times a file's chunk is asked for when no answer comes. A long file meets a dropped answer sooner or later. */
 const FILE_CHUNK_ATTEMPTS = 3
 
@@ -472,6 +492,10 @@ export class AgentRoomsService implements RoomsService {
   /** How many asks of what the agent serves were started: only the latest one's answer is kept. */
   private servedAsks = 0
   private heldInFlight?: Promise<HeldRoom[]>
+  /** The last key list read, and when: a write's epoch question is answered from it while fresh (HELD_FRESH_MS). */
+  private heldLast?: { rooms: HeldRoom[]; at: number }
+  /** Each room's newest version as a listing found it, and when: a sealed write's head while fresh (HEAD_FRESH_MS). */
+  private readonly heads = new Map<string, { version: number; at: number }>()
   /**
    * Which of this phone's identities the agent holds each room's keys as, from its last key list (`rooms/keys/list`
    * 0.2 names the member). A room held as two of them is one the agent cannot pick a member for by itself.
@@ -857,6 +881,7 @@ export class AgentRoomsService implements RoomsService {
     const by = new Map<string, Set<string>>()
     for (const h of held) if (h.member) by.set(h.roomId, (by.get(h.roomId) ?? new Set()).add(h.member))
     this.heldBy = by
+    this.heldLast = { rooms: held, at: this.now() }
     return held
   }
 
@@ -1083,7 +1108,18 @@ export class AgentRoomsService implements RoomsService {
         this.unservedListings.set(roomId, { type, at: this.now(), refusal: e })
       throw e
     }
-    return this.noteListOf(roomId, parseBrowse(answer))
+    const parsed = parseBrowse(answer)
+    // From the start, or from at or below the head held: a newer record would be here, so this is the room's head now.
+    const held = this.heads.get(roomId)
+    if (parsed.complete && (sinceVersion === undefined || (held && sinceVersion <= held.version)))
+      this.noteHead(roomId, parsed.records)
+    return this.noteListOf(roomId, parsed)
+  }
+
+  /** The room's newest version as a listing that would show any newer record found it, now. */
+  private noteHead(roomId: string, records: readonly { version: number }[]): void {
+    const newest = records.reduce((top, r) => Math.max(top, r.version), this.heads.get(roomId)?.version ?? 0)
+    this.heads.set(roomId, { version: newest, at: this.now() })
   }
 
   /** A browse answer as the rooms service lists it, each record's version noted as listed. */
@@ -1141,7 +1177,10 @@ export class AgentRoomsService implements RoomsService {
       this.unservedWindows.set(memo, { type, at: this.now() })
       return cut()
     }
-    const listing = this.noteListOf(roomId, parseBrowse(answer))
+    const parsed = parseBrowse(answer)
+    // From the top, newest first: its first rows are the room's newest records, so this is its head now.
+    if (beforeVersion === undefined) this.noteHead(roomId, parsed.records)
+    const listing = this.noteListOf(roomId, parsed)
     // Newest version first, whatever order the rows came in; and never more than asked, nor at or above the bound.
     const window = windowOf(listing, size, beforeVersion)
     return { ...window, complete: true, older: window.older || !listing.complete }
@@ -1180,6 +1219,14 @@ export class AgentRoomsService implements RoomsService {
       if (reason) throw new RoomsRefused('readNote', reason, reason === 'notDelivered', message(e), e)
       throw e
     }
+  }
+
+  /** One line per post sent, or that failed: how long from Send, and how it went. Never what it said or which post. */
+  public notePostSent(roomId: string, ms: number, how: { failed: boolean; asRecord: boolean; file: boolean }): void {
+    const kind = how.file ? 'a file' : how.asRecord ? 'a record' : 'a note'
+    this.backend.warn(
+      `rooms: ${logRef(roomId)} a post as ${kind} ${how.failed ? 'failed' : 'was written'} ${ms} ms after Send`
+    )
   }
 
   /** One line per page that left records unopened: the reasons and how many, never which records. */
@@ -1522,6 +1569,8 @@ export class AgentRoomsService implements RoomsService {
 
   public dropOpenedRecords(): void {
     this.watches.forget()
+    this.heads.clear()
+    this.heldLast = undefined
     this.opened.clear()
     this.listed.clear()
     // A read asked before the lock is not joined after it, nor kept when it answers.
@@ -1784,6 +1833,7 @@ export class AgentRoomsService implements RoomsService {
       const heldAs = this.heldBy.get(roomId)
       if (sealed && heldAs) heldAs.add(community.personaDid)
       this.heldInFlight = undefined // nor joins a key list asked before the room was held
+      this.heldLast = undefined // nor answers a write's epoch from one
       this.roomsChanged++ // nor does a listing asked before the accept replace the room joined, when it answers
       this.roomsInFlight = undefined
       this.backend.warn(`rooms: ${logRef(roomId)} accepted in ${this.now() - started} ms (${steps.join(', ')})`)
@@ -2236,7 +2286,9 @@ export class AgentRoomsService implements RoomsService {
     if (!served.includes(ROOMS_TASK.keysProfileRead))
       return said('not asked (the agent reads no profile)', { listed: [], canSeal, unresolved: false })
     const k = `${room.roomId}\n${host}\n${community.personaDid}`
-    const epoch = await this.heldRooms().then(
+    // A key list read in the last few minutes answers this; a write does not ask the agent again for it (HELD_FRESH_MS).
+    const recent = this.heldLast && this.now() - this.heldLast.at < HELD_FRESH_MS ? this.heldLast.rooms : undefined
+    const epoch = await (recent ? Promise.resolve(recent) : this.heldRooms()).then(
       (held) => held.find((h) => h.roomId === room.roomId && (!h.member || h.member === community.personaDid))?.epoch,
       () => undefined
     )
@@ -2303,7 +2355,22 @@ export class AgentRoomsService implements RoomsService {
    * Writes a message, a reply or a reaction to an attributed room, by the writer's rule (`recordWrites.ts`). Off until
    * `RoomsBackend.recordSending` says so: the real backend reads the release's switch (`recordSendingSwitch`) on every send.
    */
+  /**
+   * A record write, and on any failure what it may have taken on trust is forgotten, as for a sealed write: a refusal
+   * decided here from the room's record members (`requirePermitted`, a reply's or an edit's members) can come from a
+   * key list held across an epoch move, so the next write asks one afresh (review of #1029).
+   */
   public async sendRecord(roomId: string, write: RecordWrite): Promise<{ key: string; version: number }> {
+    try {
+      return await this.sendRecordOnce(roomId, write)
+    } catch (e) {
+      this.heldLast = undefined
+      this.heads.delete(roomId)
+      throw e
+    }
+  }
+
+  private async sendRecordOnce(roomId: string, write: RecordWrite): Promise<{ key: string; version: number }> {
     if (!this.backend.recordSending) throw new RecordSendingOff()
     // A message's words are held to a post's own rules: an empty one would read as withdrawn, a long one as no post did.
     if (write.type === 'message' || write.type === 'edit') {
@@ -2378,7 +2445,24 @@ export class AgentRoomsService implements RoomsService {
    * `ownKey`: the key is this post's own, so a record already there at the first try is this post, sent again
    * after its answer was lost.
    */
+  /**
+   * A sealed write, and on any failure the two things it may have taken on trust are forgotten: the key list's epoch
+   * (HELD_FRESH_MS) and the room's head (HEAD_FRESH_MS). The next write asks both afresh, so a stale one costs one
+   * failed write, never every write until it ages out (review of #1029).
+   */
   private async writeSealed(
+    ...args: Parameters<AgentRoomsService['writeSealedOnce']>
+  ): Promise<{ key: string; version: number }> {
+    try {
+      return await this.writeSealedOnce(...args)
+    } catch (e) {
+      this.heldLast = undefined
+      this.heads.delete(args[0].roomId)
+      throw e
+    }
+  }
+
+  private async writeSealedOnce(
     room: KnownRoom,
     community: RoomsCommunity,
     host: string,
@@ -2388,7 +2472,12 @@ export class AgentRoomsService implements RoomsService {
     ownKey: boolean,
     options: { blobs?: string[] } = {}
   ): Promise<{ key: string; version: number }> {
-    let intended = (await this.headVersion(room)) + 1
+    // The room's head as a listing found it, while the room is watched and that listing is recent: a change since would
+    // have been signalled and read. Else the whole room is listed for it, as before. A wrong guess is a race, below.
+    const head = this.heads.get(room.roomId)
+    const known =
+      head && this.now() - head.at < HEAD_FRESH_MS && this.watches.watched(room.roomId) ? head.version : undefined
+    let intended = (known ?? (await this.headVersion(room))) + 1
     let expected = expectedVersion
     let landed = 0
     for (let attempt = 0; attempt < SEALED_WRITE_ATTEMPTS; attempt++) {
@@ -2430,7 +2519,10 @@ export class AgentRoomsService implements RoomsService {
       }
       const put = parsePut(answer)
       if (!put || put.key !== key) throw new Error(`the host answered the write of ${key} with something else`)
-      if (put.version === intended) return put
+      if (put.version === intended) {
+        this.noteHead(room.roomId, [put])
+        return put
+      }
       landed = put.version
       expected = landed
       intended = landed + 1
@@ -2533,6 +2625,7 @@ export class AgentRoomsService implements RoomsService {
     const listing = parseBrowse(
       await this.agentStep('write', 'list the room', this.browseType(), { roomId: room.roomId, host: room.host })
     )
+    if (listing.complete) this.noteHead(room.roomId, listing.records)
     return listing.records.reduce((head, r) => Math.max(head, r.version), 0)
   }
 
