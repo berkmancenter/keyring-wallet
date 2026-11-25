@@ -49,6 +49,9 @@ import RemoteVrcNotificationsAsk, {
   useRemoteVrcNotificationsGate,
 } from '../../modules/vrc/components/RemoteVrcNotificationsAsk'
 
+/** A code shown this long with no connection record: the keep-open line gives way to "ask for a new code". */
+const SCAN_NOT_ARRIVED_MS = 3 * 60 * 1000
+
 type ConnectProps = StackScreenProps<ConnectStackParams>
 interface Props extends ConnectProps {
   showTabs?: boolean
@@ -81,6 +84,9 @@ const QRScanner: React.FC<Props> = ({
   const [torchActive, setTorchActive] = useState(false)
   const [showInfoBox, setShowInfoBox] = useState(false)
   const [showErrorDetailsModal, setShowErrorDetailsModal] = useState(false)
+  // The code has been up SCAN_NOT_ARRIVED_MS with no connection record: a scan whose first message never arrived
+  // looks exactly like no scan, so the keep-open line gives way to "ask for a new code" (see the QR view).
+  const [scanNotArrived, setScanNotArrived] = useState(false)
   const [showingQRCodeView, _setShowingQRCodeView] = useState(defaultToConnect && !showTabs)
   const [showProfilePicker, setShowProfilePicker] = useState(false)
   const { profiles, activeProfileId, setActive } = useRCardCredential()
@@ -357,6 +363,14 @@ const QRScanner: React.FC<Props> = ({
   }, [showTabs, record, navigation, recordId])
 
   useEffect(() => {
+    // Counted from each code shown; a connection record (any state: the other phone reached this one) ends it.
+    setScanNotArrived(false)
+    if (!invitation || record) return
+    const timer = setTimeout(() => setScanNotArrived(true), SCAN_NOT_ARRIVED_MS)
+    return () => clearTimeout(timer)
+  }, [invitation, record])
+
+  useEffect(() => {
     if (!defaultToConnect || showTabs) return
 
     const connected =
@@ -595,9 +609,12 @@ const QRScanner: React.FC<Props> = ({
                 <ThemedText style={styles.shareLinkNote} testID={testIdWithKey('MyQRShareLinkNote')}>
                   {t('Scan.ShareLinkNote')}
                 </ThemedText>
-                {/* A remote exchange runs only while both apps are open: no push reaches a phone without an agent (IN-448). */}
+                {/* A remote exchange runs only while both apps are open: no push reaches a phone without an agent (IN-448).
+                    Shown long enough with nothing arriving, the line says what else could be wrong: the other phone
+                    scanned, its first message never reached this one (its send failed), and only a new code helps —
+                    this screen cannot know that, since the failed send is the only signal there would have been. */}
                 <ThemedText style={styles.shareLinkNote} testID={testIdWithKey('MyQRShareLinkKeepOpen')}>
-                  {t('LateStep.KeepOpenShare')}
+                  {t(scanNotArrived ? 'LateStep.NoScanArrived' : 'LateStep.KeepOpenShare')}
                 </ThemedText>
                 {shareLinkFailed ? (
                   <ThemedText

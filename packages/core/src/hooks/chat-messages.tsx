@@ -543,7 +543,13 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           setProgressComplete(false)
           setInProgress(true)
           setTimedOut(true)
-          setStatusKey('Chat.Flow.DidNotComplete')
+          // The first contact failing (this phone's scan never reached the other, which still shows its code) asks
+          // for a different next step than a later failure: a new code and a new scan, not "try connecting again".
+          setStatusKey(
+            vrcFlowStore.flowEndedFromStatus(connectionId) === 'connecting'
+              ? 'Chat.Flow.DidNotReach'
+              : 'Chat.Flow.DidNotComplete'
+          )
           progressStartedRef.current = false
           maxFractionRef.current = 0
           flowStartedAtRef.current = null

@@ -148,6 +148,8 @@ class VrcFlowStore extends EventEmitter {
   private proposalPrompts: Map<string, RelationshipProposalPrompt> = new Map()
   /** How the last flow on a connection ended, when it did not complete; forgotten when a new one starts. */
   private flowEnds: Map<string, VrcFlowEnd> = new Map()
+  /** The status a flow was in when it was stood down without completing: which step failed (the words differ). */
+  private flowEndedFrom: Map<string, VrcFlowStatus> = new Map()
   private dialects: Map<string, VrcFlowDialect> = new Map()
   // The inbound R-Card (the peer's contact card, what names them locally).
   // Fired/tracked separately from the VRC completion flags above: the R-Card
@@ -343,8 +345,15 @@ class VrcFlowStore extends EventEmitter {
    * reset whose overlay has already cleared itself.
    */
   clearFlow(connectionId: string, ended?: VrcFlowEnd): void {
-    if (ended) this.flowEnds.set(connectionId, ended)
-    else this.flowEnds.delete(connectionId)
+    if (ended) {
+      this.flowEnds.set(connectionId, ended)
+      const from = this.flowStatus.get(connectionId)
+      if (from) this.flowEndedFrom.set(connectionId, from)
+      else this.flowEndedFrom.delete(connectionId)
+    } else {
+      this.flowEnds.delete(connectionId)
+      this.flowEndedFrom.delete(connectionId)
+    }
     this.flowStatus.delete(connectionId)
     this.statusSince.delete(connectionId)
     this.isWitnessed.delete(connectionId)
@@ -363,6 +372,14 @@ class VrcFlowStore extends EventEmitter {
   /** How the last flow on this connection ended, when it was stood down without completing. */
   flowEndedWith(connectionId: string): VrcFlowEnd | undefined {
     return this.flowEnds.get(connectionId)
+  }
+
+  /**
+   * The step the last flow was at when it ended without completing (kept beside {@link flowEndedWith}): `connecting`
+   * is the first contact, this phone's scan never reaching the other, whose words differ from a later failure.
+   */
+  flowEndedFromStatus(connectionId: string): VrcFlowStatus | undefined {
+    return this.flowEndedFrom.get(connectionId)
   }
 }
 

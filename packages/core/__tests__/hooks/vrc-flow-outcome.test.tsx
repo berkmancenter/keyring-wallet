@@ -71,6 +71,18 @@ describe('a flow that ends without completing', () => {
     expect(result.current.progressComplete).toBe(false)
     // The did-not-complete state is the timeout's, shown at once; Chat.test.tsx pins its wording on screen.
     expect(result.current.timedOut).toBe(true)
+    expect(result.current.statusText).toBe('Chat.Flow.DidNotComplete')
+  })
+
+  // The first contact failing is this phone's scan never reaching the other, which still shows its code: the next
+  // step is a new code and a new scan, not "try connecting again" (the mailbox tester builds, 2026-11-21).
+  it('the first contact failed (connecting): the overlay says the scan never reached the other phone', () => {
+    const { result, confirmedSeen } = overlay()
+    act(() => vrcFlowStore.setStatus(CONN, 'connecting'))
+    act(() => vrcFlowStore.clearFlow(CONN, 'error'))
+    expect(confirmedSeen).not.toContain(true)
+    expect(result.current.timedOut).toBe(true)
+    expect(result.current.statusText).toBe('Chat.Flow.DidNotReach')
   })
 
   // fd's #469: a waiting dialog the person dismissed keeps the flow and its bar; a decline then read as confirmed.
@@ -117,5 +129,19 @@ describe('the store remembers how a flow ended, until the next starts', () => {
     vrcFlowStore.clearFlow(CONN)
     expect(vrcFlowStore.flowEndedWith(CONN)).toBeUndefined()
     vrcFlowStore.off('flowUpdate', onUpdate)
+  })
+
+  it('and from which step: the first contact (connecting) is told apart from a later failure', () => {
+    vrcFlowStore.setStatus(CONN, 'connecting')
+    vrcFlowStore.clearFlow(CONN, 'error')
+    expect(vrcFlowStore.flowEndedFromStatus(CONN)).toBe('connecting')
+    vrcFlowStore.setStatus(CONN, 'preparing-offer')
+    vrcFlowStore.clearFlow(CONN, 'error')
+    expect(vrcFlowStore.flowEndedFromStatus(CONN)).toBe('preparing-offer')
+    // CONTROL: a plain clear, or a flow that completed, remembers no step
+    vrcFlowStore.clearFlow(CONN)
+    expect(vrcFlowStore.flowEndedFromStatus(CONN)).toBeUndefined()
+    vrcFlowStore.clearFlow(CONN, 'error')
+    expect(vrcFlowStore.flowEndedFromStatus(CONN)).toBeUndefined()
   })
 })
