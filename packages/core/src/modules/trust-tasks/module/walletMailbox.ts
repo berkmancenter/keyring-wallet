@@ -55,10 +55,14 @@ export const MEDIATOR_WAKE_REQUEST = 'https://trusttasks.org/spec/messaging/wake
  * (affinidi-messaging-sdk `ERROR_FORMAT_MEMBER` = `ERROR_FORMAT_DOCUMENT`, which upstream's own clients send from
  * 0.46.2): refuse this request with a `trust-task-error` document threaded to the envelope by `thid`, as an answer
  * is. From v0.54.0 the mediator refuses a request that does not ask with a DIDComm problem-report instead, threaded
- * by `pthid`; v0.52 and v0.53 answer every refusal with the document (trust_task_error.rs). Upstream withdraws the
- * ask in its first release after 2027-02-07 and sends the document to all; carrying it then changes nothing.
+ * by `pthid`; v0.52 and v0.53 (the mailbox's deployed version, deploy/keyring-messaging/mailbox) answer every refusal
+ * with the document and read the member as harmless (trust_task_error.rs at each tag). Upstream withdraws the ask in
+ * its first release after 2027-02-07 and sends the document to all; carrying it then changes nothing. The type is
+ * the literal, so no later key here can shadow one of the document's own.
  */
-export const MEDIATOR_ASK_ERROR_FORMAT: Readonly<Record<string, string>> = { 'x-errorFormat': 'trust-task-error' }
+export const MEDIATOR_ASK_ERROR_FORMAT: Readonly<{ 'x-errorFormat': 'trust-task-error' }> = {
+  'x-errorFormat': 'trust-task-error',
+}
 
 /**
  * The key the mediator holds an account under: the sha256 of its DID, in hex (upstream `did_identity::did_hash`).

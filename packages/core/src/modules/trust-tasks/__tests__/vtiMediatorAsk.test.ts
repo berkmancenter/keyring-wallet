@@ -97,6 +97,22 @@ describe('asking the mediator', () => {
     await session.stop()
   })
 
+  test('a frame carrying both ids settles the ask either names: thid naming something else, pthid naming the ask', async () => {
+    const { session, sent, frame } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({
+      id: 'urn:uuid:pr-3',
+      type: PROBLEM_REPORT,
+      from: mediator.did,
+      thid: 'urn:uuid:a-thread-of-its-own',
+      pthid: sent[0].id,
+      body: { code: 'e.p.malformedRequest', comment: 'body is not a Trust Task document' },
+    })
+    await expect(asked).rejects.toThrow(/refused: e\.p\.malformedRequest/)
+    expect(session['asks'].size).toBe(0)
+    await session.stop()
+  })
+
   test('CONTROL: the mediator’s problem-report about another envelope is not the answer; the ask keeps waiting', async () => {
     const { session, sent, frame, onMessage } = sessionAsking()
     const asked = session.ask(document)
