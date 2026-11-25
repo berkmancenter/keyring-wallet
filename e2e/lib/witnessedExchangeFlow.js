@@ -42,7 +42,8 @@ import {
   showRelationshipInvitation,
 } from "./flows.js";
 import { startWitness, witnessLegFromEnv } from "./witness.js";
-import { printSuccess, printFailure } from "./banner.js";
+import { printSuccess, printFailure, printSkipped } from "./banner.js";
+import { expectV2Invitation, RunSkipped } from "./v2Mint.js";
 
 const WITNESS_NAME = process.env.WITNESS_NAME || "e2e-witness";
 const IDENTITY_A = { firstName: "Alice", lastName: "Anderson" };
@@ -428,9 +429,8 @@ export async function runWitnessedExchange({
     console.log("[e2e] both wallets connected to the witness");
 
     const invitationUrl = await showRelationshipInvitation(sessionA);
-    if (useDidCommV2 && !/[?&]_oob=/.test(invitationUrl)) {
-      throw new Error(`expected an out-of-band/2.0 invitation (_oob=), got: ${invitationUrl.slice(0, 80)}…`);
-    }
+    // On a v2 run a 1.x invitation is 282's kill of v2 minting (#1018): SKIPPED with that reason (lib/v2Mint.js).
+    if (useDidCommV2) expectV2Invitation(invitationUrl);
     await acceptInvitationViaPaste(sessionB, invitationUrl);
 
     // v4 consent: one bottom-sheet on the non-proposer wallet, no
@@ -510,22 +510,28 @@ export async function runWitnessedExchange({
 
     dumpLogs([udidA, udidB].filter(Boolean));
   } catch (err) {
-    printFailure(name, err);
-    for (const d of [sessionA, sessionB].filter(Boolean)) {
-      try {
-        await screenshot(d, "failure");
-        await dumpSource(d, "failure");
-      } catch {
-        /* session may be dead */
+    if (err instanceof RunSkipped) {
+      // Not run on this build, for the reason the banner says: no screenshots or logs, exit 0 beside a SKIPPED banner.
+      printSkipped(name, err.message);
+      process.exitCode = 0;
+    } else {
+      printFailure(name, err);
+      for (const d of [sessionA, sessionB].filter(Boolean)) {
+        try {
+          await screenshot(d, "failure");
+          await dumpSource(d, "failure");
+        } catch {
+          /* session may be dead */
+        }
       }
+      try {
+        const { a: udidA, b: udidB } = detectDevices();
+        dumpLogs([udidA, udidB].filter(Boolean));
+      } catch {
+        /* best-effort */
+      }
+      process.exitCode = 1;
     }
-    try {
-      const { a: udidA, b: udidB } = detectDevices();
-      dumpLogs([udidA, udidB].filter(Boolean));
-    } catch {
-      /* best-effort */
-    }
-    process.exitCode = 1;
   } finally {
     stopIosSyslogCapture();
     for (const d of [sessionA, sessionB].filter(Boolean)) stopIosLogCapture(d);
