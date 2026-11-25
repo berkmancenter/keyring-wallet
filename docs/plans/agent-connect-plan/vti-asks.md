@@ -32,7 +32,7 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-25 | VTI-Q38 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
-Not registered, with the reason: AC-12 and AC-13 (starter-image decisions, for openvti-starter), AC-14 (a question for the DTG working group, not for VTI), AC-15 (a cross-reference nit), AC-17 (a TypeScript library gap), AC-18 (a note on coexistence), AC-19 (a comparison of two sign-in forms), AC-20 (Anthropic, not VTI), AC-36 (a proposal to the Trust Tasks working group, not VTI), AC-37 and AC-38 (OpenVTC's `vta-agent-memory`, not VTI code; plan D42).
+Not registered, with the reason: AC-12 and AC-13 (starter-image decisions, for openvti-starter), AC-14 (a question for the DTG working group, not for VTI), AC-15 (a cross-reference nit), AC-17 (a TypeScript library gap), AC-18 (a note on coexistence), AC-19 (a comparison of two sign-in forms), AC-20 (Anthropic, not VTI), AC-36 (a proposal to the Trust Tasks working group, not VTI), AC-37 and AC-38 (OpenVTC's `vta-agent-memory`, not VTI code; plan D45).
 
 Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale working tree), `external/dtgwg-cred-spec` `94af2d8` and the starter mediator `mediator-buildathon:e6e2c636` (0.48.0, DIDComm v2, built with `tsp,secrets-aws`, measured 2026-11-20 on the lab, not on the VTA Farm).
 
@@ -182,7 +182,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `OpenVTC/vta-agent-memory` `main` at `c9b80d26` (read through `gh api`, no local clone); `vta-mcp/README.md`.
 - **Extension:** none needed for P0 (the plugin is the channel server); noted so the two plugins can coexist.
 - **Severity:** none.
-- **Status (2026-11-25):** superseded by plan D42: the plugin is `vta-agent-memory` itself, extended, so the channel is added to it rather than run beside it (AC-37).
+- **Status (2026-11-25):** superseded by plan D45: the plugin is `vta-agent-memory` itself, extended, so the channel is added to it rather than run beside it (AC-37).
 
 ### AC-19 `vtc-mcp` approves by comparing a number, the browser flow by typing one
 
@@ -220,7 +220,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Re-read at the pin `f7b78e29d` on 2026-11-25:** the entry's `stepUp` fields are stored by the ACL operations and gate nothing at runtime; step-up is only ever self-approval (`initiate_self_step_up`, `trust_tasks/policy_gate.rs:250`; the disclosure step-up, `trust_tasks/persona.rs:3110`); `maybe_push_step_up` returns early when the recipient is the caller (`trust_tasks/step_up.rs:1127`); and `step_up.rs:1276-1282` says delegated step-up was removed and "Someone-else-approves is the consent flow's job (`requireConsent` + an approver set)". So the question is now the consent flow's.
 - **Evidence:** the files above; `vta-service/src/operations/acl.rs:28-31,1112-1116`; `trust_tasks/policy_gate.rs:1-16` (policy rules, enforced only when `config.policy.enforcement` is on). Read, not run. Unmeasured: plan §2.3 item 12, step 0.1(n).
 - **Extension:** a documented way for an owner (not only the operator) to put an `application` entry's memory and room writes under `requireConsent` with the owner's wallet in the approver set, with the consent request pushed to that wallet in a documented format. Documenting that the entry's `stepUp` fields are inert (or removing them) would avoid the misreading this plan made on 2026-11-25.
-- **Severity:** P1 works around (the plugin's hook is the primary control; the consent flow is used only once measured, plan D43); P2 none.
+- **Severity:** P1 works around (the plugin's hook is the primary control; the consent flow is used only once measured, plan D46); P2 none.
 
 ## Not for upstream: local items to resolve elsewhere
 
@@ -299,7 +299,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 
 ## OpenVTC `vta-agent-memory` and the Trust Tasks working group (2026-11-25)
 
-Added with plan D42: the plugin extends OpenVTC's `vta-agent-memory` rather than living in a repository of ours ([`2026-11-25-bam.md`](./2026-11-25-bam.md)). Evidence is `OpenVTC/vta-agent-memory` at `80047d95619ed504f2d7793f00c5501f1ed4f5dd`, read through `gh api` (no local clone).
+Added with plan D45: the plugin extends OpenVTC's `vta-agent-memory` rather than living in a repository of ours ([`2026-11-25-bam-2.md`](./2026-11-25-bam-2.md)). Evidence is `OpenVTC/vta-agent-memory` at `80047d95619ed504f2d7793f00c5501f1ed4f5dd`, read through `gh api` (no local clone).
 
 ### AC-36 The pairing messages are a Keyring placeholder, not a Trust Task specification
 
@@ -313,7 +313,7 @@ Added with plan D42: the plugin extends OpenVTC's `vta-agent-memory` rather than
 - **Hit:** the plugin needs phone pairing (QR, typed number, biometric approval), a way to tell a session that a message arrived, and a gate on the sender. `vta-agent-memory` has none: its only hook is `SessionStart` (`hooks/hooks.json`), its MCP server has nine memory tools (`src/server.rs`), and its enrolment is the printed `pnm` grant or a local `pnm` login (`src/enrol.rs`, README).
 - **Evidence:** `.claude-plugin/plugin.json` (0.8.2), `marketplace.json`, `.mcp.json`, `src/server.rs`, `src/enrol.rs`, `src/rooms.rs`, `src/fence.rs`, `hooks/hooks.json`, README, at `80047d95`.
 - **Extension:** the pairing, the channel and `inbox`, the sender gate and `HostContract`, contributed as pull requests (plan §3.12, §3.18, steps 7.6, 7.15, 7.19, 7.24, 7.25).
-- **Severity:** P0 works around: a fork branch of `vta-agent-memory` that we build and test against while a merge lags (plan D42, §7.0).
+- **Severity:** P0 works around: a fork branch of `vta-agent-memory` that we build and test against while a merge lags (plan D45, §7.0).
 
 ### AC-38 One context per agent, created by the agent's setup, against a memory set Keyring creates
 
