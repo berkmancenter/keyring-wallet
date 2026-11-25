@@ -247,6 +247,12 @@ const Developer: React.FC = () => {
      * row's switch, outside it like the title (so the switch can never toggle twice), and its hint for a screen reader.
      */
     hint?: string
+    /**
+     * A switch row's state, spoken as the row's value ("on"/"off"): the accessible row hides its Switch from a screen
+     * reader and from UI automation on iOS, so without this the row says nothing about which way it is set (the e2e
+     * runners read it to tap a switch only when it disagrees with the run; the switches are on by default).
+     */
+    switchOn?: boolean
   }
   const SectionRow = ({
     title,
@@ -258,6 +264,7 @@ const Developer: React.FC = () => {
     subContent,
     wholeRow,
     hint,
+    switchOn,
   }: SectionRowProps) => (
     <>
       <View style={styles.section}>
@@ -296,6 +303,7 @@ const Developer: React.FC = () => {
               accessible={true}
               accessibilityLabel={accessibilityLabel}
               accessibilityHint={hint}
+              accessibilityValue={switchOn === undefined ? undefined : { text: switchOn ? 'on' : 'off' }}
               testID={testID}
               style={styles.sectionRow}
             >
@@ -1133,6 +1141,7 @@ const Developer: React.FC = () => {
           title={t('Developer.EnableDidCommV2')}
           accessibilityLabel={t('Developer.EnableDidCommV2')}
           testID={testIdWithKey('ToggleEnableDidCommV2')}
+          switchOn={enableDidCommV2}
           showRowSeparator
           // The row itself toggles too: on iOS the accessible row hides the
           // Switch from automation, and a tap on the row did nothing (the
@@ -1151,6 +1160,7 @@ const Developer: React.FC = () => {
           title={t('Developer.EnableV2Mailbox')}
           accessibilityLabel={t('Developer.EnableV2Mailbox')}
           testID={testIdWithKey('ToggleEnableV2Mailbox')}
+          switchOn={enableV2Mailbox}
           showRowSeparator
           // The row toggles too: iOS hides the Switch behind the accessible row
           // from automation (same fix as the DIDComm v2 row, 2026-09-14).
@@ -1185,6 +1195,7 @@ const Developer: React.FC = () => {
           title={t('Developer.EnableTspCarriage')}
           accessibilityLabel={t('Developer.EnableTspCarriage')}
           testID={testIdWithKey('ToggleEnableTspCarriage')}
+          switchOn={enableTspCarriage}
           showRowSeparator
           // The row toggles too: iOS hides the Switch behind the accessible row
           // from automation (same fix as the DIDComm v2 row, 2026-09-14).

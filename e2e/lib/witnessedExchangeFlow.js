@@ -32,16 +32,18 @@ import {
   enableHardwareAttestation,
   enableTspCarriage,
   enableDidCommV2,
+  enableV2Mailbox,
   assertDidCommV2CarriageMarkers,
   assertTspOverDidCommV2Markers,
-  assertV2MediationMarker,
+  assertWalletMailboxOpen,
   readAppJsLog,
   startIosLogCapture,
   stopIosLogCapture,
   showRelationshipInvitation,
 } from "./flows.js";
-import { startWitness } from "./witness.js";
-import { printSuccess, printFailure } from "./banner.js";
+import { startWitness, witnessLegFromEnv } from "./witness.js";
+import { printSuccess, printFailure, printSkipped } from "./banner.js";
+import { expectV2Invitation, RunSkipped, SKIPPED_EXIT_CODE } from "./v2Mint.js";
 
 const WITNESS_NAME = process.env.WITNESS_NAME || "e2e-witness";
 const IDENTITY_A = { firstName: "Alice", lastName: "Anderson" };
@@ -297,10 +299,13 @@ export async function runWitnessedExchange({
   reportLocality = false,
   useTspCarriage = false,
   // DIDComm v2 on both wallets (didcomm_v2_subtask.md C14/T6 on devices):
-  // the witness serves v1+v2 and the wallets connect to its out-of-band/2.0
-  // invitation; with useTspCarriage too, every Trust Task document is a TSP
-  // envelope delivered on those v2 connections. The build must carry
-  // MEDIATOR_V2_URL (`yarn mediator --didcomm-v2`, tunnel mode for devices).
+  // the "DIDComm v2" and "wallet mailbox" settings are confirmed on (the
+  // defaults), each wallet's mailbox open is asserted, and the peer exchange
+  // routes through the mailboxes; the witness leg follows WITNESS_LEG
+  // (lib/witness.js: v1 by default, "v2" = the witness on v1+v2 and its
+  // out-of-band/2.0 invitation). With useTspCarriage too, every Trust Task
+  // document is a TSP envelope on those connections. The build must carry
+  // MAILBOX_MEDIATOR_DID (the store configuration); MEDIATOR_V2_URL is gone.
   useDidCommV2 = false,
   // Require the Secure Exchange badge too (real devices on both sides; the
   // Android runners keep it optional because an old device's attestation
@@ -334,8 +339,11 @@ export async function runWitnessedExchange({
     // blocks cleartext http, and production witnesses are HTTPS (real mediators
     // like aaleon have SSL). The tunnel mirrors that locally without the
     // instability of routing the witness through the app's mediator.
-    witness = await startWitness({ name: WITNESS_NAME, didcommV2: useDidCommV2 });
-    if (useDidCommV2 && !witness.invitationV2Url) throw new Error("witness published no DIDComm v2 invitation");
+    // The witness leg's version is WITNESS_LEG, v1 by default (see lib/witness.js); only a v2 run can ask for v2.
+    const witnessLeg = useDidCommV2 ? witnessLegFromEnv() : "v1";
+    witness = await startWitness({ name: WITNESS_NAME, didcommV2: witnessLeg === "v2" });
+    if (witnessLeg === "v2" && !witness.invitationV2Url) throw new Error("witness published no DIDComm v2 invitation");
+    if (useDidCommV2) console.log(`[e2e] witness leg: DIDComm ${witnessLeg} (WITNESS_LEG)`);
 
     console.log(
       "\n[e2e] ATTENDED WITNESSED RUN — keep both phones unlocked and within reach.\n" +
@@ -377,6 +385,7 @@ export async function runWitnessedExchange({
     // reason to find out under an attended run instead of before one starts).
     if (useDidCommV2) {
       await Promise.all([enableDidCommV2(sessionA), enableDidCommV2(sessionB)]);
+      await Promise.all([enableV2Mailbox(sessionA), enableV2Mailbox(sessionB)]);
     }
     if (useTspCarriage) {
       await Promise.all([enableTspCarriage(sessionA), enableTspCarriage(sessionB)]);
@@ -404,9 +413,9 @@ export async function runWitnessedExchange({
       );
     }
     if (useDidCommV2) {
-      await Promise.all([assertV2MediationMarker(sessionA, 120000), assertV2MediationMarker(sessionB, 120000)]);
+      await Promise.all([assertWalletMailboxOpen(sessionA, 120000), assertWalletMailboxOpen(sessionB, 120000)]);
     }
-    const witnessInvitationUrl = useDidCommV2 ? witness.invitationV2Url : witness.invitationUrl;
+    const witnessInvitationUrl = witnessLeg === "v2" ? witness.invitationV2Url : witness.invitationUrl;
     await connectToWitness(sessionA, witnessInvitationUrl);
     if (assertLocality || reportLocality) await acceptLocalityPreflightIfPresent(sessionA);
     await connectToWitness(sessionB, witnessInvitationUrl);
@@ -420,9 +429,9 @@ export async function runWitnessedExchange({
     console.log("[e2e] both wallets connected to the witness");
 
     const invitationUrl = await showRelationshipInvitation(sessionA);
-    if (useDidCommV2 && !/[?&]_oob=/.test(invitationUrl)) {
-      throw new Error(`expected an out-of-band/2.0 invitation (_oob=), got: ${invitationUrl.slice(0, 80)}…`);
-    }
+    // On a v2 run a 1.x invitation is 282's kill of v2 minting (#1018): SKIPPED with that reason (lib/v2Mint.js). Used
+    // as an assert here, its return discarded on purpose: the invitation is already in hand.
+    if (useDidCommV2) void expectV2Invitation(invitationUrl);
     await acceptInvitationViaPaste(sessionB, invitationUrl);
 
     // v4 consent: one bottom-sheet on the non-proposer wallet, no
@@ -502,22 +511,28 @@ export async function runWitnessedExchange({
 
     dumpLogs([udidA, udidB].filter(Boolean));
   } catch (err) {
-    printFailure(name, err);
-    for (const d of [sessionA, sessionB].filter(Boolean)) {
-      try {
-        await screenshot(d, "failure");
-        await dumpSource(d, "failure");
-      } catch {
-        /* session may be dead */
+    if (err instanceof RunSkipped) {
+      // Not run on this build, for the reason the banner says: no screenshots or logs; exit 77, the skip code, beside a SKIPPED banner.
+      printSkipped(name, err.message);
+      process.exitCode = SKIPPED_EXIT_CODE;
+    } else {
+      printFailure(name, err);
+      for (const d of [sessionA, sessionB].filter(Boolean)) {
+        try {
+          await screenshot(d, "failure");
+          await dumpSource(d, "failure");
+        } catch {
+          /* session may be dead */
+        }
       }
+      try {
+        const { a: udidA, b: udidB } = detectDevices();
+        dumpLogs([udidA, udidB].filter(Boolean));
+      } catch {
+        /* best-effort */
+      }
+      process.exitCode = 1;
     }
-    try {
-      const { a: udidA, b: udidB } = detectDevices();
-      dumpLogs([udidA, udidB].filter(Boolean));
-    } catch {
-      /* best-effort */
-    }
-    process.exitCode = 1;
   } finally {
     stopIosSyslogCapture();
     for (const d of [sessionA, sessionB].filter(Boolean)) stopIosLogCapture(d);
