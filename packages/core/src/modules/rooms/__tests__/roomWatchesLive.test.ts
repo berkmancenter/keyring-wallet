@@ -391,6 +391,24 @@ describe('a host with no live watch to give', () => {
     expect(s.asked()).toEqual(['0.2 live', '0.1', '0.1'])
   })
 
+  test('an agent that serves the watch at 0.1 only: the same, no live watch is asked again this session', async () => {
+    // What an agent from before the live watch answers: it knows the task, not this version of it.
+    const s = setUp({
+      answer: (sent, now) => {
+        if (sent.type === ROOMS_TASK.keysWatch02) throw new VtiRefusal('unsupportedVersion', 'served: 0.1')
+        return liveHost(sent, now)
+      },
+    })
+    s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
+    await s.settled()
+    expect(s.watches.watched(ROOM)).toBe(true)
+    s.clock.now = T0 + LIVE_RETRY_MS * 3
+    s.watches.renew(ROOM)
+    s.watches.want('did:webvh:room:two', MEMBER, HOST, 1, { live: true })
+    await s.settled()
+    expect(s.asked()).toEqual(['0.2 live', '0.1', '0.1'])
+  })
+
   test('a hold of 0.2 noted in the last day: nothing goes at 0.2, and the room is armed one-shot', async () => {
     const holds = storedConsentHolds(() => 'did:agent:mine', disk())
     await holds.noteHeld(ROOMS_TASK.keysWatch02, T0 - 1000)

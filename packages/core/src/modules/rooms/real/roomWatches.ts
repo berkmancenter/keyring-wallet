@@ -118,11 +118,13 @@ export class RoomWatches {
     // want passes all three checks (on, what the agent serves known, the task in it): a reason back after that is said again.
     if (this.stopped) return
     const served = this.deps.served()
+    // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
+    const oneShotServed = served?.includes(ROOMS_TASK.keysWatch01) === true
     const unwatched = !this.deps.on()
       ? 'live delivery is off'
       : served === undefined
         ? 'what the agent serves is not known yet'
-        : !served.includes(ROOMS_TASK.keysWatch01)
+        : !oneShotServed
           ? 'the agent does not serve rooms/keys/watch/0.1'
           : undefined
     if (unwatched) {
@@ -207,6 +209,7 @@ export class RoomWatches {
     this.chain = this.chain.then(() =>
       this.deps
         .agentTask(
+          // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
           ROOMS_TASK.keysWatch01,
           { member: w.member, host: w.host, rooms: [{ roomId }], cancel: true },
           { timeoutMs: WATCH_TIMEOUT_MS, waitForConsent: false }
@@ -241,7 +244,11 @@ export class RoomWatches {
     this.chain = this.chain.then(() => this.flush())
   }
 
-  /** Whether `roomId` may be asked live now: the release allows it, the agent serves it, and no wait is running. */
+  /**
+   * Whether `roomId` may be asked live now: the release allows it, the agent serves it, and no wait is running.
+   *
+   * @versionLadder rooms/keys/watch
+   */
   private liveMay(roomId: string, served: readonly string[]): boolean {
     return (
       !this.liveStopped &&
@@ -285,6 +292,12 @@ export class RoomWatches {
     await this.flushLive(live)
   }
 
+  /**
+   * The rooms wanted live, a host at a time. The family's step-down is here and in `armLive`: 0.2 is asked first, and
+   * a room it does not make live is armed at 0.1 by `want`.
+   *
+   * @versionLadder rooms/keys/watch
+   */
   private async flushLive(groups: [string, Map<string, number>][]): Promise<void> {
     const holds = this.deps.consentHolds
     for (const [k, rooms] of groups) {
@@ -314,6 +327,8 @@ export class RoomWatches {
   /**
    * One live request (`rooms/keys/watch/0.2`, `live: true`): a first arming, or a renewal. A room is live only where
    * its outcome says so. Every other outcome leaves it watched one signal at a time, and live is asked again later.
+   *
+   * @versionLadder rooms/keys/watch
    */
   private async armLive(member: string, host: string, rooms: [string, number][]): Promise<void> {
     const generation = this.generation
@@ -339,7 +354,11 @@ export class RoomWatches {
         await this.deps.consentHolds?.noteHeld(ROOMS_TASK.keysWatch02, this.deps.now()).catch(() => undefined)
         why = 'held for consent'
         this.liveStopped = why
-      } else if (code === 'unsupportedType') this.liveStopped = why
+      } else if (code === 'unsupportedType' || code === 'unsupportedVersion') {
+        // An agent from before the live watch serves the task at 0.1 only and answers `unsupportedVersion` here: it
+        // will not learn 0.2 while this session lasts, so it is not asked every ten minutes for nothing.
+        this.liveStopped = why
+      }
       this.deps.warn(
         `rooms: a live watch of ${rooms.length} rooms ${why}: ${
           this.liveStopped ? 'none is asked again this session' : 'asked again later'
@@ -391,6 +410,7 @@ export class RoomWatches {
   private async flushOneShot(groups: [string, Map<string, number>][]): Promise<void> {
     if (groups.length === 0) return
     const holds = this.deps.consentHolds
+    // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
     if (holds && (await holds.heldRecently(ROOMS_TASK.keysWatch01, this.deps.now()).catch(() => true))) {
       for (const [, rooms] of groups)
         for (const roomId of rooms.keys()) this.polled(roomId, 'held for consent in the last day')
@@ -419,6 +439,7 @@ export class RoomWatches {
     try {
       answer = parseWatch(
         await this.deps.agentTask(
+          // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
           ROOMS_TASK.keysWatch01,
           {
             member,
@@ -435,6 +456,7 @@ export class RoomWatches {
       let why = code ? failureCategory(e) : 'no answer'
       if (consentPendingOf(e)) {
         // The agent has asked its approvers already. Kept, so no session asks again today (consentHolds.ts).
+        // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
         await this.deps.consentHolds?.noteHeld(ROOMS_TASK.keysWatch01, this.deps.now()).catch(() => undefined)
         why = 'held for consent'
         this.stopped = why
