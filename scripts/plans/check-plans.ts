@@ -662,6 +662,8 @@ export const ROLE_CHECK_START = '2026-11-26'
 export const ROLE_CREDIT_ALLOW = new Set<string>([
   // Alberto's plan ("Reviewers: the product owner ...", the Product owner rows of its tables), written before this check.
   'docs/plans/single-codebase-plan.md',
+  // Alberto's plan ("The product owner" in its header, review notes and tables), written before this check.
+  'docs/plans/data-rooms-performance-plan.md',
 ])
 
 export const ROLE_HINT = 'name the person, e.g. Brendan or Alberto; see docs/plans/CLAUDE.md, Collaborative plan branches'
