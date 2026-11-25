@@ -163,7 +163,7 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
   const label = [
     t(community ? 'Rooms.RowLabelIn' : 'Rooms.RowLabel', { room: name, community, preview: line, ...asWritten }),
     when,
-    unread ? t('MessagesList.Unread', { count: row.unread }) : '',
+    unread ? t(row.unreadMore ? 'MessagesList.UnreadMore' : 'MessagesList.Unread', { count: row.unread }) : '',
   ]
     .filter(Boolean)
     .join(', ')
@@ -233,7 +233,9 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
                 )}
                 {unread ? (
                   <View style={styles.badge} testID={testIdWithKey('MessagesListUnread')}>
-                    <ThemedText style={styles.badgeText}>{row.unread > 99 ? '99+' : row.unread}</ThemedText>
+                    <ThemedText style={styles.badgeText}>
+                      {row.unread > 99 ? '99+' : row.unreadMore ? `${row.unread}+` : row.unread}
+                    </ThemedText>
                   </View>
                 ) : null}
               </View>

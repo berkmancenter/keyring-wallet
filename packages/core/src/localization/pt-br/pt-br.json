@@ -2979,6 +2979,7 @@
     "RowLabel": "{{name}}, {{preview}}, {{when}}",
     "Unread_one": "{{count}} mensagem não lida",
     "Unread_other": "{{count}} mensagens não lidas",
+    "UnreadMore": "{{count}} ou mais mensagens não lidas",
     "NewMessage": "Nova mensagem",
     "EmptyTitle": "Nenhuma conversa ainda",
     "EmptyBody": "Suas conversas com seus contatos aparecem aqui. Cada uma é criptografada entre os seus telefones.",

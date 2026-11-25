@@ -13,7 +13,10 @@
  * - the moment the agent is back, if a read is out or left rooms unread or failed: that read went to a session now
  *   gone, so nothing waits for its next retry;
  * - one room after another, each asked only for what came after the newest post already read; the newest of
- *   that is read in full, and only when it is newer than the post the row already shows.
+ *   that is read in full, and only when it is newer than the post the row already shows. A room's first read is a
+ *   window of its newest ROOM_HEAD_WINDOW records (rooms/newestFirstSwitch; the whole room, off), so its unread count
+ *   is at most what that window holds: while the member has not seen down to the window's lowest record, the row says
+ *   "N+" ({@link RoomRow.unreadMore}).
  *
  * "Seen" is the newest post the member has had on screen in the room (markRoomSeen, from the room screen). It is kept
  * on this phone, per room, as a short hash of the room's ID, so a relaunch neither loses it nor counts old posts as
@@ -61,6 +64,7 @@ import { isNote, newestFirst, placeOf, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
 import { isRoomWatchWheneverOpenOn } from './watchWheneverOpenSwitch'
 import { isRoomsPartialListingOn } from './partialListingSwitch'
+import { isRoomsNewestFirstOn, ROOM_HEAD_WINDOW } from './newestFirstSwitch'
 
 /** While Messages is in view: about the offers poll's idle pace, never faster. */
 export const ROWS_POLL_MS = 120_000
@@ -106,6 +110,11 @@ export interface RoomRow {
   lastActivityAt?: Date
   /** Posts by others after the newest one the member has seen. */
   unread: number
+  /**
+   * There may be more unread than `unread`: the room's first read was a window, and the member has not seen down to
+   * its lowest record, so records below it after the newest seen were never counted. Shown as "N+".
+   */
+  unreadMore?: boolean
   lastPost?: RoomRowPost
   /** Its posts not read yet: the row says it is reading, not that there are none. */
   reading?: boolean
@@ -123,7 +132,16 @@ interface Track {
   lastKey?: string
   at?: Date
   actingAs?: Identity
+  /**
+   * The lowest version the room's first read held, when that read was a window with older records below it: records
+   * under it were never counted, so while `seen` is below it the count is a floor ({@link moreUnread}).
+   */
+  windowFloor?: number
 }
+
+/** Whether records the first read left below its window may be unread: the member has not seen down to its floor. */
+const moreUnread = (track: Track | undefined): boolean =>
+  track?.windowFloor !== undefined && track.seen < track.windowFloor - 1
 
 interface Feed {
   service?: RoomsService
@@ -234,7 +252,13 @@ const rowPostOf = (note: NoteSummary, actingAs: Identity | undefined): RoomRowPo
 /** Reads one room: what came after the newest post already read, and the newest post in full when it changed. */
 async function readRoom(service: RoomsService, room: RoomSummary, track: Track | undefined): Promise<Track> {
   const actingAs = track?.actingAs ?? (await service.getRoom(room.roomId)).actingAs
-  const listing = await service.listNotes(room.roomId, track ? { sinceVersion: track.newest } : undefined)
+  // A first read is a window of the newest records while rooms/newestFirstSwitch is on; off, the whole room, asked
+  // exactly as before. Later reads ask only what came after the newest held, as before.
+  const listing = track
+    ? await service.listNotes(room.roomId, { sinceVersion: track.newest })
+    : isRoomsNewestFirstOn()
+      ? await service.listNotes(room.roomId, { head: ROOM_HEAD_WINDOW })
+      : await service.listNotes(room.roomId)
   // A first listing that stopped early with nothing in it says nothing about the room: still unread, not empty. Only a
   // first read: a listing asked with `sinceVersion` is never complete (types.ts), so this on a refresh would leave every
   // room unread for ever. readAll catches it per room, so the other rooms read on.
@@ -245,6 +269,8 @@ async function readRoom(service: RoomsService, room: RoomSummary, track: Track |
     : { newest: 0, seen: kept ?? Number.MAX_SAFE_INTEGER, unread: new Map(), actingAs }
   const standing = listing.notes.filter((n) => n.status !== 'retracted')
   for (const note of listing.notes) next.newest = Math.max(next.newest, note.version)
+  if (!track && listing.older && listing.notes.length > 0)
+    next.windowFloor = listing.notes.reduce((lowest, n) => Math.min(lowest, n.version), Number.POSITIVE_INFINITY)
   // Met for the first time with nothing kept: seen up to its newest post.
   if (next.seen === Number.MAX_SAFE_INTEGER) {
     next.seen = next.newest
@@ -295,6 +321,7 @@ const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | unde
   communityName: room.communityName,
   lastActivityAt: track?.at && !Number.isNaN(track.at.getTime()) ? track.at : undefined,
   unread: track?.unread.size ?? 0,
+  ...(moreUnread(track) ? { unreadMore: true } : {}),
   lastPost: track?.last,
   ...(room.joined === false ? { notJoined: true } : track ? {} : { reading: true }),
 })
@@ -386,6 +413,7 @@ const sameRow = (a: RoomRow, b: RoomRow): boolean =>
   !!a.reading === !!b.reading &&
   !!a.notJoined === !!b.notJoined &&
   a.unread === b.unread &&
+  !!a.unreadMore === !!b.unreadMore &&
   a.lastActivityAt?.getTime() === b.lastActivityAt?.getTime() &&
   a.lastPost?.text === b.lastPost?.text &&
   a.lastPost?.kind === b.lastPost?.kind &&
@@ -741,7 +769,11 @@ export function markRoomSeen(service: RoomsService | undefined, roomId: string, 
 }
 
 function recount(service: RoomsService, roomId: string, track: Track): void {
-  feed.all = feed.all?.map((row) => (row.roomId === roomId ? { ...row, unread: track.unread.size } : row))
+  feed.all = feed.all?.map((row) => {
+    if (row.roomId !== roomId) return row
+    const { unreadMore: _was, ...rest } = row
+    return { ...rest, unread: track.unread.size, ...(moreUnread(track) ? { unreadMore: true } : {}) }
+  })
   showRows(service)
   publish()
 }

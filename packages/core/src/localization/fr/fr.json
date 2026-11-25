@@ -3063,6 +3063,7 @@
     "RowLabel": "{{name}}, {{preview}}, {{when}}",
     "Unread_one": "{{count}} message non lu",
     "Unread_other": "{{count}} messages non lus",
+    "UnreadMore": "{{count}} messages non lus ou plus",
     "NewMessage": "Nouveau message",
     "EmptyTitle": "Aucune discussion pour l'instant",
     "EmptyBody": "Vos discussions avec vos contacts s'affichent ici. Chacune est chiffrée entre vos téléphones.",

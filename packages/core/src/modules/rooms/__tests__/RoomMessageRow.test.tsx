@@ -84,6 +84,20 @@ describe("a room's Messages row", () => {
     expect(onOpen).toHaveBeenCalledWith('planning')
   })
 
+  // rooms/newestFirstSwitch: a first read that was a window counts only what it held, so the row says "N+".
+  test('a count that may be more says "N+", and says so aloud, in every language (control: an exact count)', () => {
+    const more = show(<RoomMessageRow row={row({ unread: 60, unreadMore: true })} onOpen={jest.fn()} />)
+    expect(more.getByTestId(id('MessagesListUnread'))).toHaveTextContent('60+')
+    const said = more.getByTestId(id('RoomMessageRow')).props.accessibilityLabel as string
+    expect(said).toContain('MessagesList.UnreadMore')
+    const exact = show(<RoomMessageRow row={row({ unread: 60 })} onOpen={jest.fn()} />)
+    expect(exact.getByTestId(id('MessagesListUnread'))).toHaveTextContent(/^60$/)
+    const saidExact = exact.getByTestId(id('RoomMessageRow')).props.accessibilityLabel as string
+    expect(saidExact).toContain('MessagesList.Unread')
+    expect(saidExact).not.toContain('UnreadMore')
+    for (const words of [en, fr, ptBr]) expect(words.MessagesList.UnreadMore).toContain('{{count}}')
+  })
+
   test('the member\'s own post reads "You: …"; no posts read yet, and no unread count (control)', () => {
     const mine = show(
       <RoomMessageRow

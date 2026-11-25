@@ -3105,6 +3105,7 @@
     "RowLabel": "{{name}}, {{preview}}, {{when}}",
     "Unread_one": "{{count}} unread message",
     "Unread_other": "{{count}} unread messages",
+    "UnreadMore": "{{count}} or more unread messages",
     "NewMessage": "New message",
     "EmptyTitle": "No chats yet",
     "EmptyBody": "Chats with your contacts show here. Each one is encrypted between your phones.",
