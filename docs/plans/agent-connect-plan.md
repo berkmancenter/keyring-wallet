@@ -292,7 +292,7 @@ Keyring's screens call the person's VTA "your agent" (the "My Agent" screens; `b
 - **the VTA**: the person's server (what Keyring's screens call "your agent");
 - **the session**: the Claude terminal session with the plugin (`vta-agent-memory`, extended, §3.12);
 - **an agent**, **connected agent** or **AI agent**: the session's identity as Keyring knows it. Screen titles say "AI agents" and "Connect an agent" (§6) and the VTA's own screens keep their names, which is how the two "agent" meanings are kept apart in copy (D20);
-- **a memory** (in copy) or **a slice** (the product owner's word): one VTA context used as agent memory (§3.7, §3.15). "Education" and "Healthcare" are the owner's examples of two slices.
+- **a memory** (in copy) or **a slice** (Alberto's word): one VTA context used as agent memory (§3.7, §3.15). "Education" and "Healthcare" are the owner's examples of two slices.
 
 ### 1.5 Assumptions
 
@@ -963,7 +963,7 @@ Wireframes are in [`agent-connect-plan/mockups/`](./agent-connect-plan/mockups/)
 - A phone that is not an unrestricted administrator (the connect ends here; no picker, no "New memory"): notice "This phone can't connect an agent. Connecting needs full administrator access to your VTA.", button "Close" (§1.5, §3.15, D32).
 - Revoke sheet, P2 row (step 7.18): "Also delete what it remembered" above the buttons (§3.15).
 - Give a credential (P1, step 7.23): title "Give "<credential>" to "<agent>"", body "It will be kept in the memory "<memory>". Pick what to share.", the field rows, button "Continue"; approval sheet "Share these with "<agent>"?", body "<fields>, for "<purpose>", kept in the memory "<memory>" until <date> or until the credential is revoked." (the one approval body; it always carries the purpose) and "<agent> sees only these fields, as a copy.", buttons "Share" (asks for the phone's face or fingerprint check) and "Not now"; a credential item reads "Credential. Valid until <date>" or "Credential. Revoked: removed from memory".
-  - **Wording added 2026-11-25 (product owner), for review: the four parts of this flow the copy above did not cover, drawn as stand-ins on the canvas (D41).**
+  - **Wording added 2026-11-25 (Alberto), for review: the four parts of this flow the copy above did not cover, drawn as stand-ins on the canvas (D41).**
   - *Choosing the agent and its memory* (from a credential's "Give to an agent"): title "Give "<credential>" to an agent"; a section "Agent" with one row per connected agent; then a section "Keep it in" with one row per memory of the agent chosen and the helper "<agent> can use only the memories you gave it."; button "Next". An agent with no memory is shown but cannot be picked, with "<agent> has no memory yet. Add one in its details first."
   - *Adding a credential from the agent's details* ("Add a credential"): title "Add a credential"; body "Pick a credential to give to "<agent>"."; one row per credential in the wallet; button "Next". With none: "You have no credentials to give."
   - *The purpose*, on the "Give" screen under the field rows: label "What it's for"; a short line the owner types, with the hint "For example: applying for a course"; "Continue" stays off until it is filled. The purpose is shown in the approval body above; there is no second body.
@@ -1032,7 +1032,7 @@ Wireframes are in [`agent-connect-plan/mockups/`](./agent-connect-plan/mockups/)
 | Lane | Owner | Steps |
 |---|---|---|
 | Keyring core | Keyring maintainers (Brendan Miller) | 7.2 to 7.5, 7.7 to 7.10, 7.13, 7.14, 7.16, 7.18, 7.20 to 7.23, 7.26 (the logic of each) |
-| UI/UX | UI/UX lane (the product owner's designer) | The screens of 7.7, 7.8, 7.11, 7.13, 7.14, 7.16, 7.23, 7.26; the canvas (D41; redrawn for rev 4 at canvas version 39, §6) |
+| UI/UX | UI/UX lane (the designer Brendan and Alberto share) | The screens of 7.7, 7.8, 7.11, 7.13, 7.14, 7.16, 7.23, 7.26; the canvas (D41; redrawn for rev 4 at canvas version 39, §6) |
 | Plugin (`OpenVTC/vta-agent-memory`, extended; a fork branch while a merge lags, D45) | Plugin maintainer, with the `vta-agent-memory` maintainers reviewing upstream | 7.6, 7.15, 7.19, 7.24, 7.25 |
 | VTA and upstream recording | Keyring maintainers | 7.1 (findings), this plan's §10 and `vti-asks.md`; the lab's VTA; no filing required |
 | Test and lab | Test lane (the lab owner) | 7.1, 7.11, 7.12, 7.17, 7.24 (the conformance suite) |
