@@ -173,6 +173,8 @@ export const VTI_ANSWER_HOLD_MS = 60000
  * may go; only that one kind of reply does. A reply naming its thread is never held back.
  */
 export const VTI_BACKLOG_GRACE_MS = 2000
+/** How many answers' ids are remembered as given (`answerFromListener`, 'repeat'): a second copy comes within seconds. */
+const ANSWERS_GIVEN_MAX = 128
 
 /** A task's name without the host and the version: `vtc/join-requests/submit`. */
 const taskName = (type: string) => type.replace(/^https?:\/\/[^/]+\/(spec\/)?/, '').replace(/\/[\d.]+$/, '')
@@ -716,6 +718,8 @@ class VtiAgentController {
   private askSeq = 0
   /** By identity and community: the latest-sent ask that community has answered (readReaskSwitch.ts). */
   private readonly answeredSeq = new Map<string, number>()
+  /** The ids of the answers given to an ask lately ({@link ANSWERS_GIVEN_MAX} at most): a second copy of one is known for what it is. */
+  private readonly answersGiven = new Set<string>()
   /** How long `ask` waits for an answer when the caller names no time. */
   answerTimeoutMs = 30000
   /** How long a read waits before it may be asked once more (readReaskSwitch.ts). A test shortens it. */
@@ -980,6 +984,11 @@ class VtiAgentController {
    *   directory lookup over an identity's own session, ZN6C-WNXG, 11-18).
    * - 'orphan': it threads on no ask, and answers a read (`VTI_READ_TASKS`): nothing waits for it and the read is asked
    *   again, so it may be dropped.
+   * - 'repeat': an orphan that is the very message an ask was given already, by its id. The shared session takes an
+   *   answer and acknowledges it after; signed in as another identity in between, the acknowledgement never goes, and
+   *   the mediator delivers the message again to that identity's listener (281.2, 23QE-AHW7: a rooms listing answered
+   *   at 05:56:08.5 as the session moved on, heard again at 05:56:10.2). Dropped as an orphan is; only said apart, so
+   *   a report does not read a second copy as an answer that was lost.
    * - undefined: anything else stays the shared session's. A request, a refusal that threads on no ask this identity
    *   sent, a reply naming no thread (matched by
    *   type, which a listener must not guess at), an ask of another identity, or an unclaimed answer to a write, whose
@@ -988,7 +997,7 @@ class VtiAgentController {
    * Not a pure check, though it reads like one: it lets go of expired holds first, whatever it returns. That is only
    * time-based housekeeping on the holds.
    */
-  answerFromListener(did: string, received: DidCommV2PlaintextMessage): 'answered' | 'orphan' | undefined {
+  answerFromListener(did: string, received: DidCommV2PlaintextMessage): 'answered' | 'orphan' | 'repeat' | undefined {
     const plaintext = unwrapBindingEnvelope(received)
     const type = String(plaintext.type ?? '')
     const response = type.endsWith(RESPONSE_SUFFIX)
@@ -1014,12 +1023,19 @@ class VtiAgentController {
     }
     // A refusal that threads on no ask of this phone's is never dropped here: it stays the shared session's.
     if (!response) return undefined
-    return isVtiReadTask(type.slice(0, -RESPONSE_SUFFIX.length)) ? 'orphan' : undefined
+    if (!isVtiReadTask(type.slice(0, -RESPONSE_SUFFIX.length))) return undefined
+    return typeof plaintext.id === 'string' && this.answersGiven.has(plaintext.id) ? 'repeat' : 'orphan'
   }
 
   /** Hand an answer to whoever waits on the ask, or keep it for the next caller. */
   private settle(entry: AskEntry, answer: DidCommV2PlaintextMessage): void {
     this.noteAnswered(entry)
+    if (typeof answer.id === 'string' && answer.id) {
+      // Oldest out first: a Set keeps the order its members were added in.
+      if (this.answersGiven.size >= ANSWERS_GIVEN_MAX)
+        this.answersGiven.delete(this.answersGiven.values().next().value as string)
+      this.answersGiven.add(answer.id)
+    }
     if (entry.waiters.length) {
       this.asks.delete(entry.id)
       for (const resolve of entry.waiters.splice(0)) resolve(answer)
