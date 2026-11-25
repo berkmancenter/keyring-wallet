@@ -591,6 +591,8 @@ export interface RoomsService {
   renewRoomWatch?(roomId: string): void
   /** True while `roomId` has a watch armed: its timed poll can wait, and a change comes through `onRoomChanged`. */
   roomWatched?(roomId: string): boolean
+  /** True while that watch is live (`watchRoom` with `live: true`, and the host gave one): its poll waits less. */
+  roomWatchedLive?(roomId: string): boolean
   /** Hear each room a watch said changed: read it once. Returns the way to stop hearing. */
   onRoomChanged?(listener: (roomId: string) => void): () => void
   /** For logs: how many records one page of a room could not open, by reason (`other` for any other failure). */

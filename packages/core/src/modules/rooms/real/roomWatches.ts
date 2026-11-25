@@ -199,6 +199,16 @@ export class RoomWatches {
   }
 
   /**
+   * True while `roomId` is watched LIVE and its lease has not lapsed: a subset of {@link watched}. The open room's poll
+   * waits less for one (useRoomPosts): a live watch is a conversation on screen, where a lost signal shows at once.
+   */
+  watchedLive(roomId: string): boolean {
+    if (!this.deps.on()) return false
+    const w = this.watches.get(roomId)
+    return w?.state === 'live' && w.expiresAt > this.deps.now()
+  }
+
+  /**
    * A `rooms/keys/changed/0.1` the agent pushed. Returns the room to read when it names a watch armed here, as the
    * member and at the host it was armed with; anything else changes nothing and returns undefined.
    */

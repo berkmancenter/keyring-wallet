@@ -63,6 +63,13 @@ export const ROOM_POLL_MS = 10_000
  * a signal and is read at once, so this is only for a signal lost on the way (a socket that dropped, a host that forgot).
  */
 export const ROOM_WATCHED_POLL_MS = 120_000
+/**
+ * The same while the watch is LIVE (`RoomsService.roomWatchedLive`): the room on screen used as a conversation, where a
+ * signal lost on the way left it silent for two minutes and the member left and came back to see a new post (IN-756,
+ * 11-25: one live signal arrived, the next never did). 30 s caps that, at a listing every 30 s while a live room is
+ * open (Alberto, 11-25: "Yes, 30 s"). A one-shot watch keeps the two minutes: it serves the rows and rooms not in use.
+ */
+export const ROOM_LIVE_WATCHED_POLL_MS = 30_000
 /** After a poll that failed, the ticks that pass before the next one. */
 export const POLL_SKIPS_AFTER_FAILURE = 2
 
@@ -381,7 +388,10 @@ export function useRoomPosts(
   }, [])
   // The poll of the room while it is polled, for `pollNow`.
   const tickNow = useRef<(() => void) | undefined>(undefined)
-  /** When the last listing of the room was asked: a watched room's poll waits ROOM_WATCHED_POLL_MS from it. */
+  /**
+   * When the last listing of the room was asked: a watched room's poll waits ROOM_WATCHED_POLL_MS from it, or
+   * ROOM_LIVE_WATCHED_POLL_MS while the watch is live.
+   */
   const askedAt = useRef(0)
   /** The member's own successful writes the posts do not carry yet (awaitWrites): a watched room polls at its old pace. */
   const awaiting = useRef<readonly { key: string; version: number }[]>([])
@@ -553,12 +563,8 @@ export function useRoomPosts(
       // Watched: a change is told and read at once (below), and this tick is only the fallback for a signal lost.
       // A signal spends the watch before it ticks, so the tick it starts is never held here. Nor is one while the
       // member's own write is still to land (awaitWrites): its overlay ends at 30 s, and a lost signal is never re-sent.
-      if (
-        awaiting.current.length === 0 &&
-        service.roomWatched?.(roomId) &&
-        Date.now() - askedAt.current < ROOM_WATCHED_POLL_MS
-      )
-        return
+      const waits = service.roomWatchedLive?.(roomId) ? ROOM_LIVE_WATCHED_POLL_MS : ROOM_WATCHED_POLL_MS
+      if (awaiting.current.length === 0 && service.roomWatched?.(roomId) && Date.now() - askedAt.current < waits) return
       askedAt.current = Date.now()
       const sentOn = openedAt.current
       counted(listingsInFlight, () =>

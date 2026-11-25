@@ -1501,6 +1501,10 @@ export class AgentRoomsService implements RoomsService {
     return this.watches.watched(roomId)
   }
 
+  public roomWatchedLive(roomId: string): boolean {
+    return this.watches.watchedLive(roomId)
+  }
+
   public onRoomChanged(listener: (roomId: string) => void): () => void {
     this.changedListeners.add(listener)
     // Signals are heard while someone listens: each one is a room to read, and with no screen there is none.

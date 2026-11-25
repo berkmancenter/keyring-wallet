@@ -20,6 +20,7 @@ import {
   POSTS_PAGE,
   ROOM_POLL_MS,
   ROOM_WATCHED_POLL_MS,
+  ROOM_LIVE_WATCHED_POLL_MS,
   type RoomPosts,
   useRoomPosts,
 } from '../useRoomPosts'
@@ -365,8 +366,12 @@ describe('a room in view', () => {
 // version held never mentions them: a `lastPrune.version` above what this phone has synced means rebuild from a full
 // listing and drop what it no longer holds (browse 0.3 spec, "a caller that keeps its own copy of the room").
 /** A service that can watch: armed by watchRoom, spent by a signal, as the agent's watches are. */
-const watchable = <S extends RoomsService>(service: S, { arms = true }: { arms?: boolean } = {}) => {
+const watchable = <S extends RoomsService>(
+  service: S,
+  { arms = true, live = false }: { arms?: boolean; live?: boolean } = {}
+) => {
   let armed = false
+  let liveNow = live
   const listeners = new Set<(roomId: string) => void>()
   const watchRoom = jest.fn((_roomId: string, _since: number, _options?: { live?: boolean }) => {
     if (arms) armed = true
@@ -375,6 +380,7 @@ const watchable = <S extends RoomsService>(service: S, { arms = true }: { arms?:
     service: Object.assign(service, {
       watchRoom,
       roomWatched: (roomId: string) => roomId === ROOM && armed,
+      roomWatchedLive: (roomId: string) => roomId === ROOM && armed && liveNow,
       onRoomChanged: (listener: (roomId: string) => void) => {
         listeners.add(listener)
         return () => void listeners.delete(listener)
@@ -382,6 +388,8 @@ const watchable = <S extends RoomsService>(service: S, { arms = true }: { arms?:
     }),
     watchRoom,
     listeners,
+    /** The host ends the live watch, or it lapses: the room stays watched one signal at a time. */
+    endLive: () => void (liveNow = false),
     /** The agent passes the host's signal on: the watch is spent. */
     signal: async (roomId = ROOM) => {
       if (roomId === ROOM) armed = false
@@ -402,10 +410,36 @@ describe('a room watched at its host', () => {
     expect(w.watchRoom).toHaveBeenCalledWith(ROOM, 2, { live: true })
   })
 
-  test('watched: no timed poll every ten seconds; one at two minutes, for a signal lost', async () => {
+  test('watched one signal at a time: no timed poll every ten seconds; one at two minutes, for a signal lost', async () => {
     const { service } = roomWith([note('a', 1)])
     const w = watchable(service)
     await open(w.service)
+    for (let i = 0; i < ROOM_WATCHED_POLL_MS / ROOM_POLL_MS - 1; i++) await tick()
+    expect(polls(service)).toHaveLength(0)
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+  })
+
+  // IN-756: the room on screen was watched live, one live signal arrived and the next never did, and the new post
+  // waited for the two-minute poll; the member left and came back to see it.
+  test('watched live: the timed poll comes at thirty seconds, not two minutes, and again thirty after', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    await open(w.service)
+    expect(ROOM_LIVE_WATCHED_POLL_MS).toBe(30_000)
+    for (let i = 0; i < ROOM_LIVE_WATCHED_POLL_MS / ROOM_POLL_MS - 1; i++) await tick()
+    expect(polls(service)).toHaveLength(0)
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+    for (let i = 0; i < ROOM_LIVE_WATCHED_POLL_MS / ROOM_POLL_MS; i++) await tick()
+    expect(polls(service)).toHaveLength(2)
+  })
+
+  test('a live watch that ends (out of view, or lapsed) waits the two minutes again (control)', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    await open(w.service)
+    w.endLive()
     for (let i = 0; i < ROOM_WATCHED_POLL_MS / ROOM_POLL_MS - 1; i++) await tick()
     expect(polls(service)).toHaveLength(0)
     await tick()
