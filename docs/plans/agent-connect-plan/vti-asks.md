@@ -32,7 +32,7 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-25 | VTI-Q38 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
-Not registered, with the reason: AC-12 and AC-13 (starter-image decisions, for openvti-starter), AC-14 (a question for the DTG working group, not for VTI), AC-15 (a cross-reference nit), AC-17 (a TypeScript library gap), AC-18 (a note on coexistence), AC-19 (a comparison of two sign-in forms), AC-20 (Anthropic, not VTI).
+Not registered, with the reason: AC-12 and AC-13 (starter-image decisions, for openvti-starter), AC-14 (a question for the DTG working group, not for VTI), AC-15 (a cross-reference nit), AC-17 (a TypeScript library gap), AC-18 (a note on coexistence), AC-19 (a comparison of two sign-in forms), AC-20 (Anthropic, not VTI), AC-36 (a proposal to the Trust Tasks working group, not VTI), AC-37 and AC-38 (OpenVTC's `vta-agent-memory`, not VTI code; plan D42).
 
 Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale working tree), `external/dtgwg-cred-spec` `94af2d8` and the starter mediator `mediator-buildathon:e6e2c636` (0.48.0, DIDComm v2, built with `tsp,secrets-aws`, measured 2026-11-20 on the lab, not on the VTA Farm).
 
@@ -182,6 +182,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `OpenVTC/vta-agent-memory` `main` at `c9b80d26` (read through `gh api`, no local clone); `vta-mcp/README.md`.
 - **Extension:** none needed for P0 (the plugin is the channel server); noted so the two plugins can coexist.
 - **Severity:** none.
+- **Status (2026-11-25):** superseded by plan D42: the plugin is `vta-agent-memory` itself, extended, so the channel is added to it rather than run beside it (AC-37).
 
 ### AC-19 `vtc-mcp` approves by comparing a number, the browser flow by typing one
 
@@ -294,3 +295,28 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `docs/02-vta/data-rooms.md:588-640`; `docs/05-design-notes/data-rooms-joining.md:11-25,122-131` (a proposal that recommends waiting), at `4e5861d95`, 2026-11-24.
 - **Extension:** `rooms/join/request/0.1`.
 - **Severity:** P2 works around (a Keyring-defined join message and the existing VIC flow; a community room uses `vtc/rooms/offers`). Registered as VTI-Q48.
+
+## OpenVTC `vta-agent-memory` and the Trust Tasks working group (2026-11-25)
+
+Added with plan D42: the plugin extends OpenVTC's `vta-agent-memory` rather than living in a repository of ours ([`2026-11-25-bam.md`](./2026-11-25-bam.md)). Evidence is `OpenVTC/vta-agent-memory` at `80047d95619ed504f2d7793f00c5501f1ed4f5dd`, read through `gh api` (no local clone).
+
+### AC-36 The pairing messages are a Keyring placeholder, not a Trust Task specification
+
+- **Hit:** the `agent-connect` messages (`claim`, `hello`, `approved`, `rotated`, `vdcAccepted`, `settings`) carry Keyring's placeholder type URIs (plan §3.2), so another wallet or agent host has no specification to implement.
+- **Evidence:** plan §3.2 ("Message type URIs are Keyring's own ... placeholders"); the Trust Task registry is `trustoverip/dtgwg-trust-tasks-tf` (`openvtc-integration-plan.md`).
+- **Extension:** propose the pairing messages as a Trust Task specification (one task family, versioned), beside the flow's registration in the links specification (AC-01, AC-16, VTI-Q27).
+- **Severity:** none; P0 to P2 use the placeholders. Recorded, not filed.
+
+### AC-37 `vta-agent-memory` has no wallet pairing, inbound channel or sender gate
+
+- **Hit:** the plugin needs phone pairing (QR, typed number, biometric approval), a way to tell a session that a message arrived, and a gate on the sender. `vta-agent-memory` has none: its only hook is `SessionStart` (`hooks/hooks.json`), its MCP server has nine memory tools (`src/server.rs`), and its enrolment is the printed `pnm` grant or a local `pnm` login (`src/enrol.rs`, README).
+- **Evidence:** `.claude-plugin/plugin.json` (0.8.2), `marketplace.json`, `.mcp.json`, `src/server.rs`, `src/enrol.rs`, `src/rooms.rs`, `src/fence.rs`, `hooks/hooks.json`, README, at `80047d95`.
+- **Extension:** the pairing, the channel and `inbox`, the sender gate and `HostContract`, contributed as pull requests (plan §3.12, §3.18, steps 7.6, 7.15, 7.19, 7.24, 7.25).
+- **Severity:** P0 works around: a fork branch of `vta-agent-memory` that we build and test against while a merge lags (plan D42, §7.0).
+
+### AC-38 One context per agent, created by the agent's setup, against a memory set Keyring creates
+
+- **Hit:** `vta-agent-memory` grants one context per agent and has it created by its own setup (`init` prints `pnm contexts create` and `pnm acl create --role application --contexts <one> --purposes personalisation`; `setup` makes the grant through `pnm`; the configuration holds one `context_id`), while the plan binds an agent to a fixed set of top-level memories that Keyring creates and grants (plan D31, D32, D35), with Keyring as the unrestricted-administrator granter in place of the `pnm acl create` step (plan §1.5). Its rotation goes through `vti_secrets` `IntegrationOnboarding`; no `device/register` call was found in the files read, while the plan registers the `aiAgent` consumer kind (plan §3.2 step 9).
+- **Evidence:** `src/enrol.rs` (lines 98-115, 148-195, 233), `src/config.rs:142`, `src/setup.rs:278`, `src/store.rs:83`, at `80047d95`.
+- **Extension:** a configuration and tools that hold a set of contexts; a pairing enrolment path in which the wallet is the granter; the consumer kind registered at enrolment. Questions, not a defect: plan §11 Q6.
+- **Severity:** P0 works around (the fork branch carries the plan's design); the maintainers' answer decides the upstream merge of step 7.6.
