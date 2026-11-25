@@ -66,16 +66,15 @@ describe('createRelationshipInvitation: v2 accepted by default, minted only thro
     jest.restoreAllMocks()
     setDidCommV2Enabled(DIDCOMM_V2_ON_BY_DEFAULT)
     setV2MediationEnabled(false)
-    DIDCOMM_V2_MINT_REMOTE_OFF.off = false
+    DIDCOMM_V2_MINT_REMOTE_OFF.off = true // the shipped value, from 282
   })
 
-  test('as shipped: DIDComm v2 on', () => {
+  // Whether v2 is minted as shipped is the kill's own row, below: from 282 it is not.
+  test('as shipped: the DIDComm v2 setting is on', () => {
     jest.isolateModules(() => {
       const ceremony = require('../../../trust-tasks/ceremony') as typeof import('../../../trust-tasks/ceremony')
       expect(ceremony.DIDCOMM_V2_ON_BY_DEFAULT).toBe(true)
-      expect(ceremony.isDidCommV2Enabled()).toBe(true)
     })
-    expect(isDidCommV2Enabled()).toBe(true)
   })
 
   test('DEFAULT: v2 on, no mailbox open → a v1 invitation, through the default mediator, and the log says why', async () => {
@@ -167,7 +166,7 @@ describe('createRelationshipInvitation: v2 accepted by default, minted only thro
 
 describe('DIDCOMM_V2_MINT_REMOTE_OFF beats what DIDComm v2 ships as', () => {
   afterEach(() => {
-    DIDCOMM_V2_MINT_REMOTE_OFF.off = false
+    DIDCOMM_V2_MINT_REMOTE_OFF.off = true // the shipped value, from 282
     setDidCommV2Enabled(DIDCOMM_V2_ON_BY_DEFAULT)
   })
 
