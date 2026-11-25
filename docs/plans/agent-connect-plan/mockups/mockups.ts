@@ -370,6 +370,79 @@ export const MOCKUPS: Mockup[] = [
     },
     notes: ['Shown when `auth/whoami` at connect time says the session is not an unrestricted administrator. Keyring assumes it always is (§1.5); this is that assumption being enforced, not a degraded mode: nothing is created and no other role is tried.', 'Step 0.1(p) confirms the assumption live; a scoped phone reopens D32.'],
   },
+  {
+    file: '24-give-credential.svg',
+    title: `Give a credential to an agent: pick what to share, P1 (${PLAN} §3.15, §6, D36)`,
+    draw: (s) => {
+      s.header(undefined, { placeholder: '<title>', assumed: 'the header title of the give-credential screen; the plan defines none (§6).' })
+      let y = s.heading('Give "Degree" to "Notes helper"', TOP)
+      y = s.body('It will be kept in the memory "Education". Pick what to share.', y + 4) + 8
+      y = s.layerRow('Degree title', y)
+      y = s.layerRow('Issuer', y)
+      y = s.layerRow('Graduation year', y)
+      s.primaryButton('Continue', BOTTOM)
+      s.tabBar('myAgent')
+    },
+    notes: ['P1 (step 7.23). From "Give to an agent" on a credential or "Add a credential" on the agent’s details. Checkbox rows, boxes not drawn: selective disclosure. Sample fields.', 'The memory is one of the agent’s bound memories; nothing here changes what the agent can reach (D31).'],
+  },
+  {
+    file: '25-approve-credential.svg',
+    title: `Approve sharing a credential with an agent, P1 (${PLAN} §3.15, §6, D36)`,
+    draw: (s) => {
+      s.header(undefined, { placeholder: '<title>', assumed: 'the header title of the give-credential screen; the plan defines none (§6).' })
+      s.tabBar('myAgent')
+      s.bottomSheet((sheet, y) => {
+        let yy = sheet.heading('Share these with "Notes helper"?', y) + 8
+        yy = sheet.body('Degree title and graduation year, kept in the memory "Education" until 12 June 2027 or until the credential is revoked.', yy) + 8
+        yy = sheet.body('Notes helper sees only these fields, as a copy.', yy) + 10
+        yy = sheet.primaryButton('Share', yy) + 12
+        return sheet.secondaryButton('Not now', yy)
+      })
+    },
+    notes: ['P1. "Share" asks for the phone’s face or fingerprint check, which names the agent, the memory, the fields and the purpose (§3.15).', 'The date is a sample. The copy never says the copy is encrypted: memory is text on the VTA.'],
+  },
+  {
+    file: '26-credential-in-memory.svg',
+    title: `A memory with credentials: valid and revoked, P1 (${PLAN} §3.15, §6, D36)`,
+    draw: (s) => {
+      s.header(undefined, { placeholder: '<title>', assumed: 'the header title of a memory screen; the plan defines none (§6).' })
+      let y = s.heading('Education', TOP)
+      y = s.layerRow('Degree', y + 4, { muted: 'Credential. Valid until 12 June 2027' })
+      y = s.layerRow('Diploma', y, { muted: 'Credential. Revoked: removed from memory' })
+      y = s.label('Memory is stored as text on your VTA. It is not a place for secrets.', y + 4)
+      s.tabBar('myAgent')
+    },
+    omits: { primary: 'the list has no main action; a row opens the credential’s details.' },
+    notes: ['P1. Keyring reconciles at app start and when the details open: a revoked or expired credential’s item is deleted or marked and the agent is told in chat. Not atomic.', 'Samples. Listed by name, never by the memory’s id.'],
+  },
+  {
+    file: '27-room-join-code.svg',
+    title: `Invite someone to a room by code, P2 placeholder (${PLAN} §3.17, §6, D37)`,
+    draw: (s) => {
+      s.header(undefined, { placeholder: ROOM_TITLE, assumed: NO_ROOM_TITLE })
+      let y = s.heading('Invite to "Campus notes"', TOP)
+      y = s.body('Ask them to scan this code in Keyring. It works once, for 5 minutes.', y + 4) + 10
+      s.placeholder(y, [CONTENT_W * 0.8, CONTENT_W * 0.8, CONTENT_W * 0.8, CONTENT_W * 0.8])
+      s.primaryButton('Cancel', BOTTOM)
+      s.tabBar('messages')
+    },
+    notes: ['P2 placeholder (step 7.26). The grey bars stand for the QR code. It carries only the owner’s contact, a room reference, a single-use handle and an expiry: never a key, a VIC or a DID.', ROOMS_FROM_MESSAGES],
+  },
+  {
+    file: '28-room-join-approve.svg',
+    title: `Join a room by scanning: the joiner approves, P2 placeholder (${PLAN} §3.17, §6, D37)`,
+    draw: (s) => {
+      s.header(undefined, { placeholder: ROOM_TITLE, assumed: NO_ROOM_TITLE })
+      s.tabBar('messages')
+      s.bottomSheet((sheet, y) => {
+        let yy = sheet.heading('Join "Campus notes" as "Ada"?', y) + 8
+        yy = sheet.body('The room owner will be asked to approve. Nothing is shared until they do.', yy) + 10
+        yy = sheet.primaryButton('Join', yy) + 12
+        return sheet.secondaryButton('Not now', yy)
+      })
+    },
+    notes: ['P2 placeholder. "Join" asks for the phone’s face or fingerprint check. An agent never scans a join code (D31).', ROOMS_FROM_MESSAGES],
+  },
 ]
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

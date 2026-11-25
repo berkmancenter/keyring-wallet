@@ -4,10 +4,10 @@
   "tokens": "0e768796902f",
   "columns": 3,
   "width": 1968,
-  "height": 6936,
+  "height": 8664,
   "sheet": {
     "file": "sheet.png",
-    "sha256": "514e8fb58ba4861174e5541dab3d929a2a116c47b8e36a8651aa36d41b0cbcb2"
+    "sha256": "5b85d7806fe3b79b553263e47a559965b57eb20188913d847cc0443cc3fe1ef6"
   },
   "svgs": {
     "01-connect-name.svg": "053a1a5d2a4357c235f05442926b464aff1ca201ca69793b0ee825118d57d92b",
@@ -32,6 +32,11 @@
     "20-change-memories.svg": "551cadeb475b5f8b5c82f973ec8702d66fff0d00fa27295ed8a99453e9341130",
     "21-delete-memory.svg": "a219558ea02ac31896b70396a6b632b1c24d852bc50e6fb254704a98577d5d88",
     "22-memory-drift.svg": "bcf217eac6c556a1b1cde50c165df05058cd0dc65cf5929fdb83bb22ec321c6d",
-    "23-not-an-administrator.svg": "0a035f2b394d7a76d3e513941389bd9b9822cabe9476c5cc8dfb735385e1cda0"
+    "23-not-an-administrator.svg": "0a035f2b394d7a76d3e513941389bd9b9822cabe9476c5cc8dfb735385e1cda0",
+    "24-give-credential.svg": "179d52144e14fc7c08d9acd0c5424201928b4478e053540b1881f3699b66c1ce",
+    "25-approve-credential.svg": "c58d2729a7b1a8a80b9c783cb354277953b7e643665b34a0f019c68739d769f6",
+    "26-credential-in-memory.svg": "56a23908a59cea50cae6750f0fdc445092a8a8f069a027be3e2a0b58f0fc9294",
+    "27-room-join-code.svg": "d6ccdccfbb4d37da906b14bb1cc10f49b276c74b8d963e381d0e90fd582c8874",
+    "28-room-join-approve.svg": "a2317b2eb583237cad6059c923540087802411b61ef23e0a06ee9364b4a675d6"
   }
 }
