@@ -1580,8 +1580,9 @@ export class VtiMediatorSession {
   /**
    * Ask the mediator itself something: a Trust Task document, signed by the caller for the DID this session is
    * signed in as, carried in the DIDComm binding envelope and authcrypted to the mediator over this socket. Resolves
-   * with the mediator's answer, the frame it threads to the envelope (`thid`); rejects with the mediator's
-   * problem-report words, when the socket cannot carry it, or after `timeoutMs`.
+   * with the mediator's answer, the frame it threads to the envelope (`thid`: a response, or a `trust-task-error`
+   * document refusing the task); rejects with the mediator's problem-report words (threaded by `thid` or `pthid`),
+   * when the socket cannot carry it, or after `timeoutMs`.
    *
    * The mailbox uses it for its account at the mediator (walletMailbox.ts): `messaging/account/update` to turn on
    * its own forwarding right, `messaging/wake/set` to leave its push handle. Measured against
@@ -1618,13 +1619,20 @@ export class VtiMediatorSession {
     return answer
   }
 
-  /** If `plaintext` answers an `ask` (threaded to its id), settle that ask and say so. */
+  /**
+   * If `plaintext` answers an `ask`, settle that ask and say so. An answer, and a `trust-task-error` document, are
+   * threaded to the ask's envelope by `thid`. The mediator's problem-report about that envelope is threaded to it by
+   * `pthid` (affinidi-messaging-mediator error_response.rs, every release): its refusal of a request that did not
+   * ask for the document (from v0.54.0), or an envelope it could not read as a Trust Task at all. Read by `thid`
+   * alone, such a refusal was no answer, and the ask ran to its bound (ASK_TIMEOUT_MS) for a "no" that had arrived.
+   */
   private answeredAsk(plaintext: DidCommV2PlaintextMessage): boolean {
-    const thid = (plaintext as { thid?: unknown }).thid
-    const waiting = typeof thid === 'string' ? this.asks.get(thid) : undefined
-    if (!waiting || typeof thid !== 'string') return false
+    const { thid, pthid } = plaintext as { thid?: unknown; pthid?: unknown }
+    const id = [thid, pthid].find((t): t is string => typeof t === 'string' && this.asks.has(t))
+    const waiting = id === undefined ? undefined : this.asks.get(id)
+    if (!waiting || id === undefined) return false
     clearTimeout(waiting.timer)
-    this.asks.delete(thid)
+    this.asks.delete(id)
     if (isProblemReport(plaintext)) {
       waiting.reject(new Error(`${LOG_PREFIX} ${this.where} refused: ${problemReportWords(plaintext)}`))
     } else {

@@ -75,6 +75,59 @@ describe('asking the mediator', () => {
     await session.stop()
   })
 
+  test('the mediator’s problem-report threaded to the ask by pthid alone (v0.54.0 refusing a request without the document ask) refuses it at once', async () => {
+    const { session, sent, frame, onMessage } = sessionAsking()
+    const before = Date.now()
+    // The shipping bound, 15 s: the refusal must settle the ask, not the timer.
+    const asked = session.ask(document)
+    // error_response.rs: a new id, `pthid` naming the refused envelope, no `thid`, and the mediator's `e.p.<code>`.
+    await frame({
+      id: 'urn:uuid:pr-1',
+      type: PROBLEM_REPORT,
+      from: mediator.did,
+      pthid: sent[0].id,
+      body: { code: 'e.p.permissionDenied', comment: 'account {1} may not change its own ACL', args: ['x'] },
+    })
+    await expect(asked).rejects.toThrow(/refused: e\.p\.permissionDenied/)
+    expect(Date.now() - before).toBeLessThan(2_000)
+    expect(session['asks'].size).toBe(0)
+    // The refusal is the asker's: not handed on, not acknowledged, said only through the rejection.
+    expect(onMessage).not.toHaveBeenCalled()
+    expect(session['acknowledge']).not.toHaveBeenCalled()
+    await session.stop()
+  })
+
+  test('CONTROL: the mediator’s problem-report about another envelope is not the answer; the ask keeps waiting', async () => {
+    const { session, sent, frame, onMessage } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({
+      id: 'urn:uuid:pr-2',
+      type: PROBLEM_REPORT,
+      from: mediator.did,
+      pthid: 'urn:uuid:some-forward',
+      body: { code: 'e.p.me.res.storage.limit', comment: 'queue is full' },
+    })
+    expect(session['asks'].size).toBe(1)
+    expect(onMessage).not.toHaveBeenCalled()
+    expect(sent).toHaveLength(1)
+    await session.stop()
+    await expect(asked).rejects.toThrow(/session stopped/)
+  })
+
+  test('a trust-task-error document threaded to the ask (the refusal a request that asks gets) is its answer, resolved for the caller to read', async () => {
+    const { session, sent, frame } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({
+      type: ENVELOPE,
+      from: mediator.did,
+      thid: sent[0].id,
+      body: { type: 'https://trusttasks.org/spec/trust-task-error/0.5', payload: { code: 'permissionDenied' } },
+    })
+    await expect(asked).resolves.toMatchObject({ body: { payload: { code: 'permissionDenied' } } })
+    expect(session['asks'].size).toBe(0)
+    await session.stop()
+  })
+
   test('CONTROL: a frame threaded to something else is no answer; a peer’s message still goes to the consumer, and the ask waits', async () => {
     const { session, sent, frame, onMessage } = sessionAsking()
     const asked = session.ask(document)

@@ -50,6 +50,15 @@ const FORWARD = 'https://didcomm.org/routing/2.0/forward'
 export const MEDIATOR_ACCOUNT_UPDATE = 'https://trusttasks.org/spec/messaging/account/update/0.1'
 export const MEDIATOR_WAKE_SET = 'https://trusttasks.org/spec/messaging/wake/set/0.1'
 export const MEDIATOR_WAKE_REQUEST = 'https://trusttasks.org/spec/messaging/wake/request/0.1'
+/**
+ * The ask every task to the mediator carries, a top-level member the spec allows and the proof covers
+ * (affinidi-messaging-sdk `ERROR_FORMAT_MEMBER` = `ERROR_FORMAT_DOCUMENT`, which upstream's own clients send from
+ * 0.46.2): refuse this request with a `trust-task-error` document threaded to the envelope by `thid`, as an answer
+ * is. From v0.54.0 the mediator refuses a request that does not ask with a DIDComm problem-report instead, threaded
+ * by `pthid`; v0.52 and v0.53 answer every refusal with the document (trust_task_error.rs). Upstream withdraws the
+ * ask in its first release after 2027-02-07 and sends the document to all; carrying it then changes nothing.
+ */
+export const MEDIATOR_ASK_ERROR_FORMAT: Readonly<Record<string, string>> = { 'x-errorFormat': 'trust-task-error' }
 
 /**
  * The key the mediator holds an account under: the sha256 of its DID, in hex (upstream `did_identity::did_hash`).
@@ -136,7 +145,8 @@ async function mailboxDidFor(agent: Agent, mediator: VtiMediatorEndpoints): Prom
 /**
  * A Trust Task to the mailbox's mediator, signed for the mailbox DID (eddsa-jcs-2022, proof purpose authentication:
  * what the mediator verifies a management task with), asked over the mailbox's session. Returns the answer's body,
- * the mediator's response document.
+ * the mediator's response document, or its `trust-task-error` document when the task is refused: the caller reads
+ * which. Rejects with the mediator's words when it answers a problem-report instead (`VtiMediatorSession.ask`).
  */
 async function askMediator(
   agent: Agent,
@@ -150,6 +160,7 @@ async function askMediator(
     issuer: mailbox.did,
     recipient: mailbox.mediatorDid,
     issuedAt: wireTimestamp(),
+    ...MEDIATOR_ASK_ERROR_FORMAT,
     payload,
   }
   const signed = await signDocumentProof(agent, document, mailbox.did, { proofPurpose: 'authentication' })

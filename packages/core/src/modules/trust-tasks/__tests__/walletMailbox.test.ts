@@ -346,6 +346,9 @@ describe('the phone’s account at the mediator', () => {
       issuer: MAILBOX,
       recipient: MEDIATOR,
       payload: { did: sha256hex(MAILBOX), acl: { sendForwarded: true } },
+      // The ask for a `trust-task-error` document on refusal, inside the signed document (v0.54.0 reads it; without it
+      // the refusal is a problem-report).
+      'x-errorFormat': 'trust-task-error',
       proof: { proofPurpose: 'authentication', verificationMethod: `${MAILBOX}#key-1` },
     })
     expect(typeof document.issuedAt).toBe('string')
