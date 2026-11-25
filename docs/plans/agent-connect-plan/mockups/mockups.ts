@@ -32,12 +32,15 @@ export const MOCKUPS: Mockup[] = [
       y = s.layerRow('Healthcare', y)
       y = s.layerRow('New memory', y)
       y = s.label('Your VTA keeps this agent to these memories. To use different ones in a room, connect another agent for it.', y + 2) + 6
-      y = s.layerRow('Connected for', y, { muted: '7 days, 30 days, 90 days' }) + 6
+      y = s.body('What it can use them for', y)
+      y = s.layerRow('Personalise its answers for you', y + 2)
+      y = s.layerRow('Do the tasks you ask of it', y)
+      y = s.layerRow('For 4 hours', y, { muted: 'After 4 hours it has to ask again.' }) + 6
       s.label("You'll run a command in a terminal on the computer where Claude Code runs. It shows a code to scan.", y)
       s.primaryButton('Continue', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['The grey bar stands for the name field.', '"Memory it can use" is the memory picker (§3.15): checkbox rows (boxes not drawn), any number or none, and "New memory". Sample memories.', 'The line under the rows is the binding (§3.15): the VTA keeps the agent to the picked set; a different set in a room is another agent.', 'Expiry: 7, 30 or 90 days, 30 by default; drawn as one line.'],
+    notes: ['The grey bar stands for the name field.', '"Memory it can use" is the memory picker (§3.15): checkbox rows (boxes not drawn), any number or none, and "New memory". Sample memories.', 'The line under the rows is the binding (§3.15): the VTA keeps the agent to the picked set; a different set in a room is another agent.', 'Purposes by their descriptions (D43), one row each. No expiry choice: 4 hours, temporary (D41); the helper is drawn as the row\'s second line.'],
   },
   {
     file: '02-connect-scan.svg',
@@ -83,15 +86,20 @@ export const MOCKUPS: Mockup[] = [
     draw: (s) => {
       s.header('Connect an agent')
       let y = s.heading('Connect "Notes helper"?', TOP) + 10
+      y = s.body('Run by you, from your own terminal.', y)
       y = s.body('It will be able to chat with you.', y)
-      y = s.body('It will be able to use the memories Education, Healthcare, and no others.', y)
-      y = s.body('Until 23 December 2026.', y)
-      y = s.body('It can read a room only after you add it to one.', y) + 10
+      y = s.body('It will be able to read and change the memories Education, Healthcare, and no others.', y)
+      y = s.body('It can use them for:', y)
+      y = s.layerRow('Personalise its answers for you', y + 2)
+      y = s.layerRow('Do the tasks you ask of it', y)
+      y = s.body('For 4 hours, until 15:30.', y + 4)
+      y = s.body('It can read a room only after you add it to one.', y)
+      y = s.body('Approving gives access. It is not signing in.', y) + 6
       s.body('Only continue if you ran the command in your own terminal just now.', y)
       s.primaryButton('Approve', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['Shown after the right number was typed. "Approve" asks for the phone’s face or fingerprint check (§3.2 step 6).', 'With no memory picked the second line reads "It will have no memory." The date and the memories are samples.', 'The line "It can read a room only after you add it to one." is the P1 form; P0, with no rooms, omits it.'],
+    notes: ['Shown after the right number was typed. "Approve" asks for the phone’s face or fingerprint check (§3.2 step 6).', 'HCP\'s checklist as it applies here (D41). With no memory picked the memories line reads "It will have no memory." and the purposes are omitted. The time and the memories are samples. Nothing here elects persistence.', 'The line "It can read a room only after you add it to one." is the P1 form; P0, with no rooms, omits it.'],
   },
   {
     file: '06-agent-list.svg',
@@ -107,7 +115,7 @@ export const MOCKUPS: Mockup[] = [
       s.primaryButton('Connect an agent', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['The My Agent tab opens here (D26); the VTA’s screens are under Settings as "My VTA" (19).', 'P1 line: the "Answers other people" lines appear from step 7.14; P0 draws the rows without them.', 'Sample names. Status is one of Connected, Not connected right now, Expires in <n> days, Expired, Not finished, Revoke not confirmed, Revoked, plus "<name> changed its key" (not drawn).', 'A row opens the agent details (11); "Extend" and "Revoke" not drawn. The primary button is a mockup choice.'],
+    notes: ['The My Agent tab opens here (D26); the VTA’s screens are under Settings as "My VTA" (19).', 'P1 line: the "Answers other people" lines appear from step 7.14; P0 draws the rows without them.', 'Sample names. Status is one of Connected, Connected until <time>, Not connected right now, Expired, Not finished, Revoke not confirmed, Revoked, plus "<name> changed its key" (not drawn).', 'A row opens the agent details (11); "Extend" and "Revoke" not drawn. The primary button is a mockup choice.'],
   },
   {
     file: '07-agent-sheet.svg',
