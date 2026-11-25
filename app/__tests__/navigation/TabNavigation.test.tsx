@@ -3,7 +3,7 @@ import React from 'react'
 
 // Import directly from bifold submodule path
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-import QRCodeExchangeSlider from '../../../bifold/packages/core/src/components/modals/QRCodeExchangeSlider'
+import QRCodeExchangeSlider from '../../../packages/core/src/components/modals/QRCodeExchangeSlider'
 import { BasicAppContext } from '../../__mocks__/helpers/app'
 import { testIdWithKey } from '@bifold/core'
 

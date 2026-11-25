@@ -94,6 +94,7 @@ export function legRecord({ name, exit, start, end }, log, meta, passedBefore = 
 // variable is existence-based: '1', '0' and '' all ignore replace refs; only unsetting it honours them. bifoldKind's
 // `ls-tree <sha>` below does not need it: a graft rewrites parents only, so the replacement carries the same tree as
 // the real commit (checked: both 9024ab43… for the fold); a replacement that edited content would silently mislead it.
+// oneCodebase's ls-tree reads are the same kind of read.
 export const NO_REPLACE = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' };
 
 /** Is commit `a` an ancestor of (or equal to) `b` in the repo at `dir`? null when that can't be told. */
@@ -105,14 +106,18 @@ export function isAncestor(dir, a, b) {
   }
 }
 
-/** What `<sha>:bifold` is in the wallet repo: 'commit' (a gitlink), 'tree' (folded in), null (absent or unknown). */
-const bifoldKind = (dir, sha) => { try { return execFileSync('git', ['-C', dir, 'ls-tree', sha, '--', 'bifold'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/)[1] || null; } catch { return null; } };
+/** The kind of the tree entry `<sha>:<name>` in the wallet repo: 'commit' (a gitlink), 'tree', null (absent or unknown). */
+const kindAt = (dir, sha, name) => { try { return execFileSync('git', ['-C', dir, 'ls-tree', sha, '--', name], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/)[1] || null; } catch { return null; } };
+/** Does the wallet commit carry the framework as part of itself: a tree at packages/ (since the move) or at bifold/
+ * (between the fold and the move)? Then the wallet's ancestry answers for the framework's too. A gitlink does not. */
+const oneCodebase = (dir, sha) => kindAt(dir, sha, 'bifold') === 'tree' || (kindAt(dir, sha, 'bifold') === null && kindAt(dir, sha, 'packages') === 'tree');
 
 /**
  * Row name -> { run, ancestor } for the newest earlier run (by started=) in which it PASSed. `ancestor`: is that
  * run's build an ancestor of this one's (wallet pin, and bifold when BIFOLD_GIT or ./bifold can tell; with no bifold
- * repo, the wallet alone once its commit carries bifold/ as a tree, since the tree is part of that commit)? true,
- * false, or null when it can't be told. `repos` is { wallet, bifold } paths, injectable for tests.
+ * repo, the wallet alone once its commit carries the framework as a tree, at packages/ since the move or at bifold/
+ * before it, since that tree is part of the commit)? true, false, or null when it can't be told. `repos` is
+ * { wallet, bifold } paths, injectable for tests.
  */
 export function passedBeforeIn(runDir, repos = defaultRepos()) {
   const runs = path.dirname(runDir), me = parseMeta(read(path.join(runDir, 'meta')));
@@ -128,9 +133,10 @@ export function passedBeforeIn(runDir, repos = defaultRepos()) {
     let legs = [];
     try { legs = fs.readdirSync(path.join(runs, id), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name); } catch { continue; }
     const wallet = isAncestor(repos.wallet, first(meta.pin), first(me.pin));
-    // No bifold repo at hand: a wallet commit still carrying the gitlink cannot be told (null); a folded one can.
+    // No bifold repo at hand: a wallet commit still carrying the gitlink cannot be told (null); one carrying the
+    // framework as its own tree can.
     const bifold = first(meta.bifold) && first(me.bifold)
-      ? repos.bifold ? isAncestor(repos.bifold, first(meta.bifold), first(me.bifold)) : bifoldKind(repos.wallet, first(me.pin)) === 'tree' ? undefined : null
+      ? repos.bifold ? isAncestor(repos.bifold, first(meta.bifold), first(me.bifold)) : oneCodebase(repos.wallet, first(me.pin)) ? undefined : null
       : undefined;
     const ancestor = wallet === false || bifold === false ? false : wallet === true && bifold !== null ? true : null;
     // The strongest earlier pass per row wins: an ancestor (true) over unknown (null) over a side build (false), so a

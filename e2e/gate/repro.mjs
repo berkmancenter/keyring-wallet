@@ -3,7 +3,7 @@
 // where does the failing test go? Prints a starting test (a bifold unit test, or a gate row), and the rest of the
 // loop as commands: red on the tester's build, the fix, green, the changed legs, the tier.
 //
-//   repro.mjs --report IN-257 --files bifold/packages/core/src/screens/PINEnter.tsx[,…] [--saw "…"] [--want "…"]
+//   repro.mjs --report IN-257 --files packages/core/src/screens/PINEnter.tsx[,…] [--saw "…"] [--want "…"]
 //
 // The report's line is read from the local queue (QUEUE_FILE, default ~/.keyring-fleet/queue.md) when it is there;
 // it is printed for you only and never written into the repo. Prints; writes nothing.
@@ -19,19 +19,19 @@ const e2eDir = path.resolve(here, '..');
 export const slugOf = (id, saw = '') =>
   `${id.toLowerCase()}${saw ? '-' + saw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').split('-').slice(0, 5).join('-') : ''}`;
 
-/** Where a unit test for a source file goes, by the repo's own layout (bifold core's __tests__/<area>, a feature
- * module's __tests__, react-hooks' tests/, the app's __tests__/<area>). */
+/** Where a unit test for a source file goes, by the repo's own layout (core's __tests__/<area>, a feature module's
+ * __tests__, react-hooks' tests/, the app's __tests__/<area>; the framework packages are at packages/ since the move). */
 export function unitTestPath(file, slug) {
   const ext = /\.tsx$/.test(file) ? 'tsx' : 'ts';
   const name = `${slug}.test.${ext}`;
   let m;
-  if ((m = file.match(/^(bifold\/packages\/core\/src\/modules\/[^/]+)\//))) return `${m[1]}/__tests__/${name}`;
-  if ((m = file.match(/^bifold\/packages\/core\/src\/([^/]+)\//))) return `bifold/packages/core/__tests__/${m[1]}/${name}`;
-  if (/^bifold\/packages\/core\//.test(file)) return `bifold/packages/core/__tests__/${name}`;
-  if (/^bifold\/packages\/react-hooks\//.test(file)) return `bifold/packages/react-hooks/tests/${name}`;
+  if ((m = file.match(/^(packages\/core\/src\/modules\/[^/]+)\//))) return `${m[1]}/__tests__/${name}`;
+  if ((m = file.match(/^packages\/core\/src\/([^/]+)\//))) return `packages/core/__tests__/${m[1]}/${name}`;
+  if (/^packages\/core\//.test(file)) return `packages/core/__tests__/${name}`;
+  if (/^packages\/react-hooks\//.test(file)) return `packages/react-hooks/tests/${name}`;
   // The trust-tasks package has no tests of its own: core's trust-tasks module covers it.
-  if (/^bifold\/packages\/trust-tasks\//.test(file)) return `bifold/packages/core/src/modules/trust-tasks/__tests__/${name}`;
-  if ((m = file.match(/^(bifold\/packages\/[^/]+)\//))) return `${m[1]}/__tests__/${name}`;
+  if (/^packages\/trust-tasks\//.test(file)) return `packages/core/src/modules/trust-tasks/__tests__/${name}`;
+  if ((m = file.match(/^(packages\/[^/]+)\//))) return `${m[1]}/__tests__/${name}`;
   if ((m = file.match(/^app\/src\/([^/]+)\//))) return `app/__tests__/${m[1]}/${name}`;
   return `app/__tests__/${name}`;
 }
@@ -78,7 +78,8 @@ const usesRows = (driver, read) => { try { return /createRows\s*\(/.test(read(dr
  * { legs, ids, unmapped, missing, kind: 'unit'|'row', unitPath?, driver?: {leg, driver, unit} }
  */
 export function plan({ files }, { manifests, legsDir, read = (f) => fs.readFileSync(f, 'utf8'), exists = pathExists, repoRoot = path.resolve(e2eDir, '..') }) {
-  const missing = files.filter((f) => /^(bifold|app)\//.test(f) && exists(f) === false);
+  // A bifold/… path is missing too, since the move: the framework lives at packages/.
+  const missing = files.filter((f) => /^(bifold|packages|app)\//.test(f) && exists(f) === false);
   const present = files.filter((f) => !missing.includes(f));
   const owned = idsOwnedBy(present, ownersFrom(manifests));
   const r = select(present, { manifests, legsDir, read, root: path.join(repoRoot, 'e2e'), top: repoRoot });
@@ -105,11 +106,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const q = queueLine(id, QUEUE());
   if (q) console.log(`report (the local queue; private: never paste it into a PR or an issue):\n  ${q.slice(0, 300)}\n`);
   const manifests = [
-    { file: 'lib/testids.json', root: 'bifold/packages/core/' },
+    { file: 'lib/testids.json', root: 'packages/core/' },
     { file: 'lib/testids.app.json', root: 'app/' },
   ].filter((m) => fs.existsSync(path.join(e2eDir, m.file))).map((m) => ({ root: m.root, json: JSON.parse(fs.readFileSync(path.join(e2eDir, m.file), 'utf8')) }));
   const p = plan({ files }, { manifests, legsDir: path.join(here, 'legs') });
-  if (p.missing.length) console.log(`no such file in the wallet or bifold tree: ${p.missing.join(', ')}`);
+  if (p.missing.length) console.log(`no such file in the wallet tree (the framework lives at packages/ since its move): ${p.missing.join(', ')}`);
   if (p.kind === 'none') { process.exitCode = 2; } else {
     console.log('1. Is the gate looking?');
     console.log(p.legs.length ? `   yes: ${p.legs.join(', ')} reach ${p.ids.slice(0, 6).join(', ')}` : '   no leg reaches these files');

@@ -704,14 +704,14 @@ async function setAutoLockNever(driver) {
  *
  * The "Developer" row on Settings (testID DeveloperOptions) only exists
  * once `store.preferences.developerModeEnabled` is already persisted true
- * (bifold/packages/core/src/screens/Settings.tsx) — i.e. on a LATER visit
+ * (packages/core/src/screens/Settings.tsx) — i.e. on a LATER visit
  * to Settings, after developer mode has already been turned on. Tripping
  * the tap counter for the FIRST time takes a different path entirely:
  * Settings' own onDevModeTriggered fires as soon as the threshold trips
  * and calls `navigation.navigate(Screens.Developer)` directly, so the app
  * jumps straight to the Developer screen — there is no "DeveloperOptions"
  * row to see or tap on Settings in that transition, only afterwards.
- * (bifold/packages/core/src/hooks/developer-mode.ts:
+ * (packages/core/src/hooks/developer-mode.ts:
  * TOUCH_COUNT_TO_ENABLE_DEVELOPER_MODE = 10 taps on the version footer,
  * but the counter is checked BEFORE incrementing, so it only trips on the
  * 11th tap despite the constant's name.)
@@ -821,7 +821,7 @@ export async function openDeveloperScreen(driver, { keepAutoLock = false } = {})
     // Developer mode was already enabled in a prior session (persisted store).
     await tapTestId(driver, "DeveloperOptions", 15000);
   } else {
-    // useDeveloperMode's counter (bifold/packages/core/src/hooks/developer-
+    // useDeveloperMode's counter (packages/core/src/hooks/developer-
     // mode.ts) has no time-window reset — any 11 taps that land trip it,
     // however spaced out. So a plain "click 11 times" loop assumes every
     // click lands, but real devices under load occasionally drop a tap
