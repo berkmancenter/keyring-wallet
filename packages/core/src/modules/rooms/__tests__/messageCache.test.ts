@@ -31,7 +31,11 @@ import {
 } from '../messageCache'
 import { cacheWallet } from './fixtures/cacheWallet'
 
-jest.mock('../useRoomRows', () => ({ onRoomsListed: jest.fn() }))
+jest.mock('../useRoomRows', () => ({
+  onRoomsListed: jest.fn(),
+  dropRowPreviews: jest.fn(),
+  readRowPreviewsWith: jest.fn(),
+}))
 
 const NOW = Date.parse('2026-11-18T12:00:00Z')
 const DAY = 24 * 3600 * 1000

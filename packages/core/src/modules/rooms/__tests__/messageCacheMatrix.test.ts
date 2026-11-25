@@ -40,6 +40,8 @@ jest.mock('../useRoomRows', () => ({
     return () => undefined
   },
   refreshRoomRows: () => undefined,
+  dropRowPreviews: () => undefined,
+  readRowPreviewsWith: () => undefined,
 }))
 jest.mock('../../directory/names', () => ({ dropDirectoryNames: async () => undefined }))
 jest.mock('../../directory/myPhoto', () => ({ keepSentPhoto: async () => undefined }))

@@ -6,7 +6,9 @@ import { LocalStorageKeys } from '../../constants'
 import { PersistentStorage } from '../../services/storage'
 import { VTA_UNLINKING_EVENT } from '../trust-tasks/module/unlinkEvent'
 import { VTI_REMOVED_EVENT } from '../trust-tasks/module/vtiCommunityNotices'
-import { onRoomsListed } from './useRoomRows'
+import { toInertText } from './inertText'
+import type { RoomsService } from './types'
+import { dropRowPreviews, onRoomsListed, readRowPreviewsWith, type RowPreview } from './useRoomRows'
 
 /**
  * A room's recent posts, kept on the phone in the agent's encrypted wallet so a room opens on them at once, and emptied
@@ -297,11 +299,17 @@ async function coveredBy(agent: CacheWallet, entry: JournalEntry): Promise<Recor
 
 async function emptyRecords(agent: CacheWallet, records: RecordLike[]): Promise<number> {
   let n = 0
-  for (const record of records) {
-    if (record.content?.emptied === true) continue
-    record.content = { ...EMPTIED }
-    await agent.genericRecords.update(record)
-    n++
+  try {
+    for (const record of records) {
+      if (record.content?.emptied === true) continue
+      // Messages' previews drawn from the copies come down before the first copy is emptied, whichever it is.
+      if (n === 0) dropRowPreviews()
+      record.content = { ...EMPTIED }
+      await agent.genericRecords.update(record)
+      n++
+    }
+  } finally {
+    if (n > 0) dropRowPreviews()
   }
   return n
 }
@@ -460,6 +468,49 @@ export async function readRoomPostsBeforeRoom(
     })
   if (mine.length !== 1) return undefined
   return readRoomPosts(agent, mine[0].personaDid, roomId, now)
+}
+
+/**
+ * Each kept room's newest post, by room, for Messages' rows at launch (useRoomRows `withPreview`): read through
+ * {@link readRoomPostsBeforeRoom}, so a copy is drawn only by the one identity this phone acts as in its community, and
+ * under every check that read makes. Nothing when the cache is not allowed.
+ */
+export async function readKeptNewestPosts(
+  agent: CacheWallet,
+  communities: ReadonlyArray<{ did: string; personaDid: string }>,
+  now = Date.now()
+): Promise<Map<string, { personaDid: string; post: CachedPost }>> {
+  const out = new Map<string, { personaDid: string; post: CachedPost }>()
+  if (!(await messageCacheAllowed())) return out
+  const records = await agent.genericRecords.findAllByQuery({ type: RECORD_TYPE })
+  const roomIds = new Set(records.map((record) => contentOf(record)?.roomId).filter(isText))
+  for (const roomId of roomIds) {
+    const copy = await readRoomPostsBeforeRoom(agent, roomId, communities, now)
+    const newest = copy?.posts[0]
+    if (copy && newest) out.set(roomId, { personaDid: copy.room.personaDid, post: newest })
+  }
+  return out
+}
+
+/** A kept post as Messages' row draws its newest post: its words inert again, the member's own said as theirs. */
+function previewOf(personaDid: string, post: CachedPost): RowPreview {
+  return {
+    post: {
+      ...(post.author ? { by: { did: post.author } } : {}),
+      mine: post.author === personaDid,
+      text: String(toInertText(post.body)),
+      kind: 'chat',
+    },
+    at: new Date(post.writtenAt),
+  }
+}
+
+/** What Messages reads its rows' previews with: the bound agent's kept copies, for the service built on it. */
+async function rowPreviews(service: RoomsService): Promise<ReadonlyMap<string, RowPreview>> {
+  const agent = bound
+  if (!agent || service.runsOn !== agent || !service.localCommunities) return new Map()
+  const newest = await readKeptNewestPosts(agent, await service.localCommunities())
+  return new Map([...newest].map(([roomId, { personaDid, post }]) => [roomId, previewOf(personaDid, post)]))
 }
 
 function readInTurn(
@@ -651,6 +702,8 @@ export async function bindMessageCache(
   } catch {
     log?.('[Rooms:cache] the kept posts were not swept at start; the next start does')
   }
+  // Messages' rows read their previews from the copies only once the sweep has emptied what no longer stands.
+  readRowPreviewsWith(rowPreviews)
 }
 
 /** For tests: forget what is bound. */
