@@ -26,6 +26,7 @@ import {
   ROWS_WATCHED_MAX,
   refreshRoomRows,
   useRoomRows,
+  markRoomSeen,
   useRoomRowsPoll,
   useRoomsUnreadCount,
 } from '../useRoomRows'
@@ -146,6 +147,76 @@ function watching(s: ReturnType<typeof serviceWith>) {
 
 const inView = () => act(async () => void focus?.())
 const armed = (watchRoom: jest.Mock) => watchRoom.mock.calls.map(([roomId, since]) => [roomId, since])
+
+// Review of #1007 (the review lane's probe, kept with its control): a room marked unread on another device while a
+// signal-driven read of it is out. The mark drops the room's track and starts a read that refills it at once, so the
+// slower read out across both found a track and put back the "seen" the mark took away.
+describe('a room marked unread on another device, and a read of it in flight', () => {
+  type MarkerListener = (roomId: string, marker: { version: number }, how: 'further' | 'moved') => void
+  const withAgentMarker = (s: ReturnType<typeof serviceWith>) => {
+    const marker: { now?: { version: number } } = {}
+    const listeners = new Set<MarkerListener>()
+    Object.assign(s, {
+      roomReadMarker: () => marker.now,
+      markRoomRead: jest.fn(),
+      roomMarkedUnread: () => false,
+      roomEntered: jest.fn(),
+      onRoomReadMarker: (l: MarkerListener) => {
+        listeners.add(l)
+        return () => void listeners.delete(l)
+      },
+    })
+    /** The person marks the room unread at `version` on another device: the agent's marker goes back to it. */
+    const markBack = (version: number) =>
+      act(async () => {
+        marker.now = { version }
+        for (const l of [...listeners]) l('a', { version }, 'moved')
+      })
+    return { marker, markBack }
+  }
+
+  const seenToFive = async () => {
+    const s = serviceWith([room('a')], { a: [note('a1', 1), note('a3', 3), note('a4', 4)] })
+    const w = watching(s)
+    const m = withAgentMarker(s)
+    const { list } = mount(s)
+    await inView()
+    await flush()
+    m.marker.now = { version: 5 }
+    await act(async () => markRoomSeen(s, 'a', 5))
+    await flush()
+    const unread = () => list.result.current.rows.rows.find((r) => r.roomId === 'a')?.unread
+    return { s, w, m, unread }
+  }
+
+  test('the read in flight answers after the mark: the row counts from the mark, not from the seen it carried', async () => {
+    const { s, w, m, unread } = await seenToFive()
+    let release: () => void = () => undefined
+    s.listNotes.mockImplementationOnce(
+      () =>
+        new Promise<NoteList>(
+          (resolve) =>
+            (release = () => resolve({ notes: [], complete: true, check: { verdict: 'consistent', detail: '' } }))
+        )
+    )
+    const reading = w.signal('a')
+    await m.markBack(2)
+    await flush()
+    await act(async () => release())
+    await reading
+    await flush()
+    expect(unread()).toBe(2)
+  })
+
+  test('the same mark with no read in flight (control: the same count)', async () => {
+    const { w, m, unread } = await seenToFive()
+    await m.markBack(2)
+    await flush()
+    await w.signal('a')
+    await flush()
+    expect(unread()).toBe(2)
+  })
+})
 
 describe("Messages' rooms watched at their hosts", () => {
   test('in view: each room read is armed from the newest version read', async () => {

@@ -213,6 +213,8 @@ let tracks = new WeakMap<RoomsService, Map<string, Track>>()
 
 const hashOf = (roomId: string) => bytesToHex(sha256(utf8ToBytes(roomId))).slice(0, 16)
 
+/** How many times each room was marked unread on another device this run (adoptReadMarker): a read out across one is stale. */
+const markedBack = new Map<string, number>()
 let seenVersions: Record<string, number> | undefined
 let hiddenUntil: Record<string, number> | undefined
 let seenRead: Promise<void> | undefined
@@ -283,6 +285,7 @@ const rowPostOf = (note: NoteSummary, actingAs: Identity | undefined): RoomRowPo
 
 /** Reads one room: what came after the newest post already read, and the newest post in full when it changed. */
 async function readRoom(service: RoomsService, room: RoomSummary, track: Track | undefined): Promise<Track> {
+  const marksBefore = markedBack.get(room.roomId) ?? 0
   const actingAs = track?.actingAs ?? (await service.getRoom(room.roomId)).actingAs
   // A first read is a window of the newest records while rooms/newestFirstSwitch is on; off, the whole room, asked
   // exactly as before. Later reads ask only what came after the newest held, as before.
@@ -291,11 +294,12 @@ async function readRoom(service: RoomsService, room: RoomSummary, track: Track |
     : isRoomsNewestFirstOn()
       ? await service.listNotes(room.roomId, { head: ROOM_HEAD_WINDOW })
       : await service.listNotes(room.roomId)
-  // The room was marked unread on another device while this read was out (adoptReadMarker dropped its track so the next
-  // read starts from the marker): the track carried in is stale, and building on it would put back the "seen" the mark
-  // took away. Read it afresh, as a room met for the first time is. Found in review of #1007 (a probe that held a
-  // listing while the marker moved back).
-  if (track && !tracks.get(service)?.has(room.roomId)) return readRoom(service, room, undefined)
+  // The room was marked unread on another device while this read was out: the track carried in is from before the
+  // mark, and building on it would put back the "seen" the mark took away. Read it afresh, as a room met for the first
+  // time is. Asked by the count of marks, not by whether the track is there now: adoptReadMarker drops it and starts a
+  // read that refills it at once, so a slower read out across both found a track and put the stale one back. Found in
+  // review of #1007.
+  if (track && (markedBack.get(room.roomId) ?? 0) !== marksBefore) return readRoom(service, room, undefined)
   // A first listing that stopped early with nothing in it says nothing about the room: still unread, not empty. Only a
   // first read: a listing asked with `sinceVersion` is never complete (types.ts), so this on a refresh would leave every
   // room unread for ever. readAll catches it per room, so the other rooms read on.
@@ -1080,6 +1084,8 @@ function adoptReadMarker(service: RoomsService, roomId: string, version: number,
   if (how === 'further' || version >= before) return seenTo(service, roomId, version)
   seenVersions = { ...(seenVersions ?? {}), [hash]: version }
   void keepSeen()
+  // Counted whether or not a track is held: a read out now carries the track from before this, and must not keep it.
+  markedBack.set(roomId, (markedBack.get(roomId) ?? 0) + 1)
   if (!track) return
   tracks.get(service)?.delete(roomId)
   refreshRoomRows()
