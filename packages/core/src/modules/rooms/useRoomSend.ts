@@ -137,6 +137,10 @@ const isExpired = (e: unknown): boolean => e instanceof Error && e.name === 'Roo
 export const listedKeyOf = (post: Pick<PendingPost, 'key' | 'recordKey'>): string | undefined =>
   post.key ?? post.recordKey
 
+/** Whether a post goes as a record that says it is a message (sendRecord), not as a note: what write() does and the log says. */
+const goesAsRecord = (service: RoomsService, post: PendingPost): boolean =>
+  !!(post.asRecord && !post.file && service.sendRecord)
+
 async function deliver(service: RoomsService, roomId: string, post: PendingPost) {
   const box = outboxOf(service, roomId)
   // From Send (or a retry's tap) to written or failed: one log line, so a report shows what a post costs (IN-776).
@@ -144,7 +148,7 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
   const timed = (failed: boolean) =>
     service.notePostSent?.(roomId, Date.now() - startedAt, {
       failed,
-      asRecord: !!(post.asRecord && !post.file && service.sendRecord),
+      asRecord: goesAsRecord(service, post),
       file: !!post.file,
     })
   const abort = new AbortController()
@@ -153,7 +157,7 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
   const letGo = post.file ? holdRoomFileTransfer(abort) : undefined
   const write = async () => {
     // A record that says it's a message, a reply if it names one: its own id keeps a retry one record, as a note's does.
-    if (post.asRecord && !post.file && service.sendRecord)
+    if (goesAsRecord(service, post) && service.sendRecord)
       return service.sendRecord(roomId, {
         type: 'message',
         body: post.body,
@@ -196,6 +200,7 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
     if (box.posts.some((p) => p.localId === post.localId)) {
       const refused = permanentRefusal(e)
       update(box, post.localId, { state: 'failed', progress: undefined, refused })
+      // Inside this guard on purpose: a cancelled upload has already left the box, and is not a post that failed.
       timed(true)
       // Not refused, so it may have landed with only its answer lost (IN-736): the room is read once more now, and a
       // post its list shows leaves here (settle) instead of waiting for the next poll as "Not sent".

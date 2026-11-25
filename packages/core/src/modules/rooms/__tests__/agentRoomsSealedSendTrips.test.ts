@@ -222,6 +222,32 @@ describe("the room's newest version a sealed write is sealed for", () => {
   })
 })
 
+// Review of #1029: before, a stale key list or head would be trusted by every write until it aged out. Now a failed write
+// forgets both, so a stale one costs one failed write.
+describe('a write that fails forgets what it took on trust', () => {
+  test('the next write asks the key list and lists the room again, and goes through', async () => {
+    const s = setup({ head: 4 })
+    await s.openWatched()
+    // The put is refused once: as a write that met a moved epoch would be.
+    s.sendCompleted.mockRejectedValueOnce(Object.assign(new Error('refused'), { name: 'VtiRefusal', code: 'conflict' }))
+    await expect(s.send('first')).rejects.toBeDefined()
+    const [lists, browsed] = [s.count(ROOMS_TASK.keysList02), s.count(ROOMS_TASK.keysBrowse)]
+    const written = await s.send('second')
+    expect(s.count(ROOMS_TASK.keysList02)).toBe(lists + 1)
+    expect(s.count(ROOMS_TASK.keysBrowse)).toBe(browsed + 1)
+    expect(written.version).toBe(5)
+  })
+
+  test('a write that goes through keeps both: the next one asks neither (control)', async () => {
+    const s = setup({ head: 4 })
+    await s.openWatched()
+    await s.send('first')
+    const [lists, browsed] = [s.count(ROOMS_TASK.keysList02), s.count(ROOMS_TASK.keysBrowse)]
+    await s.send('second')
+    expect([s.count(ROOMS_TASK.keysList02), s.count(ROOMS_TASK.keysBrowse)]).toEqual([lists, browsed])
+  })
+})
+
 describe('the trips a message costs, end to end', () => {
   test('watched and recently listed: seal, act and put only', async () => {
     const s = setup({ head: 4 })

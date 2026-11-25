@@ -315,17 +315,21 @@ const SEALED_WRITE_ATTEMPTS = 4
 
 /**
  * How long the agent's key list, as last read, answers a write's question "which epoch is this room at?"
- * (recordFeaturesIn) without asking again. An epoch moves only when the room's membership does; a write that meets a
- * moved one is refused like any other and the next asks afresh. Each list asked for any reason refreshes it. A key
- * list on every write was one of five trips in a row for each message in a room that takes records (IN-776).
+ * (recordFeaturesIn) without asking again. An epoch moves only when the room's membership does. A write that fails
+ * forgets the list (writeSealed), so the next asks afresh. Each list asked for any reason refreshes it. A key list on
+ * every write was one of five trips in a row for each message in a room that takes records (IN-776).
  */
 export const HELD_FRESH_MS = 5 * 60_000
 
 /**
  * How long a room's newest version, as a listing of the service found it, stands for the room's head when a sealed
  * write is sent, in place of a listing of the whole room (writeSealed). Only while the room is watched, so a change
- * since would have been signalled and read. A wrong guess costs what a race always cost: the write is sealed and put
- * again at the version the host gave it (SEALED_WRITE_ATTEMPTS). Two minutes is the watched room's own poll.
+ * since would have been signalled; not always read: a signal that comes while a failed poll still owes its skipped
+ * ticks is not read early (useRoomPosts), and a room left and come back to may have moved between its watches. A
+ * wrong guess is a version race: the host stores the record at its next
+ * version, sealed for another, so it does not open until the write seals and puts it again at the version the host
+ * gave (SEALED_WRITE_ATTEMPTS); if the app stops between the two, that record stays unopenable. Two minutes is the
+ * watched room's own poll.
  */
 export const HEAD_FRESH_MS = 120_000
 
@@ -2430,7 +2434,24 @@ export class AgentRoomsService implements RoomsService {
    * `ownKey`: the key is this post's own, so a record already there at the first try is this post, sent again
    * after its answer was lost.
    */
+  /**
+   * A sealed write, and on any failure the two things it may have taken on trust are forgotten: the key list's epoch
+   * (HELD_FRESH_MS) and the room's head (HEAD_FRESH_MS). The next write asks both afresh, so a stale one costs one
+   * failed write, never every write until it ages out (review of #1029).
+   */
   private async writeSealed(
+    ...args: Parameters<AgentRoomsService['writeSealedOnce']>
+  ): Promise<{ key: string; version: number }> {
+    try {
+      return await this.writeSealedOnce(...args)
+    } catch (e) {
+      this.heldLast = undefined
+      this.heads.delete(args[0].roomId)
+      throw e
+    }
+  }
+
+  private async writeSealedOnce(
     room: KnownRoom,
     community: RoomsCommunity,
     host: string,
