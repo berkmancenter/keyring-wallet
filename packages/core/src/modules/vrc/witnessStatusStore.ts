@@ -190,6 +190,7 @@ class VrcFlowStore extends EventEmitter {
     if (this.flowStatus.get(connectionId) !== status) this.statusSince.set(connectionId, Date.now())
     this.flowStatus.set(connectionId, status)
     this.flowEnds.delete(connectionId)
+    this.flowEndedFrom.delete(connectionId)
     if (witnessed || status === 'witness-active') {
       this.isWitnessed.set(connectionId, true)
     }

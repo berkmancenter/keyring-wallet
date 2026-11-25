@@ -261,7 +261,6 @@ describe('QRScanner Component', () => {
   test('the QR code view says to ask for a new code once a code has been up three minutes with nothing arriving', async () => {
     // A scan whose first message never reached this phone (the other phone's send failed) looks exactly like no
     // scan: the keep-open line gives way to the one way forward, a new code (2026-11-21).
-    // @ts-expect-error useAgent will be replaced with a mock which will have this method
     useAgent().agent?.modules.didcomm.oob.createInvitation.mockReturnValue({
       outOfBandInvitation: { toUrl: () => 'https://example.com/invitation' },
     })
