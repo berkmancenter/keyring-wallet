@@ -31,7 +31,7 @@ import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
-import { canMintV2Invitation } from '../../../src/modules/trust-tasks/ceremony'
+import { DIDCOMM_V2_MINT_REMOTE_OFF, canMintV2Invitation } from '../../../src/modules/trust-tasks/ceremony'
 import {
   closeWalletMailbox,
   mailboxNamedBy,
@@ -211,7 +211,14 @@ afterEach(async () => {
   held.length = 0
 })
 
+// These rows prove the mailbox's v2 path itself, so the release kill on minting v2 (on from 282, until chat speaks
+// over v2) is lifted for them and put back after.
+beforeAll(() => {
+  DIDCOMM_V2_MINT_REMOTE_OFF.off = false
+})
+
 afterAll(async () => {
+  DIDCOMM_V2_MINT_REMOTE_OFF.off = true
   for (const agent of running) await agent.shutdown()
   rmSync(storeDir, { recursive: true, force: true })
 })
