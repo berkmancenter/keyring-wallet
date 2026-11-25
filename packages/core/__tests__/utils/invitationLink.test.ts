@@ -4,10 +4,15 @@
  * receiver was handed it cut to 200 characters, and was told "Unable to handle
  * deeplink" (1039) with nothing to do about it.
  */
-import { DidCommOutOfBandInvitation } from '@credo-ts/didcomm'
+import { DidCommOutOfBandInvitation, DidCommOutOfBandInvitationV2 } from '@credo-ts/didcomm'
 
 import { domain } from '../../src/constants'
-import { invitationLinkError, invitationLinkIncomplete, invitationShareContent } from '../../src/utils/invitationLink'
+import {
+  deepLinkCarriesInvitation,
+  invitationLinkError,
+  invitationLinkIncomplete,
+  invitationShareContent,
+} from '../../src/utils/invitationLink'
 
 const t = ((key: string) => key) as never
 
@@ -42,6 +47,38 @@ describe('the invitation link, as it is shared and as it arrives', () => {
       expect(DidCommOutOfBandInvitation.fromUrl(link).toJSON()).toEqual(sent.toJSON())
     }
   )
+
+  // With the mailbox open a phone shares an out-of-band/2.0 invitation, under
+  // `_oob`. On 282's gate (pair-ios, 0b3342db5) the receiver tapped one and
+  // nothing happened: the deep link was dropped before connecting, with no
+  // word, because only `oob` was read as carrying an invitation.
+  const v2Invitation = () =>
+    new DidCommOutOfBandInvitationV2({
+      from: 'did:peer:2.Ez6LSbysY2xFMRpGMhb7tFTLMpeuPRaqaWM1yECxJ2MwFTFGB.Vz6MkqRYqQiSgvZQdnBytw86Qbs2ZWUkGv22od935YF4s8M7V',
+      body: { goalCode: 'relationship.credential.bidirectional', goal: 'Establish connection', accept: ['didcomm/v2'] },
+    })
+
+  test('a v2 invitation link, as a phone with its mailbox open shares it, is handed on to connect', () => {
+    const link = v2Invitation().toUrl({ domain })
+    expect(link).toMatch(/[?&]_oob=/)
+    expect(deepLinkCarriesInvitation(link)).toBe(true)
+    expect(invitationLinkIncomplete(link)).toBe(false)
+    expect(invitationLinkError(link, t)).toBeUndefined()
+  })
+
+  test('the v1 link is handed on as before, and a join code (_oobid) is not taken for an invitation', () => {
+    expect(deepLinkCarriesInvitation(invitation().toUrl({ domain }))).toBe(true)
+    expect(deepLinkCarriesInvitation('https://example.org/join?_oobid=2b7c0f1e')).toBe(false)
+    expect(deepLinkCarriesInvitation('https://wallet.asml.berkmancenter.org/invite')).toBe(false)
+  })
+
+  test('a v2 invitation link cut on its way is told as incomplete, as a v1 one is', () => {
+    const link = v2Invitation().toUrl({ domain })
+    const cut = link.slice(0, link.indexOf('_oob=') + 40)
+    expect(deepLinkCarriesInvitation(cut)).toBe(true)
+    expect(invitationLinkIncomplete(cut)).toBe(true)
+    expect(invitationLinkError(cut, t)?.code).toBe(1051)
+  })
 
   test('the same link cut on its way, as a receiver got it, is told as incomplete', () => {
     const url = invitation().toUrl({ domain })
