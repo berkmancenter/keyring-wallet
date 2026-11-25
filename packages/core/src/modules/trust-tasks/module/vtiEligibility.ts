@@ -221,17 +221,19 @@ async function verifyRoleCredential(
   if (typeof issuer !== 'string' || typeof subjectId !== 'string' || !Number.isFinite(validFrom))
     return refuse('grantMalformed', 'the role credential has no issuer, subject or validFrom')
   if (issuer !== expect.community) return refuse('grantIssuer', 'the role credential was not issued by the community')
-  // A DTG Credentials v1 grant (VAC): what vta-sdk 0.47's verify_role_credential
-  // holds it to beyond the rest — the registry context, issuerScope `public`
-  // (the only scope a community can truthfully declare), no `parent`, and
-  // `authority.scope` the community (eligibility.rs:303-336).
+  // A DTG Credentials v1 grant (VAC): what vta-sdk's verify_role_credential
+  // holds it to beyond the rest — the registry context, an issuerScope of
+  // `directed` or `public` (a community is `directed` at minimum, DTG Core
+  // *Correlation Scope*; vta-sdk 0.87 `satisfies(IssuerScope::Directed)`,
+  // dtg-credentials 0.16 — `public` only through 0.84), no `parent`, and
+  // `authority.scope` the community (eligibility.rs:309-340 at 0.87).
   const card = communityRoleCard(credential)
   if (card?.shape === 'vac') {
     const contexts = ([] as unknown[]).concat(credential['@context'] ?? [])
     if (!contexts.includes(DTG_REGISTRY_CONTEXT_V1))
       return refuse('grantMalformed', 'the role credential is not under the DTG Credentials v1 context')
-    if (credential.issuerScope !== 'public')
-      return refuse('grantMalformed', 'a community role credential declares issuerScope public')
+    if (credential.issuerScope !== 'directed' && credential.issuerScope !== 'public')
+      return refuse('grantMalformed', 'a community role credential declares issuerScope directed or public')
     if (card.communityDid !== expect.community)
       return refuse('grantIssuer', 'the role credential confers a role somewhere other than the community')
   }

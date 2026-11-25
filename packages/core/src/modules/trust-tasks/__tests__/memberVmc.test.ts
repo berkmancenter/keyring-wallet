@@ -145,14 +145,28 @@ describe('what cannot be acknowledged (dtg-credentials refusals)', () => {
     }
     return undefined
   }
-  it('refuses anything but a public membership grant about this persona, still current', () => {
+  it('refuses anything but a community membership grant about this persona, still current', () => {
     expect(refused({ ...grant, type: ['VerifiableCredential'] })).toBe('notAMembershipGrant')
     expect(refused({ ...grant, credentialSubject: { id: PERSONA, digestMultibase: 'z' } })).toBe(
       'alreadyAnAcknowledgement'
     )
     expect(refused(grant, 'did:webvh:someone:else')).toBe('notTheGrantSubject')
-    expect(refused({ ...grant, issuerScope: 'directed' })).toBe('grantScope')
     expect(refused({ ...grant, validUntil: '2026-10-11T17:59:59Z' })).toBe('grantExpired')
+  })
+
+  // dtg-credentials 0.16 read_membership_grant: a community declares `directed`
+  // at minimum (`public` was the only scope through 0.15; VTC 0.35 issues
+  // `public` by default and `directed` where the community is configured so).
+  it('acknowledges a grant whose community declares directed, as it does public', () => {
+    expect(grant.issuerScope).toBe('public')
+    expect(refused(grant)).toBeUndefined()
+    expect(refused({ ...grant, issuerScope: 'directed' })).toBeUndefined()
+  })
+
+  it('still refuses a grant scoped narrower than directed, misspelt, or with no scope', () => {
+    expect(refused({ ...grant, issuerScope: 'pairwise' })).toBe('grantScope')
+    expect(refused({ ...grant, issuerScope: 'Public' })).toBe('grantScope')
+    expect(refused({ ...grant, issuerScope: undefined })).toBe('grantScope')
   })
 })
 
