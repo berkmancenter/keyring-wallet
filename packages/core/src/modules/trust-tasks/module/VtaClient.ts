@@ -3024,10 +3024,13 @@ export class VtaClient {
     // The two copies go together, not the signing one and then the key-agreement one: a sign-in needs the signing key
     // for its TSP session and the key-agreement key for the mediator's authenticate, and fetched one after the other
     // the second always landed in a second export round behind every other identity's first (a tester's launch,
-    // IN-724 on 281.2: four signing exports, then four key-agreement ones, the socket waiting on the last). The agent
-    // channel's read lane bounds how many exports are on the wire at once (keyCopySweep), so two at a time from one
-    // identity takes nothing from that. Both are waited for before this answers: a failed fetch fails the ask, and
-    // can leave the other copy held, which the next ask then finds and skips (one fetch instead of two).
+    // IN-724 on 281.2: four signing exports, then four key-agreement ones, the socket waiting on the last). An export
+    // takes a slot of the agent channel's read lane (sharesLane, three wide while KEY_COPIES_TOGETHER is on), and that
+    // bound is unchanged: two copies of one identity hold two of the three slots while they run, so what moves is WHICH
+    // three are on the wire, not how many; one identity's pair is whole sooner, the next identity's first copy waits
+    // for a slot a little longer. With the switch off, exports go one at a time and the two asks simply queue. Both
+    // are waited for before this answers: a failed fetch fails the ask, and can leave the other copy held, which the
+    // next ask then finds and skips (one fetch instead of two).
     const outcomes = await Promise.allSettled(
       pairs.map(([kind, kmsKeyId, vtaKeyId]) => this.holdOneKey(kind, kmsKeyId, vtaKeyId, source))
     )
