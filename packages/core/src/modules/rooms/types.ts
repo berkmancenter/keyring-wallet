@@ -250,6 +250,11 @@ export interface Note extends NoteSummary {
   editedAt?: string
   /** A reaction whose body, as written and before it was made inert, a reader must not show. */
   reactionRefused?: true
+  /**
+   * The record was opened and holds nothing this client can show: JSON that is no record it knows, or a record with
+   * no title, words, file or kind. Its `body` is empty; a screen says one line in its place, never the record.
+   */
+  notShown?: true
 }
 
 /** A file to post, as the phone picked it: a local copy the service reads and uploads through the member's agent. */

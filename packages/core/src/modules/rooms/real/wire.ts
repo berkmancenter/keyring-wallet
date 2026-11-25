@@ -15,6 +15,8 @@ import {
   type RoomVerb,
 } from '../types'
 
+import { CHAT_PROFILE } from '../../chat/chatEvent'
+
 import type { SenderCheck } from './files/sender'
 import type { BlobManifest } from './files/stream'
 
@@ -669,6 +671,11 @@ export interface OpenedRecord extends RecordMeta, RecordMembers {
    * (`files/textSenderCount.ts`). The service takes it off the record before keeping the record.
    */
   signedText?: Record<string, unknown> | null
+  /**
+   * The body is a JSON object that holds nothing this client can show (see `parseRecord`): `body` is empty, and a
+   * screen says so in one line.
+   */
+  notShown?: true
   /** Whether that signature was checked and holds (`files/sender.ts`); set by the service once checked. */
   sender?: SenderCheck
 }
@@ -732,13 +739,22 @@ function parseRecord(
     status === 'retracted' ? '' : plaintext ? decodeBase64Url(plaintext) : cleartext ? JSON.stringify(cleartext) : ''
   // A record body is application-defined. Keyring's notes are `{ title, body }` JSON, and a sealed room's body is a
   // signed SealedRecordBody with the same members. A file record has no `body`: its words are none, and its file is
-  // the body's `file`, never the JSON shown as text (the 276 display bug). Anything else is shown whole.
+  // the body's `file`, never the JSON shown as text (the 276 display bug).
+  //
+  // Nor has a note written with a title and no text: `SealedRecordBody` requires only `roomId`, `key`, `version`,
+  // `author` and `proof` (trust-tasks-tf `rooms/_shared` 0.2), so `body` may be absent. Read as "anything else", such a
+  // note was drawn whole, proof and all, as a chat bubble (IN-725). A title alone now makes it a record.
+  //
+  // What is left is text that is not JSON, shown as written, and JSON that is no record this client knows: an object
+  // with none of those members. That one is never shown as text. It is marked `notShown`, with no words, and a screen
+  // says one line in its place. This client's own chat event, where a body is one whole, is left to `postOf`.
   let title: string | undefined
   let body = raw
   let file: FileManifest | undefined
   let signed: Record<string, unknown> | undefined
   let parsedBody: Record<string, unknown> | undefined
   let members: RecordMembers = {}
+  let notShown = false
   try {
     const parsed = obj(JSON.parse(raw))
     parsedBody = parsed
@@ -746,9 +762,12 @@ function parseRecord(
     if (file) signed = parsed
     members = recordMembersOf(parsed)
     // A record that says what it is is a record, not JSON to show, even with no words: a withdrawn message has none.
-    if (parsed && (typeof parsed.body === 'string' || file || members.kind)) {
+    if (parsed && (typeof parsed.body === 'string' || file || members.kind || str(parsed.title))) {
       body = typeof parsed.body === 'string' ? parsed.body : ''
       title = str(parsed.title)
+    } else if (parsed && parsed.profile !== CHAT_PROFILE) {
+      body = ''
+      notShown = true
     }
   } catch {
     // Not JSON: shown as it is.
@@ -767,6 +786,7 @@ function parseRecord(
     ...(sealedAt !== undefined ? { sealedAt } : {}),
     ...(signed ? { signed } : {}),
     ...(plaintext && !file && status !== 'retracted' ? { signedText: parsedBody ?? null } : {}),
+    ...(notShown ? { notShown: true as const } : {}),
     ...members,
   }
 }

@@ -128,6 +128,22 @@ describe('keeping what the room drew', () => {
     expect(keptWords(r.wallet)).toContain('the words of b')
   })
 
+  // IN-725: what is kept must be what the copy gives back. A post this client can't show has no words to keep, and
+  // words that are a whole signed record are left out when the copy is read (messageCache), so neither is written.
+  it("keeps a person's words, JSON or not; not a post that can't be shown, nor words that are a whole signed record", async () => {
+    const pasted = JSON.stringify({ author: 'did:peer:them', key: 'p', proof: { type: 'x' }, roomId: ROOM, version: 4 })
+    const r = roomWith([
+      note('words', 1),
+      { ...note('typed json', 2), body: toInertText('{"a":1}') },
+      { ...note('not shown', 3), body: toInertText(''), notShown: true },
+      { ...note('pasted record', 4), body: toInertText(pasted) },
+    ])
+    await open(r.service)
+    await settle()
+    const kept = r.wallet.copies().flatMap((copy) => (copy.posts ?? []) as { key: string }[])
+    expect(kept.map((p) => p.key).sort()).toEqual(['typed json', 'words'])
+  })
+
   it('control: a screen not given messageCache (a sealed room, or not the chat) keeps and reads nothing', async () => {
     const r = roomWith([note('a', 1)])
     await open(r.service, {})

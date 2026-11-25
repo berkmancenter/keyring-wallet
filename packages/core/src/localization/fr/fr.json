@@ -3322,6 +3322,7 @@
     "PostRemoved": "Retiré",
     "PostUnread": "Ce message n'a pas pu être lu.",
     "PostCannotOpen": "Ce message ne peut pas être ouvert.",
+    "PostNotShown": "Ce message ne peut pas être affiché ici.",
     "QuoteUnavailable": "Le message d'origine n'est pas disponible",
     "QuoteNote": "Note",
     "QuoteNoAuthor": "Un membre",

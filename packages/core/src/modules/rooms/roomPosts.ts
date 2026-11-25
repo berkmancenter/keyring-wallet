@@ -59,6 +59,8 @@ export interface RoomPost {
   answersReaction?: true
   /** A reaction whose body, as written, a reader must not show (`reactionValueOfBody`). */
   reactionRefused?: true
+  /** The record was read and holds nothing this client can show: one line says so, never the record itself. */
+  notShown?: true
 }
 
 const sameIdentity = (a?: Identity, b?: Identity): boolean => !!a && !!b && JSON.stringify(a) === JSON.stringify(b)
@@ -68,6 +70,47 @@ const dateOf = (iso?: string): Date | undefined => {
   const at = new Date(iso)
   return Number.isNaN(at.getTime()) ? undefined : at
 }
+
+/**
+ * Whether `text` is a whole sealed record as its author signed it, rather than words a person wrote: a JSON object
+ * carrying a record's own envelope, which is a `proof` object, or a `roomId` with a `version` (`SealedRecordBody`).
+ *
+ * For a post's WORDS, where there is nothing else to go by: the copy a phone keeps of a room (`messageCache.ts`) holds
+ * each post as its words alone. A bundle from before IN-725's fix drew such a record whole and kept it so. Told by the
+ * envelope and by nothing wider on purpose: a person may well type `{}` or `{"a":1}` as a message, and words taken for
+ * a record would be dropped from the copy each time it is read, and missing from the room when the phone is offline.
+ *
+ * IN-725: a note written in a community's web room with a title and no text reached Keyring as a signed
+ * `SealedRecordBody` with no `body` member, which that schema allows, and the whole of it was drawn as a chat bubble.
+ */
+export function isRecordJson(text: string): boolean {
+  if (!text.trimStart().startsWith('{')) return false
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    return false
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  const signed = !!record.proof && typeof record.proof === 'object' && !Array.isArray(record.proof)
+  return signed || (typeof record.roomId === 'string' && typeof record.version === 'number')
+}
+
+/**
+ * The same for words cut short (`messageCache.ts` cuts long ones), which no longer parse: told by their start and by
+ * naming a `proof` object, never by their structure.
+ *
+ * `proof` alone, not `roomId`: a signed body is written with its members sorted (its proof is made over the canonical
+ * form), so `proof` comes before `roomId`, and any cut that still holds `roomId` holds `proof` too. Words a person
+ * pasted that merely name a room are then left alone, as {@link isRecordJson} leaves them when they are whole.
+ *
+ * That order is upstream's, not ours, and a body with a large member that sorts before `proof` (a `description`, a
+ * file's manifest) can be cut before it: such a record is missed. When this misses, an old record's JSON stays in the
+ * copy a while longer. It takes words out only where they start with a brace and name a `proof` object.
+ */
+export const isCutRecordJson = (text: string): boolean =>
+  text.trimStart().startsWith('{') && /"proof"\s*:\s*\{/.test(text)
 
 /** A chat message's text, if `body` is a keyring.chat/1 message event; otherwise undefined. */
 export function chatMessageText(body: string, now: number = Date.now()): string | undefined {
@@ -119,6 +162,7 @@ export function postOf(note: Note | NoteSummary, actingAs?: Identity, now: numbe
     ...(read && note.writtenAt ? { writtenAt: note.writtenAt } : {}),
     ...(read && note.editedAt ? { editedAt: note.editedAt } : {}),
     ...(read && note.reactionRefused ? { reactionRefused: true as const } : {}),
+    ...(read && !retracted && note.notShown ? { notShown: true as const } : {}),
     ...(note.createdAt ? { createdAt: note.createdAt } : {}),
     ...(note.createdBy ? { createdBy: note.createdBy } : {}),
   }

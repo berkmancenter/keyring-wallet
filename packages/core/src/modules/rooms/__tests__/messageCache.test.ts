@@ -92,6 +92,39 @@ describe('keeping and reading', () => {
     expect(record.tags).toMatchObject({ community: hashOf(LAB), persona: hashOf(ME), room: hashOf(ROOM) })
   })
 
+  // IN-725: a bundle from before the fix drew a whole signed record as a post's words, and kept it. Read back, the copy
+  // would put that JSON on screen again, and the room would never read the record afresh: its version has not moved.
+  it("a whole signed record kept as a post's words is left out of the copy read back; a person's words stay, JSON or not", async () => {
+    const w = wallet()
+    const record = JSON.stringify({
+      author: ME,
+      key: 'n',
+      proof: { type: 'DataIntegrityProof' },
+      roomId: ROOM,
+      title: 'Message 1',
+      version: 30,
+    })
+    const kept = [
+      post('record', 60_000, { body: record }),
+      post('cut record', 120_000, { body: record.slice(0, record.indexOf('"proof"') + 12), cut: true }),
+      post('words', 180_000, { body: 'See you at 6' }),
+      // Control (review of #1020): what a person typed, which only looks like structure.
+      post('typed json', 240_000, { body: '{"a":1}' }),
+      post('typed braces', 300_000, { body: '{}' }),
+      post('cut words', 360_000, { body: '{ a long story that starts with a brace', cut: true }),
+      // Whole, an object naming a room and no version is a person's words; cut, it is still.
+      post('cut pasted object', 420_000, { body: `{"roomId":"${ROOM}","settings":{"k`, cut: true }),
+    ]
+    await keepRoomPosts(w, room(), kept, NOW)
+    expect((await readRoomPosts(w, ME, ROOM, NOW))?.posts.map((p) => p.key)).toEqual([
+      'words',
+      'typed json',
+      'typed braces',
+      'cut words',
+      'cut pasted object',
+    ])
+  })
+
   it('control: another identity on the phone never reads it', async () => {
     const w = wallet()
     await keepRoomPosts(w, room(), [post('a')], NOW)

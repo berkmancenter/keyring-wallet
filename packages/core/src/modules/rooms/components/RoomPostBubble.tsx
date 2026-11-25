@@ -186,6 +186,11 @@ export const RoomPostBubble: React.FC<{
             <ThemedText style={styles.quiet} testID={testIdWithKey('RoomPostWithdrawn')}>
               {t(mine ? 'Rooms.PostWithdrawnMine' : 'Rooms.PostWithdrawn')}
             </ThemedText>
+          ) : post.notShown ? (
+            // Read, and nothing in it this client can show (roomPosts `isRecordJson`): said in one line, never drawn.
+            <ThemedText style={styles.quiet} testID={testIdWithKey('RoomPostNotShown')}>
+              {t('Rooms.PostNotShown')}
+            </ThemedText>
           ) : post.unread && (post.unreadWhy === 'removed' || post.unreadWhy === 'beyondChain') ? (
             // The agent could not open it and already tried to repair its keys: not a failure that passes. Worded
             // without a cause, since several room settings and membership changes lead here.
