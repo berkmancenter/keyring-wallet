@@ -125,8 +125,13 @@ export const DIDCOMM_V2_ON_BY_DEFAULT = true
 /**
  * Set to true in a release to stop minting out-of-band/2.0 invitations, whatever was set: new invitations are v1. It
  * never takes v2 out of the agent's didcommVersions, which would strand the v2 connections a phone already has.
+ *
+ * ON from 282 (Alberto, 2026-11-25): chat's reactions, disappearing messages and photos ride v1 connections only
+ * (modules/chat/capability.ts, `counterpartySpeaksChat`), so a contact made through a v2 invitation had none of them,
+ * and was told to update Keyring. The mailbox stays open and v2 invitations are still accepted. Lifted, by OTA, once
+ * chat speaks over v2.
  */
-export const DIDCOMM_V2_MINT_REMOTE_OFF: { off: boolean } = { off: false }
+export const DIDCOMM_V2_MINT_REMOTE_OFF: { off: boolean } = { off: true }
 
 let didCommV2Enabled = DIDCOMM_V2_ON_BY_DEFAULT
 
