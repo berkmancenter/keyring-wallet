@@ -198,3 +198,48 @@ describe('as before (controls)', () => {
     room.unmount()
   })
 })
+
+// IN-776: one log line per post, from Send to written or failed, so a report shows what a post costs.
+describe('the time a post takes from Send', () => {
+  const timedService = (fail = false) => {
+    const w = writing()
+    if (fail) w.answers('lost')
+    const notePostSent = jest.fn()
+    Object.assign(w.service, { notePostSent })
+    return { ...w, notePostSent }
+  }
+
+  test('written: said once, as written, with how long it took and how it went', async () => {
+    const w = timedService()
+    const room = open(w.service)
+    await act(async () => void room.result.current.send('On my way.'))
+    await flush()
+    expect(w.notePostSent).toHaveBeenCalledTimes(1)
+    const [roomId, ms, how] = w.notePostSent.mock.calls[0]
+    expect([roomId, how]).toEqual(['room:first', { failed: false, asRecord: false, file: false }])
+    expect(ms).toBeGreaterThanOrEqual(0)
+    room.unmount()
+  })
+
+  test('failed: said once, as failed; a retry that then goes through is said again, as written', async () => {
+    const w = timedService(true)
+    const room = open(w.service)
+    await act(async () => void room.result.current.send('Second try'))
+    await flush()
+    expect(w.notePostSent.mock.calls.map(([, , how]) => how.failed)).toEqual([true])
+    w.answers('ok')
+    await act(async () => room.result.current.retry(room.result.current.pending[0].localId))
+    await flush()
+    expect(w.notePostSent.mock.calls.map(([, , how]) => how.failed)).toEqual([true, false])
+    room.unmount()
+  })
+
+  test('a service with nothing to log to is asked nothing (control: the sample)', async () => {
+    const w = writing()
+    const room = open(w.service)
+    await act(async () => void room.result.current.send('On my way.'))
+    await flush()
+    expect(room.result.current.pending.map((p) => p.state)).toEqual(['sent'])
+    room.unmount()
+  })
+})

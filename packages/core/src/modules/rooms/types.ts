@@ -634,6 +634,8 @@ export interface RoomsService {
   roomWatched?(roomId: string): boolean
   /** Hear each room a watch said changed: read it once. Returns the way to stop hearing. */
   onRoomChanged?(listener: (roomId: string) => void): () => void
+  /** For logs: how long a post took from Send until it was written or failed, and how it was sent. None for the sample. */
+  notePostSent?(roomId: string, ms: number, how: { failed: boolean; asRecord: boolean; file: boolean }): void
   /** For logs: how many records one page of a room could not open, by reason (`other` for any other failure). */
   noteUnread?(roomId: string, counts: Readonly<Record<string, number>>): void
   prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview>
