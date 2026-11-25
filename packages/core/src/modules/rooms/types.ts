@@ -210,9 +210,24 @@ export interface NoteList {
   notes: NoteSummary[]
   /** False when the host's listing stopped early. */
   complete: boolean
+  /**
+   * A window (`listNotes`'s `head`): the room holds records below the lowest version listed, left for a later window
+   * asked with `beforeVersion`. Only a window sets it, and it is not `complete` false: nothing was withheld, the reader
+   * asked for no more. Absence of a record from a window says nothing about it.
+   */
+  older?: boolean
   check: HostCheck
   /** The room's last prune, when the agent passes one on (browse 0.3). */
   lastPrune?: RecordPrune
+}
+
+/** What `RoomsService.listNotes` lists: everything above `sinceVersion` (all, absent), or a window. */
+export interface ListNotesOptions {
+  sinceVersion?: number
+  /** A window of at most this many records, newest version first (1 to 1000). */
+  head?: number
+  /** With `head`: only records below this version, to page back from the lowest one held. */
+  beforeVersion?: number
 }
 
 export interface InertFlags {
@@ -532,8 +547,12 @@ export interface RoomsService {
    * The room's records, metadata only. With `sinceVersion`, only those written or curated after it (a version is
    * the host's, monotonic per room), so a refresh asks only for what is new; such a listing is never complete
    * against the room's record count.
+   *
+   * With `head`, a window instead: at most that many records, newest version first, below `beforeVersion` when it is
+   * given (exclusive), and `older` when more lie below. `sinceVersion` does not apply to a window. Asked newest first
+   * where the agent and host can (rooms/newestFirstSwitch), else cut from the whole room.
    */
-  listNotes(roomId: string, options?: { sinceVersion?: number }): Promise<NoteList>
+  listNotes(roomId: string, options?: ListNotesOptions): Promise<NoteList>
   /**
    * One record, opened. Refused with `RoomsRefused('readNote', reason)` when the agent says why it could not open it
    * (a {@link RecordUnopenedReason}); any other failure arrives as it came.

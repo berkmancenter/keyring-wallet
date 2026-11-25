@@ -40,6 +40,8 @@ import { roomRef } from '../roomRef'
 import { ACCEPT_FROM_PREVIEW_MAX_AGE_MS, isAcceptFromPreviewOn } from '../acceptFromPreviewSwitch'
 import { holdsTwoAuthorities, permanentRefusal } from '../postRefusal'
 import { emptyMessageCache, isCacheWallet } from '../messageCache'
+import { windowOf } from '../listingWindow'
+import { isRoomsNewestFirstOn } from '../newestFirstSwitch'
 import { isRoomsPartialListingOn } from '../partialListingSwitch'
 import { failureCategory, logRef } from '../roomsLogWords'
 import { takesRepliesOrReactions } from '../recordPermits'
@@ -50,6 +52,7 @@ import type {
   HeldBackCommunity,
   Identity,
   Note,
+  ListNotesOptions,
   NoteList,
   NoteSummary,
   OfferPreview,
@@ -506,6 +509,12 @@ export class AgentRoomsService implements RoomsService {
    * again at the same type within {@link UNSERVED_LISTING_MS}, it is answered with that same refusal and nothing is sent.
    */
   private unservedListings = new Map<string, { type: string; at: number; refusal: unknown }>()
+  /**
+   * A room whose window could not be asked newest first (`unsupportedType` from a host without records/list 0.7 or
+   * 0.8, `unsupportedVersion` from the agent), by room and kind (`head`, `older`): the type asked and when. Within
+   * {@link UNSERVED_LISTING_MS}, at the same type, the window is cut from the whole room without asking again.
+   */
+  private unservedWindows = new Map<string, { type: string; at: number }>()
   /** A record's read being asked now, by room and key: every caller that reads it meanwhile waits for the same one. */
   private readsInFlight = new Map<string, Promise<OpenedRecord>>()
   /** A batch was refused for being a batch (readBatches): this session reads one at a time, as before. */
@@ -1032,11 +1041,19 @@ export class AgentRoomsService implements RoomsService {
     return room
   }
 
-  public listNotes(roomId: string, options: { sinceVersion?: number } = {}): Promise<NoteList> {
-    const flightKey = `${roomId}\n${options.sinceVersion ?? 'all'}`
+  public listNotes(roomId: string, options: ListNotesOptions = {}): Promise<NoteList> {
+    const { head, beforeVersion } = options
+    const flightKey =
+      head !== undefined
+        ? `${roomId}\nhead ${head} below ${beforeVersion ?? 'none'}`
+        : `${roomId}\n${options.sinceVersion ?? 'all'}`
     let flight = this.listingInFlight.get(flightKey)
     if (!flight) {
-      const asked = this.readListing(roomId, options.sinceVersion).finally(() => {
+      const reading =
+        head !== undefined
+          ? this.readWindow(roomId, head, beforeVersion)
+          : this.readListing(roomId, options.sinceVersion)
+      const asked = reading.finally(() => {
         if (this.listingInFlight.get(flightKey) === asked) this.listingInFlight.delete(flightKey)
       })
       this.listingInFlight.set(flightKey, asked)
@@ -1066,7 +1083,11 @@ export class AgentRoomsService implements RoomsService {
         this.unservedListings.set(roomId, { type, at: this.now(), refusal: e })
       throw e
     }
-    const listing = parseBrowse(answer)
+    return this.noteListOf(roomId, parseBrowse(answer))
+  }
+
+  /** A browse answer as the rooms service lists it, each record's version noted as listed. */
+  private noteListOf(roomId: string, listing: ReturnType<typeof parseBrowse>): NoteList {
     for (const r of listing.records) {
       // A version only goes up: an answer that arrives late never takes a record back.
       const k = listedKey(roomId, r.key)
@@ -1087,6 +1108,43 @@ export class AgentRoomsService implements RoomsService {
       check: listing.check,
       ...(listing.lastPrune ? { lastPrune: listing.lastPrune } : {}),
     }
+  }
+
+  /**
+   * A window of the room's records (`listNotes`'s `head`): newest first from the agent where it and the room's host
+   * can (browse 0.6 or 0.5 with `order: newestFirst`, `limit` and `maxPages: 1`), so the agent stops after one host page
+   * rather than following the host's cursor to the room's end. The agent's `complete: false` is then the bound asked
+   * for, not a short host: it is said as `older`. Where neither can, the whole room is listed as before and the window
+   * cut from it, so a caller is answered the same either way.
+   */
+  private async readWindow(roomId: string, size: number, beforeVersion: number | undefined): Promise<NoteList> {
+    const room = await this.requireInRoom(roomId, 'listNotes')
+    const kind = beforeVersion !== undefined ? 'older' : 'head'
+    const type = this.windowType(kind)
+    const memo = `${roomId}\n${kind}`
+    const unserved = this.unservedWindows.get(memo)
+    const cut = async () => windowOf(await this.listNotes(roomId), size, beforeVersion)
+    if (!type || (unserved && unserved.type === type && this.now() - unserved.at < UNSERVED_LISTING_MS)) return cut()
+    let answer: unknown
+    try {
+      answer = await this.agentTask(type, {
+        roomId,
+        host: room.host,
+        order: 'newestFirst',
+        limit: size,
+        maxPages: 1,
+        ...(beforeVersion !== undefined ? { beforeVersion } : {}),
+      })
+    } catch (e) {
+      const code = refusalCode(e)
+      if (code !== 'unsupportedType' && code !== 'unsupportedVersion') throw e
+      this.unservedWindows.set(memo, { type, at: this.now() })
+      return cut()
+    }
+    const listing = this.noteListOf(roomId, parseBrowse(answer))
+    // Newest version first, whatever order the rows came in; and never more than asked, nor at or above the bound.
+    const window = windowOf(listing, size, beforeVersion)
+    return { ...window, complete: true, older: window.older || !listing.complete }
   }
 
   /**
@@ -1848,18 +1906,39 @@ export class AgentRoomsService implements RoomsService {
   }
 
   /**
-   * The newest `rooms/keys/browse` the agent serves. 0.3 asks the same and answers the same, plus the room's
-   * `lastPrune`, which `listNotes` passes on; 0.4 adds what a host stamps on each row, which nothing reads yet. An
-   * agent that lists none of them is asked 0.1, as before 0.3.
+   * The newest `rooms/keys/browse` the agent serves, for a listing of the whole room. 0.3 asks the same and answers
+   * the same, plus the room's `lastPrune`, which `listNotes` passes on; 0.4 adds what a host stamps on each row, which
+   * nothing reads yet. 0.5 and 0.6, asked with none of their own members, list the whole room as 0.4 does: the agent
+   * steps its host listing down exactly as 0.4's (records/list 0.7, 0.6, 0.5), and reads to the end. They are asked
+   * only under rooms/newestFirstSwitch; off, the ladder starts at 0.4, as before. An agent that lists none of them is
+   * asked 0.1, as before 0.3.
    *
    * @versionLadder rooms/keys/browse
    */
   private browseType(): string {
     const served = this.served?.types ?? []
-    return (
-      [ROOMS_TASK.keysBrowse04, ROOMS_TASK.keysBrowse03, ROOMS_TASK.keysBrowse].find((t) => served.includes(t)) ??
-      ROOMS_TASK.keysBrowse
-    )
+    const ladder = [
+      ROOMS_TASK.keysBrowse06,
+      ROOMS_TASK.keysBrowse05,
+      ROOMS_TASK.keysBrowse04,
+      ROOMS_TASK.keysBrowse03,
+      ROOMS_TASK.keysBrowse,
+    ]
+    const from = isRoomsNewestFirstOn() ? ladder : ladder.slice(2)
+    return from.find((t) => served.includes(t)) ?? ROOMS_TASK.keysBrowse
+  }
+
+  /**
+   * The browse a window is asked with, newest first: 0.6 for either kind, 0.5 for a `head` (it has no
+   * `beforeVersion`). None when the switch is off or the agent serves neither: the window is cut from the whole room.
+   *
+   * @versionLadder rooms/keys/browse
+   */
+  private windowType(kind: 'head' | 'older'): string | undefined {
+    if (!isRoomsNewestFirstOn()) return undefined
+    const served = this.served?.types ?? []
+    const ladder = kind === 'head' ? [ROOMS_TASK.keysBrowse06, ROOMS_TASK.keysBrowse05] : [ROOMS_TASK.keysBrowse06]
+    return ladder.find((t) => served.includes(t))
   }
 
   /** The newest `rooms/keys/act` the agent serves, if any. */

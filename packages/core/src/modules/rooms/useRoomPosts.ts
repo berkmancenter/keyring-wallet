@@ -5,10 +5,11 @@
  * version it holds, and catches up at once on coming back. Upstream's browse says a consumer SHOULD NOT poll; the
  * poll is kept to the room the member is looking at.
  *
- * Until the rooms service pages from the newest itself, this lists the room once and reads each shown record. A read
- * is kept by key and version, so a new listing reads only what is new or changed: a refresh or a poll that finds
- * nothing new reads nothing and redraws nothing. A record that can't be read stays in its place as "couldn't be
- * read", never hiding the rest, and is read again with the next listing.
+ * An opening lists the room's newest {@link ROOM_HEAD_WINDOW} records (rooms/newestFirstSwitch; the whole room, off),
+ * and "load older" lists the next ones below the lowest version held once those shown run out. Each shown record is
+ * then read. A read is kept by key and version, so a new listing reads only what is new or changed: a refresh or a
+ * poll that finds nothing new reads nothing and redraws nothing. A record that can't be read stays in its place as
+ * "couldn't be read", never hiding the rest, and is read again with the next listing.
  *
  * The agent client sends one task at a time, so a poll is skipped while a listing of the room is still being asked:
  * it never queues behind itself, and a member's own post waits behind one listing at most.
@@ -35,6 +36,7 @@ import {
   readRoomPosts,
   readRoomPostsBeforeRoom,
 } from './messageCache'
+import { isRoomsNewestFirstOn, ROOM_HEAD_WINDOW } from './newestFirstSwitch'
 import { logRef } from './roomsLogWords'
 import {
   RECORD_UNOPENED_REASONS,
@@ -68,6 +70,8 @@ interface Listing {
   notes: NoteSummary[]
   check: HostCheck
   complete: boolean
+  /** A window: the room holds records below the lowest version here, listed when the posts shown reach them. */
+  older?: boolean
   /** The version of the last prune this listing already reflects: a full listing that carried it. */
   pruneSeen?: number
 }
@@ -143,17 +147,50 @@ export function mergeNewer(listing: Listing, newer: NoteList): { listing: Listin
       notes: newestFirst([...byKey.values()]),
       check,
       complete: listing.complete && newer.complete,
+      ...(listing.older ? { older: true } : {}),
       ...(listing.pruneSeen !== undefined ? { pruneSeen: listing.pruneSeen } : {}),
     },
     added,
   }
 }
 
+/** The lowest version a listing holds: the next window is asked below it. */
+export const lowestVersion = (notes: readonly NoteSummary[]): number =>
+  notes.reduce((lowest, note) => Math.min(lowest, note.version), Number.POSITIVE_INFINITY)
+
+/**
+ * A listing with the window below it joined on: a key it already holds keeps the higher version, and `older` is the
+ * window's own, so the room is said to hold nothing more once a window comes back without it. A conflict the window's
+ * check found shows, as a poll's does (mergeNewer).
+ */
+export function withOlder(listing: Listing, older: NoteList): Listing {
+  const byKey = new Map(listing.notes.map((note) => [note.key, note]))
+  for (const note of older.notes) {
+    const held = byKey.get(note.key)
+    if (!held || held.version < note.version) byKey.set(note.key, note)
+  }
+  return {
+    notes: newestFirst([...byKey.values()]),
+    check: older.check.verdict === 'conflict' ? older.check : listing.check,
+    complete: listing.complete && older.complete,
+    ...(older.older ? { older: true } : {}),
+    ...(listing.pruneSeen !== undefined ? { pruneSeen: listing.pruneSeen } : {}),
+  }
+}
+
+/**
+ * The room's newest records, as an opening lists them: a window of `size` while rooms/newestFirstSwitch is on, else the
+ * whole room, asked exactly as before the switch.
+ */
+const listHead = (service: RoomsService, roomId: string, size = ROOM_HEAD_WINDOW): Promise<NoteList> =>
+  isRoomsNewestFirstOn() ? service.listNotes(roomId, { head: size }) : service.listNotes(roomId)
+
 /** A full listing as held: newest first, with the prune it already reflects. */
 const listingOf = (list: NoteList): Listing => ({
   notes: newestFirst(list.notes),
   check: list.check,
   complete: list.complete,
+  ...(list.older ? { older: true } : {}),
   ...(list.lastPrune ? { pruneSeen: list.lastPrune.version } : {}),
 })
 
@@ -313,8 +350,10 @@ export function useRoomPosts(
   const [generation, setGeneration] = useState(0)
   const listingNow = useRef(listing)
   listingNow.current = listing
-  // Listings of this room being asked now (a first read, a refresh, a poll).
+  // Listings of this room being asked now (a first read, a refresh, a poll, a window below what is held).
   const listingsInFlight = useRef(0)
+  // The version the window below what is held was last asked under, and whether it answered: asked once per version.
+  const olderAsked = useRef<{ below: number; settled: boolean } | undefined>(undefined)
   // Coming back into view catches up at once instead of a tick later.
   const resumed = useRef(false)
   // Ticks still to pass after a failed poll. Kept across leaving and coming back, so a member whose agent is failing
@@ -435,7 +474,8 @@ export function useRoomPosts(
         },
         () => undefined
       )
-    counted(listingsInFlight, () => service.listNotes(roomId)).then(
+    olderAsked.current = undefined
+    counted(listingsInFlight, () => listHead(service, roomId)).then(
       (list) => {
         skips.current = 0
         if (!current) return
@@ -516,10 +556,12 @@ export function useRoomPosts(
           if (current) notePoll(false)
           const now = listingNow.current
           if (current && now && prunedPast(now, newer)) {
-            // Pruned past what is held: one full listing replaces it, new posts in this poll included. Its failure is
-            // the poll's, on the session it was sent on, so only a session opened since asks again at once.
+            // Pruned past what is held: one full listing replaces it, new posts in this poll included (a window as
+            // large as what is held, newest first, under rooms/newestFirstSwitch). Its failure is the poll's, on the
+            // session it was sent on, so only a session opened since asks again at once.
             const fullOn = openedAt.current
-            counted(listingsInFlight, () => service.listNotes(roomId)).then(
+            const size = Math.min(1000, Math.max(ROOM_HEAD_WINDOW, now.notes.length))
+            counted(listingsInFlight, () => listHead(service, roomId, size)).then(
               (full) => {
                 if (!current) return
                 const replaced = listingOf(full)
@@ -598,6 +640,33 @@ export function useRoomPosts(
       setPosts(drawn)
     }
     const draw = (notes: NoteSummary[]) => put(postsOf(notes))
+    // The window below the lowest version held, joined onto the listing when it answers. True while it is out (the page
+    // waits for it); false once it answered at this same lowest version, so a window that brought nothing lower is never
+    // asked again and the page settles as it is. Its failure ends the load; the next "load older" asks again.
+    const readOlder = (from: Listing): boolean => {
+      const below = lowestVersion(from.notes)
+      if (!Number.isFinite(below)) return false
+      if (olderAsked.current?.below === below) return !olderAsked.current.settled
+      const asked = { below, settled: false }
+      olderAsked.current = asked
+      const askedFor = reads.current
+      counted(listingsInFlight, () => service.listNotes(roomId, { head: ROOM_HEAD_WINDOW, beforeVersion: below })).then(
+        (older) => {
+          asked.settled = true
+          const held = listingNow.current
+          if (reads.current !== askedFor || olderAsked.current !== asked || !held) return
+          const joined = withOlder(held, older)
+          keepListing(service, roomId, joined)
+          setListing(joined)
+        },
+        () => {
+          if (reads.current !== askedFor || olderAsked.current !== asked) return
+          olderAsked.current = undefined
+          setLoadingOlder(false)
+        }
+      )
+      return true
+    }
     const show = () => {
       const drawn = postsOf(page)
       put(drawn)
@@ -609,6 +678,8 @@ export function useRoomPosts(
         setShown(page.length + wanted.current - counted)
         return
       }
+      // Every record held is drawn and the posts still fall short: the window below is asked, once per lowest version.
+      if (counted < wanted.current && listing.older && readOlder(listing)) return
       setRefreshing(false)
       setLoadingOlder(false)
     }
@@ -740,7 +811,7 @@ export function useRoomPosts(
 
   return {
     posts,
-    hasOlder: !!listing && listing.notes.length > shown,
+    hasOlder: !!listing && (listing.notes.length > shown || !!listing.older),
     check: listing?.check,
     incomplete: !!listing && !listing.complete,
     failed: failed && !session.reconnecting,

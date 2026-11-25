@@ -23,6 +23,11 @@ const SPEC = 'https://trusttasks.org/spec/'
 export const ROOMS_TASK = {
   keysList01: `${SPEC}rooms/keys/list/0.1`,
   keysList02: `${SPEC}rooms/keys/list/0.2`,
+  // 0.5 adds `order` (newestFirst), `maxPages` and a cursor (VTI #2668, VTA 0.81); 0.6 adds `beforeVersion`, to page
+  // back from the lowest version held (VTI #2727, VTA 0.83), each over the host's records/list 0.7/0.8. Asked only
+  // under rooms/newestFirstSwitch.
+  keysBrowse06: `${SPEC}rooms/keys/browse/0.6`,
+  keysBrowse05: `${SPEC}rooms/keys/browse/0.5`,
   // Agents from vta-service 0.67's nightly (upstream e6380bf1) serve browse at 0.3 only; older ones at 0.1.
   keysBrowse04: `${SPEC}rooms/keys/browse/0.4`,
   keysBrowse03: `${SPEC}rooms/keys/browse/0.3`,
