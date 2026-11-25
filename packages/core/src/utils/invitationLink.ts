@@ -31,15 +31,20 @@ export function invitationShareContent(invitationUrl: string, title: string, os:
   return os === 'ios' ? { title, url: invitationUrl } : { title, message: invitationUrl }
 }
 
-const INLINE_INVITATION = /[?&](oob|c_i|d_m)=([^&#\s]*)/
+// `_oob` is the out-of-band/2.0 (DIDComm v2) query member, the one a wallet with its mailbox on mints (the default
+// since 282); `oob` is out-of-band/1.x. Neither pattern matches our short links' `_oobid=`: the `=` follows the name.
+const INLINE_INVITATION = /[?&](_oob|oob|c_i|d_m)=([^&#\s]*)/
 
 /**
  * Whether a deep link carries an invitation for the connect path: an inline one
- * (`oob`, `c_i`, `d_m`), a link to fetch one from (`url`), or one of our short
- * links, which Credo fetches. Anything else is not handed to it.
+ * (`_oob`, `oob`, `c_i`, `d_m`), a link to fetch one from (`url`), or one of our
+ * short links, which Credo fetches. Anything else is not handed to it. Without
+ * `_oob` here, a tapped share link from a mailbox phone (an out-of-band/2.0
+ * invitation) was logged as handled and then dropped, while the same link
+ * pasted or scanned connected (the 282 gate's iOS pair, 2026-11-25).
  */
 export function deepLinkCarriesInvitation(link: string): boolean {
-  return /[?&](oob|c_i|d_m|url)=/.test(link) || isShortInvitationLink(link)
+  return /[?&](_oob|oob|c_i|d_m|url)=/.test(link) || isShortInvitationLink(link)
 }
 
 /** Whether `link` carries an inline invitation that cannot be read. */
@@ -49,7 +54,7 @@ export function invitationLinkIncomplete(link: string): boolean {
   const [, param, raw] = found
   try {
     const value = decodeURIComponent(raw)
-    const json = param === 'oob' ? JsonEncoder.fromBase64Url(value) : JsonEncoder.fromBase64(value)
+    const json = param === 'oob' || param === '_oob' ? JsonEncoder.fromBase64Url(value) : JsonEncoder.fromBase64(value)
     return json === null || typeof json !== 'object'
   } catch {
     return true

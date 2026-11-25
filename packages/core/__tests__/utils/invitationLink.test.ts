@@ -4,10 +4,17 @@
  * receiver was handed it cut to 200 characters, and was told "Unable to handle
  * deeplink" (1039) with nothing to do about it.
  */
+import { JsonEncoder } from '@credo-ts/core'
 import { DidCommOutOfBandInvitation } from '@credo-ts/didcomm'
 
 import { domain } from '../../src/constants'
-import { invitationLinkError, invitationLinkIncomplete, invitationShareContent } from '../../src/utils/invitationLink'
+import {
+  deepLinkCarriesInvitation,
+  invitationLinkError,
+  invitationLinkIncomplete,
+  invitationShareContent,
+} from '../../src/utils/invitationLink'
+import { LINKS_ORIGIN } from '../../src/utils/shortInvitationLink'
 
 const t = ((key: string) => key) as never
 
@@ -66,6 +73,45 @@ describe('the invitation link, as it is shared and as it arrives', () => {
   ])('a link that carries no inline invitation is left alone: %s', (link) => {
     expect(invitationLinkIncomplete(link)).toBe(false)
     expect(invitationLinkError(link, t)).toBeUndefined()
+  })
+
+  // The out-of-band/2.0 link a wallet with its mailbox on mints (the default since 282): its invitation rides in
+  // `_oob`, not `oob`. Tapped, such a share link was logged "Handling deeplink" and dropped at the gate, while the
+  // same link pasted or scanned connected (the 282 gate's iOS pair, 2026-11-25).
+  const v2Invitation = () => ({
+    type: 'https://didcomm.org/out-of-band/2.0/invitation',
+    id: 'urn:uuid:8f4c1b2e-0000-4000-8000-00000000002a',
+    from: 'did:peer:2.Vz6MkqRYqQiSgvZQdnBytw86Qbs2ZWUkGv22od935YF4s8M7V.Ez6LSbysY2xFMRpGMhb7tFTLMpeuPRaqaWM1yECxJ2MwFTFGB',
+    body: { goal_code: 'relationship.credential.bidirectional', accept: ['didcomm/v2'] },
+  })
+  // `domain` is the full invite URL (scheme, host and path), as the 1.x links above are minted on.
+  const v2Link = () => `${domain}?_oob=${JsonEncoder.toBase64Url(v2Invitation())}`
+
+  test('a tapped out-of-band/2.0 share link carries an invitation, and reads as complete', () => {
+    const link = v2Link()
+    expect(deepLinkCarriesInvitation(link)).toBe(true)
+    expect(invitationLinkIncomplete(link)).toBe(false)
+    expect(invitationLinkError(link, t)).toBeUndefined()
+  })
+
+  test('the same out-of-band/2.0 link cut on its way is told as incomplete, like a 1.x one', () => {
+    const cut = v2Link().slice(0, 80)
+    expect(deepLinkCarriesInvitation(cut)).toBe(true)
+    expect(invitationLinkIncomplete(cut)).toBe(true)
+    expect(invitationLinkError(cut, t)?.code).toBe(1051)
+  })
+
+  test.each([
+    [`${domain}?oob=eyJAdHlwZSI6Im9vYiJ9`, true],
+    [`${domain}?c_i=eyJAdHlwZSI6ImNpIn0=`, true],
+    [`${domain}?url=https%3A%2F%2Fexample.org%2Finvitation`, true],
+    [`${LINKS_ORIGIN}/i/2b7c0f1e2b7c0f1e`, true], // our short link, which Credo fetches
+    ['https://example.org/i/2b7c0f1e?_oobid=2b7c0f1e', false], // not our origin, and `_oobid=` is not `_oob=`
+    ['keyring://messages', false],
+    [domain, false],
+    ['openid-credential-offer://?credential_offer=%7B%7D', false],
+  ])('the deep-link gate, unchanged for every other shape: %s → %s', (link, carries) => {
+    expect(deepLinkCarriesInvitation(link)).toBe(carries)
   })
 
   // 1050 is BiometryControl's: the invitation's words took it once, and a
